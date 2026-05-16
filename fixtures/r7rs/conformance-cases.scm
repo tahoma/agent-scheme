@@ -145,7 +145,7 @@
     ((id core-data-vector-ref)
      (category core-data-types)
      (section "6.8")
-     (status pending)
+     (status implemented)
      (description "Vector literals and vector-ref expose indexed values.")
      (source "(vector-ref '#(a b c) 1)")
      (expect (value "b")))

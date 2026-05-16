@@ -29,6 +29,12 @@
           (agent-scheme-eval-source source #f options))
          expected))
 
+(define (find-primitive-spec name specs)
+  (cond
+   ((null? specs) #f)
+   ((eq? (cadr (assq 'name (car specs))) name) (car specs))
+   (else (find-primitive-spec name (cdr specs)))))
+
 (define (raises? thunk)
   (guard (condition
           (else #t))
@@ -59,8 +65,58 @@
        (raises? (lambda () (agent-scheme-eval-source "missing")))
        #t)
 (check 'unregistered-primitive
-       (raises? (lambda () (agent-scheme-eval-source "(/ 1 2)")))
+       (raises? (lambda () (agent-scheme-eval-source "(values 1 2)")))
        #t)
+
+(let ((names (agent-scheme-base-primitive-names))
+      (specs (agent-scheme-base-primitive-specs)))
+  (check 'base-registry-names
+         (and (memq '+ names)
+              (memq 'apply names)
+              (memq 'map names)
+              (memq 'vector-ref names)
+              (not (memq 'values names)))
+         #t)
+  (check 'base-registry-specs
+         (cadr (assq 'minimum-arity
+                     (find-primitive-spec 'vector-ref specs)))
+         2))
+
+(check-external 'base-list-helpers
+                "(list (length (append '(1 2) '(3 4)))
+                       (cadr '(alpha beta gamma))
+                       (equal? '(1 \"x\") '(1 \"x\")))"
+                "(4 beta #t)")
+
+(check-external 'base-scalar-helpers
+                "(list (/ 5 2)
+                       (abs -4)
+                       (modulo -13 4)
+                       (square 5)
+                       (boolean=? #t (not #f))
+                       (string->symbol (symbol->string 'agent-scheme)))"
+                "(2.5 4 3 25 #t agent-scheme)")
+
+(check-external 'base-vector-and-bytevector-helpers
+                "(define v (vector 'a 'b 'c))
+                 (vector-set! v 1 'changed)
+                 (define b (bytevector 1 2 3))
+                 (bytevector-u8-set! b 1 9)
+                 (list v b)"
+                "(#(a changed c) #u8(1 9 3))")
+
+(check-external 'base-higher-order-helpers
+                "(define total 0)
+                 (for-each (lambda (x) (set! total (+ total x))) '(1 2 3))
+                 (list (apply + 1 '(2 3 4))
+                       (map (lambda (x) (* x x)) '(2 3 4))
+                       total)"
+                "(10 (4 9 16) 6)")
+
+(check 'result-rendering
+       (agent-scheme-result->external
+        (agent-scheme-eval-source-result "(+ 1 2)"))
+       "(evaluation-result (status ok) (value 3) (events ()) (budget (steps-used 5) (host-calls 1)))")
 
 (check-external 'closure
                 "(define make-adder

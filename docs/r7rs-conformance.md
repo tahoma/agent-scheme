@@ -59,6 +59,70 @@ marked `implemented`.
 | `(scheme write)` | `pending` | `standard-library-write-display` | Writer output should be stable enough for fixture comparison. |
 | `(scheme r5rs)` | `pending` | None yet | Compatibility library. |
 
+### `(scheme base)` Binding Status
+
+Issue #4 establishes the first `(scheme base)` procedure registry used by the
+bootstrap evaluator. This is not a claim of complete base-library conformance:
+derived syntax, macros, multiple values, continuations, exceptions, records,
+ports, and host-effecting bindings remain separate follow-up work.
+
+Implemented primitive procedure bindings:
+
+- numeric and predicates: `*`, `+`, `-`, `/`, `<`, `<=`, `=`, `>`, `>=`, `abs`,
+  `ceiling`, `complex?`, `even?`, `exact-integer?`, `exact?`, `floor`,
+  `floor-quotient`, `floor-remainder`, `inexact?`, `integer?`, `max`, `min`,
+  `modulo`, `negative?`, `number->string`, `number?`, `odd?`, `positive?`,
+  `quotient`, `rational?`, `real?`, `remainder`, `round`, `square`, `truncate`,
+  `truncate-quotient`, `truncate-remainder`, `zero?`
+- pairs and lists: `append`, `assoc`, `assq`, `assv`, `caar`, `cadr`, `car`,
+  `cdar`, `cddr`, `cdr`, `cons`, `length`, `list`, `list-copy`, `list-ref`,
+  `list-set!`, `list-tail`, `list?`, `make-list`, `member`, `memq`, `memv`,
+  `null?`, `pair?`, `reverse`, `set-car!`, `set-cdr!`
+- booleans, equivalence, symbols, and procedures: `boolean=?`, `boolean?`,
+  `eq?`, `equal?`, `eqv?`, `not`, `procedure?`, `string->symbol`,
+  `symbol->string`, `symbol=?`, `symbol?`
+- characters and strings: `char->integer`, `char<=?`, `char<?`, `char=?`,
+  `char>=?`, `char>?`, `char?`, `integer->char`, `list->string`,
+  `make-string`, `string`, `string->list`, `string->number`, `string->vector`,
+  `string-append`, `string-copy`, `string-copy!`, `string-fill!`,
+  `string-for-each`, `string-length`, `string-map`, `string-ref`,
+  `string-set!`, `string<=?`, `string<?`, `string=?`, `string>=?`, `string>?`,
+  `string?`, `substring`, `vector->string`
+- vectors and bytevectors: `bytevector`, `bytevector-append`, `bytevector-copy`,
+  `bytevector-copy!`, `bytevector-length`, `bytevector-u8-ref`,
+  `bytevector-u8-set!`, `bytevector?`, `list->vector`, `make-bytevector`,
+  `make-vector`, `vector`, `vector->list`, `vector-append`, `vector-copy`,
+  `vector-copy!`, `vector-fill!`, `vector-for-each`, `vector-length`,
+  `vector-map`, `vector-ref`, `vector-set!`, `vector?`
+- higher-order helpers: `apply`, `for-each`, `map`
+
+Pending pure bindings include derived syntax and macro forms (`and`, `case`,
+`cond`, `cond-expand`, `do`, `let`, `let*`, `letrec`, `letrec*`, `let-syntax`,
+`letrec-syntax`, `or`, `quasiquote`, `syntax-rules`, `unless`, `when`), records
+(`define-record-type`), multiple values (`call-with-values`, `define-values`,
+`let-values`, `let*-values`, `values`), continuations (`call/cc`,
+`call-with-current-continuation`, `dynamic-wind`), exceptions (`error`, `guard`,
+`raise`, `raise-continuable`, `with-exception-handler` and error-object
+predicates), remaining numeric operations (`denominator`, `exact`,
+`exact-integer-sqrt`, `expt`, `gcd`, `inexact`, `lcm`, `numerator`,
+`number->string` radix support, `rationalize`, `string->number` radix support,
+`floor/`, `truncate/`), UTF-8 conversion (`string->utf8`, `utf8->string`), and
+feature/library forms (`features`, `include`, `include-ci`).
+
+Policy-gated base bindings are the ones that expose or manipulate host-managed
+ports or process-facing I/O: `binary-port?`, `call-with-port`, `char-ready?`,
+`close-input-port`, `close-output-port`, `close-port`, `current-error-port`,
+`current-input-port`, `current-output-port`, `eof-object`, `eof-object?`,
+`file-error?`, `flush-output-port`, `get-output-bytevector`,
+`get-output-string`, `input-port-open?`, `input-port?`,
+`open-input-bytevector`, `open-input-string`, `open-output-bytevector`,
+`open-output-string`, `output-port-open?`, `output-port?`, `peek-char`,
+`peek-u8`, `port?`, `read-bytevector`, `read-bytevector!`, `read-char`,
+`read-error?`, `read-line`, `read-string`, `read-u8`, `textual-port?`,
+`u8-ready?`, `write-bytevector`, `write-char`, `write-string`, and `write-u8`.
+In-memory ports may become pure later, but they still need the port subsystem
+before this matrix marks them implemented.
+
 ## Fixture Rules
 
 - Add one fixture for each representative behavior before marking a matrix row
