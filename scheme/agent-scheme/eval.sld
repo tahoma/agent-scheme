@@ -131,6 +131,14 @@
       (value-environment syntax-transformer-value-environment)
       (syntax-environment syntax-transformer-syntax-environment))
 
+    (define-record-type <pattern-binding>
+      (make-pattern-binding depth captures empty-prefixes)
+      pattern-binding?
+      (depth pattern-binding-depth set-pattern-binding-depth!)
+      (captures pattern-binding-captures set-pattern-binding-captures!)
+      (empty-prefixes pattern-binding-empty-prefixes
+                      set-pattern-binding-empty-prefixes!))
+
     (define-record-type <syntax-scope>
       (make-syntax-scope forms syntax-environment)
       syntax-scope?
@@ -616,6 +624,94 @@
         (environment-set-identifier! environment target value)
         agent-scheme-unspecified))
 
+    (define (tagged-list? datum tag)
+      (and (pair? datum)
+           (identifier-named? (car datum) tag)))
+
+    (define (single-argument-syntax form description)
+      (let ((parts (proper-list-elements form description)))
+        (if (not (= (length parts) 2))
+            (eval-error
+             (string-append description " requires exactly one operand")
+             form))
+        (second parts)))
+
+    (define (eval-quasiquote-list template depth environment context)
+      (let loop ((cursor template) (output '()))
+        (if (pair? cursor)
+            (let ((element (car cursor)))
+              (if (and (= depth 1)
+                       (tagged-list? element 'unquote-splicing))
+                  (let ((splice
+                         (eval-expression
+                          (single-argument-syntax
+                           element
+                           "unquote-splicing")
+                          environment
+                          context
+                          #f)))
+                    (loop (cdr cursor)
+                          (append (reverse
+                                   (proper-list-elements
+                                    splice
+                                    "unquote-splicing result"))
+                                  output)))
+                  (loop (cdr cursor)
+                        (cons (eval-quasiquote-template
+                               element depth environment context)
+                              output))))
+            (append-tail
+             (reverse output)
+             (cond
+              ((null? cursor) '())
+              ((and (= depth 1)
+                    (tagged-list? cursor 'unquote))
+               (eval-expression
+                (single-argument-syntax cursor "unquote")
+                environment
+                context
+                #f))
+              (else
+               (eval-quasiquote-template
+                cursor depth environment context)))))))
+
+    (define (eval-quasiquote-template template depth environment context)
+      (cond
+       ((tagged-list? template 'unquote)
+        (let ((operand (single-argument-syntax template "unquote")))
+          (if (= depth 1)
+              (eval-expression operand environment context #f)
+              (list (car template)
+                    (eval-quasiquote-template
+                     operand (- depth 1) environment context)))))
+       ((tagged-list? template 'unquote-splicing)
+        (if (= depth 1)
+            (eval-error
+             "unquote-splicing is only valid inside a quasiquoted list or vector"
+             template)
+            (let ((operand
+                   (single-argument-syntax template "unquote-splicing")))
+              (list (car template)
+                    (eval-quasiquote-template
+                     operand (- depth 1) environment context)))))
+       ((tagged-list? template 'quasiquote)
+        (let ((operand (single-argument-syntax template "quasiquote")))
+          (list (car template)
+                (eval-quasiquote-template
+                 operand (+ depth 1) environment context))))
+       ((pair? template)
+        (eval-quasiquote-list template depth environment context))
+       ((vector? template)
+        (list->vector
+         (eval-quasiquote-list
+          (vector->list template) depth environment context)))
+       (else template)))
+
+    (define (eval-quasiquote parts environment context)
+      (if (not (= (length parts) 2))
+          (eval-error "quasiquote requires exactly one template" parts))
+      (eval-quasiquote-template (second parts) 1 environment context))
+
     (define (parse-letrec-binding binding description)
       (let ((parts (proper-list-elements binding description)))
         (if (not (= (length parts) 2))
@@ -783,7 +879,11 @@
                                (cdr tail)))
                (literals
                 (map (lambda (literal)
-                       (expect-symbol literal "syntax-rules literal"))
+                       (if (not (identifier-datum? literal))
+                           (eval-error
+                            "syntax-rules literal must be an identifier"
+                            literal))
+                       literal)
                      (proper-list-elements
                       literal-form
                       "syntax-rules literal list"))))
@@ -795,40 +895,75 @@
            syntax-environment))))
 
     (define (syntax-literal? identifier literals)
-      (memq (identifier-datum-name identifier) literals))
+      (let ((name (identifier-datum-name identifier)))
+        (let loop ((rest literals))
+          (cond
+           ((null? rest) #f)
+           ((eq? name (identifier-datum-name (car rest))) #t)
+           (else (loop (cdr rest)))))))
 
     (define (make-pattern-bindings)
       (list 'bindings))
 
-    (define (pattern-binding bindings name)
+    (define (pattern-binding-cell bindings name)
       (assoc name (cdr bindings)))
+
+    (define (pattern-binding bindings name)
+      (let ((cell (pattern-binding-cell bindings name)))
+        (if cell (cdr cell) #f)))
 
     (define (add-pattern-binding! bindings name entry)
       (set-cdr! bindings (cons (cons name entry) (cdr bindings))))
 
-    (define (syntax-bind-pattern-variable! bindings name value repeated?)
+    (define (path-prefix? prefix path)
+      (cond
+       ((null? prefix) #t)
+       ((null? path) #f)
+       ((= (car prefix) (car path))
+        (path-prefix? (cdr prefix) (cdr path)))
+       (else #f)))
+
+    (define (capture-ref captures path)
+      (let ((cell (assoc path captures)))
+        (if cell (cdr cell) #f)))
+
+    (define (ensure-pattern-binding! bindings name depth)
       (let ((entry (pattern-binding bindings name)))
         (cond
-         (repeated?
-          (cond
-           ((not entry)
-            (add-pattern-binding!
-             bindings
-             name
-             (cons 'repeat (list value))))
-           ((eq? (car (cdr entry)) 'repeat)
-            (set-cdr! entry
-                      (cons 'repeat
-                            (append (cdr (cdr entry)) (list value)))))
-           (else
-            (eval-error
-             "pattern variable used at inconsistent ellipsis depth"
-             name))))
-         (entry
-          (eval-error "duplicate pattern variable" name))
+         ((not entry)
+          (let ((new-entry (make-pattern-binding depth '() '())))
+            (add-pattern-binding! bindings name new-entry)
+            new-entry))
+         ((and (not (null? (pattern-binding-captures entry)))
+               (not (= (pattern-binding-depth entry) depth)))
+          (eval-error
+           "pattern variable used at inconsistent ellipsis depth"
+           name))
          (else
-          (add-pattern-binding! bindings name (cons 'single value)))))
+          (if (< (pattern-binding-depth entry) depth)
+              (set-pattern-binding-depth! entry depth))
+          entry))))
+
+    (define (syntax-bind-pattern-variable! bindings name value path)
+      (let* ((entry (ensure-pattern-binding! bindings name (length path)))
+             (captures (pattern-binding-captures entry)))
+        (if (assoc path captures)
+            (eval-error "duplicate pattern variable" name))
+        (set-pattern-binding-captures!
+         entry
+         (cons (cons path value) captures)))
       #t)
+
+    (define (list-elements-tail datum)
+      (let loop ((cursor datum) (elements '()))
+        (if (pair? cursor)
+            (loop (cdr cursor) (cons (car cursor) elements))
+            (cons (reverse elements) cursor))))
+
+    (define (append-tail elements tail)
+      (if (null? elements)
+          tail
+          (cons (car elements) (append-tail (cdr elements) tail))))
 
     (define (pattern-variable-names pattern literals ellipsis)
       (cond
@@ -836,18 +971,22 @@
         (let ((name (identifier-datum-name pattern)))
           (if (or (eq? name '_)
                   (eq? name ellipsis)
-                  (memq name literals))
+                  (syntax-literal? pattern literals))
               '()
               (list name))))
        ((pair? pattern)
-        (let ((elements (proper-list-elements/maybe pattern)))
-          (if elements
-              (apply append
-                     (map (lambda (element)
-                            (pattern-variable-names
-                             element literals ellipsis))
-                          elements))
-              '())))
+        (let* ((pieces (list-elements-tail pattern))
+               (names
+                (apply append
+                       (map (lambda (element)
+                              (pattern-variable-names
+                               element literals ellipsis))
+                            (car pieces)))))
+          (if (cdr pieces)
+              (append names
+                      (pattern-variable-names
+                       (cdr pieces) literals ellipsis))
+              names)))
        ((vector? pattern)
         (apply append
                (map (lambda (element)
@@ -856,11 +995,15 @@
        (else '())))
 
     (define (bind-empty-repeated-pattern-variables!
-             pattern literals ellipsis bindings)
+             pattern literals ellipsis bindings path)
       (for-each
        (lambda (name)
-         (if (not (pattern-binding bindings name))
-             (add-pattern-binding! bindings name (cons 'repeat '()))))
+         (let ((entry
+                (ensure-pattern-binding! bindings name (+ (length path) 1))))
+           (if (not (member path (pattern-binding-empty-prefixes entry)))
+               (set-pattern-binding-empty-prefixes!
+                entry
+                (cons path (pattern-binding-empty-prefixes entry))))))
        (pattern-variable-names pattern literals ellipsis)))
 
     (define (list-take list count)
@@ -877,44 +1020,106 @@
     (define (list-last-n list count)
       (list-drop list (- (length list) count)))
 
-    (define (match-pattern pattern input literals ellipsis bindings repeated?)
+    (define (identifier-syntax-binding-in identifier syntax-environment)
+      (let ((name (identifier-datum-name identifier)))
+        (and name
+             (or
+              (and (identifier? identifier)
+                   (let* ((identifier-context (identifier-context identifier))
+                          (definition-syntax-environment
+                           (and identifier-context
+                                (syntax-context-syntax-environment
+                                 identifier-context))))
+                     (and definition-syntax-environment
+                          (syntax-environment-ref
+                           definition-syntax-environment
+                           name))))
+              (and syntax-environment
+                   (syntax-environment-ref syntax-environment name))))))
+
+    (define (identifier-binding-token identifier value-environment
+                                      syntax-environment)
+      (let ((cell
+             (and value-environment
+                  (environment-cell-for-identifier
+                   value-environment identifier)))
+            (syntax-binding
+             (identifier-syntax-binding-in identifier syntax-environment)))
+        (cond
+         (cell (cons 'value cell))
+         (syntax-binding (cons 'syntax syntax-binding))
+         (else #f))))
+
+    (define (binding-tokens-equal? left right)
       (cond
-       ((identifier-datum? pattern)
-        (let ((name (identifier-datum-name pattern)))
-          (cond
-           ((and (eq? name '_) (not (memq name literals))) #t)
-           ((syntax-literal? pattern literals)
-            (and (identifier-datum? input)
-                 (eq? name (identifier-datum-name input))))
-           ((eq? name ellipsis)
-            (and (identifier-datum? input)
-                 (eq? name (identifier-datum-name input))))
-           (else
-            (syntax-bind-pattern-variable!
-             bindings name input repeated?)))))
-       ((pair? pattern)
-        (let ((pattern-elements (proper-list-elements/maybe pattern))
-              (input-elements (proper-list-elements/maybe input)))
-          (and pattern-elements
-               input-elements
+       ((and (not left) (not right)) #t)
+       ((and left right
+             (eq? (car left) (car right))
+             (eq? (cdr left) (cdr right)))
+        #t)
+       (else #f)))
+
+    (define (literal-identifier-match? pattern input transformer
+                                       use-environment use-syntax-environment)
+      (and (identifier-datum? input)
+           (eq? (identifier-datum-name pattern)
+                (identifier-datum-name input))
+           (binding-tokens-equal?
+            (identifier-binding-token
+             pattern
+             (syntax-transformer-value-environment transformer)
+             (syntax-transformer-syntax-environment transformer))
+            (identifier-binding-token
+             input use-environment use-syntax-environment))))
+
+    (define (match-pattern pattern input transformer bindings path
+                           use-environment use-syntax-environment)
+      (let ((literals (syntax-transformer-literals transformer))
+            (ellipsis (syntax-transformer-ellipsis transformer)))
+        (cond
+         ((identifier-datum? pattern)
+          (let ((name (identifier-datum-name pattern)))
+            (cond
+             ((and (eq? name '_) (not (syntax-literal? pattern literals)))
+              #t)
+             ((syntax-literal? pattern literals)
+              (literal-identifier-match?
+               pattern input transformer use-environment
+               use-syntax-environment))
+             ((eq? name ellipsis)
+              (and (identifier-datum? input)
+                   (eq? name (identifier-datum-name input))))
+             (else
+              (syntax-bind-pattern-variable!
+               bindings name input path)))))
+         ((pair? pattern)
+          (and (pair? input)
+               (let ((pattern-pieces (list-elements-tail pattern))
+                     (input-pieces (list-elements-tail input)))
+                 (match-pattern-elements
+                  (car pattern-pieces)
+                  (cdr pattern-pieces)
+                  (car input-pieces)
+                  (cdr input-pieces)
+                  transformer
+                  bindings
+                  path
+                  use-environment
+                  use-syntax-environment))))
+         ((vector? pattern)
+          (and (vector? input)
                (match-pattern-elements
-                pattern-elements
-                input-elements
-                literals
-                ellipsis
+                (vector->list pattern)
+                '()
+                (vector->list input)
+                '()
+                transformer
                 bindings
-                repeated?))))
-       ((vector? pattern)
-        (and (vector? input)
-             (match-pattern-elements
-              (vector->list pattern)
-              (vector->list input)
-              literals
-              ellipsis
-              bindings
-              repeated?)))
-       (else
-        (equal? pattern input))))
+                path
+                use-environment
+                use-syntax-environment)))
+         (else
+          (equal? pattern input)))))
 
     (define (find-ellipsis-index patterns ellipsis)
       (if (null? patterns)
@@ -925,98 +1130,135 @@
              ((ellipsis-identifier? (car rest) ellipsis) index)
              (else (loop (cdr rest) (+ index 1)))))))
 
-    (define (match-pattern-list patterns inputs literals ellipsis bindings
-                                repeated?)
+    (define (match-pattern-list patterns inputs transformer bindings path
+                                use-environment use-syntax-environment)
       (cond
-       ((null? patterns) (null? inputs))
+       ((null? patterns) #t)
        ((null? inputs) #f)
        ((match-pattern (car patterns)
                        (car inputs)
-                       literals
-                       ellipsis
+                       transformer
                        bindings
-                       repeated?)
+                       path
+                       use-environment
+                       use-syntax-environment)
         (match-pattern-list (cdr patterns)
                             (cdr inputs)
-                            literals
-                            ellipsis
+                            transformer
                             bindings
-                            repeated?))
+                            path
+                            use-environment
+                            use-syntax-environment))
        (else #f)))
 
-    (define (match-repeated-inputs pattern inputs literals ellipsis bindings)
-      (if (null? inputs)
-          (begin
-            (bind-empty-repeated-pattern-variables!
-             pattern literals ellipsis bindings)
-            #t)
-          (and (match-pattern pattern
-                              (car inputs)
-                              literals
-                              ellipsis
-                              bindings
-                              #t)
-               (match-repeated-inputs pattern
-                                      (cdr inputs)
-                                      literals
-                                      ellipsis
-                                      bindings))))
+    (define (path-add-index path index)
+      (append path (list index)))
 
-    (define (match-pattern-elements patterns inputs literals ellipsis bindings
-                                    repeated?)
-      (let ((ellipsis-index (find-ellipsis-index patterns ellipsis)))
+    (define (match-pattern-elements patterns pattern-tail input-elements
+                                    input-tail transformer bindings path
+                                    use-environment use-syntax-environment)
+      (let* ((ellipsis (syntax-transformer-ellipsis transformer))
+             (ellipsis-index (find-ellipsis-index patterns ellipsis)))
         (if ellipsis-index
             (let* ((prefix-count (- ellipsis-index 1))
                    (suffix (list-drop patterns (+ ellipsis-index 1)))
                    (suffix-count (length suffix))
                    (repeat-pattern (list-ref patterns (- ellipsis-index 1)))
-                   (repeat-count (- (length inputs)
+                   (repeat-count (- (length input-elements)
                                     prefix-count
                                     suffix-count)))
               (and (>= repeat-count 0)
                    (match-pattern-list
                     (list-take patterns prefix-count)
-                    (list-take inputs prefix-count)
-                    literals
-                    ellipsis
+                    (list-take input-elements prefix-count)
+                    transformer
                     bindings
-                    repeated?)
-                   (match-repeated-inputs
-                    repeat-pattern
-                    (list-take (list-drop inputs prefix-count)
-                               repeat-count)
-                    literals
-                    ellipsis
-                    bindings)
+                    path
+                    use-environment
+                    use-syntax-environment)
+                   (let repeat-loop
+                       ((rest (list-take
+                               (list-drop input-elements prefix-count)
+                               repeat-count))
+                        (index 0))
+                     (if (null? rest)
+                         (begin
+                           (if (= repeat-count 0)
+                               (bind-empty-repeated-pattern-variables!
+                                repeat-pattern
+                                (syntax-transformer-literals transformer)
+                                ellipsis
+                                bindings
+                                path))
+                           #t)
+                         (and
+                          (match-pattern repeat-pattern
+                                         (car rest)
+                                         transformer
+                                         bindings
+                                         (path-add-index path index)
+                                         use-environment
+                                         use-syntax-environment)
+                          (repeat-loop (cdr rest) (+ index 1)))))
                    (match-pattern-list
                     suffix
                     (if (> suffix-count 0)
-                        (list-last-n inputs suffix-count)
+                        (list-last-n input-elements suffix-count)
                         '())
-                    literals
-                    ellipsis
+                    transformer
                     bindings
-                    repeated?)))
-            (and (= (length patterns) (length inputs))
-                 (match-pattern-list patterns
-                                     inputs
-                                     literals
-                                     ellipsis
-                                     bindings
-                                     repeated?)))))
+                    path
+                    use-environment
+                    use-syntax-environment)
+                   (if pattern-tail
+                       (match-pattern pattern-tail
+                                      input-tail
+                                      transformer
+                                      bindings
+                                      path
+                                      use-environment
+                                      use-syntax-environment)
+                       (null? input-tail))))
+            (and (>= (length input-elements) (length patterns))
+                 (match-pattern-list
+                  patterns
+                  (list-take input-elements (length patterns))
+                  transformer
+                  bindings
+                  path
+                  use-environment
+                  use-syntax-environment)
+                 (let ((remaining
+                        (list-drop input-elements (length patterns))))
+                   (if pattern-tail
+                       (match-pattern pattern-tail
+                                      (append-tail remaining input-tail)
+                                      transformer
+                                      bindings
+                                      path
+                                      use-environment
+                                      use-syntax-environment)
+                       (and (null? remaining) (null? input-tail))))))))
 
-    (define (match-syntax-rule rule form transformer bindings)
-      (let ((pattern-elements (proper-list-elements/maybe (car rule)))
-            (input-elements (proper-list-elements/maybe form)))
-        (and pattern-elements
+    (define (match-syntax-rule rule form transformer bindings
+                               use-environment use-syntax-environment)
+      (let* ((pattern-pieces (list-elements-tail (car rule)))
+             (input-pieces (list-elements-tail form))
+             (pattern-elements (car pattern-pieces))
+             (input-elements (car input-pieces)))
+        (and (not (null? pattern-elements))
              input-elements
+             (null? (cdr input-pieces))
              (match-pattern-elements
               (cdr pattern-elements)
+              (cdr pattern-pieces)
               (cdr input-elements)
-              (syntax-transformer-literals transformer)
-              (syntax-transformer-ellipsis transformer)
+              '()
+              transformer
               bindings
-              #f))))
+              '()
+              use-environment
+              use-syntax-environment))))
 
     (define (template-pattern-variable-names template bindings ellipsis)
       (cond
@@ -1027,14 +1269,18 @@
               (list name)
               '())))
        ((pair? template)
-        (let ((elements (proper-list-elements/maybe template)))
-          (if elements
-              (apply append
-                     (map (lambda (element)
-                            (template-pattern-variable-names
-                             element bindings ellipsis))
-                          elements))
-              '())))
+        (let* ((pieces (list-elements-tail template))
+               (names
+                (apply append
+                       (map (lambda (element)
+                              (template-pattern-variable-names
+                               element bindings ellipsis))
+                            (car pieces)))))
+          (if (null? (cdr pieces))
+              names
+              (append names
+                      (template-pattern-variable-names
+                       (cdr pieces) bindings ellipsis)))))
        ((vector? template)
         (apply append
                (map (lambda (element)
@@ -1043,7 +1289,44 @@
                     (vector->list template))))
        (else '())))
 
-    (define (template-repeat-count template bindings ellipsis)
+    (define (max-number-list numbers)
+      (let loop ((rest (cdr numbers)) (best (car numbers)))
+        (if (null? rest)
+            best
+            (loop (cdr rest)
+                  (if (> (car rest) best) (car rest) best)))))
+
+    (define (collect-next-indices paths path)
+      (let ((path-length (length path)))
+        (let loop ((rest paths) (indices '()))
+          (cond
+           ((null? rest) indices)
+           ((and (> (length (car rest)) path-length)
+                 (path-prefix? path (car rest)))
+            (let ((index (list-ref (car rest) path-length)))
+              (loop (cdr rest)
+                    (if (memv index indices)
+                        indices
+                        (cons index indices)))))
+           (else
+            (loop (cdr rest) indices))))))
+
+    (define (pattern-binding-repeat-count-at entry path)
+      (if (<= (pattern-binding-depth entry) (length path))
+          #f
+          (let* ((capture-paths (map car (pattern-binding-captures entry)))
+                 (empty-prefixes (pattern-binding-empty-prefixes entry))
+                 (indices
+                  (collect-next-indices
+                   (append capture-paths empty-prefixes)
+                   path)))
+            (cond
+             ((not (null? indices))
+              (+ (max-number-list indices) 1))
+             ((member path empty-prefixes) 0)
+             (else #f)))))
+
+    (define (template-repeat-count template bindings ellipsis path)
       (let loop ((names (template-pattern-variable-names
                          template bindings ellipsis))
                  (count #f))
@@ -1054,17 +1337,32 @@
               (eval-error
                "template ellipsis must contain a repeated pattern variable")))
          (else
-          (let ((entry (pattern-binding bindings (car names))))
-            (if (and entry (eq? (car (cdr entry)) 'repeat))
-                (let ((length (length (cdr (cdr entry)))))
-                  (if (and count (not (= count length)))
+          (let* ((entry (pattern-binding bindings (car names)))
+                 (entry-count
+                  (and entry
+                       (pattern-binding-repeat-count-at entry path))))
+            (if entry-count
+                (if (and count (not (= count entry-count)))
                       (eval-error
                        "template ellipsis variables have different lengths")
-                      (loop (cdr names) length)))
+                      (loop (cdr names) entry-count))
                 (loop (cdr names) count)))))))
 
+    (define (pattern-binding-value-at entry name path)
+      (let* ((depth (pattern-binding-depth entry))
+             (capture-path
+              (if (<= depth (length path))
+                  (list-take path depth)
+                  (eval-error
+                   "repeated pattern variable used without enough ellipses"
+                   name)))
+             (cell (assoc capture-path (pattern-binding-captures entry))))
+        (if cell
+            (cdr cell)
+            (eval-error "missing pattern variable capture" name))))
+
     (define (expand-template template bindings syntax-context ellipsis . rest)
-      (let ((repeat-index (if (null? rest) #f (car rest)))
+      (let ((path (if (null? rest) '() (car rest)))
             (ellipsis-literal? (if (or (null? rest) (null? (cdr rest)))
                                    #f
                                    (second rest))))
@@ -1072,38 +1370,40 @@
          ((identifier-datum? template)
           (let* ((name (identifier-datum-name template))
                  (entry (and (not (eq? name ellipsis))
-                             (pattern-binding bindings name))))
+                            (pattern-binding bindings name))))
             (cond
-             ((and entry (eq? (car (cdr entry)) 'single))
-              (cdr (cdr entry)))
-             ((and entry (eq? (car (cdr entry)) 'repeat))
-              (if (not repeat-index)
-                  (eval-error
-                   "repeated pattern variable used without ellipsis"
-                   name))
-              (list-ref (cdr (cdr entry)) repeat-index))
+             (entry
+              (pattern-binding-value-at entry name path))
              ((and (eq? name ellipsis) (not ellipsis-literal?))
               (eval-error "misplaced ellipsis in template"))
              (else
               (make-identifier name syntax-context)))))
          ((pair? template)
-          (let ((elements (proper-list-elements/maybe template)))
-            (if (not elements)
-                (eval-error
-                 "improper syntax-rules templates are not implemented yet"
-                 template))
+          (let* ((pieces (list-elements-tail template))
+                 (elements (car pieces))
+                 (tail (cdr pieces)))
             (if (and (not ellipsis-literal?)
+                     (null? tail)
                      (= (length elements) 2)
                      (ellipsis-identifier? (car elements) ellipsis))
                 (expand-template (second elements)
                                  bindings
                                  syntax-context
                                  ellipsis
-                                 repeat-index
+                                 path
                                  #t)
                 (let loop ((cursor elements) (output '()))
                   (if (null? cursor)
-                      (reverse output)
+                      (append-tail
+                       (reverse output)
+                       (if (null? tail)
+                           '()
+                           (expand-template tail
+                                            bindings
+                                            syntax-context
+                                            ellipsis
+                                            path
+                                            ellipsis-literal?)))
                       (let ((element (car cursor))
                             (next (if (null? (cdr cursor))
                                       #f
@@ -1113,7 +1413,7 @@
                                  (ellipsis-identifier? next ellipsis))
                             (let ((count
                                    (template-repeat-count
-                                    element bindings ellipsis)))
+                                    element bindings ellipsis path)))
                               (let repeat-loop ((index 0) (out output))
                                 (if (= index count)
                                     (loop (cdr (cdr cursor)) out)
@@ -1124,7 +1424,7 @@
                                             bindings
                                             syntax-context
                                             ellipsis
-                                            index)
+                                            (path-add-index path index))
                                            out)))))
                             (loop (cdr cursor)
                                   (cons (expand-template
@@ -1132,7 +1432,7 @@
                                          bindings
                                          syntax-context
                                          ellipsis
-                                         repeat-index
+                                         path
                                          ellipsis-literal?)
                                         output)))))))))
          ((vector? template)
@@ -1141,7 +1441,7 @@
                             bindings
                             syntax-context
                             ellipsis
-                            repeat-index
+                            path
                             ellipsis-literal?)))
          (else template))))
 
@@ -1150,14 +1450,20 @@
         (set-context-next-syntax-id! context (+ id 1))
         (make-syntax-context id value-environment syntax-environment)))
 
-    (define (apply-syntax-transformer transformer form context)
+    (define (apply-syntax-transformer transformer form environment context)
       (let loop ((rules (syntax-transformer-rules transformer)))
         (if (null? rules)
             (eval-error
              "macro use does not match any syntax-rules pattern"
              form)
             (let ((bindings (make-pattern-bindings)))
-              (if (match-syntax-rule (car rules) form transformer bindings)
+              (if (match-syntax-rule
+                   (car rules)
+                   form
+                   transformer
+                   bindings
+                   environment
+                   (context-syntax-environment context))
                   (expand-template
                    (cdr (car rules))
                    bindings
@@ -1242,9 +1548,10 @@
                    (special-operator-active? operator environment))
               (make-local-syntax-scope parts environment context #t))
              ((syntax-binding-for-operator operator environment context)
-              => (lambda (transformer)
+             => (lambda (transformer)
                    (apply-syntax-transformer transformer
                                              expression
+                                             environment
                                              context)))
              (else expression)))))
 
@@ -1259,6 +1566,11 @@
             (if (not (= (length parts) 2))
                 (eval-error "quote requires exactly one datum" parts))
             (check-value-budget (second parts) context))
+           ((and (identifier-named? operator 'quasiquote)
+                 (special-operator-active? operator environment))
+            (check-value-budget
+             (eval-quasiquote parts environment context)
+             context))
            ((and (identifier-named? operator 'lambda)
                  (special-operator-active? operator environment))
             (if (< (length parts) 3)
@@ -2478,65 +2790,6 @@
        (list 'vector-set! primitive-vector-set! 3 3)
        (list 'vector? primitive-vector? 1 1)))
 
-    (define base-syntax-source
-      "(define-syntax and
-         (syntax-rules ()
-           ((and) #t)
-           ((and test) test)
-           ((and test1 test2 ...)
-            (if test1 (and test2 ...) #f))))
-       (define-syntax or
-         (syntax-rules ()
-           ((or) #f)
-           ((or test) test)
-           ((or test1 test2 ...)
-            (let ((temp test1))
-              (if temp temp (or test2 ...))))))
-       (define-syntax when
-         (syntax-rules ()
-           ((when test result1 result2 ...)
-            (if test
-                (begin result1 result2 ...)))))
-       (define-syntax unless
-         (syntax-rules ()
-           ((unless test result1 result2 ...)
-            (if (not test)
-                (begin result1 result2 ...)))))
-       (define-syntax let
-         (syntax-rules ()
-           ((let ((name val) ...) body1 body2 ...)
-            ((lambda (name ...) body1 body2 ...)
-             val ...))
-           ((let tag ((name val) ...) body1 body2 ...)
-            ((letrec ((tag (lambda (name ...)
-                             body1 body2 ...)))
-               tag)
-             val ...))))
-       (define-syntax let*
-         (syntax-rules ()
-           ((let* () body1 body2 ...)
-            (let () body1 body2 ...))
-           ((let* ((name1 val1) (name2 val2) ...)
-              body1 body2 ...)
-            (let ((name1 val1))
-              (let* ((name2 val2) ...)
-                body1 body2 ...)))))
-       (define-syntax cond
-         (syntax-rules (else)
-           ((cond (else result1 result2 ...))
-            (begin result1 result2 ...))
-           ((cond (test)) test)
-           ((cond (test) clause1 clause2 ...)
-            (let ((temp test))
-              (if temp temp (cond clause1 clause2 ...))))
-           ((cond (test result1 result2 ...))
-            (if test (begin result1 result2 ...)))
-           ((cond (test result1 result2 ...)
-                  clause1 clause2 ...)
-            (if test
-                (begin result1 result2 ...)
-                (cond clause1 clause2 ...)))))")
-
     (define (agent-scheme-base-primitive-names)
       (map car base-primitive-registry))
 
@@ -2552,6 +2805,10 @@
       '("scheme/agent-scheme/base-prelude.scm"
         "agent-scheme/base-prelude.scm"))
 
+    (define agent-scheme-base-syntax-load-paths
+      '("scheme/agent-scheme/base-syntax.scm"
+        "agent-scheme/base-syntax.scm"))
+
     (define (read-all-datums port)
       (let ((datum (read port)))
         (if (eof-object? datum)
@@ -2562,6 +2819,14 @@
       (let try ((paths agent-scheme-base-prelude-load-paths))
         (if (null? paths)
             (eval-error "unable to load base prelude")
+            (guard (condition
+                    (else (try (cdr paths))))
+              (call-with-input-file (car paths) read-all-datums)))))
+
+    (define (base-syntax-forms)
+      (let try ((paths agent-scheme-base-syntax-load-paths))
+        (if (null? paths)
+            (eval-error "unable to load base syntax prelude")
             (guard (condition
                     (else (try (cdr paths))))
               (call-with-input-file (car paths) read-all-datums)))))
@@ -2666,7 +2931,7 @@
                 environment
                 context
                 (context-syntax-environment context)))
-             (agent-scheme-read-all base-syntax-source))
+             (base-syntax-forms))
             (set-context-base-syntax-installed! context #t))))
 
     (define (rest-environment rest)

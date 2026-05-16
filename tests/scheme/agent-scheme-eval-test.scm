@@ -193,6 +193,72 @@
                        (loop (- n 1) (+ acc 1))))"
                 "5")
 
+(check-external 'cond-arrow-respects-literal-binding
+                "(list
+                   (cond ((assv 'b '((a 1) (b 2))) => cadr)
+                         (else #f))
+                   (let ((=> #f))
+                     (cond (#t => 'ok))))"
+                "(2 ok)")
+
+(check-external 'case-expands-from-base-syntax
+                "(list
+                   (case (car '(c d))
+                     ((a e i o u) 'vowel)
+                     ((c d) 'consonant)
+                     (else 'other))
+                   (case 'b
+                     ((a) 'a)
+                     ((b c) => (lambda (x) (list x 'hit)))
+                     (else #f)))"
+                "(consonant (b hit))")
+
+(check-external 'do-expands-nested-ellipses
+                "(do ((i 0 (+ i 1))
+                      (acc 0 (+ acc i)))
+                     ((= i 5) acc))"
+                "10")
+
+(check-external 'dotted-patterns-and-templates
+                "(define-syntax rest-list
+                   (syntax-rules ()
+                     ((rest-list first . rest)
+                      'rest)))
+                 (define-syntax make-pair
+                   (syntax-rules ()
+                     ((make-pair left right)
+                      '(left . right))))
+                 (list (rest-list a b c)
+                       (make-pair alpha beta))"
+                "((b c) (alpha . beta))")
+
+(check-external 'nested-ellipsis-template-expands
+                "(define-syntax echo-groups
+                   (syntax-rules ()
+                     ((echo-groups ((head item ...) ...))
+                      '((head item ...) ...))))
+                 (echo-groups ((a 1 2) (b 3) (c)))"
+                "((a 1 2) (b 3) (c))")
+
+(check-external 'quasiquote-evaluates-unquotes
+                "(list
+                   (quasiquote (a (unquote (+ 1 2))
+                                  (unquote-splicing (list 'b 'c))))
+                   (quasiquote #(1 (unquote (+ 1 2))))
+                   (quasiquote (outer
+                                 (quasiquote
+                                  (inner (unquote (+ 1 2))))
+                                 (unquote (+ 2 3)))))"
+                "((a 3 b c) #(1 3) (outer (quasiquote (inner (unquote (+ 1 2)))) 5))")
+
+(check-external 'cond-expand-selects-base-feature
+                "(list
+                   (cond-expand (r7rs 'ok) (else 'missing))
+                   (cond-expand
+                    ((library (scheme base)) 'base)
+                    (else 'missing)))"
+                "(ok base)")
+
 (check 'result-rendering
        (agent-scheme-result->external
         (agent-scheme-eval-source-result "(+ 1 2)"))

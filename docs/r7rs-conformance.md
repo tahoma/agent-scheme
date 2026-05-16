@@ -26,9 +26,9 @@ marked `implemented`.
 | Reader syntax | Comments, case directives, booleans, numbers, characters, strings, symbols, lists, dotted pairs, abbreviations, vectors, bytevectors, datum comments | `pending` | `reader-boolean-literals`, `reader-bytevector-literal`, `reader-character-literal`, `reader-symbol-case-directive`, `reader-dotted-list`, `reader-vector-literal`, `reader-abbreviation-forms`, `reader-comments-and-datum-comments` | First-pass reader datums are implemented and fixture-loaded with Agent Scheme's reader; datum labels remain pending. |
 | Primitive expressions | Literal, variable reference, quote, procedure call, `if`, `set!`, `lambda` | `implemented` | `primitive-procedure-call` | Emacs Lisp and portable R7RS evaluator kernels cover explicit lexical environments, closures, mutation, and primitive calls. |
 | Definitions and sequencing | `define`, `define-values`, `begin`, internal definitions | `pending` | `primitive-procedure-call` | Internal definitions should be tested with lexical scope cases. |
-| Derived syntax | `cond`, `case`, `and`, `or`, `when`, `unless`, `let`, `let*`, `letrec`, `letrec*`, `let-values`, `let*-values`, `do`, `delay`, `quasiquote`, `parameterize` | `pending` | `derived-let-expression` | Initial macro-expanded `and`, `or`, `when`, `unless`, `let`, `let*`, and simple `cond` support is implemented; broader derived syntax remains pending. |
-| `syntax-rules` macros | `define-syntax`, `let-syntax`, `letrec-syntax`, literals, ellipses, hygiene | `pending` | `syntax-rules-unless`, `syntax-rules-let-syntax-hygiene` | Initial high-level macro expansion supports top-level `define-syntax`, local `let-syntax` and `letrec-syntax`, one-dimensional ellipses, and hygienic introduced identifiers. Dotted patterns, nested ellipses, and additional literal-binding edge cases still need coverage. |
-| Libraries, imports, exports | `define-library`, `import`, `export`, `include`, `include-ci`, `cond-expand`, library body ordering | `pending` | `library-import-export` | Library names use R7RS names such as `(scheme base)`. |
+| Derived syntax | `cond`, `case`, `and`, `or`, `when`, `unless`, `let`, `let*`, `letrec`, `letrec*`, `let-values`, `let*-values`, `do`, `delay`, `quasiquote`, `parameterize` | `pending` | `derived-let-expression`, `derived-cond-arrow-literal-binding`, `derived-case-expression`, `derived-do-expression`, `derived-quasiquote-expression` | Macro-expanded `and`, `case`, `cond`, `do`, `or`, `when`, `unless`, `let`, and `let*` support is implemented. `letrec`, `letrec*`, `begin`, and `quasiquote` are evaluator-supported where primitive handling is required. |
+| `syntax-rules` macros | `define-syntax`, `let-syntax`, `letrec-syntax`, literals, ellipses, hygiene | `implemented` | `syntax-rules-unless`, `syntax-rules-let-syntax-hygiene`, `syntax-rules-dotted-pattern-template`, `syntax-rules-nested-ellipsis` | High-level macro expansion supports top-level `define-syntax`, local `let-syntax` and `letrec-syntax`, hygienic introduced identifiers, literal binding checks, dotted patterns/templates, and nested ellipses. |
+| Libraries, imports, exports | `define-library`, `import`, `export`, `include`, `include-ci`, `cond-expand`, library body ordering | `pending` | `cond-expand-r7rs-feature`, `library-import-export` | Expression-level `cond-expand` for recognized base features is implemented; the full library system remains pending. |
 | Proper tail recursion | Tail calls in procedures, conditionals, derived syntax, continuations, and library procedures | `pending` | `proper-tail-recursion-loop` | Procedure, conditional, and named-let loops are fixture-covered; continuations and broader library interactions remain pending. |
 | Multiple values | `values`, `call-with-values`, `define-values`, `let-values`, `let*-values` | `pending` | `multiple-values-direct`, `multiple-values-call-with-values` | Fixture expectations can compare either one value or multiple values. |
 | Exceptions | `with-exception-handler`, `guard`, `raise`, `raise-continuable`, `error` | `pending` | `exceptions-guard-raise` | Error objects should remain printable as Scheme-readable data where possible. |
@@ -97,13 +97,14 @@ Implemented primitive procedure bindings:
 - higher-order helpers: `apply`, `for-each`, `map`
 
 Implemented macro-expanded and evaluator-supported syntax includes `and`,
-simple `cond`, `let`, `let*`, `letrec`, `letrec*`, `let-syntax`,
-`letrec-syntax`, `or`, `syntax-rules`, `unless`, and `when`.
+`case`, `cond`, `cond-expand`, `do`, `let`, `let*`, `letrec`, `letrec*`,
+`let-syntax`, `letrec-syntax`, `or`, `quasiquote`, `syntax-rules`, `unless`,
+and `when`.
 
-Pending pure bindings include remaining derived syntax and macro forms (`case`,
-`cond-expand`, `do`, `quasiquote`), records
+Pending pure bindings include records
 (`define-record-type`), multiple values (`call-with-values`, `define-values`,
-`let-values`, `let*-values`, `values`), continuations (`call/cc`,
+`let-values`, `let*-values`, `values`), promises (`delay`, `delay-force`,
+`force`, `make-promise`), dynamic parameters (`parameterize`), continuations (`call/cc`,
 `call-with-current-continuation`, `dynamic-wind`), exceptions (`error`, `guard`,
 `raise`, `raise-continuable`, `with-exception-handler` and error-object
 predicates), remaining numeric operations (`denominator`, `exact`,

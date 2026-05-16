@@ -95,4 +95,95 @@
           (loop (- n 1) (+ acc 1))))")
     "5")))
 
+(ert-deftest agent-scheme-macro-test-cond-arrow-respects-literal-binding ()
+  "Treat `=>' as syntax only when the use-site binding matches."
+  (should
+   (equal
+    (agent-scheme-macro-test--external
+     "(list
+        (cond ((assv 'b '((a 1) (b 2))) => cadr)
+              (else #f))
+        (let ((=> #f))
+          (cond (#t => 'ok))))")
+    "(2 ok)")))
+
+(ert-deftest agent-scheme-macro-test-case-expands-from-base-syntax ()
+  "Expand R7RS case clauses through the base syntax prelude."
+  (should
+   (equal
+    (agent-scheme-macro-test--external
+     "(list
+        (case (car '(c d))
+          ((a e i o u) 'vowel)
+          ((c d) 'consonant)
+          (else 'other))
+        (case 'b
+          ((a) 'a)
+          ((b c) => (lambda (x) (list x 'hit)))
+          (else #f)))")
+    "(consonant (b hit))")))
+
+(ert-deftest agent-scheme-macro-test-do-expands-nested-ellipses ()
+  "Expand R7RS do through nested ellipses in the shared syntax prelude."
+  (should
+   (equal
+    (agent-scheme-macro-test--external
+     "(do ((i 0 (+ i 1))
+           (acc 0 (+ acc i)))
+          ((= i 5) acc))")
+    "10")))
+
+(ert-deftest agent-scheme-macro-test-dotted-patterns-and-templates ()
+  "Match improper syntax-rules patterns and produce improper templates."
+  (should
+   (equal
+    (agent-scheme-macro-test--external
+     "(define-syntax rest-list
+        (syntax-rules ()
+          ((rest-list first . rest)
+           'rest)))
+      (define-syntax make-pair
+        (syntax-rules ()
+          ((make-pair left right)
+           '(left . right))))
+      (list (rest-list a b c)
+            (make-pair alpha beta))")
+    "((b c) (alpha . beta))")))
+
+(ert-deftest agent-scheme-macro-test-nested-ellipsis-template-expands ()
+  "Distribute nested ellipsis matches through nested templates."
+  (should
+   (equal
+    (agent-scheme-macro-test--external
+     "(define-syntax echo-groups
+        (syntax-rules ()
+          ((echo-groups ((head item ...) ...))
+           '((head item ...) ...))))
+      (echo-groups ((a 1 2) (b 3) (c)))")
+    "((a 1 2) (b 3) (c))")))
+
+(ert-deftest agent-scheme-macro-test-quasiquote-evaluates-unquotes ()
+  "Evaluate quasiquote templates, including splicing and vectors."
+  (should
+   (equal
+    (agent-scheme-macro-test--external
+     "(list
+        (quasiquote (a (unquote (+ 1 2))
+                       (unquote-splicing (list 'b 'c))))
+        (quasiquote #(1 (unquote (+ 1 2))))
+        (quasiquote (outer
+                      (quasiquote (inner (unquote (+ 1 2))))
+                      (unquote (+ 2 3)))))")
+    "((a 3 b c) #(1 3) (outer (quasiquote (inner (unquote (+ 1 2)))) 5))")))
+
+(ert-deftest agent-scheme-macro-test-cond-expand-selects-base-feature ()
+  "Expand recognized cond-expand feature clauses from the syntax prelude."
+  (should
+   (equal
+    (agent-scheme-macro-test--external
+     "(list
+        (cond-expand (r7rs 'ok) (else 'missing))
+        (cond-expand ((library (scheme base)) 'base) (else 'missing)))")
+    "(ok base)")))
+
 ;;; agent-scheme-macro-test.el ends here

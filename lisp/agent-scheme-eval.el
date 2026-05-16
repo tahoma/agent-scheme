@@ -36,6 +36,12 @@
                  file)
   :group 'agent-scheme)
 
+(defcustom agent-scheme-base-syntax-file nil
+  "Optional path to the portable `(scheme base)' syntax prelude file."
+  :type '(choice (const :tag "Use bundled syntax prelude" nil)
+                 file)
+  :group 'agent-scheme)
+
 (define-error 'agent-scheme-eval-error
   "Agent Scheme evaluation error")
 
@@ -148,6 +154,13 @@
                (:copier nil))
   "A parsed high-level `syntax-rules' transformer."
   ellipsis literals rules value-environment syntax-environment)
+
+(cl-defstruct (agent-scheme--pattern-binding
+               (:constructor agent-scheme--make-pattern-binding
+                             (depth captures))
+               (:copier nil))
+  "Nested pattern-variable captures for one macro expansion."
+  depth captures empty-prefixes)
 
 (cl-defstruct (agent-scheme--syntax-scope
                (:constructor agent-scheme--make-syntax-scope
@@ -705,6 +718,101 @@ When TAILP is non-nil, return a bounce for Scheme procedure bodies."
     (agent-scheme--environment-set-identifier environment target value)
     agent-scheme-unspecified))
 
+(defun agent-scheme--tagged-list-p (datum tag)
+  "Return non-nil if DATUM is a list whose first identifier names TAG."
+  (and (consp datum)
+       (agent-scheme--symbol-named-p (car datum) tag)))
+
+(defun agent-scheme--single-argument-syntax (form description)
+  "Return FORM's single operand or signal an error for DESCRIPTION."
+  (let ((parts (agent-scheme--proper-list-elements form description)))
+    (unless (= (length parts) 2)
+      (agent-scheme--eval-error "%s requires exactly one operand" description))
+    (cadr parts)))
+
+(defun agent-scheme--eval-quasiquote-list
+    (template depth environment context)
+  "Evaluate quasiquoted list TEMPLATE at nesting DEPTH."
+  (let ((cursor template)
+        output)
+    (while (consp cursor)
+      (let ((element (car cursor)))
+        (if (and (= depth 1)
+                 (agent-scheme--tagged-list-p element "unquote-splicing"))
+            (let ((splice
+                   (agent-scheme--eval-expression
+                    (agent-scheme--single-argument-syntax
+                     element "unquote-splicing")
+                    environment
+                    context
+                    nil)))
+              (dolist (splice-element
+                       (agent-scheme--proper-list-elements
+                        splice "unquote-splicing result"))
+                (push splice-element output)))
+          (push (agent-scheme--eval-quasiquote-template
+                 element depth environment context)
+                output)))
+      (setq cursor (cdr cursor)))
+    (append
+     (nreverse output)
+     (cond
+      ((null cursor) nil)
+      ((and (= depth 1)
+            (agent-scheme--tagged-list-p cursor "unquote"))
+       (agent-scheme--eval-expression
+        (agent-scheme--single-argument-syntax cursor "unquote")
+        environment
+        context
+        nil))
+      (t
+       (agent-scheme--eval-quasiquote-template
+        cursor depth environment context))))))
+
+(defun agent-scheme--eval-quasiquote-template
+    (template depth environment context)
+  "Evaluate quasiquote TEMPLATE at nesting DEPTH."
+  (cond
+   ((agent-scheme--tagged-list-p template "unquote")
+    (let ((operand
+           (agent-scheme--single-argument-syntax template "unquote")))
+      (if (= depth 1)
+          (agent-scheme--eval-expression operand environment context nil)
+        (list (car template)
+              (agent-scheme--eval-quasiquote-template
+               operand (1- depth) environment context)))))
+   ((agent-scheme--tagged-list-p template "unquote-splicing")
+    (if (= depth 1)
+        (agent-scheme--eval-error
+         "unquote-splicing is only valid inside a quasiquoted list or vector")
+      (let ((operand
+             (agent-scheme--single-argument-syntax
+              template "unquote-splicing")))
+        (list (car template)
+              (agent-scheme--eval-quasiquote-template
+               operand (1- depth) environment context)))))
+   ((agent-scheme--tagged-list-p template "quasiquote")
+    (let ((operand
+           (agent-scheme--single-argument-syntax template "quasiquote")))
+      (list (car template)
+            (agent-scheme--eval-quasiquote-template
+             operand (1+ depth) environment context))))
+   ((consp template)
+    (agent-scheme--eval-quasiquote-list
+     template depth environment context))
+   ((vectorp template)
+    (vconcat
+     (agent-scheme--eval-quasiquote-list
+      (append template nil) depth environment context)))
+   (t template)))
+
+(defun agent-scheme--eval-quasiquote (parts environment context)
+  "Evaluate a quasiquote expression PARTS in ENVIRONMENT."
+  (unless (= (length parts) 2)
+    (agent-scheme--eval-error "quasiquote requires exactly one template"))
+  (agent-scheme--eval-quasiquote-template
+   (cadr parts) 1 environment context))
+
 (defun agent-scheme--parse-letrec-binding (binding description)
   "Return BINDING as (NAME . INITIALIZER) for DESCRIPTION."
   (let ((parts (agent-scheme--proper-list-elements binding description)))
@@ -902,8 +1010,10 @@ each initializer."
     (let ((literals
            (mapcar
             (lambda (literal)
-              (agent-scheme--expect-symbol-name
-               literal "syntax-rules literal"))
+              (unless (agent-scheme--identifier-datum-p literal)
+                (agent-scheme--eval-error
+                 "syntax-rules literal must be an identifier"))
+              literal)
             (agent-scheme--proper-list-elements
              literal-form "syntax-rules literal list"))))
       (agent-scheme--make-syntax-transformer
@@ -915,30 +1025,48 @@ each initializer."
 
 (defun agent-scheme--syntax-literal-p (identifier literals)
   "Return non-nil if IDENTIFIER is one of LITERALS."
-  (member (agent-scheme--symbol-name identifier) literals))
+  (member (agent-scheme--symbol-name identifier)
+          (mapcar #'agent-scheme--symbol-name literals)))
 
-(defun agent-scheme--syntax-bind-pattern-variable
-    (bindings name value repeated)
-  "Bind pattern variable NAME to VALUE in BINDINGS.
-When REPEATED is non-nil, append VALUE to NAME's repeated matches."
+(defun agent-scheme--path-prefix-p (prefix path)
+  "Return non-nil when PREFIX is an initial segment of PATH."
+  (and (<= (length prefix) (length path))
+       (cl-loop for left in prefix
+                for right in path
+                always (= left right))))
+
+(defun agent-scheme--ensure-pattern-binding (bindings name depth)
+  "Return pattern binding NAME in BINDINGS, creating it at DEPTH."
   (let ((entry (gethash name bindings)))
     (cond
-     (repeated
-      (cond
-       ((null entry)
-        (puthash name (cons 'repeat (list value)) bindings))
-       ((eq (car entry) 'repeat)
-        (puthash name (cons 'repeat (append (cdr entry) (list value)))
-                 bindings))
-       (t
-        (agent-scheme--eval-error
-         "pattern variable used at inconsistent ellipsis depth: %s"
-         name))))
-     (entry
+     ((null entry)
+      (setq entry
+            (agent-scheme--make-pattern-binding
+             depth
+             (make-hash-table :test #'equal)))
+      (puthash name entry bindings))
+     ((and (> (hash-table-count
+               (agent-scheme--pattern-binding-captures entry))
+              0)
+           (/= (agent-scheme--pattern-binding-depth entry) depth))
+      (agent-scheme--eval-error
+       "pattern variable used at inconsistent ellipsis depth: %s"
+       name))
+     ((< (agent-scheme--pattern-binding-depth entry) depth)
+      (setf (agent-scheme--pattern-binding-depth entry) depth)))
+    entry))
+
+(defun agent-scheme--syntax-bind-pattern-variable
+    (bindings name value path)
+  "Bind pattern variable NAME to VALUE at nested ellipsis PATH."
+  (let* ((depth (length path))
+         (entry (agent-scheme--ensure-pattern-binding bindings name depth))
+         (captures (agent-scheme--pattern-binding-captures entry)))
+    (unless (eq (gethash path captures agent-scheme--missing-cell)
+                agent-scheme--missing-cell)
       (agent-scheme--eval-error
        "duplicate pattern variable: %s" name))
-     (t
-      (puthash name (cons 'single value) bindings))))
+    (puthash path value captures))
   t)
 
 (defun agent-scheme--pattern-variable-names (pattern literals ellipsis)
@@ -948,7 +1076,8 @@ When REPEATED is non-nil, append VALUE to NAME's repeated matches."
     (let ((name (agent-scheme--symbol-name pattern)))
       (unless (or (equal name "_")
                   (equal name ellipsis)
-                  (member name literals))
+                  (member name (mapcar #'agent-scheme--symbol-name
+                                       literals)))
         (list name))))
    ((consp pattern)
     (let ((elements (agent-scheme--proper-list-elements-maybe pattern)))
@@ -969,115 +1098,254 @@ When REPEATED is non-nil, append VALUE to NAME's repeated matches."
    (t nil)))
 
 (defun agent-scheme--bind-empty-repeated-pattern-variables
-    (pattern literals ellipsis bindings)
-  "Record empty repeated matches for variables in PATTERN."
+    (pattern literals ellipsis bindings path)
+  "Record empty repeated matches for variables in PATTERN at PATH."
   (dolist (name (agent-scheme--pattern-variable-names
                  pattern literals ellipsis))
-    (unless (gethash name bindings)
-      (puthash name (cons 'repeat nil) bindings))))
+    (let ((entry
+           (agent-scheme--ensure-pattern-binding
+            bindings name (1+ (length path)))))
+      (cl-pushnew path
+                  (agent-scheme--pattern-binding-empty-prefixes entry)
+                  :test #'equal))))
+
+(defun agent-scheme--list-elements-tail (datum)
+  "Return (ELEMENTS . TAIL) for possibly improper list DATUM."
+  (let ((cursor datum)
+        elements)
+    (while (consp cursor)
+      (push (car cursor) elements)
+      (setq cursor (cdr cursor)))
+    (cons (nreverse elements) cursor)))
+
+(defun agent-scheme--identifier-syntax-binding-in
+    (identifier syntax-environment)
+  "Return syntactic binding for IDENTIFIER in SYNTAX-ENVIRONMENT."
+  (let ((name (agent-scheme--symbol-name identifier)))
+    (and name
+         (or
+          (and (agent-scheme--identifier-p identifier)
+               (let* ((identifier-context
+                       (agent-scheme--identifier-context identifier))
+                      (definition-syntax-environment
+                       (and identifier-context
+                            (agent-scheme--syntax-context-syntax-environment
+                             identifier-context))))
+                 (and definition-syntax-environment
+                      (agent-scheme--syntax-environment-ref
+                       definition-syntax-environment name))))
+          (and syntax-environment
+               (agent-scheme--syntax-environment-ref
+                syntax-environment name))))))
+
+(defun agent-scheme--identifier-binding-token
+    (identifier value-environment syntax-environment)
+  "Return lexical binding token for IDENTIFIER."
+  (let ((cell (and value-environment
+                   (agent-scheme--environment-cell-for-identifier
+                    value-environment identifier)))
+        (syntax-binding
+         (agent-scheme--identifier-syntax-binding-in
+          identifier syntax-environment)))
+    (cond
+     (cell (cons 'value cell))
+     (syntax-binding (cons 'syntax syntax-binding))
+     (t nil))))
+
+(defun agent-scheme--binding-tokens-equal-p (left right)
+  "Return non-nil if lexical binding tokens LEFT and RIGHT are equal."
+  (cond
+   ((and (null left) (null right)) t)
+   ((and left right
+         (eq (car left) (car right))
+         (eq (cdr left) (cdr right)))
+    t)
+   (t nil)))
+
+(defun agent-scheme--literal-identifier-match-p
+    (pattern input transformer use-environment use-syntax-environment)
+  "Return non-nil if literal PATTERN matches INPUT."
+  (and (agent-scheme--identifier-datum-p input)
+       (equal (agent-scheme--symbol-name pattern)
+              (agent-scheme--symbol-name input))
+       (agent-scheme--binding-tokens-equal-p
+        (agent-scheme--identifier-binding-token
+         pattern
+         (agent-scheme--syntax-transformer-value-environment transformer)
+         (agent-scheme--syntax-transformer-syntax-environment transformer))
+        (agent-scheme--identifier-binding-token
+         input use-environment use-syntax-environment))))
+
+(defun agent-scheme--find-ellipsis-index (patterns ellipsis)
+  "Return index of the first ellipsis in PATTERNS, or nil."
+  (let ((index 1)
+        found)
+    (while (and (null found) (< index (length patterns)))
+      (when (agent-scheme--ellipsis-identifier-p (nth index patterns) ellipsis)
+        (setq found index))
+      (setq index (1+ index)))
+    found))
 
 (defun agent-scheme--match-pattern
-    (pattern input literals ellipsis bindings repeated)
-  "Return non-nil if PATTERN matches INPUT.
-Pattern variables are recorded in BINDINGS.  LITERALS and ELLIPSIS
-come from the active `syntax-rules' transformer.  REPEATED records
-matches inside an ellipsis subpattern."
-  (cond
-   ((agent-scheme--identifier-datum-p pattern)
-    (let ((name (agent-scheme--symbol-name pattern)))
-      (cond
-       ((and (equal name "_") (not (member name literals)))
-        t)
-       ((agent-scheme--syntax-literal-p pattern literals)
-        (and (agent-scheme--identifier-datum-p input)
-             (equal name (agent-scheme--symbol-name input))))
-       ((equal name ellipsis)
-        (and (agent-scheme--identifier-datum-p input)
-             (equal name (agent-scheme--symbol-name input))))
-       (t
-        (agent-scheme--syntax-bind-pattern-variable
-         bindings name input repeated)))))
-   ((consp pattern)
-    (let ((pattern-elements
-           (agent-scheme--proper-list-elements-maybe pattern))
-          (input-elements
-           (agent-scheme--proper-list-elements-maybe input)))
-      (and pattern-elements
-           input-elements
+    (pattern input transformer bindings path use-environment
+             use-syntax-environment)
+  "Return non-nil if PATTERN matches INPUT at nested ellipsis PATH."
+  (let ((literals (agent-scheme--syntax-transformer-literals transformer))
+        (ellipsis (agent-scheme--syntax-transformer-ellipsis transformer)))
+    (cond
+     ((agent-scheme--identifier-datum-p pattern)
+      (let ((name (agent-scheme--symbol-name pattern)))
+        (cond
+         ((and (equal name "_")
+               (not (agent-scheme--syntax-literal-p pattern literals)))
+          t)
+         ((agent-scheme--syntax-literal-p pattern literals)
+          (agent-scheme--literal-identifier-match-p
+           pattern input transformer use-environment use-syntax-environment))
+         ((equal name ellipsis)
+          (and (agent-scheme--identifier-datum-p input)
+               (equal name (agent-scheme--symbol-name input))))
+         (t
+          (agent-scheme--syntax-bind-pattern-variable
+           bindings name input path)))))
+     ((consp pattern)
+      (and (consp input)
+           (let* ((pattern-list
+                   (agent-scheme--list-elements-tail pattern))
+                  (input-list
+                   (agent-scheme--list-elements-tail input)))
+             (agent-scheme--match-pattern-elements
+              (car pattern-list)
+              (cdr pattern-list)
+              (car input-list)
+              (cdr input-list)
+              transformer
+              bindings
+              path
+              use-environment
+              use-syntax-environment))))
+     ((vectorp pattern)
+      (and (vectorp input)
            (agent-scheme--match-pattern-elements
-            pattern-elements input-elements literals ellipsis bindings repeated))))
-   ((vectorp pattern)
-    (and (vectorp input)
-         (agent-scheme--match-pattern-elements
-          (append pattern nil)
-          (append input nil)
-          literals ellipsis bindings repeated)))
-   (t
-    (equal pattern input))))
+            (append pattern nil)
+            nil
+            (append input nil)
+            nil
+            transformer
+            bindings
+            path
+            use-environment
+            use-syntax-environment)))
+     (t
+      (equal pattern input)))))
+
+(defun agent-scheme--match-fixed-pattern-elements
+    (patterns pattern-tail input-elements input-tail transformer bindings path
+              use-environment use-syntax-environment)
+  "Match fixed PATTERNS and PATTERN-TAIL against input pieces."
+  (and (>= (length input-elements) (length patterns))
+       (cl-loop for pattern in patterns
+                for input in input-elements
+                always
+                (agent-scheme--match-pattern
+                 pattern input transformer bindings path
+                 use-environment use-syntax-environment))
+       (let ((remaining
+              (nthcdr (length patterns) input-elements)))
+         (if pattern-tail
+             (agent-scheme--match-pattern
+              pattern-tail
+              (append remaining input-tail)
+              transformer
+              bindings
+              path
+              use-environment
+              use-syntax-environment)
+           (and (null remaining) (null input-tail))))))
 
 (defun agent-scheme--match-pattern-elements
-    (patterns inputs literals ellipsis bindings repeated)
-  "Return non-nil if PATTERNS match INPUTS element-wise."
-  (let ((ellipsis-index nil)
-        (index 1))
-    (while (and (null ellipsis-index) (< index (length patterns)))
-      (when (agent-scheme--ellipsis-identifier-p (nth index patterns) ellipsis)
-        (setq ellipsis-index index))
-      (setq index (1+ index)))
+    (patterns pattern-tail input-elements input-tail transformer bindings path
+              use-environment use-syntax-environment)
+  "Return non-nil if PATTERNS match INPUT-ELEMENTS."
+  (let* ((ellipsis (agent-scheme--syntax-transformer-ellipsis transformer))
+         (ellipsis-index
+          (agent-scheme--find-ellipsis-index patterns ellipsis)))
     (if ellipsis-index
         (let* ((prefix-count (1- ellipsis-index))
                (suffix (nthcdr (1+ ellipsis-index) patterns))
                (suffix-count (length suffix))
                (repeat-pattern (nth (1- ellipsis-index) patterns))
-               (repeat-count (- (length inputs)
+               (repeat-count (- (length input-elements)
                                 prefix-count
                                 suffix-count)))
           (and (>= repeat-count 0)
                (cl-loop for pattern in (cl-subseq patterns 0 prefix-count)
-                        for input in inputs
+                        for input in input-elements
                         always
                         (agent-scheme--match-pattern
-                         pattern input literals ellipsis bindings repeated))
+                         pattern input transformer bindings path
+                         use-environment use-syntax-environment))
                (progn
                  (when (= repeat-count 0)
                    (agent-scheme--bind-empty-repeated-pattern-variables
-                    repeat-pattern literals ellipsis bindings))
+                    repeat-pattern
+                    (agent-scheme--syntax-transformer-literals transformer)
+                    ellipsis
+                    bindings
+                    path))
                  t)
-               (cl-loop for input in (cl-subseq inputs
-                                                prefix-count
-                                                (+ prefix-count repeat-count))
+               (cl-loop for input in (cl-subseq
+                                      input-elements
+                                      prefix-count
+                                      (+ prefix-count repeat-count))
+                        for index from 0
                         always
                         (agent-scheme--match-pattern
-                         repeat-pattern input literals ellipsis bindings t))
+                         repeat-pattern input transformer bindings
+                         (append path (list index))
+                         use-environment use-syntax-environment))
                (cl-loop for pattern in suffix
                         for input in (if (> suffix-count 0)
-                                         (last inputs suffix-count)
+                                         (last input-elements suffix-count)
                                        nil)
                         always
                         (agent-scheme--match-pattern
-                         pattern input literals ellipsis bindings repeated))))
-      (and (= (length patterns) (length inputs))
-           (cl-loop for pattern in patterns
-                    for input in inputs
-                    always
-                    (agent-scheme--match-pattern
-                     pattern input literals ellipsis bindings repeated))))))
+                         pattern input transformer bindings path
+                         use-environment use-syntax-environment))
+               (if pattern-tail
+                   (agent-scheme--match-pattern
+                    pattern-tail
+                    input-tail
+                    transformer
+                    bindings
+                    path
+                    use-environment
+                    use-syntax-environment)
+                 (null input-tail))))
+      (agent-scheme--match-fixed-pattern-elements
+       patterns pattern-tail input-elements input-tail transformer bindings path
+       use-environment use-syntax-environment))))
 
-(defun agent-scheme--match-syntax-rule (rule form transformer bindings)
+(defun agent-scheme--match-syntax-rule
+    (rule form transformer bindings use-environment use-syntax-environment)
   "Return non-nil if RULE matches macro use FORM."
-  (let ((pattern-elements
-         (agent-scheme--proper-list-elements-maybe (car rule)))
-        (input-elements
-         (agent-scheme--proper-list-elements-maybe form)))
+  (let* ((pattern-list (agent-scheme--list-elements-tail (car rule)))
+         (input-list (agent-scheme--list-elements-tail form))
+         (pattern-elements (car pattern-list))
+         (input-elements (car input-list)))
     (and pattern-elements
          input-elements
+         (null (cdr input-list))
          (agent-scheme--match-pattern-elements
           (cdr pattern-elements)
+          (cdr pattern-list)
           (cdr input-elements)
-          (agent-scheme--syntax-transformer-literals transformer)
-          (agent-scheme--syntax-transformer-ellipsis transformer)
+          nil
+          transformer
           bindings
-          nil))))
+          nil
+          use-environment
+          use-syntax-environment))))
 
 (defun agent-scheme--template-pattern-variable-names
     (template bindings ellipsis)
@@ -1089,14 +1357,19 @@ matches inside an ellipsis subpattern."
            (gethash name bindings)
            (list name))))
    ((consp template)
-    (let ((elements (agent-scheme--proper-list-elements-maybe template)))
-      (when elements
-        (apply #'append
-               (mapcar
-                (lambda (element)
+    (let* ((pieces (agent-scheme--list-elements-tail template))
+           (names
+            (apply #'append
+                   (mapcar
+                    (lambda (element)
+                      (agent-scheme--template-pattern-variable-names
+                       element bindings ellipsis))
+                    (car pieces)))))
+      (if (cdr pieces)
+          (append names
                   (agent-scheme--template-pattern-variable-names
-                   element bindings ellipsis))
-                elements)))))
+                   (cdr pieces) bindings ellipsis))
+        names)))
    ((vectorp template)
     (apply #'append
            (mapcar
@@ -1106,56 +1379,95 @@ matches inside an ellipsis subpattern."
             (append template nil))))
    (t nil)))
 
-(defun agent-scheme--template-repeat-count (template bindings ellipsis)
-  "Return the repetition count required by TEMPLATE."
+(defun agent-scheme--pattern-binding-repeat-count-at (entry path)
+  "Return repetition count for ENTRY one level below PATH, or nil."
+  (when (> (agent-scheme--pattern-binding-depth entry) (length path))
+    (let ((indices nil))
+      (maphash
+       (lambda (capture-path _value)
+         (when (and (> (length capture-path) (length path))
+                    (agent-scheme--path-prefix-p path capture-path))
+           (cl-pushnew (nth (length path) capture-path)
+                       indices)))
+       (agent-scheme--pattern-binding-captures entry))
+      (dolist (empty-prefix
+               (agent-scheme--pattern-binding-empty-prefixes entry))
+        (when (and (> (length empty-prefix) (length path))
+                   (agent-scheme--path-prefix-p path empty-prefix))
+          (cl-pushnew (nth (length path) empty-prefix) indices)))
+      (cond
+       (indices
+        (1+ (apply #'max indices)))
+       ((member path
+                (agent-scheme--pattern-binding-empty-prefixes entry))
+        0)
+       (t nil)))))
+
+(defun agent-scheme--template-repeat-count (template bindings ellipsis path)
+  "Return the repetition count required by TEMPLATE at PATH."
   (let ((count nil))
     (dolist (name (agent-scheme--template-pattern-variable-names
                    template bindings ellipsis))
-      (let ((entry (gethash name bindings)))
-        (when (eq (car entry) 'repeat)
-          (let ((length (length (cdr entry))))
-            (cond
-             ((null count)
-              (setq count length))
-             ((/= count length)
-              (agent-scheme--eval-error
-               "template ellipsis variables have different lengths")))))))
+      (let* ((entry (gethash name bindings))
+             (entry-count
+              (and entry
+                   (agent-scheme--pattern-binding-repeat-count-at
+                    entry path))))
+        (when entry-count
+          (cond
+           ((null count)
+            (setq count entry-count))
+           ((/= count entry-count)
+            (agent-scheme--eval-error
+             "template ellipsis variables have different lengths"))))))
     (or count
         (agent-scheme--eval-error
          "template ellipsis must contain a repeated pattern variable"))))
 
+(defun agent-scheme--pattern-binding-value-at (entry name path)
+  "Return captured value for NAME from ENTRY at PATH."
+  (let* ((depth (agent-scheme--pattern-binding-depth entry))
+         (capture-path
+          (if (<= depth (length path))
+              (cl-subseq path 0 depth)
+            (agent-scheme--eval-error
+             "repeated pattern variable used without enough ellipses: %s"
+             name)))
+         (value
+          (gethash capture-path
+                   (agent-scheme--pattern-binding-captures entry)
+                   agent-scheme--missing-cell)))
+    (if (eq value agent-scheme--missing-cell)
+        (agent-scheme--eval-error
+         "missing pattern variable capture: %s" name)
+      value)))
+
 (defun agent-scheme--expand-template
-    (template bindings syntax-context ellipsis &optional repeat-index
-              ellipsis-literal)
+    (template bindings syntax-context ellipsis &optional path ellipsis-literal)
   "Expand TEMPLATE using BINDINGS and SYNTAX-CONTEXT."
+  (setq path (or path nil))
   (cond
    ((agent-scheme--identifier-datum-p template)
     (let* ((name (agent-scheme--symbol-name template))
            (entry (and (not (equal name ellipsis))
                        (gethash name bindings))))
       (cond
-       ((and entry (eq (car entry) 'single))
-        (cdr entry))
-       ((and entry (eq (car entry) 'repeat))
-        (unless repeat-index
-          (agent-scheme--eval-error
-           "repeated pattern variable used without ellipsis: %s"
-           name))
-        (nth repeat-index (cdr entry)))
+       (entry
+        (agent-scheme--pattern-binding-value-at entry name path))
        ((and (equal name ellipsis) (not ellipsis-literal))
         (agent-scheme--eval-error "misplaced ellipsis in template"))
        (t
         (agent-scheme--make-identifier name syntax-context)))))
    ((consp template)
-    (let ((elements (agent-scheme--proper-list-elements-maybe template)))
-      (unless elements
-        (agent-scheme--eval-error
-         "improper syntax-rules templates are not implemented yet"))
+    (let* ((pieces (agent-scheme--list-elements-tail template))
+           (elements (car pieces))
+           (tail (cdr pieces)))
       (if (and (not ellipsis-literal)
+               (null tail)
                (= (length elements) 2)
                (agent-scheme--ellipsis-identifier-p (car elements) ellipsis))
           (agent-scheme--expand-template
-           (cadr elements) bindings syntax-context ellipsis repeat-index t)
+           (cadr elements) bindings syntax-context ellipsis path t)
         (let ((cursor elements)
               output)
           (while cursor
@@ -1165,37 +1477,48 @@ matches inside an ellipsis subpattern."
                        (not ellipsis-literal)
                        (agent-scheme--ellipsis-identifier-p next ellipsis))
                   (let ((count (agent-scheme--template-repeat-count
-                                element bindings ellipsis))
+                                element bindings ellipsis path))
                         expanded)
                     (dotimes (index count)
                       (push (agent-scheme--expand-template
-                             element bindings syntax-context ellipsis index)
+                             element bindings syntax-context ellipsis
+                             (append path (list index)))
                             expanded))
                     (dolist (expanded-element (nreverse expanded))
                       (push expanded-element output))
                     (setq cursor (cddr cursor)))
                 (push (agent-scheme--expand-template
-                       element bindings syntax-context ellipsis repeat-index
+                       element bindings syntax-context ellipsis path
                        ellipsis-literal)
                       output)
                 (setq cursor (cdr cursor)))))
-          (nreverse output)))))
+          (append (nreverse output)
+                  (and tail
+                       (agent-scheme--expand-template
+                        tail bindings syntax-context ellipsis path
+                        ellipsis-literal)))))))
    ((vectorp template)
     (vconcat
-     (agent-scheme--expand-template
-      (append template nil)
-      bindings syntax-context ellipsis repeat-index ellipsis-literal)))
+     (agent-scheme--proper-list-elements
+      (agent-scheme--expand-template
+       (append template nil)
+       bindings syntax-context ellipsis path ellipsis-literal)
+      "syntax-rules vector template")))
    (t template)))
 
-(defun agent-scheme--apply-syntax-transformer (transformer form)
+(defun agent-scheme--apply-syntax-transformer
+    (transformer form environment context)
   "Apply TRANSFORMER to macro use FORM."
   (let ((matched nil)
-        result)
+        result
+        (use-syntax-environment
+         (agent-scheme--eval-context-syntax-environment context)))
     (dolist (rule (agent-scheme--syntax-transformer-rules transformer))
       (unless matched
         (let ((bindings (make-hash-table :test #'equal)))
           (when (agent-scheme--match-syntax-rule
-                 rule form transformer bindings)
+                 rule form transformer bindings environment
+                 use-syntax-environment)
             (setq matched t)
             (setq result
                   (agent-scheme--expand-template
@@ -1315,7 +1638,9 @@ When RECURSIVE is non-nil, transformer specs see the new bindings."
         (agent-scheme--apply-syntax-transformer
          (agent-scheme--syntax-binding-for-operator
           operator environment context)
-         expression))
+         expression
+         environment
+         context))
        (t expression)))))
 
 (defun agent-scheme--eval-combination (expression environment context tailp)
@@ -1330,6 +1655,11 @@ When RECURSIVE is non-nil, transformer specs see the new bindings."
         (unless (= (length parts) 2)
           (agent-scheme--eval-error "quote requires exactly one datum"))
         (agent-scheme--check-value-budget (cadr parts) context))
+       ((and (agent-scheme--symbol-named-p operator "quasiquote")
+             (agent-scheme--special-operator-active-p operator environment))
+        (agent-scheme--check-value-budget
+         (agent-scheme--eval-quasiquote parts environment context)
+         context))
        ((and (agent-scheme--symbol-named-p operator "lambda")
              (agent-scheme--special-operator-active-p operator environment))
         (unless (>= (length parts) 3)
@@ -2939,66 +3269,6 @@ When KEEP-RESULTS is non-nil, return the collected values."
   "Registry of implemented `(scheme base)' primitive procedures.
 Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
 
-(defconst agent-scheme--base-syntax-source
-  "(define-syntax and
-     (syntax-rules ()
-       ((and) #t)
-       ((and test) test)
-       ((and test1 test2 ...)
-        (if test1 (and test2 ...) #f))))
-   (define-syntax or
-     (syntax-rules ()
-       ((or) #f)
-       ((or test) test)
-       ((or test1 test2 ...)
-        (let ((temp test1))
-          (if temp temp (or test2 ...))))))
-   (define-syntax when
-     (syntax-rules ()
-       ((when test result1 result2 ...)
-        (if test
-            (begin result1 result2 ...)))))
-   (define-syntax unless
-     (syntax-rules ()
-       ((unless test result1 result2 ...)
-        (if (not test)
-            (begin result1 result2 ...)))))
-   (define-syntax let
-     (syntax-rules ()
-       ((let ((name val) ...) body1 body2 ...)
-        ((lambda (name ...) body1 body2 ...)
-         val ...))
-       ((let tag ((name val) ...) body1 body2 ...)
-        ((letrec ((tag (lambda (name ...)
-                         body1 body2 ...)))
-           tag)
-         val ...))))
-   (define-syntax let*
-     (syntax-rules ()
-       ((let* () body1 body2 ...)
-        (let () body1 body2 ...))
-       ((let* ((name1 val1) (name2 val2) ...)
-          body1 body2 ...)
-        (let ((name1 val1))
-          (let* ((name2 val2) ...)
-            body1 body2 ...)))))
-   (define-syntax cond
-     (syntax-rules (else)
-       ((cond (else result1 result2 ...))
-        (begin result1 result2 ...))
-       ((cond (test)) test)
-       ((cond (test) clause1 clause2 ...)
-        (let ((temp test))
-          (if temp temp (cond clause1 clause2 ...))))
-       ((cond (test result1 result2 ...))
-        (if test (begin result1 result2 ...)))
-       ((cond (test result1 result2 ...)
-              clause1 clause2 ...)
-        (if test
-            (begin result1 result2 ...)
-            (cond clause1 clause2 ...)))))"
-  "Portable high-level syntax installed in the initial syntactic environment.")
-
 (defun agent-scheme-base-primitive-names ()
   "Return implemented `(scheme base)' primitive procedure names."
   (mapcar #'car agent-scheme--base-primitive-registry))
@@ -3029,6 +3299,23 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
 (defun agent-scheme--base-prelude-forms ()
   "Return parsed portable prelude definition forms."
   (agent-scheme-read-all (agent-scheme--base-prelude-source)))
+
+(defun agent-scheme--base-syntax-file ()
+  "Return the portable `(scheme base)' syntax prelude source file path."
+  (or agent-scheme-base-syntax-file
+      (expand-file-name
+       "../scheme/agent-scheme/base-syntax.scm"
+       agent-scheme--source-directory)))
+
+(defun agent-scheme--base-syntax-source ()
+  "Return the portable `(scheme base)' syntax prelude source."
+  (with-temp-buffer
+    (insert-file-contents (agent-scheme--base-syntax-file))
+    (buffer-string)))
+
+(defun agent-scheme--base-syntax-forms ()
+  "Return parsed portable base syntax definition forms."
+  (agent-scheme-read-all (agent-scheme--base-syntax-source)))
 
 (defun agent-scheme--formals-arity (formals)
   "Return (MINIMUM-ARITY . MAXIMUM-ARITY) for Scheme FORMALS."
@@ -3129,7 +3416,7 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
 (defun agent-scheme--ensure-base-syntax (context environment)
   "Install base derived syntax into CONTEXT once, capturing ENVIRONMENT."
   (unless (agent-scheme--eval-context-base-syntax-installed context)
-    (dolist (form (agent-scheme-read-all agent-scheme--base-syntax-source))
+    (dolist (form (agent-scheme--base-syntax-forms))
       (agent-scheme--eval-define-syntax
        form
        environment
