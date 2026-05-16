@@ -25,6 +25,9 @@ Planned user-facing command names include:
 
 Scheme libraries keep Scheme library names instead of Emacs Lisp package names,
 for example `(scheme base)`, `(emacs buffer)`, and `(agent io)`.
+Portable implementation libraries under `scheme/agent-scheme/` use
+`(agent-scheme ...)` names, such as `(agent-scheme reader)`, when they expose
+core Agent Scheme facilities for bootstrapping.
 
 ## Private Names
 
@@ -45,6 +48,18 @@ Implementation files under `lisp/` should follow the package namespace:
 
 Tests should mirror the module names, such as
 `tests/agent-scheme-reader-test.el`.
+
+Portable R7RS implementation files under `scheme/agent-scheme/` should mirror
+their library names:
+
+- `scheme/agent-scheme/reader.sld` defines `(agent-scheme reader)`
+
+Use `.sld` for portable R7RS `define-library` modules. Use `.scm` for Scheme
+programs, tests, fixtures, and ordinary source snippets that are loaded or run
+as code rather than imported as libraries.
+
+Scheme-side tests live under `tests/scheme/`; their ERT bridge files still use
+the normal `tests/agent-scheme-*-test.el` naming pattern.
 
 If future bootstrap work touches files named `lisp/config-agent*.el`, treat
 those files as host-configuration integration. Any durable Agent Scheme API

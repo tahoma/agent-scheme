@@ -11,6 +11,7 @@ help:
 	@printf '\n%s\n' 'Variables:'
 	@printf '  %-40s %s\n' 'EMACS=emacs' 'Emacs command used by make test.'
 	@printf '  %-40s %s\n' 'AGENT_SCHEME_TEST_SELECTOR=SEL' 'Optional ERT selector for make test.'
+	@printf '  %-40s %s\n' 'AGENT_SCHEME_CHIBI=chibi-scheme' 'Optional Chibi Scheme command for portable R7RS tests.'
 
 test:
 	$(EMACS) -Q --batch --load tests/agent-scheme-test-runner.el

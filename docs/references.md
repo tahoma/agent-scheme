@@ -66,13 +66,15 @@ implementation techniques.
 These are worth keeping in mind, but they should only become project references
 when a ticket benefits from them directly.
 
-- *How to Design Programs* for teaching-oriented design method and
-  Scheme-family pedagogy.
-- *The Little Schemer* series for small-step recursion, reasoning, and
-  relational programming style.
-- *Programming Languages: Application and Interpretation* for interpreter and
-  language-design pedagogy on the Racket side of the Scheme family.
-- *An Introduction to Scheme and its Implementation* for implementation details
-  that complement SICP and Lisp in Small Pieces.
-- *Software Design for Flexibility* for modern Sussman/Hanson design patterns
-  that may inform agent-facing Scheme libraries later.
+- [*How to Design Programs*](https://htdp.org/) for teaching-oriented design
+  method and Scheme-family pedagogy.
+- [*The Little Schemer*](https://mitpress.mit.edu/9780262560993/the-little-schemer/)
+  series for small-step recursion, reasoning, and relational programming style.
+- [*Programming Languages: Application and Interpretation*](https://www.plai.org/)
+  for interpreter and language-design pedagogy on the Racket side of the Scheme
+  family.
+- [*An Introduction to Scheme and its Implementation*](https://docs.scheme.org/schintro/)
+  for implementation details that complement SICP and Lisp in Small Pieces.
+- [*Software Design for Flexibility*](https://mitpress.mit.edu/9780262045490/software-design-for-flexibility)
+  for modern Sussman/Hanson design patterns that may inform agent-facing Scheme
+  libraries later.

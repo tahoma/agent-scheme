@@ -23,7 +23,7 @@ marked `implemented`.
 
 | Area | R7RS-small coverage | Status | Representative fixtures | Notes |
 | --- | --- | --- | --- | --- |
-| Reader syntax | Comments, case directives, booleans, numbers, characters, strings, symbols, lists, dotted pairs, abbreviations, vectors, bytevectors, labels, datum comments | `pending` | `reader-boolean-literals`, `reader-bytevector-literal` | Reader work should use an Agent Scheme reader rather than Emacs `read`. |
+| Reader syntax | Comments, case directives, booleans, numbers, characters, strings, symbols, lists, dotted pairs, abbreviations, vectors, bytevectors, datum comments | `pending` | `reader-boolean-literals`, `reader-bytevector-literal`, `reader-character-literal`, `reader-symbol-case-directive`, `reader-dotted-list`, `reader-vector-literal`, `reader-abbreviation-forms`, `reader-comments-and-datum-comments` | First-pass reader datums are implemented and fixture-loaded with Agent Scheme's reader; datum labels remain pending. |
 | Primitive expressions | Literal, variable reference, quote, procedure call, `if`, `set!`, `lambda` | `pending` | `primitive-procedure-call` | Start with `(scheme base)` expression semantics. |
 | Definitions and sequencing | `define`, `define-values`, `begin`, internal definitions | `pending` | `primitive-procedure-call` | Internal definitions should be tested with lexical scope cases. |
 | Derived syntax | `cond`, `case`, `and`, `or`, `when`, `unless`, `let`, `let*`, `letrec`, `letrec*`, `let-values`, `let*-values`, `do`, `delay`, `quasiquote`, `parameterize` | `pending` | `derived-let-expression` | Derived syntax may be implemented through macro expansion once `syntax-rules` exists. |
