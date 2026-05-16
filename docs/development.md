@@ -93,6 +93,12 @@ and does not load user Emacs configuration.
 Future R7RS conformance fixtures should plug into `make test` through the same
 test command instead of adding a second top-level verification path.
 
+The active R7RS-small conformance matrix lives in
+[`docs/r7rs-conformance.md`](r7rs-conformance.md), with representative fixtures
+in `fixtures/r7rs/conformance-cases.scm`. Fixtures marked `pending`,
+`policy-gated`, or `unavailable` are loaded and validated by ERT without being
+executed. Fixtures marked `implemented` must run through `make test`.
+
 ## Verification
 
 The default local verification command is:
