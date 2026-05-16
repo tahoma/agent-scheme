@@ -8,6 +8,9 @@
           agent-scheme-make-base-environment
           agent-scheme-base-primitive-names
           agent-scheme-base-primitive-specs
+          agent-scheme-base-prelude-binding-names
+          agent-scheme-base-prelude-binding-specs
+          agent-scheme-base-binding-specs
           agent-scheme-result->external
           agent-scheme-value->external
           agent-scheme-unspecified
@@ -15,6 +18,8 @@
           agent-scheme-procedure?
           agent-scheme-primitive-procedure?)
   (import (scheme base)
+          (scheme file)
+          (scheme read)
           (agent-scheme reader))
   (begin
     (define agent-scheme-default-maximum-steps 100000)
@@ -1558,12 +1563,7 @@
        (list '= primitive= 2 #f)
        (list '> primitive> 2 #f)
        (list '>= primitive>= 2 #f)
-       (list 'abs primitive-abs 1 1)
-       (list 'append primitive-append 0 #f)
        (list 'apply primitive-apply 2 #f)
-       (list 'assoc primitive-assoc 2 2)
-       (list 'assq primitive-assq 2 2)
-       (list 'assv primitive-assv 2 2)
        (list 'boolean=? primitive-boolean=? 2 #f)
        (list 'boolean? primitive-boolean? 1 1)
        (list 'bytevector primitive-bytevector 0 #f)
@@ -1574,11 +1574,7 @@
        (list 'bytevector-u8-ref primitive-bytevector-u8-ref 2 2)
        (list 'bytevector-u8-set! primitive-bytevector-u8-set! 3 3)
        (list 'bytevector? primitive-bytevector? 1 1)
-       (list 'caar primitive-caar 1 1)
-       (list 'cadr primitive-cadr 1 1)
        (list 'car primitive-car 1 1)
-       (list 'cdar primitive-cdar 1 1)
-       (list 'cddr primitive-cddr 1 1)
        (list 'cdr primitive-cdr 1 1)
        (list 'ceiling primitive-ceiling 1 1)
        (list 'char->integer primitive-char->integer 1 1)
@@ -1593,54 +1589,33 @@
        (list 'eq? primitive-eq? 2 2)
        (list 'equal? primitive-equal? 2 2)
        (list 'eqv? primitive-eqv? 2 2)
-       (list 'even? primitive-even? 1 1)
        (list 'exact-integer? primitive-exact-integer? 1 1)
        (list 'exact? primitive-exact? 1 1)
        (list 'floor primitive-floor 1 1)
        (list 'floor-quotient primitive-floor-quotient 2 2)
        (list 'floor-remainder primitive-floor-remainder 2 2)
-       (list 'for-each primitive-for-each 2 #f)
        (list 'inexact? primitive-inexact? 1 1)
        (list 'integer->char primitive-integer->char 1 1)
        (list 'integer? primitive-integer? 1 1)
-       (list 'length primitive-length 1 1)
-       (list 'list primitive-list 0 #f)
        (list 'list->string primitive-list->string 1 1)
        (list 'list->vector primitive-list->vector 1 1)
-       (list 'list-copy primitive-list-copy 1 1)
-       (list 'list-ref primitive-list-ref 2 2)
-       (list 'list-set! primitive-list-set! 3 3)
-       (list 'list-tail primitive-list-tail 2 2)
        (list 'list? primitive-list? 1 1)
        (list 'make-bytevector primitive-make-bytevector 1 2)
-       (list 'make-list primitive-make-list 1 2)
        (list 'make-string primitive-make-string 1 2)
        (list 'make-vector primitive-make-vector 1 2)
-       (list 'map primitive-map 2 #f)
-       (list 'max primitive-max 1 #f)
-       (list 'member primitive-member 2 2)
-       (list 'memq primitive-memq 2 2)
-       (list 'memv primitive-memv 2 2)
-       (list 'min primitive-min 1 #f)
        (list 'modulo primitive-modulo 2 2)
-       (list 'negative? primitive-negative? 1 1)
-       (list 'not primitive-not 1 1)
        (list 'null? primitive-null? 1 1)
        (list 'number->string primitive-number->string 1 1)
        (list 'number? primitive-number? 1 1)
-       (list 'odd? primitive-odd? 1 1)
        (list 'pair? primitive-pair? 1 1)
-       (list 'positive? primitive-positive? 1 1)
        (list 'procedure? primitive-procedure? 1 1)
        (list 'quotient primitive-quotient 2 2)
        (list 'rational? primitive-rational? 1 1)
        (list 'real? primitive-real? 1 1)
        (list 'remainder primitive-remainder 2 2)
-       (list 'reverse primitive-reverse 1 1)
        (list 'round primitive-round 1 1)
        (list 'set-car! primitive-set-car! 2 2)
        (list 'set-cdr! primitive-set-cdr! 2 2)
-       (list 'square primitive-square 1 1)
        (list 'string primitive-string 0 #f)
        (list 'string->list primitive-string->list 1 3)
        (list 'string->number primitive-string->number 1 1)
@@ -1680,8 +1655,7 @@
        (list 'vector-map primitive-vector-map 2 #f)
        (list 'vector-ref primitive-vector-ref 2 2)
        (list 'vector-set! primitive-vector-set! 3 3)
-       (list 'vector? primitive-vector? 1 1)
-       (list 'zero? primitive-zero? 1 1)))
+       (list 'vector? primitive-vector? 1 1)))
 
     (define (agent-scheme-base-primitive-names)
       (map car base-primitive-registry))
@@ -1690,8 +1664,88 @@
       (map (lambda (entry)
              (list (list 'name (car entry))
                    (list 'minimum-arity (third entry))
-                   (list 'maximum-arity (fourth entry))))
+                   (list 'maximum-arity (fourth entry))
+                   (list 'source 'kernel)))
            base-primitive-registry))
+
+    (define agent-scheme-base-prelude-load-paths
+      '("scheme/agent-scheme/base-prelude.scm"
+        "agent-scheme/base-prelude.scm"))
+
+    (define (read-all-datums port)
+      (let ((datum (read port)))
+        (if (eof-object? datum)
+            '()
+            (cons datum (read-all-datums port)))))
+
+    (define (base-prelude-forms)
+      (let try ((paths agent-scheme-base-prelude-load-paths))
+        (if (null? paths)
+            (eval-error "unable to load base prelude")
+            (guard (condition
+                    (else (try (cdr paths))))
+              (call-with-input-file (car paths) read-all-datums)))))
+
+    (define (formals-arity formals)
+      (cond
+       ((symbol? formals)
+        (cons 0 #f))
+       (else
+        (let loop ((cursor formals) (minimum 0))
+          (cond
+           ((null? cursor)
+            (cons minimum minimum))
+           ((pair? cursor)
+            (loop (cdr cursor) (+ minimum 1)))
+           ((symbol? cursor)
+            (cons minimum #f))
+           (else
+            (eval-error "prelude definition has invalid formals")))))))
+
+    (define (prelude-definition-spec form)
+      (if (not (and (pair? form)
+                    (eq? (car form) 'define)
+                    (pair? (cdr form))
+                    (pair? (cdr (cdr form)))))
+          (eval-error "prelude form must be one definition" form))
+      (let ((target (second form)))
+        (cond
+         ((symbol? target)
+          (if (not (null? (cdr (cdr (cdr form)))))
+              (eval-error
+               "prelude variable definition must have one initializer"))
+          (let ((initializer (third form)))
+            (if (not (and (pair? initializer)
+                          (eq? (car initializer) 'lambda)))
+                (eval-error
+                 "prelude variable definition must initialize a lambda"))
+            (let ((arity (formals-arity (second initializer))))
+              (list (list 'name target)
+                    (list 'minimum-arity (car arity))
+                    (list 'maximum-arity (cdr arity))
+                    (list 'source 'prelude)))))
+         ((pair? target)
+          (let ((arity (formals-arity (cdr target))))
+            (list (list 'name (car target))
+                  (list 'minimum-arity (car arity))
+                  (list 'maximum-arity (cdr arity))
+                  (list 'source 'prelude))))
+         (else
+          (eval-error
+           "prelude define target must be an identifier or function signature"
+           form)))))
+
+    (define (agent-scheme-base-prelude-binding-specs)
+      (map prelude-definition-spec (base-prelude-forms)))
+
+    (define (agent-scheme-base-prelude-binding-names)
+      (map (lambda (spec)
+             (second (assq 'name spec)))
+           (agent-scheme-base-prelude-binding-specs)))
+
+    (define (agent-scheme-base-binding-specs)
+      (append (agent-scheme-base-primitive-specs)
+              (agent-scheme-base-prelude-binding-specs)))
 
     (define (define-primitive! environment
                                name
@@ -1708,7 +1762,12 @@
       (let ((environment (agent-scheme-make-empty-environment)))
         (let loop ((rest base-primitive-registry))
           (if (null? rest)
-              environment
+              (begin
+                (trampoline
+                 (make-sequence (base-prelude-forms) #t)
+                 environment
+                 (new-eval-context '()))
+                environment)
               (begin
                 (define-primitive! environment
                                    (car (car rest))

@@ -69,18 +69,38 @@
        #t)
 
 (let ((names (agent-scheme-base-primitive-names))
-      (specs (agent-scheme-base-primitive-specs)))
+      (prelude-names (agent-scheme-base-prelude-binding-names))
+      (specs (agent-scheme-base-primitive-specs))
+      (binding-specs (agent-scheme-base-binding-specs)))
   (check 'base-registry-names
          (and (memq '+ names)
               (memq 'apply names)
-              (memq 'map names)
+              (memq 'car names)
               (memq 'vector-ref names)
+              (not (memq 'append names))
+              (not (memq 'cadr names))
+              (not (memq 'length names))
+              (not (memq 'map names))
+              (not (memq 'zero? names))
+              (memq 'append prelude-names)
+              (memq 'cadr prelude-names)
+              (memq 'length prelude-names)
+              (memq 'map prelude-names)
+              (memq 'zero? prelude-names)
               (not (memq 'values names)))
          #t)
   (check 'base-registry-specs
          (cadr (assq 'minimum-arity
                      (find-primitive-spec 'vector-ref specs)))
-         2))
+         2)
+  (check 'base-kernel-source-spec
+         (cadr (assq 'source
+                     (find-primitive-spec 'vector-ref binding-specs)))
+         'kernel)
+  (check 'base-prelude-source-spec
+         (cadr (assq 'source
+                     (find-primitive-spec 'append binding-specs)))
+         'prelude))
 
 (check-external 'base-list-helpers
                 "(list (length (append '(1 2) '(3 4)))

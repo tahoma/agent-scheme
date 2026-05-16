@@ -318,6 +318,28 @@ Host-effecting standard libraries require a policy bridge:
 The same policy function should serve local REPL use, project sessions, skills,
 and MCP-triggered evaluation.
 
+## Base Library Kernel and Prelude
+
+The initial `(scheme base)` environment is assembled in two phases:
+
+1. install a small evaluator kernel of host primitives
+2. evaluate the portable prelude in
+   `scheme/agent-scheme/base-prelude.scm` into that environment
+
+Kernel primitives are reserved for bindings that cannot yet be expressed
+portably inside the bootstrap evaluator: primitive expression and application
+mechanics, mutable storage representation hooks, identity-sensitive predicates,
+low-level numeric and scalar representation operations, collection
+constructors/accessors/mutators, control features when they land, and
+policy-gated host effects. Derived helpers such as composed accessors, list
+traversals, convenience numeric predicates, and higher-order iteration should
+live in the prelude once they can be written using the available kernel.
+
+Primitive discovery should preserve this boundary. Kernel bindings and
+prelude-defined bindings are both discoverable, but their metadata identifies
+which source installed each binding so later conformance work can reduce the
+host surface without losing visibility into the supported base environment.
+
 ## Agent Skills Interop
 
 The ecosystem Agent Skills directory format is the public interchange format.
