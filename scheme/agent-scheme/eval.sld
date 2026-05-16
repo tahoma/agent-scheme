@@ -2,8 +2,13 @@
   (export agent-scheme-eval
           agent-scheme-eval-source
           agent-scheme-eval-string
+          agent-scheme-eval-result
+          agent-scheme-eval-source-result
           agent-scheme-make-empty-environment
           agent-scheme-make-base-environment
+          agent-scheme-base-primitive-names
+          agent-scheme-base-primitive-specs
+          agent-scheme-result->external
           agent-scheme-value->external
           agent-scheme-unspecified
           agent-scheme-unspecified?
@@ -596,16 +601,114 @@
                                    #t))
             (check-value-budget state context))))
 
+    (define (exact-integer->host datum description)
+      (if (exact-integer? datum)
+          datum
+          (eval-error
+           (string-append description " must be an exact integer")
+           datum)))
+
+    (define (expect-nonnegative-index datum limit description allow-end?)
+      (let ((index (exact-integer->host datum description)))
+        (if (not (and (<= 0 index)
+                      (if allow-end? (<= index limit) (< index limit))))
+            (eval-error
+             (string-append description " index out of range")
+             index))
+        index))
+
+    (define (expect-byte datum description)
+      (let ((byte (exact-integer->host datum description)))
+        (if (not (and (<= 0 byte) (<= byte 255)))
+            (eval-error
+             (string-append description " must be in byte range")
+             byte))
+        byte))
+
+    (define (expect-string datum description)
+      (if (string? datum)
+          datum
+          (eval-error (string-append description " must be a string") datum)))
+
+    (define (expect-character datum description)
+      (if (char? datum)
+          datum
+          (eval-error
+           (string-append description " must be a character")
+           datum)))
+
+    (define (expect-vector datum description)
+      (if (vector? datum)
+          datum
+          (eval-error (string-append description " must be a vector") datum)))
+
+    (define (expect-bytevector datum description)
+      (if (bytevector? datum)
+          datum
+          (eval-error
+           (string-append description " must be a bytevector")
+           datum)))
+
+    (define (expect-procedure datum description)
+      (if (or (agent-scheme-procedure? datum)
+              (agent-scheme-primitive-procedure? datum))
+          datum
+          (eval-error
+           (string-append description " must be a procedure")
+           datum)))
+
+    (define (optional-range arguments offset length description)
+      (let ((optional-count (- (length arguments) offset)))
+        (if (not (and (<= 0 optional-count) (<= optional-count 2)))
+            (eval-error
+             (string-append description
+                            " expected at most start and end arguments")))
+        (let ((start (if (>= optional-count 1)
+                         (expect-nonnegative-index
+                          (list-ref arguments offset)
+                          length
+                          description
+                          #t)
+                         0))
+              (end (if (>= optional-count 2)
+                       (expect-nonnegative-index
+                        (list-ref arguments (+ offset 1))
+                        length
+                        description
+                        #t)
+                       length)))
+          (if (> start end)
+              (eval-error
+               (string-append description " start index exceeds end index")))
+          (cons start end))))
+
     (define (primitive+ arguments context)
       (apply + arguments))
 
     (define (primitive* arguments context)
       (apply * arguments))
 
+    (define (scheme-divide left right)
+      (if (zero? right)
+          (eval-error "division by zero"))
+      (if (and (integer? left) (integer? right)
+               (zero? (remainder left right)))
+          (/ left right)
+          (inexact (/ left right))))
+
     (define (primitive- arguments context)
       (if (= (length arguments) 1)
           (- (car arguments))
           (apply - arguments)))
+
+    (define (primitive/ arguments context)
+      (if (= (length arguments) 1)
+          (scheme-divide 1 (car arguments))
+          (let loop ((result (car arguments)) (rest (cdr arguments)))
+            (if (null? rest)
+                result
+                (loop (scheme-divide result (car rest))
+                      (cdr rest))))))
 
     (define (primitive-compare arguments predicate)
       (let loop ((rest arguments))
@@ -629,6 +732,81 @@
     (define (primitive>= arguments context)
       (primitive-compare arguments >=))
 
+    (define (primitive-abs arguments context)
+      (abs (car arguments)))
+
+    (define (primitive-min arguments context)
+      (apply min arguments))
+
+    (define (primitive-max arguments context)
+      (apply max arguments))
+
+    (define (primitive-square arguments context)
+      (* (car arguments) (car arguments)))
+
+    (define (primitive-zero? arguments context)
+      (zero? (car arguments)))
+
+    (define (primitive-positive? arguments context)
+      (positive? (car arguments)))
+
+    (define (primitive-negative? arguments context)
+      (negative? (car arguments)))
+
+    (define (primitive-odd? arguments context)
+      (odd? (exact-integer->host (car arguments) "odd?")))
+
+    (define (primitive-even? arguments context)
+      (even? (exact-integer->host (car arguments) "even?")))
+
+    (define (integer-quotient arguments quotient-function description)
+      (let ((left (exact-integer->host (car arguments) description))
+            (right (exact-integer->host (second arguments) description)))
+        (if (zero? right)
+            (eval-error (string-append description " division by zero")))
+        (quotient-function left right)))
+
+    (define (primitive-quotient arguments context)
+      (integer-quotient arguments truncate-quotient "quotient"))
+
+    (define (primitive-floor-quotient arguments context)
+      (integer-quotient arguments floor-quotient "floor-quotient"))
+
+    (define (primitive-truncate-quotient arguments context)
+      (integer-quotient arguments truncate-quotient "truncate-quotient"))
+
+    (define (primitive-remainder arguments context)
+      (let ((left (exact-integer->host (car arguments) "remainder"))
+            (right (exact-integer->host (second arguments) "remainder")))
+        (if (zero? right)
+            (eval-error "remainder division by zero"))
+        (truncate-remainder left right)))
+
+    (define (primitive-modulo arguments context)
+      (let ((left (exact-integer->host (car arguments) "modulo"))
+            (right (exact-integer->host (second arguments) "modulo")))
+        (if (zero? right)
+            (eval-error "modulo division by zero"))
+        (floor-remainder left right)))
+
+    (define (primitive-floor-remainder arguments context)
+      (primitive-modulo arguments context))
+
+    (define (primitive-truncate-remainder arguments context)
+      (primitive-remainder arguments context))
+
+    (define (primitive-floor arguments context)
+      (floor (car arguments)))
+
+    (define (primitive-ceiling arguments context)
+      (ceiling (car arguments)))
+
+    (define (primitive-truncate arguments context)
+      (truncate (car arguments)))
+
+    (define (primitive-round arguments context)
+      (round (car arguments)))
+
     (define (primitive-cons arguments context)
       (cons (car arguments) (second arguments)))
 
@@ -647,6 +825,93 @@
     (define (primitive-list arguments context)
       arguments)
 
+    (define (proper-list? value)
+      (let loop ((cursor value) (seen '()))
+        (cond
+         ((null? cursor) #t)
+         ((not (pair? cursor)) #f)
+         ((memq cursor seen) #f)
+         (else (loop (cdr cursor) (cons cursor seen))))))
+
+    (define (primitive-list? arguments context)
+      (proper-list? (car arguments)))
+
+    (define (primitive-length arguments context)
+      (length (proper-list-elements (car arguments) "length")))
+
+    (define (primitive-append arguments context)
+      (apply append arguments))
+
+    (define (primitive-reverse arguments context)
+      (reverse (proper-list-elements (car arguments) "reverse")))
+
+    (define (primitive-list-tail arguments context)
+      (let ((index (exact-integer->host (second arguments) "list-tail")))
+        (if (< index 0)
+            (eval-error "list-tail index must be non-negative"))
+        (let loop ((cursor (car arguments)) (remaining index))
+          (cond
+           ((zero? remaining) cursor)
+           ((pair? cursor) (loop (cdr cursor) (- remaining 1)))
+           (else (eval-error "list-tail index exceeds list length"))))))
+
+    (define (primitive-list-ref arguments context)
+      (let ((tail (primitive-list-tail arguments context)))
+        (if (pair? tail)
+            (car tail)
+            (eval-error "list-ref index exceeds list length"))))
+
+    (define (primitive-list-set! arguments context)
+      (let ((tail (primitive-list-tail arguments context)))
+        (if (not (pair? tail))
+            (eval-error "list-set! index exceeds list length"))
+        (set-car! tail (third arguments))
+        agent-scheme-unspecified))
+
+    (define (primitive-set-car! arguments context)
+      (let ((pair (car arguments)))
+        (if (not (pair? pair))
+            (eval-error "set-car! expected pair" pair))
+        (set-car! pair (second arguments))
+        agent-scheme-unspecified))
+
+    (define (primitive-set-cdr! arguments context)
+      (let ((pair (car arguments)))
+        (if (not (pair? pair))
+            (eval-error "set-cdr! expected pair" pair))
+        (set-cdr! pair (second arguments))
+        agent-scheme-unspecified))
+
+    (define (primitive-make-list arguments context)
+      (let ((length (exact-integer->host (car arguments) "make-list"))
+            (fill (if (null? (cdr arguments))
+                      agent-scheme-unspecified
+                      (second arguments))))
+        (if (< length 0)
+            (eval-error "make-list length must be non-negative"))
+        (make-list length fill)))
+
+    (define (copy-list value)
+      (cond
+       ((null? value) '())
+       ((pair? value) (cons (car value) (copy-list (cdr value))))
+       (else value)))
+
+    (define (primitive-list-copy arguments context)
+      (copy-list (car arguments)))
+
+    (define (primitive-caar arguments context)
+      (primitive-car (list (primitive-car arguments context)) context))
+
+    (define (primitive-cadr arguments context)
+      (primitive-car (list (primitive-cdr arguments context)) context))
+
+    (define (primitive-cdar arguments context)
+      (primitive-cdr (list (primitive-car arguments context)) context))
+
+    (define (primitive-cddr arguments context)
+      (primitive-cdr (list (primitive-cdr arguments context)) context))
+
     (define (primitive-null? arguments context)
       (null? (car arguments)))
 
@@ -659,15 +924,774 @@
     (define (primitive-boolean? arguments context)
       (boolean? (car arguments)))
 
+    (define (primitive-boolean=? arguments context)
+      (let ((first (car arguments)))
+        (if (not (boolean? first))
+            (eval-error "boolean=? expected booleans"))
+        (let loop ((rest (cdr arguments)))
+          (cond
+           ((null? rest) #t)
+           ((not (boolean? (car rest)))
+            (eval-error "boolean=? expected booleans"))
+           ((eq? first (car rest)) (loop (cdr rest)))
+           (else #f)))))
+
     (define (primitive-number? arguments context)
       (number? (car arguments)))
+
+    (define (primitive-complex? arguments context)
+      (complex? (car arguments)))
+
+    (define (primitive-real? arguments context)
+      (real? (car arguments)))
+
+    (define (primitive-rational? arguments context)
+      (rational? (car arguments)))
+
+    (define (primitive-integer? arguments context)
+      (integer? (car arguments)))
+
+    (define (primitive-exact-integer? arguments context)
+      (exact-integer? (car arguments)))
+
+    (define (primitive-exact? arguments context)
+      (and (number? (car arguments)) (exact? (car arguments))))
+
+    (define (primitive-inexact? arguments context)
+      (and (number? (car arguments)) (inexact? (car arguments))))
+
+    (define (primitive-number->string arguments context)
+      (if (not (number? (car arguments)))
+          (eval-error "number->string expected a number"))
+      (number->string (car arguments)))
+
+    (define (primitive-string->number arguments context)
+      (let ((source (expect-string (car arguments) "string->number")))
+        (guard (condition (else #f))
+          (let ((datum (agent-scheme-read source)))
+            (if (number? datum) datum #f)))))
 
     (define (primitive-symbol? arguments context)
       (symbol? (car arguments)))
 
+    (define (primitive-symbol->string arguments context)
+      (if (not (symbol? (car arguments)))
+          (eval-error "symbol->string expected a symbol"))
+      (symbol->string (car arguments)))
+
+    (define (primitive-string->symbol arguments context)
+      (string->symbol (expect-string (car arguments) "string->symbol")))
+
+    (define (primitive-symbol=? arguments context)
+      (let ((first (car arguments)))
+        (if (not (symbol? first))
+            (eval-error "symbol=? expected symbols"))
+        (let loop ((rest (cdr arguments)))
+          (cond
+           ((null? rest) #t)
+           ((not (symbol? (car rest)))
+            (eval-error "symbol=? expected symbols"))
+           ((eq? first (car rest)) (loop (cdr rest)))
+           (else #f)))))
+
+    (define (primitive-char? arguments context)
+      (char? (car arguments)))
+
+    (define (primitive-char->integer arguments context)
+      (char->integer
+       (expect-character (car arguments) "char->integer")))
+
+    (define (primitive-integer->char arguments context)
+      (integer->char
+       (exact-integer->host (car arguments) "integer->char")))
+
+    (define (primitive-char-compare arguments predicate description)
+      (let loop ((rest arguments))
+        (cond
+         ((or (null? rest) (null? (cdr rest))) #t)
+         (else
+          (let ((left (expect-character (car rest) description))
+                (right (expect-character (second rest) description)))
+            (and (predicate left right) (loop (cdr rest))))))))
+
+    (define (primitive-char=? arguments context)
+      (primitive-char-compare arguments char=? "char=?"))
+
+    (define (primitive-char<? arguments context)
+      (primitive-char-compare arguments char<? "char<?"))
+
+    (define (primitive-char>? arguments context)
+      (primitive-char-compare arguments char>? "char>?"))
+
+    (define (primitive-char<=? arguments context)
+      (primitive-char-compare arguments char<=? "char<=?"))
+
+    (define (primitive-char>=? arguments context)
+      (primitive-char-compare arguments char>=? "char>=?"))
+
+    (define (primitive-string? arguments context)
+      (string? (car arguments)))
+
+    (define (primitive-make-string arguments context)
+      (let ((length (exact-integer->host (car arguments) "make-string"))
+            (fill (if (null? (cdr arguments))
+                      #\null
+                      (expect-character
+                       (second arguments)
+                       "make-string fill"))))
+        (if (< length 0)
+            (eval-error "make-string length must be non-negative"))
+        (make-string length fill)))
+
+    (define (primitive-string arguments context)
+      (list->string
+       (map (lambda (argument)
+              (expect-character argument "string"))
+            arguments)))
+
+    (define (primitive-string-length arguments context)
+      (string-length (expect-string (car arguments) "string-length")))
+
+    (define (primitive-string-ref arguments context)
+      (let* ((string (expect-string (car arguments) "string-ref"))
+             (index (expect-nonnegative-index
+                     (second arguments)
+                     (string-length string)
+                     "string-ref"
+                     #f)))
+        (string-ref string index)))
+
+    (define (primitive-string-set! arguments context)
+      (let* ((string (expect-string (car arguments) "string-set!"))
+             (index (expect-nonnegative-index
+                     (second arguments)
+                     (string-length string)
+                     "string-set!"
+                     #f))
+             (char (expect-character (third arguments) "string-set! value")))
+        (string-set! string index char)
+        agent-scheme-unspecified))
+
+    (define (primitive-substring arguments context)
+      (let* ((string (expect-string (car arguments) "substring"))
+             (start (expect-nonnegative-index
+                     (second arguments)
+                     (string-length string)
+                     "substring"
+                     #t))
+             (end (expect-nonnegative-index
+                   (third arguments)
+                   (string-length string)
+                   "substring"
+                   #t)))
+        (if (> start end)
+            (eval-error "substring start exceeds end"))
+        (substring string start end)))
+
+    (define (primitive-string-append arguments context)
+      (apply string-append
+             (map (lambda (argument)
+                    (expect-string argument "string-append"))
+                  arguments)))
+
+    (define (primitive-string->list arguments context)
+      (let* ((string (expect-string (car arguments) "string->list"))
+             (range (optional-range
+                     arguments
+                     1
+                     (string-length string)
+                     "string->list")))
+        (let loop ((index (car range)) (result '()))
+          (if (= index (cdr range))
+              (reverse result)
+              (loop (+ index 1)
+                    (cons (string-ref string index) result))))))
+
+    (define (primitive-list->string arguments context)
+      (list->string
+       (map (lambda (argument)
+              (expect-character argument "list->string"))
+            (proper-list-elements (car arguments) "list->string"))))
+
+    (define (primitive-string->vector arguments context)
+      (list->vector (primitive-string->list arguments context)))
+
+    (define (primitive-vector->string arguments context)
+      (let* ((vector (expect-vector (car arguments) "vector->string"))
+             (range (optional-range
+                     arguments
+                     1
+                     (vector-length vector)
+                     "vector->string")))
+        (let loop ((index (car range)) (result '()))
+          (if (= index (cdr range))
+              (list->string (reverse result))
+              (loop (+ index 1)
+                    (cons (expect-character
+                           (vector-ref vector index)
+                           "vector->string")
+                          result))))))
+
+    (define (primitive-string-copy arguments context)
+      (let* ((string (expect-string (car arguments) "string-copy"))
+             (range (optional-range
+                     arguments
+                     1
+                     (string-length string)
+                     "string-copy")))
+        (substring string (car range) (cdr range))))
+
+    (define (primitive-string-copy! arguments context)
+      (let* ((to (expect-string (car arguments) "string-copy! target"))
+             (at (expect-nonnegative-index
+                  (second arguments)
+                  (string-length to)
+                  "string-copy!"
+                  #t))
+             (from (expect-string (third arguments) "string-copy! source"))
+             (range (optional-range
+                     arguments
+                     3
+                     (string-length from)
+                     "string-copy!")))
+        (if (> (+ at (- (cdr range) (car range))) (string-length to))
+            (eval-error "string-copy! target range exceeds length"))
+        (let loop ((source-index (car range)) (target-index at))
+          (if (< source-index (cdr range))
+              (begin
+                (string-set! to target-index (string-ref from source-index))
+                (loop (+ source-index 1) (+ target-index 1)))))
+        agent-scheme-unspecified))
+
+    (define (primitive-string-fill! arguments context)
+      (let* ((string (expect-string (car arguments) "string-fill!"))
+             (fill (expect-character (second arguments) "string-fill! value"))
+             (range (optional-range
+                     arguments
+                     2
+                     (string-length string)
+                     "string-fill!")))
+        (let loop ((index (car range)))
+          (if (< index (cdr range))
+              (begin
+                (string-set! string index fill)
+                (loop (+ index 1)))))
+        agent-scheme-unspecified))
+
+    (define (primitive-string-compare arguments predicate description)
+      (let loop ((rest arguments))
+        (cond
+         ((or (null? rest) (null? (cdr rest))) #t)
+         (else
+          (let ((left (expect-string (car rest) description))
+                (right (expect-string (second rest) description)))
+            (and (predicate left right) (loop (cdr rest))))))))
+
+    (define (primitive-string=? arguments context)
+      (primitive-string-compare arguments string=? "string=?"))
+
+    (define (primitive-string<? arguments context)
+      (primitive-string-compare arguments string<? "string<?"))
+
+    (define (primitive-string>? arguments context)
+      (primitive-string-compare arguments string>? "string>?"))
+
+    (define (primitive-string<=? arguments context)
+      (primitive-string-compare arguments string<=? "string<=?"))
+
+    (define (primitive-string>=? arguments context)
+      (primitive-string-compare arguments string>=? "string>=?"))
+
+    (define (map-over-lists procedure lists context keep-results?)
+      (let loop ((cursors lists) (results '()))
+        (cond
+         ((let any-empty? ((rest cursors))
+            (cond
+             ((null? rest) #f)
+             ((null? (car rest)) #t)
+             (else (any-empty? (cdr rest)))))
+          (if keep-results? (reverse results) agent-scheme-unspecified))
+         ((let any-improper? ((rest cursors))
+            (cond
+             ((null? rest) #f)
+             ((not (pair? (car rest))) #t)
+             (else (any-improper? (cdr rest)))))
+          (eval-error "map expected proper lists"))
+         (else
+          (let ((value
+                 (apply-procedure procedure (map car cursors) context #f)))
+            (loop (map cdr cursors)
+                  (if keep-results?
+                      (cons value results)
+                      results)))))))
+
+    (define (primitive-apply arguments context)
+      (let ((procedure (expect-procedure (car arguments) "apply procedure"))
+            (fixed-arguments (reverse (cdr (reverse (cdr arguments)))))
+            (tail-arguments
+             (proper-list-elements
+              (car (reverse arguments))
+              "apply final argument")))
+        (apply-procedure procedure
+                         (append fixed-arguments tail-arguments)
+                         context
+                         #f)))
+
+    (define (primitive-map arguments context)
+      (map-over-lists
+       (expect-procedure (car arguments) "map procedure")
+       (cdr arguments)
+       context
+       #t))
+
+    (define (primitive-for-each arguments context)
+      (map-over-lists
+       (expect-procedure (car arguments) "for-each procedure")
+       (cdr arguments)
+       context
+       #f))
+
+    (define (primitive-string-map arguments context)
+      (let* ((procedure (expect-procedure
+                         (car arguments)
+                         "string-map procedure"))
+             (strings (map (lambda (argument)
+                             (expect-string argument "string-map"))
+                           (cdr arguments)))
+             (limit (apply min (map string-length strings))))
+        (let loop ((index 0) (result '()))
+          (if (= index limit)
+              (list->string (reverse result))
+              (let ((value
+                     (apply-procedure
+                      procedure
+                      (map (lambda (string) (string-ref string index))
+                           strings)
+                      context
+                      #f)))
+                (loop (+ index 1)
+                      (cons (expect-character value "string-map result")
+                            result)))))))
+
+    (define (primitive-string-for-each arguments context)
+      (let* ((procedure (expect-procedure
+                         (car arguments)
+                         "string-for-each procedure"))
+             (strings (map (lambda (argument)
+                             (expect-string argument "string-for-each"))
+                           (cdr arguments)))
+             (limit (apply min (map string-length strings))))
+        (let loop ((index 0))
+          (if (< index limit)
+              (begin
+                (apply-procedure
+                 procedure
+                 (map (lambda (string) (string-ref string index)) strings)
+                 context
+                 #f)
+                (loop (+ index 1)))))
+        agent-scheme-unspecified))
+
+    (define (primitive-vector? arguments context)
+      (vector? (car arguments)))
+
+    (define (primitive-make-vector arguments context)
+      (let ((length (exact-integer->host (car arguments) "make-vector"))
+            (fill (if (null? (cdr arguments))
+                      agent-scheme-unspecified
+                      (second arguments))))
+        (if (< length 0)
+            (eval-error "make-vector length must be non-negative"))
+        (make-vector length fill)))
+
+    (define (primitive-vector arguments context)
+      (list->vector arguments))
+
+    (define (primitive-vector-length arguments context)
+      (vector-length (expect-vector (car arguments) "vector-length")))
+
+    (define (primitive-vector-ref arguments context)
+      (let* ((vector (expect-vector (car arguments) "vector-ref"))
+             (index (expect-nonnegative-index
+                     (second arguments)
+                     (vector-length vector)
+                     "vector-ref"
+                     #f)))
+        (vector-ref vector index)))
+
+    (define (primitive-vector-set! arguments context)
+      (let* ((vector (expect-vector (car arguments) "vector-set!"))
+             (index (expect-nonnegative-index
+                     (second arguments)
+                     (vector-length vector)
+                     "vector-set!"
+                     #f)))
+        (vector-set! vector index (third arguments))
+        agent-scheme-unspecified))
+
+    (define (primitive-vector->list arguments context)
+      (let* ((vector (expect-vector (car arguments) "vector->list"))
+             (range (optional-range
+                     arguments
+                     1
+                     (vector-length vector)
+                     "vector->list")))
+        (let loop ((index (car range)) (result '()))
+          (if (= index (cdr range))
+              (reverse result)
+              (loop (+ index 1)
+                    (cons (vector-ref vector index) result))))))
+
+    (define (primitive-list->vector arguments context)
+      (list->vector
+       (proper-list-elements (car arguments) "list->vector")))
+
+    (define (primitive-vector-copy arguments context)
+      (list->vector (primitive-vector->list arguments context)))
+
+    (define (primitive-vector-copy! arguments context)
+      (let* ((to (expect-vector (car arguments) "vector-copy! target"))
+             (at (expect-nonnegative-index
+                  (second arguments)
+                  (vector-length to)
+                  "vector-copy!"
+                  #t))
+             (from (expect-vector (third arguments) "vector-copy! source"))
+             (range (optional-range
+                     arguments
+                     3
+                     (vector-length from)
+                     "vector-copy!")))
+        (if (> (+ at (- (cdr range) (car range))) (vector-length to))
+            (eval-error "vector-copy! target range exceeds length"))
+        (let loop ((source-index (car range)) (target-index at))
+          (if (< source-index (cdr range))
+              (begin
+                (vector-set! to target-index
+                             (vector-ref from source-index))
+                (loop (+ source-index 1) (+ target-index 1)))))
+        agent-scheme-unspecified))
+
+    (define (primitive-vector-append arguments context)
+      (list->vector
+       (apply append
+              (map (lambda (argument)
+                     (vector->list
+                      (expect-vector argument "vector-append")))
+                   arguments))))
+
+    (define (primitive-vector-fill! arguments context)
+      (let* ((vector (expect-vector (car arguments) "vector-fill!"))
+             (fill (second arguments))
+             (range (optional-range
+                     arguments
+                     2
+                     (vector-length vector)
+                     "vector-fill!")))
+        (let loop ((index (car range)))
+          (if (< index (cdr range))
+              (begin
+                (vector-set! vector index fill)
+                (loop (+ index 1)))))
+        agent-scheme-unspecified))
+
+    (define (primitive-vector-map arguments context)
+      (let* ((procedure (expect-procedure
+                         (car arguments)
+                         "vector-map procedure"))
+             (vectors (map (lambda (argument)
+                             (expect-vector argument "vector-map"))
+                           (cdr arguments)))
+             (limit (apply min (map vector-length vectors))))
+        (let loop ((index 0) (result '()))
+          (if (= index limit)
+              (list->vector (reverse result))
+              (loop (+ index 1)
+                    (cons
+                     (apply-procedure
+                      procedure
+                      (map (lambda (vector) (vector-ref vector index))
+                           vectors)
+                      context
+                      #f)
+                     result))))))
+
+    (define (primitive-vector-for-each arguments context)
+      (primitive-vector-map arguments context)
+      agent-scheme-unspecified)
+
+    (define (primitive-bytevector? arguments context)
+      (bytevector? (car arguments)))
+
+    (define (primitive-make-bytevector arguments context)
+      (let ((length (exact-integer->host (car arguments) "make-bytevector"))
+            (fill (if (null? (cdr arguments))
+                      0
+                      (expect-byte
+                       (second arguments)
+                       "make-bytevector fill"))))
+        (if (< length 0)
+            (eval-error "make-bytevector length must be non-negative"))
+        (make-bytevector length fill)))
+
+    (define (primitive-bytevector arguments context)
+      (apply bytevector
+             (map (lambda (argument)
+                    (expect-byte argument "bytevector"))
+                  arguments)))
+
+    (define (primitive-bytevector-length arguments context)
+      (bytevector-length
+       (expect-bytevector (car arguments) "bytevector-length")))
+
+    (define (primitive-bytevector-u8-ref arguments context)
+      (let* ((bytevector
+              (expect-bytevector
+               (car arguments)
+               "bytevector-u8-ref"))
+             (index (expect-nonnegative-index
+                     (second arguments)
+                     (bytevector-length bytevector)
+                     "bytevector-u8-ref"
+                     #f)))
+        (bytevector-u8-ref bytevector index)))
+
+    (define (primitive-bytevector-u8-set! arguments context)
+      (let* ((bytevector
+              (expect-bytevector
+               (car arguments)
+               "bytevector-u8-set!"))
+             (index (expect-nonnegative-index
+                     (second arguments)
+                     (bytevector-length bytevector)
+                     "bytevector-u8-set!"
+                     #f))
+             (byte (expect-byte
+                    (third arguments)
+                    "bytevector-u8-set! value")))
+        (bytevector-u8-set! bytevector index byte)
+        agent-scheme-unspecified))
+
+    (define (primitive-bytevector-copy arguments context)
+      (let* ((bytevector
+              (expect-bytevector (car arguments) "bytevector-copy"))
+             (range (optional-range
+                     arguments
+                     1
+                     (bytevector-length bytevector)
+                     "bytevector-copy")))
+        (bytevector-copy bytevector (car range) (cdr range))))
+
+    (define (primitive-bytevector-copy! arguments context)
+      (let* ((to (expect-bytevector
+                  (car arguments)
+                  "bytevector-copy! target"))
+             (at (expect-nonnegative-index
+                  (second arguments)
+                  (bytevector-length to)
+                  "bytevector-copy!"
+                  #t))
+             (from (expect-bytevector
+                    (third arguments)
+                    "bytevector-copy! source"))
+             (range (optional-range
+                     arguments
+                     3
+                     (bytevector-length from)
+                     "bytevector-copy!")))
+        (if (> (+ at (- (cdr range) (car range))) (bytevector-length to))
+            (eval-error "bytevector-copy! target range exceeds length"))
+        (bytevector-copy! to at from (car range) (cdr range))
+        agent-scheme-unspecified))
+
+    (define (primitive-bytevector-append arguments context)
+      (apply bytevector-append
+             (map (lambda (argument)
+                    (expect-bytevector argument "bytevector-append"))
+                  arguments)))
+
     (define (primitive-procedure? arguments context)
       (or (agent-scheme-procedure? (car arguments))
           (agent-scheme-primitive-procedure? (car arguments))))
+
+    (define (primitive-eq? arguments context)
+      (eq? (car arguments) (second arguments)))
+
+    (define (primitive-eqv? arguments context)
+      (eqv? (car arguments) (second arguments)))
+
+    (define (primitive-equal? arguments context)
+      (equal? (car arguments) (second arguments)))
+
+    (define (primitive-memq arguments context)
+      (let ((result (memq (car arguments) (second arguments))))
+        (if result result #f)))
+
+    (define (primitive-memv arguments context)
+      (let ((result (memv (car arguments) (second arguments))))
+        (if result result #f)))
+
+    (define (primitive-member arguments context)
+      (let ((result (member (car arguments) (second arguments))))
+        (if result result #f)))
+
+    (define (primitive-assq arguments context)
+      (let ((result (assq (car arguments) (second arguments))))
+        (if result result #f)))
+
+    (define (primitive-assv arguments context)
+      (let ((result (assv (car arguments) (second arguments))))
+        (if result result #f)))
+
+    (define (primitive-assoc arguments context)
+      (let ((result (assoc (car arguments) (second arguments))))
+        (if result result #f)))
+
+    (define base-primitive-registry
+      (list
+       (list '* primitive* 0 #f)
+       (list '+ primitive+ 0 #f)
+       (list '- primitive- 1 #f)
+       (list '/ primitive/ 1 #f)
+       (list '< primitive< 2 #f)
+       (list '<= primitive<= 2 #f)
+       (list '= primitive= 2 #f)
+       (list '> primitive> 2 #f)
+       (list '>= primitive>= 2 #f)
+       (list 'abs primitive-abs 1 1)
+       (list 'append primitive-append 0 #f)
+       (list 'apply primitive-apply 2 #f)
+       (list 'assoc primitive-assoc 2 2)
+       (list 'assq primitive-assq 2 2)
+       (list 'assv primitive-assv 2 2)
+       (list 'boolean=? primitive-boolean=? 2 #f)
+       (list 'boolean? primitive-boolean? 1 1)
+       (list 'bytevector primitive-bytevector 0 #f)
+       (list 'bytevector-append primitive-bytevector-append 0 #f)
+       (list 'bytevector-copy primitive-bytevector-copy 1 3)
+       (list 'bytevector-copy! primitive-bytevector-copy! 3 5)
+       (list 'bytevector-length primitive-bytevector-length 1 1)
+       (list 'bytevector-u8-ref primitive-bytevector-u8-ref 2 2)
+       (list 'bytevector-u8-set! primitive-bytevector-u8-set! 3 3)
+       (list 'bytevector? primitive-bytevector? 1 1)
+       (list 'caar primitive-caar 1 1)
+       (list 'cadr primitive-cadr 1 1)
+       (list 'car primitive-car 1 1)
+       (list 'cdar primitive-cdar 1 1)
+       (list 'cddr primitive-cddr 1 1)
+       (list 'cdr primitive-cdr 1 1)
+       (list 'ceiling primitive-ceiling 1 1)
+       (list 'char->integer primitive-char->integer 1 1)
+       (list 'char<=? primitive-char<=? 2 #f)
+       (list 'char<? primitive-char<? 2 #f)
+       (list 'char=? primitive-char=? 2 #f)
+       (list 'char>=? primitive-char>=? 2 #f)
+       (list 'char>? primitive-char>? 2 #f)
+       (list 'char? primitive-char? 1 1)
+       (list 'complex? primitive-complex? 1 1)
+       (list 'cons primitive-cons 2 2)
+       (list 'eq? primitive-eq? 2 2)
+       (list 'equal? primitive-equal? 2 2)
+       (list 'eqv? primitive-eqv? 2 2)
+       (list 'even? primitive-even? 1 1)
+       (list 'exact-integer? primitive-exact-integer? 1 1)
+       (list 'exact? primitive-exact? 1 1)
+       (list 'floor primitive-floor 1 1)
+       (list 'floor-quotient primitive-floor-quotient 2 2)
+       (list 'floor-remainder primitive-floor-remainder 2 2)
+       (list 'for-each primitive-for-each 2 #f)
+       (list 'inexact? primitive-inexact? 1 1)
+       (list 'integer->char primitive-integer->char 1 1)
+       (list 'integer? primitive-integer? 1 1)
+       (list 'length primitive-length 1 1)
+       (list 'list primitive-list 0 #f)
+       (list 'list->string primitive-list->string 1 1)
+       (list 'list->vector primitive-list->vector 1 1)
+       (list 'list-copy primitive-list-copy 1 1)
+       (list 'list-ref primitive-list-ref 2 2)
+       (list 'list-set! primitive-list-set! 3 3)
+       (list 'list-tail primitive-list-tail 2 2)
+       (list 'list? primitive-list? 1 1)
+       (list 'make-bytevector primitive-make-bytevector 1 2)
+       (list 'make-list primitive-make-list 1 2)
+       (list 'make-string primitive-make-string 1 2)
+       (list 'make-vector primitive-make-vector 1 2)
+       (list 'map primitive-map 2 #f)
+       (list 'max primitive-max 1 #f)
+       (list 'member primitive-member 2 2)
+       (list 'memq primitive-memq 2 2)
+       (list 'memv primitive-memv 2 2)
+       (list 'min primitive-min 1 #f)
+       (list 'modulo primitive-modulo 2 2)
+       (list 'negative? primitive-negative? 1 1)
+       (list 'not primitive-not 1 1)
+       (list 'null? primitive-null? 1 1)
+       (list 'number->string primitive-number->string 1 1)
+       (list 'number? primitive-number? 1 1)
+       (list 'odd? primitive-odd? 1 1)
+       (list 'pair? primitive-pair? 1 1)
+       (list 'positive? primitive-positive? 1 1)
+       (list 'procedure? primitive-procedure? 1 1)
+       (list 'quotient primitive-quotient 2 2)
+       (list 'rational? primitive-rational? 1 1)
+       (list 'real? primitive-real? 1 1)
+       (list 'remainder primitive-remainder 2 2)
+       (list 'reverse primitive-reverse 1 1)
+       (list 'round primitive-round 1 1)
+       (list 'set-car! primitive-set-car! 2 2)
+       (list 'set-cdr! primitive-set-cdr! 2 2)
+       (list 'square primitive-square 1 1)
+       (list 'string primitive-string 0 #f)
+       (list 'string->list primitive-string->list 1 3)
+       (list 'string->number primitive-string->number 1 1)
+       (list 'string->symbol primitive-string->symbol 1 1)
+       (list 'string->vector primitive-string->vector 1 3)
+       (list 'string-append primitive-string-append 0 #f)
+       (list 'string-copy primitive-string-copy 1 3)
+       (list 'string-copy! primitive-string-copy! 3 5)
+       (list 'string-fill! primitive-string-fill! 2 4)
+       (list 'string-for-each primitive-string-for-each 2 #f)
+       (list 'string-length primitive-string-length 1 1)
+       (list 'string-map primitive-string-map 2 #f)
+       (list 'string-ref primitive-string-ref 2 2)
+       (list 'string-set! primitive-string-set! 3 3)
+       (list 'string<=? primitive-string<=? 2 #f)
+       (list 'string<? primitive-string<? 2 #f)
+       (list 'string=? primitive-string=? 2 #f)
+       (list 'string>=? primitive-string>=? 2 #f)
+       (list 'string>? primitive-string>? 2 #f)
+       (list 'string? primitive-string? 1 1)
+       (list 'substring primitive-substring 3 3)
+       (list 'symbol->string primitive-symbol->string 1 1)
+       (list 'symbol=? primitive-symbol=? 2 #f)
+       (list 'symbol? primitive-symbol? 1 1)
+       (list 'truncate primitive-truncate 1 1)
+       (list 'truncate-quotient primitive-truncate-quotient 2 2)
+       (list 'truncate-remainder primitive-truncate-remainder 2 2)
+       (list 'vector primitive-vector 0 #f)
+       (list 'vector->list primitive-vector->list 1 3)
+       (list 'vector->string primitive-vector->string 1 3)
+       (list 'vector-append primitive-vector-append 0 #f)
+       (list 'vector-copy primitive-vector-copy 1 3)
+       (list 'vector-copy! primitive-vector-copy! 3 5)
+       (list 'vector-fill! primitive-vector-fill! 2 4)
+       (list 'vector-for-each primitive-vector-for-each 2 #f)
+       (list 'vector-length primitive-vector-length 1 1)
+       (list 'vector-map primitive-vector-map 2 #f)
+       (list 'vector-ref primitive-vector-ref 2 2)
+       (list 'vector-set! primitive-vector-set! 3 3)
+       (list 'vector? primitive-vector? 1 1)
+       (list 'zero? primitive-zero? 1 1)))
+
+    (define (agent-scheme-base-primitive-names)
+      (map car base-primitive-registry))
+
+    (define (agent-scheme-base-primitive-specs)
+      (map (lambda (entry)
+             (list (list 'name (car entry))
+                   (list 'minimum-arity (third entry))
+                   (list 'maximum-arity (fourth entry))))
+           base-primitive-registry))
 
     (define (define-primitive! environment
                                name
@@ -682,26 +1706,16 @@
 
     (define (agent-scheme-make-base-environment)
       (let ((environment (agent-scheme-make-empty-environment)))
-        (define-primitive! environment '+ primitive+ 0 #f)
-        (define-primitive! environment '* primitive* 0 #f)
-        (define-primitive! environment '- primitive- 1 #f)
-        (define-primitive! environment '= primitive= 2 #f)
-        (define-primitive! environment '< primitive< 2 #f)
-        (define-primitive! environment '> primitive> 2 #f)
-        (define-primitive! environment '<= primitive<= 2 #f)
-        (define-primitive! environment '>= primitive>= 2 #f)
-        (define-primitive! environment 'cons primitive-cons 2 2)
-        (define-primitive! environment 'car primitive-car 1 1)
-        (define-primitive! environment 'cdr primitive-cdr 1 1)
-        (define-primitive! environment 'list primitive-list 0 #f)
-        (define-primitive! environment 'null? primitive-null? 1 1)
-        (define-primitive! environment 'pair? primitive-pair? 1 1)
-        (define-primitive! environment 'not primitive-not 1 1)
-        (define-primitive! environment 'boolean? primitive-boolean? 1 1)
-        (define-primitive! environment 'number? primitive-number? 1 1)
-        (define-primitive! environment 'symbol? primitive-symbol? 1 1)
-        (define-primitive! environment 'procedure? primitive-procedure? 1 1)
-        environment))
+        (let loop ((rest base-primitive-registry))
+          (if (null? rest)
+              environment
+              (begin
+                (define-primitive! environment
+                                   (car (car rest))
+                                   (second (car rest))
+                                   (third (car rest))
+                                   (fourth (car rest)))
+                (loop (cdr rest)))))))
 
     (define (rest-environment rest)
       (if (or (null? rest) (not (car rest)))
@@ -725,6 +1739,94 @@
         (trampoline (make-sequence forms #t) environment context)))
 
     (define agent-scheme-eval-string agent-scheme-eval-source)
+
+    (define (result-field name . values)
+      (cons name values))
+
+    (define (value->result-datum value . maybe-seen)
+      (let ((seen (if (null? maybe-seen) '() (car maybe-seen))))
+        (cond
+         ((or (boolean? value)
+              (null? value)
+              (symbol? value)
+              (char? value)
+              (number? value)
+              (string? value)
+              (bytevector? value))
+          value)
+         ((agent-scheme-unspecified? value)
+          '(unspecified))
+         ((agent-scheme-primitive-procedure? value)
+          (list 'procedure
+                (result-field 'kind 'primitive)
+                (result-field 'name (primitive-procedure-name value))))
+         ((agent-scheme-procedure? value)
+          (list 'procedure (result-field 'kind 'compound)))
+         ((pair? value)
+          (if (memq value seen)
+              '(cycle)
+              (cons (value->result-datum (car value) (cons value seen))
+                    (value->result-datum (cdr value) (cons value seen)))))
+         ((vector? value)
+          (if (memq value seen)
+              #(cycle)
+              (list->vector
+               (map (lambda (item)
+                      (value->result-datum item (cons value seen)))
+                    (vector->list value)))))
+         (else
+          (list 'host-object
+                (result-field 'printed "#<host-object>"))))))
+
+    (define (budget-result-field context)
+      (result-field
+       'budget
+       (result-field 'steps-used (context-steps context))
+       (result-field 'host-calls (context-host-callbacks context))))
+
+    (define (ok-result-datum value context)
+      (list 'evaluation-result
+            (result-field 'status 'ok)
+            (result-field 'value (value->result-datum value))
+            (result-field 'events '())
+            (budget-result-field context)))
+
+    (define (condition-message condition)
+      (if (error-object? condition)
+          (error-object-message condition)
+          "error"))
+
+    (define (condition-result-datum condition context)
+      (list 'evaluation-result
+            (result-field 'status 'error)
+            (result-field
+             'error
+             (result-field 'condition 'error)
+             (result-field 'message (condition-message condition)))
+            (result-field 'events '())
+            (budget-result-field context)))
+
+    (define (agent-scheme-eval-result expression . rest)
+      (let ((context (new-eval-context (rest-options rest)))
+            (environment (rest-environment rest)))
+        (guard (condition
+                (else (condition-result-datum condition context)))
+          (ok-result-datum
+           (trampoline expression environment context)
+           context))))
+
+    (define (agent-scheme-eval-source-result source . rest)
+      (let ((context (new-eval-context (rest-options rest)))
+            (environment (rest-environment rest)))
+        (guard (condition
+                (else (condition-result-datum condition context)))
+          (let ((forms (agent-scheme-read-all source)))
+            (ok-result-datum
+             (trampoline (make-sequence forms #t) environment context)
+             context)))))
+
+    (define (agent-scheme-result->external result)
+      (agent-scheme-datum->external result))
 
     (define (agent-scheme-value->external value)
       (cond

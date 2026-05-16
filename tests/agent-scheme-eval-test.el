@@ -45,7 +45,7 @@
                 :type 'agent-scheme-eval-error)
   (should-error (agent-scheme-eval-source "(missing 1)")
                 :type 'agent-scheme-eval-error)
-  (should-error (agent-scheme-eval-source "(/ 1 2)")
+  (should-error (agent-scheme-eval-source "(values 1 2)")
                 :type 'agent-scheme-eval-error)
   (should-error (agent-scheme-eval-source "(1 2)")
                 :type 'agent-scheme-eval-error))
