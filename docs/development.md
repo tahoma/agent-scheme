@@ -58,6 +58,8 @@ Before implementing a ticket, read:
 - [Repository agent instructions](../AGENTS.md), for agentic or tool-assisted work
 - [Architecture and threat model](architecture.md)
 - [Naming convention](naming.md)
+- [Scheme references](references.md)
+- [R7RS-small report reference](r7rs-small-report.md)
 - [Roadmap note](roadmap.md)
 - [Contributing](contributing.md)
 - The GitHub issue you are working on
@@ -93,11 +95,13 @@ and does not load user Emacs configuration.
 Future R7RS conformance fixtures should plug into `make test` through the same
 test command instead of adding a second top-level verification path.
 
-The active R7RS-small conformance matrix lives in
-[`docs/r7rs-conformance.md`](r7rs-conformance.md), with representative fixtures
-in `fixtures/r7rs/conformance-cases.scm`. Fixtures marked `pending`,
-`policy-gated`, or `unavailable` are loaded and validated by ERT without being
-executed. Fixtures marked `implemented` must run through `make test`.
+The local R7RS-small report reference lives in
+[`docs/r7rs-small-report.md`](r7rs-small-report.md). The active R7RS-small
+conformance matrix lives in [`docs/r7rs-conformance.md`](r7rs-conformance.md),
+with representative fixtures in `fixtures/r7rs/conformance-cases.scm`. Fixtures
+marked `pending`, `policy-gated`, or `unavailable` are loaded and validated by
+ERT without being executed. Fixtures marked `implemented` must run through
+`make test`.
 
 ## Verification
 

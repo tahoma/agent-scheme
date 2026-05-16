@@ -1,8 +1,10 @@
 # R7RS-Small Conformance Matrix
 
-This matrix is the source of truth for Agent Scheme's R7RS-small surface. It
-tracks the language features, standard libraries, and representative fixture
-cases that should move from `pending` to `implemented` as the runtime lands.
+This matrix is the source of truth for Agent Scheme's R7RS-small surface. Use
+the local [R7RS-small report reference](r7rs-small-report.md) for the underlying
+language text. This matrix tracks the language features, standard libraries, and
+representative fixture cases that should move from `pending` to `implemented`
+as the runtime lands.
 
 Fixture cases live in `fixtures/r7rs/conformance-cases.scm`. The ERT harness in
 `tests/agent-scheme-conformance-test.el` validates every fixture and runs cases
