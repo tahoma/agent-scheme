@@ -55,7 +55,9 @@ you use.
 
 Before implementing a ticket, read:
 
+- [Repository agent instructions](../AGENTS.md), for agentic or tool-assisted work
 - [Architecture and threat model](architecture.md)
+- [Naming convention](naming.md)
 - [Roadmap note](roadmap.md)
 - [Contributing](contributing.md)
 - The GitHub issue you are working on
@@ -79,12 +81,14 @@ run:
 
 ```sh
 git diff --check
-rg -n "my/agent-scheme|my/mcp" README.md docs --glob '!docs/development.md'
+rg -n "m[y]/agent-scheme|m[y]/mcp" README.md docs
 ```
 
 The `rg` command should normally return no matches. Also search for any
-project-history or private-machine references relevant to the change. If a match
-is intentional, explain why in the pull request.
+project-history or private-machine references relevant to the change. The
+pattern uses a character class so this guide does not carry the deprecated
+spelling as plain text. If a match is intentional, explain why in the pull
+request.
 
 Once the implementation and test harness land, the default verification command
 should be:
