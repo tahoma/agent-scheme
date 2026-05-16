@@ -1,0 +1,43 @@
+;;; agent-scheme-scheme-eval-test.el --- Portable evaluator tests  -*- lexical-binding: t; -*-
+
+;;; Commentary:
+
+;; ERT bridge for the portable R7RS evaluator implementation.
+
+;;; Code:
+
+(require 'ert)
+
+(defun agent-scheme--scheme-eval-runner ()
+  "Return the configured or discovered Chibi Scheme executable."
+  (let ((configured (getenv "AGENT_SCHEME_CHIBI")))
+    (cond
+     ((and configured (> (length configured) 0))
+      configured)
+     (t
+      (executable-find "chibi-scheme")))))
+
+(ert-deftest agent-scheme-scheme-eval-test-r7rs-suite ()
+  "Run the portable R7RS evaluator tests with an external Scheme."
+  (let ((runner (agent-scheme--scheme-eval-runner)))
+    (skip-unless runner)
+    (let ((output-buffer (generate-new-buffer " *agent-scheme-r7rs-eval*")))
+      (unwind-protect
+          (let ((status
+                 (process-file
+                  runner
+                  nil
+                  output-buffer
+                  nil
+                  "-A"
+                  (expand-file-name "scheme" agent-scheme--test-root)
+                  (expand-file-name
+                   "tests/scheme/agent-scheme-eval-test.scm"
+                   agent-scheme--test-root))))
+            (unless (equal status 0)
+              (ert-fail
+               (with-current-buffer output-buffer
+                 (buffer-string)))))
+        (kill-buffer output-buffer)))))
+
+;;; agent-scheme-scheme-eval-test.el ends here
