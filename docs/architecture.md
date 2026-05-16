@@ -354,22 +354,25 @@ Example normalized record:
 
 ## Public Entry Points and Names
 
-Durable Agent Scheme identifiers should use a project namespace rather than the
-informal `my/` prefix. Issue tahoma/agent-scheme#61 tracks the full naming
-migration, but new public examples should prefer:
+Durable Agent Scheme identifiers use the project namespace documented in
+[Naming Convention](naming.md). Public Emacs Lisp commands, functions,
+variables, customization options, faces, modes, hooks, and module entry points
+use `agent-scheme-`. Private Emacs Lisp internals use `agent-scheme--`.
+
+Initial public entry points should include:
 
 - `agent-scheme-read`
 - `agent-scheme-eval`
 - `agent-scheme-describe-environment`
 - `agent-scheme-start-repl`
+- `agent-scheme-mcp-start`
+- `agent-scheme-mcp-stop`
 - `agent-scheme-mcp-register-tools`
 - `agent-scheme-mcp-unregister-tools`
 
-Private Emacs Lisp internals should use `agent-scheme--`.
-
-Compatibility aliases may exist during API migrations, but they should be
-documented as temporary and should not appear as the preferred names in new Agent
-Scheme docs or tests.
+Compatibility aliases may exist during migrations from shipped names, but they
+must be documented as temporary and must not appear as the preferred names in new
+Agent Scheme docs, tests, examples, or issue plans.
 
 ## Emacs and MCP Integration
 
@@ -382,6 +385,8 @@ clear responsibilities:
   library system, policy layer, sessions, and event channel are available
 - MCP payloads preserve Scheme-readable result and event datums inside the
   protocol response
+- `agent-scheme-mcp-start` and `agent-scheme-mcp-stop` should expose the
+  user-facing integration lifecycle
 - `agent-scheme-mcp-register-tools` and
   `agent-scheme-mcp-unregister-tools` should not disturb unrelated Emacs MCP
   tools

@@ -29,7 +29,8 @@ author-name/issue-12/conformance-fixtures
 
 Use a short contributing author name as the branch prefix no matter which tools
 the author uses. The prefix should identify who owns the branch; the `issue-N`
-segment identifies the work.
+segment identifies the work. Do not use assistant, tool, vendor, or workflow
+branding in branch names.
 
 Pull requests should:
 
@@ -38,6 +39,7 @@ Pull requests should:
 - describe the verification that was run
 - call out any follow-up work left for the issue
 - avoid bundling unrelated issue work into the same branch
+- use plain project titles without assistant, tool, vendor, or workflow branding
 
 ## Commit Messages
 
@@ -65,6 +67,8 @@ Rules:
 - Mark breaking changes with `!` before the colon, or with a
   `BREAKING CHANGE: description` footer.
 - Do not use vague summaries such as `update docs`, `fix stuff`, or `changes`.
+- Do not include assistant, tool, vendor, or workflow branding in commit
+  messages.
 
 Recommended types:
 
