@@ -17,11 +17,16 @@
    (agent-scheme-eval-source source nil options)))
 
 (ert-deftest agent-scheme-base-test-registry-is-discoverable ()
-  "Expose implemented primitive names and arity metadata from Emacs."
+  "Expose kernel and prelude binding metadata from Emacs."
   (let ((names (agent-scheme-base-primitive-names))
-        (specs (agent-scheme-base-primitive-specs)))
-    (dolist (name '("+" "apply" "map" "vector-ref" "bytevector-u8-ref"))
+        (prelude-names (agent-scheme-base-prelude-binding-names))
+        (specs (agent-scheme-base-primitive-specs))
+        (binding-specs (agent-scheme-base-binding-specs)))
+    (dolist (name '("+" "apply" "car" "vector-ref" "bytevector-u8-ref"))
       (should (member name names)))
+    (dolist (name '("append" "cadr" "length" "map" "zero?"))
+      (should-not (member name names))
+      (should (member name prelude-names)))
     (should-not (member "values" names))
     (should
      (equal (plist-get
@@ -30,7 +35,23 @@
                 (equal (plist-get spec :name) "vector-ref"))
               specs)
              :minimum-arity)
-            2))))
+            2))
+    (should
+     (eq (plist-get
+          (seq-find
+           (lambda (spec)
+             (equal (plist-get spec :name) "vector-ref"))
+           binding-specs)
+          :source)
+         'kernel))
+    (should
+     (eq (plist-get
+          (seq-find
+           (lambda (spec)
+             (equal (plist-get spec :name) "append"))
+           binding-specs)
+          :source)
+         'prelude))))
 
 (ert-deftest agent-scheme-base-test-pairs-lists-and-equality ()
   "Evaluate common pair, list, association, and equality procedures."
