@@ -10,6 +10,7 @@
 
 (require 'cl-lib)
 (require 'ert)
+(require 'agent-scheme-reader)
 
 (defconst agent-scheme--conformance-statuses
   '(pending implemented policy-gated unavailable)
@@ -40,6 +41,44 @@ The function receives one Scheme source string and returns a plist:
 
 PRINTED-VALUE strings should use Agent Scheme's stable writer.")
 
+(defun agent-scheme--conformance-reader-evaluator (source)
+  "Read SOURCE as one datum and return a conformance result plist."
+  (condition-case condition
+      (let ((datums (agent-scheme-read-all source)))
+        (if (= (length datums) 1)
+            (list :status 'value
+                  :value (agent-scheme-datum->external (car datums)))
+          (list :status 'values
+                :values (mapcar #'agent-scheme-datum->external datums))))
+    (agent-scheme-reader-error
+     (list :status 'error :condition condition))))
+
+(defun agent-scheme--conformance-host-datum (datum)
+  "Convert Agent Scheme fixture DATUM to the host shape used by ERT."
+  (cond
+   ((eq datum agent-scheme-true) t)
+   ((eq datum agent-scheme-false) :scheme-false)
+   ((null datum) nil)
+   ((agent-scheme-symbol-p datum)
+    (intern (agent-scheme-symbol-name datum)))
+   ((agent-scheme-number-p datum)
+    (or (agent-scheme-number-value datum)
+        (agent-scheme-number-lexeme datum)))
+   ((or (stringp datum) (characterp datum))
+    datum)
+   ((agent-scheme-character-p datum)
+    (agent-scheme-character-code datum))
+   ((agent-scheme-bytevector-p datum)
+    (append (agent-scheme-bytevector-bytes datum) nil))
+   ((consp datum)
+    (cons (agent-scheme--conformance-host-datum (car datum))
+          (agent-scheme--conformance-host-datum (cdr datum))))
+   ((vectorp datum)
+    (vconcat (mapcar #'agent-scheme--conformance-host-datum
+                     (append datum nil))))
+   (t
+    (ert-fail (format "Unsupported fixture datum: %S" datum)))))
+
 (defun agent-scheme--conformance-fixture-file ()
   "Return the R7RS conformance fixture file path."
   (expand-file-name
@@ -52,13 +91,14 @@ PRINTED-VALUE strings should use Agent Scheme's stable writer.")
 
 (defun agent-scheme--conformance-read-suite ()
   "Read and return the R7RS conformance suite datum."
-  (with-temp-buffer
-    (insert-file-contents (agent-scheme--conformance-fixture-file))
-    (goto-char (point-min))
-    (let ((suite (read (current-buffer))))
-      (unless (eq (car-safe suite) 'r7rs-conformance-suite)
-        (ert-fail "Conformance fixture must start with r7rs-conformance-suite"))
-      suite)))
+  (let* ((source (with-temp-buffer
+                   (insert-file-contents (agent-scheme--conformance-fixture-file))
+                   (buffer-string)))
+         (suite (agent-scheme--conformance-host-datum
+                 (agent-scheme-read source))))
+    (unless (eq (car-safe suite) 'r7rs-conformance-suite)
+      (ert-fail "Conformance fixture must start with r7rs-conformance-suite"))
+    suite))
 
 (defun agent-scheme--conformance-suite-cases ()
   "Return conformance fixture cases."
@@ -122,19 +162,24 @@ ACTUAL is the plist returned by `agent-scheme-conformance-evaluator'."
 
 (defun agent-scheme--conformance-run-case (case)
   "Run one implemented conformance CASE."
-  (unless (functionp agent-scheme-conformance-evaluator)
-    (ert-fail
-     (format "No Agent Scheme evaluator is registered for implemented case %S"
-             (agent-scheme--conformance-field case 'id))))
-  (let* ((source (agent-scheme--conformance-field case 'source))
-         (expect (agent-scheme--conformance-field case 'expect))
-         (actual (funcall agent-scheme-conformance-evaluator source)))
-    (unless (agent-scheme--conformance-actual-matches-p expect actual)
+  (let ((evaluator
+         (or agent-scheme-conformance-evaluator
+             (and (eq (agent-scheme--conformance-field case 'category)
+                      'reader-syntax)
+                  #'agent-scheme--conformance-reader-evaluator))))
+    (unless (functionp evaluator)
       (ert-fail
-       (format "Conformance case %S expected %S, got %S"
-               (agent-scheme--conformance-field case 'id)
-               expect
-               actual)))))
+       (format "No Agent Scheme evaluator is registered for implemented case %S"
+               (agent-scheme--conformance-field case 'id))))
+    (let* ((source (agent-scheme--conformance-field case 'source))
+           (expect (agent-scheme--conformance-field case 'expect))
+           (actual (funcall evaluator source)))
+      (unless (agent-scheme--conformance-actual-matches-p expect actual)
+        (ert-fail
+         (format "Conformance case %S expected %S, got %S"
+                 (agent-scheme--conformance-field case 'id)
+                 expect
+                 actual))))))
 
 (ert-deftest agent-scheme-conformance-test-fixture-suite-is-valid ()
   "Validate the R7RS conformance fixture suite shape."

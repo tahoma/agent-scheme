@@ -31,6 +31,8 @@ This seed is intentionally small. Initial implementation modules and documentati
 
 - [Repository agent instructions](AGENTS.md)
 - [Architecture and threat model](docs/architecture.md)
+- [Scheme references](docs/references.md)
+- [R7RS-small report reference](docs/r7rs-small-report.md)
 - [R7RS-small conformance matrix](docs/r7rs-conformance.md)
 - [Contributing](docs/contributing.md)
 - [Development setup](docs/development.md)

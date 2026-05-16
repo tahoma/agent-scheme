@@ -14,8 +14,7 @@ small and will grow as implementation tickets land.
 
 Optional but useful:
 
-- An R7RS Scheme implementation for comparing behavior against reference
-  Scheme programs and conformance fixtures
+- Chibi Scheme, `chibi-scheme`, for running portable R7RS bootstrap tests
 - ShellCheck or other local lint tools for future scripts
 
 ## GitHub Access
@@ -58,6 +57,8 @@ Before implementing a ticket, read:
 - [Repository agent instructions](../AGENTS.md), for agentic or tool-assisted work
 - [Architecture and threat model](architecture.md)
 - [Naming convention](naming.md)
+- [Scheme references](references.md)
+- [R7RS-small report reference](r7rs-small-report.md)
 - [Roadmap note](roadmap.md)
 - [Contributing](contributing.md)
 - The GitHub issue you are working on
@@ -93,11 +94,19 @@ and does not load user Emacs configuration.
 Future R7RS conformance fixtures should plug into `make test` through the same
 test command instead of adding a second top-level verification path.
 
-The active R7RS-small conformance matrix lives in
-[`docs/r7rs-conformance.md`](r7rs-conformance.md), with representative fixtures
-in `fixtures/r7rs/conformance-cases.scm`. Fixtures marked `pending`,
-`policy-gated`, or `unavailable` are loaded and validated by ERT without being
-executed. Fixtures marked `implemented` must run through `make test`.
+Portable R7RS tests live under `tests/scheme/` and are launched by ERT. The
+current portable reader harness uses Chibi Scheme when `chibi-scheme` is on
+`PATH`, or the command named by `AGENT_SCHEME_CHIBI`. If Chibi is unavailable,
+the ERT test is skipped so a minimal Emacs-only checkout can still run the
+bootstrap suite.
+
+The local R7RS-small report reference lives in
+[`docs/r7rs-small-report.md`](r7rs-small-report.md). The active R7RS-small
+conformance matrix lives in [`docs/r7rs-conformance.md`](r7rs-conformance.md),
+with representative fixtures in `fixtures/r7rs/conformance-cases.scm`. Fixtures
+marked `pending`, `policy-gated`, or `unavailable` are loaded and validated by
+ERT without being executed. Fixtures marked `implemented` must run through
+`make test`.
 
 ## Verification
 
@@ -133,6 +142,7 @@ work is expected to introduce directories such as:
 
 ```text
 lisp/
+scheme/
 tests/
 fixtures/
 ```
