@@ -9,7 +9,7 @@ small and will grow as implementation tickets land.
 - Git
 - GitHub CLI, `gh`
 - Emacs, preferably a current stable release
-- GNU Make, once the test harness lands
+- GNU Make
 - ripgrep, `rg`, for fast repository searches
 
 Optional but useful:
@@ -74,10 +74,40 @@ with dependency-free or explicitly unblocked issues.
   examples.
 - Follow the commit-message rules in [Contributing](contributing.md).
 
+## Test Layout
+
+Project tests live under `tests/` and run through the repository `Makefile`.
+Emacs Lisp bootstrap tests use ERT and follow these conventions:
+
+- test files are named `tests/agent-scheme-*-test.el`
+- module tests mirror implementation modules, such as
+  `tests/agent-scheme-reader-test.el` for `lisp/agent-scheme-reader.el`
+- shared ERT helpers should live in `tests/agent-scheme-test-helper.el` and
+  provide `agent-scheme-test-helper`
+- the batch runner is `tests/agent-scheme-test-runner.el`
+
+The runner starts Emacs with `-Q --batch`, adds project-local `lisp/` and
+`tests/` directories to `load-path`, loads test files in deterministic order,
+and does not load user Emacs configuration.
+
+Future R7RS conformance fixtures should plug into `make test` through the same
+test command instead of adding a second top-level verification path.
+
 ## Verification
 
-Today, the repository is mostly documentation. For documentation-only changes,
-run:
+The default local verification command is:
+
+```sh
+make test
+```
+
+To run a narrower ERT selector:
+
+```sh
+AGENT_SCHEME_TEST_SELECTOR='agent-scheme-smoke-test-harness-runs' make test
+```
+
+For documentation-only changes, also run:
 
 ```sh
 git diff --check
@@ -89,15 +119,6 @@ project-history or private-machine references relevant to the change. The
 pattern uses a character class so this guide does not carry the deprecated
 spelling as plain text. If a match is intentional, explain why in the pull
 request.
-
-Once the implementation and test harness land, the default verification command
-should be:
-
-```sh
-make test
-```
-
-Until then, note explicitly when `make test` is unavailable.
 
 ## Expected Repository Shape
 
