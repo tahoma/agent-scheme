@@ -51,6 +51,25 @@
       (frame environment-frame set-environment-frame!)
       (parent environment-parent))
 
+    (define-record-type <syntax-environment>
+      (make-syntax-environment frame parent)
+      syntax-environment?
+      (frame syntax-environment-frame set-syntax-environment-frame!)
+      (parent syntax-environment-parent))
+
+    (define-record-type <syntax-context>
+      (make-syntax-context id value-environment syntax-environment)
+      syntax-context?
+      (id syntax-context-id)
+      (value-environment syntax-context-value-environment)
+      (syntax-environment syntax-context-syntax-environment))
+
+    (define-record-type <identifier>
+      (make-identifier name context)
+      identifier?
+      (name identifier-name)
+      (context identifier-context))
+
     (define-record-type <formals>
       (make-formals required rest)
       formals?
@@ -79,21 +98,44 @@
       (allow-definitions sequence-allow-definitions))
 
     (define-record-type <bounce>
-      (make-bounce expression environment)
+      (make-bounce expression environment syntax-environment)
       bounce?
       (expression bounce-expression)
-      (environment bounce-environment))
+      (environment bounce-environment)
+      (syntax-environment bounce-syntax-environment))
 
     (define-record-type <eval-context>
       (make-eval-context steps maximum-steps
-                         maximum-value-nodes
-                         host-callbacks maximum-host-callbacks)
+                         maximum-value-nodes host-callbacks
+                         maximum-host-callbacks syntax-environment
+                         base-syntax-installed next-syntax-id)
       eval-context?
       (steps context-steps set-context-steps!)
       (maximum-steps context-maximum-steps)
       (maximum-value-nodes context-maximum-value-nodes)
       (host-callbacks context-host-callbacks set-context-host-callbacks!)
-      (maximum-host-callbacks context-maximum-host-callbacks))
+      (maximum-host-callbacks context-maximum-host-callbacks)
+      (syntax-environment context-syntax-environment
+                          set-context-syntax-environment!)
+      (base-syntax-installed context-base-syntax-installed
+                             set-context-base-syntax-installed!)
+      (next-syntax-id context-next-syntax-id set-context-next-syntax-id!))
+
+    (define-record-type <syntax-transformer>
+      (make-syntax-transformer ellipsis literals rules
+                               value-environment syntax-environment)
+      syntax-transformer?
+      (ellipsis syntax-transformer-ellipsis)
+      (literals syntax-transformer-literals)
+      (rules syntax-transformer-rules)
+      (value-environment syntax-transformer-value-environment)
+      (syntax-environment syntax-transformer-syntax-environment))
+
+    (define-record-type <syntax-scope>
+      (make-syntax-scope forms syntax-environment)
+      syntax-scope?
+      (forms syntax-scope-forms)
+      (syntax-environment syntax-scope-syntax-environment))
 
     (define (option-ref options key default)
       (let ((cell (assq key options)))
@@ -123,7 +165,10 @@
        0
        (option-ref options
                    'max-host-callbacks
-                   agent-scheme-default-maximum-host-callbacks)))
+                   agent-scheme-default-maximum-host-callbacks)
+       (make-syntax-environment '() #f)
+       #f
+       0))
 
     (define (note-step! context)
       (set-context-steps! context (+ (context-steps context) 1))
@@ -145,6 +190,7 @@
        ((or (boolean? value)
             (null? value)
             (symbol? value)
+            (identifier? value)
             (char? value)
             (number? value)
             (agent-scheme-unspecified? value)
@@ -208,13 +254,46 @@
            (string-append description " must be an identifier")
            datum)))
 
+    (define (identifier-datum? datum)
+      (or (symbol? datum) (identifier? datum)))
+
+    (define (identifier-datum-name datum)
+      (cond
+       ((symbol? datum) datum)
+       ((identifier? datum) (identifier-name datum))
+       (else #f)))
+
+    (define (identifier-key identifier)
+      (cond
+       ((identifier? identifier)
+        (let ((context (identifier-context identifier)))
+          (if context
+              (list 'syntax
+                    (syntax-context-id context)
+                    (identifier-name identifier))
+              (identifier-name identifier))))
+       ((symbol? identifier) identifier)
+       (else
+        (eval-error "expected identifier" identifier))))
+
+    (define (identifier-named? datum name)
+      (let ((actual (identifier-datum-name datum)))
+        (and actual (eq? actual name))))
+
+    (define (expect-identifier-key datum description)
+      (if (identifier-datum? datum)
+          (identifier-key datum)
+          (eval-error
+           (string-append description " must be an identifier")
+           datum)))
+
     (define (agent-scheme-make-empty-environment . maybe-parent)
       (make-environment
        '()
        (if (null? maybe-parent) #f (car maybe-parent))))
 
     (define (frame-cell environment name)
-      (let ((cell (assq name (environment-frame environment))))
+      (let ((cell (assoc name (environment-frame environment))))
         (if cell (cdr cell) #f)))
 
     (define (environment-cell environment name)
@@ -247,6 +326,40 @@
                    name)
                   value)))))
 
+    (define (environment-cell-for-identifier environment identifier)
+      (cond
+       ((identifier? identifier)
+        (let ((context (identifier-context identifier)))
+          (if context
+              (or (environment-cell environment (identifier-key identifier))
+                  (let ((definition-environment
+                         (syntax-context-value-environment context)))
+                    (and definition-environment
+                         (environment-cell definition-environment
+                                           (identifier-name identifier)))))
+              (environment-cell environment (identifier-name identifier)))))
+       ((symbol? identifier)
+        (environment-cell environment identifier))
+       (else #f)))
+
+    (define (environment-ref-identifier environment identifier)
+      (let ((cell (environment-cell-for-identifier environment identifier)))
+        (if (not cell)
+            (eval-error "unbound identifier" (identifier-datum-name identifier))
+            (let ((value (cell-value cell)))
+              (if (undefined? value)
+                  (eval-error
+                   "identifier referenced before definition is initialized"
+                   (identifier-datum-name identifier))
+                  value)))))
+
+    (define (environment-set-identifier! environment identifier value)
+      (let ((cell (environment-cell-for-identifier environment identifier)))
+        (if cell
+            (set-cell-value! cell value)
+            (eval-error "unbound identifier in set!"
+                        (identifier-datum-name identifier)))))
+
     (define (ensure-distinct-names names description)
       (let loop ((rest names) (seen '()))
         (if (not (null? rest))
@@ -260,7 +373,9 @@
     (define (parse-formals formals)
       (cond
        ((symbol? formals)
-        (make-formals '() formals))
+        (make-formals '() (identifier-key formals)))
+       ((identifier? formals)
+        (make-formals '() (identifier-key formals)))
        (else
         (let loop ((cursor formals) (required '()))
           (cond
@@ -270,13 +385,14 @@
               (make-formals names #f)))
            ((pair? cursor)
             (loop (cdr cursor)
-                  (cons (expect-symbol (car cursor) "lambda formal")
+                  (cons (expect-identifier-key (car cursor) "lambda formal")
                         required)))
-           ((symbol? cursor)
+           ((identifier-datum? cursor)
             (let ((names (reverse required)))
-              (ensure-distinct-names (append names (list cursor))
+              (ensure-distinct-names
+               (append names (list (identifier-key cursor)))
                                      "lambda formals")
-              (make-formals names cursor)))
+              (make-formals names (identifier-key cursor))))
            (else
             (eval-error
              "lambda formals must be an identifier, a proper list, or a dotted list"
@@ -314,10 +430,17 @@
                 (eval-error
                  "variable define requires exactly one expression"
                  form))
-            (cons target (car body)))
+            (cons (identifier-key target) (car body)))
+           ((identifier? target)
+            (if (not (= (length body) 1))
+                (eval-error
+                 "variable define requires exactly one expression"
+                 form))
+            (cons (identifier-key target) (car body)))
            ((pair? target)
-            (let ((name (expect-symbol (car target)
-                                       "function define name")))
+            (let ((name (expect-identifier-key
+                         (car target)
+                         "function define name")))
               (if (null? body)
                   (eval-error "function define requires a body" form))
               (cons name (make-lambda-expression (cdr target) body))))
@@ -446,7 +569,9 @@
                  context))
                (body-expression (make-sequence (cdr body-state) #f)))
           (if tail?
-              (make-bounce body-expression (car body-state))
+              (make-bounce body-expression
+                           (car body-state)
+                           (context-syntax-environment context))
               (eval-sequence (cdr body-state)
                              (car body-state)
                              context
@@ -468,11 +593,15 @@
         (cond
          ((true-value? test-value)
           (if tail?
-              (make-bounce (third parts) environment)
+              (make-bounce (third parts)
+                           environment
+                           (context-syntax-environment context))
               (eval-expression (third parts) environment context #f)))
          ((= (length parts) 4)
           (if tail?
-              (make-bounce (fourth parts) environment)
+              (make-bounce (fourth parts)
+                           environment
+                           (context-syntax-environment context))
               (eval-expression (fourth parts) environment context #f)))
          (else
           agent-scheme-unspecified))))
@@ -480,13 +609,644 @@
     (define (eval-set! parts environment context)
       (if (not (= (length parts) 3))
           (eval-error "set! requires an identifier and an expression" parts))
-      (let ((name (expect-symbol (second parts) "set! target"))
-            (value (eval-expression (third parts)
-                                    environment
-                                    context
-                                    #f)))
-        (environment-set! environment name value)
+      (let ((target (second parts))
+            (value (eval-expression (third parts) environment context #f)))
+        (if (not (identifier-datum? target))
+            (eval-error "set! target must be an identifier" target))
+        (environment-set-identifier! environment target value)
         agent-scheme-unspecified))
+
+    (define (parse-letrec-binding binding description)
+      (let ((parts (proper-list-elements binding description)))
+        (if (not (= (length parts) 2))
+            (eval-error
+             (string-append description
+                            " binding must contain an identifier and initializer")
+             binding))
+        (cons (expect-identifier-key (car parts) description)
+              (second parts))))
+
+    (define (eval-letrec parts environment context tail? sequential?)
+      (if (< (length parts) 3)
+          (eval-error
+           (string-append
+            (if sequential? "letrec*" "letrec")
+            " requires bindings and a body")
+           parts))
+      (let* ((description (if sequential? "letrec*" "letrec"))
+             (bindings
+              (map (lambda (binding)
+                     (parse-letrec-binding binding description))
+                   (proper-list-elements
+                    (second parts)
+                    (string-append description " binding list"))))
+             (names (map car bindings))
+             (local-environment
+              (agent-scheme-make-empty-environment environment)))
+        (ensure-distinct-names names description)
+        (for-each
+         (lambda (name)
+           (environment-define! local-environment name undefined))
+         names)
+        (if sequential?
+            (for-each
+             (lambda (binding)
+               (environment-set!
+                local-environment
+                (car binding)
+                (eval-expression (cdr binding)
+                                 local-environment
+                                 context
+                                 #f)))
+             bindings)
+            (let ((values
+                   (map (lambda (binding)
+                          (cons (car binding)
+                                (eval-expression (cdr binding)
+                                                 local-environment
+                                                 context
+                                                 #f)))
+                        bindings)))
+              (for-each
+               (lambda (binding-value)
+                 (environment-set!
+                  local-environment
+                  (car binding-value)
+                  (cdr binding-value)))
+               values)))
+        (eval-sequence (cddr parts)
+                       local-environment
+                       context
+                       tail?
+                       #t)))
+
+    (define (make-empty-syntax-environment parent)
+      (make-syntax-environment '() parent))
+
+    (define (syntax-environment-ref syntax-environment name)
+      (let loop ((cursor syntax-environment))
+        (cond
+         ((not cursor) #f)
+         ((assq name (syntax-environment-frame cursor))
+          => (lambda (cell) (cdr cell)))
+         (else (loop (syntax-environment-parent cursor))))))
+
+    (define (syntax-environment-define! syntax-environment name transformer)
+      (set-syntax-environment-frame!
+       syntax-environment
+       (cons (cons name transformer)
+             (syntax-environment-frame syntax-environment))))
+
+    (define (with-syntax-environment context syntax-environment thunk)
+      (let ((old-syntax-environment (context-syntax-environment context)))
+        (set-context-syntax-environment! context syntax-environment)
+        (let ((value (thunk)))
+          (set-context-syntax-environment! context old-syntax-environment)
+          value)))
+
+    (define (operator-shadowed? operator environment)
+      (and (symbol? operator) (environment-cell environment operator)))
+
+    (define (special-operator-active? operator environment)
+      (and (identifier-datum? operator)
+           (or (identifier? operator)
+               (not (operator-shadowed? operator environment)))))
+
+    (define (syntax-binding-for-operator operator environment context)
+      (let ((name (identifier-datum-name operator)))
+        (if (and name (not (operator-shadowed? operator environment)))
+            (or
+             (and (identifier? operator)
+                  (let* ((identifier-context (identifier-context operator))
+                         (definition-syntax-environment
+                          (and identifier-context
+                               (syntax-context-syntax-environment
+                                identifier-context))))
+                    (and definition-syntax-environment
+                         (syntax-environment-ref
+                          definition-syntax-environment
+                          name))))
+             (syntax-environment-ref
+              (context-syntax-environment context)
+              name))
+            #f)))
+
+    (define (ellipsis-identifier? datum ellipsis)
+      (and (identifier-datum? datum)
+           (eq? (identifier-datum-name datum) ellipsis)))
+
+    (define (proper-list-elements/maybe datum)
+      (let loop ((cursor datum) (elements '()))
+        (cond
+         ((null? cursor) (reverse elements))
+         ((pair? cursor) (loop (cdr cursor) (cons (car cursor) elements)))
+         (else #f))))
+
+    (define (syntax-rules-spec? form)
+      (and (pair? form) (identifier-named? (car form) 'syntax-rules)))
+
+    (define (parse-syntax-rule rule)
+      (let ((parts (proper-list-elements rule "syntax-rules rule")))
+        (if (not (= (length parts) 2))
+            (eval-error
+             "syntax-rules rule must contain a pattern and a template"
+             rule))
+        (let ((pattern (car parts)))
+          (if (not (and (pair? pattern)
+                        (identifier-datum? (car pattern))))
+              (eval-error
+               "syntax-rules pattern must be a list beginning with an identifier"
+               pattern))
+          (cons pattern (second parts)))))
+
+    (define (parse-syntax-rules form value-environment syntax-environment)
+      (if (not (syntax-rules-spec? form))
+          (eval-error "transformer spec must be a syntax-rules form" form))
+      (let* ((parts (proper-list-elements form "syntax-rules form"))
+             (tail (cdr parts)))
+        (if (< (length tail) 2)
+            (eval-error
+             "syntax-rules requires literals and at least one rule"
+             form))
+        (let* ((custom-ellipsis?
+                (and (identifier-datum? (car tail))
+                     (pair? (cdr tail))))
+               (ellipsis (if custom-ellipsis?
+                             (expect-symbol (car tail)
+                                            "syntax-rules ellipsis")
+                             '...))
+               (literal-form (if custom-ellipsis?
+                                 (second tail)
+                                 (car tail)))
+               (rule-forms (if custom-ellipsis?
+                               (cddr tail)
+                               (cdr tail)))
+               (literals
+                (map (lambda (literal)
+                       (expect-symbol literal "syntax-rules literal"))
+                     (proper-list-elements
+                      literal-form
+                      "syntax-rules literal list"))))
+          (make-syntax-transformer
+           ellipsis
+           literals
+           (map parse-syntax-rule rule-forms)
+           value-environment
+           syntax-environment))))
+
+    (define (syntax-literal? identifier literals)
+      (memq (identifier-datum-name identifier) literals))
+
+    (define (make-pattern-bindings)
+      (list 'bindings))
+
+    (define (pattern-binding bindings name)
+      (assoc name (cdr bindings)))
+
+    (define (add-pattern-binding! bindings name entry)
+      (set-cdr! bindings (cons (cons name entry) (cdr bindings))))
+
+    (define (syntax-bind-pattern-variable! bindings name value repeated?)
+      (let ((entry (pattern-binding bindings name)))
+        (cond
+         (repeated?
+          (cond
+           ((not entry)
+            (add-pattern-binding!
+             bindings
+             name
+             (cons 'repeat (list value))))
+           ((eq? (car (cdr entry)) 'repeat)
+            (set-cdr! entry
+                      (cons 'repeat
+                            (append (cdr (cdr entry)) (list value)))))
+           (else
+            (eval-error
+             "pattern variable used at inconsistent ellipsis depth"
+             name))))
+         (entry
+          (eval-error "duplicate pattern variable" name))
+         (else
+          (add-pattern-binding! bindings name (cons 'single value)))))
+      #t)
+
+    (define (pattern-variable-names pattern literals ellipsis)
+      (cond
+       ((identifier-datum? pattern)
+        (let ((name (identifier-datum-name pattern)))
+          (if (or (eq? name '_)
+                  (eq? name ellipsis)
+                  (memq name literals))
+              '()
+              (list name))))
+       ((pair? pattern)
+        (let ((elements (proper-list-elements/maybe pattern)))
+          (if elements
+              (apply append
+                     (map (lambda (element)
+                            (pattern-variable-names
+                             element literals ellipsis))
+                          elements))
+              '())))
+       ((vector? pattern)
+        (apply append
+               (map (lambda (element)
+                      (pattern-variable-names element literals ellipsis))
+                    (vector->list pattern))))
+       (else '())))
+
+    (define (bind-empty-repeated-pattern-variables!
+             pattern literals ellipsis bindings)
+      (for-each
+       (lambda (name)
+         (if (not (pattern-binding bindings name))
+             (add-pattern-binding! bindings name (cons 'repeat '()))))
+       (pattern-variable-names pattern literals ellipsis)))
+
+    (define (list-take list count)
+      (let loop ((rest list) (remaining count) (result '()))
+        (if (= remaining 0)
+            (reverse result)
+            (loop (cdr rest) (- remaining 1) (cons (car rest) result)))))
+
+    (define (list-drop list count)
+      (if (= count 0)
+          list
+          (list-drop (cdr list) (- count 1))))
+
+    (define (list-last-n list count)
+      (list-drop list (- (length list) count)))
+
+    (define (match-pattern pattern input literals ellipsis bindings repeated?)
+      (cond
+       ((identifier-datum? pattern)
+        (let ((name (identifier-datum-name pattern)))
+          (cond
+           ((and (eq? name '_) (not (memq name literals))) #t)
+           ((syntax-literal? pattern literals)
+            (and (identifier-datum? input)
+                 (eq? name (identifier-datum-name input))))
+           ((eq? name ellipsis)
+            (and (identifier-datum? input)
+                 (eq? name (identifier-datum-name input))))
+           (else
+            (syntax-bind-pattern-variable!
+             bindings name input repeated?)))))
+       ((pair? pattern)
+        (let ((pattern-elements (proper-list-elements/maybe pattern))
+              (input-elements (proper-list-elements/maybe input)))
+          (and pattern-elements
+               input-elements
+               (match-pattern-elements
+                pattern-elements
+                input-elements
+                literals
+                ellipsis
+                bindings
+                repeated?))))
+       ((vector? pattern)
+        (and (vector? input)
+             (match-pattern-elements
+              (vector->list pattern)
+              (vector->list input)
+              literals
+              ellipsis
+              bindings
+              repeated?)))
+       (else
+        (equal? pattern input))))
+
+    (define (find-ellipsis-index patterns ellipsis)
+      (if (null? patterns)
+          #f
+          (let loop ((rest (cdr patterns)) (index 1))
+            (cond
+             ((null? rest) #f)
+             ((ellipsis-identifier? (car rest) ellipsis) index)
+             (else (loop (cdr rest) (+ index 1)))))))
+
+    (define (match-pattern-list patterns inputs literals ellipsis bindings
+                                repeated?)
+      (cond
+       ((null? patterns) (null? inputs))
+       ((null? inputs) #f)
+       ((match-pattern (car patterns)
+                       (car inputs)
+                       literals
+                       ellipsis
+                       bindings
+                       repeated?)
+        (match-pattern-list (cdr patterns)
+                            (cdr inputs)
+                            literals
+                            ellipsis
+                            bindings
+                            repeated?))
+       (else #f)))
+
+    (define (match-repeated-inputs pattern inputs literals ellipsis bindings)
+      (if (null? inputs)
+          (begin
+            (bind-empty-repeated-pattern-variables!
+             pattern literals ellipsis bindings)
+            #t)
+          (and (match-pattern pattern
+                              (car inputs)
+                              literals
+                              ellipsis
+                              bindings
+                              #t)
+               (match-repeated-inputs pattern
+                                      (cdr inputs)
+                                      literals
+                                      ellipsis
+                                      bindings))))
+
+    (define (match-pattern-elements patterns inputs literals ellipsis bindings
+                                    repeated?)
+      (let ((ellipsis-index (find-ellipsis-index patterns ellipsis)))
+        (if ellipsis-index
+            (let* ((prefix-count (- ellipsis-index 1))
+                   (suffix (list-drop patterns (+ ellipsis-index 1)))
+                   (suffix-count (length suffix))
+                   (repeat-pattern (list-ref patterns (- ellipsis-index 1)))
+                   (repeat-count (- (length inputs)
+                                    prefix-count
+                                    suffix-count)))
+              (and (>= repeat-count 0)
+                   (match-pattern-list
+                    (list-take patterns prefix-count)
+                    (list-take inputs prefix-count)
+                    literals
+                    ellipsis
+                    bindings
+                    repeated?)
+                   (match-repeated-inputs
+                    repeat-pattern
+                    (list-take (list-drop inputs prefix-count)
+                               repeat-count)
+                    literals
+                    ellipsis
+                    bindings)
+                   (match-pattern-list
+                    suffix
+                    (if (> suffix-count 0)
+                        (list-last-n inputs suffix-count)
+                        '())
+                    literals
+                    ellipsis
+                    bindings
+                    repeated?)))
+            (and (= (length patterns) (length inputs))
+                 (match-pattern-list patterns
+                                     inputs
+                                     literals
+                                     ellipsis
+                                     bindings
+                                     repeated?)))))
+
+    (define (match-syntax-rule rule form transformer bindings)
+      (let ((pattern-elements (proper-list-elements/maybe (car rule)))
+            (input-elements (proper-list-elements/maybe form)))
+        (and pattern-elements
+             input-elements
+             (match-pattern-elements
+              (cdr pattern-elements)
+              (cdr input-elements)
+              (syntax-transformer-literals transformer)
+              (syntax-transformer-ellipsis transformer)
+              bindings
+              #f))))
+
+    (define (template-pattern-variable-names template bindings ellipsis)
+      (cond
+       ((identifier-datum? template)
+        (let ((name (identifier-datum-name template)))
+          (if (and (not (eq? name ellipsis))
+                   (pattern-binding bindings name))
+              (list name)
+              '())))
+       ((pair? template)
+        (let ((elements (proper-list-elements/maybe template)))
+          (if elements
+              (apply append
+                     (map (lambda (element)
+                            (template-pattern-variable-names
+                             element bindings ellipsis))
+                          elements))
+              '())))
+       ((vector? template)
+        (apply append
+               (map (lambda (element)
+                      (template-pattern-variable-names
+                       element bindings ellipsis))
+                    (vector->list template))))
+       (else '())))
+
+    (define (template-repeat-count template bindings ellipsis)
+      (let loop ((names (template-pattern-variable-names
+                         template bindings ellipsis))
+                 (count #f))
+        (cond
+         ((null? names)
+          (if count
+              count
+              (eval-error
+               "template ellipsis must contain a repeated pattern variable")))
+         (else
+          (let ((entry (pattern-binding bindings (car names))))
+            (if (and entry (eq? (car (cdr entry)) 'repeat))
+                (let ((length (length (cdr (cdr entry)))))
+                  (if (and count (not (= count length)))
+                      (eval-error
+                       "template ellipsis variables have different lengths")
+                      (loop (cdr names) length)))
+                (loop (cdr names) count)))))))
+
+    (define (expand-template template bindings syntax-context ellipsis . rest)
+      (let ((repeat-index (if (null? rest) #f (car rest)))
+            (ellipsis-literal? (if (or (null? rest) (null? (cdr rest)))
+                                   #f
+                                   (second rest))))
+        (cond
+         ((identifier-datum? template)
+          (let* ((name (identifier-datum-name template))
+                 (entry (and (not (eq? name ellipsis))
+                             (pattern-binding bindings name))))
+            (cond
+             ((and entry (eq? (car (cdr entry)) 'single))
+              (cdr (cdr entry)))
+             ((and entry (eq? (car (cdr entry)) 'repeat))
+              (if (not repeat-index)
+                  (eval-error
+                   "repeated pattern variable used without ellipsis"
+                   name))
+              (list-ref (cdr (cdr entry)) repeat-index))
+             ((and (eq? name ellipsis) (not ellipsis-literal?))
+              (eval-error "misplaced ellipsis in template"))
+             (else
+              (make-identifier name syntax-context)))))
+         ((pair? template)
+          (let ((elements (proper-list-elements/maybe template)))
+            (if (not elements)
+                (eval-error
+                 "improper syntax-rules templates are not implemented yet"
+                 template))
+            (if (and (not ellipsis-literal?)
+                     (= (length elements) 2)
+                     (ellipsis-identifier? (car elements) ellipsis))
+                (expand-template (second elements)
+                                 bindings
+                                 syntax-context
+                                 ellipsis
+                                 repeat-index
+                                 #t)
+                (let loop ((cursor elements) (output '()))
+                  (if (null? cursor)
+                      (reverse output)
+                      (let ((element (car cursor))
+                            (next (if (null? (cdr cursor))
+                                      #f
+                                      (second cursor))))
+                        (if (and next
+                                 (not ellipsis-literal?)
+                                 (ellipsis-identifier? next ellipsis))
+                            (let ((count
+                                   (template-repeat-count
+                                    element bindings ellipsis)))
+                              (let repeat-loop ((index 0) (out output))
+                                (if (= index count)
+                                    (loop (cdr (cdr cursor)) out)
+                                    (repeat-loop
+                                     (+ index 1)
+                                     (cons (expand-template
+                                            element
+                                            bindings
+                                            syntax-context
+                                            ellipsis
+                                            index)
+                                           out)))))
+                            (loop (cdr cursor)
+                                  (cons (expand-template
+                                         element
+                                         bindings
+                                         syntax-context
+                                         ellipsis
+                                         repeat-index
+                                         ellipsis-literal?)
+                                        output)))))))))
+         ((vector? template)
+          (list->vector
+           (expand-template (vector->list template)
+                            bindings
+                            syntax-context
+                            ellipsis
+                            repeat-index
+                            ellipsis-literal?)))
+         (else template))))
+
+    (define (next-syntax-context! context value-environment syntax-environment)
+      (let ((id (context-next-syntax-id context)))
+        (set-context-next-syntax-id! context (+ id 1))
+        (make-syntax-context id value-environment syntax-environment)))
+
+    (define (apply-syntax-transformer transformer form context)
+      (let loop ((rules (syntax-transformer-rules transformer)))
+        (if (null? rules)
+            (eval-error
+             "macro use does not match any syntax-rules pattern"
+             form)
+            (let ((bindings (make-pattern-bindings)))
+              (if (match-syntax-rule (car rules) form transformer bindings)
+                  (expand-template
+                   (cdr (car rules))
+                   bindings
+                   (next-syntax-context!
+                    context
+                    (syntax-transformer-value-environment transformer)
+                    (syntax-transformer-syntax-environment transformer))
+                   (syntax-transformer-ellipsis transformer))
+                  (loop (cdr rules)))))))
+
+    (define (syntax-definition-form? form)
+      (and (pair? form) (identifier-named? (car form) 'define-syntax)))
+
+    (define (eval-define-syntax form environment context syntax-environment)
+      (let ((parts (proper-list-elements form "define-syntax form")))
+        (if (not (= (length parts) 3))
+            (eval-error
+             "define-syntax requires a keyword and transformer spec"
+             form))
+        (let ((keyword (expect-symbol (second parts)
+                                      "define-syntax keyword"))
+              (transformer
+               (parse-syntax-rules (third parts)
+                                   environment
+                                   syntax-environment)))
+          (syntax-environment-define!
+           syntax-environment keyword transformer)
+          agent-scheme-unspecified)))
+
+    (define (parse-let-syntax-binding binding)
+      (let ((parts (proper-list-elements binding "syntax binding")))
+        (if (not (= (length parts) 2))
+            (eval-error
+             "syntax binding must contain a keyword and transformer spec"
+             binding))
+        (cons (expect-symbol (car parts) "syntax binding keyword")
+              (second parts))))
+
+    (define (make-local-syntax-scope parts environment context recursive?)
+      (if (< (length parts) 3)
+          (eval-error
+           (string-append
+            (if recursive? "letrec-syntax" "let-syntax")
+            " requires bindings and a body")
+           parts))
+      (let* ((outer-syntax-environment (context-syntax-environment context))
+             (local-syntax-environment
+              (make-empty-syntax-environment outer-syntax-environment))
+             (bindings
+              (map parse-let-syntax-binding
+                   (proper-list-elements
+                    (second parts)
+                    "syntax binding list"))))
+        (ensure-distinct-names (map car bindings) "syntax binding list")
+        (for-each
+         (lambda (binding)
+           (syntax-environment-define!
+            local-syntax-environment
+            (car binding)
+            (parse-syntax-rules
+             (cdr binding)
+             environment
+             (if recursive?
+                 local-syntax-environment
+                 outer-syntax-environment))))
+         bindings)
+        (make-syntax-scope (cddr parts) local-syntax-environment)))
+
+    (define (expand-expression expression environment context)
+      (if (not (pair? expression))
+          expression
+          (let* ((parts (proper-list-elements expression "expression"))
+                 (operator (car parts)))
+            (cond
+             ((and (identifier-named? operator 'syntax-error)
+                   (special-operator-active? operator environment))
+              (eval-error "syntax-error" (cdr parts)))
+             ((and (identifier-named? operator 'let-syntax)
+                   (special-operator-active? operator environment))
+              (make-local-syntax-scope parts environment context #f))
+             ((and (identifier-named? operator 'letrec-syntax)
+                   (special-operator-active? operator environment))
+              (make-local-syntax-scope parts environment context #t))
+             ((syntax-binding-for-operator operator environment context)
+              => (lambda (transformer)
+                   (apply-syntax-transformer transformer
+                                             expression
+                                             context)))
+             (else expression)))))
 
     (define (eval-combination expression environment context tail?)
       (let ((parts (proper-list-elements expression "expression")))
@@ -494,23 +1254,40 @@
             (eval-error "empty list is not an expression"))
         (let ((operator (car parts)))
           (cond
-           ((eq? operator 'quote)
+           ((and (identifier-named? operator 'quote)
+                 (special-operator-active? operator environment))
             (if (not (= (length parts) 2))
                 (eval-error "quote requires exactly one datum" parts))
             (check-value-budget (second parts) context))
-           ((eq? operator 'lambda)
+           ((and (identifier-named? operator 'lambda)
+                 (special-operator-active? operator environment))
             (if (< (length parts) 3)
                 (eval-error "lambda requires formals and a body" parts))
             (make-procedure (parse-formals (second parts))
                             (cddr parts)
                             environment))
-           ((eq? operator 'if)
+           ((and (identifier-named? operator 'if)
+                 (special-operator-active? operator environment))
             (eval-if parts environment context tail?))
-           ((eq? operator 'set!)
+           ((and (identifier-named? operator 'set!)
+                 (special-operator-active? operator environment))
             (eval-set! parts environment context))
-           ((eq? operator 'define)
+           ((and (identifier-named? operator 'letrec)
+                 (special-operator-active? operator environment))
+            (eval-letrec parts environment context tail? #f))
+           ((and (identifier-named? operator 'letrec*)
+                 (special-operator-active? operator environment))
+            (eval-letrec parts environment context tail? #t))
+           ((and (identifier-named? operator 'define)
+                 (special-operator-active? operator environment))
             (eval-error "define is not valid in expression position" parts))
-           ((eq? operator 'begin)
+           ((and (identifier-named? operator 'define-syntax)
+                 (special-operator-active? operator environment))
+            (eval-error
+             "define-syntax is not valid in expression position"
+             parts))
+           ((and (identifier-named? operator 'begin)
+                 (special-operator-active? operator environment))
             (eval-sequence (cdr parts) environment context tail? #f))
            (else
             (let ((procedure
@@ -538,14 +1315,29 @@
                        context
                        tail?
                        (sequence-allow-definitions expression)))
+       ((syntax-scope? expression)
+        (with-syntax-environment
+         context
+         (syntax-scope-syntax-environment expression)
+         (lambda ()
+           (eval-sequence (syntax-scope-forms expression)
+                          environment
+                          context
+                          tail?
+                          #t))))
        ((self-evaluating? expression)
         (check-value-budget expression context))
        ((symbol? expression)
-        (environment-ref environment expression))
+        (environment-ref-identifier environment expression))
+       ((identifier? expression)
+        (environment-ref-identifier environment expression))
        ((null? expression)
         (eval-error "empty list is not an expression"))
        ((pair? expression)
-        (eval-combination expression environment context tail?))
+        (let ((expanded (expand-expression expression environment context)))
+          (if (eq? expanded expression)
+              (eval-combination expression environment context tail?)
+              (eval-expression expanded environment context tail?))))
        (else
         (eval-error "unsupported expression datum" expression))))
 
@@ -556,6 +1348,16 @@
        ((null? (cdr forms))
         (let ((form (car forms)))
           (cond
+           ((syntax-definition-form? form)
+            (if allow-definitions?
+                (eval-define-syntax
+                 form
+                 environment
+                 context
+                 (context-syntax-environment context))
+                (eval-error
+                 "define-syntax is only allowed before body expressions"
+                 form)))
            ((definition-form? form)
             (if allow-definitions?
                 (eval-definition form environment context)
@@ -570,12 +1372,24 @@
              tail?
              #t))
            (tail?
-            (make-bounce form environment))
+            (make-bounce form
+                         environment
+                         (context-syntax-environment context)))
            (else
             (eval-expression form environment context #f)))))
        (else
         (let ((form (car forms)))
           (cond
+           ((syntax-definition-form? form)
+            (if allow-definitions?
+                (eval-define-syntax
+                 form
+                 environment
+                 context
+                 (context-syntax-environment context))
+                (eval-error
+                 "define-syntax is only allowed before body expressions"
+                 form)))
            ((definition-form? form)
             (if allow-definitions?
                 (eval-definition form environment context)
@@ -598,12 +1412,19 @@
                          allow-definitions?)))))
 
     (define (trampoline expression environment context)
-      (let loop ((state (make-bounce expression environment)))
+      (let loop ((state (make-bounce expression
+                                     environment
+                                     (context-syntax-environment context))))
         (if (bounce? state)
-            (loop (eval-expression (bounce-expression state)
-                                   (bounce-environment state)
-                                   context
-                                   #t))
+            (loop
+             (with-syntax-environment
+              context
+              (bounce-syntax-environment state)
+              (lambda ()
+                (eval-expression (bounce-expression state)
+                                 (bounce-environment state)
+                                 context
+                                 #t))))
             (check-value-budget state context))))
 
     (define (exact-integer->host datum description)
@@ -1657,6 +2478,65 @@
        (list 'vector-set! primitive-vector-set! 3 3)
        (list 'vector? primitive-vector? 1 1)))
 
+    (define base-syntax-source
+      "(define-syntax and
+         (syntax-rules ()
+           ((and) #t)
+           ((and test) test)
+           ((and test1 test2 ...)
+            (if test1 (and test2 ...) #f))))
+       (define-syntax or
+         (syntax-rules ()
+           ((or) #f)
+           ((or test) test)
+           ((or test1 test2 ...)
+            (let ((temp test1))
+              (if temp temp (or test2 ...))))))
+       (define-syntax when
+         (syntax-rules ()
+           ((when test result1 result2 ...)
+            (if test
+                (begin result1 result2 ...)))))
+       (define-syntax unless
+         (syntax-rules ()
+           ((unless test result1 result2 ...)
+            (if (not test)
+                (begin result1 result2 ...)))))
+       (define-syntax let
+         (syntax-rules ()
+           ((let ((name val) ...) body1 body2 ...)
+            ((lambda (name ...) body1 body2 ...)
+             val ...))
+           ((let tag ((name val) ...) body1 body2 ...)
+            ((letrec ((tag (lambda (name ...)
+                             body1 body2 ...)))
+               tag)
+             val ...))))
+       (define-syntax let*
+         (syntax-rules ()
+           ((let* () body1 body2 ...)
+            (let () body1 body2 ...))
+           ((let* ((name1 val1) (name2 val2) ...)
+              body1 body2 ...)
+            (let ((name1 val1))
+              (let* ((name2 val2) ...)
+                body1 body2 ...)))))
+       (define-syntax cond
+         (syntax-rules (else)
+           ((cond (else result1 result2 ...))
+            (begin result1 result2 ...))
+           ((cond (test)) test)
+           ((cond (test) clause1 clause2 ...)
+            (let ((temp test))
+              (if temp temp (cond clause1 clause2 ...))))
+           ((cond (test result1 result2 ...))
+            (if test (begin result1 result2 ...)))
+           ((cond (test result1 result2 ...)
+                  clause1 clause2 ...)
+            (if test
+                (begin result1 result2 ...)
+                (cond clause1 clause2 ...)))))")
+
     (define (agent-scheme-base-primitive-names)
       (map car base-primitive-registry))
 
@@ -1776,6 +2656,19 @@
                                    (fourth (car rest)))
                 (loop (cdr rest)))))))
 
+    (define (ensure-base-syntax! context environment)
+      (if (not (context-base-syntax-installed context))
+          (begin
+            (for-each
+             (lambda (form)
+               (eval-define-syntax
+                form
+                environment
+                context
+                (context-syntax-environment context)))
+             (agent-scheme-read-all base-syntax-source))
+            (set-context-base-syntax-installed! context #t))))
+
     (define (rest-environment rest)
       (if (or (null? rest) (not (car rest)))
           (agent-scheme-make-base-environment)
@@ -1789,12 +2682,14 @@
     (define (agent-scheme-eval expression . rest)
       (let ((context (new-eval-context (rest-options rest)))
             (environment (rest-environment rest)))
+        (ensure-base-syntax! context environment)
         (trampoline expression environment context)))
 
     (define (agent-scheme-eval-source source . rest)
       (let ((context (new-eval-context (rest-options rest)))
             (environment (rest-environment rest))
             (forms (agent-scheme-read-all source)))
+        (ensure-base-syntax! context environment)
         (trampoline (make-sequence forms #t) environment context)))
 
     (define agent-scheme-eval-string agent-scheme-eval-source)
@@ -1813,6 +2708,8 @@
               (string? value)
               (bytevector? value))
           value)
+         ((identifier? value)
+          (identifier-name value))
          ((agent-scheme-unspecified? value)
           '(unspecified))
          ((agent-scheme-primitive-procedure? value)
@@ -1834,8 +2731,27 @@
                       (value->result-datum item (cons value seen)))
                     (vector->list value)))))
          (else
-          (list 'host-object
+         (list 'host-object
                 (result-field 'printed "#<host-object>"))))))
+
+    (define (strip-identifiers value . maybe-seen)
+      (let ((seen (if (null? maybe-seen) '() (car maybe-seen))))
+        (cond
+         ((identifier? value)
+          (identifier-name value))
+         ((pair? value)
+          (if (memq value seen)
+              value
+              (cons (strip-identifiers (car value) (cons value seen))
+                    (strip-identifiers (cdr value) (cons value seen)))))
+         ((vector? value)
+          (if (memq value seen)
+              value
+              (list->vector
+               (map (lambda (item)
+                      (strip-identifiers item (cons value seen)))
+                    (vector->list value)))))
+         (else value))))
 
     (define (budget-result-field context)
       (result-field
@@ -1868,6 +2784,7 @@
     (define (agent-scheme-eval-result expression . rest)
       (let ((context (new-eval-context (rest-options rest)))
             (environment (rest-environment rest)))
+        (ensure-base-syntax! context environment)
         (guard (condition
                 (else (condition-result-datum condition context)))
           (ok-result-datum
@@ -1877,6 +2794,7 @@
     (define (agent-scheme-eval-source-result source . rest)
       (let ((context (new-eval-context (rest-options rest)))
             (environment (rest-environment rest)))
+        (ensure-base-syntax! context environment)
         (guard (condition
                 (else (condition-result-datum condition context)))
           (let ((forms (agent-scheme-read-all source)))
@@ -1899,4 +2817,4 @@
          (symbol->string (primitive-procedure-name value))
          ">"))
        (else
-        (agent-scheme-datum->external value))))))
+        (agent-scheme-datum->external (strip-identifiers value)))))))

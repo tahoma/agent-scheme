@@ -133,6 +133,66 @@
                        total)"
                 "(10 (4 9 16) 6)")
 
+(check-external 'define-syntax-expands-ellipsis
+                "(define x 0)
+                 (define-syntax unless
+                   (syntax-rules ()
+                     ((unless test body ...)
+                      (if test #f (begin body ...)))))
+                 (unless #f
+                   (set! x 41)
+                   (+ x 1))"
+                "42")
+
+(check-external 'introduced-bindings-are-hygienic
+                "(define-syntax my-or
+                   (syntax-rules ()
+                     ((my-or) #f)
+                     ((my-or expr) expr)
+                     ((my-or expr next ...)
+                      (let ((temp expr))
+                        (if temp temp (my-or next ...))))))
+                 (let ((temp 99))
+                   (my-or #f temp))"
+                "99")
+
+(check-external 'let-syntax-is-referentially-transparent
+                "(let ((x 'outer))
+                   (let-syntax ((m (syntax-rules ()
+                                     ((m) x))))
+                     (let ((x 'inner))
+                       (m))))"
+                "outer")
+
+(check 'free-template-identifiers-do-not-capture-use-site
+       (raises? (lambda ()
+                  (agent-scheme-eval-source
+                   "(define-syntax expose-x
+                      (syntax-rules ()
+                        ((expose-x) x)))
+                    (let ((x 1))
+                      (expose-x))")))
+       #t)
+
+(check-external 'letrec-syntax-allows-recursive-transformers
+                "(letrec-syntax
+                     ((my-or
+                       (syntax-rules ()
+                         ((my-or) #f)
+                         ((my-or expr) expr)
+                         ((my-or expr next ...)
+                          (let ((temp expr))
+                            (if temp temp (my-or next ...)))))))
+                   (my-or #f #f 7))"
+                "7")
+
+(check-external 'named-let-expands-through-letrec
+                "(let loop ((n 5) (acc 0))
+                   (if (= n 0)
+                       acc
+                       (loop (- n 1) (+ acc 1))))"
+                "5")
+
 (check 'result-rendering
        (agent-scheme-result->external
         (agent-scheme-eval-source-result "(+ 1 2)"))
