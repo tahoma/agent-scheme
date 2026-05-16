@@ -11,6 +11,10 @@
 (require 'cl-lib)
 (require 'agent-scheme-reader)
 
+(defconst agent-scheme--source-directory
+  (file-name-directory (or load-file-name buffer-file-name default-directory))
+  "Directory containing the loaded Agent Scheme evaluator source.")
+
 (defcustom agent-scheme-eval-maximum-steps 100000
   "Maximum evaluator steps allowed in one `agent-scheme-eval' run."
   :type 'integer
@@ -24,6 +28,12 @@
 (defcustom agent-scheme-eval-maximum-host-callbacks 10000
   "Maximum registered primitive callbacks allowed during evaluation."
   :type 'integer
+  :group 'agent-scheme)
+
+(defcustom agent-scheme-base-prelude-file nil
+  "Optional path to the portable `(scheme base)' prelude source file."
+  :type '(choice (const :tag "Use bundled prelude" nil)
+                 file)
   :group 'agent-scheme)
 
 (define-error 'agent-scheme-eval-error
@@ -2008,12 +2018,7 @@ When KEEP-RESULTS is non-nil, return the collected values."
     ("=" agent-scheme--primitive= 2 nil)
     (">" agent-scheme--primitive> 2 nil)
     (">=" agent-scheme--primitive>= 2 nil)
-    ("abs" agent-scheme--primitive-abs 1 1)
-    ("append" agent-scheme--primitive-append 0 nil)
     ("apply" agent-scheme--primitive-apply 2 nil)
-    ("assoc" agent-scheme--primitive-assoc 2 2)
-    ("assq" agent-scheme--primitive-assq 2 2)
-    ("assv" agent-scheme--primitive-assv 2 2)
     ("boolean=?" agent-scheme--primitive-boolean=? 2 nil)
     ("boolean?" agent-scheme--primitive-boolean? 1 1)
     ("bytevector" agent-scheme--primitive-bytevector 0 nil)
@@ -2024,11 +2029,7 @@ When KEEP-RESULTS is non-nil, return the collected values."
     ("bytevector-u8-ref" agent-scheme--primitive-bytevector-u8-ref 2 2)
     ("bytevector-u8-set!" agent-scheme--primitive-bytevector-u8-set! 3 3)
     ("bytevector?" agent-scheme--primitive-bytevector? 1 1)
-    ("caar" agent-scheme--primitive-caar 1 1)
-    ("cadr" agent-scheme--primitive-cadr 1 1)
     ("car" agent-scheme--primitive-car 1 1)
-    ("cdar" agent-scheme--primitive-cdar 1 1)
-    ("cddr" agent-scheme--primitive-cddr 1 1)
     ("cdr" agent-scheme--primitive-cdr 1 1)
     ("ceiling" agent-scheme--primitive-ceiling 1 1)
     ("char->integer" agent-scheme--primitive-char->integer 1 1)
@@ -2043,54 +2044,33 @@ When KEEP-RESULTS is non-nil, return the collected values."
     ("eq?" agent-scheme--primitive-eq? 2 2)
     ("equal?" agent-scheme--primitive-equal? 2 2)
     ("eqv?" agent-scheme--primitive-eqv? 2 2)
-    ("even?" agent-scheme--primitive-even? 1 1)
     ("exact-integer?" agent-scheme--primitive-exact-integer? 1 1)
     ("exact?" agent-scheme--primitive-exact? 1 1)
     ("floor" agent-scheme--primitive-floor 1 1)
     ("floor-quotient" agent-scheme--primitive-floor-quotient 2 2)
     ("floor-remainder" agent-scheme--primitive-floor-remainder 2 2)
-    ("for-each" agent-scheme--primitive-for-each 2 nil)
     ("inexact?" agent-scheme--primitive-inexact? 1 1)
     ("integer->char" agent-scheme--primitive-integer->char 1 1)
     ("integer?" agent-scheme--primitive-integer? 1 1)
-    ("length" agent-scheme--primitive-length 1 1)
-    ("list" agent-scheme--primitive-list 0 nil)
     ("list->string" agent-scheme--primitive-list->string 1 1)
     ("list->vector" agent-scheme--primitive-list->vector 1 1)
-    ("list-copy" agent-scheme--primitive-list-copy 1 1)
-    ("list-ref" agent-scheme--primitive-list-ref 2 2)
-    ("list-set!" agent-scheme--primitive-list-set! 3 3)
-    ("list-tail" agent-scheme--primitive-list-tail 2 2)
     ("list?" agent-scheme--primitive-list? 1 1)
     ("make-bytevector" agent-scheme--primitive-make-bytevector 1 2)
-    ("make-list" agent-scheme--primitive-make-list 1 2)
     ("make-string" agent-scheme--primitive-make-string 1 2)
     ("make-vector" agent-scheme--primitive-make-vector 1 2)
-    ("map" agent-scheme--primitive-map 2 nil)
-    ("max" agent-scheme--primitive-max 1 nil)
-    ("member" agent-scheme--primitive-member 2 2)
-    ("memq" agent-scheme--primitive-memq 2 2)
-    ("memv" agent-scheme--primitive-memv 2 2)
-    ("min" agent-scheme--primitive-min 1 nil)
     ("modulo" agent-scheme--primitive-modulo 2 2)
-    ("negative?" agent-scheme--primitive-negative? 1 1)
-    ("not" agent-scheme--primitive-not 1 1)
     ("null?" agent-scheme--primitive-null? 1 1)
     ("number->string" agent-scheme--primitive-number->string 1 1)
     ("number?" agent-scheme--primitive-number? 1 1)
-    ("odd?" agent-scheme--primitive-odd? 1 1)
     ("pair?" agent-scheme--primitive-pair? 1 1)
-    ("positive?" agent-scheme--primitive-positive? 1 1)
     ("procedure?" agent-scheme--primitive-procedure? 1 1)
     ("quotient" agent-scheme--primitive-quotient 2 2)
     ("rational?" agent-scheme--primitive-rational? 1 1)
     ("real?" agent-scheme--primitive-real? 1 1)
     ("remainder" agent-scheme--primitive-remainder 2 2)
-    ("reverse" agent-scheme--primitive-reverse 1 1)
     ("round" agent-scheme--primitive-round 1 1)
     ("set-car!" agent-scheme--primitive-set-car! 2 2)
     ("set-cdr!" agent-scheme--primitive-set-cdr! 2 2)
-    ("square" agent-scheme--primitive-square 1 1)
     ("string" agent-scheme--primitive-string 0 nil)
     ("string->list" agent-scheme--primitive-string->list 1 3)
     ("string->number" agent-scheme--primitive-string->number 1 1)
@@ -2130,8 +2110,7 @@ When KEEP-RESULTS is non-nil, return the collected values."
     ("vector-map" agent-scheme--primitive-vector-map 2 nil)
     ("vector-ref" agent-scheme--primitive-vector-ref 2 2)
     ("vector-set!" agent-scheme--primitive-vector-set! 3 3)
-    ("vector?" agent-scheme--primitive-vector? 1 1)
-    ("zero?" agent-scheme--primitive-zero? 1 1))
+    ("vector?" agent-scheme--primitive-vector? 1 1))
   "Registry of implemented `(scheme base)' primitive procedures.
 Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
 
@@ -2145,8 +2124,97 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
    (lambda (entry)
      (list :name (nth 0 entry)
            :minimum-arity (nth 2 entry)
-           :maximum-arity (nth 3 entry)))
+           :maximum-arity (nth 3 entry)
+           :source 'kernel))
    agent-scheme--base-primitive-registry))
+
+(defun agent-scheme--base-prelude-file ()
+  "Return the portable `(scheme base)' prelude source file path."
+  (or agent-scheme-base-prelude-file
+      (expand-file-name
+       "../scheme/agent-scheme/base-prelude.scm"
+       agent-scheme--source-directory)))
+
+(defun agent-scheme--base-prelude-source ()
+  "Return the portable `(scheme base)' prelude source."
+  (with-temp-buffer
+    (insert-file-contents (agent-scheme--base-prelude-file))
+    (buffer-string)))
+
+(defun agent-scheme--base-prelude-forms ()
+  "Return parsed portable prelude definition forms."
+  (agent-scheme-read-all (agent-scheme--base-prelude-source)))
+
+(defun agent-scheme--formals-arity (formals)
+  "Return (MINIMUM-ARITY . MAXIMUM-ARITY) for Scheme FORMALS."
+  (cond
+   ((agent-scheme-symbol-p formals)
+    (cons 0 nil))
+   (t
+    (let ((cursor formals)
+          (minimum 0))
+      (while (consp cursor)
+        (setq minimum (1+ minimum))
+        (setq cursor (cdr cursor)))
+      (cond
+       ((null cursor)
+        (cons minimum minimum))
+       ((agent-scheme-symbol-p cursor)
+        (cons minimum nil))
+       (t
+        (agent-scheme--eval-error
+         "prelude definition has invalid formals")))))))
+
+(defun agent-scheme--prelude-definition-spec (form)
+  "Return metadata for one portable prelude definition FORM."
+  (let ((parts (agent-scheme--proper-list-elements
+                form "prelude definition")))
+    (unless (and (>= (length parts) 3)
+                 (agent-scheme--symbol-named-p (car parts) "define"))
+      (agent-scheme--eval-error "prelude form must be one definition"))
+    (let ((target (cadr parts))
+          arity)
+      (cond
+       ((agent-scheme-symbol-p target)
+        (unless (= (length parts) 3)
+          (agent-scheme--eval-error
+           "prelude variable definition must have one initializer"))
+        (let ((initializer (caddr parts)))
+          (unless (and (consp initializer)
+                       (agent-scheme--symbol-named-p
+                        (car initializer) "lambda"))
+            (agent-scheme--eval-error
+             "prelude variable definition must initialize a lambda"))
+          (setq arity (agent-scheme--formals-arity (cadr initializer)))
+          (list :name (agent-scheme-symbol-name target)
+                :minimum-arity (car arity)
+                :maximum-arity (cdr arity)
+                :source 'prelude)))
+       ((consp target)
+        (setq arity (agent-scheme--formals-arity (cdr target)))
+        (list :name (agent-scheme--expect-symbol-name
+                     (car target) "prelude function name")
+              :minimum-arity (car arity)
+              :maximum-arity (cdr arity)
+              :source 'prelude))
+       (t
+        (agent-scheme--eval-error
+         "prelude define target must be an identifier or function signature"))))))
+
+(defun agent-scheme-base-prelude-binding-specs ()
+  "Return discoverable metadata for portable prelude bindings."
+  (mapcar #'agent-scheme--prelude-definition-spec
+          (agent-scheme--base-prelude-forms)))
+
+(defun agent-scheme-base-prelude-binding-names ()
+  "Return names supplied by the portable `(scheme base)' prelude."
+  (mapcar (lambda (spec) (plist-get spec :name))
+          (agent-scheme-base-prelude-binding-specs)))
+
+(defun agent-scheme-base-binding-specs ()
+  "Return discoverable metadata for kernel and prelude base bindings."
+  (append (agent-scheme-base-primitive-specs)
+          (agent-scheme-base-prelude-binding-specs)))
 
 (defun agent-scheme--define-primitive
     (environment name function minimum-arity maximum-arity)
@@ -2158,7 +2226,7 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
     name function minimum-arity maximum-arity)))
 
 (defun agent-scheme-make-base-environment ()
-  "Return a fresh environment with registered `(scheme base)' primitives."
+  "Return a fresh environment with kernel and prelude `(scheme base)' bindings."
   (let ((environment (agent-scheme-make-empty-environment)))
     (dolist (entry agent-scheme--base-primitive-registry)
       (agent-scheme--define-primitive
@@ -2167,6 +2235,10 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
        (nth 1 entry)
        (nth 2 entry)
        (nth 3 entry)))
+    (agent-scheme--trampoline
+     (agent-scheme--make-sequence (agent-scheme--base-prelude-forms) t)
+     environment
+     (agent-scheme--new-eval-context nil))
     environment))
 
 ;;;###autoload
