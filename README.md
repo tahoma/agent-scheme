@@ -25,3 +25,10 @@ The implementation roadmap lives in GitHub issues, starting with the architectur
 ## Repository Shape
 
 This seed is intentionally small. Initial implementation modules and documentation should follow the GitHub roadmap.
+
+## Project Docs
+
+- [Architecture and threat model](docs/architecture.md)
+- [Contributing](docs/contributing.md)
+- [Development setup](docs/development.md)
+- [Roadmap note](docs/roadmap.md)
