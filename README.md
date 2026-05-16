@@ -12,7 +12,7 @@ The project goal is to give agents and users a Lisp-native scripting environment
 
 ## Current Status
 
-This repository is being split out of `tahoma/emacs-config` while the design is still issue-driven. The implementation roadmap lives in GitHub issues, starting with the architecture and dependency-graph issues.
+The implementation roadmap lives in GitHub issues, starting with the architecture and dependency-graph issues.
 
 ## Design Rules
 
