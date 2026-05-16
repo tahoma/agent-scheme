@@ -186,4 +186,32 @@
         (cond-expand ((library (scheme base)) 'base) (else 'missing)))")
     "(ok base)")))
 
+(ert-deftest agent-scheme-macro-test-expand-source-exposes-expanded-forms ()
+  "Expose a source-level macro expansion phase before evaluation."
+  (should
+   (equal
+    (agent-scheme-value->external
+     (agent-scheme-expand-source
+      "(define-syntax unless
+         (syntax-rules ()
+           ((unless test body ...)
+            (if test #f (begin body ...)))))
+       (unless #f 42)"))
+    "((if #f #f (begin 42)))")))
+
+(ert-deftest agent-scheme-macro-test-syntax-error-reports-source-form ()
+  "Include the original macro use in expansion-time syntax errors."
+  (let* ((condition
+          (should-error
+           (agent-scheme-eval-source
+            "(define-syntax bad-use
+               (syntax-rules ()
+                 ((bad-use x)
+                  (syntax-error \"bad macro\" x))))
+             (bad-use 123)")
+           :type 'agent-scheme-eval-error))
+         (message (cadr condition)))
+    (should (string-match-p "while expanding (bad-use 123)" message))
+    (should (string-match-p "bad macro" message))))
+
 ;;; agent-scheme-macro-test.el ends here

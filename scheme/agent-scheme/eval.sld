@@ -2,6 +2,8 @@
   (export agent-scheme-eval
           agent-scheme-eval-source
           agent-scheme-eval-string
+          agent-scheme-expand
+          agent-scheme-expand-source
           agent-scheme-eval-result
           agent-scheme-eval-source-result
           agent-scheme-make-empty-environment
@@ -635,6 +637,34 @@
              (string-append description " requires exactly one operand")
              form))
         (second parts)))
+
+    (define (syntax-error-form? form)
+      (tagged-list? form 'syntax-error))
+
+    (define (syntax-error-message form)
+      (let ((parts (proper-list-elements form "syntax-error form")))
+        (let loop ((rest (cdr parts)) (message ""))
+          (cond
+           ((null? rest) message)
+           ((string=? message "")
+            (loop (cdr rest) (agent-scheme-value->external (car rest))))
+           (else
+            (loop (cdr rest)
+                  (string-append
+                   message
+                   " "
+                   (agent-scheme-value->external (car rest)))))))))
+
+    (define (raise-syntax-error form . maybe-source-form)
+      (let ((message (syntax-error-message form)))
+        (if (null? maybe-source-form)
+            (eval-error (string-append "syntax-error: " message))
+            (eval-error
+             (string-append
+              "syntax-error while expanding "
+              (agent-scheme-value->external (car maybe-source-form))
+              ": "
+              message)))))
 
     (define (eval-quasiquote-list template depth environment context)
       (let loop ((cursor template) (output '()))
@@ -1457,21 +1487,25 @@
              "macro use does not match any syntax-rules pattern"
              form)
             (let ((bindings (make-pattern-bindings)))
-              (if (match-syntax-rule
-                   (car rules)
-                   form
-                   transformer
-                   bindings
-                   environment
-                   (context-syntax-environment context))
-                  (expand-template
-                   (cdr (car rules))
-                   bindings
-                   (next-syntax-context!
-                    context
-                    (syntax-transformer-value-environment transformer)
-                    (syntax-transformer-syntax-environment transformer))
-                   (syntax-transformer-ellipsis transformer))
+             (if (match-syntax-rule
+                  (car rules)
+                  form
+                  transformer
+                  bindings
+                  environment
+                  (context-syntax-environment context))
+                  (let ((result
+                         (expand-template
+                          (cdr (car rules))
+                          bindings
+                          (next-syntax-context!
+                           context
+                           (syntax-transformer-value-environment transformer)
+                           (syntax-transformer-syntax-environment transformer))
+                          (syntax-transformer-ellipsis transformer))))
+                    (if (syntax-error-form? result)
+                        (raise-syntax-error result form)
+                        result))
                   (loop (cdr rules)))))))
 
     (define (syntax-definition-form? form)
@@ -1540,7 +1574,7 @@
             (cond
              ((and (identifier-named? operator 'syntax-error)
                    (special-operator-active? operator environment))
-              (eval-error "syntax-error" (cdr parts)))
+              (raise-syntax-error expression))
              ((and (identifier-named? operator 'let-syntax)
                    (special-operator-active? operator environment))
               (make-local-syntax-scope parts environment context #f))
@@ -2934,6 +2968,160 @@
              (base-syntax-forms))
             (set-context-base-syntax-installed! context #t))))
 
+    (define (expand-definition-form form environment context)
+      (let* ((parts (proper-list-elements form "define form"))
+             (target (second parts)))
+        (cond
+         ((identifier-datum? target)
+          (if (not (= (length parts) 3))
+              (eval-error
+               "define requires an identifier and an expression"
+               form))
+          (list (car parts)
+                target
+                (expand-expression/fully
+                 (third parts) environment context)))
+         ((pair? target)
+          (append (list (car parts) target)
+                  (expand-sequence-forms
+                   (cddr parts) environment context #t)))
+         (else
+          (eval-error
+           "define target must be an identifier or function signature"
+           form)))))
+
+    (define (expand-core-combination expression environment context)
+      (let* ((parts (proper-list-elements expression "expression"))
+             (operator (car parts)))
+        (cond
+         ((or (and (identifier-named? operator 'quote)
+                   (special-operator-active? operator environment))
+              (and (identifier-named? operator 'quasiquote)
+                   (special-operator-active? operator environment)))
+          expression)
+         ((and (identifier-named? operator 'lambda)
+               (special-operator-active? operator environment))
+          (if (< (length parts) 3)
+              (eval-error "lambda requires formals and a body" parts))
+          (append (list operator (second parts))
+                  (expand-sequence-forms
+                   (cddr parts) environment context #t)))
+         ((and (identifier-named? operator 'if)
+               (special-operator-active? operator environment))
+          (if (not (or (= (length parts) 3) (= (length parts) 4)))
+              (eval-error
+               "if requires test, consequent, and optional alternate"
+               parts))
+          (append
+           (list operator
+                 (expand-expression/fully
+                  (second parts) environment context)
+                 (expand-expression/fully
+                  (third parts) environment context))
+           (if (= (length parts) 4)
+               (list (expand-expression/fully
+                      (fourth parts) environment context))
+               '())))
+         ((and (identifier-named? operator 'set!)
+               (special-operator-active? operator environment))
+          (if (not (= (length parts) 3))
+              (eval-error
+               "set! requires an identifier and an expression"
+               parts))
+          (list operator
+                (second parts)
+                (expand-expression/fully
+                 (third parts) environment context)))
+         ((and (or (identifier-named? operator 'letrec)
+                   (identifier-named? operator 'letrec*))
+               (special-operator-active? operator environment))
+          (let ((bindings
+                 (map (lambda (binding)
+                        (let ((binding-parts
+                               (proper-list-elements
+                                binding
+                                "letrec binding")))
+                          (if (not (= (length binding-parts) 2))
+                              (eval-error
+                               "letrec binding must contain an identifier and initializer"
+                               binding))
+                          (list (car binding-parts)
+                                (expand-expression/fully
+                                 (second binding-parts)
+                                 environment
+                                 context))))
+                      (proper-list-elements
+                       (second parts)
+                       "letrec binding list"))))
+            (append (list operator bindings)
+                    (expand-sequence-forms
+                     (cddr parts) environment context #t))))
+         ((and (identifier-named? operator 'begin)
+               (special-operator-active? operator environment))
+          (cons operator
+                (expand-sequence-forms
+                 (cdr parts) environment context #f)))
+         (else
+          (map (lambda (part)
+                 (expand-expression/fully part environment context))
+               parts)))))
+
+    (define (expand-expression/fully expression environment context)
+      (let ((expanded (expand-expression expression environment context)))
+        (cond
+         ((not (eq? expanded expression))
+          (cond
+           ((syntax-scope? expanded)
+            (with-syntax-environment
+             context
+             (syntax-scope-syntax-environment expanded)
+             (lambda ()
+               (cons 'begin
+                     (expand-sequence-forms
+                      (syntax-scope-forms expanded)
+                      environment
+                      context
+                      #t)))))
+           (else
+            (expand-expression/fully expanded environment context))))
+         ((pair? expression)
+          (expand-core-combination expression environment context))
+         (else expression))))
+
+    (define (expand-sequence-forms forms environment context allow-definitions?)
+      (let loop ((rest forms) (expanded '()))
+        (if (null? rest)
+            (reverse expanded)
+            (let ((form (car rest)))
+              (cond
+               ((and allow-definitions? (syntax-definition-form? form))
+                (eval-define-syntax
+                 form
+                 environment
+                 context
+                 (context-syntax-environment context))
+                (loop (cdr rest) expanded))
+               ((and allow-definitions? (definition-form? form))
+                (loop (cdr rest)
+                      (cons (expand-definition-form
+                             form environment context)
+                            expanded)))
+               ((and allow-definitions? (begin-form? form))
+                (loop (cdr rest)
+                      (append
+                       (reverse
+                        (expand-sequence-forms
+                         (cdr (proper-list-elements form "begin form"))
+                         environment
+                         context
+                         #t))
+                       expanded)))
+               (else
+                (loop (cdr rest)
+                      (cons (expand-expression/fully
+                             form environment context)
+                            expanded))))))))
+
     (define (rest-environment rest)
       (if (or (null? rest) (not (car rest)))
           (agent-scheme-make-base-environment)
@@ -2958,6 +3146,19 @@
         (trampoline (make-sequence forms #t) environment context)))
 
     (define agent-scheme-eval-string agent-scheme-eval-source)
+
+    (define (agent-scheme-expand expression . rest)
+      (let ((context (new-eval-context (rest-options rest)))
+            (environment (rest-environment rest)))
+        (ensure-base-syntax! context environment)
+        (expand-expression/fully expression environment context)))
+
+    (define (agent-scheme-expand-source source . rest)
+      (let ((context (new-eval-context (rest-options rest)))
+            (environment (rest-environment rest))
+            (forms (agent-scheme-read-all source)))
+        (ensure-base-syntax! context environment)
+        (expand-sequence-forms forms environment context #t)))
 
     (define (result-field name . values)
       (cons name values))

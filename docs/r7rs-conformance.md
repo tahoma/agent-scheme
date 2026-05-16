@@ -27,7 +27,7 @@ marked `implemented`.
 | Primitive expressions | Literal, variable reference, quote, procedure call, `if`, `set!`, `lambda` | `implemented` | `primitive-procedure-call` | Emacs Lisp and portable R7RS evaluator kernels cover explicit lexical environments, closures, mutation, and primitive calls. |
 | Definitions and sequencing | `define`, `define-values`, `begin`, internal definitions | `pending` | `primitive-procedure-call` | Internal definitions should be tested with lexical scope cases. |
 | Derived syntax | `cond`, `case`, `and`, `or`, `when`, `unless`, `let`, `let*`, `letrec`, `letrec*`, `let-values`, `let*-values`, `do`, `delay`, `quasiquote`, `parameterize` | `pending` | `derived-let-expression`, `derived-cond-arrow-literal-binding`, `derived-case-expression`, `derived-do-expression`, `derived-quasiquote-expression` | Macro-expanded `and`, `case`, `cond`, `do`, `or`, `when`, `unless`, `let`, and `let*` support is implemented. `letrec`, `letrec*`, `begin`, and `quasiquote` are evaluator-supported where primitive handling is required. |
-| `syntax-rules` macros | `define-syntax`, `let-syntax`, `letrec-syntax`, literals, ellipses, hygiene | `implemented` | `syntax-rules-unless`, `syntax-rules-let-syntax-hygiene`, `syntax-rules-dotted-pattern-template`, `syntax-rules-nested-ellipsis` | High-level macro expansion supports top-level `define-syntax`, local `let-syntax` and `letrec-syntax`, hygienic introduced identifiers, literal binding checks, dotted patterns/templates, and nested ellipses. |
+| `syntax-rules` macros | `define-syntax`, `let-syntax`, `letrec-syntax`, literals, ellipses, hygiene | `implemented` | `syntax-rules-unless`, `syntax-rules-let-syntax-hygiene`, `syntax-rules-dotted-pattern-template`, `syntax-rules-nested-ellipsis`, `syntax-rules-syntax-error` | High-level macro expansion supports top-level `define-syntax`, local `let-syntax` and `letrec-syntax`, hygienic introduced identifiers, literal binding checks, dotted patterns/templates, nested ellipses, an explicit expansion API, and expansion-time `syntax-error` diagnostics that include the originating macro use. |
 | Libraries, imports, exports | `define-library`, `import`, `export`, `include`, `include-ci`, `cond-expand`, library body ordering | `pending` | `cond-expand-r7rs-feature`, `library-import-export` | Expression-level `cond-expand` for recognized base features is implemented; the full library system remains pending. |
 | Proper tail recursion | Tail calls in procedures, conditionals, derived syntax, continuations, and library procedures | `pending` | `proper-tail-recursion-loop` | Procedure, conditional, and named-let loops are fixture-covered; continuations and broader library interactions remain pending. |
 | Multiple values | `values`, `call-with-values`, `define-values`, `let-values`, `let*-values` | `pending` | `multiple-values-direct`, `multiple-values-call-with-values` | Fixture expectations can compare either one value or multiple values. |
@@ -100,6 +100,10 @@ Implemented macro-expanded and evaluator-supported syntax includes `and`,
 `case`, `cond`, `cond-expand`, `do`, `let`, `let*`, `letrec`, `letrec*`,
 `let-syntax`, `letrec-syntax`, `or`, `quasiquote`, `syntax-rules`, `unless`,
 and `when`.
+
+The evaluator exposes a macro expansion phase through `agent-scheme-expand` and
+`agent-scheme-expand-source` in both the Emacs Lisp and portable Scheme
+kernels.
 
 Pending pure bindings include records
 (`define-record-type`), multiple values (`call-with-values`, `define-values`,

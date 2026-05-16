@@ -259,6 +259,29 @@
                     (else 'missing)))"
                 "(ok base)")
 
+(check 'expand-source-exposes-expanded-forms
+       (agent-scheme-value->external
+        (agent-scheme-expand-source
+         "(define-syntax unless
+            (syntax-rules ()
+              ((unless test body ...)
+               (if test #f (begin body ...)))))
+          (unless #f 42)"))
+       "((if #f #f (begin 42)))")
+
+(check 'syntax-error-reports-source-form
+       (let* ((result
+               (agent-scheme-eval-source-result
+                "(define-syntax bad-use
+                   (syntax-rules ()
+                     ((bad-use x)
+                      (syntax-error \"bad macro\" x))))
+                 (bad-use 123)"))
+              (error-field (assq 'error (cdr result)))
+              (message-field (assq 'message (cdr error-field))))
+         (cadr message-field))
+       "agent-scheme eval error: syntax-error while expanding (bad-use 123): \"bad macro\" 123")
+
 (check 'result-rendering
        (agent-scheme-result->external
         (agent-scheme-eval-source-result "(+ 1 2)"))

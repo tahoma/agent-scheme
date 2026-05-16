@@ -730,6 +730,25 @@ When TAILP is non-nil, return a bounce for Scheme procedure bodies."
       (agent-scheme--eval-error "%s requires exactly one operand" description))
     (cadr parts)))
 
+(defun agent-scheme--syntax-error-form-p (form)
+  "Return non-nil if FORM is a syntax-error form."
+  (agent-scheme--tagged-list-p form "syntax-error"))
+
+(defun agent-scheme--syntax-error-message (form)
+  "Return the user-facing message for syntax-error FORM."
+  (let ((parts (agent-scheme--proper-list-elements form "syntax-error form")))
+    (mapconcat #'agent-scheme-value->external (cdr parts) " ")))
+
+(defun agent-scheme--raise-syntax-error (form &optional source-form)
+  "Signal a syntax-error FORM, optionally attributed to SOURCE-FORM."
+  (let ((message (agent-scheme--syntax-error-message form)))
+    (if source-form
+        (agent-scheme--eval-error
+         "syntax-error while expanding %s: %s"
+         (agent-scheme-value->external source-form)
+         message)
+      (agent-scheme--eval-error "syntax-error: %s" message))))
+
 (defun agent-scheme--eval-quasiquote-list
     (template depth environment context)
   "Evaluate quasiquoted list TEMPLATE at nesting DEPTH."
@@ -1536,6 +1555,8 @@ each initializer."
       (agent-scheme--eval-error
        "macro use does not match any syntax-rules pattern: %s"
        (agent-scheme-value->external form)))
+    (when (agent-scheme--syntax-error-form-p result)
+      (agent-scheme--raise-syntax-error result form))
     result))
 
 (defun agent-scheme--syntax-definition-form-p (form)
@@ -1622,9 +1643,7 @@ When RECURSIVE is non-nil, transformer specs see the new bindings."
       (cond
        ((and (agent-scheme--symbol-named-p operator "syntax-error")
              (agent-scheme--special-operator-active-p operator environment))
-        (agent-scheme--eval-error
-         "syntax-error: %s"
-         (mapconcat #'agent-scheme-value->external (cdr parts) " ")))
+        (agent-scheme--raise-syntax-error expression))
        ((and (agent-scheme--symbol-named-p operator "let-syntax")
              (agent-scheme--special-operator-active-p operator environment))
         (agent-scheme--make-local-syntax-scope
@@ -3423,6 +3442,179 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
        context
        (agent-scheme--eval-context-syntax-environment context)))
     (setf (agent-scheme--eval-context-base-syntax-installed context) t)))
+
+(defun agent-scheme--expand-definition-form (form environment context)
+  "Return macro-expanded variable definition FORM."
+  (let* ((parts (agent-scheme--proper-list-elements form "define form"))
+         (target (cadr parts)))
+    (cond
+     ((agent-scheme--identifier-datum-p target)
+      (unless (= (length parts) 3)
+        (agent-scheme--eval-error
+         "define requires an identifier and an expression"))
+      (list (car parts)
+            target
+            (agent-scheme--expand-expression-fully
+             (caddr parts) environment context)))
+     ((consp target)
+      (append
+       (list (car parts) target)
+       (agent-scheme--expand-sequence-forms
+        (cddr parts) environment context t)))
+     (t
+      (agent-scheme--eval-error
+       "define target must be an identifier or function signature")))))
+
+(defun agent-scheme--expand-core-combination (expression environment context)
+  "Return EXPRESSION with macro expansion recursively applied."
+  (let* ((parts (agent-scheme--proper-list-elements expression "expression"))
+         (operator (car parts)))
+    (cond
+     ((or (and (agent-scheme--symbol-named-p operator "quote")
+               (agent-scheme--special-operator-active-p operator environment))
+          (and (agent-scheme--symbol-named-p operator "quasiquote")
+               (agent-scheme--special-operator-active-p operator environment)))
+      expression)
+     ((and (agent-scheme--symbol-named-p operator "lambda")
+           (agent-scheme--special-operator-active-p operator environment))
+      (unless (>= (length parts) 3)
+        (agent-scheme--eval-error "lambda requires formals and a body"))
+      (append (list operator (cadr parts))
+              (agent-scheme--expand-sequence-forms
+               (cddr parts) environment context t)))
+     ((and (agent-scheme--symbol-named-p operator "if")
+           (agent-scheme--special-operator-active-p operator environment))
+      (unless (memq (length parts) '(3 4))
+        (agent-scheme--eval-error
+         "if requires test, consequent, and optional alternate"))
+      (append
+       (list operator
+             (agent-scheme--expand-expression-fully
+              (cadr parts) environment context)
+             (agent-scheme--expand-expression-fully
+              (caddr parts) environment context))
+       (and (= (length parts) 4)
+            (list
+             (agent-scheme--expand-expression-fully
+              (cadddr parts) environment context)))))
+     ((and (agent-scheme--symbol-named-p operator "set!")
+           (agent-scheme--special-operator-active-p operator environment))
+      (unless (= (length parts) 3)
+        (agent-scheme--eval-error
+         "set! requires an identifier and an expression"))
+      (list operator
+            (cadr parts)
+            (agent-scheme--expand-expression-fully
+             (caddr parts) environment context)))
+     ((and (member (agent-scheme--symbol-name operator) '("letrec" "letrec*"))
+           (agent-scheme--special-operator-active-p operator environment))
+      (let ((bindings
+             (mapcar
+              (lambda (binding)
+                (let ((binding-parts
+                       (agent-scheme--proper-list-elements
+                        binding "letrec binding")))
+                  (unless (= (length binding-parts) 2)
+                    (agent-scheme--eval-error
+                     "letrec binding must contain an identifier and initializer"))
+                  (list (car binding-parts)
+                        (agent-scheme--expand-expression-fully
+                         (cadr binding-parts) environment context))))
+              (agent-scheme--proper-list-elements
+               (cadr parts) "letrec binding list"))))
+        (append (list operator bindings)
+                (agent-scheme--expand-sequence-forms
+                 (cddr parts) environment context t))))
+     ((and (agent-scheme--symbol-named-p operator "begin")
+           (agent-scheme--special-operator-active-p operator environment))
+      (cons operator
+            (agent-scheme--expand-sequence-forms
+             (cdr parts) environment context nil)))
+     (t
+      (mapcar
+       (lambda (part)
+         (agent-scheme--expand-expression-fully part environment context))
+       parts)))))
+
+(defun agent-scheme--expand-expression-fully (expression environment context)
+  "Return EXPRESSION after recursive macro expansion."
+  (let ((expanded (agent-scheme--expand-expression
+                   expression environment context)))
+    (cond
+     ((not (eq expanded expression))
+      (cond
+       ((agent-scheme--syntax-scope-p expanded)
+        (agent-scheme--with-syntax-environment
+         context
+         (agent-scheme--syntax-scope-syntax-environment expanded)
+         (lambda ()
+           (cons (agent-scheme--syntax-symbol "begin")
+                 (agent-scheme--expand-sequence-forms
+                  (agent-scheme--syntax-scope-forms expanded)
+                  environment
+                  context
+                  t)))))
+       (t
+        (agent-scheme--expand-expression-fully expanded environment context))))
+     ((consp expression)
+      (agent-scheme--expand-core-combination expression environment context))
+     (t expression))))
+
+(defun agent-scheme--expand-sequence-forms
+    (forms environment context allow-definitions)
+  "Return FORMS after macro expansion under CONTEXT."
+  (let (expanded-forms)
+    (dolist (form forms)
+      (cond
+       ((and allow-definitions
+             (agent-scheme--syntax-definition-form-p form))
+        (agent-scheme--eval-define-syntax
+         form
+         environment
+         context
+         (agent-scheme--eval-context-syntax-environment context)))
+       ((and allow-definitions
+             (agent-scheme--definition-form-p form))
+        (push (agent-scheme--expand-definition-form
+               form environment context)
+              expanded-forms))
+       ((and allow-definitions
+             (agent-scheme--begin-form-p form))
+        (dolist (begin-form
+                 (agent-scheme--expand-sequence-forms
+                  (cdr (agent-scheme--proper-list-elements form "begin form"))
+                  environment
+                  context
+                  t))
+          (push begin-form expanded-forms)))
+       (t
+        (push (agent-scheme--expand-expression-fully
+               form environment context)
+              expanded-forms))))
+    (nreverse expanded-forms)))
+
+;;;###autoload
+(defun agent-scheme-expand (expression &optional environment options)
+  "Macro-expand one Agent Scheme EXPRESSION datum."
+  (let ((context (agent-scheme--new-eval-context options))
+        (eval-environment (or environment
+                              (agent-scheme-make-base-environment))))
+    (agent-scheme--ensure-base-syntax context eval-environment)
+    (agent-scheme--expand-expression-fully
+     expression eval-environment context)))
+
+;;;###autoload
+(defun agent-scheme-expand-source (source &optional environment options)
+  "Read SOURCE and return its macro-expanded non-syntax forms."
+  (let ((context (agent-scheme--new-eval-context options))
+        (eval-environment (or environment
+                              (agent-scheme-make-base-environment))))
+    (agent-scheme--ensure-base-syntax context eval-environment)
+    (agent-scheme--expand-sequence-forms
+     (agent-scheme-read-all source)
+     eval-environment
+     context
+     t)))
 
 ;;;###autoload
 (defun agent-scheme-eval (expression &optional environment options)

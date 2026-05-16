@@ -150,6 +150,14 @@
      (source "(begin (define-syntax echo-groups (syntax-rules () ((echo-groups ((head item ...) ...)) '((head item ...) ...)))) (echo-groups ((a 1 2) (b 3) (c))))")
      (expect (value "((a 1 2) (b 3) (c))")))
 
+    ((id syntax-rules-syntax-error)
+     (category syntax-rules)
+     (section "4.3.3")
+     (status implemented)
+     (description "A syntax-error template signals an expansion-time error.")
+     (source "(begin (define-syntax bad-use (syntax-rules () ((bad-use x) (syntax-error \"bad macro\" x)))) (bad-use 123))")
+     (expect (error)))
+
     ((id cond-expand-r7rs-feature)
      (category libraries)
      (section "4.2.1")
