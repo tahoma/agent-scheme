@@ -133,6 +133,155 @@
                        total)"
                 "(10 (4 9 16) 6)")
 
+(check-external 'define-syntax-expands-ellipsis
+                "(define x 0)
+                 (define-syntax unless
+                   (syntax-rules ()
+                     ((unless test body ...)
+                      (if test #f (begin body ...)))))
+                 (unless #f
+                   (set! x 41)
+                   (+ x 1))"
+                "42")
+
+(check-external 'introduced-bindings-are-hygienic
+                "(define-syntax my-or
+                   (syntax-rules ()
+                     ((my-or) #f)
+                     ((my-or expr) expr)
+                     ((my-or expr next ...)
+                      (let ((temp expr))
+                        (if temp temp (my-or next ...))))))
+                 (let ((temp 99))
+                   (my-or #f temp))"
+                "99")
+
+(check-external 'let-syntax-is-referentially-transparent
+                "(let ((x 'outer))
+                   (let-syntax ((m (syntax-rules ()
+                                     ((m) x))))
+                     (let ((x 'inner))
+                       (m))))"
+                "outer")
+
+(check 'free-template-identifiers-do-not-capture-use-site
+       (raises? (lambda ()
+                  (agent-scheme-eval-source
+                   "(define-syntax expose-x
+                      (syntax-rules ()
+                        ((expose-x) x)))
+                    (let ((x 1))
+                      (expose-x))")))
+       #t)
+
+(check-external 'letrec-syntax-allows-recursive-transformers
+                "(letrec-syntax
+                     ((my-or
+                       (syntax-rules ()
+                         ((my-or) #f)
+                         ((my-or expr) expr)
+                         ((my-or expr next ...)
+                          (let ((temp expr))
+                            (if temp temp (my-or next ...)))))))
+                   (my-or #f #f 7))"
+                "7")
+
+(check-external 'named-let-expands-through-letrec
+                "(let loop ((n 5) (acc 0))
+                   (if (= n 0)
+                       acc
+                       (loop (- n 1) (+ acc 1))))"
+                "5")
+
+(check-external 'cond-arrow-respects-literal-binding
+                "(list
+                   (cond ((assv 'b '((a 1) (b 2))) => cadr)
+                         (else #f))
+                   (let ((=> #f))
+                     (cond (#t => 'ok))))"
+                "(2 ok)")
+
+(check-external 'case-expands-from-base-syntax
+                "(list
+                   (case (car '(c d))
+                     ((a e i o u) 'vowel)
+                     ((c d) 'consonant)
+                     (else 'other))
+                   (case 'b
+                     ((a) 'a)
+                     ((b c) => (lambda (x) (list x 'hit)))
+                     (else #f)))"
+                "(consonant (b hit))")
+
+(check-external 'do-expands-nested-ellipses
+                "(do ((i 0 (+ i 1))
+                      (acc 0 (+ acc i)))
+                     ((= i 5) acc))"
+                "10")
+
+(check-external 'dotted-patterns-and-templates
+                "(define-syntax rest-list
+                   (syntax-rules ()
+                     ((rest-list first . rest)
+                      'rest)))
+                 (define-syntax make-pair
+                   (syntax-rules ()
+                     ((make-pair left right)
+                      '(left . right))))
+                 (list (rest-list a b c)
+                       (make-pair alpha beta))"
+                "((b c) (alpha . beta))")
+
+(check-external 'nested-ellipsis-template-expands
+                "(define-syntax echo-groups
+                   (syntax-rules ()
+                     ((echo-groups ((head item ...) ...))
+                      '((head item ...) ...))))
+                 (echo-groups ((a 1 2) (b 3) (c)))"
+                "((a 1 2) (b 3) (c))")
+
+(check-external 'quasiquote-evaluates-unquotes
+                "(list
+                   (quasiquote (a (unquote (+ 1 2))
+                                  (unquote-splicing (list 'b 'c))))
+                   (quasiquote #(1 (unquote (+ 1 2))))
+                   (quasiquote (outer
+                                 (quasiquote
+                                  (inner (unquote (+ 1 2))))
+                                 (unquote (+ 2 3)))))"
+                "((a 3 b c) #(1 3) (outer (quasiquote (inner (unquote (+ 1 2)))) 5))")
+
+(check-external 'cond-expand-selects-base-feature
+                "(list
+                   (cond-expand (r7rs 'ok) (else 'missing))
+                   (cond-expand
+                    ((library (scheme base)) 'base)
+                    (else 'missing)))"
+                "(ok base)")
+
+(check 'expand-source-exposes-expanded-forms
+       (agent-scheme-value->external
+        (agent-scheme-expand-source
+         "(define-syntax unless
+            (syntax-rules ()
+              ((unless test body ...)
+               (if test #f (begin body ...)))))
+          (unless #f 42)"))
+       "((if #f #f (begin 42)))")
+
+(check 'syntax-error-reports-source-form
+       (let* ((result
+               (agent-scheme-eval-source-result
+                "(define-syntax bad-use
+                   (syntax-rules ()
+                     ((bad-use x)
+                      (syntax-error \"bad macro\" x))))
+                 (bad-use 123)"))
+              (error-field (assq 'error (cdr result)))
+              (message-field (assq 'message (cdr error-field))))
+         (cadr message-field))
+       "agent-scheme eval error: syntax-error while expanding (bad-use 123): \"bad macro\" 123")
+
 (check 'result-rendering
        (agent-scheme-result->external
         (agent-scheme-eval-source-result "(+ 1 2)"))
