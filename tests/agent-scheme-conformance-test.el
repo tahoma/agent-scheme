@@ -10,6 +10,7 @@
 
 (require 'cl-lib)
 (require 'ert)
+(require 'agent-scheme-eval)
 (require 'agent-scheme-reader)
 
 (defconst agent-scheme--conformance-statuses
@@ -51,6 +52,15 @@ PRINTED-VALUE strings should use Agent Scheme's stable writer.")
           (list :status 'values
                 :values (mapcar #'agent-scheme-datum->external datums))))
     (agent-scheme-reader-error
+     (list :status 'error :condition condition))))
+
+(defun agent-scheme--conformance-eval-evaluator (source)
+  "Evaluate SOURCE and return a conformance result plist."
+  (condition-case condition
+      (list :status 'value
+            :value (agent-scheme-value->external
+                    (agent-scheme-eval-source source)))
+    (agent-scheme-eval-error
      (list :status 'error :condition condition))))
 
 (defun agent-scheme--conformance-host-datum (datum)
@@ -162,11 +172,14 @@ ACTUAL is the plist returned by `agent-scheme-conformance-evaluator'."
 
 (defun agent-scheme--conformance-run-case (case)
   "Run one implemented conformance CASE."
-  (let ((evaluator
-         (or agent-scheme-conformance-evaluator
-             (and (eq (agent-scheme--conformance-field case 'category)
-                      'reader-syntax)
-                  #'agent-scheme--conformance-reader-evaluator))))
+  (let* ((category (agent-scheme--conformance-field case 'category))
+         (evaluator
+          (cond
+           ((eq category 'reader-syntax)
+            #'agent-scheme--conformance-reader-evaluator)
+           (agent-scheme-conformance-evaluator)
+           (t
+            #'agent-scheme--conformance-eval-evaluator))))
     (unless (functionp evaluator)
       (ert-fail
        (format "No Agent Scheme evaluator is registered for implemented case %S"

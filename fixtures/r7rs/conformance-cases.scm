@@ -73,7 +73,7 @@
     ((id primitive-procedure-call)
      (category primitive-expressions)
      (section "4.1")
-     (status pending)
+     (status implemented)
      (description "Primitive procedure calls evaluate operator and operands.")
      (source "(+ 1 2)")
      (expect (value "3")))
