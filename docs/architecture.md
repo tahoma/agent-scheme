@@ -397,7 +397,23 @@ MCP exposure should come after local evaluation, policy, session UX, and
 ## Initial Module and Test Map
 
 Later tickets should use focused modules rather than one large host file.
-Likely Emacs Lisp bootstrap modules:
+Portable R7RS core modules live under `scheme/`, with Emacs Lisp host adapters
+and bootstrap mirrors under `lisp/`. Scheme modules should be usable by another
+R7RS implementation while Agent Scheme is still self-bootstrapping; Emacs Lisp
+modules own Emacs integration and may mirror core behavior until the portable
+core can take over.
+
+Likely portable R7RS modules:
+
+- `scheme/agent-scheme/reader.sld`
+- `scheme/agent-scheme/datum.sld`
+- `scheme/agent-scheme/eval.sld`
+- `scheme/agent-scheme/write.sld`
+- `scheme/agent-scheme/library.sld`
+- `scheme/agent-scheme/macro.sld`
+- `scheme/agent-scheme/base.sld`
+
+Likely Emacs Lisp bootstrap and adapter modules:
 
 - `lisp/agent-scheme-reader.el`
 - `lisp/agent-scheme-datum.el`
