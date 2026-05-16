@@ -24,4 +24,4 @@ The implementation roadmap lives in GitHub issues, starting with the architectur
 
 ## Repository Shape
 
-This seed is intentionally small. Initial implementation modules and documentation should follow the GitHub roadmap as issues are transferred into this repository.
+This seed is intentionally small. Initial implementation modules and documentation should follow the GitHub roadmap.
