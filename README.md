@@ -21,6 +21,7 @@ The implementation roadmap lives in GitHub issues, starting with the architectur
 - Use JSON, HTTP, Markdown, and other encodings at protocol or document boundaries, not as the internal model.
 - Keep host adapters severable. Emacs is the first body; Agent Scheme should have a portable core.
 - Prefer conservative, audited capabilities over broad host access.
+- Use the Agent Scheme project namespace for durable Emacs Lisp APIs and docs.
 
 ## Repository Shape
 
@@ -31,4 +32,5 @@ This seed is intentionally small. Initial implementation modules and documentati
 - [Architecture and threat model](docs/architecture.md)
 - [Contributing](docs/contributing.md)
 - [Development setup](docs/development.md)
+- [Naming convention](docs/naming.md)
 - [Roadmap note](docs/roadmap.md)
