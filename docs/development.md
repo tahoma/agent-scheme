@@ -55,7 +55,9 @@ you use.
 
 Before implementing a ticket, read:
 
+- [Repository agent instructions](../AGENTS.md), for agentic or tool-assisted work
 - [Architecture and threat model](architecture.md)
+- [Naming convention](naming.md)
 - [Roadmap note](roadmap.md)
 - [Contributing](contributing.md)
 - The GitHub issue you are working on

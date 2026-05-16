@@ -29,6 +29,7 @@ This seed is intentionally small. Initial implementation modules and documentati
 
 ## Project Docs
 
+- [Repository agent instructions](AGENTS.md)
 - [Architecture and threat model](docs/architecture.md)
 - [Contributing](docs/contributing.md)
 - [Development setup](docs/development.md)
