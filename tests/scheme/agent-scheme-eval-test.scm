@@ -194,6 +194,98 @@
                    (reverse path))"
                 "(before during after)")
 
+(check-external 'call/cc-reenter-after-return
+                "(let ((again #f))
+                   (let ((value (call/cc
+                                 (lambda (k)
+                                   (set! again k)
+                                   'first))))
+                     (if (eq? value 'first)
+                         (again 'second)
+                         value)))"
+                "second")
+
+(check-external 'call/cc-repeated-invocation
+                "(let ((again #f)
+                       (seen '()))
+                   (let ((value (call/cc
+                                 (lambda (k)
+                                   (set! again k)
+                                   'start))))
+                     (set! seen (cons value seen))
+                     (if (< (length seen) 3)
+                         (again (length seen))
+                         (reverse seen))))"
+                "(start 1 2)")
+
+(check-external 'dynamic-wind-reentry
+                "(let ((again #f)
+                       (outside #f)
+                       (path '()))
+                   (define (add tag) (set! path (cons tag path)))
+                   (call/cc
+                    (lambda (escape)
+                      (set! outside escape)
+                      (dynamic-wind
+                       (lambda () (add 'before-outer))
+                       (lambda ()
+                         (dynamic-wind
+                          (lambda () (add 'before-inner))
+                          (lambda ()
+                            (call/cc
+                             (lambda (k)
+                               (set! again k)
+                               'captured))
+                            (add 'during-inner)
+                            (outside 'escaped))
+                          (lambda () (add 'after-inner))))
+                       (lambda () (add 'after-outer)))))
+                   (if again
+                       (let ((resume again))
+                         (set! again #f)
+                         (resume 'resumed))
+                       (reverse path)))"
+                "(before-outer before-inner during-inner after-inner after-outer before-outer before-inner during-inner after-inner after-outer)")
+
+(check-external 'call/cc-multiple-values
+                "(let ((again #f))
+                   (call-with-values
+                    (lambda ()
+                      (call/cc
+                       (lambda (k)
+                         (set! again k)
+                         (values 1 2))))
+                    (lambda (a b)
+                      (if (= a 1)
+                          (again 3 4)
+                          (list a b)))))"
+                "(3 4)")
+
+(check-external 'let-values-continuation-multiple-values
+                "(let ((again #f))
+                   (let-values (((a b)
+                                 (call/cc
+                                  (lambda (k)
+                                    (set! again k)
+                                    (values 1 2)))))
+                     (if (= a 1)
+                         (again 3 4)
+                         (list a b))))"
+                "(3 4)")
+
+(check-external 'let*-values-continuation-multiple-values
+                "(let ((again #f))
+                   (let*-values (((a b)
+                                  (call/cc
+                                   (lambda (k)
+                                     (set! again k)
+                                     (values 1 2))))
+                                 ((c) (+ a b)))
+                     (if (= a 1)
+                         (again 3 4)
+                         (list a b c))))"
+                "(3 4 7)")
+
 (check-external 'guard-raise
                 "(guard (exn (else (list 'caught exn)))
                    (raise 'boom))"
