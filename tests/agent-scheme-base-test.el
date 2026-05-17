@@ -78,6 +78,30 @@
            "(list (eq? 'a 'a) (eqv? 1 1) (equal? '(1 \"x\") '(1 \"x\")))")
           "(#t #t #t)")))
 
+(ert-deftest agent-scheme-base-test-records-and-circular-equality ()
+  "Evaluate R7RS records and equality over circular data."
+  (should
+   (equal (agent-scheme-base-test--external
+           "(define-record-type <pare>
+              (kons x y)
+              pare?
+              (x kar set-kar!)
+              (y kdr))
+            (let ((p (kons 1 2)))
+              (set-kar! p 3)
+              (list (pare? p)
+                    (pare? (cons 1 2))
+                    (kar p)
+                    (kdr p)))")
+          "(#t #f 3 2)"))
+  (should
+   (equal (agent-scheme-base-test--external
+           "(let ((left '#1=(a b . #1#))
+                  (right '#2=(a b a b . #2#)))
+              (list (eq? left (cddr left))
+                    (equal? left right)))")
+          "(#t #t)")))
+
 (ert-deftest agent-scheme-base-test-numbers-booleans-symbols-characters-strings ()
   "Evaluate scalar base-library procedures."
   (should

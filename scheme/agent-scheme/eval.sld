@@ -329,8 +329,21 @@
             (agent-scheme-primitive-procedure? value)
             (continuation? value)
             (agent-scheme-error-object? value)
-            (string-output-port? value))
+            (string-output-port? value)
+            (agent-scheme-record-type? value))
         1)
+       ((agent-scheme-record? value)
+        (if (memq value seen)
+            0
+            (let ((fields (agent-scheme-record-fields value)))
+              (let loop ((index 0) (count 1))
+                (if (= index (vector-length fields))
+                    count
+                    (loop (+ index 1)
+                          (+ count
+                             (value-node-count
+                              (vector-ref fields index)
+                              (cons value seen)))))))))
        ((multiple-values? value)
         (+ 1
            (let loop ((rest (multiple-values-values value)) (count 0))
@@ -712,10 +725,220 @@
              "define target must be an identifier or function signature"
              form))))))
 
+    (define (record-definition-form? form)
+      (and (pair? form) (identifier-named? (car form) 'define-record-type)))
+
+    (define (body-definition-form? form)
+      (or (definition-form? form)
+          (record-definition-form? form)))
+
+    (define (parse-record-definition form)
+      (let ((parts (proper-list-elements form "define-record-type form")))
+        (if (< (length parts) 4)
+            (eval-error
+             "define-record-type requires name, constructor, predicate, and fields"
+             form))
+        (let* ((type-name
+                (expect-identifier-key (second parts) "record type name"))
+               (constructor-spec
+                (proper-list-elements (third parts) "record constructor"))
+               (constructor-name
+                (expect-identifier-key
+                 (car constructor-spec) "record constructor name"))
+               (constructor-fields
+                (map (lambda (field)
+                       (expect-identifier-key
+                        field
+                        "record constructor field"))
+                     (cdr constructor-spec)))
+               (predicate-name
+                (expect-identifier-key
+                 (fourth parts)
+                 "record predicate name")))
+          (let loop ((field-specs (cdr (cdr (cdr (cdr parts)))))
+                     (fields '())
+                     (accessors '())
+                     (mutators '()))
+            (if (null? field-specs)
+                (let ((field-names (reverse fields))
+                      (accessor-specs (reverse accessors))
+                      (mutator-specs (reverse mutators)))
+                  (ensure-distinct-names field-names "record fields")
+                  (ensure-distinct-names
+                   (append (map car accessor-specs)
+                           (map car mutator-specs))
+                   "record accessors and mutators")
+                  (let constructor-loop ((rest constructor-fields))
+                    (if (not (null? rest))
+                        (begin
+                          (if (not (memq (car rest) field-names))
+                              (eval-error
+                               "record constructor references unknown field"
+                               (car rest)))
+                          (constructor-loop (cdr rest)))))
+                  (list (list 'type-name type-name)
+                        (list 'constructor-name constructor-name)
+                        (list 'constructor-fields constructor-fields)
+                        (list 'predicate-name predicate-name)
+                        (list 'fields field-names)
+                        (list 'accessors accessor-specs)
+                        (list 'mutators mutator-specs)))
+                (let ((field-parts
+                       (proper-list-elements
+                        (car field-specs)
+                        "record field")))
+                  (if (not (or (= (length field-parts) 2)
+                               (= (length field-parts) 3)))
+                      (eval-error
+                       "record field requires name, accessor, and optional mutator"
+                       (car field-specs)))
+                  (let ((field-name
+                         (expect-identifier-key
+                          (car field-parts)
+                          "record field name"))
+                        (accessor-name
+                         (expect-identifier-key
+                          (second field-parts)
+                          "record accessor name"))
+                        (mutator-name
+                         (if (= (length field-parts) 3)
+                             (expect-identifier-key
+                              (third field-parts)
+                              "record mutator name")
+                             #f)))
+                    (loop (cdr field-specs)
+                          (cons field-name fields)
+                          (cons (cons accessor-name field-name) accessors)
+                          (if mutator-name
+                              (cons (cons mutator-name field-name) mutators)
+                              mutators)))))))))
+
+    (define (record-definition-bound-names form)
+      (let ((spec (parse-record-definition form)))
+        (append
+         (list (second (assq 'type-name spec))
+               (second (assq 'constructor-name spec))
+               (second (assq 'predicate-name spec)))
+         (map car (second (assq 'accessors spec)))
+         (map car (second (assq 'mutators spec))))))
+
+    (define (record-field-index record-type field)
+      (let loop ((rest (agent-scheme-record-type-fields record-type))
+                 (index 0))
+        (cond
+         ((null? rest)
+          (eval-error "record type does not contain field" field))
+         ((eq? (car rest) field) index)
+         (else (loop (cdr rest) (+ index 1))))))
+
+    (define (expect-record-of-type value record-type description)
+      (if (not (and (agent-scheme-record? value)
+                    (eq? (agent-scheme-record-type value) record-type)))
+          (eval-error
+           (string-append (symbol->string description) " expected record")
+           value))
+      value)
+
+    (define (define-or-set-record-binding! environment name value)
+      (let ((cell (frame-cell environment name)))
+        (if cell
+            (begin
+              (if (environment-cell-imported? environment cell)
+                  (eval-error "cannot redefine imported binding" name))
+              (set-cell-value! cell value))
+            (environment-define! environment name value))))
+
+    (define (eval-record-definition form environment context)
+      (let* ((spec (parse-record-definition form))
+             (type-name (second (assq 'type-name spec)))
+             (fields (second (assq 'fields spec)))
+             (record-type (agent-scheme-make-record-type type-name fields))
+             (constructor-fields
+              (second (assq 'constructor-fields spec)))
+             (constructor-name (second (assq 'constructor-name spec)))
+             (predicate-name (second (assq 'predicate-name spec)))
+             (constructor
+              (make-primitive-procedure
+               constructor-name
+               (lambda (arguments context)
+                 (let ((values (make-vector
+                                (length fields)
+                                agent-scheme-unspecified)))
+                   (let loop ((rest-fields constructor-fields)
+                              (rest-arguments arguments))
+                     (if (null? rest-fields)
+                         (agent-scheme-make-record record-type values)
+                         (begin
+                           (vector-set!
+                            values
+                            (record-field-index record-type (car rest-fields))
+                            (car rest-arguments))
+                           (loop (cdr rest-fields)
+                                 (cdr rest-arguments)))))))
+               (length constructor-fields)
+               (length constructor-fields)))
+             (predicate
+              (make-primitive-procedure
+               predicate-name
+               (lambda (arguments context)
+                 (and (agent-scheme-record? (car arguments))
+                      (eq? (agent-scheme-record-type (car arguments))
+                           record-type)))
+               1
+               1)))
+        (define-or-set-record-binding! environment type-name record-type)
+        (define-or-set-record-binding! environment constructor-name constructor)
+        (define-or-set-record-binding! environment predicate-name predicate)
+        (for-each
+         (lambda (accessor)
+           (let* ((name (car accessor))
+                  (field (cdr accessor))
+                  (index (record-field-index record-type field)))
+             (define-or-set-record-binding!
+              environment
+              name
+              (make-primitive-procedure
+               name
+               (lambda (arguments context)
+                 (vector-ref
+                  (agent-scheme-record-fields
+                   (expect-record-of-type
+                    (car arguments)
+                    record-type
+                    name))
+                  index))
+               1
+               1))))
+         (second (assq 'accessors spec)))
+        (for-each
+         (lambda (mutator)
+           (let* ((name (car mutator))
+                  (field (cdr mutator))
+                  (index (record-field-index record-type field)))
+             (define-or-set-record-binding!
+              environment
+              name
+              (make-primitive-procedure
+               name
+               (lambda (arguments context)
+                 (vector-set!
+                  (agent-scheme-record-fields
+                   (expect-record-of-type
+                    (car arguments)
+                    record-type
+                    name))
+                  index
+                  (second arguments))
+                 agent-scheme-unspecified)
+               2
+               2))))
+         (second (assq 'mutators spec)))
+        agent-scheme-unspecified))
+
     (define (split-body body)
       (let loop ((cursor body) (definitions '()))
         (cond
-         ((and (pair? cursor) (definition-form? (car cursor)))
+         ((and (pair? cursor) (body-definition-form? (car cursor)))
           (loop (cdr cursor) (cons (car cursor) definitions)))
          ((null? cursor)
           (eval-error "body must contain at least one expression" body))
@@ -736,29 +959,60 @@
                       (if (null? remaining)
                           (cons body-environment expressions)
                           (begin
-                            (environment-set!
-                             body-environment
-                             (caar remaining)
-                             (eval-expression
-                              (cdar remaining)
-                              body-environment
-                              context
-                              #f))
+                            (cond
+                             ((eq? (car (car remaining)) 'define)
+                              (environment-set!
+                               body-environment
+                               (car (cdr (car remaining)))
+                               (eval-expression
+                                (cdr (cdr (car remaining)))
+                                body-environment
+                                context
+                                #f)))
+                             ((eq? (car (car remaining)) 'record)
+                              (eval-record-definition
+                               (cdr (car remaining))
+                               body-environment
+                               context)))
                             (initialize-loop (cdr remaining)))))
-                    (let ((parsed-definition (parse-definition (car rest))))
-                      (if (frame-cell body-environment
-                                      (car parsed-definition))
-                          (eval-error "duplicate internal definition"
-                                      (car parsed-definition)))
-                      ;; Allocate every internal-definition cell before any
-                      ;; initializer runs so recursive references have a
-                      ;; location, even if its value is still undefined.
-                      (environment-define!
-                       body-environment
-                       (car parsed-definition)
-                       undefined)
-                      (install-loop (cdr rest)
-                                    (cons parsed-definition parsed)))))))))
+                    (let ((definition (car rest)))
+                      (cond
+                       ((definition-form? definition)
+                        (let ((parsed-definition
+                               (parse-definition definition)))
+                          (if (frame-cell body-environment
+                                          (car parsed-definition))
+                              (eval-error "duplicate internal definition"
+                                          (car parsed-definition)))
+                          ;; Allocate every internal-definition cell before any
+                          ;; initializer runs so recursive references have a
+                          ;; location, even if its value is still undefined.
+                          (environment-define!
+                           body-environment
+                           (car parsed-definition)
+                           undefined)
+                          (install-loop
+                           (cdr rest)
+                           (cons (cons 'define parsed-definition)
+                                 parsed))))
+                       ((record-definition-form? definition)
+                        (let names-loop
+                            ((names (record-definition-bound-names
+                                     definition)))
+                          (if (not (null? names))
+                              (begin
+                                (if (frame-cell body-environment (car names))
+                                    (eval-error
+                                     "duplicate internal definition"
+                                     (car names)))
+                                (environment-define!
+                                 body-environment
+                                 (car names)
+                                 undefined)
+                                (names-loop (cdr names)))))
+                        (install-loop
+                         (cdr rest)
+                         (cons (cons 'record definition) parsed)))))))))))
 
     (define (eval-definition form environment context . maybe-continuation)
       (let* ((parsed (parse-definition form))
@@ -2337,6 +2591,8 @@
          (list
           (list 'display primitive-display 1 2)
           (list 'write primitive-write 1 2)
+          (list 'write-shared primitive-write-shared 1 2)
+          (list 'write-simple primitive-write-simple 1 2)
           (list 'open-output-string primitive-open-output-string 0 0)
           (list 'get-output-string primitive-get-output-string 1 1))
          context))
@@ -3039,6 +3295,11 @@
            ((and (identifier-named? operator 'define)
                  (special-operator-active? operator environment))
             (eval-error "define is not valid in expression position" parts))
+           ((and (identifier-named? operator 'define-record-type)
+                 (special-operator-active? operator environment))
+            (eval-error
+             "define-record-type is not valid in expression position"
+             parts))
            ((and (identifier-named? operator 'define-syntax)
                  (special-operator-active? operator environment))
             (eval-error
@@ -3201,6 +3462,14 @@
                        remaining)
                       (eval-error
                        "define-syntax is only allowed before body expressions"
+                       form)))
+                 ((record-definition-form? form)
+                  (if allow-definitions?
+                      (after-form
+                       (eval-record-definition form environment context)
+                       remaining)
+                      (eval-error
+                       "define-record-type is only allowed before body expressions"
                        form)))
                  ((definition-form? form)
                   (if allow-definitions?
@@ -4576,10 +4845,7 @@
       (char-upcase (expect-character (car arguments) "char-upcase")))
 
     (define (display-string value)
-      (cond
-       ((string? value) value)
-       ((char? value) (string value))
-       (else (agent-scheme-value->external value))))
+      (agent-scheme-datum->external value 'write #t))
 
     (define (expect-string-output-port value description)
       (if (not (string-output-port? value))
@@ -4588,14 +4854,14 @@
            value))
       value)
 
-    (define (write-to-output-port value port display?)
+    (define (write-to-output-port value port mode display?)
       (set-string-output-port-contents!
        port
        (string-append
         (string-output-port-contents port)
         (if display?
             (display-string value)
-            (agent-scheme-value->external value))))
+            (agent-scheme-datum->external value mode))))
       agent-scheme-unspecified)
 
     (define (primitive-open-output-string arguments context)
@@ -4613,6 +4879,7 @@
           (write-to-output-port
            (car arguments)
            (expect-string-output-port (second arguments) "display")
+           'write
            #t)))
 
     (define (primitive-write arguments context)
@@ -4621,6 +4888,25 @@
           (write-to-output-port
            (car arguments)
            (expect-string-output-port (second arguments) "write")
+           'write
+           #f)))
+
+    (define (primitive-write-shared arguments context)
+      (if (null? (cdr arguments))
+          agent-scheme-unspecified
+          (write-to-output-port
+           (car arguments)
+           (expect-string-output-port (second arguments) "write-shared")
+           'shared
+           #f)))
+
+    (define (primitive-write-simple arguments context)
+      (if (null? (cdr arguments))
+          agent-scheme-unspecified
+          (write-to-output-port
+           (car arguments)
+           (expect-string-output-port (second arguments) "write-simple")
+           'simple
            #f)))
 
     (define (resolve-file-policy-path filename context description)
@@ -5387,22 +5673,40 @@
                (agent-scheme-number? right)
                (numeric-representation-eqv? left right))))
 
+    (define (equal-seen-pair? left right seen)
+      (cond
+       ((null? seen) #f)
+       ((and (eq? left (caar seen))
+             (eq? right (cdar seen)))
+        #t)
+       (else
+        (equal-seen-pair? left right (cdr seen)))))
+
     (define (equal-value? left right seen)
       (cond
        ((eqv-value? left right) #t)
        ((and (pair? left) (pair? right))
-        (if (memq left seen)
+        (if (equal-seen-pair? left right seen)
             #t
-            (and (equal-value? (car left) (car right) (cons left seen))
-                 (equal-value? (cdr left) (cdr right) (cons left seen)))))
+            (let ((seen (cons (cons left right) seen)))
+              (and (equal-value? (car left) (car right) seen)
+                   (equal-value? (cdr left) (cdr right) seen)))))
        ((and (vector? left) (vector? right))
         (and (= (vector-length left) (vector-length right))
-             (let loop ((index 0))
-               (or (= index (vector-length left))
-                   (and (equal-value? (vector-ref left index)
-                                      (vector-ref right index)
-                                      seen)
-                        (loop (+ index 1)))))))
+             (if (equal-seen-pair? left right seen)
+                 #t
+                 (let ((seen (cons (cons left right) seen)))
+                   (let loop ((index 0))
+                     (or (= index (vector-length left))
+                         (and (equal-value? (vector-ref left index)
+                                            (vector-ref right index)
+                                            seen)
+                              (loop (+ index 1)))))))))
+       ((or (agent-scheme-record? left)
+            (agent-scheme-record? right)
+            (agent-scheme-record-type? left)
+            (agent-scheme-record-type? right))
+        #f)
        (else
         (equal? left right))))
 
@@ -6020,6 +6324,16 @@
                  (map (lambda (irritant)
                         (value->result-datum irritant seen))
                       (agent-scheme-error-object-irritants value)))))
+         ((agent-scheme-record-type? value)
+          (list 'record-type
+                (result-field 'name
+                              (agent-scheme-record-type-name value))))
+         ((agent-scheme-record? value)
+          (list 'record
+                (result-field
+                 'type
+                 (agent-scheme-record-type-name
+                  (agent-scheme-record-type value)))))
          ((pair? value)
           (if (memq value seen)
               '(cycle)
@@ -6053,6 +6367,10 @@
                (map (lambda (item)
                       (strip-identifiers item (cons value seen)))
                     (vector->list value)))))
+         ((agent-scheme-record? value)
+          value)
+         ((agent-scheme-record-type? value)
+          value)
          (else value))))
 
     (define (budget-result-field context)

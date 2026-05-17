@@ -25,7 +25,15 @@
           agent-scheme-number-negative?
           agent-scheme-number-abs
           agent-scheme-number->external
-          agent-scheme-integer->radix-string)
+          agent-scheme-integer->radix-string
+          agent-scheme-make-record-type
+          agent-scheme-record-type?
+          agent-scheme-record-type-name
+          agent-scheme-record-type-fields
+          agent-scheme-make-record
+          agent-scheme-record?
+          agent-scheme-record-type
+          agent-scheme-record-fields)
   (import (scheme base)
           (scheme char)
           (scheme inexact)
@@ -43,7 +51,7 @@
     (define-record-type <reader>
       ;; Reader state is mutable only for cursor position, fold-case mode, and
       ;; node count.  SOURCE remains the immutable snapshot of input text.
-      (make-reader source position length fold-case node-count
+      (make-reader source position length fold-case node-count datum-labels
                    maximum-depth maximum-list-length maximum-vector-length
                    maximum-bytevector-length maximum-string-size
                    maximum-total-nodes)
@@ -53,6 +61,7 @@
       (length reader-length)
       (fold-case reader-fold-case set-reader-fold-case!)
       (node-count reader-node-count set-reader-node-count!)
+      (datum-labels reader-datum-labels set-reader-datum-labels!)
       (maximum-depth reader-maximum-depth)
       (maximum-list-length reader-maximum-list-length)
       (maximum-vector-length reader-maximum-vector-length)
@@ -78,6 +87,25 @@
       (radix agent-scheme-number-radix)
       (kind agent-scheme-number-kind)
       (value agent-scheme-number-value))
+
+    (define-record-type <agent-scheme-record-type>
+      (agent-scheme-make-record-type name fields)
+      agent-scheme-record-type?
+      (name agent-scheme-record-type-name)
+      (fields agent-scheme-record-type-fields))
+
+    (define-record-type <agent-scheme-record>
+      (agent-scheme-make-record type fields)
+      agent-scheme-record?
+      (type agent-scheme-record-type)
+      (fields agent-scheme-record-fields))
+
+    (define-record-type <datum-label>
+      (make-datum-label id filled value)
+      datum-label?
+      (id datum-label-id)
+      (filled datum-label-filled? set-datum-label-filled!)
+      (value datum-label-value set-datum-label-value!))
 
     (define char-page (integer->char 12))
 
@@ -108,6 +136,7 @@
                        (string-length source)
                        #f
                        0
+                       '()
                        (option-ref options 'max-depth
                                    agent-scheme-default-maximum-depth)
                        (option-ref options 'max-list-length
@@ -1224,6 +1253,55 @@
     (define (quote-datum name datum)
       (list (string->symbol name) datum))
 
+    (define (reader-label-cell reader id)
+      (let loop ((rest (reader-datum-labels reader)))
+        (cond
+         ((null? rest) #f)
+         ((string=? (caar rest) id) (car rest))
+         (else (loop (cdr rest))))))
+
+    (define (read-datum-label reader depth)
+      (advance! reader)
+      (let ((start (reader-position reader)))
+        (let digit-loop ()
+          (let ((char (peek reader)))
+            (if (and char (char>=? char #\0) (char<=? char #\9))
+                (begin
+                  (advance! reader)
+                  (digit-loop)))))
+        (if (= start (reader-position reader))
+            (reader-error reader "datum label requires digits"))
+        (let* ((id (substring (reader-source reader)
+                              start
+                              (reader-position reader)))
+               (marker (peek reader)))
+          (cond
+           ((and marker (char=? marker #\=))
+            (advance! reader)
+            (if (reader-label-cell reader id)
+                (reader-error reader "duplicate datum label" id))
+            (let ((label (make-datum-label id #f #f)))
+              (set-reader-datum-labels!
+               reader
+               (cons (cons id label) (reader-datum-labels reader)))
+              (let ((datum (read-datum reader depth)))
+                (if (eq? datum label)
+                    (reader-error
+                     reader
+                     "datum label cannot reference itself directly"
+                     id))
+                (set-datum-label-value! label datum)
+                (set-datum-label-filled! label #t)
+                datum)))
+           ((and marker (char=? marker #\#))
+            (advance! reader)
+            (let ((cell (reader-label-cell reader id)))
+              (if (not cell)
+                  (reader-error reader "undefined datum label" id))
+              (cdr cell)))
+           (else
+            (reader-error reader "datum label must end with = or #"))))))
+
     (define (read-dispatch reader depth)
       (cond
        ((starts-with? reader "#(") (read-vector reader depth))
@@ -1231,11 +1309,40 @@
        ((starts-with? reader "#\\") (read-character-literal reader))
        ((let ((char (peek reader 1)))
           (and char (char>=? char #\0) (char<=? char #\9)))
-        ;; Datum labels need graph-aware allocation and writing; reject them
-        ;; until the runtime has explicit support for shared/circular datums.
-        (reader-error reader "datum labels are not supported yet"))
+        (read-datum-label reader depth))
        (else
         (classify-token reader (read-token reader)))))
+
+    (define (resolve-datum-labels datum reader)
+      (let resolve ((value datum) (seen '()))
+        (cond
+         ((datum-label? value)
+          (if (not (datum-label-filled? value))
+              (reader-error reader "undefined datum label"
+                            (datum-label-id value)))
+          (resolve (datum-label-value value) seen))
+         ((pair? value)
+          (if (memq value seen)
+              value
+              (begin
+                (set-car! value (resolve (car value) (cons value seen)))
+                (set-cdr! value (resolve (cdr value) (cons value seen)))
+                value)))
+         ((vector? value)
+          (if (memq value seen)
+              value
+              (let loop ((index 0))
+                (if (= index (vector-length value))
+                    value
+                    (begin
+                      (vector-set!
+                       value
+                       index
+                       (resolve (vector-ref value index)
+                                (cons value seen)))
+                      (loop (+ index 1)))))))
+         (else value))))
+
 
     (define (read-datum reader depth)
       (check-depth reader depth)
@@ -1297,7 +1404,9 @@
     (define (agent-scheme-read source . maybe-options)
       (let* ((options (options-from-rest maybe-options))
              (reader (reader-from-source source options))
-             (datum (read-datum reader 0)))
+             (ignored (set-reader-datum-labels! reader '()))
+             (datum (resolve-datum-labels (read-datum reader 0)
+                                          reader)))
         (skip-intertoken-space! reader 0)
         (if (not (eof? reader))
             (reader-error reader "unexpected trailing input"))
@@ -1317,7 +1426,12 @@
                       (begin
                         (agent-scheme-validate-datum (car rest) options)
                         (validate-loop (cdr rest))))))
-              (loop (cons (read-datum reader 0) datums))))))
+              (begin
+                (set-reader-datum-labels! reader '())
+                (loop (cons (resolve-datum-labels
+                             (read-datum reader 0)
+                             reader)
+                            datums)))))))
 
     (define (validation-note-node! validation)
       (set-validation-node-count!
@@ -1371,8 +1485,9 @@
             #t
             (let loop ((cursor datum)
                        (count 0)
-                       (next-seen (cons datum seen)))
+                       (next-seen seen))
               (cond
+               ((memq cursor next-seen) #t)
                ((pair? cursor)
                 (let ((next-count (+ count 1)))
                   (if (> next-count
@@ -1386,8 +1501,10 @@
                                   options
                                   validation
                                   (+ depth 1)
-                                  next-seen)
-                  (loop (cdr cursor) next-count next-seen)))
+                                  (cons cursor next-seen))
+                  (loop (cdr cursor)
+                        next-count
+                        (cons cursor next-seen))))
                ((null? cursor) #t)
                (else
                 (validate-datum cursor
@@ -1488,61 +1605,206 @@
               (loop (cdr rest)
                     (string-append result separator (car rest))))))))
 
-    (define (write-list datum)
-      (let loop ((cursor datum) (parts '()))
-        (cond
-         ((pair? cursor)
-          (loop (cdr cursor)
-                (cons (agent-scheme-datum->external (car cursor)) parts)))
-         ((null? cursor)
-          (string-append "(" (join (reverse parts) " ") ")"))
-         (else
-          (string-append
-           "("
-           (join (reverse parts) " ")
-           (if (null? parts) ". " " . ")
-           (agent-scheme-datum->external cursor)
-           ")")))))
+    (define (writer-compound? datum)
+      (or (pair? datum) (vector? datum)))
 
-    (define (bytevector->strings bytevector)
-      (let loop ((index 0) (parts '()))
-        (if (= index (bytevector-length bytevector))
-            (reverse parts)
-            (loop (+ index 1)
-                  (cons (agent-scheme-integer->radix-string
-                         (bytevector-u8-ref bytevector index)
-                         10)
-                        parts)))))
+    (define (alist-ref-eq key alist default)
+      (let ((cell (assq key alist)))
+        (if cell (cdr cell) default)))
 
-    (define (vector->strings vector)
-      (let loop ((index 0) (parts '()))
-        (if (= index (vector-length vector))
-            (reverse parts)
-            (loop (+ index 1)
-                  (cons (agent-scheme-datum->external
-                         (vector-ref vector index))
-                        parts)))))
-
-    (define (agent-scheme-datum->external datum)
-      ;; This writer is intentionally simple: it renders current bootstrap
-      ;; datums but does not generate labels for shared or circular structure.
+    (define (remove-assq key alist)
       (cond
-       ((boolean? datum) (if datum "#t" "#f"))
-       ((null? datum) "()")
-       ((symbol? datum) (write-symbol-name (symbol->string datum)))
-       ((char? datum) (write-character-datum datum))
-       ((agent-scheme-number? datum) (agent-scheme-number->external datum))
-       ((string? datum)
-        (string-append "\"" (escape-string datum) "\""))
-       ((bytevector? datum)
-        (string-append "#u8("
-                       (join (bytevector->strings datum) " ")
-                       ")"))
-       ((pair? datum) (write-list datum))
-       ((vector? datum)
-        (string-append "#("
-                       (join (vector->strings datum) " ")
-                       ")"))
-       (else
-        (error "agent-scheme reader error: cannot write unsupported datum"
-               datum))))))
+       ((null? alist) '())
+       ((eq? key (caar alist)) (cdr alist))
+       (else (cons (car alist) (remove-assq key (cdr alist))))))
+
+    (define (agent-scheme-datum->external datum . maybe-options)
+      (let ((mode (if (null? maybe-options) 'write (car maybe-options)))
+            (display? (if (or (null? maybe-options)
+                              (null? (cdr maybe-options)))
+                          #f
+                          (cadr maybe-options)))
+            (counts '())
+            (states '())
+            (cyclic '())
+            (labels '())
+            (emitted '())
+            (next-label 0))
+
+        (define (set-count! value count)
+          (set! counts (cons (cons value count)
+                             (remove-assq value counts))))
+
+        (define (set-state! value state)
+          (set! states (cons (cons value state)
+                             (remove-assq value states))))
+
+        (define (mark-cyclic! value)
+          (if (not (memq value cyclic))
+              (set! cyclic (cons value cyclic))))
+
+        (define (mark-cycle! target stack)
+          (let loop ((rest stack))
+            (if (not (null? rest))
+                (begin
+                  (mark-cyclic! (car rest))
+                  (if (not (eq? (car rest) target))
+                      (loop (cdr rest)))))))
+
+        (define (scan value stack)
+          (if (writer-compound? value)
+              (begin
+                (set-count! value (+ (alist-ref-eq value counts 0) 1))
+                (let ((state (alist-ref-eq value states #f)))
+                  (cond
+                   ((eq? state 'visiting)
+                    (mark-cycle! value stack))
+                   ((eq? state 'done)
+                    #t)
+                   (else
+                    (set-state! value 'visiting)
+                    (cond
+                     ((pair? value)
+                      (scan (car value) (cons value stack))
+                      (scan (cdr value) (cons value stack)))
+                     ((vector? value)
+                      (let loop ((index 0))
+                        (if (< index (vector-length value))
+                            (begin
+                              (scan (vector-ref value index)
+                                    (cons value stack))
+                              (loop (+ index 1)))))))
+                    (set-state! value 'done)))))))
+
+        (define (label-needed? value)
+          (and (writer-compound? value)
+               (cond
+                ((eq? mode 'shared)
+                 (> (alist-ref-eq value counts 0) 1))
+                ((eq? mode 'write)
+                 (memq value cyclic))
+                (else #f))))
+
+        (define (label-reference-ready? value)
+          (and (label-needed? value)
+               (assq value labels)
+               (memq value emitted)))
+
+        (define (label-for value)
+          (let ((cell (assq value labels)))
+            (if cell
+                (cdr cell)
+                (let ((label next-label))
+                  (set! next-label (+ next-label 1))
+                  (set! labels (cons (cons value label) labels))
+                  label))))
+
+        (define (record-name->external name)
+          (cond
+           ((symbol? name) (symbol->string name))
+           ((string? name) name)
+           (else (error "agent-scheme reader error: invalid record name"
+                        name))))
+
+        (define (render value)
+          (if (label-needed? value)
+              (let ((label (label-for value)))
+                (if (memq value emitted)
+                    (string-append
+                     "#"
+                     (agent-scheme-integer->radix-string label 10)
+                     "#")
+                    (begin
+                      (set! emitted (cons value emitted))
+                      (string-append
+                       "#"
+                       (agent-scheme-integer->radix-string label 10)
+                       "="
+                       (render-body value)))))
+              (render-body value)))
+
+        (define (render-list value)
+          (let loop ((cursor value)
+                     (parts '())
+                     (first? #t))
+            (if (and (pair? cursor)
+                     (not (and (not first?)
+                               (label-reference-ready? cursor))))
+                (loop (cdr cursor)
+                      (cons (render (car cursor)) parts)
+                      #f)
+                (let ((body (join (reverse parts) " ")))
+                  (string-append
+                   "("
+                   body
+                   (cond
+                    ((and (pair? cursor)
+                          (label-reference-ready? cursor))
+                     (string-append
+                      (if (null? parts) ". " " . ")
+                      (render cursor)))
+                    ((null? cursor) "")
+                    (else
+                     (string-append
+                      (if (null? parts) ". " " . ")
+                      (render cursor))))
+                   ")")))))
+
+        (define (render-vector value)
+          (let loop ((index 0) (parts '()))
+            (if (= index (vector-length value))
+                (string-append "#(" (join (reverse parts) " ") ")")
+                (loop (+ index 1)
+                      (cons (render (vector-ref value index)) parts)))))
+
+        (define (render-bytevector value)
+          (let loop ((index 0) (parts '()))
+            (if (= index (bytevector-length value))
+                (string-append "#u8(" (join (reverse parts) " ") ")")
+                (loop (+ index 1)
+                      (cons (agent-scheme-integer->radix-string
+                             (bytevector-u8-ref value index)
+                             10)
+                            parts)))))
+
+        (define (render-body value)
+          (cond
+           ((boolean? value) (if value "#t" "#f"))
+           ((null? value) "()")
+           ((symbol? value)
+            (if display?
+                (symbol->string value)
+                (write-symbol-name (symbol->string value))))
+           ((char? value)
+            (if display?
+                (string value)
+                (write-character-datum value)))
+           ((agent-scheme-number? value) (agent-scheme-number->external value))
+           ((string? value)
+            (if display?
+                value
+                (string-append "\"" (escape-string value) "\"")))
+           ((bytevector? value) (render-bytevector value))
+           ((pair? value) (render-list value))
+           ((vector? value) (render-vector value))
+           ((agent-scheme-record? value)
+            (string-append
+             "#<record "
+             (record-name->external
+              (agent-scheme-record-type-name
+               (agent-scheme-record-type value)))
+             ">"))
+           ((agent-scheme-record-type? value)
+            (string-append
+             "#<record-type "
+             (record-name->external
+              (agent-scheme-record-type-name value))
+             ">"))
+           (else
+            (error "agent-scheme reader error: cannot write unsupported datum"
+                   value))))
+
+        (scan datum '())
+        (if (and (eq? mode 'simple) (not (null? cyclic)))
+            (error "agent-scheme reader error: write-simple cannot render circular datum"))
+        (render datum)))))

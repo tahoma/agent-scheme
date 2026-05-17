@@ -252,12 +252,62 @@
   "Import `(scheme write)' in-memory string output procedures."
   (should
    (equal
-    (agent-scheme-library-test--external
+   (agent-scheme-library-test--external
      "(import (scheme base) (scheme write))
       (let ((out (open-output-string)))
         (display \"ok\" out)
         (get-output-string out))")
     "\"ok\"")))
+
+(ert-deftest agent-scheme-library-test-standard-write-shared-and-record-output ()
+  "Import `(scheme write)' shared, simple, and record writer procedures."
+  (should
+   (equal
+    (agent-scheme-library-test--external
+     "(import (scheme base) (scheme write))
+      (let ((x (list 'a)))
+        (let ((out (open-output-string)))
+          (write-shared (list x x) out)
+          (get-output-string out)))")
+    "\"(#0=(a) #0#)\""))
+  (should
+   (equal
+    (agent-scheme-library-test--external
+     "(import (scheme base) (scheme write))
+      (let ((x (list 'a)))
+        (let ((out (open-output-string)))
+          (write (list x x) out)
+          (get-output-string out)))")
+    "\"((a) (a))\""))
+  (should
+   (equal
+    (agent-scheme-library-test--external
+     "(import (scheme base) (scheme write))
+      (let ((out (open-output-string)))
+        (write '#1=(a . #1#) out)
+        (get-output-string out))")
+    "\"#0=(a . #0#)\""))
+  (should
+   (equal
+    (agent-scheme-library-test--external
+     "(import (scheme base) (scheme write))
+      (let ((out (open-output-string)))
+        (write-simple '#(1 \"x\") out)
+        (get-output-string out))")
+    "\"#(1 \\\"x\\\")\""))
+  (should
+   (equal
+    (agent-scheme-library-test--external
+     "(import (scheme base) (scheme write))
+      (define-record-type <pare>
+        (kons x y)
+        pare?
+        (x kar)
+        (y kdr))
+      (let ((out (open-output-string)))
+        (write (kons 1 2) out)
+        (get-output-string out))")
+    "\"#<record <pare>>\"")))
 
 (ert-deftest agent-scheme-library-test-standard-file-import-is-policy-gated ()
   "Keep `(scheme file)' host file effects behind explicit path policy."

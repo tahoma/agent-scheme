@@ -122,11 +122,20 @@
         (lambda ()
           (agent-scheme-read "#(1 2 3)" '((max-vector-length . 2)))))
        #t)
-(check 'datum-labels-pending
-       (raises?
-        (lambda ()
-          (agent-scheme-read "#1=(a . #1#)")))
-       #t)
+(let ((circular (agent-scheme-read "#1=(a . #1#)"))
+      (shared (agent-scheme-read "(#1=(a b) #1#)")))
+  (check 'datum-labels-circular-identity
+         (eq? circular (cdr circular))
+         #t)
+  (check 'datum-labels-shared-identity
+         (eq? (car shared) (cadr shared))
+         #t)
+  (check 'datum-labels-circular-writer
+         (agent-scheme-datum->external circular)
+         "#0=(a . #0#)")
+  (check 'datum-labels-shared-simple-writer
+         (agent-scheme-datum->external shared)
+         "((a b) (a b))"))
 
 (if (= failures 0)
     (begin
