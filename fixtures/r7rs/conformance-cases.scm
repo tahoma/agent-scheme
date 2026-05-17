@@ -110,6 +110,14 @@
      (source "(import (scheme inexact)) (list (real? +inf.0) (rational? +inf.0) (infinite? +inf.0) (nan? +nan.0) (= +nan.0 +nan.0))")
      (expect (value "(#t #f #t #t #f)")))
 
+    ((id numeric-polar-special-values)
+     (category numeric-tower)
+     (section "6.2")
+     (status implemented)
+     (description "Polar complex operations preserve canonical infinity and NaN components.")
+     (source "(import (scheme complex)) (list +inf.0i (make-polar +inf.0 0) (make-polar 1 +inf.0) (make-polar +nan.0 0))")
+     (expect (value "(0+inf.0i +inf.0+nan.0i +nan.0+nan.0i +nan.0+nan.0i)")))
+
     ((id derived-let-expression)
      (category derived-syntax)
      (section "4.2")

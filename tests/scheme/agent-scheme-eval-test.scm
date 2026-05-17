@@ -137,6 +137,13 @@
                        (string->number \"2a\" 16))"
                 "(3/20 5/6 3 2 \"2a\" 42)")
 
+(check-external 'numeric-tower-polar-special-values
+                "(import (scheme complex))
+                 (list (make-polar +inf.0 0)
+                       (make-polar 1 +inf.0)
+                       (make-polar +nan.0 0))"
+                "(+inf.0+nan.0i +nan.0+nan.0i +nan.0+nan.0i)")
+
 (check-external 'base-vector-and-bytevector-helpers
                 "(define v (vector 'a 'b 'c))
                  (vector-set! v 1 'changed)

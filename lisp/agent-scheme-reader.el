@@ -517,10 +517,22 @@ DEPTH is used when reading a datum comment's discarded datum."
     (agent-scheme--make-number
      (number-to-string value) exactness radix 'integer value)))
 
+(defun agent-scheme--host-inexact-special-kind (value)
+  "Return Agent Scheme's special inexact kind for host VALUE, or nil."
+  (let ((text (number-to-string value)))
+    (cond
+     ((string-match-p "NaN" text) '+nan.0)
+     ((string-match-p "INF" text)
+      (if (string-prefix-p "-" text) '-inf.0 '+inf.0))
+     (t nil))))
+
 (defun agent-scheme--make-canonical-decimal (value &optional lexeme)
   "Return an inexact decimal number datum for VALUE."
-  (agent-scheme--make-number
-   (or lexeme (number-to-string value)) 'inexact 10 'decimal value))
+  (let ((special-kind (agent-scheme--host-inexact-special-kind value)))
+    (if special-kind
+        (agent-scheme--make-canonical-infnan special-kind)
+      (agent-scheme--make-number
+       (or lexeme (number-to-string value)) 'inexact 10 'decimal value))))
 
 (defun agent-scheme--make-canonical-rational
     (numerator denominator &optional exactness radix)
@@ -625,13 +637,16 @@ DEPTH is used when reading a datum comment's discarded datum."
     ('complex
      (let* ((value (agent-scheme-number-value number))
             (real (car value))
-            (imaginary (cdr value))
-            (negative (agent-scheme--number-negative-p imaginary))
-            (magnitude (agent-scheme--number-abs imaginary)))
+            (imaginary (cdr value)))
         (concat
          (agent-scheme--number->external real)
-        (if negative "-" "+")
-         (agent-scheme--number->external magnitude)
+         (if (eq (agent-scheme-number-kind imaginary) 'infnan)
+             (agent-scheme--number->external imaginary)
+           (let ((negative (agent-scheme--number-negative-p imaginary))
+                 (magnitude (agent-scheme--number-abs imaginary)))
+             (concat
+              (if negative "-" "+")
+              (agent-scheme--number->external magnitude))))
          "i")))
     (_
      (or (agent-scheme-number-lexeme number)
@@ -840,6 +855,20 @@ The return value is (BODY EXACTNESS RADIX), or nil."
     (agent-scheme--reader-error reader "invalid rational number %s" token))
    (t nil)))
 
+(defun agent-scheme--number->reader-float (number)
+  "Return NUMBER as a host float for reader-only polar conversion."
+  (pcase (agent-scheme-number-kind number)
+    ('integer (float (agent-scheme-number-value number)))
+    ('rational
+     (let ((value (agent-scheme-number-value number)))
+       (/ (float (car value)) (cdr value))))
+    ('decimal (agent-scheme-number-value number))
+    ('infnan
+     (pcase (agent-scheme-number-value number)
+       ('+inf.0 (/ 1.0 0.0))
+       ('-inf.0 (/ -1.0 0.0))
+       ('+nan.0 (/ 0.0 0.0))))))
+
 (defun agent-scheme--complex-split-index (body)
   "Return the rectangular complex split index in BODY, or nil."
   (let ((index 1)
@@ -891,20 +920,8 @@ The return value is (BODY EXACTNESS RADIX), or nil."
                    (agent-scheme--parse-real-number-body
                     reader token (cadr parts) exactness radix))))
         (when (and magnitude angle)
-          (let ((r (string-to-number
-                    (agent-scheme--number->external
-                     (if (eq (agent-scheme-number-kind magnitude) 'rational)
-                         (agent-scheme--make-canonical-decimal
-                          (/ (float (car (agent-scheme-number-value magnitude)))
-                             (cdr (agent-scheme-number-value magnitude))))
-                       magnitude))))
-                (theta (string-to-number
-                        (agent-scheme--number->external
-                         (if (eq (agent-scheme-number-kind angle) 'rational)
-                             (agent-scheme--make-canonical-decimal
-                              (/ (float (car (agent-scheme-number-value angle)))
-                                 (cdr (agent-scheme-number-value angle))))
-                           angle)))))
+          (let ((r (agent-scheme--number->reader-float magnitude))
+                (theta (agent-scheme--number->reader-float angle)))
             (agent-scheme--make-canonical-complex
              (agent-scheme--make-canonical-decimal (* r (cos theta)))
              (agent-scheme--make-canonical-decimal (* r (sin theta))))))))

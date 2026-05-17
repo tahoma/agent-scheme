@@ -117,6 +117,21 @@
     (should (eq (agent-scheme-number-kind complex) 'complex))
     (should (equal (agent-scheme-datum->external complex) "3/4-5/6i"))))
 
+(ert-deftest agent-scheme-reader-test-inexact-complex-special-values ()
+  "Read inexact special values in complex external forms canonically."
+  (should (equal (agent-scheme-reader-test--external "+inf.0i")
+                 "0+inf.0i"))
+  (should (equal (agent-scheme-reader-test--external "-inf.0i")
+                 "0-inf.0i"))
+  (should (equal (agent-scheme-reader-test--external "+nan.0i")
+                 "0+nan.0i"))
+  (should (equal (agent-scheme-reader-test--external "+inf.0@0")
+                 "+inf.0+nan.0i"))
+  (should (equal (agent-scheme-reader-test--external "1@+inf.0")
+                 "+nan.0+nan.0i"))
+  (should (equal (agent-scheme-reader-test--external "+nan.0@0")
+                 "+nan.0+nan.0i")))
+
 (ert-deftest agent-scheme-reader-test-lists-vectors-bytevectors-and-abbreviations ()
   "Read compound datum forms."
   (should
