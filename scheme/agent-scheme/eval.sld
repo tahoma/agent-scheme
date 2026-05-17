@@ -135,6 +135,36 @@
       (message agent-scheme-error-object-message)
       (irritants agent-scheme-error-object-irritants))
 
+    (define-record-type <agent-scheme-eof-object>
+      (make-agent-scheme-eof-object)
+      agent-scheme-eof-object?)
+
+    (define agent-scheme-eof-object (make-agent-scheme-eof-object))
+
+    (define-record-type <agent-scheme-port>
+      ;; MEDIUM separates string, bytevector, host-file, and virtual ports.
+      ;; SOURCE/POSITION back input ports; CONTENTS backs output ports.
+      (make-agent-scheme-port medium input? output? textual? binary?
+                              open? source position contents)
+      agent-scheme-port?
+      (medium agent-scheme-port-medium)
+      (input? agent-scheme-port-input?)
+      (output? agent-scheme-port-output?)
+      (textual? agent-scheme-port-textual?)
+      (binary? agent-scheme-port-binary?)
+      (open? agent-scheme-port-open? set-agent-scheme-port-open?!)
+      (source agent-scheme-port-source)
+      (position agent-scheme-port-position set-agent-scheme-port-position!)
+      (contents agent-scheme-port-contents
+                set-agent-scheme-port-contents!))
+
+    (define-record-type <environment-specifier>
+      (make-environment-specifier environment syntax-environment immutable?)
+      environment-specifier?
+      (environment environment-specifier-environment)
+      (syntax-environment environment-specifier-syntax-environment)
+      (immutable? environment-specifier-immutable?))
+
     (define-record-type <string-output-port>
       (make-string-output-port contents)
       string-output-port?
@@ -162,6 +192,7 @@
                          maximum-value-nodes host-callbacks
                          maximum-host-callbacks syntax-environment libraries
                          include-paths include-directory file-paths
+                         interaction-environment
                          base-syntax-installed next-syntax-id
                          exception-handlers dynamic-winds)
       eval-context?
@@ -177,6 +208,8 @@
       (include-directory context-include-directory
                          set-context-include-directory!)
       (file-paths context-file-paths)
+      (interaction-environment context-interaction-environment
+                               set-context-interaction-environment!)
       (base-syntax-installed context-base-syntax-installed
                              set-context-base-syntax-installed!)
       (next-syntax-id context-next-syntax-id set-context-next-syntax-id!)
@@ -297,6 +330,7 @@
         (option-ref options 'file-paths '())
         include-directory)
        #f
+       #f
        0
        '()
        '())))
@@ -329,6 +363,9 @@
             (agent-scheme-primitive-procedure? value)
             (continuation? value)
             (agent-scheme-error-object? value)
+            (agent-scheme-eof-object? value)
+            (agent-scheme-port? value)
+            (environment-specifier? value)
             (string-output-port? value)
             (agent-scheme-record-type? value))
         1)
@@ -1121,6 +1158,8 @@
                (primitive-apply/k arguments context continuation))
               ((eq? name 'call-with-values)
                (primitive-call-with-values/k arguments context continuation))
+              ((eq? name 'call-with-port)
+               (primitive-call-with-port/k arguments context continuation))
               ((or (eq? name 'call-with-current-continuation)
                    (eq? name 'call/cc))
                (primitive-call/cc/k arguments context continuation))
@@ -1136,6 +1175,10 @@
                (primitive-raise/k arguments context continuation))
               ((eq? name 'error)
                (primitive-error/k arguments context continuation))
+              ((eq? name 'eval)
+               (primitive-eval/k arguments context continuation))
+              ((eq? name 'load)
+               (primitive-load/k arguments context continuation))
               (else
                (continue
                 continuation
@@ -2291,9 +2334,12 @@
         (scheme char)
         (scheme complex)
         (scheme cxr)
+        (scheme eval)
         (scheme file)
         (scheme inexact)
         (scheme lazy)
+        (scheme load)
+        (scheme read)
         (scheme write)))
 
     (define case-lambda-library-source
@@ -2567,6 +2613,13 @@
          '(caar cadr cdar cddr)
          context
          environment))
+       ((equal? key '(scheme eval))
+        (register-primitive-library!
+         key
+         (list
+          (list 'environment primitive-environment 1 #f)
+          (list 'eval primitive-eval 2 2))
+         context))
        ((equal? key '(scheme file))
         (register-primitive-library!
          key
@@ -2585,6 +2638,16 @@
          lazy-library-source
          context
          environment))
+       ((equal? key '(scheme load))
+        (register-primitive-library!
+         key
+         (list (list 'load primitive-load 1 2))
+         context))
+       ((equal? key '(scheme read))
+        (register-primitive-library!
+         key
+         (list (list 'read primitive-read 0 1))
+         context))
        ((equal? key '(scheme write))
         (register-primitive-library!
          key
@@ -2592,9 +2655,7 @@
           (list 'display primitive-display 1 2)
           (list 'write primitive-write 1 2)
           (list 'write-shared primitive-write-shared 1 2)
-          (list 'write-simple primitive-write-simple 1 2)
-          (list 'open-output-string primitive-open-output-string 0 0)
-          (list 'get-output-string primitive-get-output-string 1 1))
+          (list 'write-simple primitive-write-simple 1 2))
          context))
        (else
         (eval-error "unknown standard library" key))))
@@ -3786,7 +3847,7 @@
            (string-append description " must be a procedure")
            datum)))
 
-    (define (optional-range arguments offset length description)
+    (define (optional-range arguments offset limit description)
       (let ((optional-count (- (length arguments) offset)))
         (if (not (and (<= 0 optional-count) (<= optional-count 2)))
             (eval-error
@@ -3795,17 +3856,17 @@
         (let ((start (if (>= optional-count 1)
                          (expect-nonnegative-index
                           (list-ref arguments offset)
-                          length
+                          limit
                           description
                           #t)
                          0))
               (end (if (>= optional-count 2)
                        (expect-nonnegative-index
                         (list-ref arguments (+ offset 1))
-                        length
+                        limit
                         description
                         #t)
-                       length)))
+                       limit)))
           (if (> start end)
               (eval-error
                (string-append description " start index exceeds end index")))
@@ -4847,67 +4908,514 @@
     (define (display-string value)
       (agent-scheme-datum->external value 'write #t))
 
-    (define (expect-string-output-port value description)
-      (if (not (string-output-port? value))
-          (eval-error
-           (string-append description " expected an output string port")
-           value))
+    (define (expect-port value description)
+      (if (not (agent-scheme-port? value))
+          (eval-error (string-append description " expected a port") value))
       value)
 
+    (define (expect-open-port value description)
+      (let ((port (expect-port value description)))
+        (if (not (agent-scheme-port-open? port))
+            (eval-error
+             (string-append description " expected an open port")
+             value))
+        port))
+
+    (define (expect-input-port value description)
+      (let ((port (expect-open-port value description)))
+        (if (not (agent-scheme-port-input? port))
+            (eval-error
+             (string-append description " expected an input port")
+             value))
+        port))
+
+    (define (expect-output-port value description)
+      (let ((port (expect-open-port value description)))
+        (if (not (agent-scheme-port-output? port))
+            (eval-error
+             (string-append description " expected an output port")
+             value))
+        port))
+
+    (define (expect-textual-input-port value description)
+      (let ((port (expect-input-port value description)))
+        (if (not (agent-scheme-port-textual? port))
+            (eval-error
+             (string-append description " expected a textual input port")
+             value))
+        port))
+
+    (define (expect-textual-output-port value description)
+      (let ((port (expect-output-port value description)))
+        (if (not (agent-scheme-port-textual? port))
+            (eval-error
+             (string-append description " expected a textual output port")
+             value))
+        port))
+
+    (define (expect-binary-input-port value description)
+      (let ((port (expect-input-port value description)))
+        (if (not (agent-scheme-port-binary? port))
+            (eval-error
+             (string-append description " expected a binary input port")
+             value))
+        port))
+
+    (define (expect-binary-output-port value description)
+      (let ((port (expect-output-port value description)))
+        (if (not (agent-scheme-port-binary? port))
+            (eval-error
+             (string-append description " expected a binary output port")
+             value))
+        port))
+
+    (define (expect-string-output-port value description)
+      (let ((port (expect-textual-output-port value description)))
+        (if (not (eq? (agent-scheme-port-medium port) 'string))
+            (eval-error
+             (string-append description " expected an output string port")
+             value))
+        port))
+
+    (define (expect-bytevector-output-port value description)
+      (let ((port (expect-binary-output-port value description)))
+        (if (not (eq? (agent-scheme-port-medium port) 'bytevector))
+            (eval-error
+             (string-append description
+                            " expected an output bytevector port")
+             value))
+        port))
+
+    (define (write-text-to-port text port description)
+      (let ((output (expect-textual-output-port port description)))
+        (if (not (eq? (agent-scheme-port-medium output) 'string))
+            (eval-error
+             (string-append description
+                            " host textual output ports are not available")
+             port))
+        (set-agent-scheme-port-contents!
+         output
+         (string-append (agent-scheme-port-contents output) text))
+        agent-scheme-unspecified))
+
     (define (write-to-output-port value port mode display?)
-      (set-string-output-port-contents!
+      (write-text-to-port
+       (if display?
+           (display-string value)
+           (agent-scheme-datum->external value mode))
        port
-       (string-append
-        (string-output-port-contents port)
-        (if display?
-            (display-string value)
-            (agent-scheme-datum->external value mode))))
+       (if display? "display" "write")))
+
+    (define (primitive-eof-object? arguments context)
+      (agent-scheme-eof-object? (car arguments)))
+
+    (define (primitive-eof-object arguments context)
+      agent-scheme-eof-object)
+
+    (define (primitive-port? arguments context)
+      (agent-scheme-port? (car arguments)))
+
+    (define (primitive-input-port? arguments context)
+      (and (agent-scheme-port? (car arguments))
+           (agent-scheme-port-input? (car arguments))))
+
+    (define (primitive-output-port? arguments context)
+      (and (agent-scheme-port? (car arguments))
+           (agent-scheme-port-output? (car arguments))))
+
+    (define (primitive-textual-port? arguments context)
+      (and (agent-scheme-port? (car arguments))
+           (agent-scheme-port-textual? (car arguments))))
+
+    (define (primitive-binary-port? arguments context)
+      (and (agent-scheme-port? (car arguments))
+           (agent-scheme-port-binary? (car arguments))))
+
+    (define (primitive-input-port-open? arguments context)
+      (let ((port (expect-port (car arguments) "input-port-open?")))
+        (and (agent-scheme-port-input? port)
+             (agent-scheme-port-open? port))))
+
+    (define (primitive-output-port-open? arguments context)
+      (let ((port (expect-port (car arguments) "output-port-open?")))
+        (and (agent-scheme-port-output? port)
+             (agent-scheme-port-open? port))))
+
+    (define (close-port-value port)
+      (set-agent-scheme-port-open?! port #f)
       agent-scheme-unspecified)
 
+    (define (primitive-close-port arguments context)
+      (close-port-value (expect-port (car arguments) "close-port")))
+
+    (define (primitive-close-input-port arguments context)
+      (close-port-value
+       (expect-input-port (car arguments) "close-input-port")))
+
+    (define (primitive-close-output-port arguments context)
+      (close-port-value
+       (expect-output-port (car arguments) "close-output-port")))
+
     (define (primitive-open-output-string arguments context)
-      (make-string-output-port ""))
+      (make-agent-scheme-port 'string #f #t #t #f #t #f 0 ""))
+
+    (define (primitive-open-input-string arguments context)
+      (make-agent-scheme-port
+       'string #t #f #t #f #t
+       (expect-string (car arguments) "open-input-string")
+       0 #f))
 
     (define (primitive-get-output-string arguments context)
-      (string-output-port-contents
+      (agent-scheme-port-contents
        (expect-string-output-port
         (car arguments)
         "get-output-string")))
 
+    (define (primitive-open-output-bytevector arguments context)
+      (make-agent-scheme-port 'bytevector #f #t #f #t #t #f 0 '()))
+
+    (define (copy-bytevector bytes)
+      (let* ((length (bytevector-length bytes))
+             (copy (make-bytevector length 0)))
+        (let loop ((index 0))
+          (if (< index length)
+              (begin
+                (bytevector-u8-set! copy index (bytevector-u8-ref bytes index))
+                (loop (+ index 1)))))
+        copy))
+
+    (define (primitive-open-input-bytevector arguments context)
+      (make-agent-scheme-port
+       'bytevector #t #f #f #t #t
+       (copy-bytevector
+        (expect-bytevector (car arguments) "open-input-bytevector"))
+       0 #f))
+
+    (define (list->bytevector bytes)
+      (let ((result (make-bytevector (length bytes) 0)))
+        (let loop ((index 0) (rest bytes))
+          (if (null? rest)
+              result
+              (begin
+                (bytevector-u8-set! result index (car rest))
+                (loop (+ index 1) (cdr rest)))))))
+
+    (define (primitive-get-output-bytevector arguments context)
+      (list->bytevector
+       (agent-scheme-port-contents
+        (expect-bytevector-output-port
+         (car arguments)
+         "get-output-bytevector"))))
+
+    (define (primitive-read arguments context)
+      (if (null? arguments)
+          agent-scheme-eof-object
+          (let* ((port (expect-textual-input-port (car arguments) "read"))
+                 (result
+                  (agent-scheme-read-from-string-at
+                   (agent-scheme-port-source port)
+                   (agent-scheme-port-position port))))
+            (set-agent-scheme-port-position! port (cdr result))
+            (if (agent-scheme-read-eof? (car result))
+                agent-scheme-eof-object
+                (car result)))))
+
+    (define (text-port-next-char port advance? description)
+      (let ((input (expect-textual-input-port port description)))
+        (if (not (eq? (agent-scheme-port-medium input) 'string))
+            (eval-error
+             (string-append description
+                            " host textual input ports are not available")
+             port))
+        (let ((position (agent-scheme-port-position input))
+              (source (agent-scheme-port-source input)))
+          (if (>= position (string-length source))
+              agent-scheme-eof-object
+              (let ((char (string-ref source position)))
+                (if advance?
+                    (set-agent-scheme-port-position! input (+ position 1)))
+                char)))))
+
+    (define (primitive-read-char arguments context)
+      (if (null? arguments)
+          agent-scheme-eof-object
+          (text-port-next-char (car arguments) #t "read-char")))
+
+    (define (primitive-peek-char arguments context)
+      (if (null? arguments)
+          agent-scheme-eof-object
+          (text-port-next-char (car arguments) #f "peek-char")))
+
+    (define (primitive-char-ready? arguments context)
+      (if (not (null? arguments))
+          (expect-textual-input-port (car arguments) "char-ready?"))
+      #t)
+
+    (define (primitive-read-string arguments context)
+      (let ((count (exact-integer->host (car arguments) "read-string"))
+            (port (if (null? (cdr arguments))
+                      #f
+                      (expect-textual-input-port
+                       (second arguments)
+                       "read-string"))))
+        (if (< count 0)
+            (eval-error "read-string count must be non-negative"))
+        (cond
+         ((not port) (if (= count 0) "" agent-scheme-eof-object))
+         ((not (eq? (agent-scheme-port-medium port) 'string))
+          (eval-error "read-string host textual input ports are not available"))
+         (else
+          (let* ((source (agent-scheme-port-source port))
+                 (position (agent-scheme-port-position port))
+                 (remaining (- (string-length source) position))
+                 (amount (if (< count remaining) count remaining)))
+            (cond
+             ((= count 0) "")
+             ((= amount 0) agent-scheme-eof-object)
+             (else
+              (set-agent-scheme-port-position! port (+ position amount))
+              (substring source position (+ position amount)))))))))
+
+    (define (primitive-read-line arguments context)
+      (if (null? arguments)
+          agent-scheme-eof-object
+          (let ((port (expect-textual-input-port
+                       (car arguments)
+                       "read-line")))
+            (if (not (eq? (agent-scheme-port-medium port) 'string))
+                (eval-error
+                 "read-line host textual input ports are not available"))
+            (let* ((source (agent-scheme-port-source port))
+                   (start (agent-scheme-port-position port))
+                   (length (string-length source)))
+              (let loop ((position start))
+                (if (and (< position length)
+                         (not (or (char=? (string-ref source position)
+                                           #\newline)
+                                  (char=? (string-ref source position)
+                                           #\return))))
+                    (loop (+ position 1))
+                    (if (and (= start position) (>= position length))
+                        agent-scheme-eof-object
+                        (let ((line (substring source start position)))
+                          (if (< position length)
+                              (if (and (char=? (string-ref source position)
+                                                #\return)
+                                       (< (+ position 1) length)
+                                       (char=? (string-ref
+                                                source
+                                                (+ position 1))
+                                               #\newline))
+                                  (set! position (+ position 2))
+                                  (set! position (+ position 1))))
+                          (set-agent-scheme-port-position! port position)
+                          line))))))))
+
+    (define (write-byte-to-port byte port description)
+      (let ((output (expect-binary-output-port port description)))
+        (if (not (eq? (agent-scheme-port-medium output) 'bytevector))
+            (eval-error
+             (string-append description
+                            " host binary output ports are not available")
+             port))
+        (set-agent-scheme-port-contents!
+         output
+         (append (agent-scheme-port-contents output) (list byte)))
+        agent-scheme-unspecified))
+
+    (define (primitive-read-u8 arguments context)
+      (if (null? arguments)
+          agent-scheme-eof-object
+          (let* ((port (expect-binary-input-port (car arguments) "read-u8"))
+                 (source (agent-scheme-port-source port))
+                 (position (agent-scheme-port-position port)))
+            (if (not (eq? (agent-scheme-port-medium port) 'bytevector))
+                (eval-error
+                 "read-u8 host binary input ports are not available"))
+            (if (>= position (bytevector-length source))
+                agent-scheme-eof-object
+                (begin
+                  (set-agent-scheme-port-position! port (+ position 1))
+                  (host-number->agent-number
+                   (bytevector-u8-ref source position)))))))
+
+    (define (primitive-peek-u8 arguments context)
+      (if (null? arguments)
+          agent-scheme-eof-object
+          (let* ((port (expect-binary-input-port (car arguments) "peek-u8"))
+                 (source (agent-scheme-port-source port))
+                 (position (agent-scheme-port-position port)))
+            (if (not (eq? (agent-scheme-port-medium port) 'bytevector))
+                (eval-error
+                 "peek-u8 host binary input ports are not available"))
+            (if (>= position (bytevector-length source))
+                agent-scheme-eof-object
+                (host-number->agent-number
+                 (bytevector-u8-ref source position))))))
+
+    (define (primitive-u8-ready? arguments context)
+      (if (not (null? arguments))
+          (expect-binary-input-port (car arguments) "u8-ready?"))
+      #t)
+
+    (define (subbytevector source start end)
+      (let ((result (make-bytevector (- end start) 0)))
+        (let loop ((index start))
+          (if (< index end)
+              (begin
+                (bytevector-u8-set!
+                 result
+                 (- index start)
+                 (bytevector-u8-ref source index))
+                (loop (+ index 1)))))
+        result))
+
+    (define (primitive-read-bytevector arguments context)
+      (let ((count (exact-integer->host
+                    (car arguments)
+                    "read-bytevector"))
+            (port (if (null? (cdr arguments))
+                      #f
+                      (expect-binary-input-port
+                       (second arguments)
+                       "read-bytevector"))))
+        (if (< count 0)
+            (eval-error "read-bytevector count must be non-negative"))
+        (cond
+         ((not port)
+          (if (= count 0) (make-bytevector 0 0) agent-scheme-eof-object))
+         ((not (eq? (agent-scheme-port-medium port) 'bytevector))
+          (eval-error "read-bytevector host binary input ports are not available"))
+         (else
+          (let* ((source (agent-scheme-port-source port))
+                 (position (agent-scheme-port-position port))
+                 (remaining (- (bytevector-length source) position))
+                 (amount (if (< count remaining) count remaining)))
+            (cond
+             ((= count 0) (make-bytevector 0 0))
+             ((= amount 0) agent-scheme-eof-object)
+             (else
+              (set-agent-scheme-port-position! port (+ position amount))
+              (subbytevector source position (+ position amount)))))))))
+
+    (define (primitive-read-bytevector! arguments context)
+      (let* ((target (expect-bytevector
+                      (car arguments)
+                      "read-bytevector! target"))
+             (port (if (null? (cdr arguments))
+                       #f
+                       (expect-binary-input-port
+                        (second arguments)
+                        "read-bytevector!")))
+             (start (if (null? (cddr arguments))
+                        0
+                        (expect-nonnegative-index
+                         (third arguments)
+                         (bytevector-length target)
+                         "read-bytevector!"
+                         #t)))
+             (end (if (null? (cdr (cddr arguments)))
+                      (bytevector-length target)
+                      (expect-nonnegative-index
+                       (fourth arguments)
+                       (bytevector-length target)
+                       "read-bytevector!"
+                       #t))))
+        (if (> start end)
+            (eval-error "read-bytevector! invalid range"))
+        (if (not port)
+            agent-scheme-eof-object
+            (let* ((source (agent-scheme-port-source port))
+                   (position (agent-scheme-port-position port))
+                   (capacity (- end start))
+                   (remaining (- (bytevector-length source) position))
+                   (amount (if (< capacity remaining) capacity remaining)))
+              (if (= amount 0)
+                  agent-scheme-eof-object
+                  (begin
+                    (let loop ((offset 0))
+                      (if (< offset amount)
+                          (begin
+                            (bytevector-u8-set!
+                             target
+                             (+ start offset)
+                             (bytevector-u8-ref source (+ position offset)))
+                            (loop (+ offset 1)))))
+                    (set-agent-scheme-port-position! port (+ position amount))
+                    (host-number->agent-number amount)))))))
+
+    (define (primitive-write-u8 arguments context)
+      (if (not (null? (cdr arguments)))
+          (write-byte-to-port
+           (expect-byte (car arguments) "write-u8")
+           (second arguments)
+           "write-u8"))
+      agent-scheme-unspecified)
+
+    (define (primitive-write-bytevector arguments context)
+      (if (not (null? (cdr arguments)))
+          (let* ((bytes (expect-bytevector
+                         (car arguments)
+                         "write-bytevector"))
+                 (range (optional-range arguments
+                                        2
+                                        (bytevector-length bytes)
+                                        "write-bytevector")))
+            (let loop ((index (car range)))
+              (if (< index (cdr range))
+                  (begin
+                    (write-byte-to-port
+                     (bytevector-u8-ref bytes index)
+                     (second arguments)
+                     "write-bytevector")
+                    (loop (+ index 1)))))))
+      agent-scheme-unspecified)
+
+    (define (primitive-write-char arguments context)
+      (if (not (null? (cdr arguments)))
+          (write-text-to-port
+           (string (expect-character (car arguments) "write-char"))
+           (second arguments)
+           "write-char"))
+      agent-scheme-unspecified)
+
+    (define (primitive-write-string arguments context)
+      (if (not (null? (cdr arguments)))
+          (let* ((string (expect-string (car arguments) "write-string"))
+                 (range (optional-range arguments
+                                        2
+                                        (string-length string)
+                                        "write-string")))
+            (write-text-to-port
+             (substring string (car range) (cdr range))
+             (second arguments)
+             "write-string")))
+      agent-scheme-unspecified)
+
+    (define (primitive-newline arguments context)
+      (if (not (null? arguments))
+          (write-text-to-port "\n" (car arguments) "newline"))
+      agent-scheme-unspecified)
+
     (define (primitive-display arguments context)
       (if (null? (cdr arguments))
           agent-scheme-unspecified
-          (write-to-output-port
-           (car arguments)
-           (expect-string-output-port (second arguments) "display")
-           'write
-           #t)))
+          (write-to-output-port (car arguments) (second arguments) 'write #t)))
 
     (define (primitive-write arguments context)
       (if (null? (cdr arguments))
           agent-scheme-unspecified
-          (write-to-output-port
-           (car arguments)
-           (expect-string-output-port (second arguments) "write")
-           'write
-           #f)))
+          (write-to-output-port (car arguments) (second arguments) 'write #f)))
 
     (define (primitive-write-shared arguments context)
       (if (null? (cdr arguments))
           agent-scheme-unspecified
-          (write-to-output-port
-           (car arguments)
-           (expect-string-output-port (second arguments) "write-shared")
-           'shared
-           #f)))
+          (write-to-output-port (car arguments) (second arguments) 'shared #f)))
 
     (define (primitive-write-simple arguments context)
       (if (null? (cdr arguments))
           agent-scheme-unspecified
-          (write-to-output-port
-           (car arguments)
-           (expect-string-output-port (second arguments) "write-simple")
-           'simple
-           #f)))
+          (write-to-output-port (car arguments) (second arguments) 'simple #f)))
 
     (define (resolve-file-policy-path filename context description)
       (let ((path (path-join (context-include-directory context) filename)))
@@ -4930,6 +5438,123 @@
               context
               "file-exists?")))
         (file-exists? path)))
+
+    (define (primitive-call-with-port arguments context)
+      (drain-state
+       (primitive-call-with-port/k
+        arguments context identity-continuation)
+       context))
+
+    (define (primitive-call-with-port/k arguments context continuation)
+      (let ((port (expect-port (car arguments) "call-with-port port"))
+            (procedure
+             (expect-procedure (second arguments) "call-with-port procedure")))
+        (apply-procedure
+         procedure
+         (list port)
+         context
+         #t
+         (lambda (value)
+           (close-port-value port)
+           (continue continuation value)))))
+
+    (define (primitive-environment arguments context)
+      (let ((environment (agent-scheme-make-empty-environment))
+            (syntax-environment (make-syntax-environment '() #f '())))
+        (with-syntax-environment
+         context
+         syntax-environment
+         (lambda ()
+           (eval-import (cons 'import arguments) environment context)))
+        (make-environment-specifier environment syntax-environment #t)))
+
+    (define (expect-environment-specifier value description)
+      (if (not (environment-specifier? value))
+          (eval-error
+           (string-append description " expected an environment specifier")
+           value))
+      value)
+
+    (define (eval-form-mutates-environment? form)
+      (or (import-form? form)
+          (define-library-form? form)
+          (syntax-definition-form? form)
+          (record-definition-form? form)
+          (definition-form? form)))
+
+    (define (primitive-eval arguments context)
+      (drain-state
+       (primitive-eval/k arguments context identity-continuation)
+       context))
+
+    (define (primitive-eval/k arguments context continuation)
+      (let* ((expression (car arguments))
+             (specifier
+              (expect-environment-specifier (second arguments) "eval"))
+             (environment (environment-specifier-environment specifier))
+             (syntax-environment
+              (environment-specifier-syntax-environment specifier)))
+        (if (and (environment-specifier-immutable? specifier)
+                 (eval-form-mutates-environment? expression))
+            (eval-error "eval cannot mutate an immutable environment"))
+        (with-syntax-environment
+         context
+         syntax-environment
+         (lambda ()
+           (if (eval-form-mutates-environment? expression)
+               (eval-sequence
+                (list expression) environment context #t #t continuation)
+               (eval-expression
+                expression environment context #t continuation))))))
+
+    (define (read-policy-file-forms filename context description)
+      (let ((path (resolve-file-policy-path filename context description)))
+        (if (not (file-exists? path))
+            (eval-error
+             (string-append description " file is not readable")
+             filename))
+        (cons (agent-scheme-read-all (read-file-string path))
+              (path-directory path))))
+
+    (define (load-target arguments context)
+      (if (not (null? (cdr arguments)))
+          (let ((specifier
+                 (expect-environment-specifier (second arguments) "load")))
+            (if (environment-specifier-immutable? specifier)
+                (eval-error
+                 "load cannot mutate an immutable environment"))
+            (cons (environment-specifier-environment specifier)
+                  (environment-specifier-syntax-environment specifier)))
+          (cons (or (context-interaction-environment context)
+                    (agent-scheme-make-base-environment))
+                (context-syntax-environment context))))
+
+    (define (primitive-load arguments context)
+      (drain-state
+       (primitive-load/k arguments context identity-continuation)
+       context))
+
+    (define (primitive-load/k arguments context continuation)
+      (let* ((filename (expect-string (car arguments) "load"))
+             (read-result
+              (read-policy-file-forms filename context "load"))
+             (target (load-target arguments context)))
+        (with-include-directory
+         context
+         (cdr read-result)
+         (lambda ()
+           (with-syntax-environment
+            context
+            (cdr target)
+            (lambda ()
+              (eval-sequence
+               (car read-result)
+               (car target)
+               context
+               #t
+               #t
+               (lambda (value)
+                 (continue continuation agent-scheme-unspecified)))))))))
 
     (define (primitive-string? arguments context)
       (string? (car arguments)))
@@ -5777,6 +6402,7 @@
        (list '> primitive> 2 #f)
        (list '>= primitive>= 2 #f)
        (list 'apply primitive-apply 2 #f)
+       (list 'binary-port? primitive-binary-port? 1 1)
        (list 'boolean=? primitive-boolean=? 2 #f)
        (list 'boolean? primitive-boolean? 1 1)
        (list 'bytevector primitive-bytevector 0 #f)
@@ -5788,6 +6414,7 @@
        (list 'bytevector-u8-set! primitive-bytevector-u8-set! 3 3)
        (list 'bytevector? primitive-bytevector? 1 1)
        (list 'call-with-current-continuation primitive-call/cc 1 1)
+       (list 'call-with-port primitive-call-with-port 2 2)
        (list 'call-with-values primitive-call-with-values 2 2)
        (list 'call/cc primitive-call/cc 1 1)
        (list 'car primitive-car 1 1)
@@ -5799,13 +6426,19 @@
        (list 'char=? primitive-char=? 2 #f)
        (list 'char>=? primitive-char>=? 2 #f)
        (list 'char>? primitive-char>? 2 #f)
+       (list 'char-ready? primitive-char-ready? 0 1)
        (list 'char? primitive-char? 1 1)
+       (list 'close-input-port primitive-close-input-port 1 1)
+       (list 'close-output-port primitive-close-output-port 1 1)
+       (list 'close-port primitive-close-port 1 1)
        (list 'complex? primitive-complex? 1 1)
        (list 'cons primitive-cons 2 2)
        (list 'dynamic-wind primitive-dynamic-wind 3 3)
        (list 'eq? primitive-eq? 2 2)
        (list 'equal? primitive-equal? 2 2)
        (list 'eqv? primitive-eqv? 2 2)
+       (list 'eof-object primitive-eof-object 0 0)
+       (list 'eof-object? primitive-eof-object? 1 1)
        (list 'error primitive-error 1 #f)
        (list 'error-object-irritants primitive-error-object-irritants 1 1)
        (list 'error-object-message primitive-error-object-message 1 1)
@@ -5821,8 +6454,12 @@
        (list 'floor-quotient primitive-floor-quotient 2 2)
        (list 'floor-remainder primitive-floor-remainder 2 2)
        (list 'gcd primitive-gcd 0 #f)
+       (list 'get-output-bytevector primitive-get-output-bytevector 1 1)
+       (list 'get-output-string primitive-get-output-string 1 1)
        (list 'inexact primitive-inexact 1 1)
        (list 'inexact? primitive-inexact? 1 1)
+       (list 'input-port-open? primitive-input-port-open? 1 1)
+       (list 'input-port? primitive-input-port? 1 1)
        (list 'integer->char primitive-integer->char 1 1)
        (list 'integer? primitive-integer? 1 1)
        (list 'lcm primitive-lcm 0 #f)
@@ -5833,17 +6470,33 @@
        (list 'make-string primitive-make-string 1 2)
        (list 'make-vector primitive-make-vector 1 2)
        (list 'modulo primitive-modulo 2 2)
+       (list 'newline primitive-newline 0 1)
        (list 'null? primitive-null? 1 1)
        (list 'number->string primitive-number->string 1 2)
        (list 'number? primitive-number? 1 1)
        (list 'numerator primitive-numerator 1 1)
+       (list 'open-input-bytevector primitive-open-input-bytevector 1 1)
+       (list 'open-input-string primitive-open-input-string 1 1)
+       (list 'open-output-bytevector primitive-open-output-bytevector 0 0)
+       (list 'open-output-string primitive-open-output-string 0 0)
+       (list 'output-port-open? primitive-output-port-open? 1 1)
+       (list 'output-port? primitive-output-port? 1 1)
        (list 'pair? primitive-pair? 1 1)
+       (list 'peek-char primitive-peek-char 0 1)
+       (list 'peek-u8 primitive-peek-u8 0 1)
+       (list 'port? primitive-port? 1 1)
        (list 'procedure? primitive-procedure? 1 1)
        (list 'quotient primitive-quotient 2 2)
        (list 'raise primitive-raise 1 1)
        (list 'raise-continuable primitive-raise-continuable 1 1)
        (list 'rational? primitive-rational? 1 1)
        (list 'rationalize primitive-rationalize 2 2)
+       (list 'read-bytevector primitive-read-bytevector 1 2)
+       (list 'read-bytevector! primitive-read-bytevector! 1 4)
+       (list 'read-char primitive-read-char 0 1)
+       (list 'read-line primitive-read-line 0 1)
+       (list 'read-string primitive-read-string 1 2)
+       (list 'read-u8 primitive-read-u8 0 1)
        (list 'real? primitive-real? 1 1)
        (list 'remainder primitive-remainder 2 2)
        (list 'round primitive-round 1 1)
@@ -5873,10 +6526,12 @@
        (list 'symbol->string primitive-symbol->string 1 1)
        (list 'symbol=? primitive-symbol=? 2 #f)
        (list 'symbol? primitive-symbol? 1 1)
+       (list 'textual-port? primitive-textual-port? 1 1)
        (list 'truncate primitive-truncate 1 1)
        (list 'truncate/ primitive-truncate/ 2 2)
        (list 'truncate-quotient primitive-truncate-quotient 2 2)
        (list 'truncate-remainder primitive-truncate-remainder 2 2)
+       (list 'u8-ready? primitive-u8-ready? 0 1)
        (list 'vector primitive-vector 0 #f)
        (list 'vector->list primitive-vector->list 1 3)
        (list 'vector->string primitive-vector->string 1 3)
@@ -5894,7 +6549,11 @@
        (list 'with-exception-handler
              primitive-with-exception-handler
              2
-             2)))
+             2)
+       (list 'write-bytevector primitive-write-bytevector 1 4)
+       (list 'write-char primitive-write-char 1 2)
+       (list 'write-string primitive-write-string 1 4)
+       (list 'write-u8 primitive-write-u8 1 2)))
 
     (define (agent-scheme-base-primitive-names)
       (map car base-primitive-registry))
@@ -6264,6 +6923,7 @@
     (define (agent-scheme-eval expression . rest)
       (let ((context (new-eval-context (rest-options rest)))
             (environment (rest-environment rest)))
+        (set-context-interaction-environment! context environment)
         (ensure-base-syntax! context environment)
         (trampoline expression environment context)))
 
@@ -6271,6 +6931,7 @@
       (let ((context (new-eval-context (rest-options rest)))
             (environment (rest-environment rest))
             (forms (agent-scheme-read-all source)))
+        (set-context-interaction-environment! context environment)
         (ensure-base-syntax! context environment)
         (trampoline (make-sequence forms #t) environment context)))
 
@@ -6307,6 +6968,16 @@
           (identifier-name value))
          ((agent-scheme-unspecified? value)
           '(unspecified))
+         ((agent-scheme-eof-object? value)
+          '(eof-object))
+         ((agent-scheme-port? value)
+          (list 'port
+                (result-field 'medium (agent-scheme-port-medium value))
+                (result-field
+                 'open
+                 (if (agent-scheme-port-open? value) #t #f))))
+         ((environment-specifier? value)
+          '(environment))
          ((agent-scheme-primitive-procedure? value)
           (list 'procedure
                 (result-field 'kind 'primitive)
@@ -6418,6 +7089,7 @@
     (define (agent-scheme-eval-result expression . rest)
       (let ((context (new-eval-context (rest-options rest)))
             (environment (rest-environment rest)))
+        (set-context-interaction-environment! context environment)
         (ensure-base-syntax! context environment)
         (guard (condition
                 (else (condition-result-datum condition context)))
@@ -6428,6 +7100,7 @@
     (define (agent-scheme-eval-source-result source . rest)
       (let ((context (new-eval-context (rest-options rest)))
             (environment (rest-environment rest)))
+        (set-context-interaction-environment! context environment)
         (ensure-base-syntax! context environment)
         (guard (condition
                 (else (condition-result-datum condition context)))
@@ -6443,6 +7116,17 @@
       (cond
        ((agent-scheme-unspecified? value)
         "#<unspecified>")
+       ((agent-scheme-eof-object? value)
+        "#<eof>")
+       ((agent-scheme-port? value)
+        (string-append
+         "#<"
+         (symbol->string (agent-scheme-port-medium value))
+         "-port"
+         (if (agent-scheme-port-open? value) "" " closed")
+         ">"))
+       ((environment-specifier? value)
+        "#<environment>")
        ((agent-scheme-procedure? value)
         "#<procedure>")
        ((agent-scheme-primitive-procedure? value)

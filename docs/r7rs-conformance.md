@@ -33,10 +33,10 @@ marked `implemented`.
 | Multiple values | `values`, `call-with-values`, `define-values`, `let-values`, `let*-values` | `pending` | `multiple-values-direct`, `multiple-values-call-with-values`, `multiple-values-let-values` | `values`, `call-with-values`, `let-values`, and `let*-values` are implemented; `define-values` remains pending. |
 | Exceptions | `with-exception-handler`, `guard`, `raise`, `raise-continuable`, `error` | `implemented` | `exceptions-guard-raise`, `exceptions-raise-continuable` | Error objects remain inspectable through `error-object?`, `error-object-message`, and `error-object-irritants`. |
 | Continuations | `call-with-current-continuation`, `call/cc`, `dynamic-wind` | `implemented` | `continuations-escape`, `continuations-dynamic-wind-exit`, `continuations-reenter-after-return`, `continuations-repeated-invocation`, `continuations-dynamic-wind-reentry`, `continuations-multiple-values`, `continuations-let-values-multiple-values`, `continuations-let*-values-multiple-values` | Captured continuations are re-enterable after their original extent returns, can be invoked repeatedly, preserve representative dynamic-wind exit and re-entry ordering, and deliver multiple values to call-with-values and let-values contexts. |
-| Core data types | Booleans, numbers, characters, strings, symbols, pairs, lists, vectors, bytevectors, procedures, records, ports, EOF objects | `pending` | `core-data-vector-ref`, `core-data-record-type`, `core-data-eof-object` | Records are covered through `define-record-type`; host-managed ports and EOF objects remain pending. |
+| Core data types | Booleans, numbers, characters, strings, symbols, pairs, lists, vectors, bytevectors, procedures, records, ports, EOF objects | `pending` | `core-data-vector-ref`, `core-data-record-type`, `core-data-eof-object`, `standard-library-bytevector-ports` | Records are covered through `define-record-type`; EOF objects and in-memory string and bytevector ports are fixture-covered. Host-managed ports remain pending or policy-gated. |
 | Numeric tower | Exact and inexact integers, rationals, reals, complex numbers, arithmetic, comparison, conversions | `implemented` | `numeric-exact-rational-arithmetic`, `numeric-exactness-conversions`, `numeric-complex-rectangular-arithmetic`, `numeric-inexact-special-values`, `numeric-polar-special-values` | Exact rationals reduce to canonical form; rectangular complex arithmetic, polar special-value canonicalization, and focused `(scheme inexact)` predicates are fixture-covered. Remaining transcendental routines may still use host math only behind Agent Scheme result canonicalization. |
 | Equivalence | `eq?`, `eqv?`, `equal?` across standard datums | `pending` | `core-data-vector-ref`, `core-data-circular-equal` | Circular pair and vector comparisons terminate; add exact edge cases as data representation stabilizes. |
-| Ports and I/O datums | Textual and binary ports, input/output procedures, reader and writer round trips | `pending` | `standard-library-write-display`, `standard-library-write-shared`, `standard-library-write-simple`, `standard-library-write-circular` | In-memory string output supports `display`, `write`, `write-shared`, and `write-simple`; external host access is policy-gated separately. |
+| Ports and I/O datums | Textual and binary ports, input/output procedures, reader and writer round trips | `pending` | `standard-library-write-display`, `standard-library-write-shared`, `standard-library-write-simple`, `standard-library-write-circular`, `standard-library-read-string-port`, `standard-library-bytevector-ports`, `standard-library-current-output-port` | In-memory string and bytevector ports support focused read/write round trips without host access. Current/default ports, read/write error predicates, flushing, and host-backed ports remain pending or policy-gated. |
 
 ## Standard Libraries
 
@@ -47,16 +47,16 @@ marked `implemented`.
 | `(scheme char)` | `pending` | `standard-library-char-upcase` | Focused `char-upcase` import is implemented; full character library coverage remains pending. |
 | `(scheme complex)` | `implemented` | `numeric-complex-rectangular-arithmetic`, `numeric-polar-special-values` | `make-rectangular`, `make-polar`, `real-part`, `imag-part`, `magnitude`, and `angle` are available. Polar and special-value results are normalized back into Agent Scheme numeric records instead of exposing host NaN/infinity spellings. |
 | `(scheme cxr)` | `pending` | `standard-library-cxr-cadr` | Focused composed accessor imports are implemented; full three- and four-level accessor coverage remains pending. |
-| `(scheme eval)` | `policy-gated` | None yet | Required semantics should be available only through explicit evaluation policy. |
+| `(scheme eval)` | `implemented` | `standard-library-eval-environment` | `environment` imports explicit library sets into immutable environment specifiers; `eval` evaluates Scheme expressions through the Agent Scheme evaluator rather than host eval. Unit tests cover rejecting definitions into immutable environments. |
 | `(scheme file)` | `policy-gated` | `standard-library-file-exists-policy` | Host file-system access must be audited and policy-gated. |
 | `(scheme inexact)` | `pending` | `numeric-inexact-special-values` | Focused `finite?`, `infinite?`, and `nan?` imports are implemented; public transcendental procedure imports remain pending. Host math accelerators used by existing complex helpers must return through Agent Scheme canonical inexact records. |
 | `(scheme lazy)` | `pending` | `standard-library-lazy-force` | Focused promise imports with memoizing `delay` and `force` are implemented; broader lazy edge cases remain pending. |
-| `(scheme load)` | `policy-gated` | None yet | Loading host files requires policy checks. |
+| `(scheme load)` | `policy-gated` | `standard-library-load-policy-denied` | Loading host files requires file policy. Fixture coverage exercises default denial; unit tests cover allowed-root loading. |
 | `(scheme process-context)` | `policy-gated` | None yet | Environment and command-line access require policy checks. |
-| `(scheme read)` | `pending` | None yet | Reading from in-memory ports can be pure; host ports need policy. |
+| `(scheme read)` | `pending` | `standard-library-read-string-port` | `read` is implemented for explicit in-memory string input ports and uses the Agent Scheme reader. Default current input and host ports remain pending or policy-gated. |
 | `(scheme repl)` | `policy-gated` | None yet | Interactive host integration belongs behind the REPL/session policy boundary. |
 | `(scheme time)` | `policy-gated` | None yet | Time is an observable host effect and should be explicit. |
-| `(scheme write)` | `pending` | `standard-library-write-display`, `standard-library-write-shared`, `standard-library-write-simple`, `standard-library-write-circular` | Focused in-memory string output with `display`, `write`, `write-shared`, and `write-simple` is implemented; full port behavior remains pending. |
+| `(scheme write)` | `pending` | `standard-library-write-display`, `standard-library-write-shared`, `standard-library-write-simple`, `standard-library-write-circular`, `standard-library-current-output-port` | Focused in-memory string output with `display`, `write`, `write-shared`, and `write-simple` is implemented; default current output and host-backed ports remain pending or policy-gated. |
 | `(scheme r5rs)` | `pending` | None yet | Compatibility library. |
 
 ### `(scheme base)` Binding Status
@@ -96,6 +96,15 @@ Implemented primitive procedure bindings:
   `make-vector`, `vector`, `vector->list`, `vector-append`, `vector-copy`,
   `vector-copy!`, `vector-fill!`, `vector-for-each`, `vector-length`,
   `vector-map`, `vector-ref`, `vector-set!`, `vector?`
+- EOF and in-memory ports: `binary-port?`, `call-with-port`, `char-ready?`,
+  `close-input-port`, `close-output-port`, `close-port`, `eof-object`,
+  `eof-object?`, `get-output-bytevector`, `get-output-string`,
+  `input-port-open?`, `input-port?`, `open-input-bytevector`,
+  `open-input-string`, `open-output-bytevector`, `open-output-string`,
+  `output-port-open?`, `output-port?`, `peek-char`, `peek-u8`, `port?`,
+  `read-bytevector`, `read-bytevector!`, `read-char`, `read-line`,
+  `read-string`, `read-u8`, `textual-port?`, `u8-ready?`,
+  `write-bytevector`, `write-char`, `write-string`, `write-u8`
 - higher-order helpers: `apply`, `call-with-current-continuation`,
   `call-with-values`, `call/cc`, `dynamic-wind`, `for-each`, `map`, `values`,
   `with-exception-handler`, `raise`, `raise-continuable`, `error`,
@@ -116,19 +125,11 @@ Pending pure bindings include `define-values`, dynamic parameters
 (`string->utf8`, `utf8->string`), and feature/library forms (`features`,
 `include`, `include-ci`).
 
-Policy-gated base bindings are the ones that expose or manipulate host-managed
-ports or process-facing I/O: `binary-port?`, `call-with-port`, `char-ready?`,
-`close-input-port`, `close-output-port`, `close-port`, `current-error-port`,
-`current-input-port`, `current-output-port`, `eof-object`, `eof-object?`,
-`file-error?`, `flush-output-port`, `get-output-bytevector`,
-`get-output-string`, `input-port-open?`, `input-port?`,
-`open-input-bytevector`, `open-input-string`, `open-output-bytevector`,
-`open-output-string`, `output-port-open?`, `output-port?`, `peek-char`,
-`peek-u8`, `port?`, `read-bytevector`, `read-bytevector!`, `read-char`,
-`read-error?`, `read-line`, `read-string`, `read-u8`, `textual-port?`,
-`u8-ready?`, `write-bytevector`, `write-char`, `write-string`, and `write-u8`.
-In-memory ports may become pure later, but they still need the port subsystem
-before this matrix marks them implemented.
+Policy-gated or pending base bindings are now limited to host-managed ports,
+process-facing I/O, and current/default port integration:
+`current-error-port`, `current-input-port`, `current-output-port`,
+`file-error?`, `flush-output-port`, and `read-error?`. The pure in-memory
+string and bytevector port operations above do not grant host authority.
 
 ## Fixture Rules
 

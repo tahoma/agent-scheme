@@ -8,6 +8,9 @@
 (define-library (agent-scheme reader)
   (export agent-scheme-read
           agent-scheme-read-all
+          agent-scheme-read-from-string-at
+          agent-scheme-read-eof
+          agent-scheme-read-eof?
           agent-scheme-validate-datum
           agent-scheme-datum->external
           agent-scheme-number?
@@ -76,6 +79,12 @@
       validation?
       (node-count validation-node-count set-validation-node-count!)
       (maximum-total-nodes validation-maximum-total-nodes))
+
+    (define-record-type <agent-scheme-read-eof>
+      (make-agent-scheme-read-eof)
+      agent-scheme-read-eof?)
+
+    (define agent-scheme-read-eof (make-agent-scheme-read-eof))
 
     (define-record-type <agent-scheme-number>
       ;; Agent Scheme owns numeric syntax even in the portable implementation.
@@ -1432,6 +1441,27 @@
                              (read-datum reader 0)
                              reader)
                             datums)))))))
+
+    (define (agent-scheme-read-from-string-at source position . maybe-options)
+      (if (not (string? source))
+          (error "agent-scheme reader source must be a string" source))
+      (if (or (not (integer? position))
+              (< position 0)
+              (> position (string-length source)))
+          (error "agent-scheme reader position out of range" position))
+      (let* ((options (options-from-rest maybe-options))
+             (reader (reader-from-source source options)))
+        (set-reader-position! reader position)
+        (skip-intertoken-space! reader 0)
+        (if (eof? reader)
+            (cons agent-scheme-read-eof (reader-position reader))
+            (begin
+              (set-reader-datum-labels! reader '())
+              (let ((datum (resolve-datum-labels
+                            (read-datum reader 0)
+                            reader)))
+                (agent-scheme-validate-datum datum options)
+                (cons datum (reader-position reader)))))))
 
     (define (validation-note-node! validation)
       (set-validation-node-count!
