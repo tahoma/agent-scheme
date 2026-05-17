@@ -127,6 +127,25 @@ template resolve there instead of at the macro use site."
   "Registered primitive procedure value."
   name function minimum-arity maximum-arity)
 
+(cl-defstruct (agent-scheme--multiple-values
+               (:constructor agent-scheme--make-multiple-values (values))
+               (:copier nil))
+  "A Scheme multiple-values payload."
+  values)
+
+(cl-defstruct (agent-scheme--continuation
+               (:constructor agent-scheme--make-continuation (tag active))
+               (:copier nil))
+  "An escape continuation captured by call/cc."
+  tag active)
+
+(cl-defstruct (agent-scheme-error-object
+               (:constructor agent-scheme--make-error-object
+                             (message irritants))
+               (:copier nil))
+  "R7RS error object created by the `error' procedure."
+  message irritants)
+
 (cl-defstruct (agent-scheme--string-output-port
                (:constructor agent-scheme--make-string-output-port
                              (contents))
@@ -166,7 +185,9 @@ base syntax prelude has already been installed."
   include-paths
   include-directory
   file-paths
-  base-syntax-installed)
+  base-syntax-installed
+  exception-handlers
+  dynamic-winds)
 
 (cl-defstruct (agent-scheme--syntax-transformer
                (:constructor agent-scheme--make-syntax-transformer
@@ -270,7 +291,9 @@ validation."
      (agent-scheme--normalize-include-paths
       (agent-scheme--eval-option options :file-paths nil)
       include-directory)
-     :base-syntax-installed nil)))
+     :base-syntax-installed nil
+     :exception-handlers nil
+     :dynamic-winds nil)))
 
 (defun agent-scheme--eval-error (message &rest args)
   "Signal an Agent Scheme evaluation error.
@@ -314,8 +337,13 @@ SEEN prevents infinite recursion over cyclic host structures."
         (agent-scheme-number-p value)
         (agent-scheme-procedure-p value)
         (agent-scheme-primitive-procedure-p value)
+        (agent-scheme--continuation-p value)
+        (agent-scheme-error-object-p value)
         (agent-scheme--string-output-port-p value))
     1)
+   ((agent-scheme--multiple-values-p value)
+    (1+ (cl-loop for item in (agent-scheme--multiple-values-values value)
+                 sum (agent-scheme--value-node-count item seen))))
    ((stringp value)
     (1+ (length value)))
    ((agent-scheme-bytevector-p value)
@@ -349,6 +377,26 @@ SEEN prevents infinite recursion over cyclic host structures."
        count
        (agent-scheme--eval-context-maximum-value-nodes context))))
   value)
+
+(defun agent-scheme--values-list (value)
+  "Return VALUE as the list delivered to a continuation."
+  (if (agent-scheme--multiple-values-p value)
+      (agent-scheme--multiple-values-values value)
+    (list value)))
+
+(defun agent-scheme--single-value (value description)
+  "Return VALUE as one Scheme value or signal an arity error."
+  (let ((values (agent-scheme--values-list value)))
+    (unless (= (length values) 1)
+      (agent-scheme--eval-error
+       "%s expected one value, got %d" description (length values)))
+    (car values)))
+
+(defun agent-scheme--call-ignoring-values (procedure context description)
+  "Call zero-argument PROCEDURE in CONTEXT and discard its values."
+  (agent-scheme--expect-procedure procedure description)
+  (agent-scheme--apply-procedure procedure nil context nil)
+  agent-scheme-unspecified)
 
 (defun agent-scheme--identifier-datum-p (datum)
   "Return non-nil if DATUM is a Scheme identifier."
@@ -701,8 +749,10 @@ initializers are evaluated."
          (cell (gethash name
                         (agent-scheme--environment-bindings environment)
                         agent-scheme--missing-cell))
-         (value (agent-scheme--eval-expression
-                 (cdr parsed) environment context nil)))
+         (value (agent-scheme--single-value
+                 (agent-scheme--eval-expression
+                  (cdr parsed) environment context nil)
+                 "define initializer")))
     (if (not (eq cell agent-scheme--missing-cell))
         (progn
           (when (agent-scheme--current-environment-imported-p
@@ -715,6 +765,15 @@ initializers are evaluated."
 
 (defun agent-scheme--bind-formals (formals arguments closure-environment context)
   "Return a call environment for FORMALS bound to ARGUMENTS."
+  (let ((environment (agent-scheme-make-empty-environment
+                      closure-environment)))
+    (agent-scheme--bind-formals-in-environment
+     formals arguments environment context "procedure")
+    environment))
+
+(defun agent-scheme--bind-formals-in-environment
+    (formals arguments environment context description)
+  "Bind FORMALS to ARGUMENTS in ENVIRONMENT for DESCRIPTION."
   (let* ((required (agent-scheme--formals-required formals))
          (rest (agent-scheme--formals-rest formals))
          (required-count (length required))
@@ -722,15 +781,15 @@ initializers are evaluated."
     (cond
      ((and (null rest) (/= argument-count required-count))
       (agent-scheme--eval-error
-       "procedure expected %d arguments, got %d"
+       "%s expected %d values, got %d"
+       description
        required-count argument-count))
      ((and rest (< argument-count required-count))
       (agent-scheme--eval-error
-       "procedure expected at least %d arguments, got %d"
+       "%s expected at least %d values, got %d"
+       description
        required-count argument-count)))
-    (let ((environment (agent-scheme-make-empty-environment
-                        closure-environment))
-          (remaining arguments))
+    (let ((remaining arguments))
       (dolist (name required)
         (agent-scheme--environment-define environment name (car remaining))
         (setq remaining (cdr remaining)))
@@ -739,6 +798,13 @@ initializers are evaluated."
          environment rest (copy-sequence remaining))
         (agent-scheme--check-value-budget remaining context))
       environment)))
+
+(defun agent-scheme--formals-names (formals)
+  "Return all names bound by FORMALS."
+  (if (agent-scheme--formals-rest formals)
+      (append (agent-scheme--formals-required formals)
+              (list (agent-scheme--formals-rest formals)))
+    (agent-scheme--formals-required formals)))
 
 (defun agent-scheme--arity-match-p (primitive count)
   "Return non-nil if PRIMITIVE accepts COUNT arguments."
@@ -793,6 +859,13 @@ When TAILP is non-nil, return a bounce for Scheme procedure bodies."
            (agent-scheme--eval-context-syntax-environment context))
         (agent-scheme--eval-sequence
          (cdr body-state) (car body-state) context nil nil))))
+   ((agent-scheme--continuation-p procedure)
+    (unless (agent-scheme--continuation-active procedure)
+      (agent-scheme--eval-error "continuation is no longer active"))
+    (throw (agent-scheme--continuation-tag procedure)
+           (if (= (length arguments) 1)
+               (car arguments)
+             (agent-scheme--make-multiple-values arguments))))
    (t
     (agent-scheme--eval-error
      "attempted to call non-procedure: %s"
@@ -803,7 +876,9 @@ When TAILP is non-nil, return a bounce for Scheme procedure bodies."
   (unless (memq (length parts) '(3 4))
     (agent-scheme--eval-error "if requires test, consequent, and optional alternate"))
   (let ((test-value
-         (agent-scheme--eval-expression (cadr parts) environment context nil)))
+         (agent-scheme--single-value
+          (agent-scheme--eval-expression (cadr parts) environment context nil)
+          "if test")))
     (cond
      ((agent-scheme--true-value-p test-value)
       (if tailp
@@ -827,8 +902,10 @@ When TAILP is non-nil, return a bounce for Scheme procedure bodies."
   (unless (= (length parts) 3)
     (agent-scheme--eval-error "set! requires an identifier and an expression"))
   (let ((target (cadr parts))
-        (value (agent-scheme--eval-expression
-                (caddr parts) environment context nil)))
+        (value (agent-scheme--single-value
+                (agent-scheme--eval-expression
+                 (caddr parts) environment context nil)
+                "set! expression")))
     (unless (agent-scheme--identifier-datum-p target)
       (agent-scheme--eval-error "set! target must be an identifier"))
     (agent-scheme--environment-set-identifier environment target value)
@@ -875,12 +952,14 @@ When TAILP is non-nil, return a bounce for Scheme procedure bodies."
         (if (and (= depth 1)
                  (agent-scheme--tagged-list-p element "unquote-splicing"))
             (let ((splice
-                   (agent-scheme--eval-expression
-                    (agent-scheme--single-argument-syntax
-                     element "unquote-splicing")
-                    environment
-                    context
-                    nil)))
+                   (agent-scheme--single-value
+                    (agent-scheme--eval-expression
+                     (agent-scheme--single-argument-syntax
+                      element "unquote-splicing")
+                     environment
+                     context
+                     nil)
+                    "unquote-splicing result")))
               (dolist (splice-element
                        (agent-scheme--proper-list-elements
                         splice "unquote-splicing result"))
@@ -912,7 +991,9 @@ When TAILP is non-nil, return a bounce for Scheme procedure bodies."
     (let ((operand
            (agent-scheme--single-argument-syntax template "unquote")))
       (if (= depth 1)
-          (agent-scheme--eval-expression operand environment context nil)
+          (agent-scheme--single-value
+           (agent-scheme--eval-expression operand environment context nil)
+           "unquote result")
         (list (car template)
               (agent-scheme--eval-quasiquote-template
                operand (1- depth) environment context)))))
@@ -984,23 +1065,86 @@ each initializer."
        local-environment name agent-scheme--undefined))
     (if sequential
         (dolist (binding bindings)
-          (agent-scheme--environment-set-cell
-           local-environment
-           (car binding)
-           (agent-scheme--eval-expression
-            (cdr binding) local-environment context nil)))
+           (agent-scheme--environment-set-cell
+            local-environment
+            (car binding)
+            (agent-scheme--single-value
+             (agent-scheme--eval-expression
+              (cdr binding) local-environment context nil)
+             "letrec* initializer")))
       (let (values)
         (dolist (binding bindings)
           (push
            (cons (car binding)
-                 (agent-scheme--eval-expression
-                  (cdr binding) local-environment context nil))
+                 (agent-scheme--single-value
+                  (agent-scheme--eval-expression
+                   (cdr binding) local-environment context nil)
+                  "letrec initializer"))
            values))
         (dolist (binding-value (nreverse values))
           (agent-scheme--environment-set-cell
            local-environment
            (car binding-value)
            (cdr binding-value)))))
+    (agent-scheme--eval-sequence
+     (cddr parts) local-environment context tailp t)))
+
+(defun agent-scheme--parse-mv-binding (binding description)
+  "Return BINDING as (FORMALS . INITIALIZER) for DESCRIPTION."
+  (let ((parts (agent-scheme--proper-list-elements binding description)))
+    (unless (= (length parts) 2)
+      (agent-scheme--eval-error
+       "%s binding must contain formals and initializer"
+       description))
+    (cons (agent-scheme--parse-formals (car parts))
+          (cadr parts))))
+
+(defun agent-scheme--eval-let-values
+    (parts environment context tailp sequential)
+  "Evaluate let-values or let*-values PARTS in ENVIRONMENT."
+  (unless (>= (length parts) 3)
+    (agent-scheme--eval-error
+     "%s requires bindings and a body"
+     (if sequential "let*-values" "let-values")))
+  (let* ((description (if sequential "let*-values" "let-values"))
+         (bindings
+          (mapcar
+           (lambda (binding)
+             (agent-scheme--parse-mv-binding binding description))
+           (agent-scheme--proper-list-elements
+            (cadr parts) (format "%s binding list" description))))
+         (local-environment
+          (agent-scheme-make-empty-environment environment)))
+    (if sequential
+        (dolist (binding bindings)
+          (agent-scheme--bind-formals-in-environment
+           (car binding)
+           (agent-scheme--values-list
+            (agent-scheme--eval-expression
+             (cdr binding) local-environment context nil))
+           local-environment
+           context
+           description))
+      (let ((all-names nil)
+            (evaluated nil))
+        (dolist (binding bindings)
+          (setq all-names
+                (append all-names
+                        (agent-scheme--formals-names (car binding))))
+          (push
+           (cons (car binding)
+                 (agent-scheme--values-list
+                  (agent-scheme--eval-expression
+                   (cdr binding) environment context nil)))
+           evaluated))
+        (agent-scheme--ensure-distinct-names all-names description)
+        (dolist (binding-values (nreverse evaluated))
+          (agent-scheme--bind-formals-in-environment
+           (car binding-values)
+           (cdr binding-values)
+           local-environment
+           context
+           description))))
     (agent-scheme--eval-sequence
      (cddr parts) local-environment context tailp t)))
 
@@ -2768,6 +2912,12 @@ When FOLD-CASE is non-nil, read as if the file began with
        ((and (agent-scheme--symbol-named-p operator "set!")
              (agent-scheme--special-operator-active-p operator environment))
         (agent-scheme--eval-set! parts environment context))
+       ((and (agent-scheme--symbol-named-p operator "let-values")
+             (agent-scheme--special-operator-active-p operator environment))
+        (agent-scheme--eval-let-values parts environment context tailp nil))
+       ((and (agent-scheme--symbol-named-p operator "let*-values")
+             (agent-scheme--special-operator-active-p operator environment))
+        (agent-scheme--eval-let-values parts environment context tailp t))
        ((and (agent-scheme--symbol-named-p operator "letrec")
              (agent-scheme--special-operator-active-p operator environment))
         (agent-scheme--eval-letrec parts environment context tailp nil))
@@ -2794,11 +2944,16 @@ When FOLD-CASE is non-nil, read as if the file began with
         (agent-scheme--eval-sequence (cdr parts) environment context tailp nil))
        (t
         (let ((procedure
-               (agent-scheme--eval-expression operator environment context nil))
+               (agent-scheme--single-value
+                (agent-scheme--eval-expression operator environment context nil)
+                "procedure operator"))
               (arguments
                (mapcar
                 (lambda (operand)
-                  (agent-scheme--eval-expression operand environment context nil))
+                  (agent-scheme--single-value
+                   (agent-scheme--eval-expression
+                    operand environment context nil)
+                   "procedure argument"))
                 (cdr parts))))
           (agent-scheme--apply-procedure procedure arguments context tailp)))))))
 
@@ -3101,7 +3256,8 @@ When ALLOW-END is non-nil, LIMIT itself is accepted."
 (defun agent-scheme--expect-procedure (datum description)
   "Return DATUM as a procedure or signal an error naming DESCRIPTION."
   (unless (or (agent-scheme-procedure-p datum)
-              (agent-scheme-primitive-procedure-p datum))
+              (agent-scheme-primitive-procedure-p datum)
+              (agent-scheme--continuation-p datum))
     (agent-scheme--eval-error
      "%s must be a procedure, got %s"
      description
@@ -3390,7 +3546,8 @@ the maximum endpoint for DESCRIPTION."
   "Primitive procedure? over ARGUMENTS."
   (let ((value (car arguments)))
     (if (or (agent-scheme-procedure-p value)
-            (agent-scheme-primitive-procedure-p value))
+            (agent-scheme-primitive-procedure-p value)
+            (agent-scheme--continuation-p value))
         agent-scheme-true
       agent-scheme-false)))
 
@@ -4095,7 +4252,8 @@ When KEEP-RESULTS is non-nil, return the collected values."
                       context
                       nil)))
           (when keep-results
-            (push value results)))
+            (push (agent-scheme--single-value value "map result")
+                  results)))
         (setq cursors (mapcar #'cdr cursors)))))
     (if keep-results
         (nreverse results)
@@ -4114,6 +4272,148 @@ When KEEP-RESULTS is non-nil, return the collected values."
      (append fixed-arguments tail-arguments)
      context
      nil)))
+
+(defun agent-scheme--primitive-values (arguments _context)
+  "Primitive values over ARGUMENTS."
+  (agent-scheme--make-multiple-values arguments))
+
+(defun agent-scheme--primitive-call-with-values (arguments context)
+  "Primitive call-with-values over ARGUMENTS."
+  (let* ((producer (agent-scheme--expect-procedure
+                    (car arguments) "call-with-values producer"))
+         (consumer (agent-scheme--expect-procedure
+                    (cadr arguments) "call-with-values consumer"))
+         (produced (agent-scheme--apply-procedure producer nil context nil)))
+    (agent-scheme--apply-procedure
+     consumer
+     (agent-scheme--values-list produced)
+     context
+     nil)))
+
+(defun agent-scheme--primitive-call/cc (arguments context)
+  "Primitive call-with-current-continuation over ARGUMENTS."
+  (let* ((procedure
+          (agent-scheme--expect-procedure
+           (car arguments)
+           "call-with-current-continuation procedure"))
+         (tag (make-symbol "agent-scheme-continuation"))
+         (continuation (agent-scheme--make-continuation tag t)))
+    (unwind-protect
+        (catch tag
+          (agent-scheme--apply-procedure
+           procedure
+           (list continuation)
+           context
+           nil))
+      (setf (agent-scheme--continuation-active continuation) nil))))
+
+(defun agent-scheme--primitive-dynamic-wind (arguments context)
+  "Primitive dynamic-wind over ARGUMENTS."
+  (let ((before (agent-scheme--expect-procedure
+                 (car arguments) "dynamic-wind before"))
+        (thunk (agent-scheme--expect-procedure
+                (cadr arguments) "dynamic-wind thunk"))
+        (after (agent-scheme--expect-procedure
+                (caddr arguments) "dynamic-wind after"))
+        (entered nil)
+        result)
+    (agent-scheme--call-ignoring-values before context "dynamic-wind before")
+    (unwind-protect
+        (progn
+          (setq entered t)
+          (push after (agent-scheme--eval-context-dynamic-winds context))
+          (setq result
+                (agent-scheme--apply-procedure thunk nil context nil))
+          result)
+      (when entered
+        (when (eq (car (agent-scheme--eval-context-dynamic-winds context))
+                  after)
+          (pop (agent-scheme--eval-context-dynamic-winds context)))
+        (agent-scheme--call-ignoring-values
+         after context "dynamic-wind after")))))
+
+(defun agent-scheme--current-exception-handler (context)
+  "Return CONTEXT's current exception handler, or nil."
+  (car (agent-scheme--eval-context-exception-handlers context)))
+
+(defun agent-scheme--invoke-exception-handler (condition context)
+  "Invoke the current exception handler for CONDITION."
+  (let* ((handlers (agent-scheme--eval-context-exception-handlers context))
+         (handler (car handlers)))
+    (unless handler
+      (agent-scheme--eval-error
+       "unhandled exception: %s"
+       (agent-scheme-value->external condition)))
+    (unwind-protect
+        (progn
+          (setf (agent-scheme--eval-context-exception-handlers context)
+                (cdr handlers))
+          (agent-scheme--apply-procedure
+           handler
+           (list condition)
+           context
+           nil))
+      (setf (agent-scheme--eval-context-exception-handlers context)
+            handlers))))
+
+(defun agent-scheme--primitive-with-exception-handler (arguments context)
+  "Primitive with-exception-handler over ARGUMENTS."
+  (let ((handler (agent-scheme--expect-procedure
+                  (car arguments) "with-exception-handler handler"))
+        (thunk (agent-scheme--expect-procedure
+                (cadr arguments) "with-exception-handler thunk"))
+        (old-handlers (agent-scheme--eval-context-exception-handlers context)))
+    (unwind-protect
+        (progn
+          (setf (agent-scheme--eval-context-exception-handlers context)
+                (cons handler old-handlers))
+          (agent-scheme--apply-procedure thunk nil context nil))
+      (setf (agent-scheme--eval-context-exception-handlers context)
+            old-handlers))))
+
+(defun agent-scheme--primitive-raise-continuable (arguments context)
+  "Primitive raise-continuable over ARGUMENTS."
+  (agent-scheme--invoke-exception-handler (car arguments) context))
+
+(defun agent-scheme--primitive-raise (arguments context)
+  "Primitive raise over ARGUMENTS."
+  (agent-scheme--invoke-exception-handler (car arguments) context)
+  (agent-scheme--eval-error "non-continuable exception handler returned"))
+
+(defun agent-scheme--primitive-error (arguments context)
+  "Primitive error over ARGUMENTS."
+  (let ((message (agent-scheme--expect-string (car arguments) "error message"))
+        (irritants (cdr arguments)))
+    (agent-scheme--primitive-raise
+     (list (agent-scheme--make-error-object message irritants))
+     context)))
+
+(defun agent-scheme--primitive-error-object? (arguments _context)
+  "Primitive error-object? over ARGUMENTS."
+  (agent-scheme--scheme-boolean
+   (agent-scheme-error-object-p (car arguments))))
+
+(defun agent-scheme--expect-error-object (value description)
+  "Return VALUE as an error object for DESCRIPTION."
+  (unless (agent-scheme-error-object-p value)
+    (agent-scheme--eval-error
+     "%s expected an error object, got %s"
+     description
+     (agent-scheme-value->external value)))
+  value)
+
+(defun agent-scheme--primitive-error-object-message (arguments _context)
+  "Primitive error-object-message over ARGUMENTS."
+  (agent-scheme-error-object-message
+   (agent-scheme--expect-error-object
+    (car arguments) "error-object-message")))
+
+(defun agent-scheme--primitive-error-object-irritants (arguments _context)
+  "Primitive error-object-irritants over ARGUMENTS."
+  (copy-sequence
+   (agent-scheme-error-object-irritants
+    (agent-scheme--expect-error-object
+     (car arguments) "error-object-irritants"))))
 
 (defun agent-scheme--primitive-map (arguments context)
   "Primitive map over ARGUMENTS."
@@ -4153,7 +4453,8 @@ When KEEP-RESULTS is non-nil, return the collected values."
                         context
                         nil)))
                   (push (agent-scheme--expect-character
-                         value "string-map result")
+                         (agent-scheme--single-value value "string-map result")
+                         "string-map result")
                         codes)))
     (apply #'string (nreverse codes))))
 
@@ -4283,11 +4584,13 @@ When KEEP-RESULTS is non-nil, return the collected values."
          results)
     (cl-loop for index from 0 below length
              do (push
-                 (agent-scheme--apply-procedure
-                  procedure
-                  (mapcar (lambda (vector) (aref vector index)) vectors)
-                  context
-                  nil)
+                 (agent-scheme--single-value
+                  (agent-scheme--apply-procedure
+                   procedure
+                   (mapcar (lambda (vector) (aref vector index)) vectors)
+                   context
+                   nil)
+                  "vector-map result")
                  results))
     (vconcat (nreverse results))))
 
@@ -4411,6 +4714,9 @@ When KEEP-RESULTS is non-nil, return the collected values."
     ("bytevector-u8-ref" agent-scheme--primitive-bytevector-u8-ref 2 2)
     ("bytevector-u8-set!" agent-scheme--primitive-bytevector-u8-set! 3 3)
     ("bytevector?" agent-scheme--primitive-bytevector? 1 1)
+    ("call-with-current-continuation" agent-scheme--primitive-call/cc 1 1)
+    ("call-with-values" agent-scheme--primitive-call-with-values 2 2)
+    ("call/cc" agent-scheme--primitive-call/cc 1 1)
     ("car" agent-scheme--primitive-car 1 1)
     ("cdr" agent-scheme--primitive-cdr 1 1)
     ("ceiling" agent-scheme--primitive-ceiling 1 1)
@@ -4423,9 +4729,14 @@ When KEEP-RESULTS is non-nil, return the collected values."
     ("char?" agent-scheme--primitive-char? 1 1)
     ("complex?" agent-scheme--primitive-complex? 1 1)
     ("cons" agent-scheme--primitive-cons 2 2)
+    ("dynamic-wind" agent-scheme--primitive-dynamic-wind 3 3)
     ("eq?" agent-scheme--primitive-eq? 2 2)
     ("equal?" agent-scheme--primitive-equal? 2 2)
     ("eqv?" agent-scheme--primitive-eqv? 2 2)
+    ("error" agent-scheme--primitive-error 1 nil)
+    ("error-object-irritants" agent-scheme--primitive-error-object-irritants 1 1)
+    ("error-object-message" agent-scheme--primitive-error-object-message 1 1)
+    ("error-object?" agent-scheme--primitive-error-object? 1 1)
     ("exact-integer?" agent-scheme--primitive-exact-integer? 1 1)
     ("exact?" agent-scheme--primitive-exact? 1 1)
     ("floor" agent-scheme--primitive-floor 1 1)
@@ -4447,6 +4758,8 @@ When KEEP-RESULTS is non-nil, return the collected values."
     ("pair?" agent-scheme--primitive-pair? 1 1)
     ("procedure?" agent-scheme--primitive-procedure? 1 1)
     ("quotient" agent-scheme--primitive-quotient 2 2)
+    ("raise" agent-scheme--primitive-raise 1 1)
+    ("raise-continuable" agent-scheme--primitive-raise-continuable 1 1)
     ("rational?" agent-scheme--primitive-rational? 1 1)
     ("real?" agent-scheme--primitive-real? 1 1)
     ("remainder" agent-scheme--primitive-remainder 2 2)
@@ -4492,7 +4805,9 @@ When KEEP-RESULTS is non-nil, return the collected values."
     ("vector-map" agent-scheme--primitive-vector-map 2 nil)
     ("vector-ref" agent-scheme--primitive-vector-ref 2 2)
     ("vector-set!" agent-scheme--primitive-vector-set! 3 3)
-    ("vector?" agent-scheme--primitive-vector? 1 1))
+    ("vector?" agent-scheme--primitive-vector? 1 1)
+    ("values" agent-scheme--primitive-values 0 nil)
+    ("with-exception-handler" agent-scheme--primitive-with-exception-handler 2 2))
   "Registry of implemented `(scheme base)' primitive procedures.
 Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
 
@@ -4712,10 +5027,33 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
       (unless (= (length parts) 3)
         (agent-scheme--eval-error
          "set! requires an identifier and an expression"))
-      (list operator
+     (list operator
             (cadr parts)
             (agent-scheme--expand-expression-fully
              (caddr parts) environment context)))
+     ((and (member (agent-scheme--symbol-name operator)
+                   '("let-values" "let*-values"))
+           (agent-scheme--special-operator-active-p operator environment))
+      (let* ((description (agent-scheme--symbol-name operator))
+             (bindings
+              (mapcar
+               (lambda (binding)
+                 (let ((binding-parts
+                        (agent-scheme--proper-list-elements
+                         binding
+                         (format "%s binding" description))))
+                   (unless (= (length binding-parts) 2)
+                     (agent-scheme--eval-error
+                      "%s binding must contain formals and initializer"
+                      description))
+                   (list (car binding-parts)
+                         (agent-scheme--expand-expression-fully
+                          (cadr binding-parts) environment context))))
+               (agent-scheme--proper-list-elements
+                (cadr parts) (format "%s binding list" description)))))
+        (append (list operator bindings)
+                (agent-scheme--expand-sequence-forms
+                 (cddr parts) environment context t))))
      ((and (member (agent-scheme--symbol-name operator) '("letrec" "letrec*"))
            (agent-scheme--special-operator-active-p operator environment))
       (let ((bindings
@@ -4904,6 +5242,20 @@ objects so result records can be rendered by `agent-scheme-datum->external'."
       (list (agent-scheme--result-symbol "procedure")
             (agent-scheme--result-field "kind"
                                         (agent-scheme--result-symbol "compound"))))
+     ((agent-scheme--continuation-p value)
+      (list (agent-scheme--result-symbol "procedure")
+            (agent-scheme--result-field "kind"
+                                        (agent-scheme--result-symbol "continuation"))))
+     ((agent-scheme-error-object-p value)
+      (list (agent-scheme--result-symbol "error-object")
+            (agent-scheme--result-field
+             "message"
+             (agent-scheme-error-object-message value))
+            (agent-scheme--result-field
+             "irritants"
+             (mapcar (lambda (irritant)
+                       (agent-scheme--value->result-datum irritant seen))
+                     (agent-scheme-error-object-irritants value)))))
      ((consp value)
       (if (gethash value seen)
           (list (agent-scheme--result-symbol "cycle"))
@@ -4961,14 +5313,25 @@ objects so result records can be rendered by `agent-scheme-datum->external'."
 
 (defun agent-scheme--ok-result-datum (value context)
   "Return a stable Scheme-readable successful evaluation result."
-  (list (agent-scheme--result-symbol "evaluation-result")
-        (agent-scheme--result-field "status"
-                                    (agent-scheme--result-symbol "ok"))
-        (agent-scheme--result-field
-         "value"
-         (agent-scheme--value->result-datum value))
-        (agent-scheme--result-field "events" nil)
-        (agent-scheme--budget-result-field context)))
+  (if (agent-scheme--multiple-values-p value)
+      (list (agent-scheme--result-symbol "evaluation-result")
+            (agent-scheme--result-field
+             "status"
+             (agent-scheme--result-symbol "values"))
+            (agent-scheme--result-field
+             "values"
+             (mapcar #'agent-scheme--value->result-datum
+                     (agent-scheme--multiple-values-values value)))
+            (agent-scheme--result-field "events" nil)
+            (agent-scheme--budget-result-field context))
+    (list (agent-scheme--result-symbol "evaluation-result")
+          (agent-scheme--result-field "status"
+                                      (agent-scheme--result-symbol "ok"))
+          (agent-scheme--result-field
+           "value"
+           (agent-scheme--value->result-datum value))
+          (agent-scheme--result-field "events" nil)
+          (agent-scheme--budget-result-field context))))
 
 (defun agent-scheme--condition-result-datum (condition context)
   "Return a stable Scheme-readable error result for CONDITION."
@@ -5031,6 +5394,16 @@ objects so result records can be rendered by `agent-scheme-datum->external'."
    ((agent-scheme-primitive-procedure-p value)
     (format "#<primitive %s>"
             (agent-scheme-primitive-procedure-name value)))
+   ((agent-scheme--continuation-p value)
+    "#<continuation>")
+   ((agent-scheme-error-object-p value)
+    (format "#<error-object %S>"
+            (agent-scheme-error-object-message value)))
+   ((agent-scheme--multiple-values-p value)
+    (agent-scheme-datum->external
+     (cons (agent-scheme--syntax-symbol "values")
+           (mapcar #'agent-scheme--strip-identifiers
+                   (agent-scheme--multiple-values-values value)))))
    (t
     (agent-scheme-datum->external
      (agent-scheme--strip-identifiers value)))))
