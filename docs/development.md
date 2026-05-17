@@ -56,6 +56,7 @@ Before implementing a ticket, read:
 
 - [Repository agent instructions](../AGENTS.md), for agentic or tool-assisted work
 - [Architecture and threat model](architecture.md)
+- [Multi-host adapter and bootstrap strategy](multi-host-bootstrap.md)
 - [Naming convention](naming.md)
 - [Scheme references](references.md)
 - [R7RS-small report reference](r7rs-small-report.md)
@@ -99,6 +100,13 @@ current portable reader harness uses Chibi Scheme when `chibi-scheme` is on
 `PATH`, or the command named by `AGENT_SCHEME_CHIBI`. If Chibi is unavailable,
 the ERT test is skipped so a minimal Emacs-only checkout can still run the
 bootstrap suite.
+
+The multi-host bootstrap strategy in
+[`docs/multi-host-bootstrap.md`](multi-host-bootstrap.md) defines what belongs
+in portable Scheme modules versus host adapter modules. New host-neutral runtime
+or library behavior should gain portable fixtures where practical before a host
+adapter exposes it through editor, process, filesystem, model, or persistence
+capabilities.
 
 The local R7RS-small report reference lives in
 [`docs/r7rs-small-report.md`](r7rs-small-report.md). The active R7RS-small
