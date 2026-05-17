@@ -29,6 +29,12 @@
           (agent-scheme-eval-source source #f options))
          expected))
 
+(define (check-result-external name source expected)
+  (check name
+         (agent-scheme-result->external
+          (agent-scheme-eval-source-result source))
+         expected))
+
 (define (find-primitive-spec name specs)
   (cond
    ((null? specs) #f)
@@ -64,30 +70,32 @@
 (check 'unknown-identifier
        (raises? (lambda () (agent-scheme-eval-source "missing")))
        #t)
-(check 'unregistered-primitive
-       (raises? (lambda () (agent-scheme-eval-source "(values 1 2)")))
-       #t)
 
 (let ((names (agent-scheme-base-primitive-names))
       (prelude-names (agent-scheme-base-prelude-binding-names))
       (specs (agent-scheme-base-primitive-specs))
       (binding-specs (agent-scheme-base-binding-specs)))
   (check 'base-registry-names
-         (and (memq '+ names)
-              (memq 'apply names)
-              (memq 'car names)
-              (memq 'vector-ref names)
-              (not (memq 'append names))
-              (not (memq 'cadr names))
-              (not (memq 'length names))
-              (not (memq 'map names))
-              (not (memq 'zero? names))
-              (memq 'append prelude-names)
-              (memq 'cadr prelude-names)
-              (memq 'length prelude-names)
-              (memq 'map prelude-names)
-              (memq 'zero? prelude-names)
-              (not (memq 'values names)))
+         (if (and (memq '+ names)
+                  (memq 'apply names)
+                  (memq 'car names)
+                  (memq 'vector-ref names)
+                  (not (memq 'append names))
+                  (not (memq 'cadr names))
+                  (not (memq 'length names))
+                  (not (memq 'map names))
+                  (not (memq 'zero? names))
+                  (memq 'append prelude-names)
+                  (memq 'cadr prelude-names)
+                  (memq 'length prelude-names)
+                  (memq 'map prelude-names)
+                  (memq 'zero? prelude-names)
+                  (memq 'call-with-values names)
+                  (memq 'call/cc names)
+                  (memq 'dynamic-wind names)
+                  (memq 'values names))
+             #t
+             #f)
          #t)
   (check 'base-registry-specs
          (cadr (assq 'minimum-arity
@@ -132,6 +140,60 @@
                        (map (lambda (x) (* x x)) '(2 3 4))
                        total)"
                 "(10 (4 9 16) 6)")
+
+(check-result-external 'multiple-values-result
+                       "(values 1 2)"
+                       "(evaluation-result (status values) (values (1 2)) (events ()) (budget (steps-used 5) (host-calls 1)))")
+
+(check-external 'multiple-values-binding-forms
+                "(let ((a 'a) (b 'b) (x 'x) (y 'y))
+                   (let*-values (((a b) (values x y))
+                                 ((x y) (values a b)))
+                     (list a b x y)))"
+                "(x y x y)")
+
+(check-external 'call-with-values-consumer
+                "(call-with-values (lambda () (values 4 5))
+                                   (lambda (a b) (- b a)))"
+                "1")
+
+(check-external 'call/cc-escape
+                "(call/cc (lambda (escape) (+ 1 (escape 42))))"
+                "42")
+
+(check-external 'dynamic-wind-exit
+                "(let ((path '()))
+                   (define (add tag) (set! path (cons tag path)))
+                   (call/cc
+                    (lambda (escape)
+                      (dynamic-wind
+                       (lambda () (add 'before))
+                       (lambda ()
+                         (add 'during)
+                         (escape 'done))
+                       (lambda () (add 'after)))))
+                   (reverse path))"
+                "(before during after)")
+
+(check-external 'guard-raise
+                "(guard (exn (else (list 'caught exn)))
+                   (raise 'boom))"
+                "(caught boom)")
+
+(check-external 'raise-continuable
+                "(with-exception-handler
+                   (lambda (exn) 42)
+                   (lambda ()
+                     (+ (raise-continuable 'warning) 23)))"
+                "65")
+
+(check-external 'error-object
+                "(guard (exn
+                         ((error-object? exn)
+                          (list (error-object-message exn)
+                                (error-object-irritants exn))))
+                   (error \"bad input\" 'alpha 7))"
+                "(\"bad input\" (alpha 7))")
 
 (check-external 'define-syntax-expands-ellipsis
                 "(define x 0)

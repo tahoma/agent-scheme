@@ -27,7 +27,8 @@
     (dolist (name '("append" "cadr" "length" "map" "zero?"))
       (should-not (member name names))
       (should (member name prelude-names)))
-    (should-not (member "values" names))
+    (dolist (name '("call-with-values" "call/cc" "dynamic-wind" "values"))
+      (should (member name names)))
     (should
      (equal (plist-get
              (seq-find

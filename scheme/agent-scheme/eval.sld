@@ -111,6 +111,23 @@
       (minimum-arity primitive-procedure-minimum-arity)
       (maximum-arity primitive-procedure-maximum-arity))
 
+    (define-record-type <multiple-values>
+      (make-multiple-values values)
+      multiple-values?
+      (values multiple-values-values))
+
+    (define-record-type <continuation>
+      (make-continuation tag active)
+      continuation?
+      (tag continuation-tag)
+      (active continuation-active set-continuation-active!))
+
+    (define-record-type <agent-scheme-error-object>
+      (make-agent-scheme-error-object message irritants)
+      agent-scheme-error-object?
+      (message agent-scheme-error-object-message)
+      (irritants agent-scheme-error-object-irritants))
+
     (define-record-type <string-output-port>
       (make-string-output-port contents)
       string-output-port?
@@ -137,7 +154,8 @@
                          maximum-value-nodes host-callbacks
                          maximum-host-callbacks syntax-environment libraries
                          include-paths include-directory file-paths
-                         base-syntax-installed next-syntax-id)
+                         base-syntax-installed next-syntax-id
+                         exception-handlers dynamic-winds)
       eval-context?
       (steps context-steps set-context-steps!)
       (maximum-steps context-maximum-steps)
@@ -153,7 +171,10 @@
       (file-paths context-file-paths)
       (base-syntax-installed context-base-syntax-installed
                              set-context-base-syntax-installed!)
-      (next-syntax-id context-next-syntax-id set-context-next-syntax-id!))
+      (next-syntax-id context-next-syntax-id set-context-next-syntax-id!)
+      (exception-handlers context-exception-handlers
+                          set-context-exception-handlers!)
+      (dynamic-winds context-dynamic-winds set-context-dynamic-winds!))
 
     (define-record-type <syntax-transformer>
       (make-syntax-transformer ellipsis literals rules
@@ -268,7 +289,9 @@
         (option-ref options 'file-paths '())
         include-directory)
        #f
-       0)))
+       0
+       '()
+       '())))
 
     (define (note-step! context)
       (set-context-steps! context (+ (context-steps context) 1))
@@ -296,8 +319,18 @@
             (agent-scheme-unspecified? value)
             (agent-scheme-procedure? value)
             (agent-scheme-primitive-procedure? value)
+            (continuation? value)
+            (agent-scheme-error-object? value)
             (string-output-port? value))
         1)
+       ((multiple-values? value)
+        (+ 1
+           (let loop ((rest (multiple-values-values value)) (count 0))
+             (if (null? rest)
+                 count
+                 (loop (cdr rest)
+                       (+ count
+                          (value-node-count (car rest) seen)))))))
        ((string? value)
         (+ 1 (string-length value)))
        ((bytevector? value)
@@ -329,6 +362,24 @@
                           count
                           (context-maximum-value-nodes context))))
       value)
+
+    (define (values-list value)
+      (if (multiple-values? value)
+          (multiple-values-values value)
+          (list value)))
+
+    (define (single-value value description)
+      (let ((values (values-list value)))
+        (if (not (= (length values) 1))
+            (eval-error
+             (string-append description " expected one value")
+             (length values)))
+        (car values)))
+
+    (define (call-ignoring-values procedure context description)
+      (expect-procedure procedure description)
+      (apply-procedure procedure '() context #f)
+      agent-scheme-unspecified)
 
     (define (proper-list-elements datum description)
       (let loop ((cursor datum) (elements '()))
@@ -631,10 +682,12 @@
       (let* ((parsed (parse-definition form))
              (name (car parsed))
              (cell (frame-cell environment name))
-             (value (eval-expression (cdr parsed)
-                                     environment
-                                     context
-                                     #f)))
+             (value (single-value
+                     (eval-expression (cdr parsed)
+                                      environment
+                                      context
+                                      #f)
+                     "define initializer")))
         (if cell
             (begin
               (if (current-environment-imported? environment name)
@@ -644,36 +697,48 @@
         agent-scheme-unspecified))
 
     (define (bind-formals formals arguments closure-environment context)
+      (let ((environment
+             (agent-scheme-make-empty-environment closure-environment)))
+        (bind-formals-in-environment
+         formals arguments environment context "procedure")
+        environment))
+
+    (define (bind-formals-in-environment
+             formals arguments environment context description)
       (let* ((required (formals-required formals))
              (rest (formals-rest formals))
              (required-count (length required))
              (argument-count (length arguments)))
         (cond
          ((and (not rest) (not (= argument-count required-count)))
-          (eval-error "procedure received wrong number of arguments"
+          (eval-error
+                      (string-append description
+                                     " received wrong number of values")
                       required-count
                       argument-count))
          ((and rest (< argument-count required-count))
-          (eval-error "procedure received too few arguments"
+          (eval-error
+                      (string-append description " received too few values")
                       required-count
                       argument-count)))
-        (let ((environment
-               (agent-scheme-make-empty-environment closure-environment)))
-          (let loop ((names required) (values arguments))
-            (if (null? names)
-                (begin
-                  (if rest
-                      (begin
-                        (environment-define! environment
-                                             rest
-                                             values)
-                        (check-value-budget values context)))
-                  environment)
-                (begin
-                  (environment-define! environment
-                                       (car names)
-                                       (car values))
-                  (loop (cdr names) (cdr values))))))))
+        (let loop ((names required) (values arguments))
+          (if (null? names)
+              (begin
+                (if rest
+                    (begin
+                      (environment-define! environment rest values)
+                      (check-value-budget values context)))
+                environment)
+              (begin
+                (environment-define! environment
+                                     (car names)
+                                     (car values))
+                (loop (cdr names) (cdr values)))))))
+
+    (define (formals-names formals)
+      (if (formals-rest formals)
+          (append (formals-required formals) (list (formals-rest formals)))
+          (formals-required formals)))
 
     (define (arity-match? primitive count)
       (and (>= count (primitive-procedure-minimum-arity primitive))
@@ -713,6 +778,15 @@
                              context
                              #f
                              #f))))
+       ((continuation? procedure)
+        (if (not (continuation-active procedure))
+            (eval-error "continuation is no longer active"))
+        (raise
+         (list 'agent-scheme-continuation-jump
+               (continuation-tag procedure)
+               (if (= (length arguments) 1)
+                   (car arguments)
+                   (make-multiple-values arguments)))))
        (else
         (eval-error "attempted to call non-procedure"
                     (agent-scheme-value->external procedure)))))
@@ -722,10 +796,10 @@
           (eval-error
            "if requires test, consequent, and optional alternate"
            parts))
-      (let ((test-value (eval-expression (second parts)
-                                         environment
-                                         context
-                                         #f)))
+      (let ((test-value
+             (single-value
+              (eval-expression (second parts) environment context #f)
+              "if test")))
         (cond
          ((true-value? test-value)
           (if tail?
@@ -746,7 +820,10 @@
       (if (not (= (length parts) 3))
           (eval-error "set! requires an identifier and an expression" parts))
       (let ((target (second parts))
-            (value (eval-expression (third parts) environment context #f)))
+            (value (single-value
+                    (eval-expression
+                     (third parts) environment context #f)
+                    "set! expression")))
         (if (not (identifier-datum? target))
             (eval-error "set! target must be an identifier" target))
         (environment-set-identifier! environment target value)
@@ -799,13 +876,15 @@
               (if (and (= depth 1)
                        (tagged-list? element 'unquote-splicing))
                   (let ((splice
-                         (eval-expression
-                          (single-argument-syntax
-                           element
-                           "unquote-splicing")
-                          environment
-                          context
-                          #f)))
+                         (single-value
+                          (eval-expression
+                           (single-argument-syntax
+                            element
+                            "unquote-splicing")
+                           environment
+                           context
+                           #f)
+                          "unquote-splicing result")))
                     (loop (cdr cursor)
                           (append (reverse
                                    (proper-list-elements
@@ -822,11 +901,13 @@
               ((null? cursor) '())
               ((and (= depth 1)
                     (tagged-list? cursor 'unquote))
-               (eval-expression
-                (single-argument-syntax cursor "unquote")
-                environment
-                context
-                #f))
+               (single-value
+                (eval-expression
+                 (single-argument-syntax cursor "unquote")
+                 environment
+                 context
+                 #f)
+                "unquote result"))
               (else
                (eval-quasiquote-template
                 cursor depth environment context)))))))
@@ -836,7 +917,9 @@
        ((tagged-list? template 'unquote)
         (let ((operand (single-argument-syntax template "unquote")))
           (if (= depth 1)
-              (eval-expression operand environment context #f)
+              (single-value
+               (eval-expression operand environment context #f)
+               "unquote result")
               (list (car template)
                     (eval-quasiquote-template
                      operand (- depth 1) environment context)))))
@@ -906,18 +989,22 @@
                (environment-set!
                 local-environment
                 (car binding)
-                (eval-expression (cdr binding)
-                                 local-environment
-                                 context
-                                 #f)))
+                (single-value
+                 (eval-expression (cdr binding)
+                                  local-environment
+                                  context
+                                  #f)
+                 "letrec* initializer")))
              bindings)
             (let ((values
                    (map (lambda (binding)
                           (cons (car binding)
-                                (eval-expression (cdr binding)
-                                                 local-environment
-                                                 context
-                                                 #f)))
+                                (single-value
+                                 (eval-expression (cdr binding)
+                                                  local-environment
+                                                  context
+                                                  #f)
+                                 "letrec initializer")))
                         bindings)))
               (for-each
                (lambda (binding-value)
@@ -926,6 +1013,71 @@
                   (car binding-value)
                   (cdr binding-value)))
                values)))
+        (eval-sequence (cddr parts)
+                       local-environment
+                       context
+                       tail?
+                       #t)))
+
+    (define (parse-mv-binding binding description)
+      (let ((parts (proper-list-elements binding description)))
+        (if (not (= (length parts) 2))
+            (eval-error
+             (string-append description
+                            " binding must contain formals and initializer")
+             binding))
+        (cons (parse-formals (car parts))
+              (second parts))))
+
+    (define (eval-let-values parts environment context tail? sequential?)
+      (if (< (length parts) 3)
+          (eval-error
+           (string-append
+            (if sequential? "let*-values" "let-values")
+            " requires bindings and a body")
+           parts))
+      (let* ((description (if sequential? "let*-values" "let-values"))
+             (bindings
+              (map (lambda (binding)
+                     (parse-mv-binding binding description))
+                   (proper-list-elements
+                    (second parts)
+                    (string-append description " binding list"))))
+             (local-environment
+              (agent-scheme-make-empty-environment environment)))
+        (if sequential?
+            (for-each
+             (lambda (binding)
+               (bind-formals-in-environment
+                (car binding)
+                (values-list
+                 (eval-expression
+                  (cdr binding) local-environment context #f))
+                local-environment
+                context
+                description))
+             bindings)
+            (let ((all-names
+                   (apply append (map (lambda (binding)
+                                        (formals-names (car binding)))
+                                      bindings)))
+                  (evaluated
+                   (map (lambda (binding)
+                          (cons (car binding)
+                                (values-list
+                                 (eval-expression
+                                  (cdr binding) environment context #f))))
+                        bindings)))
+              (ensure-distinct-names all-names description)
+              (for-each
+               (lambda (binding-values)
+                 (bind-formals-in-environment
+                  (car binding-values)
+                  (cdr binding-values)
+                  local-environment
+                  context
+                  description))
+               evaluated)))
         (eval-sequence (cddr parts)
                        local-environment
                        context
@@ -2659,6 +2811,12 @@
            ((and (identifier-named? operator 'set!)
                  (special-operator-active? operator environment))
             (eval-set! parts environment context))
+           ((and (identifier-named? operator 'let-values)
+                 (special-operator-active? operator environment))
+            (eval-let-values parts environment context tail? #f))
+           ((and (identifier-named? operator 'let*-values)
+                 (special-operator-active? operator environment))
+            (eval-let-values parts environment context tail? #t))
            ((and (identifier-named? operator 'letrec)
                  (special-operator-active? operator environment))
             (eval-letrec parts environment context tail? #f))
@@ -2688,18 +2846,22 @@
             (eval-sequence (cdr parts) environment context tail? #f))
            (else
             (let ((procedure
-                   (eval-expression operator environment context #f))
+                   (single-value
+                    (eval-expression operator environment context #f)
+                    "procedure operator"))
                   (arguments
                    (let loop ((operands (cdr parts)) (values '()))
                      (if (null? operands)
                          (reverse values)
                          (loop (cdr operands)
                                (cons
-                                (eval-expression
-                                 (car operands)
-                                 environment
-                                 context
-                                 #f)
+                                (single-value
+                                 (eval-expression
+                                  (car operands)
+                                  environment
+                                  context
+                                  #f)
+                                 "procedure argument")
                                 values))))))
               (apply-procedure procedure arguments context tail?)))))))
 
@@ -2920,7 +3082,8 @@
 
     (define (expect-procedure datum description)
       (if (or (agent-scheme-procedure? datum)
-              (agent-scheme-primitive-procedure? datum))
+              (agent-scheme-primitive-procedure? datum)
+              (continuation? datum))
           datum
           (eval-error
            (string-append description " must be a procedure")
@@ -3564,7 +3727,7 @@
                  (apply-procedure procedure (map car cursors) context #f)))
             (loop (map cdr cursors)
                   (if keep-results?
-                      (cons value results)
+                      (cons (single-value value "map result") results)
                       results)))))))
 
     (define (primitive-apply arguments context)
@@ -3578,6 +3741,137 @@
                          (append fixed-arguments tail-arguments)
                          context
                          #f)))
+
+    (define (primitive-values arguments context)
+      (make-multiple-values arguments))
+
+    (define (primitive-call-with-values arguments context)
+      (let* ((producer (expect-procedure
+                        (car arguments)
+                        "call-with-values producer"))
+             (consumer (expect-procedure
+                        (second arguments)
+                        "call-with-values consumer"))
+             (produced (apply-procedure producer '() context #f)))
+        (apply-procedure consumer (values-list produced) context #f)))
+
+    (define (continuation-jump? condition tag)
+      (and (pair? condition)
+           (eq? (car condition) 'agent-scheme-continuation-jump)
+           (pair? (cdr condition))
+           (eq? (second condition) tag)))
+
+    (define (primitive-call/cc arguments context)
+      (let* ((procedure
+              (expect-procedure
+               (car arguments)
+               "call-with-current-continuation procedure"))
+             (tag (list 'continuation))
+             (continuation (make-continuation tag #t)))
+        (dynamic-wind
+          (lambda () agent-scheme-unspecified)
+          (lambda ()
+            (guard (condition
+                    ((continuation-jump? condition tag)
+                     (third condition))
+                    (else (raise condition)))
+              (apply-procedure
+               procedure
+               (list continuation)
+               context
+               #f)))
+          (lambda ()
+            (set-continuation-active! continuation #f)))))
+
+    (define (primitive-dynamic-wind arguments context)
+      (let ((before (expect-procedure (car arguments) "dynamic-wind before"))
+            (thunk (expect-procedure (second arguments) "dynamic-wind thunk"))
+            (after (expect-procedure (third arguments) "dynamic-wind after")))
+        (dynamic-wind
+          (lambda ()
+            (call-ignoring-values before context "dynamic-wind before")
+            (set-context-dynamic-winds!
+             context
+             (cons after (context-dynamic-winds context))))
+          (lambda ()
+            (apply-procedure thunk '() context #f))
+          (lambda ()
+            (if (and (pair? (context-dynamic-winds context))
+                     (eq? (car (context-dynamic-winds context)) after))
+                (set-context-dynamic-winds!
+                 context
+                 (cdr (context-dynamic-winds context))))
+            (call-ignoring-values after context "dynamic-wind after")))))
+
+    (define (invoke-exception-handler condition context)
+      (let ((handlers (context-exception-handlers context)))
+        (if (null? handlers)
+            (eval-error
+             "unhandled exception"
+             (agent-scheme-value->external condition)))
+        (dynamic-wind
+          (lambda ()
+            (set-context-exception-handlers! context (cdr handlers)))
+          (lambda ()
+            (apply-procedure
+             (car handlers)
+             (list condition)
+             context
+             #f))
+          (lambda ()
+            (set-context-exception-handlers! context handlers)))))
+
+    (define (primitive-with-exception-handler arguments context)
+      (let ((handler (expect-procedure
+                      (car arguments)
+                      "with-exception-handler handler"))
+            (thunk (expect-procedure
+                    (second arguments)
+                    "with-exception-handler thunk"))
+            (old-handlers (context-exception-handlers context)))
+        (dynamic-wind
+          (lambda ()
+            (set-context-exception-handlers!
+             context
+             (cons handler old-handlers)))
+          (lambda ()
+            (apply-procedure thunk '() context #f))
+          (lambda ()
+            (set-context-exception-handlers!
+             context
+             old-handlers)))))
+
+    (define (primitive-raise-continuable arguments context)
+      (invoke-exception-handler (car arguments) context))
+
+    (define (primitive-raise arguments context)
+      (invoke-exception-handler (car arguments) context)
+      (eval-error "non-continuable exception handler returned"))
+
+    (define (primitive-error arguments context)
+      (let ((message (expect-string (car arguments) "error message"))
+            (irritants (cdr arguments)))
+        (primitive-raise
+         (list (make-agent-scheme-error-object message irritants))
+         context)))
+
+    (define (primitive-error-object? arguments context)
+      (agent-scheme-error-object? (car arguments)))
+
+    (define (expect-error-object value description)
+      (if (agent-scheme-error-object? value)
+          value
+          (eval-error
+           (string-append description " expected an error object")
+           value)))
+
+    (define (primitive-error-object-message arguments context)
+      (agent-scheme-error-object-message
+       (expect-error-object (car arguments) "error-object-message")))
+
+    (define (primitive-error-object-irritants arguments context)
+      (agent-scheme-error-object-irritants
+       (expect-error-object (car arguments) "error-object-irritants")))
 
     (define (primitive-map arguments context)
       (map-over-lists
@@ -3612,7 +3906,9 @@
                       context
                       #f)))
                 (loop (+ index 1)
-                      (cons (expect-character value "string-map result")
+                      (cons (expect-character
+                             (single-value value "string-map result")
+                             "string-map result")
                             result)))))))
 
     (define (primitive-string-for-each arguments context)
@@ -3750,12 +4046,14 @@
               (list->vector (reverse result))
               (loop (+ index 1)
                     (cons
-                     (apply-procedure
-                      procedure
-                      (map (lambda (vector) (vector-ref vector index))
-                           vectors)
-                      context
-                      #f)
+                     (single-value
+                      (apply-procedure
+                       procedure
+                       (map (lambda (vector) (vector-ref vector index))
+                            vectors)
+                       context
+                       #f)
+                      "vector-map result")
                      result))))))
 
     (define (primitive-vector-for-each arguments context)
@@ -3854,7 +4152,8 @@
 
     (define (primitive-procedure? arguments context)
       (or (agent-scheme-procedure? (car arguments))
-          (agent-scheme-primitive-procedure? (car arguments))))
+          (agent-scheme-primitive-procedure? (car arguments))
+          (continuation? (car arguments))))
 
     (define (primitive-eq? arguments context)
       (eq? (car arguments) (second arguments)))
@@ -3913,6 +4212,9 @@
        (list 'bytevector-u8-ref primitive-bytevector-u8-ref 2 2)
        (list 'bytevector-u8-set! primitive-bytevector-u8-set! 3 3)
        (list 'bytevector? primitive-bytevector? 1 1)
+       (list 'call-with-current-continuation primitive-call/cc 1 1)
+       (list 'call-with-values primitive-call-with-values 2 2)
+       (list 'call/cc primitive-call/cc 1 1)
        (list 'car primitive-car 1 1)
        (list 'cdr primitive-cdr 1 1)
        (list 'ceiling primitive-ceiling 1 1)
@@ -3925,9 +4227,14 @@
        (list 'char? primitive-char? 1 1)
        (list 'complex? primitive-complex? 1 1)
        (list 'cons primitive-cons 2 2)
+       (list 'dynamic-wind primitive-dynamic-wind 3 3)
        (list 'eq? primitive-eq? 2 2)
        (list 'equal? primitive-equal? 2 2)
        (list 'eqv? primitive-eqv? 2 2)
+       (list 'error primitive-error 1 #f)
+       (list 'error-object-irritants primitive-error-object-irritants 1 1)
+       (list 'error-object-message primitive-error-object-message 1 1)
+       (list 'error-object? primitive-error-object? 1 1)
        (list 'exact-integer? primitive-exact-integer? 1 1)
        (list 'exact? primitive-exact? 1 1)
        (list 'floor primitive-floor 1 1)
@@ -3949,6 +4256,8 @@
        (list 'pair? primitive-pair? 1 1)
        (list 'procedure? primitive-procedure? 1 1)
        (list 'quotient primitive-quotient 2 2)
+       (list 'raise primitive-raise 1 1)
+       (list 'raise-continuable primitive-raise-continuable 1 1)
        (list 'rational? primitive-rational? 1 1)
        (list 'real? primitive-real? 1 1)
        (list 'remainder primitive-remainder 2 2)
@@ -3994,7 +4303,12 @@
        (list 'vector-map primitive-vector-map 2 #f)
        (list 'vector-ref primitive-vector-ref 2 2)
        (list 'vector-set! primitive-vector-set! 3 3)
-       (list 'vector? primitive-vector? 1 1)))
+       (list 'vector? primitive-vector? 1 1)
+       (list 'values primitive-values 0 #f)
+       (list 'with-exception-handler
+             primitive-with-exception-handler
+             2
+             2)))
 
     (define (agent-scheme-base-primitive-names)
       (map car base-primitive-registry))
@@ -4208,6 +4522,34 @@
                 (second parts)
                 (expand-expression/fully
                  (third parts) environment context)))
+         ((and (or (identifier-named? operator 'let-values)
+                   (identifier-named? operator 'let*-values))
+               (special-operator-active? operator environment))
+          (let ((description
+                 (symbol->string (identifier-datum-name operator))))
+            (let ((bindings
+                   (map (lambda (binding)
+                          (let ((binding-parts
+                                 (proper-list-elements
+                                  binding
+                                  (string-append description " binding"))))
+                            (if (not (= (length binding-parts) 2))
+                                (eval-error
+                                 (string-append
+                                  description
+                                  " binding must contain formals and initializer")
+                                 binding))
+                            (list (car binding-parts)
+                                  (expand-expression/fully
+                                   (second binding-parts)
+                                   environment
+                                   context))))
+                        (proper-list-elements
+                         (second parts)
+                         (string-append description " binding list")))))
+              (append (list operator bindings)
+                      (expand-sequence-forms
+                       (cddr parts) environment context #t)))))
          ((and (or (identifier-named? operator 'letrec)
                    (identifier-named? operator 'letrec*))
                (special-operator-active? operator environment))
@@ -4366,6 +4708,17 @@
                 (result-field 'name (primitive-procedure-name value))))
          ((agent-scheme-procedure? value)
           (list 'procedure (result-field 'kind 'compound)))
+         ((continuation? value)
+          (list 'procedure (result-field 'kind 'continuation)))
+         ((agent-scheme-error-object? value)
+          (list 'error-object
+                (result-field 'message
+                              (agent-scheme-error-object-message value))
+                (result-field
+                 'irritants
+                 (map (lambda (irritant)
+                        (value->result-datum irritant seen))
+                      (agent-scheme-error-object-irritants value)))))
          ((pair? value)
           (if (memq value seen)
               '(cycle)
@@ -4408,11 +4761,20 @@
        (result-field 'host-calls (context-host-callbacks context))))
 
     (define (ok-result-datum value context)
-      (list 'evaluation-result
-            (result-field 'status 'ok)
-            (result-field 'value (value->result-datum value))
-            (result-field 'events '())
-            (budget-result-field context)))
+      (if (multiple-values? value)
+          (list 'evaluation-result
+                (result-field 'status 'values)
+                (result-field
+                 'values
+                 (map value->result-datum
+                      (multiple-values-values value)))
+                (result-field 'events '())
+                (budget-result-field context))
+          (list 'evaluation-result
+                (result-field 'status 'ok)
+                (result-field 'value (value->result-datum value))
+                (result-field 'events '())
+                (budget-result-field context))))
 
     (define (condition-message condition)
       (if (error-object? condition)
@@ -4464,5 +4826,16 @@
          "#<primitive "
          (symbol->string (primitive-procedure-name value))
          ">"))
+       ((continuation? value)
+        "#<continuation>")
+       ((agent-scheme-error-object? value)
+        (string-append
+         "#<error-object "
+         (agent-scheme-error-object-message value)
+         ">"))
+       ((multiple-values? value)
+        (agent-scheme-datum->external
+         (cons 'values
+               (map strip-identifiers (multiple-values-values value)))))
        (else
         (agent-scheme-datum->external (strip-identifiers value)))))))

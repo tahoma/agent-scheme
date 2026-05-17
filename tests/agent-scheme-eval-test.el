@@ -15,6 +15,11 @@
   (agent-scheme-value->external
    (agent-scheme-eval-source source nil options)))
 
+(defun agent-scheme-eval-test--result-external (source &optional options)
+  "Evaluate SOURCE and return the external representation of its result record."
+  (agent-scheme-result->external
+   (agent-scheme-eval-source-result source nil options)))
+
 (ert-deftest agent-scheme-eval-test-literals-and-quote ()
   "Evaluate self-evaluating datums and quoted datums."
   (should (equal (agent-scheme-eval-test--external "42") "42"))
@@ -44,8 +49,6 @@
   (should-error (agent-scheme-eval-source "missing")
                 :type 'agent-scheme-eval-error)
   (should-error (agent-scheme-eval-source "(missing 1)")
-                :type 'agent-scheme-eval-error)
-  (should-error (agent-scheme-eval-source "(values 1 2)")
                 :type 'agent-scheme-eval-error)
   (should-error (agent-scheme-eval-source "(1 2)")
                 :type 'agent-scheme-eval-error))
@@ -169,5 +172,75 @@
   (should-error
    (agent-scheme-eval-source "(+ 1 2)" nil '(:max-host-callbacks 0))
    :type 'agent-scheme-budget-error))
+
+(ert-deftest agent-scheme-eval-test-multiple-values-and-binding-forms ()
+  "Evaluate values, call-with-values, let-values, and let*-values."
+  (should
+   (string-match-p
+    (regexp-quote
+     "(evaluation-result (status values) (values (1 2))")
+    (agent-scheme-eval-test--result-external "(values 1 2)")))
+  (should
+   (equal (agent-scheme-eval-test--external
+           "(call-with-values (lambda () (values 4 5))
+                              (lambda (a b) (- b a)))")
+          "1"))
+  (should
+   (equal (agent-scheme-eval-test--external
+           "(let-values (((a b) (values 1 2))
+                         ((rest) (values '(x y))))
+              (list a b rest))")
+          "(1 2 (x y))"))
+  (should
+   (equal (agent-scheme-eval-test--external
+           "(let ((a 'a) (b 'b) (x 'x) (y 'y))
+              (let*-values (((a b) (values x y))
+                            ((x y) (values a b)))
+                (list a b x y)))")
+          "(x y x y)")))
+
+(ert-deftest agent-scheme-eval-test-continuations-and-dynamic-wind ()
+  "Evaluate escape continuations and dynamic-wind exit thunks."
+  (should
+   (equal (agent-scheme-eval-test--external
+           "(call/cc (lambda (escape) (+ 1 (escape 42))))")
+          "42"))
+  (should
+   (equal (agent-scheme-eval-test--external
+           "(let ((path '()))
+              (define (add tag) (set! path (cons tag path)))
+              (call/cc
+               (lambda (escape)
+                 (dynamic-wind
+                  (lambda () (add 'before))
+                  (lambda ()
+                    (add 'during)
+                    (escape 'done))
+                  (lambda () (add 'after)))))
+              (reverse path))")
+          "(before during after)")))
+
+(ert-deftest agent-scheme-eval-test-exceptions-and-guard ()
+  "Evaluate R7RS exception handlers, guard, continuable raises, and error."
+  (should
+   (equal (agent-scheme-eval-test--external
+           "(guard (exn (else (list 'caught exn)))
+              (raise 'boom))")
+          "(caught boom)"))
+  (should
+   (equal (agent-scheme-eval-test--external
+           "(with-exception-handler
+              (lambda (exn) 42)
+              (lambda ()
+                (+ (raise-continuable 'warning) 23)))")
+          "65"))
+  (should
+   (equal (agent-scheme-eval-test--external
+           "(guard (exn
+                    ((error-object? exn)
+                     (list (error-object-message exn)
+                           (error-object-irritants exn))))
+              (error \"bad input\" 'alpha 7))")
+          "(\"bad input\" (alpha 7))")))
 
 ;;; agent-scheme-eval-test.el ends here
