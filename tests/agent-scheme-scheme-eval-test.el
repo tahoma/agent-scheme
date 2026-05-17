@@ -17,6 +17,20 @@
      (t
       (executable-find "chibi-scheme")))))
 
+(ert-deftest agent-scheme-scheme-eval-test-bootstrap-avoids-host-call/cc ()
+  "Keep portable evaluator continuations explicit for bootstrapping."
+  (with-temp-buffer
+    (insert-file-contents
+     (expand-file-name
+      "scheme/agent-scheme/eval.sld"
+      agent-scheme--test-root))
+    (goto-char (point-min))
+    (should-not
+     (re-search-forward
+      "^[[:space:]]*(\\(?:call-with-current-continuation\\|call/cc\\)\\_>"
+      nil
+      t))))
+
 (ert-deftest agent-scheme-scheme-eval-test-r7rs-suite ()
   "Run the portable R7RS evaluator tests with an external Scheme."
   (let ((runner (agent-scheme--scheme-eval-runner)))
