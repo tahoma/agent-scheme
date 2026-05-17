@@ -3162,15 +3162,7 @@ top-level definition forms within the sequence."
    ((integerp number)
     (agent-scheme--make-canonical-integer number))
    ((floatp number)
-    (let ((text (number-to-string number)))
-      (cond
-       ((string-match-p "NaN" text)
-        (agent-scheme--make-canonical-infnan '+nan.0))
-       ((string-match-p "INF" text)
-        (agent-scheme--make-canonical-infnan
-         (if (string-prefix-p "-" text) '-inf.0 '+inf.0)))
-       (t
-        (agent-scheme--make-canonical-decimal number)))))
+    (agent-scheme--make-canonical-decimal number))
    (t
     (agent-scheme--eval-error "unsupported host number result: %S" number))))
 
