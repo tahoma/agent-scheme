@@ -138,6 +138,9 @@ per-run resource limits."
 (defvar agent-scheme--symbol-table (make-hash-table :test #'equal)
   "Intern table for Scheme symbol datums.")
 
+(defconst agent-scheme--read-eof (make-symbol "agent-scheme-read-eof")
+  "Private marker returned by incremental reader helpers at end of input.")
+
 (defconst agent-scheme--character-names
   '(("alarm" . 7)
     ("backspace" . 8)
@@ -1314,6 +1317,30 @@ SOURCE may be a string or buffer.  OPTIONS has the same shape as
     (dolist (datum datums)
       (agent-scheme-validate-datum datum options))
     datums))
+
+(defun agent-scheme--read-one-from-string-at (source position &optional options)
+  "Read one datum from SOURCE at POSITION.
+Return (DATUM . NEXT-POSITION).  DATUM is
+`agent-scheme--read-eof' when only intertoken space remains."
+  (unless (and (stringp source)
+               (integerp position)
+               (<= 0 position)
+               (<= position (length source)))
+    (signal 'wrong-type-argument (list 'string-position (list source position))))
+  (let ((reader (agent-scheme--new-reader source options)))
+    (setf (agent-scheme--reader-position reader) position)
+    (agent-scheme--skip-intertoken-space reader 0)
+    (if (agent-scheme--eof-p reader)
+        (cons agent-scheme--read-eof
+              (agent-scheme--reader-position reader))
+      (setf (agent-scheme--reader-datum-labels reader)
+            (make-hash-table :test #'equal))
+      (let ((datum
+             (agent-scheme--resolve-datum-labels
+              (agent-scheme--read-datum reader 0)
+              reader)))
+        (agent-scheme-validate-datum datum options)
+        (cons datum (agent-scheme--reader-position reader))))))
 
 (defun agent-scheme--validate-note-node (reader)
   "Record one validated datum node in READER."
