@@ -127,6 +127,14 @@ template resolve there instead of at the macro use site."
   "Registered primitive procedure value."
   name function minimum-arity maximum-arity)
 
+(cl-defstruct (agent-scheme-parameter
+               (:constructor agent-scheme--make-parameter (value converter))
+               (:copier nil))
+  "R7RS parameter object.
+VALUE is the current value.  CONVERTER is nil or a Scheme procedure applied to
+new values before they are installed."
+  value converter)
+
 (cl-defstruct (agent-scheme--multiple-values
                (:constructor agent-scheme--make-multiple-values (values))
                (:copier nil))
@@ -783,6 +791,11 @@ environment for free-template-identifier hygiene."
   (and (consp form)
        (agent-scheme--symbol-named-p (car form) "define")))
 
+(defun agent-scheme--define-values-form-p (form)
+  "Return non-nil if FORM is a supported define-values form."
+  (and (consp form)
+       (agent-scheme--symbol-named-p (car form) "define-values")))
+
 (defun agent-scheme--begin-form-p (form)
   "Return non-nil if FORM is a begin form."
   (and (consp form)
@@ -831,6 +844,7 @@ Return a cons cell (NAME . INITIALIZER-EXPRESSION)."
 (defun agent-scheme--body-definition-form-p (form)
   "Return non-nil if FORM is a body definition."
   (or (agent-scheme--definition-form-p form)
+      (agent-scheme--define-values-form-p form)
       (agent-scheme--record-definition-form-p form)))
 
 (defun agent-scheme--parse-record-definition (form)
@@ -1052,6 +1066,20 @@ initializers are evaluated."
               (agent-scheme--environment-define
                body-environment (car parsed-definition)
                agent-scheme--undefined)))
+           ((agent-scheme--define-values-form-p definition)
+            (push (cons 'define-values
+                        (agent-scheme--parse-define-values definition))
+                  parsed)
+            (dolist (name (agent-scheme--define-values-bound-names definition))
+              (unless (eq (gethash name
+                                    (agent-scheme--environment-bindings
+                                     body-environment)
+                                    agent-scheme--missing-cell)
+                          agent-scheme--missing-cell)
+                (agent-scheme--eval-error
+                 "duplicate internal definition: %s" name))
+              (agent-scheme--environment-define
+               body-environment name agent-scheme--undefined)))
            ((agent-scheme--record-definition-form-p definition)
             (push (cons 'record definition) parsed)
             (dolist (name (agent-scheme--record-definition-bound-names
@@ -1073,6 +1101,16 @@ initializers are evaluated."
               (cadr parsed-definition)
               (agent-scheme--eval-expression
                (cddr parsed-definition) body-environment context nil)))
+            ('define-values
+             (let ((define-values (cdr parsed-definition)))
+               (agent-scheme--define-values-bind
+                (car define-values)
+                (agent-scheme--values-list
+                 (agent-scheme--eval-expression
+                  (cdr define-values) body-environment context nil))
+                body-environment
+                context
+                "define-values")))
             ('record
              (agent-scheme--eval-record-definition
               (cdr parsed-definition) body-environment context))))
@@ -1110,6 +1148,74 @@ initializers are evaluated."
       (if direct-call
           (agent-scheme--drain-state state context)
         state))))
+
+(defun agent-scheme--parse-define-values (form)
+  "Parse supported DEFINE-VALUES FORM.
+Return a cons cell (FORMALS . INITIALIZER-EXPRESSION)."
+  (let ((parts (agent-scheme--proper-list-elements form "define-values form")))
+    (unless (= (length parts) 3)
+      (agent-scheme--eval-error
+       "define-values requires formals and one expression"))
+    (cons (agent-scheme--parse-formals (cadr parts))
+          (caddr parts))))
+
+(defun agent-scheme--define-values-bound-names (form)
+  "Return names bound by define-values FORM."
+  (agent-scheme--formals-names
+   (car (agent-scheme--parse-define-values form))))
+
+(defun agent-scheme--define-values-bind
+    (formals values environment context description)
+  "Bind FORMALS to VALUES in ENVIRONMENT for DESCRIPTION."
+  (let* ((required (agent-scheme--formals-required formals))
+         (rest (agent-scheme--formals-rest formals))
+         (required-count (length required))
+         (value-count (length values)))
+    (cond
+     ((and (null rest) (/= value-count required-count))
+      (agent-scheme--eval-error
+       "%s expected %d values, got %d"
+       description required-count value-count))
+     ((and rest (< value-count required-count))
+      (agent-scheme--eval-error
+       "%s expected at least %d values, got %d"
+       description required-count value-count)))
+    (let ((remaining values))
+      (dolist (name required)
+        (agent-scheme--define-or-set-record-binding
+         environment name (car remaining))
+        (setq remaining (cdr remaining)))
+      (when rest
+        (agent-scheme--define-or-set-record-binding
+         environment rest (copy-sequence remaining))
+        (agent-scheme--check-value-budget remaining context)))
+    agent-scheme-unspecified))
+
+(defun agent-scheme--eval-define-values
+    (form environment context &optional continuation)
+  "Evaluate top-level or body define-values FORM in ENVIRONMENT."
+  (let* ((parsed (agent-scheme--parse-define-values form))
+         (formals (car parsed))
+         (initializer (cdr parsed))
+         (direct-call (null continuation))
+         (next (or continuation #'agent-scheme--identity-continuation))
+         (state
+          (agent-scheme--eval-expression
+           initializer
+           environment
+           context
+           nil
+           (lambda (raw-value)
+             (agent-scheme--define-values-bind
+              formals
+              (agent-scheme--values-list raw-value)
+              environment
+              context
+              "define-values")
+             (agent-scheme--continue next agent-scheme-unspecified)))))
+    (if direct-call
+        (agent-scheme--drain-state state context)
+      state)))
 
 (defun agent-scheme--bind-formals (formals arguments closure-environment context)
   "Return a call environment for FORMALS bound to ARGUMENTS."
@@ -1219,12 +1325,17 @@ any resulting bounce to preserve existing direct-call helper behavior."
              (agent-scheme--primitive-eval/k arguments context next))
             ((eq function #'agent-scheme--primitive-load)
              (agent-scheme--primitive-load/k arguments context next))
+            ((eq function #'agent-scheme--primitive-make-parameter)
+             (agent-scheme--primitive-make-parameter/k arguments context next))
             (t
              (agent-scheme--continue
               next
               (agent-scheme--check-value-budget
                (funcall function arguments context)
                context)))))))
+       ((agent-scheme-parameter-p procedure)
+        (finish
+         (agent-scheme--apply-parameter/k procedure arguments context next)))
        ((agent-scheme-procedure-p procedure)
         (let* ((call-environment
                 (agent-scheme--bind-formals
@@ -2361,7 +2472,11 @@ When RECURSIVE is non-nil, transformer specs see the new bindings."
     "(scheme inexact)"
     "(scheme lazy)"
     "(scheme load)"
+    "(scheme process-context)"
     "(scheme read)"
+    "(scheme repl)"
+    "(scheme r5rs)"
+    "(scheme time)"
     "(scheme write)")
   "Standard R7RS library keys with focused bootstrap support.")
 
@@ -2375,14 +2490,22 @@ When RECURSIVE is non-nil, transformer specs see the new bindings."
      (export case-lambda)
      (import (scheme base))
      (begin
+       (define (%case-lambda-matches? formals count)
+         (if (symbol? formals)
+             #t
+             (let loop ((cursor formals) (required 0))
+               (cond
+                ((null? cursor) (= count required))
+                ((pair? cursor) (loop (cdr cursor) (+ required 1)))
+                (else (>= count required))))))
        (define-syntax case-lambda
          (syntax-rules ()
            ((case-lambda)
             (lambda args (car '())))
-           ((case-lambda ((param ...) body ...) more ...)
+           ((case-lambda (formals body ...) more ...)
             (lambda args
-              (if (= (length args) (length '(param ...)))
-                  (apply (lambda (param ...) body ...) args)
+              (if (%case-lambda-matches? 'formals (length args))
+                  (apply (lambda formals body ...) args)
                   (apply (case-lambda more ...) args))))))))"
   "Portable bootstrap source for `(scheme case-lambda)'.")
 
@@ -2637,6 +2760,74 @@ Each spec has (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY)."
           syntax-environment)
          registry)))))
 
+(defun agent-scheme--cxr-primitive (name)
+  "Return a primitive procedure implementation for composed accessor NAME."
+  (let ((steps (reverse (string-to-list
+                         (substring name 1 (1- (length name)))))))
+    (lambda (arguments _context)
+      (let ((value (car arguments)))
+        (dolist (step steps)
+          (setq value
+                (if (= step ?a)
+                    (agent-scheme--primitive-car (list value) nil)
+                  (agent-scheme--primitive-cdr (list value) nil))))
+        value))))
+
+(defconst agent-scheme--cxr-library-names
+  '("caaar" "caadr" "cadar" "caddr"
+    "cdaar" "cdadr" "cddar" "cdddr"
+    "caaaar" "caaadr" "caadar" "caaddr"
+    "cadaar" "cadadr" "caddar" "cadddr"
+    "cdaaar" "cdaadr" "cdadar" "cdaddr"
+    "cddaar" "cddadr" "cdddar" "cddddr")
+  "R7RS `(scheme cxr)' three- and four-level accessors.")
+
+(defun agent-scheme--cxr-primitive-specs ()
+  "Return primitive specs for `(scheme cxr)'."
+  (mapcar
+   (lambda (name)
+     (list name (agent-scheme--cxr-primitive name) 1 1))
+   agent-scheme--cxr-library-names))
+
+(defun agent-scheme--policy-denied-spec (name)
+  "Return a primitive spec for default-denied host effect NAME."
+  (list name
+        (lambda (_arguments _context)
+          (agent-scheme--policy-denied name))
+        0
+        nil))
+
+(defun agent-scheme--register-r5rs-library (key context environment)
+  "Register the practical `(scheme r5rs)' compatibility library KEY."
+  (let ((registry (agent-scheme--eval-context-libraries context)))
+    (unless (gethash key registry)
+      (let* ((base-library
+              (agent-scheme--resolve-library
+               (agent-scheme-read agent-scheme--scheme-base-library-key)
+               context
+               environment))
+             (exports (copy-sequence (agent-scheme--library-exports
+                                       base-library)))
+             (inexact-binding
+              (agent-scheme--find-library-export "inexact" exports))
+             (exact-binding
+              (agent-scheme--find-library-export "exact" exports)))
+        (push (agent-scheme--library-binding-with-name
+               inexact-binding "exact->inexact")
+              exports)
+        (push (agent-scheme--library-binding-with-name
+               exact-binding "inexact->exact")
+              exports)
+        (puthash
+         key
+         (agent-scheme--make-library
+          (agent-scheme-read key)
+          key
+          (nreverse exports)
+          (agent-scheme--library-value-environment base-library)
+          (agent-scheme--library-syntax-environment base-library))
+         registry)))))
+
 (defun agent-scheme--register-standard-library
     (key context environment)
   "Register focused standard library KEY in CONTEXT."
@@ -2647,7 +2838,28 @@ Each spec has (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY)."
     ("(scheme char)"
      (agent-scheme--register-primitive-library
       key
-      `(("char-upcase" ,#'agent-scheme--primitive-char-upcase 1 1))
+      `(("char-alphabetic?" ,#'agent-scheme--primitive-char-alphabetic? 1 1)
+        ("char-ci<=?" ,#'agent-scheme--primitive-char-ci<=? 2 nil)
+        ("char-ci<?" ,#'agent-scheme--primitive-char-ci<? 2 nil)
+        ("char-ci=?" ,#'agent-scheme--primitive-char-ci=? 2 nil)
+        ("char-ci>=?" ,#'agent-scheme--primitive-char-ci>=? 2 nil)
+        ("char-ci>?" ,#'agent-scheme--primitive-char-ci>? 2 nil)
+        ("char-downcase" ,#'agent-scheme--primitive-char-downcase 1 1)
+        ("char-foldcase" ,#'agent-scheme--primitive-char-foldcase 1 1)
+        ("char-lower-case?" ,#'agent-scheme--primitive-char-lower-case? 1 1)
+        ("char-numeric?" ,#'agent-scheme--primitive-char-numeric? 1 1)
+        ("char-upcase" ,#'agent-scheme--primitive-char-upcase 1 1)
+        ("char-upper-case?" ,#'agent-scheme--primitive-char-upper-case? 1 1)
+        ("char-whitespace?" ,#'agent-scheme--primitive-char-whitespace? 1 1)
+        ("digit-value" ,#'agent-scheme--primitive-digit-value 1 1)
+        ("string-ci<=?" ,#'agent-scheme--primitive-string-ci<=? 2 nil)
+        ("string-ci<?" ,#'agent-scheme--primitive-string-ci<? 2 nil)
+        ("string-ci=?" ,#'agent-scheme--primitive-string-ci=? 2 nil)
+        ("string-ci>=?" ,#'agent-scheme--primitive-string-ci>=? 2 nil)
+        ("string-ci>?" ,#'agent-scheme--primitive-string-ci>? 2 nil)
+        ("string-downcase" ,#'agent-scheme--primitive-string-downcase 1 1)
+        ("string-foldcase" ,#'agent-scheme--primitive-string-foldcase 1 1)
+        ("string-upcase" ,#'agent-scheme--primitive-string-upcase 1 1))
       context))
     ("(scheme complex)"
      (agent-scheme--register-primitive-library
@@ -2660,8 +2872,10 @@ Each spec has (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY)."
         ("real-part" ,#'agent-scheme--primitive-real-part 1 1))
       context))
     ("(scheme cxr)"
-     (agent-scheme--register-subset-library
-      key '("caar" "cadr" "cdar" "cddr") context environment))
+     (agent-scheme--register-primitive-library
+      key
+      (agent-scheme--cxr-primitive-specs)
+      context))
     ("(scheme eval)"
      (agent-scheme--register-primitive-library
       key
@@ -2671,14 +2885,40 @@ Each spec has (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY)."
     ("(scheme file)"
      (agent-scheme--register-primitive-library
       key
-      `(("file-exists?" ,#'agent-scheme--primitive-file-exists? 1 1))
+      `(("call-with-input-file" ,(cadr (agent-scheme--policy-denied-spec
+                                        "call-with-input-file")) 2 2)
+        ("call-with-output-file" ,(cadr (agent-scheme--policy-denied-spec
+                                         "call-with-output-file")) 2 2)
+        ("delete-file" ,#'agent-scheme--primitive-delete-file 1 1)
+        ("file-exists?" ,#'agent-scheme--primitive-file-exists? 1 1)
+        ("open-binary-input-file" ,(cadr (agent-scheme--policy-denied-spec
+                                          "open-binary-input-file")) 1 1)
+        ("open-binary-output-file" ,(cadr (agent-scheme--policy-denied-spec
+                                           "open-binary-output-file")) 1 1)
+        ("open-input-file" ,(cadr (agent-scheme--policy-denied-spec
+                                   "open-input-file")) 1 1)
+        ("open-output-file" ,(cadr (agent-scheme--policy-denied-spec
+                                    "open-output-file")) 1 1)
+        ("with-input-from-file" ,(cadr (agent-scheme--policy-denied-spec
+                                        "with-input-from-file")) 2 2)
+        ("with-output-to-file" ,(cadr (agent-scheme--policy-denied-spec
+                                       "with-output-to-file")) 2 2))
       context))
     ("(scheme inexact)"
      (agent-scheme--register-primitive-library
       key
-      `(("finite?" ,#'agent-scheme--primitive-finite? 1 1)
+      `(("acos" ,#'agent-scheme--primitive-acos 1 1)
+        ("asin" ,#'agent-scheme--primitive-asin 1 1)
+        ("atan" ,#'agent-scheme--primitive-atan 1 2)
+        ("cos" ,#'agent-scheme--primitive-cos 1 1)
+        ("exp" ,#'agent-scheme--primitive-exp 1 1)
+        ("finite?" ,#'agent-scheme--primitive-finite? 1 1)
         ("infinite?" ,#'agent-scheme--primitive-infinite? 1 1)
-        ("nan?" ,#'agent-scheme--primitive-nan? 1 1))
+        ("log" ,#'agent-scheme--primitive-log 1 2)
+        ("nan?" ,#'agent-scheme--primitive-nan? 1 1)
+        ("sin" ,#'agent-scheme--primitive-sin 1 1)
+        ("sqrt" ,#'agent-scheme--primitive-sqrt 1 1)
+        ("tan" ,#'agent-scheme--primitive-tan 1 1))
       context))
     ("(scheme lazy)"
      (agent-scheme--register-source-library
@@ -2688,10 +2928,33 @@ Each spec has (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY)."
       key
       `(("load" ,#'agent-scheme--primitive-load 1 2))
       context))
+    ("(scheme process-context)"
+     (agent-scheme--register-primitive-library
+      key
+      (mapcar #'agent-scheme--policy-denied-spec
+              '("command-line"
+                "emergency-exit"
+                "exit"
+                "get-environment-variable"
+                "get-environment-variables"))
+      context))
     ("(scheme read)"
      (agent-scheme--register-primitive-library
       key
       `(("read" ,#'agent-scheme--primitive-read 0 1))
+      context))
+    ("(scheme repl)"
+     (agent-scheme--register-primitive-library
+      key
+      (list (agent-scheme--policy-denied-spec "interaction-environment"))
+      context))
+    ("(scheme r5rs)"
+     (agent-scheme--register-r5rs-library key context environment))
+    ("(scheme time)"
+     (agent-scheme--register-primitive-library
+      key
+      (mapcar #'agent-scheme--policy-denied-spec
+              '("current-jiffy" "current-second" "jiffies-per-second"))
       context))
     ("(scheme write)"
      (agent-scheme--register-primitive-library
@@ -3419,6 +3682,10 @@ When FOLD-CASE is non-nil, read as if the file began with
        ((and (agent-scheme--symbol-named-p operator "define")
 	             (agent-scheme--special-operator-active-p operator environment))
 	        (agent-scheme--eval-error "define is not valid in expression position"))
+       ((and (agent-scheme--symbol-named-p operator "define-values")
+             (agent-scheme--special-operator-active-p operator environment))
+        (agent-scheme--eval-error
+         "define-values is not valid in expression position"))
        ((and (agent-scheme--symbol-named-p operator "define-record-type")
              (agent-scheme--special-operator-active-p operator environment))
         (agent-scheme--eval-error
@@ -3579,6 +3846,16 @@ top-level definition forms within the sequence."
                       nil)
                    (agent-scheme--eval-error
                     "define-record-type is only allowed before body expressions")))
+                ((agent-scheme--define-values-form-p form)
+                 (if allow-definitions
+                     (agent-scheme--eval-define-values
+                      form
+                      environment
+                      context
+                      (lambda (value)
+                        (after-form value rest nil)))
+                   (agent-scheme--eval-error
+                    "define-values is only allowed before body expressions")))
                 ((agent-scheme--definition-form-p form)
                  (if allow-definitions
                      (agent-scheme--eval-definition
@@ -3924,6 +4201,7 @@ When ALLOW-END is non-nil, LIMIT itself is accepted."
   "Return DATUM as a procedure or signal an error naming DESCRIPTION."
   (unless (or (agent-scheme-procedure-p datum)
               (agent-scheme-primitive-procedure-p datum)
+              (agent-scheme-parameter-p datum)
               (agent-scheme--continuation-p datum))
     (agent-scheme--eval-error
      "%s must be a procedure, got %s"
@@ -4752,6 +5030,128 @@ the maximum endpoint for DESCRIPTION."
    (agent-scheme--number-nan-p
     (agent-scheme--expect-number (car arguments) "nan?"))))
 
+(defun agent-scheme--primitive-inexact-unary
+    (arguments function description)
+  "Apply real-valued inexact FUNCTION to ARGUMENTS for DESCRIPTION."
+  (agent-scheme--make-canonical-decimal
+   (funcall function
+            (agent-scheme--number->float (car arguments) description))))
+
+(defun agent-scheme--primitive-exp (arguments _context)
+  "Primitive exp over ARGUMENTS."
+  (agent-scheme--primitive-inexact-unary arguments #'exp "exp"))
+
+(defun agent-scheme--primitive-log (arguments _context)
+  "Primitive log over ARGUMENTS."
+  (let ((value (agent-scheme--primitive-inexact-unary
+                (list (car arguments)) #'log "log")))
+    (if (cdr arguments)
+        (let ((base (agent-scheme--primitive-inexact-unary
+                     (list (cadr arguments)) #'log "log")))
+          (agent-scheme--primitive/
+           (list value base) nil))
+      value)))
+
+(defun agent-scheme--primitive-sin (arguments _context)
+  "Primitive sin over ARGUMENTS."
+  (agent-scheme--primitive-inexact-unary arguments #'sin "sin"))
+
+(defun agent-scheme--primitive-cos (arguments _context)
+  "Primitive cos over ARGUMENTS."
+  (agent-scheme--primitive-inexact-unary arguments #'cos "cos"))
+
+(defun agent-scheme--primitive-tan (arguments _context)
+  "Primitive tan over ARGUMENTS."
+  (agent-scheme--primitive-inexact-unary arguments #'tan "tan"))
+
+(defun agent-scheme--primitive-asin (arguments _context)
+  "Primitive asin over ARGUMENTS."
+  (agent-scheme--primitive-inexact-unary arguments #'asin "asin"))
+
+(defun agent-scheme--primitive-acos (arguments _context)
+  "Primitive acos over ARGUMENTS."
+  (agent-scheme--primitive-inexact-unary arguments #'acos "acos"))
+
+(defun agent-scheme--primitive-atan (arguments _context)
+  "Primitive atan over ARGUMENTS."
+  (if (cdr arguments)
+      (agent-scheme--make-canonical-decimal
+       (atan (agent-scheme--number->float (car arguments) "atan")
+             (agent-scheme--number->float (cadr arguments) "atan")))
+    (agent-scheme--primitive-inexact-unary arguments #'atan "atan")))
+
+(defun agent-scheme--primitive-sqrt (arguments _context)
+  "Primitive sqrt over ARGUMENTS."
+  (let* ((number (agent-scheme--expect-number (car arguments) "sqrt"))
+         (value (agent-scheme--number->float number "sqrt")))
+    (if (and (not (agent-scheme--number-complex-p number))
+             (< value 0.0))
+        (agent-scheme--make-canonical-complex
+         (agent-scheme--make-canonical-decimal 0.0)
+         (agent-scheme--make-canonical-decimal (sqrt (- value))))
+      (agent-scheme--make-canonical-decimal (sqrt value)))))
+
+(defun agent-scheme--apply-parameter/k
+    (parameter arguments context continuation)
+  "Apply PARAMETER to ARGUMENTS and continue with CONTINUATION."
+  (cond
+   ((null arguments)
+    (agent-scheme--continue
+     continuation
+     (agent-scheme-parameter-value parameter)))
+   ((cdr arguments)
+    (agent-scheme--eval-error
+     "parameter expected 0..1 arguments, got %d" (length arguments)))
+   ((agent-scheme-parameter-converter parameter)
+    (agent-scheme--apply-procedure
+     (agent-scheme-parameter-converter parameter)
+     (list (car arguments))
+     context
+     nil
+     (lambda (converted)
+       (setf (agent-scheme-parameter-value parameter)
+             (agent-scheme--single-value converted "parameter converter"))
+       (agent-scheme--continue continuation agent-scheme-unspecified))))
+   (t
+    (setf (agent-scheme-parameter-value parameter) (car arguments))
+    (agent-scheme--continue continuation agent-scheme-unspecified))))
+
+(defun agent-scheme--primitive-make-parameter (arguments context)
+  "Primitive make-parameter over ARGUMENTS."
+  (agent-scheme--drain-state
+   (agent-scheme--primitive-make-parameter/k
+    arguments context #'agent-scheme--identity-continuation)
+   context))
+
+(defun agent-scheme--primitive-make-parameter/k
+    (arguments context continuation)
+  "CPS primitive make-parameter over ARGUMENTS."
+  (let ((initial (car arguments))
+        (converter (cadr arguments)))
+    (if converter
+        (progn
+          (unless (or (agent-scheme-procedure-p converter)
+                      (agent-scheme-primitive-procedure-p converter)
+                      (agent-scheme--continuation-p converter)
+                      (agent-scheme-parameter-p converter))
+            (agent-scheme--eval-error
+             "make-parameter converter must be a procedure"))
+          (agent-scheme--apply-procedure
+           converter
+           (list initial)
+           context
+           nil
+           (lambda (converted)
+             (agent-scheme--continue
+              continuation
+              (agent-scheme--make-parameter
+               (agent-scheme--single-value
+                converted "make-parameter converter")
+               converter)))))
+      (agent-scheme--continue
+       continuation
+       (agent-scheme--make-parameter initial nil)))))
+
 (defun agent-scheme--primitive-make-rectangular (arguments _context)
   "Primitive make-rectangular over ARGUMENTS."
   (agent-scheme--make-canonical-complex
@@ -4869,6 +5269,7 @@ the maximum endpoint for DESCRIPTION."
   (let ((value (car arguments)))
     (if (or (agent-scheme-procedure-p value)
             (agent-scheme-primitive-procedure-p value)
+            (agent-scheme-parameter-p value)
             (agent-scheme--continuation-p value))
         agent-scheme-true
       agent-scheme-false)))
@@ -5369,6 +5770,106 @@ DESCRIPTION names the primitive for errors."
   (let ((code (agent-scheme--expect-character
                (car arguments) "char-upcase")))
     (agent-scheme--make-character (upcase code))))
+
+(defun agent-scheme--primitive-char-downcase (arguments _context)
+  "Primitive char-downcase over ARGUMENTS."
+  (let ((code (agent-scheme--expect-character
+               (car arguments) "char-downcase")))
+    (agent-scheme--make-character (downcase code))))
+
+(defun agent-scheme--primitive-char-foldcase (arguments _context)
+  "Primitive char-foldcase over ARGUMENTS."
+  (let ((code (agent-scheme--expect-character
+               (car arguments) "char-foldcase")))
+    (agent-scheme--make-character (downcase (upcase code)))))
+
+(defun agent-scheme--character-matches-p (code regexp)
+  "Return non-nil if CODE's string representation matches REGEXP."
+  (string-match-p regexp (char-to-string code)))
+
+(defun agent-scheme--primitive-char-alphabetic? (arguments _context)
+  "Primitive char-alphabetic? over ARGUMENTS."
+  (agent-scheme--scheme-boolean
+   (agent-scheme--character-matches-p
+    (agent-scheme--expect-character (car arguments) "char-alphabetic?")
+    "\\`[[:alpha:]]\\'")))
+
+(defun agent-scheme--primitive-char-numeric? (arguments _context)
+  "Primitive char-numeric? over ARGUMENTS."
+  (agent-scheme--scheme-boolean
+   (agent-scheme--character-matches-p
+    (agent-scheme--expect-character (car arguments) "char-numeric?")
+    "\\`[[:digit:]]\\'")))
+
+(defun agent-scheme--primitive-char-whitespace? (arguments _context)
+  "Primitive char-whitespace? over ARGUMENTS."
+  (agent-scheme--scheme-boolean
+   (agent-scheme--character-matches-p
+    (agent-scheme--expect-character (car arguments) "char-whitespace?")
+    "\\`[[:space:]]\\'")))
+
+(defun agent-scheme--primitive-char-upper-case? (arguments _context)
+  "Primitive char-upper-case? over ARGUMENTS."
+  (let ((code (agent-scheme--expect-character
+               (car arguments) "char-upper-case?")))
+    (agent-scheme--scheme-boolean
+     (and (agent-scheme--character-matches-p code "\\`[[:alpha:]]\\'")
+          (= code (upcase code))
+          (/= code (downcase code))))))
+
+(defun agent-scheme--primitive-char-lower-case? (arguments _context)
+  "Primitive char-lower-case? over ARGUMENTS."
+  (let ((code (agent-scheme--expect-character
+               (car arguments) "char-lower-case?")))
+    (agent-scheme--scheme-boolean
+     (and (agent-scheme--character-matches-p code "\\`[[:alpha:]]\\'")
+          (= code (downcase code))
+          (/= code (upcase code))))))
+
+(defun agent-scheme--primitive-digit-value (arguments _context)
+  "Primitive digit-value over ARGUMENTS."
+  (let ((code (agent-scheme--expect-character (car arguments) "digit-value")))
+    (if (and (>= code ?0) (<= code ?9))
+        (agent-scheme--make-canonical-integer (- code ?0))
+      agent-scheme-false)))
+
+(defun agent-scheme--char-fold-code (value description)
+  "Return folded character code for VALUE using DESCRIPTION."
+  (downcase
+   (upcase
+    (agent-scheme--expect-character value description))))
+
+(defun agent-scheme--primitive-char-ci-compare
+    (arguments predicate description)
+  "Return Scheme boolean for folded character PREDICATE over ARGUMENTS."
+  (agent-scheme--primitive-char-compare
+   (mapcar
+    (lambda (argument)
+      (agent-scheme--make-character
+       (agent-scheme--char-fold-code argument description)))
+    arguments)
+   predicate
+   description))
+
+(defun agent-scheme--primitive-char-ci=? (arguments _context)
+  "Primitive char-ci=? over ARGUMENTS."
+  (agent-scheme--primitive-char-ci-compare arguments #'= "char-ci=?"))
+
+(defun agent-scheme--primitive-char-ci<? (arguments _context)
+  "Primitive char-ci<? over ARGUMENTS."
+  (agent-scheme--primitive-char-ci-compare arguments #'< "char-ci<?"))
+
+(defun agent-scheme--primitive-char-ci>? (arguments _context)
+  "Primitive char-ci>? over ARGUMENTS."
+  (agent-scheme--primitive-char-ci-compare arguments #'> "char-ci>?"))
+
+(defun agent-scheme--primitive-char-ci<=? (arguments _context)
+  "Primitive char-ci<=? over ARGUMENTS."
+  (agent-scheme--primitive-char-ci-compare arguments #'<= "char-ci<=?"))
+
+(defun agent-scheme--primitive-char-ci>=? (arguments _context)
+  "Primitive char-ci>=? over ARGUMENTS."
+  (agent-scheme--primitive-char-ci-compare arguments #'>= "char-ci>=?"))
 
 (defun agent-scheme--display-string (value)
   "Return a focused display representation for VALUE."
@@ -5904,9 +6405,34 @@ Advance when ADVANCEP is non-nil.  Signal errors using DESCRIPTION."
        (car arguments)
        (agent-scheme--expect-string-output-port
         (cadr arguments) "write-simple")
-       'simple
+        'simple
        nil)
     agent-scheme-unspecified))
+
+(defun agent-scheme--primitive-flush-output-port (arguments _context)
+  "Primitive flush-output-port over ARGUMENTS."
+  (when arguments
+    (agent-scheme--expect-output-port (car arguments) "flush-output-port"))
+  agent-scheme-unspecified)
+
+(defun agent-scheme--primitive-read-error? (arguments _context)
+  "Primitive read-error? over ARGUMENTS."
+  (agent-scheme--scheme-boolean nil))
+
+(defun agent-scheme--primitive-file-error? (arguments _context)
+  "Primitive file-error? over ARGUMENTS."
+  (agent-scheme--scheme-boolean nil))
+
+(defun agent-scheme--primitive-features (_arguments _context)
+  "Primitive features."
+  (mapcar
+   #'agent-scheme--syntax-symbol
+   '("r7rs" "ratios" "exact-complex" "ieee-float" "agent-scheme")))
+
+(defun agent-scheme--policy-denied (description)
+  "Signal a default-denied host policy error for DESCRIPTION."
+  (agent-scheme--eval-error
+   "%s requires policy-gated host access" description))
 
 (defun agent-scheme--resolve-file-policy-path (filename context description)
   "Return absolute path for FILENAME after CONTEXT file policy checks."
@@ -5932,6 +6458,11 @@ Advance when ADVANCEP is non-nil.  Signal errors using DESCRIPTION."
          (path (agent-scheme--resolve-file-policy-path
                 filename context "file-exists?")))
     (agent-scheme--scheme-boolean (file-exists-p path))))
+
+(defun agent-scheme--primitive-delete-file (arguments _context)
+  "Primitive delete-file over ARGUMENTS."
+  (agent-scheme--expect-string (car arguments) "delete-file")
+  (agent-scheme--policy-denied "delete-file"))
 
 (defun agent-scheme--primitive-call-with-port (arguments context)
   "Primitive call-with-port over ARGUMENTS."
@@ -5982,6 +6513,7 @@ Advance when ADVANCEP is non-nil.  Signal errors using DESCRIPTION."
       (agent-scheme--define-library-form-p form)
       (agent-scheme--syntax-definition-form-p form)
       (agent-scheme--record-definition-form-p form)
+      (agent-scheme--define-values-form-p form)
       (agent-scheme--definition-form-p form)))
 
 (defun agent-scheme--primitive-eval (arguments context)
@@ -6162,6 +6694,31 @@ Return (FORMS . DIRECTORY)."
           (agent-scheme--proper-list-elements
            (car arguments) "list->string"))))
 
+(defun agent-scheme--primitive-string->utf8 (arguments _context)
+  "Primitive string->utf8 over ARGUMENTS."
+  (let* ((string (agent-scheme--expect-string (car arguments) "string->utf8"))
+         (range (agent-scheme--optional-range
+                 arguments 1 (length string) "string->utf8"))
+         (bytes (encode-coding-string
+                 (substring string (car range) (cdr range))
+                 'utf-8
+                 t)))
+    (agent-scheme--make-bytevector
+     (vconcat (mapcar #'identity bytes)))))
+
+(defun agent-scheme--primitive-utf8->string (arguments _context)
+  "Primitive utf8->string over ARGUMENTS."
+  (let* ((bytevector (agent-scheme--expect-bytevector
+                      (car arguments) "utf8->string"))
+         (bytes (agent-scheme-bytevector-bytes bytevector))
+         (range (agent-scheme--optional-range
+                 arguments 1 (length bytes) "utf8->string"))
+         (raw (apply #'unibyte-string
+                     (append
+                      (cl-subseq bytes (car range) (cdr range))
+                      nil))))
+    (decode-coding-string raw 'utf-8 t)))
+
 (defun agent-scheme--primitive-string->vector (arguments _context)
   "Primitive string->vector over ARGUMENTS."
   (vconcat (agent-scheme--primitive-string->list arguments nil)))
@@ -6246,6 +6803,53 @@ Return (FORMS . DIRECTORY)."
   "Primitive string>=? over ARGUMENTS."
   (agent-scheme--primitive-string-compare
    arguments (lambda (left right) (not (string< left right))) "string>=?"))
+
+(defun agent-scheme--primitive-string-upcase (arguments _context)
+  "Primitive string-upcase over ARGUMENTS."
+  (upcase (agent-scheme--expect-string (car arguments) "string-upcase")))
+
+(defun agent-scheme--primitive-string-downcase (arguments _context)
+  "Primitive string-downcase over ARGUMENTS."
+  (downcase (agent-scheme--expect-string (car arguments) "string-downcase")))
+
+(defun agent-scheme--primitive-string-foldcase (arguments _context)
+  "Primitive string-foldcase over ARGUMENTS."
+  (downcase (upcase (agent-scheme--expect-string
+                     (car arguments) "string-foldcase"))))
+
+(defun agent-scheme--primitive-string-ci-compare
+    (arguments predicate description)
+  "Return Scheme boolean for folded string PREDICATE over ARGUMENTS."
+  (agent-scheme--primitive-string-compare
+   (mapcar
+    (lambda (argument)
+      (downcase (upcase (agent-scheme--expect-string argument description))))
+    arguments)
+   predicate
+   description))
+
+(defun agent-scheme--primitive-string-ci=? (arguments _context)
+  "Primitive string-ci=? over ARGUMENTS."
+  (agent-scheme--primitive-string-ci-compare arguments #'string= "string-ci=?"))
+
+(defun agent-scheme--primitive-string-ci<? (arguments _context)
+  "Primitive string-ci<? over ARGUMENTS."
+  (agent-scheme--primitive-string-ci-compare arguments #'string< "string-ci<?"))
+
+(defun agent-scheme--primitive-string-ci>? (arguments _context)
+  "Primitive string-ci>? over ARGUMENTS."
+  (agent-scheme--primitive-string-ci-compare
+   arguments (lambda (left right) (string< right left)) "string-ci>?"))
+
+(defun agent-scheme--primitive-string-ci<=? (arguments _context)
+  "Primitive string-ci<=? over ARGUMENTS."
+  (agent-scheme--primitive-string-ci-compare
+   arguments (lambda (left right) (not (string< right left))) "string-ci<=?"))
+
+(defun agent-scheme--primitive-string-ci>=? (arguments _context)
+  "Primitive string-ci>=? over ARGUMENTS."
+  (agent-scheme--primitive-string-ci-compare
+   arguments (lambda (left right) (not (string< left right))) "string-ci>=?"))
 
 (defun agent-scheme--map-over-lists (procedure lists context keep-results)
   "Map PROCEDURE over LISTS in CONTEXT.
@@ -6902,6 +7506,9 @@ When KEEP-RESULTS is non-nil, return the collected values."
     ("exact-integer?" agent-scheme--primitive-exact-integer? 1 1)
     ("exact?" agent-scheme--primitive-exact? 1 1)
     ("expt" agent-scheme--primitive-expt 2 2)
+    ("features" agent-scheme--primitive-features 0 0)
+    ("file-error?" agent-scheme--primitive-file-error? 1 1)
+    ("flush-output-port" agent-scheme--primitive-flush-output-port 0 1)
     ("floor" agent-scheme--primitive-floor 1 1)
     ("floor/" agent-scheme--primitive-floor/ 2 2)
     ("floor-quotient" agent-scheme--primitive-floor-quotient 2 2)
@@ -6920,6 +7527,7 @@ When KEEP-RESULTS is non-nil, return the collected values."
     ("list->vector" agent-scheme--primitive-list->vector 1 1)
     ("list?" agent-scheme--primitive-list? 1 1)
     ("make-bytevector" agent-scheme--primitive-make-bytevector 1 2)
+    ("make-parameter" agent-scheme--primitive-make-parameter 1 2)
     ("make-string" agent-scheme--primitive-make-string 1 2)
     ("make-vector" agent-scheme--primitive-make-vector 1 2)
     ("modulo" agent-scheme--primitive-modulo 2 2)
@@ -6947,6 +7555,7 @@ When KEEP-RESULTS is non-nil, return the collected values."
     ("read-bytevector" agent-scheme--primitive-read-bytevector 1 2)
     ("read-bytevector!" agent-scheme--primitive-read-bytevector! 1 4)
     ("read-char" agent-scheme--primitive-read-char 0 1)
+    ("read-error?" agent-scheme--primitive-read-error? 1 1)
     ("read-line" agent-scheme--primitive-read-line 0 1)
     ("read-string" agent-scheme--primitive-read-string 1 2)
     ("read-u8" agent-scheme--primitive-read-u8 0 1)
@@ -6959,6 +7568,7 @@ When KEEP-RESULTS is non-nil, return the collected values."
     ("string->list" agent-scheme--primitive-string->list 1 3)
     ("string->number" agent-scheme--primitive-string->number 1 2)
     ("string->symbol" agent-scheme--primitive-string->symbol 1 1)
+    ("string->utf8" agent-scheme--primitive-string->utf8 1 3)
     ("string->vector" agent-scheme--primitive-string->vector 1 3)
     ("string-append" agent-scheme--primitive-string-append 0 nil)
     ("string-copy" agent-scheme--primitive-string-copy 1 3)
@@ -6985,6 +7595,7 @@ When KEEP-RESULTS is non-nil, return the collected values."
     ("truncate-quotient" agent-scheme--primitive-truncate-quotient 2 2)
     ("truncate-remainder" agent-scheme--primitive-truncate-remainder 2 2)
     ("u8-ready?" agent-scheme--primitive-u8-ready? 0 1)
+    ("utf8->string" agent-scheme--primitive-utf8->string 1 3)
     ("vector" agent-scheme--primitive-vector 0 nil)
     ("vector->list" agent-scheme--primitive-vector->list 1 3)
     ("vector->string" agent-scheme--primitive-vector->string 1 3)
@@ -7186,6 +7797,18 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
       (agent-scheme--eval-error
        "define target must be an identifier or function signature")))))
 
+(defun agent-scheme--expand-define-values-form (form environment context)
+  "Return macro-expanded define-values FORM."
+  (let* ((parts (agent-scheme--proper-list-elements
+                 form "define-values form")))
+    (unless (= (length parts) 3)
+      (agent-scheme--eval-error
+       "define-values requires formals and one expression"))
+    (list (car parts)
+          (cadr parts)
+          (agent-scheme--expand-expression-fully
+           (caddr parts) environment context))))
+
 (defun agent-scheme--expand-core-combination (expression environment context)
   "Return EXPRESSION with macro expansion recursively applied."
   (let* ((parts (agent-scheme--proper-list-elements expression "expression"))
@@ -7227,6 +7850,26 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
             (cadr parts)
             (agent-scheme--expand-expression-fully
              (caddr parts) environment context)))
+     ((and (agent-scheme--symbol-named-p operator "parameterize")
+           (agent-scheme--special-operator-active-p operator environment))
+      (let ((bindings
+             (mapcar
+              (lambda (binding)
+                (let ((binding-parts
+                       (agent-scheme--proper-list-elements
+                        binding "parameterize binding")))
+                  (unless (= (length binding-parts) 2)
+                    (agent-scheme--eval-error
+                     "parameterize binding must contain a parameter and value"))
+                  (list (agent-scheme--expand-expression-fully
+                         (car binding-parts) environment context)
+                        (agent-scheme--expand-expression-fully
+                         (cadr binding-parts) environment context))))
+              (agent-scheme--proper-list-elements
+               (cadr parts) "parameterize binding list"))))
+        (append (list operator bindings)
+                (agent-scheme--expand-sequence-forms
+                 (cddr parts) environment context t))))
      ((and (member (agent-scheme--symbol-name operator)
                    '("let-values" "let*-values"))
            (agent-scheme--special-operator-active-p operator environment))
@@ -7326,6 +7969,11 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
        ((and allow-definitions
              (agent-scheme--definition-form-p form))
         (push (agent-scheme--expand-definition-form
+               form environment context)
+              expanded-forms))
+       ((and allow-definitions
+             (agent-scheme--define-values-form-p form))
+        (push (agent-scheme--expand-define-values-form
                form environment context)
               expanded-forms))
        ((and allow-definitions

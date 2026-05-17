@@ -14,6 +14,19 @@ The project goal is to give agents and users a Lisp-native scripting environment
 
 The implementation roadmap lives in GitHub issues, starting with the architecture and dependency-graph issues.
 
+The initial R7RS-small compliance target is tracked in
+[docs/r7rs-conformance.md](docs/r7rs-conformance.md). Pure `(scheme base)`
+forms and the standard pure libraries are exercised through `make test`.
+Libraries that observe or mutate host state, such as `(scheme file)`,
+`(scheme load)`, `(scheme process-context)`, `(scheme repl)`, `(scheme time)`,
+and current/default ports, are importable where appropriate but default to
+policy-gated behavior.
+
+SRFI support is not part of the R7RS-small compliance contract. Optional SRFI
+libraries belong to a future `stdlib-plus` layer tracked separately in
+[tahoma/agent-scheme#54](https://github.com/tahoma/agent-scheme/issues/54), so
+SRFI import failures should not be read as R7RS-small conformance failures.
+
 ## Design Rules
 
 - Think in Lisp/Scheme first for internal APIs and examples.
@@ -26,6 +39,73 @@ The implementation roadmap lives in GitHub issues, starting with the architectur
 ## Repository Shape
 
 This seed is intentionally small. Initial implementation modules and documentation should follow the GitHub roadmap.
+
+## Examples
+
+R7RS-small library imports and ordinary macros:
+
+```scheme
+(import (scheme base)
+        (scheme case-lambda)
+        (scheme char)
+        (scheme write))
+
+(define-syntax unless
+  (syntax-rules ()
+    ((unless test body ...)
+     (if test #f (begin body ...)))))
+
+(define describe
+  (case-lambda
+    ((value)
+     (let ((out (open-output-string)))
+       (unless (char-ci=? #\a #\A)
+         (error "character folding unavailable"))
+       (write value out)
+       (get-output-string out)))
+    ((label value)
+     (string-append label ": " (describe value)))))
+```
+
+Optional SRFI imports should be guarded so portable R7RS-small code still runs
+when the `stdlib-plus` layer is unavailable:
+
+```scheme
+(define-library (agent-scheme examples optional-srfi)
+  (export sample)
+  (import (scheme base))
+  (cond-expand
+    ((library (srfi 1))
+     (import (srfi 1)))
+    (else))
+  (begin
+    (define sample '(1 2 3))))
+```
+
+Emacs capability libraries are separate from standard Scheme libraries and are
+subject to host policy. Adapter-provided procedures can be imported beside
+ordinary Scheme code when the host enables them:
+
+```scheme
+(define-library (agent-scheme examples hosted)
+  (export summarize-buffer)
+  (import (scheme base)
+          (scheme write)
+          (emacs buffer))
+  (begin
+    (define-syntax with-default
+      (syntax-rules ()
+        ((with-default fallback expression)
+         (guard (exn (else fallback))
+           expression))))
+
+    (define (summarize-buffer)
+      (with-default
+       "buffer access denied by policy"
+       (let ((out (open-output-string)))
+         (write (buffer-name (current-buffer)) out)
+         (get-output-string out)))))))
+```
 
 ## Project Docs
 
