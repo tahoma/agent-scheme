@@ -157,6 +157,17 @@
   (should-error (agent-scheme-read "#u8(1 . 2)")
                 :type 'agent-scheme-reader-error))
 
+(ert-deftest agent-scheme-reader-test-datum-labels-preserve-identity ()
+  "Read R7RS datum labels as shared and circular structure."
+  (let ((circular (agent-scheme-read "#1=(a . #1#)"))
+        (shared (agent-scheme-read "(#1=(a b) #1#)")))
+    (should (eq circular (cdr circular)))
+    (should (eq (car shared) (cadr shared)))
+    (should (equal (agent-scheme-datum->external circular)
+                   "#0=(a . #0#)"))
+    (should (equal (agent-scheme-datum->external shared)
+                   "((a b) (a b))"))))
+
 (ert-deftest agent-scheme-reader-test-comments-and-read-all ()
   "Skip line, block, datum comments, and read multiple datums."
   (should
@@ -189,7 +200,7 @@
                 :type 'agent-scheme-reader-error)
   (should-error (agent-scheme-read "(1 2")
                 :type 'agent-scheme-reader-error)
-  (should-error (agent-scheme-read "#1=(a . #1#)")
+  (should-error (agent-scheme-read "#1#")
                 :type 'agent-scheme-reader-error)
   (should-error (agent-scheme-read "1 2")
                 :type 'agent-scheme-reader-error)

@@ -119,6 +119,27 @@
                        (equal? '(1 \"x\") '(1 \"x\")))"
                 "(4 beta #t)")
 
+(check-external 'records-construct-predicate-access-and-mutate
+                "(define-record-type <pare>
+                   (kons x y)
+                   pare?
+                   (x kar set-kar!)
+                   (y kdr))
+                 (let ((p (kons 1 2)))
+                   (set-kar! p 3)
+                   (list (pare? p)
+                         (pare? (cons 1 2))
+                         (kar p)
+                         (kdr p)))"
+                "(#t #f 3 2)")
+
+(check-external 'circular-equality-terminates
+                "(let ((left '#1=(a b . #1#))
+                       (right '#2=(a b a b . #2#)))
+                   (list (eq? left (cddr left))
+                         (equal? left right)))"
+                "(#t #t)")
+
 (check-external 'base-scalar-helpers
                 "(list (/ 5 2)
                        (abs -4)
@@ -611,6 +632,40 @@
                    (display \"ok\" out)
                    (get-output-string out))"
                 "\"ok\"")
+
+(check-external 'standard-write-shared-output
+                "(import (scheme base) (scheme write))
+                 (let ((x (list 'a)))
+                   (let ((out (open-output-string)))
+                     (write-shared (list x x) out)
+                     (get-output-string out)))"
+                "\"(#0=(a) #0#)\"")
+
+(check-external 'standard-write-circular-output
+                "(import (scheme base) (scheme write))
+                 (let ((out (open-output-string)))
+                   (write '#1=(a . #1#) out)
+                   (get-output-string out))"
+                "\"#0=(a . #0#)\"")
+
+(check-external 'standard-write-simple-output
+                "(import (scheme base) (scheme write))
+                 (let ((out (open-output-string)))
+                   (write-simple '#(1 \"x\") out)
+                   (get-output-string out))"
+                "\"#(1 \\\"x\\\")\"")
+
+(check-external 'standard-write-record-output
+                "(import (scheme base) (scheme write))
+                 (define-record-type <pare>
+                   (kons x y)
+                   pare?
+                   (x kar)
+                   (y kdr))
+                 (let ((out (open-output-string)))
+                   (write (kons 1 2) out)
+                   (get-output-string out))"
+                "\"#<record <pare>>\"")
 
 (check 'standard-file-import-default-denied
        (raises?

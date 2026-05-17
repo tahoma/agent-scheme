@@ -23,7 +23,7 @@ marked `implemented`.
 
 | Area | R7RS-small coverage | Status | Representative fixtures | Notes |
 | --- | --- | --- | --- | --- |
-| Reader syntax | Comments, case directives, booleans, numbers, characters, strings, symbols, lists, dotted pairs, abbreviations, vectors, bytevectors, datum comments | `pending` | `reader-boolean-literals`, `reader-bytevector-literal`, `reader-character-literal`, `reader-symbol-case-directive`, `reader-dotted-list`, `reader-vector-literal`, `reader-abbreviation-forms`, `reader-comments-and-datum-comments` | First-pass reader datums are implemented and fixture-loaded with Agent Scheme's reader; datum labels remain pending. |
+| Reader syntax | Comments, case directives, booleans, numbers, characters, strings, symbols, lists, dotted pairs, abbreviations, vectors, bytevectors, datum comments, datum labels | `pending` | `reader-boolean-literals`, `reader-bytevector-literal`, `reader-character-literal`, `reader-symbol-case-directive`, `reader-dotted-list`, `reader-vector-literal`, `reader-abbreviation-forms`, `reader-comments-and-datum-comments`, `reader-datum-label-cycle` | First-pass reader datums, including shared and circular datum labels, are implemented and fixture-loaded with Agent Scheme's reader. |
 | Primitive expressions | Literal, variable reference, quote, procedure call, `if`, `set!`, `lambda` | `implemented` | `primitive-procedure-call` | Emacs Lisp and portable R7RS evaluator kernels cover explicit lexical environments, closures, mutation, and primitive calls. |
 | Definitions and sequencing | `define`, `define-values`, `begin`, internal definitions | `pending` | `primitive-procedure-call` | Internal definitions should be tested with lexical scope cases. |
 | Derived syntax | `cond`, `case`, `and`, `or`, `when`, `unless`, `let`, `let*`, `letrec`, `letrec*`, `let-values`, `let*-values`, `do`, `delay`, `quasiquote`, `parameterize` | `pending` | `derived-let-expression`, `derived-cond-arrow-literal-binding`, `derived-case-expression`, `derived-do-expression`, `derived-quasiquote-expression` | Macro-expanded `and`, `case`, `cond`, `do`, `or`, `when`, `unless`, `let`, and `let*` support is implemented. `letrec`, `letrec*`, `let-values`, `let*-values`, `begin`, and `quasiquote` are evaluator-supported where primitive handling is required. |
@@ -33,10 +33,10 @@ marked `implemented`.
 | Multiple values | `values`, `call-with-values`, `define-values`, `let-values`, `let*-values` | `pending` | `multiple-values-direct`, `multiple-values-call-with-values`, `multiple-values-let-values` | `values`, `call-with-values`, `let-values`, and `let*-values` are implemented; `define-values` remains pending. |
 | Exceptions | `with-exception-handler`, `guard`, `raise`, `raise-continuable`, `error` | `implemented` | `exceptions-guard-raise`, `exceptions-raise-continuable` | Error objects remain inspectable through `error-object?`, `error-object-message`, and `error-object-irritants`. |
 | Continuations | `call-with-current-continuation`, `call/cc`, `dynamic-wind` | `implemented` | `continuations-escape`, `continuations-dynamic-wind-exit`, `continuations-reenter-after-return`, `continuations-repeated-invocation`, `continuations-dynamic-wind-reentry`, `continuations-multiple-values`, `continuations-let-values-multiple-values`, `continuations-let*-values-multiple-values` | Captured continuations are re-enterable after their original extent returns, can be invoked repeatedly, preserve representative dynamic-wind exit and re-entry ordering, and deliver multiple values to call-with-values and let-values contexts. |
-| Core data types | Booleans, numbers, characters, strings, symbols, pairs, lists, vectors, bytevectors, procedures, ports, EOF objects | `pending` | `core-data-vector-ref`, `core-data-eof-object` | Data-type tests should cover predicates, constructors, accessors, mutation, and equality. |
+| Core data types | Booleans, numbers, characters, strings, symbols, pairs, lists, vectors, bytevectors, procedures, records, ports, EOF objects | `pending` | `core-data-vector-ref`, `core-data-record-type`, `core-data-eof-object` | Records are covered through `define-record-type`; host-managed ports and EOF objects remain pending. |
 | Numeric tower | Exact and inexact integers, rationals, reals, complex numbers, arithmetic, comparison, conversions | `implemented` | `numeric-exact-rational-arithmetic`, `numeric-exactness-conversions`, `numeric-complex-rectangular-arithmetic`, `numeric-inexact-special-values`, `numeric-polar-special-values` | Exact rationals reduce to canonical form; rectangular complex arithmetic, polar special-value canonicalization, and focused `(scheme inexact)` predicates are fixture-covered. Remaining transcendental routines may still use host math only behind Agent Scheme result canonicalization. |
-| Equivalence | `eq?`, `eqv?`, `equal?` across standard datums | `pending` | `core-data-vector-ref` | Add exact edge cases as data representation stabilizes. |
-| Ports and I/O datums | Textual and binary ports, input/output procedures, reader and writer round trips | `pending` | `standard-library-write-display` | External host access is policy-gated separately. |
+| Equivalence | `eq?`, `eqv?`, `equal?` across standard datums | `pending` | `core-data-vector-ref`, `core-data-circular-equal` | Circular pair and vector comparisons terminate; add exact edge cases as data representation stabilizes. |
+| Ports and I/O datums | Textual and binary ports, input/output procedures, reader and writer round trips | `pending` | `standard-library-write-display`, `standard-library-write-shared`, `standard-library-write-simple`, `standard-library-write-circular` | In-memory string output supports `display`, `write`, `write-shared`, and `write-simple`; external host access is policy-gated separately. |
 
 ## Standard Libraries
 
@@ -56,15 +56,15 @@ marked `implemented`.
 | `(scheme read)` | `pending` | None yet | Reading from in-memory ports can be pure; host ports need policy. |
 | `(scheme repl)` | `policy-gated` | None yet | Interactive host integration belongs behind the REPL/session policy boundary. |
 | `(scheme time)` | `policy-gated` | None yet | Time is an observable host effect and should be explicit. |
-| `(scheme write)` | `pending` | `standard-library-write-display` | Focused in-memory string output with `display` is implemented; full writer and port behavior remains pending. |
+| `(scheme write)` | `pending` | `standard-library-write-display`, `standard-library-write-shared`, `standard-library-write-simple`, `standard-library-write-circular` | Focused in-memory string output with `display`, `write`, `write-shared`, and `write-simple` is implemented; full port behavior remains pending. |
 | `(scheme r5rs)` | `pending` | None yet | Compatibility library. |
 
 ### `(scheme base)` Binding Status
 
 Issue #4 establishes the first `(scheme base)` procedure registry used by the
 bootstrap evaluator. This is not a claim of complete base-library conformance:
-derived syntax, macros, multiple values, continuations, exceptions, records,
-ports, and host-effecting bindings remain separate follow-up work.
+derived syntax, macros, multiple values, continuations, exceptions, ports, and
+host-effecting bindings remain separate follow-up work.
 
 Implemented primitive procedure bindings:
 
@@ -102,22 +102,19 @@ Implemented primitive procedure bindings:
   `error-object?`, `error-object-message`, `error-object-irritants`
 
 Implemented macro-expanded and evaluator-supported syntax includes `and`,
-`case`, `cond`, `cond-expand`, `do`, `guard`, `let`, `let*`, `let-values`,
-`let*-values`, `letrec`, `letrec*`, `let-syntax`, `letrec-syntax`, `or`,
-`quasiquote`, `syntax-rules`, `unless`, and `when`.
+`case`, `cond`, `cond-expand`, `define-record-type`, `do`, `guard`, `let`,
+`let*`, `let-values`, `let*-values`, `letrec`, `letrec*`, `let-syntax`,
+`letrec-syntax`, `or`, `quasiquote`, `syntax-rules`, `unless`, and `when`.
 
 The evaluator exposes a macro expansion phase through `agent-scheme-expand` and
 `agent-scheme-expand-source` in both the Emacs Lisp and portable Scheme
 kernels.
 
-Pending pure bindings include records
-(`define-record-type`), `define-values`, promises (`delay`, `delay-force`,
-`force`, `make-promise`), dynamic parameters (`parameterize`),
-remaining numeric operations (`denominator`, `exact`,
-remaining inexact transcendental operations (`exp`, `log`, `sin`, `cos`,
-`tan`, `asin`, `acos`, `atan`, `sqrt`), UTF-8 conversion (`string->utf8`,
-`utf8->string`), and feature/library forms (`features`, `include`,
-`include-ci`).
+Pending pure bindings include `define-values`, dynamic parameters
+(`parameterize`), remaining inexact transcendental operations (`exp`, `log`,
+`sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `sqrt`), UTF-8 conversion
+(`string->utf8`, `utf8->string`), and feature/library forms (`features`,
+`include`, `include-ci`).
 
 Policy-gated base bindings are the ones that expose or manipulate host-managed
 ports or process-facing I/O: `binary-port?`, `call-with-port`, `char-ready?`,
