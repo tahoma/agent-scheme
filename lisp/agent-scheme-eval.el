@@ -75,17 +75,17 @@
 
 (cl-defstruct (agent-scheme--environment
                (:constructor agent-scheme--make-environment
-                             (bindings parent))
+                             (bindings parent imported-bindings))
                (:copier nil))
   "Explicit lexical environment frame."
-  bindings parent)
+  bindings parent imported-bindings)
 
 (cl-defstruct (agent-scheme--syntax-environment
                (:constructor agent-scheme--make-syntax-environment
-                             (bindings parent))
+                             (bindings parent imported-bindings))
                (:copier nil))
   "Explicit syntactic environment frame."
-  bindings parent)
+  bindings parent imported-bindings)
 
 (cl-defstruct (agent-scheme--syntax-context
                (:constructor agent-scheme--make-syntax-context
@@ -244,7 +244,8 @@
                                 agent-scheme-eval-maximum-host-callbacks)
      :syntax-environment
      (agent-scheme--make-syntax-environment
-      (make-hash-table :test #'equal) nil)
+      (make-hash-table :test #'equal) nil
+      (make-hash-table :test #'equal))
      :libraries (make-hash-table :test #'equal)
      :include-paths
      (agent-scheme--normalize-include-paths
@@ -405,7 +406,10 @@ proper list."
 
 (defun agent-scheme-make-empty-environment (&optional parent)
   "Return a fresh empty lexical environment with optional PARENT."
-  (agent-scheme--make-environment (make-hash-table :test #'equal) parent))
+  (agent-scheme--make-environment
+   (make-hash-table :test #'equal)
+   parent
+   (make-hash-table :test #'equal)))
 
 (defun agent-scheme--environment-cell (environment name)
   "Return cell for NAME in ENVIRONMENT, or nil if unbound."
@@ -420,6 +424,28 @@ proper list."
           (setq cell candidate)))
       (setq cursor (agent-scheme--environment-parent cursor)))
     cell))
+
+(defun agent-scheme--environment-cell-imported-p (environment cell)
+  "Return non-nil when CELL is an imported binding in ENVIRONMENT."
+  (let ((cursor environment)
+        imported)
+    (while (and cursor (not imported))
+      (maphash
+       (lambda (name candidate)
+         (when (and (eq candidate cell)
+                    (gethash name
+                             (agent-scheme--environment-imported-bindings
+                              cursor)))
+           (setq imported t)))
+       (agent-scheme--environment-bindings cursor))
+      (setq cursor (agent-scheme--environment-parent cursor)))
+    imported))
+
+(defun agent-scheme--current-environment-imported-p (environment name)
+  "Return non-nil if NAME is imported in ENVIRONMENT's current frame."
+  (and (gethash name
+                (agent-scheme--environment-imported-bindings environment))
+       t))
 
 (defun agent-scheme--environment-cell-for-identifier (environment identifier)
   "Return cell for IDENTIFIER in ENVIRONMENT, or nil if unbound."
@@ -446,6 +472,9 @@ proper list."
 
 (defun agent-scheme--environment-define (environment name value)
   "Define NAME as VALUE in ENVIRONMENT's current frame."
+  (when (agent-scheme--current-environment-imported-p environment name)
+    (agent-scheme--eval-error
+     "cannot redefine imported binding: %s" name))
   (puthash name
            (agent-scheme--make-cell value)
            (agent-scheme--environment-bindings environment)))
@@ -455,6 +484,9 @@ proper list."
   (let ((cell (agent-scheme--environment-cell environment name)))
     (unless cell
       (agent-scheme--eval-error "unbound identifier in set!: %s" name))
+    (when (agent-scheme--environment-cell-imported-p environment cell)
+      (agent-scheme--eval-error
+       "cannot mutate imported binding: %s" name))
     (setf (agent-scheme--cell-value cell) value)))
 
 (defun agent-scheme--environment-ref (environment name)
@@ -492,6 +524,10 @@ proper list."
     (unless cell
       (agent-scheme--eval-error
        "unbound identifier in set!: %s"
+       (agent-scheme--identifier-display-name identifier)))
+    (when (agent-scheme--environment-cell-imported-p environment cell)
+      (agent-scheme--eval-error
+       "cannot mutate imported binding: %s"
        (agent-scheme--identifier-display-name identifier)))
     (setf (agent-scheme--cell-value cell) value)))
 
@@ -649,7 +685,12 @@ initializers are evaluated."
          (value (agent-scheme--eval-expression
                  (cdr parsed) environment context nil)))
     (if (not (eq cell agent-scheme--missing-cell))
-        (setf (agent-scheme--cell-value cell) value)
+        (progn
+          (when (agent-scheme--current-environment-imported-p
+                 environment name)
+            (agent-scheme--eval-error
+             "cannot redefine imported binding: %s" name))
+          (setf (agent-scheme--cell-value cell) value))
       (agent-scheme--environment-define environment name value))
     agent-scheme-unspecified))
 
@@ -947,7 +988,9 @@ each initializer."
 (defun agent-scheme--make-empty-syntax-environment (&optional parent)
   "Return a fresh empty syntactic environment with optional PARENT."
   (agent-scheme--make-syntax-environment
-   (make-hash-table :test #'equal) parent))
+   (make-hash-table :test #'equal)
+   parent
+   (make-hash-table :test #'equal)))
 
 (defun agent-scheme--syntax-environment-ref (syntax-environment name)
   "Return syntactic binding NAME in SYNTAX-ENVIRONMENT, or nil."
@@ -966,6 +1009,12 @@ each initializer."
 (defun agent-scheme--syntax-environment-define
     (syntax-environment name transformer)
   "Bind syntactic NAME to TRANSFORMER in SYNTAX-ENVIRONMENT."
+  (when (gethash
+         name
+         (agent-scheme--syntax-environment-imported-bindings
+          syntax-environment))
+    (agent-scheme--eval-error
+     "cannot redefine imported syntax binding: %s" name))
   (puthash name transformer
            (agent-scheme--syntax-environment-bindings syntax-environment)))
 
@@ -2197,7 +2246,7 @@ Each spec has (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY)."
               (agent-scheme--current-environment-cell
                value-environment name)))
          (cond
-          ((null existing)
+         ((null existing)
            (puthash name object
                     (agent-scheme--environment-bindings value-environment)))
           ((equal library-key agent-scheme--scheme-base-library-key)
@@ -2206,7 +2255,10 @@ Each spec has (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY)."
           ((eq existing object))
           (t
            (agent-scheme--eval-error
-            "conflicting import for identifier: %s" name)))))
+            "conflicting import for identifier: %s" name))))
+       (puthash name t
+                (agent-scheme--environment-imported-bindings
+                 value-environment)))
       ('syntax
        (let ((existing
               (agent-scheme--current-syntax-binding
@@ -2220,7 +2272,10 @@ Each spec has (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY)."
           ((eq existing object))
           (t
            (agent-scheme--eval-error
-            "conflicting syntax import for identifier: %s" name)))))
+            "conflicting syntax import for identifier: %s" name))))
+       (puthash name t
+                (agent-scheme--syntax-environment-imported-bindings
+                 syntax-environment)))
       (_
        (agent-scheme--eval-error
         "unsupported library binding kind: %S" kind)))))
@@ -2509,6 +2564,9 @@ When FOLD-CASE is non-nil, read as if the file began with
 (defun agent-scheme--library-exports-from-specs
     (specs library-key value-environment syntax-environment)
   "Return export bindings for SPECS from library environments."
+  (agent-scheme--ensure-distinct-names
+   (mapcar #'cdr specs)
+   "library exports")
   (agent-scheme--ensure-compatible-import-bindings
    (mapcar
     (lambda (spec)
@@ -2750,11 +2808,15 @@ top-level definition forms within the sequence."
     agent-scheme-unspecified)
    (t
     (let ((cursor forms)
-          value)
+          value
+          (imports-open t))
       (while (cdr cursor)
         (let ((form (car cursor)))
           (cond
            ((agent-scheme--import-form-p form)
+            (unless imports-open
+              (agent-scheme--eval-error
+               "import declarations must precede program body forms"))
             (if allow-definitions
                 (setq value
                       (agent-scheme--eval-import
@@ -2769,6 +2831,7 @@ top-level definition forms within the sequence."
               (agent-scheme--eval-error
                "define-library is only allowed at top level")))
            ((agent-scheme--syntax-definition-form-p form)
+            (setq imports-open nil)
             (if allow-definitions
                 (setq value
                       (agent-scheme--eval-define-syntax
@@ -2780,6 +2843,7 @@ top-level definition forms within the sequence."
               (agent-scheme--eval-error
                "define-syntax is only allowed before body expressions")))
            ((agent-scheme--definition-form-p form)
+            (setq imports-open nil)
             (if allow-definitions
                 (setq value
                       (agent-scheme--eval-definition
@@ -2787,11 +2851,13 @@ top-level definition forms within the sequence."
               (agent-scheme--eval-error
                "define is only allowed before body expressions")))
            ((and allow-definitions (agent-scheme--begin-form-p form))
+            (setq imports-open nil)
             (setq value
                   (agent-scheme--eval-sequence
                    (cdr (agent-scheme--proper-list-elements form "begin form"))
                    environment context nil t)))
            (t
+            (setq imports-open nil)
             (setq value
                   (agent-scheme--eval-expression
                    form environment context nil)))))
@@ -2799,6 +2865,9 @@ top-level definition forms within the sequence."
       (let ((last-form (car cursor)))
         (cond
          ((agent-scheme--import-form-p last-form)
+          (unless imports-open
+            (agent-scheme--eval-error
+             "import declarations must precede program body forms"))
           (if allow-definitions
               (agent-scheme--eval-import last-form environment context)
             (agent-scheme--eval-error

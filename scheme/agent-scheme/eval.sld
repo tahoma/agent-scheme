@@ -49,16 +49,20 @@
       (value cell-value set-cell-value!))
 
     (define-record-type <environment>
-      (make-environment frame parent)
+      (make-environment frame parent imported-names)
       environment?
       (frame environment-frame set-environment-frame!)
-      (parent environment-parent))
+      (parent environment-parent)
+      (imported-names environment-imported-names
+                      set-environment-imported-names!))
 
     (define-record-type <syntax-environment>
-      (make-syntax-environment frame parent)
+      (make-syntax-environment frame parent imported-names)
       syntax-environment?
       (frame syntax-environment-frame set-syntax-environment-frame!)
-      (parent syntax-environment-parent))
+      (parent syntax-environment-parent)
+      (imported-names syntax-environment-imported-names
+                      set-syntax-environment-imported-names!))
 
     (define-record-type <syntax-context>
       (make-syntax-context id value-environment syntax-environment)
@@ -237,7 +241,7 @@
        (option-ref options
                    'max-host-callbacks
                    agent-scheme-default-maximum-host-callbacks)
-       (make-syntax-environment '() #f)
+       (make-syntax-environment '() #f '())
        '()
        (normalize-include-paths
         (option-ref options 'include-paths '())
@@ -370,7 +374,8 @@
     (define (agent-scheme-make-empty-environment . maybe-parent)
       (make-environment
        '()
-       (if (null? maybe-parent) #f (car maybe-parent))))
+       (if (null? maybe-parent) #f (car maybe-parent))
+       '()))
 
     (define (frame-cell environment name)
       (let ((cell (assoc name (environment-frame environment))))
@@ -383,7 +388,23 @@
          ((frame-cell cursor name) => (lambda (cell) cell))
          (else (loop (environment-parent cursor))))))
 
+    (define (environment-cell-imported? environment cell)
+      (let environment-loop ((cursor environment))
+        (and cursor
+             (or (let frame-loop ((frame (environment-frame cursor)))
+                   (and (not (null? frame))
+                        (or (and (eq? (cdr (car frame)) cell)
+                                 (memq (car (car frame))
+                                       (environment-imported-names cursor)))
+                            (frame-loop (cdr frame)))))
+                 (environment-loop (environment-parent cursor))))))
+
+    (define (current-environment-imported? environment name)
+      (memq name (environment-imported-names environment)))
+
     (define (environment-define! environment name value)
+      (if (current-environment-imported? environment name)
+          (eval-error "cannot redefine imported binding" name))
       (set-environment-frame!
        environment
        (cons (cons name (make-cell value))
@@ -391,9 +412,13 @@
 
     (define (environment-set! environment name value)
       (let ((cell (environment-cell environment name)))
-        (if cell
-            (set-cell-value! cell value)
-            (eval-error "unbound identifier in set!" name))))
+        (cond
+         ((not cell)
+          (eval-error "unbound identifier in set!" name))
+         ((environment-cell-imported? environment cell)
+          (eval-error "cannot mutate imported binding" name))
+         (else
+          (set-cell-value! cell value)))))
 
     (define (environment-ref environment name)
       (let ((cell (environment-cell environment name)))
@@ -435,10 +460,15 @@
 
     (define (environment-set-identifier! environment identifier value)
       (let ((cell (environment-cell-for-identifier environment identifier)))
-        (if cell
-            (set-cell-value! cell value)
-            (eval-error "unbound identifier in set!"
-                        (identifier-datum-name identifier)))))
+        (cond
+         ((not cell)
+          (eval-error "unbound identifier in set!"
+                      (identifier-datum-name identifier)))
+         ((environment-cell-imported? environment cell)
+          (eval-error "cannot mutate imported binding"
+                      (identifier-datum-name identifier)))
+         (else
+          (set-cell-value! cell value)))))
 
     (define (ensure-distinct-names names description)
       (let loop ((rest names) (seen '()))
@@ -583,7 +613,10 @@
                                      context
                                      #f)))
         (if cell
-            (set-cell-value! cell value)
+            (begin
+              (if (current-environment-imported? environment name)
+                  (eval-error "cannot redefine imported binding" name))
+              (set-cell-value! cell value))
             (environment-define! environment name value))
         agent-scheme-unspecified))
 
@@ -877,7 +910,7 @@
                        #t)))
 
     (define (make-empty-syntax-environment parent)
-      (make-syntax-environment '() parent))
+      (make-syntax-environment '() parent '()))
 
     (define (syntax-environment-ref syntax-environment name)
       (let loop ((cursor syntax-environment))
@@ -888,6 +921,8 @@
          (else (loop (syntax-environment-parent cursor))))))
 
     (define (syntax-environment-define! syntax-environment name transformer)
+      (if (memq name (syntax-environment-imported-names syntax-environment))
+          (eval-error "cannot redefine imported syntax binding" name))
       (set-syntax-environment-frame!
        syntax-environment
        (cons (cons name transformer)
@@ -2101,7 +2136,11 @@
                      (environment-frame value-environment))))
              ((eq? existing object))
              (else
-              (eval-error "conflicting import for identifier" name)))))
+              (eval-error "conflicting import for identifier" name))))
+          (if (not (memq name (environment-imported-names value-environment)))
+              (set-environment-imported-names!
+               value-environment
+               (cons name (environment-imported-names value-environment)))))
          ((eq? kind 'syntax)
           (let ((existing (current-syntax-binding syntax-environment name)))
             (cond
@@ -2113,7 +2152,15 @@
                      (syntax-environment-frame syntax-environment))))
              ((eq? existing object))
              (else
-              (eval-error "conflicting syntax import for identifier" name)))))
+              (eval-error "conflicting syntax import for identifier" name))))
+          (if (not (memq name
+                         (syntax-environment-imported-names
+                          syntax-environment)))
+              (set-syntax-environment-imported-names!
+               syntax-environment
+               (cons name
+                     (syntax-environment-imported-names
+                      syntax-environment)))))
          (else
           (eval-error "unsupported library binding kind" kind)))))
 
@@ -2397,6 +2444,7 @@
 
     (define (library-exports-from-specs specs library-key value-environment
                                         syntax-environment)
+      (ensure-distinct-names (map cdr specs) "library exports")
       (ensure-compatible-import-bindings
        (map (lambda (spec)
               (library-export-binding spec
@@ -2644,7 +2692,25 @@
        (else
         (eval-error "unsupported expression datum" expression))))
 
+    (define (ensure-imports-precede-body forms)
+      (let loop ((rest forms) (imports-open? #t))
+        (if (not (null? rest))
+            (let ((form (car rest)))
+              (cond
+               ((import-form? form)
+                (if (not imports-open?)
+                    (eval-error
+                     "import declarations must precede program body forms"
+                     form))
+                (loop (cdr rest) imports-open?))
+               ((define-library-form? form)
+                (loop (cdr rest) imports-open?))
+               (else
+                (loop (cdr rest) #f)))))))
+
     (define (eval-sequence forms environment context tail? allow-definitions?)
+      (if allow-definitions?
+          (ensure-imports-precede-body forms))
       (cond
        ((null? forms)
         agent-scheme-unspecified)

@@ -274,4 +274,51 @@
      agent-scheme-library-test--include-options)
     "#t")))
 
+(ert-deftest agent-scheme-library-test-imported-values-are-immutable ()
+  "Reject definitions and assignments that target imported values."
+  (should-error
+   (agent-scheme-eval-source
+    "(import (scheme base))
+     (set! + 1)"
+    (agent-scheme-make-empty-environment))
+   :type 'agent-scheme-eval-error)
+  (should-error
+   (agent-scheme-eval-source
+    "(import (scheme base))
+     (define + 1)"
+    (agent-scheme-make-empty-environment))
+   :type 'agent-scheme-eval-error))
+
+(ert-deftest agent-scheme-library-test-imported-syntax-is-immutable ()
+  "Reject syntax definitions that target imported keywords."
+  (should-error
+   (agent-scheme-eval-source
+    "(import (scheme base))
+     (define-syntax and
+       (syntax-rules ()
+         ((and) #t)))"
+    (agent-scheme-make-empty-environment))
+   :type 'agent-scheme-eval-error))
+
+(ert-deftest agent-scheme-library-test-duplicate-export-names-signal-error ()
+  "Reject duplicate external names in a library export set."
+  (should-error
+   (agent-scheme-eval-source
+    "(define-library (agent-scheme fixture duplicate-export)
+       (export value value)
+       (import (scheme base))
+       (begin (define value 1)))")
+   :type 'agent-scheme-eval-error))
+
+(ert-deftest agent-scheme-library-test-program-imports-precede-body ()
+  "Reject program imports after definitions or expressions begin."
+  (should-error
+   (agent-scheme-eval-source
+    "(import (scheme base))
+     1
+     (import (scheme cxr))
+     'ok"
+    (agent-scheme-make-empty-environment))
+   :type 'agent-scheme-eval-error))
+
 ;;; agent-scheme-library-test.el ends here

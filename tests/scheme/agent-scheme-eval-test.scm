@@ -454,6 +454,56 @@
                         include-policy-options
                         "#t")
 
+(check 'imported-value-set-is-rejected
+       (raises?
+        (lambda ()
+          (agent-scheme-eval-source
+           "(import (scheme base))
+            (set! + 1)"
+           (agent-scheme-make-empty-environment))))
+       #t)
+
+(check 'imported-value-define-is-rejected
+       (raises?
+        (lambda ()
+          (agent-scheme-eval-source
+           "(import (scheme base))
+            (define + 1)"
+           (agent-scheme-make-empty-environment))))
+       #t)
+
+(check 'imported-syntax-define-is-rejected
+       (raises?
+        (lambda ()
+          (agent-scheme-eval-source
+           "(import (scheme base))
+            (define-syntax and
+              (syntax-rules ()
+                ((and) #t)))"
+           (agent-scheme-make-empty-environment))))
+       #t)
+
+(check 'duplicate-export-names-signal-error
+       (raises?
+        (lambda ()
+          (agent-scheme-eval-source
+           "(define-library (agent-scheme fixture duplicate-export)
+              (export value value)
+              (import (scheme base))
+              (begin (define value 1)))")))
+       #t)
+
+(check 'program-imports-precede-body
+       (raises?
+        (lambda ()
+          (agent-scheme-eval-source
+           "(import (scheme base))
+            1
+            (import (scheme cxr))
+            'ok"
+           (agent-scheme-make-empty-environment))))
+       #t)
+
 (check 'expand-source-exposes-expanded-forms
        (agent-scheme-value->external
         (agent-scheme-expand-source
