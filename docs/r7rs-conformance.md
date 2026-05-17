@@ -28,7 +28,7 @@ marked `implemented`.
 | Definitions and sequencing | `define`, `define-values`, `begin`, internal definitions | `pending` | `primitive-procedure-call` | Internal definitions should be tested with lexical scope cases. |
 | Derived syntax | `cond`, `case`, `and`, `or`, `when`, `unless`, `let`, `let*`, `letrec`, `letrec*`, `let-values`, `let*-values`, `do`, `delay`, `quasiquote`, `parameterize` | `pending` | `derived-let-expression`, `derived-cond-arrow-literal-binding`, `derived-case-expression`, `derived-do-expression`, `derived-quasiquote-expression` | Macro-expanded `and`, `case`, `cond`, `do`, `or`, `when`, `unless`, `let`, and `let*` support is implemented. `letrec`, `letrec*`, `begin`, and `quasiquote` are evaluator-supported where primitive handling is required. |
 | `syntax-rules` macros | `define-syntax`, `let-syntax`, `letrec-syntax`, literals, ellipses, hygiene | `implemented` | `syntax-rules-unless`, `syntax-rules-let-syntax-hygiene`, `syntax-rules-dotted-pattern-template`, `syntax-rules-nested-ellipsis`, `syntax-rules-syntax-error` | High-level macro expansion supports top-level `define-syntax`, local `let-syntax` and `letrec-syntax`, hygienic introduced identifiers, literal binding checks, dotted patterns/templates, nested ellipses, an explicit expansion API, and expansion-time `syntax-error` diagnostics that include the originating macro use. |
-| Libraries, imports, exports | `define-library`, `import`, `export`, `include`, `include-ci`, `cond-expand`, library body ordering | `pending` | `cond-expand-r7rs-feature`, `library-import-export` | Expression-level `cond-expand` for recognized base features is implemented; the full library system remains pending. |
+| Libraries, imports, exports | `define-library`, `import`, `export`, `include`, `include-ci`, `cond-expand`, library body ordering | `pending` | `cond-expand-r7rs-feature`, `library-import-export`, `library-imported-binding-immutable`, `library-duplicate-export-error`, `program-import-after-expression-error` | Basic `define-library`, program imports, import modifiers, exported macros, library-level `cond-expand`, import immutability checks, duplicate export checks, and policy-gated include declarations are implemented. Positive include fixtures need fixture-level policy options before this row can move to `implemented`. |
 | Proper tail recursion | Tail calls in procedures, conditionals, derived syntax, continuations, and library procedures | `pending` | `proper-tail-recursion-loop` | Procedure, conditional, and named-let loops are fixture-covered; continuations and broader library interactions remain pending. |
 | Multiple values | `values`, `call-with-values`, `define-values`, `let-values`, `let*-values` | `pending` | `multiple-values-direct`, `multiple-values-call-with-values` | Fixture expectations can compare either one value or multiple values. |
 | Exceptions | `with-exception-handler`, `guard`, `raise`, `raise-continuable`, `error` | `pending` | `exceptions-guard-raise` | Error objects should remain printable as Scheme-readable data where possible. |
@@ -43,20 +43,20 @@ marked `implemented`.
 | Library | Status | Representative fixtures | Notes |
 | --- | --- | --- | --- |
 | `(scheme base)` | `pending` | `primitive-procedure-call`, `derived-let-expression`, `multiple-values-call-with-values` | Core syntax and procedures. |
-| `(scheme case-lambda)` | `pending` | `standard-library-case-lambda` | Procedure dispatch by arity. |
-| `(scheme char)` | `pending` | `standard-library-char-upcase` | Character predicates and case operations. |
+| `(scheme case-lambda)` | `pending` | `standard-library-case-lambda` | Focused fixed-arity `case-lambda` import is implemented; broader clause forms remain pending. |
+| `(scheme char)` | `pending` | `standard-library-char-upcase` | Focused `char-upcase` import is implemented; full character library coverage remains pending. |
 | `(scheme complex)` | `pending` | None yet | Add fixtures when numeric representation lands. |
-| `(scheme cxr)` | `pending` | `standard-library-cxr-cadr` | Composed pair accessors. |
+| `(scheme cxr)` | `pending` | `standard-library-cxr-cadr` | Focused composed accessor imports are implemented; full three- and four-level accessor coverage remains pending. |
 | `(scheme eval)` | `policy-gated` | None yet | Required semantics should be available only through explicit evaluation policy. |
 | `(scheme file)` | `policy-gated` | `standard-library-file-exists-policy` | Host file-system access must be audited and policy-gated. |
 | `(scheme inexact)` | `pending` | None yet | Inexact numeric operations. |
-| `(scheme lazy)` | `pending` | `standard-library-lazy-force` | Promises, `delay`, and `force`. |
+| `(scheme lazy)` | `pending` | `standard-library-lazy-force` | Focused promise imports with memoizing `delay` and `force` are implemented; broader lazy edge cases remain pending. |
 | `(scheme load)` | `policy-gated` | None yet | Loading host files requires policy checks. |
 | `(scheme process-context)` | `policy-gated` | None yet | Environment and command-line access require policy checks. |
 | `(scheme read)` | `pending` | None yet | Reading from in-memory ports can be pure; host ports need policy. |
 | `(scheme repl)` | `policy-gated` | None yet | Interactive host integration belongs behind the REPL/session policy boundary. |
 | `(scheme time)` | `policy-gated` | None yet | Time is an observable host effect and should be explicit. |
-| `(scheme write)` | `pending` | `standard-library-write-display` | Writer output should be stable enough for fixture comparison. |
+| `(scheme write)` | `pending` | `standard-library-write-display` | Focused in-memory string output with `display` is implemented; full writer and port behavior remains pending. |
 | `(scheme r5rs)` | `pending` | None yet | Compatibility library. |
 
 ### `(scheme base)` Binding Status

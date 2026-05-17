@@ -259,6 +259,251 @@
                     (else 'missing)))"
                 "(ok base)")
 
+(check 'import-scheme-base-into-empty-environment
+       (agent-scheme-value->external
+        (agent-scheme-eval-source
+         "(import (scheme base))
+          (+ 1 2)"
+         (agent-scheme-make-empty-environment)))
+       "3")
+
+(check-external 'define-library-import-export
+                "(define-library (agent-scheme fixture math)
+                   (export answer)
+                   (import (scheme base))
+                   (begin
+                     (define answer 42)))
+                 (import (agent-scheme fixture math))
+                 answer"
+                "42")
+
+(check-external 'library-import-set-modifiers
+                "(define-library (agent-scheme fixture modifiers)
+                   (export add sub hidden)
+                   (import (scheme base))
+                   (begin
+                     (define (add x y) (+ x y))
+                     (define (sub x y) (- x y))
+                     (define hidden 99)))
+                 (import (only (agent-scheme fixture modifiers) add)
+                         (except
+                          (prefix (agent-scheme fixture modifiers) lib-)
+                          lib-hidden)
+                         (rename
+                          (agent-scheme fixture modifiers)
+                          (sub minus)))
+                 (list (add 1 2)
+                       (lib-add 3 4)
+                       (lib-sub 10 6)
+                       (minus 8 5))"
+                "(3 7 4 3)")
+
+(check-external 'library-export-rename
+                "(define-library (agent-scheme fixture export-rename)
+                   (export (rename internal external))
+                   (import (scheme base))
+                   (begin
+                     (define internal 42)))
+                 (import (agent-scheme fixture export-rename))
+                 external"
+                "42")
+
+(check-external 'emacs-capability-import-empty
+                "(import (emacs buffer))
+                 'ok"
+                "ok")
+
+(check 'conflicting-library-imports
+       (raises?
+        (lambda ()
+          (agent-scheme-eval-source
+           "(define-library (agent-scheme fixture left)
+              (export value)
+              (import (scheme base))
+              (begin (define value 'left)))
+            (define-library (agent-scheme fixture right)
+              (export value)
+              (import (scheme base))
+              (begin (define value 'right)))
+            (import (agent-scheme fixture left)
+                    (agent-scheme fixture right))
+            value")))
+       #t)
+
+(check-external 'exported-library-macro-keeps-scope
+                "(define-library (agent-scheme fixture syntax)
+                   (export choose)
+                   (import (scheme base))
+                   (begin
+                     (define default 'library)
+                     (define-syntax choose
+                       (syntax-rules ()
+                         ((choose) default)))))
+                 (import (scheme base)
+                         (agent-scheme fixture syntax))
+                 (let ((default 'program))
+                   (choose))"
+                "library")
+
+(check-external 'library-cond-expand-declaration
+                "(define-library (agent-scheme fixture conditional)
+                   (cond-expand
+                     ((library (scheme base))
+                      (export answer)
+                      (import (scheme base))
+                      (begin (define answer 42)))
+                     (else
+                      (export answer)
+                      (begin (define answer 'missing)))))
+                 (import (agent-scheme fixture conditional))
+                 answer"
+                "42")
+
+(check 'include-declarations-are-policy-gated
+       (raises?
+        (lambda ()
+          (agent-scheme-eval-source
+           "(define-library (agent-scheme fixture include)
+              (export answer)
+              (import (scheme base))
+              (include \"fixtures/r7rs/conformance-cases.scm\"))")))
+       #t)
+
+(define include-policy-options
+  '((include-directory . ".")
+    (include-paths . ("fixtures/r7rs"))
+    (file-paths . ("fixtures/r7rs"))))
+
+(check-external/options 'include-reads-policy-allowed-body
+                        "(define-library (agent-scheme fixture include-body)
+                           (export answer)
+                           (import (scheme base))
+                           (include \"fixtures/r7rs/include-body.scm\"))
+                         (import (agent-scheme fixture include-body))
+                         answer"
+                        include-policy-options
+                        "42")
+
+(check-external/options 'include-ci-folds-policy-allowed-body
+                        "(define-library (agent-scheme fixture include-ci-body)
+                           (export mixedanswer)
+                           (import (scheme base))
+                           (include-ci \"fixtures/r7rs/include-ci-body.scm\"))
+                         (import (agent-scheme fixture include-ci-body))
+                         mixedanswer"
+                        include-policy-options
+                        "42")
+
+(check-external/options 'include-library-declarations-splice
+                        "(define-library
+                           (agent-scheme fixture included-declarations)
+                           (include-library-declarations
+                            \"fixtures/r7rs/include-library-declarations.scm\"))
+                         (import
+                          (agent-scheme fixture included-declarations))
+                         answer"
+                        include-policy-options
+                        "42")
+
+(check-external 'standard-case-lambda-import
+                "(import (scheme base) (scheme case-lambda))
+                 ((case-lambda
+                    ((x) x)
+                    ((x y) (+ x y)))
+                  1 2)"
+                "3")
+
+(check-external 'standard-char-and-cxr-imports
+                "(import (scheme base) (scheme char) (scheme cxr))
+                 (list (char-upcase #\\a)
+                       (cadr '(alpha beta gamma)))"
+                "(#\\A beta)")
+
+(check-external 'standard-lazy-import-memoizes
+                "(import (scheme base) (scheme lazy))
+                 (let ((count 0))
+                   (let ((promise
+                          (delay
+                            (begin
+                              (set! count (+ count 1))
+                              count))))
+                     (list (force promise)
+                           (force promise)
+                           count)))"
+                "(1 1 1)")
+
+(check-external 'standard-write-import-string-output
+                "(import (scheme base) (scheme write))
+                 (let ((out (open-output-string)))
+                   (display \"ok\" out)
+                   (get-output-string out))"
+                "\"ok\"")
+
+(check 'standard-file-import-default-denied
+       (raises?
+        (lambda ()
+          (agent-scheme-eval-source
+           "(import (scheme base) (scheme file))
+            (file-exists? \"fixtures/r7rs/conformance-cases.scm\")")))
+       #t)
+
+(check-external/options 'standard-file-import-policy-allowed
+                        "(import (scheme base) (scheme file))
+                         (file-exists?
+                          \"fixtures/r7rs/conformance-cases.scm\")"
+                        include-policy-options
+                        "#t")
+
+(check 'imported-value-set-is-rejected
+       (raises?
+        (lambda ()
+          (agent-scheme-eval-source
+           "(import (scheme base))
+            (set! + 1)"
+           (agent-scheme-make-empty-environment))))
+       #t)
+
+(check 'imported-value-define-is-rejected
+       (raises?
+        (lambda ()
+          (agent-scheme-eval-source
+           "(import (scheme base))
+            (define + 1)"
+           (agent-scheme-make-empty-environment))))
+       #t)
+
+(check 'imported-syntax-define-is-rejected
+       (raises?
+        (lambda ()
+          (agent-scheme-eval-source
+           "(import (scheme base))
+            (define-syntax and
+              (syntax-rules ()
+                ((and) #t)))"
+           (agent-scheme-make-empty-environment))))
+       #t)
+
+(check 'duplicate-export-names-signal-error
+       (raises?
+        (lambda ()
+          (agent-scheme-eval-source
+           "(define-library (agent-scheme fixture duplicate-export)
+              (export value value)
+              (import (scheme base))
+              (begin (define value 1)))")))
+       #t)
+
+(check 'program-imports-precede-body
+       (raises?
+        (lambda ()
+          (agent-scheme-eval-source
+           "(import (scheme base))
+            1
+            (import (scheme cxr))
+            'ok"
+           (agent-scheme-make-empty-environment))))
+       #t)
+
 (check 'expand-source-exposes-expanded-forms
        (agent-scheme-value->external
         (agent-scheme-expand-source

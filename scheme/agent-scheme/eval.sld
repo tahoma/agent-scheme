@@ -20,6 +20,7 @@
           agent-scheme-procedure?
           agent-scheme-primitive-procedure?)
   (import (scheme base)
+          (scheme char)
           (scheme file)
           (scheme read)
           (agent-scheme reader))
@@ -48,16 +49,20 @@
       (value cell-value set-cell-value!))
 
     (define-record-type <environment>
-      (make-environment frame parent)
+      (make-environment frame parent imported-names)
       environment?
       (frame environment-frame set-environment-frame!)
-      (parent environment-parent))
+      (parent environment-parent)
+      (imported-names environment-imported-names
+                      set-environment-imported-names!))
 
     (define-record-type <syntax-environment>
-      (make-syntax-environment frame parent)
+      (make-syntax-environment frame parent imported-names)
       syntax-environment?
       (frame syntax-environment-frame set-syntax-environment-frame!)
-      (parent syntax-environment-parent))
+      (parent syntax-environment-parent)
+      (imported-names syntax-environment-imported-names
+                      set-syntax-environment-imported-names!))
 
     (define-record-type <syntax-context>
       (make-syntax-context id value-environment syntax-environment)
@@ -93,6 +98,12 @@
       (minimum-arity primitive-procedure-minimum-arity)
       (maximum-arity primitive-procedure-maximum-arity))
 
+    (define-record-type <string-output-port>
+      (make-string-output-port contents)
+      string-output-port?
+      (contents string-output-port-contents
+                set-string-output-port-contents!))
+
     (define-record-type <sequence>
       (make-sequence forms allow-definitions)
       sequence?
@@ -109,7 +120,8 @@
     (define-record-type <eval-context>
       (make-eval-context steps maximum-steps
                          maximum-value-nodes host-callbacks
-                         maximum-host-callbacks syntax-environment
+                         maximum-host-callbacks syntax-environment libraries
+                         include-paths include-directory file-paths
                          base-syntax-installed next-syntax-id)
       eval-context?
       (steps context-steps set-context-steps!)
@@ -119,6 +131,11 @@
       (maximum-host-callbacks context-maximum-host-callbacks)
       (syntax-environment context-syntax-environment
                           set-context-syntax-environment!)
+      (libraries context-libraries set-context-libraries!)
+      (include-paths context-include-paths)
+      (include-directory context-include-directory
+                         set-context-include-directory!)
+      (file-paths context-file-paths)
       (base-syntax-installed context-base-syntax-installed
                              set-context-base-syntax-installed!)
       (next-syntax-id context-next-syntax-id set-context-next-syntax-id!))
@@ -147,6 +164,23 @@
       (forms syntax-scope-forms)
       (syntax-environment syntax-scope-syntax-environment))
 
+    (define-record-type <library-binding>
+      (make-library-binding name kind object library-key)
+      library-binding?
+      (name library-binding-name)
+      (kind library-binding-kind)
+      (object library-binding-object)
+      (library-key library-binding-library-key))
+
+    (define-record-type <library>
+      (make-library name key exports value-environment syntax-environment)
+      library?
+      (name library-name)
+      (key library-key)
+      (exports library-exports)
+      (value-environment library-value-environment)
+      (syntax-environment library-syntax-environment))
+
     (define (option-ref options key default)
       (let ((cell (assq key options)))
         (if cell (cdr cell) default)))
@@ -161,7 +195,38 @@
              (string-append "agent-scheme budget error: " message)
              irritants))
 
+    (define (normalize-include-directory directory)
+      (cond
+       ((or (string=? directory "")
+            (string=? directory "."))
+        "")
+       ((char=? (string-ref directory (- (string-length directory) 1)) #\/)
+        directory)
+       (else
+        (string-append directory "/"))))
+
+    (define (path-absolute? path)
+      (and (> (string-length path) 0)
+           (char=? (string-ref path 0) #\/)))
+
+    (define (path-join directory path)
+      (cond
+       ((or (string=? directory "") (path-absolute? path))
+        path)
+       ((char=? (string-ref directory (- (string-length directory) 1)) #\/)
+        (string-append directory path))
+       (else
+        (string-append directory "/" path))))
+
+    (define (normalize-include-paths paths directory)
+      (map (lambda (path)
+             (path-join directory path))
+           paths))
+
     (define (new-eval-context options)
+      (let ((include-directory
+             (normalize-include-directory
+              (option-ref options 'include-directory "."))))
       (make-eval-context
        0
        (if (assq 'max-steps options)
@@ -176,9 +241,17 @@
        (option-ref options
                    'max-host-callbacks
                    agent-scheme-default-maximum-host-callbacks)
-       (make-syntax-environment '() #f)
+       (make-syntax-environment '() #f '())
+       '()
+       (normalize-include-paths
+        (option-ref options 'include-paths '())
+        include-directory)
+       include-directory
+       (normalize-include-paths
+        (option-ref options 'file-paths '())
+        include-directory)
        #f
-       0))
+       0)))
 
     (define (note-step! context)
       (set-context-steps! context (+ (context-steps context) 1))
@@ -205,7 +278,8 @@
             (number? value)
             (agent-scheme-unspecified? value)
             (agent-scheme-procedure? value)
-            (agent-scheme-primitive-procedure? value))
+            (agent-scheme-primitive-procedure? value)
+            (string-output-port? value))
         1)
        ((string? value)
         (+ 1 (string-length value)))
@@ -300,7 +374,8 @@
     (define (agent-scheme-make-empty-environment . maybe-parent)
       (make-environment
        '()
-       (if (null? maybe-parent) #f (car maybe-parent))))
+       (if (null? maybe-parent) #f (car maybe-parent))
+       '()))
 
     (define (frame-cell environment name)
       (let ((cell (assoc name (environment-frame environment))))
@@ -313,7 +388,23 @@
          ((frame-cell cursor name) => (lambda (cell) cell))
          (else (loop (environment-parent cursor))))))
 
+    (define (environment-cell-imported? environment cell)
+      (let environment-loop ((cursor environment))
+        (and cursor
+             (or (let frame-loop ((frame (environment-frame cursor)))
+                   (and (not (null? frame))
+                        (or (and (eq? (cdr (car frame)) cell)
+                                 (memq (car (car frame))
+                                       (environment-imported-names cursor)))
+                            (frame-loop (cdr frame)))))
+                 (environment-loop (environment-parent cursor))))))
+
+    (define (current-environment-imported? environment name)
+      (memq name (environment-imported-names environment)))
+
     (define (environment-define! environment name value)
+      (if (current-environment-imported? environment name)
+          (eval-error "cannot redefine imported binding" name))
       (set-environment-frame!
        environment
        (cons (cons name (make-cell value))
@@ -321,9 +412,13 @@
 
     (define (environment-set! environment name value)
       (let ((cell (environment-cell environment name)))
-        (if cell
-            (set-cell-value! cell value)
-            (eval-error "unbound identifier in set!" name))))
+        (cond
+         ((not cell)
+          (eval-error "unbound identifier in set!" name))
+         ((environment-cell-imported? environment cell)
+          (eval-error "cannot mutate imported binding" name))
+         (else
+          (set-cell-value! cell value)))))
 
     (define (environment-ref environment name)
       (let ((cell (environment-cell environment name)))
@@ -365,10 +460,15 @@
 
     (define (environment-set-identifier! environment identifier value)
       (let ((cell (environment-cell-for-identifier environment identifier)))
-        (if cell
-            (set-cell-value! cell value)
-            (eval-error "unbound identifier in set!"
-                        (identifier-datum-name identifier)))))
+        (cond
+         ((not cell)
+          (eval-error "unbound identifier in set!"
+                      (identifier-datum-name identifier)))
+         ((environment-cell-imported? environment cell)
+          (eval-error "cannot mutate imported binding"
+                      (identifier-datum-name identifier)))
+         (else
+          (set-cell-value! cell value)))))
 
     (define (ensure-distinct-names names description)
       (let loop ((rest names) (seen '()))
@@ -513,7 +613,10 @@
                                      context
                                      #f)))
         (if cell
-            (set-cell-value! cell value)
+            (begin
+              (if (current-environment-imported? environment name)
+                  (eval-error "cannot redefine imported binding" name))
+              (set-cell-value! cell value))
             (environment-define! environment name value))
         agent-scheme-unspecified))
 
@@ -807,7 +910,7 @@
                        #t)))
 
     (define (make-empty-syntax-environment parent)
-      (make-syntax-environment '() parent))
+      (make-syntax-environment '() parent '()))
 
     (define (syntax-environment-ref syntax-environment name)
       (let loop ((cursor syntax-environment))
@@ -818,6 +921,8 @@
          (else (loop (syntax-environment-parent cursor))))))
 
     (define (syntax-environment-define! syntax-environment name transformer)
+      (if (memq name (syntax-environment-imported-names syntax-environment))
+          (eval-error "cannot redefine imported syntax binding" name))
       (set-syntax-environment-frame!
        syntax-environment
        (cons (cons name transformer)
@@ -1566,6 +1671,896 @@
          bindings)
         (make-syntax-scope (cddr parts) local-syntax-environment)))
 
+    (define scheme-base-library-key '(scheme base))
+
+    (define empty-emacs-capability-library-keys
+      '((emacs buffer)
+        (emacs buffer edit)
+        (emacs command)
+        (emacs project)
+        (emacs window)))
+
+    (define standard-library-keys
+      '((scheme case-lambda)
+        (scheme char)
+        (scheme cxr)
+        (scheme file)
+        (scheme lazy)
+        (scheme write)))
+
+    (define case-lambda-library-source
+      "(define-library (scheme case-lambda)
+         (export case-lambda)
+         (import (scheme base))
+         (begin
+           (define-syntax case-lambda
+             (syntax-rules ()
+               ((case-lambda)
+                (lambda args (car '())))
+               ((case-lambda ((param ...) body ...) more ...)
+                (lambda args
+                  (if (= (length args) (length '(param ...)))
+                      (apply (lambda (param ...) body ...) args)
+                      (apply (case-lambda more ...) args))))))))")
+
+    (define lazy-library-source
+      "(define-library (scheme lazy)
+         (export delay delay-force force make-promise promise?)
+         (import (scheme base))
+         (begin
+           (define (%promise lazy? value)
+             (list 'agent-scheme-promise lazy? value))
+           (define (promise? obj)
+             (and (pair? obj)
+                  (eq? (car obj) 'agent-scheme-promise)))
+           (define (make-promise obj)
+             (if (promise? obj)
+                 obj
+                 (%promise #t obj)))
+           (define (force promise)
+             (if (promise? promise)
+                 (if (cadr promise)
+                     (car (cdr (cdr promise)))
+                     (let ((value ((car (cdr (cdr promise))))))
+                       (set-car! (cdr promise) #t)
+                       (set-car! (cdr (cdr promise)) value)
+                       value))
+                 promise))
+           (define-syntax delay-force
+             (syntax-rules ()
+               ((delay-force expression)
+                (%promise #f (lambda () expression)))))
+           (define-syntax delay
+             (syntax-rules ()
+               ((delay expression)
+                (delay-force expression))))))")
+
+    (define (proper-library-name? datum)
+      (and (pair? datum)
+           (let ((parts (proper-list-elements/maybe datum)))
+             (and parts
+                  (let loop ((rest parts))
+                    (cond
+                     ((null? rest) #t)
+                     ((or (symbol? (car rest))
+                          (and (exact-integer? (car rest))
+                               (>= (car rest) 0)))
+                      (loop (cdr rest)))
+                     (else #f)))))))
+
+    (define (library-name-key name)
+      (if (proper-library-name? name)
+          name
+          (eval-error "invalid library name" name)))
+
+    (define (assoc/equal key alist)
+      (cond
+       ((null? alist) #f)
+       ((equal? key (caar alist)) (car alist))
+       (else (assoc/equal key (cdr alist)))))
+
+    (define (library-registry-ref context key)
+      (let ((cell (assoc/equal key (context-libraries context))))
+        (if cell (cdr cell) #f)))
+
+    (define (library-registry-set! context key library)
+      (let replace ((rest (context-libraries context)) (prefix '()))
+        (cond
+         ((null? rest)
+          (set-context-libraries!
+           context
+           (cons (cons key library) (context-libraries context))))
+         ((equal? key (caar rest))
+          (set-context-libraries!
+           context
+           (append (reverse prefix)
+                   (cons (cons key library) (cdr rest)))))
+         (else
+          (replace (cdr rest) (cons (car rest) prefix))))))
+
+    (define (current-syntax-binding syntax-environment name)
+      (let ((cell (assq name (syntax-environment-frame syntax-environment))))
+        (if cell (cdr cell) #f)))
+
+    (define (form-named? form name)
+      (and (pair? form) (identifier-named? (car form) name)))
+
+    (define (import-form? form)
+      (form-named? form 'import))
+
+    (define (define-library-form? form)
+      (form-named? form 'define-library))
+
+    (define (library-binding-with-name binding name)
+      (make-library-binding
+       name
+       (library-binding-kind binding)
+       (library-binding-object binding)
+       (library-binding-library-key binding)))
+
+    (define (same-library-binding? left right)
+      (and (library-binding? left)
+           (library-binding? right)
+           (eq? (library-binding-kind left) (library-binding-kind right))
+           (eq? (library-binding-object left)
+                (library-binding-object right))))
+
+    (define (snapshot-library-bindings value-environment syntax-environment
+                                       library-key)
+      (append
+       (map (lambda (entry)
+              (make-library-binding
+               (car entry)
+               'value
+               (cdr entry)
+               library-key))
+            (environment-frame value-environment))
+       (map (lambda (entry)
+              (make-library-binding
+               (car entry)
+               'syntax
+               (cdr entry)
+               library-key))
+            (syntax-environment-frame syntax-environment))))
+
+    (define (register-scheme-base-library! context environment)
+      (if (not (library-registry-ref context scheme-base-library-key))
+          (let* ((use-current-environment?
+                  (environment-cell environment '+))
+                 (base-environment
+                  (if use-current-environment?
+                      environment
+                      (agent-scheme-make-base-environment)))
+                 (base-context
+                  (if use-current-environment?
+                      context
+                      (new-eval-context '()))))
+            (if (not use-current-environment?)
+                (ensure-base-syntax! base-context base-environment))
+            (let* ((base-syntax-environment
+                    (context-syntax-environment base-context))
+                   (exports
+                    (snapshot-library-bindings
+                     base-environment
+                     base-syntax-environment
+                     scheme-base-library-key)))
+              (library-registry-set!
+               context
+               scheme-base-library-key
+               (make-library
+                scheme-base-library-key
+                scheme-base-library-key
+                exports
+                base-environment
+                base-syntax-environment))))))
+
+    (define (register-empty-emacs-capability-library! key context)
+      (if (not (library-registry-ref context key))
+          (let ((value-environment (agent-scheme-make-empty-environment))
+                (syntax-environment (make-empty-syntax-environment #f)))
+            (library-registry-set!
+             context
+             key
+             (make-library key key '() value-environment syntax-environment)))))
+
+    (define (register-source-library! source context environment)
+      (eval-define-library
+       (agent-scheme-read source)
+       environment
+       context))
+
+    (define (find-library-export name exports)
+      (cond
+       ((null? exports) #f)
+       ((eq? name (library-binding-name (car exports))) (car exports))
+       (else (find-library-export name (cdr exports)))))
+
+    (define (register-subset-library! key export-names context environment)
+      (if (not (library-registry-ref context key))
+          (let* ((base-library
+                  (resolve-library scheme-base-library-key
+                                   context
+                                   environment))
+                 (base-exports (library-exports base-library))
+                 (exports
+                  (map
+                   (lambda (name)
+                     (or (find-library-export name base-exports)
+                         (eval-error
+                          "standard library binding is not available"
+                          name)))
+                   export-names)))
+            (library-registry-set!
+             context
+             key
+             (make-library
+              key
+              key
+              exports
+              (library-value-environment base-library)
+              (library-syntax-environment base-library))))))
+
+    (define (register-primitive-library! key primitive-specs context)
+      (if (not (library-registry-ref context key))
+          (let ((value-environment (agent-scheme-make-empty-environment))
+                (syntax-environment (make-empty-syntax-environment #f)))
+            (for-each
+             (lambda (spec)
+               (define-primitive!
+                value-environment
+                (car spec)
+                (second spec)
+                (third spec)
+                (fourth spec)))
+             primitive-specs)
+            (library-registry-set!
+             context
+             key
+             (make-library
+              key
+              key
+              (snapshot-library-bindings
+               value-environment
+               syntax-environment
+               key)
+              value-environment
+              syntax-environment)))))
+
+    (define (register-standard-library! key context environment)
+      (cond
+       ((equal? key '(scheme case-lambda))
+        (register-source-library!
+         case-lambda-library-source
+         context
+         environment))
+       ((equal? key '(scheme char))
+        (register-primitive-library!
+         key
+         (list (list 'char-upcase primitive-char-upcase 1 1))
+         context))
+       ((equal? key '(scheme cxr))
+        (register-subset-library!
+         key
+         '(caar cadr cdar cddr)
+         context
+         environment))
+       ((equal? key '(scheme file))
+        (register-primitive-library!
+         key
+         (list (list 'file-exists? primitive-file-exists? 1 1))
+         context))
+       ((equal? key '(scheme lazy))
+        (register-source-library!
+         lazy-library-source
+         context
+         environment))
+       ((equal? key '(scheme write))
+        (register-primitive-library!
+         key
+         (list
+          (list 'display primitive-display 1 2)
+          (list 'write primitive-write 1 2)
+          (list 'open-output-string primitive-open-output-string 0 0)
+          (list 'get-output-string primitive-get-output-string 1 1))
+         context))
+       (else
+        (eval-error "unknown standard library" key))))
+
+    (define (library-available? name context environment)
+      (let ((key (library-name-key name)))
+        (or (equal? key scheme-base-library-key)
+            (member key standard-library-keys)
+            (member key empty-emacs-capability-library-keys)
+            (and (library-registry-ref context key) #t))))
+
+    (define (resolve-library name context environment)
+      (let ((key (library-name-key name)))
+        (cond
+         ((equal? key scheme-base-library-key)
+          (register-scheme-base-library! context environment))
+         ((member key standard-library-keys)
+          (register-standard-library! key context environment))
+         ((member key empty-emacs-capability-library-keys)
+          (register-empty-emacs-capability-library! key context)))
+        (or (library-registry-ref context key)
+            (eval-error "unknown library" key))))
+
+    (define (find-import-binding name bindings)
+      (cond
+       ((null? bindings) #f)
+       ((eq? name (library-binding-name (car bindings))) (car bindings))
+       (else (find-import-binding name (cdr bindings)))))
+
+    (define (ensure-import-names-present names bindings description)
+      (for-each
+       (lambda (name)
+         (if (not (find-import-binding name bindings))
+             (eval-error
+              (string-append description " import name not found")
+              name)))
+       names))
+
+    (define (ensure-compatible-import-bindings bindings)
+      (let loop ((rest bindings) (seen '()) (result '()))
+        (if (null? rest)
+            (reverse result)
+            (let* ((binding (car rest))
+                   (name (library-binding-name binding))
+                   (previous (assq name seen)))
+              (cond
+               ((not previous)
+                (loop (cdr rest)
+                      (cons (cons name binding) seen)
+                      (cons binding result)))
+               ((same-library-binding? (cdr previous) binding)
+                (loop (cdr rest) seen result))
+               (else
+                (eval-error
+                 "conflicting imports for identifier"
+                 name)))))))
+
+    (define (import-modifier-identifiers forms description)
+      (map (lambda (form) (expect-symbol form description)) forms))
+
+    (define (resolve-import-set import-set context environment)
+      (cond
+       ((proper-library-name? import-set)
+        (library-exports
+         (resolve-library import-set context environment)))
+       ((pair? import-set)
+        (let* ((parts (proper-list-elements import-set "import set"))
+               (operator (car parts)))
+          (cond
+           ((identifier-named? operator 'only)
+            (if (< (length parts) 2)
+                (eval-error "only import set requires an import set"))
+            (let* ((bindings
+                    (resolve-import-set (second parts) context environment))
+                   (names
+                    (import-modifier-identifiers (cddr parts) "only")))
+              (ensure-import-names-present names bindings "only")
+              (let loop ((rest bindings) (result '()))
+                (cond
+                 ((null? rest) (reverse result))
+                 ((memq (library-binding-name (car rest)) names)
+                  (loop (cdr rest) (cons (car rest) result)))
+                 (else (loop (cdr rest) result))))))
+           ((identifier-named? operator 'except)
+            (if (< (length parts) 2)
+                (eval-error "except import set requires an import set"))
+            (let* ((bindings
+                    (resolve-import-set (second parts) context environment))
+                   (names
+                    (import-modifier-identifiers (cddr parts) "except")))
+              (ensure-import-names-present names bindings "except")
+              (let loop ((rest bindings) (result '()))
+                (cond
+                 ((null? rest) (reverse result))
+                 ((memq (library-binding-name (car rest)) names)
+                  (loop (cdr rest) result))
+                 (else (loop (cdr rest) (cons (car rest) result)))))))
+           ((identifier-named? operator 'prefix)
+            (if (not (= (length parts) 3))
+                (eval-error
+                 "prefix import set requires an import set and prefix"))
+            (let ((prefix
+                   (symbol->string
+                    (expect-symbol (third parts) "prefix identifier"))))
+              (map
+               (lambda (binding)
+                 (library-binding-with-name
+                  binding
+                  (string->symbol
+                   (string-append
+                    prefix
+                    (symbol->string (library-binding-name binding))))))
+               (resolve-import-set (second parts) context environment))))
+           ((identifier-named? operator 'rename)
+            (if (< (length parts) 2)
+                (eval-error "rename import set requires an import set"))
+            (let* ((bindings
+                    (resolve-import-set (second parts) context environment))
+                   (renames
+                    (map
+                     (lambda (rename-form)
+                       (let ((rename-parts
+                              (proper-list-elements
+                               rename-form
+                               "rename pair")))
+                         (if (not (= (length rename-parts) 2))
+                             (eval-error
+                              "rename pair requires old and new identifiers"))
+                         (cons
+                          (expect-symbol
+                           (car rename-parts)
+                           "rename old identifier")
+                          (expect-symbol
+                           (second rename-parts)
+                           "rename new identifier"))))
+                     (cddr parts))))
+              (ensure-import-names-present (map car renames)
+                                           bindings
+                                           "rename")
+              (map
+               (lambda (binding)
+                 (let ((rename
+                        (assq (library-binding-name binding) renames)))
+                   (if rename
+                       (library-binding-with-name binding (cdr rename))
+                       binding)))
+               bindings)))
+           (else
+            (eval-error "invalid import set" import-set)))))
+       (else
+        (eval-error "invalid import set" import-set))))
+
+    (define (install-imported-binding! binding value-environment
+                                       syntax-environment)
+      (let ((name (library-binding-name binding))
+            (kind (library-binding-kind binding))
+            (object (library-binding-object binding))
+            (binding-library-key (library-binding-library-key binding)))
+        (cond
+         ((eq? kind 'value)
+          (let ((existing (frame-cell value-environment name)))
+            (cond
+             ((not existing)
+              (set-environment-frame!
+               value-environment
+               (cons (cons name object)
+                     (environment-frame value-environment))))
+             ((equal? binding-library-key scheme-base-library-key)
+              (set-environment-frame!
+               value-environment
+               (cons (cons name object)
+                     (environment-frame value-environment))))
+             ((eq? existing object))
+             (else
+              (eval-error "conflicting import for identifier" name))))
+          (if (not (memq name (environment-imported-names value-environment)))
+              (set-environment-imported-names!
+               value-environment
+               (cons name (environment-imported-names value-environment)))))
+         ((eq? kind 'syntax)
+          (let ((existing (current-syntax-binding syntax-environment name)))
+            (cond
+             ((or (not existing)
+                  (equal? binding-library-key scheme-base-library-key))
+              (set-syntax-environment-frame!
+               syntax-environment
+               (cons (cons name object)
+                     (syntax-environment-frame syntax-environment))))
+             ((eq? existing object))
+             (else
+              (eval-error "conflicting syntax import for identifier" name))))
+          (if (not (memq name
+                         (syntax-environment-imported-names
+                          syntax-environment)))
+              (set-syntax-environment-imported-names!
+               syntax-environment
+               (cons name
+                     (syntax-environment-imported-names
+                      syntax-environment)))))
+         (else
+          (eval-error "unsupported library binding kind" kind)))))
+
+    (define (install-import-set! import-set value-environment
+                                 syntax-environment context)
+      (for-each
+       (lambda (binding)
+         (install-imported-binding! binding
+                                    value-environment
+                                    syntax-environment))
+       (ensure-compatible-import-bindings
+        (resolve-import-set import-set context value-environment))))
+
+    (define (eval-import form environment context)
+      (let ((parts (proper-list-elements form "import declaration")))
+        (if (< (length parts) 2)
+            (eval-error "import requires at least one import set"))
+        (for-each
+         (lambda (import-set)
+           (install-import-set!
+            import-set
+            environment
+            (context-syntax-environment context)
+            context))
+         (cdr parts))
+        agent-scheme-unspecified))
+
+    (define (export-specs forms)
+      (let loop ((rest forms) (specs '()))
+        (if (null? rest)
+            (reverse specs)
+            (let ((form (car rest)))
+              (cond
+               ((identifier-datum? form)
+                (let ((name (expect-symbol form "export identifier")))
+                  (loop (cdr rest) (cons (cons name name) specs))))
+               ((form-named? form 'rename)
+                (let ((parts (proper-list-elements form "export rename")))
+                  (if (not (= (length parts) 3))
+                      (eval-error
+                       "export rename requires internal and external identifiers"))
+                  (loop
+                   (cdr rest)
+                   (cons
+                    (cons
+                     (expect-symbol
+                      (second parts)
+                      "export internal identifier")
+                     (expect-symbol
+                      (third parts)
+                      "export external identifier"))
+                    specs))))
+               (else
+                (eval-error "invalid export spec" form)))))))
+
+    (define (feature-requirement-satisfied? requirement context environment)
+      (cond
+       ((identifier-datum? requirement)
+        (eq? (identifier-datum-name requirement) 'r7rs))
+       ((pair? requirement)
+        (let* ((parts (proper-list-elements requirement "feature requirement"))
+               (operator (car parts)))
+          (cond
+           ((identifier-named? operator 'library)
+            (if (not (= (length parts) 2))
+                (eval-error
+                 "library feature requirement requires one library name"))
+            (library-available? (second parts) context environment))
+           ((identifier-named? operator 'and)
+            (let loop ((rest (cdr parts)))
+              (or (null? rest)
+                  (and (feature-requirement-satisfied?
+                        (car rest)
+                        context
+                        environment)
+                       (loop (cdr rest))))))
+           ((identifier-named? operator 'or)
+            (let loop ((rest (cdr parts)))
+              (and (not (null? rest))
+                   (or (feature-requirement-satisfied?
+                        (car rest)
+                        context
+                        environment)
+                       (loop (cdr rest))))))
+           ((identifier-named? operator 'not)
+            (if (not (= (length parts) 2))
+                (eval-error
+                 "not feature requirement requires one nested requirement"))
+            (not
+             (feature-requirement-satisfied?
+              (second parts)
+              context
+              environment)))
+           (else #f))))
+       (else #f)))
+
+    (define (expand-library-cond-expand clauses context environment)
+      (let loop ((rest clauses))
+        (if (null? rest)
+            (eval-error "unfulfilled library cond-expand")
+            (let* ((parts (proper-list-elements
+                           (car rest)
+                           "cond-expand clause"))
+                   (requirement (car parts)))
+              (if (or (identifier-named? requirement 'else)
+                      (feature-requirement-satisfied?
+                       requirement context environment))
+                  (cdr parts)
+                  (loop (cdr rest)))))))
+
+    (define (expand-library-declaration declaration context environment)
+      (cond
+       ((form-named? declaration 'cond-expand)
+        (apply append
+               (map
+                (lambda (nested)
+                  (expand-library-declaration nested context environment))
+                (expand-library-cond-expand
+                 (cdr (proper-list-elements
+                       declaration
+                       "library cond-expand"))
+                 context
+                 environment))))
+       ((form-named? declaration 'include-library-declarations)
+        (expand-include-library-declarations
+         declaration
+         context
+         environment))
+       (else
+        (list declaration))))
+
+    (define (include-filenames declaration)
+      (let* ((parts (proper-list-elements declaration "include declaration"))
+             (operator (identifier-datum-name (car parts))))
+        (if (null? (cdr parts))
+            (eval-error "include requires at least one filename" operator))
+        (map
+         (lambda (filename)
+           (if (not (string? filename))
+               (eval-error "include filename must be a string literal"
+                           operator))
+           filename)
+         (cdr parts))))
+
+    (define (string-prefix? prefix string)
+      (let ((prefix-length (string-length prefix))
+            (string-length-value (string-length string)))
+        (and (<= prefix-length string-length-value)
+             (let loop ((index 0))
+               (or (= index prefix-length)
+                   (and (char=? (string-ref prefix index)
+                                (string-ref string index))
+                        (loop (+ index 1))))))))
+
+    (define (strip-trailing-slash path)
+      (if (and (> (string-length path) 0)
+               (char=? (string-ref path (- (string-length path) 1)) #\/))
+          (substring path 0 (- (string-length path) 1))
+          path))
+
+    (define (path-policy-allows-file? path allowed-paths)
+      (let loop ((rest allowed-paths))
+        (and (not (null? rest))
+             (let* ((allowed (strip-trailing-slash (car rest)))
+                    (allowed-directory (string-append allowed "/")))
+               (or (string=? path allowed)
+                   (string-prefix? allowed-directory path)
+                   (loop (cdr rest)))))))
+
+    (define (include-policy-allows-file? path context)
+      (path-policy-allows-file? path (context-include-paths context)))
+
+    (define (resolve-include-file filename context)
+      (let ((path (path-join (context-include-directory context) filename)))
+        (cond
+         ((null? (context-include-paths context))
+          (eval-error "include requires policy-gated host file access"
+                      filename))
+         ((not (include-policy-allows-file? path context))
+          (eval-error "include file is not allowed by policy" filename))
+         ((not (file-exists? path))
+          (eval-error "include file is not readable" filename))
+         (else path))))
+
+    (define (path-directory path)
+      (let loop ((index (- (string-length path) 1)))
+        (cond
+         ((< index 0) "")
+         ((char=? (string-ref path index) #\/)
+          (substring path 0 index))
+         (else (loop (- index 1))))))
+
+    (define (read-file-string path)
+      (call-with-input-file
+       path
+       (lambda (port)
+         (let loop ((chars '()))
+           (let ((char (read-char port)))
+             (if (eof-object? char)
+                 (list->string (reverse chars))
+                 (loop (cons char chars))))))))
+
+    (define (with-include-directory context directory thunk)
+      (let ((previous-directory (context-include-directory context)))
+        (dynamic-wind
+          (lambda ()
+            (set-context-include-directory!
+             context
+             (normalize-include-directory directory)))
+          thunk
+          (lambda ()
+            (set-context-include-directory!
+             context
+             previous-directory)))))
+
+    (define (read-include-file-forms filename context fold-case?)
+      (let* ((path (resolve-include-file filename context))
+             (source (read-file-string path)))
+        (cons
+         (agent-scheme-read-all
+          (if fold-case?
+              (string-append "#!fold-case\n" source)
+              source))
+         (path-directory path))))
+
+    (define (library-include-body-forms declaration context fold-case?)
+      (apply append
+             (map (lambda (filename)
+                    (car (read-include-file-forms
+                          filename
+                          context
+                          fold-case?)))
+                  (include-filenames declaration))))
+
+    (define (expand-include-library-declarations declaration context
+                                                 environment)
+      (apply
+       append
+       (map
+        (lambda (filename)
+          (let* ((read-result
+                  (read-include-file-forms filename context #f))
+                 (forms (car read-result))
+                 (directory (cdr read-result)))
+            (with-include-directory
+             context
+             directory
+             (lambda ()
+               (apply
+                append
+                (map
+                 (lambda (nested)
+                   (expand-library-declaration
+                    nested
+                    context
+                    environment))
+                 forms))))))
+        (include-filenames declaration))))
+
+    (define (library-export-binding spec library-key value-environment
+                                    syntax-environment)
+      (let* ((internal-name (car spec))
+             (external-name (cdr spec))
+             (cell (environment-cell value-environment internal-name))
+             (syntax-binding
+              (syntax-environment-ref syntax-environment internal-name)))
+        (cond
+         ((and cell syntax-binding)
+          (eval-error
+           "export identifier has both value and syntax bindings"
+           internal-name))
+         (cell
+          (make-library-binding external-name 'value cell library-key))
+         (syntax-binding
+          (make-library-binding external-name
+                                'syntax
+                                syntax-binding
+                                library-key))
+         (else
+          (eval-error "exported identifier is not bound" internal-name)))))
+
+    (define (library-exports-from-specs specs library-key value-environment
+                                        syntax-environment)
+      (ensure-distinct-names (map cdr specs) "library exports")
+      (ensure-compatible-import-bindings
+       (map (lambda (spec)
+              (library-export-binding spec
+                                      library-key
+                                      value-environment
+                                      syntax-environment))
+            specs)))
+
+    (define (eval-library-begin forms value-environment
+                                syntax-environment context)
+      (with-syntax-environment
+       context
+       syntax-environment
+       (lambda ()
+         (trampoline
+          (make-sequence forms #t)
+          value-environment
+          context))))
+
+    (define (eval-define-library form environment context)
+      (let ((parts (proper-list-elements form "define-library form")))
+        (if (< (length parts) 2)
+            (eval-error "define-library requires a library name"))
+        (let ((name (second parts)))
+          (if (not (proper-library-name? name))
+              (eval-error "invalid library name" name))
+          (let ((library-key (library-name-key name))
+                (value-environment (agent-scheme-make-empty-environment))
+                (syntax-environment (make-empty-syntax-environment #f)))
+            (let loop ((raw-declarations (cddr parts))
+                       (export-spec-list '()))
+              (if (null? raw-declarations)
+                  (begin
+                    (library-registry-set!
+                     context
+                     library-key
+                     (make-library
+                      name
+                      library-key
+                      (library-exports-from-specs
+                       export-spec-list
+                       library-key
+                       value-environment
+                       syntax-environment)
+                      value-environment
+                      syntax-environment))
+                    agent-scheme-unspecified)
+                  (let declaration-loop
+                      ((declarations
+                        (expand-library-declaration
+                         (car raw-declarations)
+                         context
+                         environment))
+                       (exports export-spec-list))
+                    (if (null? declarations)
+                        (loop (cdr raw-declarations) exports)
+                        (let* ((declaration (car declarations))
+                               (declaration-parts
+                                (proper-list-elements
+                                 declaration
+                                 "library declaration"))
+                               (operator (car declaration-parts)))
+                          (cond
+                           ((identifier-named? operator 'export)
+                            (declaration-loop
+                             (cdr declarations)
+                             (append exports
+                                     (export-specs
+                                      (cdr declaration-parts)))))
+                           ((identifier-named? operator 'import)
+                            (with-syntax-environment
+                             context
+                             syntax-environment
+                             (lambda ()
+                               (eval-import declaration
+                                            value-environment
+                                            context)))
+                            (declaration-loop (cdr declarations) exports))
+                           ((identifier-named? operator 'begin)
+                            (eval-library-begin
+                             (cdr declaration-parts)
+                             value-environment
+                             syntax-environment
+                             context)
+                            (declaration-loop (cdr declarations) exports))
+                           ((identifier-named? operator 'include)
+                            (eval-library-begin
+                             (library-include-body-forms
+                              declaration
+                              context
+                              #f)
+                             value-environment
+                             syntax-environment
+                             context)
+                            (declaration-loop (cdr declarations) exports))
+                           ((identifier-named? operator 'include-ci)
+                            (eval-library-begin
+                             (library-include-body-forms
+                              declaration
+                              context
+                              #t)
+                             value-environment
+                             syntax-environment
+                             context)
+                            (declaration-loop (cdr declarations) exports))
+                           ((identifier-named?
+                             operator
+                             'include-library-declarations)
+                            (eval-error
+                             "include-library-declarations must expand before evaluation"
+                             operator))
+                           (else
+                            (eval-error
+                             "unsupported library declaration"
+                             declaration))))))))))))
+
     (define (expand-expression expression environment context)
       (if (not (pair? expression))
           expression
@@ -1632,6 +2627,16 @@
             (eval-error
              "define-syntax is not valid in expression position"
              parts))
+           ((and (identifier-named? operator 'define-library)
+                 (special-operator-active? operator environment))
+            (eval-error
+             "define-library is not valid in expression position"
+             parts))
+           ((and (identifier-named? operator 'import)
+                 (special-operator-active? operator environment))
+            (eval-error
+             "import is not valid in expression position"
+             parts))
            ((and (identifier-named? operator 'begin)
                  (special-operator-active? operator environment))
             (eval-sequence (cdr parts) environment context tail? #f))
@@ -1687,13 +2692,43 @@
        (else
         (eval-error "unsupported expression datum" expression))))
 
+    (define (ensure-imports-precede-body forms)
+      (let loop ((rest forms) (imports-open? #t))
+        (if (not (null? rest))
+            (let ((form (car rest)))
+              (cond
+               ((import-form? form)
+                (if (not imports-open?)
+                    (eval-error
+                     "import declarations must precede program body forms"
+                     form))
+                (loop (cdr rest) imports-open?))
+               ((define-library-form? form)
+                (loop (cdr rest) imports-open?))
+               (else
+                (loop (cdr rest) #f)))))))
+
     (define (eval-sequence forms environment context tail? allow-definitions?)
+      (if allow-definitions?
+          (ensure-imports-precede-body forms))
       (cond
        ((null? forms)
         agent-scheme-unspecified)
        ((null? (cdr forms))
         (let ((form (car forms)))
           (cond
+           ((import-form? form)
+            (if allow-definitions?
+                (eval-import form environment context)
+                (eval-error
+                 "import is only allowed at top level or in library bodies"
+                 form)))
+           ((define-library-form? form)
+            (if allow-definitions?
+                (eval-define-library form environment context)
+                (eval-error
+                 "define-library is only allowed at top level"
+                 form)))
            ((syntax-definition-form? form)
             (if allow-definitions?
                 (eval-define-syntax
@@ -1726,6 +2761,18 @@
        (else
         (let ((form (car forms)))
           (cond
+           ((import-form? form)
+            (if allow-definitions?
+                (eval-import form environment context)
+                (eval-error
+                 "import is only allowed at top level or in library bodies"
+                 form)))
+           ((define-library-form? form)
+            (if allow-definitions?
+                (eval-define-library form environment context)
+                (eval-error
+                 "define-library is only allowed at top level"
+                 form)))
            ((syntax-definition-form? form)
             (if allow-definitions?
                 (eval-define-syntax
@@ -2200,6 +3247,79 @@
 
     (define (primitive-char>=? arguments context)
       (primitive-char-compare arguments char>=? "char>=?"))
+
+    (define (primitive-char-upcase arguments context)
+      (char-upcase (expect-character (car arguments) "char-upcase")))
+
+    (define (display-string value)
+      (cond
+       ((string? value) value)
+       ((char? value) (string value))
+       (else (agent-scheme-value->external value))))
+
+    (define (expect-string-output-port value description)
+      (if (not (string-output-port? value))
+          (eval-error
+           (string-append description " expected an output string port")
+           value))
+      value)
+
+    (define (write-to-output-port value port display?)
+      (set-string-output-port-contents!
+       port
+       (string-append
+        (string-output-port-contents port)
+        (if display?
+            (display-string value)
+            (agent-scheme-value->external value))))
+      agent-scheme-unspecified)
+
+    (define (primitive-open-output-string arguments context)
+      (make-string-output-port ""))
+
+    (define (primitive-get-output-string arguments context)
+      (string-output-port-contents
+       (expect-string-output-port
+        (car arguments)
+        "get-output-string")))
+
+    (define (primitive-display arguments context)
+      (if (null? (cdr arguments))
+          agent-scheme-unspecified
+          (write-to-output-port
+           (car arguments)
+           (expect-string-output-port (second arguments) "display")
+           #t)))
+
+    (define (primitive-write arguments context)
+      (if (null? (cdr arguments))
+          agent-scheme-unspecified
+          (write-to-output-port
+           (car arguments)
+           (expect-string-output-port (second arguments) "write")
+           #f)))
+
+    (define (resolve-file-policy-path filename context description)
+      (let ((path (path-join (context-include-directory context) filename)))
+        (cond
+         ((null? (context-file-paths context))
+          (eval-error
+           (string-append description
+                          " requires policy-gated host file access")
+           filename))
+         ((not (path-policy-allows-file? path (context-file-paths context)))
+          (eval-error
+           (string-append description " file is not allowed by policy")
+           filename))
+         (else path))))
+
+    (define (primitive-file-exists? arguments context)
+      (let ((path
+             (resolve-file-policy-path
+              (expect-string (car arguments) "file-exists?")
+              context
+              "file-exists?")))
+        (file-exists? path)))
 
     (define (primitive-string? arguments context)
       (string? (car arguments)))
@@ -3094,6 +4214,12 @@
             (reverse expanded)
             (let ((form (car rest)))
               (cond
+               ((and allow-definitions? (import-form? form))
+                (eval-import form environment context)
+                (loop (cdr rest) expanded))
+               ((and allow-definitions? (define-library-form? form))
+                (eval-define-library form environment context)
+                (loop (cdr rest) expanded))
                ((and allow-definitions? (syntax-definition-form? form))
                 (eval-define-syntax
                  form
