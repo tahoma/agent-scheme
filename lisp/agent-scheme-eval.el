@@ -134,10 +134,21 @@ template resolve there instead of at the macro use site."
   values)
 
 (cl-defstruct (agent-scheme--continuation
-               (:constructor agent-scheme--make-continuation (tag active))
+               (:constructor agent-scheme--make-continuation
+                             (procedure dynamic-winds exception-handlers))
                (:copier nil))
-  "An escape continuation captured by call/cc."
-  tag active)
+  "A re-enterable continuation captured by call/cc.
+PROCEDURE is the evaluator continuation to receive a value, and
+DYNAMIC-WINDS and EXCEPTION-HANDLERS are the dynamic state active at
+capture time."
+  procedure dynamic-winds exception-handlers)
+
+(cl-defstruct (agent-scheme--dynamic-wind-frame
+               (:constructor agent-scheme--make-dynamic-wind-frame
+                             (before after))
+               (:copier nil))
+  "One active dynamic-wind frame."
+  before after)
 
 (cl-defstruct (agent-scheme-error-object
                (:constructor agent-scheme--make-error-object
@@ -163,10 +174,10 @@ template resolve there instead of at the macro use site."
 (cl-defstruct (agent-scheme--bounce
                (:constructor agent-scheme--make-bounce
                              (expression environment &optional
-                                         syntax-environment))
+                                         syntax-environment continuation))
                (:copier nil))
   "Trampoline state for evaluating EXPRESSION in ENVIRONMENT."
-  expression environment syntax-environment)
+  expression environment syntax-environment continuation)
 
 (cl-defstruct (agent-scheme--eval-context
                (:constructor agent-scheme--make-eval-context)
@@ -392,11 +403,89 @@ SEEN prevents infinite recursion over cyclic host structures."
        "%s expected one value, got %d" description (length values)))
     (car values)))
 
+(defun agent-scheme--identity-continuation (value)
+  "Return VALUE unchanged as the root evaluator continuation."
+  value)
+
+(defun agent-scheme--continue (continuation value)
+  "Deliver VALUE to CONTINUATION."
+  (funcall continuation value))
+
+(defun agent-scheme--continuation-value (arguments)
+  "Return continuation payload represented by ARGUMENTS."
+  (if (= (length arguments) 1)
+      (car arguments)
+    (agent-scheme--make-multiple-values arguments)))
+
+(defun agent-scheme--dynamic-wind-prefix-before (frame stack)
+  "Return the prefix of STACK before FRAME, comparing frames with `eq'."
+  (let ((cursor stack)
+        prefix
+        found)
+    (while (and cursor (not found))
+      (if (eq (car cursor) frame)
+          (setq found t)
+        (push (car cursor) prefix)
+        (setq cursor (cdr cursor))))
+    (nreverse prefix)))
+
+(defun agent-scheme--dynamic-wind-common-frame (current target)
+  "Return the outermost common frame shared by CURRENT and TARGET."
+  (let ((current-outer (reverse current))
+        (target-outer (reverse target))
+        common)
+    (while (and current-outer target-outer
+                (eq (car current-outer) (car target-outer)))
+      (setq common (car current-outer))
+      (setq current-outer (cdr current-outer))
+      (setq target-outer (cdr target-outer)))
+    common))
+
+(declare-function agent-scheme--apply-procedure "agent-scheme-eval")
+
 (defun agent-scheme--call-ignoring-values (procedure context description)
   "Call zero-argument PROCEDURE in CONTEXT and discard its values."
   (agent-scheme--expect-procedure procedure description)
   (agent-scheme--apply-procedure procedure nil context nil)
   agent-scheme-unspecified)
+
+(defun agent-scheme--call-ignoring-values/k
+    (procedure context description continuation)
+  "Call zero-argument PROCEDURE and continue with unspecified."
+  (agent-scheme--expect-procedure procedure description)
+  (agent-scheme--apply-procedure
+   procedure
+   nil
+   context
+   t
+   (lambda (_value)
+     (agent-scheme--continue continuation agent-scheme-unspecified))))
+
+(defun agent-scheme--switch-dynamic-winds (target context)
+  "Run dynamic-wind thunks needed to move CONTEXT to TARGET."
+  (let* ((current (agent-scheme--eval-context-dynamic-winds context))
+         (common (agent-scheme--dynamic-wind-common-frame current target))
+         (exiting (if common
+                      (agent-scheme--dynamic-wind-prefix-before common current)
+                    current))
+         (entering (if common
+                       (agent-scheme--dynamic-wind-prefix-before common target)
+                     target)))
+    (dolist (frame exiting)
+      (when (eq (car (agent-scheme--eval-context-dynamic-winds context)) frame)
+        (pop (agent-scheme--eval-context-dynamic-winds context)))
+      (agent-scheme--call-ignoring-values
+       (agent-scheme--dynamic-wind-frame-after frame)
+       context
+       "dynamic-wind after"))
+    (dolist (frame (reverse entering))
+      (agent-scheme--call-ignoring-values
+       (agent-scheme--dynamic-wind-frame-before frame)
+       context
+       "dynamic-wind before")
+      (push frame (agent-scheme--eval-context-dynamic-winds context)))
+    (setf (agent-scheme--eval-context-dynamic-winds context)
+          (copy-sequence target))))
 
 (defun agent-scheme--identifier-datum-p (datum)
   "Return non-nil if DATUM is a Scheme identifier."
@@ -742,26 +831,38 @@ initializers are evaluated."
             (cdr parsed-definition) body-environment context nil)))
         (cons body-environment expressions)))))
 
-(defun agent-scheme--eval-definition (form environment context)
+(defun agent-scheme--eval-definition
+    (form environment context &optional continuation)
   "Evaluate top-level definition FORM in ENVIRONMENT."
   (let* ((parsed (agent-scheme--parse-definition form))
          (name (car parsed))
          (cell (gethash name
                         (agent-scheme--environment-bindings environment)
                         agent-scheme--missing-cell))
-         (value (agent-scheme--single-value
-                 (agent-scheme--eval-expression
-                  (cdr parsed) environment context nil)
-                 "define initializer")))
-    (if (not (eq cell agent-scheme--missing-cell))
-        (progn
-          (when (agent-scheme--current-environment-imported-p
-                 environment name)
-            (agent-scheme--eval-error
-             "cannot redefine imported binding: %s" name))
-          (setf (agent-scheme--cell-value cell) value))
-      (agent-scheme--environment-define environment name value))
-    agent-scheme-unspecified))
+         (direct-call (null continuation))
+         (next (or continuation #'agent-scheme--identity-continuation)))
+    (let ((state
+           (agent-scheme--eval-expression
+            (cdr parsed)
+            environment
+            context
+            nil
+            (lambda (raw-value)
+              (let ((value
+                     (agent-scheme--single-value
+                      raw-value "define initializer")))
+                (if (not (eq cell agent-scheme--missing-cell))
+                    (progn
+                      (when (agent-scheme--current-environment-imported-p
+                             environment name)
+                        (agent-scheme--eval-error
+                         "cannot redefine imported binding: %s" name))
+                      (setf (agent-scheme--cell-value cell) value))
+                  (agent-scheme--environment-define environment name value))
+                (agent-scheme--continue next agent-scheme-unspecified))))))
+      (if direct-call
+          (agent-scheme--drain-state state context)
+        state))))
 
 (defun agent-scheme--bind-formals (formals arguments closure-environment context)
   "Return a call environment for FORMALS bound to ARGUMENTS."
@@ -814,102 +915,142 @@ initializers are evaluated."
               (agent-scheme-primitive-procedure-maximum-arity primitive)))
          (or (null maximum) (<= count maximum)))))
 
-(defun agent-scheme--apply-procedure (procedure arguments context tailp)
+(defun agent-scheme--apply-procedure
+    (procedure arguments context tailp &optional continuation)
   "Apply PROCEDURE to ARGUMENTS.
-When TAILP is non-nil, return a bounce for Scheme procedure bodies."
-  (cond
-   ((agent-scheme-primitive-procedure-p procedure)
-    (unless (agent-scheme--arity-match-p procedure (length arguments))
-      (let ((maximum
-             (agent-scheme-primitive-procedure-maximum-arity procedure)))
+When CONTINUATION is non-nil, deliver the result to it.  When it is nil, run
+any resulting bounce to preserve existing direct-call helper behavior."
+  (let ((direct-call (null continuation))
+        (next (or continuation #'agent-scheme--identity-continuation)))
+    (cl-labels
+        ((finish (state)
+           (if direct-call
+               (agent-scheme--drain-state state context)
+             state)))
+      (cond
+       ((agent-scheme-primitive-procedure-p procedure)
+        (unless (agent-scheme--arity-match-p procedure (length arguments))
+          (let ((maximum
+                 (agent-scheme-primitive-procedure-maximum-arity procedure)))
+            (agent-scheme--eval-error
+             "primitive %s expected %s arguments, got %d"
+             (agent-scheme-primitive-procedure-name procedure)
+             (if maximum
+                 (format "%d..%d"
+                         (agent-scheme-primitive-procedure-minimum-arity
+                          procedure)
+                         maximum)
+               (format "at least %d"
+                       (agent-scheme-primitive-procedure-minimum-arity
+                        procedure)))
+             (length arguments))))
+        (agent-scheme--note-host-callback context procedure)
+        (let ((function (agent-scheme-primitive-procedure-function procedure)))
+          (finish
+           (cond
+            ((eq function #'agent-scheme--primitive-apply)
+             (agent-scheme--primitive-apply/k arguments context next))
+            ((eq function #'agent-scheme--primitive-call-with-values)
+             (agent-scheme--primitive-call-with-values/k arguments context next))
+            ((eq function #'agent-scheme--primitive-call/cc)
+             (agent-scheme--primitive-call/cc/k arguments context next))
+            ((eq function #'agent-scheme--primitive-dynamic-wind)
+             (agent-scheme--primitive-dynamic-wind/k arguments context next))
+            ((eq function #'agent-scheme--primitive-with-exception-handler)
+             (agent-scheme--primitive-with-exception-handler/k
+              arguments context next))
+            ((eq function #'agent-scheme--primitive-raise-continuable)
+             (agent-scheme--primitive-raise-continuable/k
+              arguments context next))
+            ((eq function #'agent-scheme--primitive-raise)
+             (agent-scheme--primitive-raise/k arguments context next))
+            ((eq function #'agent-scheme--primitive-error)
+             (agent-scheme--primitive-error/k arguments context next))
+            (t
+             (agent-scheme--continue
+              next
+              (agent-scheme--check-value-budget
+               (funcall function arguments context)
+               context)))))))
+       ((agent-scheme-procedure-p procedure)
+        (let* ((call-environment
+                (agent-scheme--bind-formals
+                 (agent-scheme-procedure-formals procedure)
+                 arguments
+                 (agent-scheme-procedure-environment procedure)
+                 context))
+               (body-state
+                (agent-scheme--prepare-body-environment
+                 (agent-scheme-procedure-body procedure)
+                 call-environment
+                 context))
+               (body-expression
+                (agent-scheme--make-sequence (cdr body-state) nil)))
+          (finish
+           (agent-scheme--make-bounce
+            body-expression
+            (car body-state)
+            (agent-scheme--eval-context-syntax-environment context)
+            next))))
+       ((agent-scheme--continuation-p procedure)
+        (finish
+         (agent-scheme--invoke-continuation procedure arguments context)))
+       (t
         (agent-scheme--eval-error
-         "primitive %s expected %s arguments, got %d"
-         (agent-scheme-primitive-procedure-name procedure)
-         (if maximum
-             (format "%d..%d"
-                     (agent-scheme-primitive-procedure-minimum-arity procedure)
-                     maximum)
-           (format "at least %d"
-                   (agent-scheme-primitive-procedure-minimum-arity
-                    procedure)))
-         (length arguments))))
-    (agent-scheme--note-host-callback context procedure)
-    (agent-scheme--check-value-budget
-     (funcall (agent-scheme-primitive-procedure-function procedure)
-              arguments context)
-     context))
-   ((agent-scheme-procedure-p procedure)
-    (let* ((call-environment
-            (agent-scheme--bind-formals
-             (agent-scheme-procedure-formals procedure)
-             arguments
-             (agent-scheme-procedure-environment procedure)
-             context))
-           (body-state
-            (agent-scheme--prepare-body-environment
-             (agent-scheme-procedure-body procedure)
-             call-environment
-             context))
-           (body-expression
-            (agent-scheme--make-sequence (cdr body-state) nil)))
-      (if tailp
-          (agent-scheme--make-bounce
-           body-expression
-           (car body-state)
-           (agent-scheme--eval-context-syntax-environment context))
-        (agent-scheme--eval-sequence
-         (cdr body-state) (car body-state) context nil nil))))
-   ((agent-scheme--continuation-p procedure)
-    (unless (agent-scheme--continuation-active procedure)
-      (agent-scheme--eval-error "continuation is no longer active"))
-    (throw (agent-scheme--continuation-tag procedure)
-           (if (= (length arguments) 1)
-               (car arguments)
-             (agent-scheme--make-multiple-values arguments))))
-   (t
-    (agent-scheme--eval-error
-     "attempted to call non-procedure: %s"
-     (agent-scheme-value->external procedure)))))
+         "attempted to call non-procedure: %s"
+         (agent-scheme-value->external procedure)))))))
 
-(defun agent-scheme--eval-if (parts environment context tailp)
+(defun agent-scheme--eval-if
+    (parts environment context tailp continuation)
   "Evaluate an if expression PARTS in ENVIRONMENT."
   (unless (memq (length parts) '(3 4))
     (agent-scheme--eval-error "if requires test, consequent, and optional alternate"))
-  (let ((test-value
-         (agent-scheme--single-value
-          (agent-scheme--eval-expression (cadr parts) environment context nil)
-          "if test")))
-    (cond
-     ((agent-scheme--true-value-p test-value)
-      (if tailp
-          (agent-scheme--make-bounce
-           (caddr parts)
-           environment
-           (agent-scheme--eval-context-syntax-environment context))
-        (agent-scheme--eval-expression (caddr parts) environment context nil)))
-     ((= (length parts) 4)
-      (if tailp
-          (agent-scheme--make-bounce
-           (cadddr parts)
-           environment
-           (agent-scheme--eval-context-syntax-environment context))
-        (agent-scheme--eval-expression (cadddr parts) environment context nil)))
-     (t
-      agent-scheme-unspecified))))
+  (agent-scheme--eval-expression
+   (cadr parts)
+   environment
+   context
+   nil
+   (lambda (test-result)
+     (let ((test-value
+            (agent-scheme--single-value test-result "if test")))
+       (cond
+        ((agent-scheme--true-value-p test-value)
+         (if tailp
+             (agent-scheme--make-bounce
+              (caddr parts)
+              environment
+              (agent-scheme--eval-context-syntax-environment context)
+              continuation)
+           (agent-scheme--eval-expression
+            (caddr parts) environment context nil continuation)))
+        ((= (length parts) 4)
+         (if tailp
+             (agent-scheme--make-bounce
+              (cadddr parts)
+              environment
+              (agent-scheme--eval-context-syntax-environment context)
+              continuation)
+           (agent-scheme--eval-expression
+            (cadddr parts) environment context nil continuation)))
+        (t
+         (agent-scheme--continue continuation agent-scheme-unspecified)))))))
 
-(defun agent-scheme--eval-set! (parts environment context)
+(defun agent-scheme--eval-set! (parts environment context continuation)
   "Evaluate a set! expression PARTS in ENVIRONMENT."
   (unless (= (length parts) 3)
     (agent-scheme--eval-error "set! requires an identifier and an expression"))
-  (let ((target (cadr parts))
-        (value (agent-scheme--single-value
-                (agent-scheme--eval-expression
-                 (caddr parts) environment context nil)
-                "set! expression")))
-    (unless (agent-scheme--identifier-datum-p target)
-      (agent-scheme--eval-error "set! target must be an identifier"))
-    (agent-scheme--environment-set-identifier environment target value)
-    agent-scheme-unspecified))
+  (let ((target (cadr parts)))
+    (agent-scheme--eval-expression
+     (caddr parts)
+     environment
+     context
+     nil
+     (lambda (raw-value)
+       (let ((value (agent-scheme--single-value raw-value "set! expression")))
+         (unless (agent-scheme--identifier-datum-p target)
+           (agent-scheme--eval-error "set! target must be an identifier"))
+         (agent-scheme--environment-set-identifier environment target value)
+         (agent-scheme--continue continuation agent-scheme-unspecified))))))
 
 (defun agent-scheme--tagged-list-p (datum tag)
   "Return non-nil if DATUM is a list whose first identifier names TAG."
@@ -1041,7 +1182,7 @@ When TAILP is non-nil, return a bounce for Scheme procedure bodies."
           (cadr parts))))
 
 (defun agent-scheme--eval-letrec
-    (parts environment context tailp sequential)
+    (parts environment context tailp sequential &optional continuation)
   "Evaluate letrec or letrec* PARTS in ENVIRONMENT.
 When SEQUENTIAL is non-nil, initializer values are installed after
 each initializer."
@@ -1087,7 +1228,12 @@ each initializer."
            (car binding-value)
            (cdr binding-value)))))
     (agent-scheme--eval-sequence
-     (cddr parts) local-environment context tailp t)))
+     (cddr parts)
+     local-environment
+     context
+     tailp
+     t
+     (or continuation #'agent-scheme--identity-continuation))))
 
 (defun agent-scheme--parse-mv-binding (binding description)
   "Return BINDING as (FORMALS . INITIALIZER) for DESCRIPTION."
@@ -1100,7 +1246,7 @@ each initializer."
           (cadr parts))))
 
 (defun agent-scheme--eval-let-values
-    (parts environment context tailp sequential)
+    (parts environment context tailp sequential &optional continuation)
   "Evaluate let-values or let*-values PARTS in ENVIRONMENT."
   (unless (>= (length parts) 3)
     (agent-scheme--eval-error
@@ -1115,38 +1261,65 @@ each initializer."
             (cadr parts) (format "%s binding list" description))))
          (local-environment
           (agent-scheme-make-empty-environment environment)))
-    (if sequential
-        (dolist (binding bindings)
-          (agent-scheme--bind-formals-in-environment
-           (car binding)
-           (agent-scheme--values-list
-            (agent-scheme--eval-expression
-             (cdr binding) local-environment context nil))
-           local-environment
-           context
-           description))
-      (let ((all-names nil)
-            (evaluated nil))
-        (dolist (binding bindings)
-          (setq all-names
-                (append all-names
-                        (agent-scheme--formals-names (car binding))))
-          (push
-           (cons (car binding)
-                 (agent-scheme--values-list
-                  (agent-scheme--eval-expression
-                   (cdr binding) environment context nil)))
-           evaluated))
-        (agent-scheme--ensure-distinct-names all-names description)
-        (dolist (binding-values (nreverse evaluated))
-          (agent-scheme--bind-formals-in-environment
-           (car binding-values)
-           (cdr binding-values)
-           local-environment
-           context
-           description))))
-    (agent-scheme--eval-sequence
-     (cddr parts) local-environment context tailp t)))
+    (cl-labels
+        ((body ()
+           (agent-scheme--eval-sequence
+            (cddr parts)
+            local-environment
+            context
+            tailp
+            t
+            (or continuation #'agent-scheme--identity-continuation)))
+         (step-sequential (remaining)
+           (if (null remaining)
+               (body)
+             (let ((binding (car remaining)))
+               (agent-scheme--eval-expression
+                (cdr binding)
+                local-environment
+                context
+                nil
+                (lambda (value)
+                  (agent-scheme--bind-formals-in-environment
+                   (car binding)
+                   (agent-scheme--values-list value)
+                   local-environment
+                   context
+                   description)
+                  (step-sequential (cdr remaining)))))))
+         (step-parallel (remaining all-names evaluated)
+           (if (null remaining)
+               (progn
+                 (agent-scheme--ensure-distinct-names all-names description)
+                 (dolist (binding-values (nreverse evaluated))
+                   (agent-scheme--bind-formals-in-environment
+                    (car binding-values)
+                    (cdr binding-values)
+                    local-environment
+                    context
+                    description))
+                 (body))
+             (let ((binding (car remaining)))
+               (agent-scheme--eval-expression
+                (cdr binding)
+                environment
+                context
+                nil
+                (lambda (value)
+                  (step-parallel
+                   (cdr remaining)
+                   (append all-names
+                           (agent-scheme--formals-names (car binding)))
+                   (cons (cons (car binding)
+                               (agent-scheme--values-list value))
+                         evaluated))))))))
+      (let* ((direct-call (null continuation))
+             (state (if sequential
+                        (step-sequential bindings)
+                      (step-parallel bindings nil nil))))
+        (if direct-call
+            (agent-scheme--drain-state state context)
+          state)))))
 
 (defun agent-scheme--make-empty-syntax-environment (&optional parent)
   "Return a fresh empty syntactic environment with optional PARENT."
@@ -2898,54 +3071,84 @@ When FOLD-CASE is non-nil, read as if the file began with
          expression
          environment
          context))
-       (t expression)))))
+	       (t expression)))))
 
-(defun agent-scheme--eval-combination (expression environment context tailp)
+(defun agent-scheme--eval-arguments
+    (operands environment context arguments continuation)
+  "Evaluate OPERANDS in order and deliver their single values."
+  (if (null operands)
+      (agent-scheme--continue continuation (nreverse arguments))
+    (agent-scheme--eval-expression
+     (car operands)
+     environment
+     context
+     nil
+     (lambda (raw-argument)
+       (agent-scheme--eval-arguments
+        (cdr operands)
+        environment
+        context
+        (cons (agent-scheme--single-value raw-argument "procedure argument")
+              arguments)
+        continuation)))))
+
+(defun agent-scheme--eval-combination
+    (expression environment context tailp continuation)
   "Evaluate list EXPRESSION in ENVIRONMENT."
   (let ((parts (agent-scheme--proper-list-elements expression "expression")))
     (unless parts
       (agent-scheme--eval-error "empty list is not an expression"))
     (let ((operator (car parts)))
       (cond
-       ((and (agent-scheme--symbol-named-p operator "quote")
-             (agent-scheme--special-operator-active-p operator environment))
-        (unless (= (length parts) 2)
-          (agent-scheme--eval-error "quote requires exactly one datum"))
-        (agent-scheme--check-value-budget (cadr parts) context))
-       ((and (agent-scheme--symbol-named-p operator "quasiquote")
-             (agent-scheme--special-operator-active-p operator environment))
-        (agent-scheme--check-value-budget
-         (agent-scheme--eval-quasiquote parts environment context)
-         context))
-       ((and (agent-scheme--symbol-named-p operator "lambda")
-             (agent-scheme--special-operator-active-p operator environment))
-        (unless (>= (length parts) 3)
-          (agent-scheme--eval-error "lambda requires formals and a body"))
-        (agent-scheme--make-procedure
-         (agent-scheme--parse-formals (cadr parts))
-         (cddr parts)
-         environment))
-       ((and (agent-scheme--symbol-named-p operator "if")
-             (agent-scheme--special-operator-active-p operator environment))
-        (agent-scheme--eval-if parts environment context tailp))
-       ((and (agent-scheme--symbol-named-p operator "set!")
-             (agent-scheme--special-operator-active-p operator environment))
-        (agent-scheme--eval-set! parts environment context))
-       ((and (agent-scheme--symbol-named-p operator "let-values")
-             (agent-scheme--special-operator-active-p operator environment))
-        (agent-scheme--eval-let-values parts environment context tailp nil))
-       ((and (agent-scheme--symbol-named-p operator "let*-values")
-             (agent-scheme--special-operator-active-p operator environment))
-        (agent-scheme--eval-let-values parts environment context tailp t))
-       ((and (agent-scheme--symbol-named-p operator "letrec")
-             (agent-scheme--special-operator-active-p operator environment))
-        (agent-scheme--eval-letrec parts environment context tailp nil))
-       ((and (agent-scheme--symbol-named-p operator "letrec*")
-             (agent-scheme--special-operator-active-p operator environment))
-        (agent-scheme--eval-letrec parts environment context tailp t))
-       ((and (agent-scheme--symbol-named-p operator "define")
-             (agent-scheme--special-operator-active-p operator environment))
-        (agent-scheme--eval-error "define is not valid in expression position"))
+	       ((and (agent-scheme--symbol-named-p operator "quote")
+	             (agent-scheme--special-operator-active-p operator environment))
+	        (unless (= (length parts) 2)
+	          (agent-scheme--eval-error "quote requires exactly one datum"))
+	        (agent-scheme--continue
+                 continuation
+                 (agent-scheme--check-value-budget (cadr parts) context)))
+	       ((and (agent-scheme--symbol-named-p operator "quasiquote")
+	             (agent-scheme--special-operator-active-p operator environment))
+	        (agent-scheme--continue
+                 continuation
+                 (agent-scheme--check-value-budget
+	          (agent-scheme--eval-quasiquote parts environment context)
+	          context)))
+	       ((and (agent-scheme--symbol-named-p operator "lambda")
+	             (agent-scheme--special-operator-active-p operator environment))
+	        (unless (>= (length parts) 3)
+	          (agent-scheme--eval-error "lambda requires formals and a body"))
+	        (agent-scheme--continue
+                 continuation
+                 (agent-scheme--make-procedure
+	          (agent-scheme--parse-formals (cadr parts))
+	          (cddr parts)
+	          environment)))
+	       ((and (agent-scheme--symbol-named-p operator "if")
+	             (agent-scheme--special-operator-active-p operator environment))
+	        (agent-scheme--eval-if parts environment context tailp continuation))
+	       ((and (agent-scheme--symbol-named-p operator "set!")
+	             (agent-scheme--special-operator-active-p operator environment))
+	        (agent-scheme--eval-set! parts environment context continuation))
+	       ((and (agent-scheme--symbol-named-p operator "let-values")
+	             (agent-scheme--special-operator-active-p operator environment))
+	        (agent-scheme--eval-let-values
+                 parts environment context tailp nil continuation))
+	       ((and (agent-scheme--symbol-named-p operator "let*-values")
+	             (agent-scheme--special-operator-active-p operator environment))
+	        (agent-scheme--eval-let-values
+                 parts environment context tailp t continuation))
+	       ((and (agent-scheme--symbol-named-p operator "letrec")
+	             (agent-scheme--special-operator-active-p operator environment))
+	        (agent-scheme--eval-letrec
+                 parts environment context tailp nil continuation))
+	       ((and (agent-scheme--symbol-named-p operator "letrec*")
+	             (agent-scheme--special-operator-active-p operator environment))
+	        (agent-scheme--eval-letrec
+                 parts environment context tailp t continuation))
+	       ((and (agent-scheme--symbol-named-p operator "define")
+	             (agent-scheme--special-operator-active-p operator environment))
+	        (agent-scheme--eval-error "define is not valid in expression position"))
        ((and (agent-scheme--symbol-named-p operator "define-syntax")
              (agent-scheme--special-operator-active-p operator environment))
         (agent-scheme--eval-error
@@ -2958,174 +3161,202 @@ When FOLD-CASE is non-nil, read as if the file began with
              (agent-scheme--special-operator-active-p operator environment))
         (agent-scheme--eval-error
          "import is not valid in expression position"))
-       ((and (agent-scheme--symbol-named-p operator "begin")
-             (agent-scheme--special-operator-active-p operator environment))
-        (agent-scheme--eval-sequence (cdr parts) environment context tailp nil))
-       (t
-        (let ((procedure
-               (agent-scheme--single-value
-                (agent-scheme--eval-expression operator environment context nil)
-                "procedure operator"))
-              (arguments
-               (mapcar
-                (lambda (operand)
-                  (agent-scheme--single-value
-                   (agent-scheme--eval-expression
-                    operand environment context nil)
-                   "procedure argument"))
-                (cdr parts))))
-          (agent-scheme--apply-procedure procedure arguments context tailp)))))))
+	       ((and (agent-scheme--symbol-named-p operator "begin")
+	             (agent-scheme--special-operator-active-p operator environment))
+	        (agent-scheme--eval-sequence
+                 (cdr parts) environment context tailp nil continuation))
+	       (t
+	        (agent-scheme--eval-expression
+                 operator
+                 environment
+                 context
+                 nil
+                 (lambda (raw-procedure)
+                   (let ((procedure
+                          (agent-scheme--single-value
+                           raw-procedure "procedure operator")))
+                     (agent-scheme--eval-arguments
+                      (cdr parts)
+                      environment
+                      context
+                      nil
+                      (lambda (arguments)
+                        (agent-scheme--apply-procedure
+                         procedure arguments context tailp continuation)))))))))))
 
-(defun agent-scheme--eval-expression (expression environment context tailp)
+(defun agent-scheme--eval-expression
+    (expression environment context tailp &optional continuation)
   "Evaluate EXPRESSION in ENVIRONMENT under CONTEXT.
 When TAILP is non-nil, tail calls may return an
 `agent-scheme--bounce'."
-  (agent-scheme--note-step context)
-  (cond
-   ((agent-scheme--sequence-p expression)
-    (agent-scheme--eval-sequence
-     (agent-scheme--sequence-forms expression)
-     environment
-     context
-     tailp
-     (agent-scheme--sequence-allow-definitions expression)))
-   ((agent-scheme--syntax-scope-p expression)
-    (agent-scheme--with-syntax-environment
-     context
-     (agent-scheme--syntax-scope-syntax-environment expression)
-     (lambda ()
-       (agent-scheme--eval-sequence
-        (agent-scheme--syntax-scope-forms expression)
-        environment
-        context
-        tailp
-        t))))
-   ((agent-scheme--self-evaluating-p expression)
-    (agent-scheme--check-value-budget expression context))
-   ((agent-scheme--identifier-p expression)
-    (agent-scheme--environment-ref-identifier environment expression))
-   ((agent-scheme-symbol-p expression)
-    (agent-scheme--environment-ref-identifier environment expression))
-   ((null expression)
-    (agent-scheme--eval-error "empty list is not an expression"))
-   ((consp expression)
-    (let ((expanded (agent-scheme--expand-expression
-                     expression environment context)))
-      ;; Expansion is interleaved with evaluation so local syntax forms can
-      ;; update CONTEXT before the resulting core expression is evaluated.
-      (if (eq expanded expression)
-          (agent-scheme--eval-combination expression environment context tailp)
-        (agent-scheme--eval-expression expanded environment context tailp))))
-   (t
-    (agent-scheme--eval-error "unsupported expression datum: %S" expression))))
+  (let ((direct-call (null continuation))
+        (next (or continuation #'agent-scheme--identity-continuation)))
+    (agent-scheme--note-step context)
+    (let ((state
+           (cond
+            ((agent-scheme--sequence-p expression)
+             (agent-scheme--eval-sequence
+              (agent-scheme--sequence-forms expression)
+              environment
+              context
+              tailp
+              (agent-scheme--sequence-allow-definitions expression)
+              next))
+            ((agent-scheme--syntax-scope-p expression)
+             (agent-scheme--with-syntax-environment
+              context
+              (agent-scheme--syntax-scope-syntax-environment expression)
+              (lambda ()
+                (agent-scheme--eval-sequence
+                 (agent-scheme--syntax-scope-forms expression)
+                 environment
+                 context
+                 tailp
+                 t
+                 next))))
+            ((agent-scheme--self-evaluating-p expression)
+             (agent-scheme--continue
+              next
+              (agent-scheme--check-value-budget expression context)))
+            ((agent-scheme--identifier-p expression)
+             (agent-scheme--continue
+              next
+              (agent-scheme--environment-ref-identifier environment expression)))
+            ((agent-scheme-symbol-p expression)
+             (agent-scheme--continue
+              next
+              (agent-scheme--environment-ref-identifier environment expression)))
+            ((null expression)
+             (agent-scheme--eval-error "empty list is not an expression"))
+            ((consp expression)
+             (let ((expanded (agent-scheme--expand-expression
+                              expression environment context)))
+               ;; Expansion is interleaved with evaluation so local syntax forms can
+               ;; update CONTEXT before the resulting core expression is evaluated.
+               (if (eq expanded expression)
+                   (agent-scheme--eval-combination
+                    expression environment context tailp next)
+                 (agent-scheme--eval-expression
+                  expanded environment context tailp next))))
+            (t
+             (agent-scheme--eval-error
+              "unsupported expression datum: %S" expression)))))
+      (if direct-call
+          (agent-scheme--drain-state state context)
+        state))))
 
 (defun agent-scheme--eval-sequence
-    (forms environment context tailp allow-definitions)
+    (forms environment context tailp allow-definitions &optional continuation)
   "Evaluate FORMS sequentially in ENVIRONMENT.
 TAILP controls the final form.  ALLOW-DEFINITIONS permits
 top-level definition forms within the sequence."
-  (cond
-   ((null forms)
-    agent-scheme-unspecified)
-   (t
-    (let ((cursor forms)
-          value
-          (imports-open t))
-      (while (cdr cursor)
-        (let ((form (car cursor)))
-          (cond
-           ((agent-scheme--import-form-p form)
-            (unless imports-open
-              (agent-scheme--eval-error
-               "import declarations must precede program body forms"))
-            (if allow-definitions
-                (setq value
-                      (agent-scheme--eval-import
-                       form environment context))
-              (agent-scheme--eval-error
-               "import is only allowed at top level or in library bodies")))
-           ((agent-scheme--define-library-form-p form)
-            (if allow-definitions
-                (setq value
+  (let ((next (or continuation #'agent-scheme--identity-continuation)))
+    (cl-labels
+        ((after-form (value rest imports-open)
+           (if rest
+               (step rest imports-open)
+             (agent-scheme--continue next value)))
+         (step (cursor imports-open)
+           (if (null cursor)
+               (agent-scheme--continue next agent-scheme-unspecified)
+             (let* ((form (car cursor))
+                    (rest (cdr cursor))
+                    (last-form-p (null rest)))
+               (cond
+                ((agent-scheme--import-form-p form)
+                 (unless imports-open
+                   (agent-scheme--eval-error
+                    "import declarations must precede program body forms"))
+                 (if allow-definitions
+                     (after-form
+                      (agent-scheme--eval-import form environment context)
+                      rest
+                      t)
+                   (agent-scheme--eval-error
+                    "import is only allowed at top level or in library bodies")))
+                ((agent-scheme--define-library-form-p form)
+                 (if allow-definitions
+                     (after-form
                       (agent-scheme--eval-define-library
-                       form environment context))
-              (agent-scheme--eval-error
-               "define-library is only allowed at top level")))
-           ((agent-scheme--syntax-definition-form-p form)
-            (setq imports-open nil)
-            (if allow-definitions
-                (setq value
+                       form environment context)
+                      rest
+                      imports-open)
+                   (agent-scheme--eval-error
+                    "define-library is only allowed at top level")))
+                ((agent-scheme--syntax-definition-form-p form)
+                 (if allow-definitions
+                     (after-form
                       (agent-scheme--eval-define-syntax
                        form
                        environment
                        context
                        (agent-scheme--eval-context-syntax-environment
-                        context)))
-              (agent-scheme--eval-error
-               "define-syntax is only allowed before body expressions")))
-           ((agent-scheme--definition-form-p form)
-            (setq imports-open nil)
-            (if allow-definitions
-                (setq value
-                      (agent-scheme--eval-definition
-                       form environment context))
-              (agent-scheme--eval-error
-               "define is only allowed before body expressions")))
-           ((and allow-definitions (agent-scheme--begin-form-p form))
-            (setq imports-open nil)
-            (setq value
-                  (agent-scheme--eval-sequence
-                   (cdr (agent-scheme--proper-list-elements form "begin form"))
-                   environment context nil t)))
-           (t
-            (setq imports-open nil)
-            (setq value
-                  (agent-scheme--eval-expression
-                   form environment context nil)))))
-        (setq cursor (cdr cursor)))
-      (let ((last-form (car cursor)))
-        (cond
-         ((agent-scheme--import-form-p last-form)
-          (unless imports-open
-            (agent-scheme--eval-error
-             "import declarations must precede program body forms"))
-          (if allow-definitions
-              (agent-scheme--eval-import last-form environment context)
-            (agent-scheme--eval-error
-             "import is only allowed at top level or in library bodies")))
-         ((agent-scheme--define-library-form-p last-form)
-          (if allow-definitions
-              (agent-scheme--eval-define-library
-               last-form environment context)
-            (agent-scheme--eval-error
-             "define-library is only allowed at top level")))
-         ((agent-scheme--syntax-definition-form-p last-form)
-          (if allow-definitions
-              (agent-scheme--eval-define-syntax
-               last-form
-               environment
-               context
-               (agent-scheme--eval-context-syntax-environment context))
-            (agent-scheme--eval-error
-             "define-syntax is only allowed before body expressions")))
-         ((agent-scheme--definition-form-p last-form)
-          (if allow-definitions
-              (agent-scheme--eval-definition last-form environment context)
-            (agent-scheme--eval-error
-             "define is only allowed before body expressions")))
-         ((and allow-definitions (agent-scheme--begin-form-p last-form))
-          (agent-scheme--eval-sequence
-           (cdr (agent-scheme--proper-list-elements last-form "begin form"))
-           environment context tailp t))
-         (tailp
-          (agent-scheme--make-bounce
-           last-form
-           environment
-           (agent-scheme--eval-context-syntax-environment context)))
-         (t
-          (setq value
-                (agent-scheme--eval-expression
-                 last-form environment context nil)))))))))
+                        context))
+                      rest
+                      nil)
+                   (agent-scheme--eval-error
+                    "define-syntax is only allowed before body expressions")))
+                ((agent-scheme--definition-form-p form)
+                 (if allow-definitions
+                     (agent-scheme--eval-definition
+                      form
+                      environment
+                      context
+                      (lambda (value)
+                        (after-form value rest nil)))
+                   (agent-scheme--eval-error
+                    "define is only allowed before body expressions")))
+                ((and allow-definitions (agent-scheme--begin-form-p form))
+                 (agent-scheme--eval-sequence
+                  (cdr (agent-scheme--proper-list-elements form "begin form"))
+                  environment
+                  context
+                  (and last-form-p tailp)
+                  t
+                  (lambda (value)
+                    (after-form value rest nil))))
+                (last-form-p
+                 (if tailp
+                     (agent-scheme--make-bounce
+                      form
+                      environment
+                      (agent-scheme--eval-context-syntax-environment context)
+                      next)
+                   (agent-scheme--eval-expression
+                    form environment context nil next)))
+                (t
+                 (agent-scheme--eval-expression
+                  form
+                  environment
+                  context
+                  nil
+                  (lambda (_value)
+                    (step rest nil)))))))))
+      (step forms t))))
+
+(defun agent-scheme--drain-state (state context)
+  "Run trampoline bounces in STATE under CONTEXT."
+  (while (agent-scheme--bounce-p state)
+    (let ((syntax-environment
+           (or (agent-scheme--bounce-syntax-environment state)
+               (agent-scheme--eval-context-syntax-environment context)))
+          (continuation
+           (or (agent-scheme--bounce-continuation state)
+               #'agent-scheme--identity-continuation)))
+      ;; A bounce carries the value environment, syntax environment, and
+      ;; evaluator continuation needed for the next tail step.
+      (setq state
+            (agent-scheme--with-syntax-environment
+             context
+             syntax-environment
+             (lambda ()
+               (agent-scheme--eval-expression
+                (agent-scheme--bounce-expression state)
+                (agent-scheme--bounce-environment state)
+                context
+                t
+                continuation))))))
+  state)
 
 (defun agent-scheme--trampoline (expression environment context)
   "Evaluate EXPRESSION in ENVIRONMENT using CONTEXT's trampoline."
@@ -3133,23 +3364,9 @@ top-level definition forms within the sequence."
          (agent-scheme--make-bounce
           expression
           environment
-          (agent-scheme--eval-context-syntax-environment context))))
-    (while (agent-scheme--bounce-p state)
-      (let ((syntax-environment
-             (or (agent-scheme--bounce-syntax-environment state)
-                 (agent-scheme--eval-context-syntax-environment context))))
-        ;; A bounce carries both the value environment and the syntax
-        ;; environment needed for the next tail step.
-        (setq state
-              (agent-scheme--with-syntax-environment
-               context
-               syntax-environment
-               (lambda ()
-                 (agent-scheme--eval-expression
-                  (agent-scheme--bounce-expression state)
-                  (agent-scheme--bounce-environment state)
-                  context
-                  t))))))
+          (agent-scheme--eval-context-syntax-environment context)
+          #'agent-scheme--identity-continuation)))
+    (setq state (agent-scheme--drain-state state context))
     (agent-scheme--check-value-budget state context)))
 
 (defun agent-scheme--scheme-boolean (value)
@@ -5152,6 +5369,21 @@ When KEEP-RESULTS is non-nil, return the collected values."
      context
      nil)))
 
+(defun agent-scheme--primitive-apply/k (arguments context continuation)
+  "CPS primitive apply over ARGUMENTS."
+  (let* ((procedure (agent-scheme--expect-procedure
+                     (car arguments) "apply procedure"))
+         (fixed-arguments (butlast (cdr arguments)))
+         (tail (car (last arguments)))
+         (tail-arguments
+          (agent-scheme--proper-list-elements tail "apply final argument")))
+    (agent-scheme--apply-procedure
+     procedure
+     (append fixed-arguments tail-arguments)
+     context
+     t
+     continuation)))
+
 (defun agent-scheme--primitive-values (arguments _context)
   "Primitive values over ARGUMENTS."
   (agent-scheme--make-multiple-values arguments))
@@ -5169,47 +5401,104 @@ When KEEP-RESULTS is non-nil, return the collected values."
      context
      nil)))
 
+(defun agent-scheme--primitive-call-with-values/k
+    (arguments context continuation)
+  "CPS primitive call-with-values over ARGUMENTS."
+  (let ((producer (agent-scheme--expect-procedure
+                   (car arguments) "call-with-values producer"))
+        (consumer (agent-scheme--expect-procedure
+                   (cadr arguments) "call-with-values consumer")))
+    (agent-scheme--apply-procedure
+     producer
+     nil
+     context
+     t
+     (lambda (produced)
+       (agent-scheme--apply-procedure
+        consumer
+        (agent-scheme--values-list produced)
+        context
+        t
+        continuation)))))
+
 (defun agent-scheme--primitive-call/cc (arguments context)
   "Primitive call-with-current-continuation over ARGUMENTS."
+  (agent-scheme--drain-state
+   (agent-scheme--primitive-call/cc/k
+    arguments context #'agent-scheme--identity-continuation)
+   context))
+
+(defun agent-scheme--primitive-call/cc/k (arguments context continuation)
+  "CPS primitive call-with-current-continuation over ARGUMENTS."
   (let* ((procedure
           (agent-scheme--expect-procedure
            (car arguments)
            "call-with-current-continuation procedure"))
-         (tag (make-symbol "agent-scheme-continuation"))
-         (continuation (agent-scheme--make-continuation tag t)))
-    (unwind-protect
-        (catch tag
-          (agent-scheme--apply-procedure
-           procedure
-           (list continuation)
-           context
-           nil))
-      (setf (agent-scheme--continuation-active continuation) nil))))
+         (captured
+          (agent-scheme--make-continuation
+           continuation
+           (copy-sequence
+            (agent-scheme--eval-context-dynamic-winds context))
+           (copy-sequence
+            (agent-scheme--eval-context-exception-handlers context)))))
+    (agent-scheme--apply-procedure
+     procedure
+     (list captured)
+     context
+     t
+     continuation)))
+
+(defun agent-scheme--invoke-continuation
+    (continuation arguments context)
+  "Invoke captured CONTINUATION with ARGUMENTS in CONTEXT."
+  (agent-scheme--switch-dynamic-winds
+   (agent-scheme--continuation-dynamic-winds continuation)
+   context)
+  (setf (agent-scheme--eval-context-exception-handlers context)
+        (copy-sequence
+         (agent-scheme--continuation-exception-handlers continuation)))
+  (agent-scheme--continue
+   (agent-scheme--continuation-procedure continuation)
+   (agent-scheme--continuation-value arguments)))
 
 (defun agent-scheme--primitive-dynamic-wind (arguments context)
   "Primitive dynamic-wind over ARGUMENTS."
-  (let ((before (agent-scheme--expect-procedure
-                 (car arguments) "dynamic-wind before"))
-        (thunk (agent-scheme--expect-procedure
-                (cadr arguments) "dynamic-wind thunk"))
-        (after (agent-scheme--expect-procedure
-                (caddr arguments) "dynamic-wind after"))
-        (entered nil)
-        result)
-    (agent-scheme--call-ignoring-values before context "dynamic-wind before")
-    (unwind-protect
-        (progn
-          (setq entered t)
-          (push after (agent-scheme--eval-context-dynamic-winds context))
-          (setq result
-                (agent-scheme--apply-procedure thunk nil context nil))
-          result)
-      (when entered
-        (when (eq (car (agent-scheme--eval-context-dynamic-winds context))
-                  after)
-          (pop (agent-scheme--eval-context-dynamic-winds context)))
-        (agent-scheme--call-ignoring-values
-         after context "dynamic-wind after")))))
+  (agent-scheme--drain-state
+   (agent-scheme--primitive-dynamic-wind/k
+    arguments context #'agent-scheme--identity-continuation)
+   context))
+
+(defun agent-scheme--primitive-dynamic-wind/k
+    (arguments context continuation)
+  "CPS primitive dynamic-wind over ARGUMENTS."
+  (let* ((before (agent-scheme--expect-procedure
+                  (car arguments) "dynamic-wind before"))
+         (thunk (agent-scheme--expect-procedure
+                 (cadr arguments) "dynamic-wind thunk"))
+         (after (agent-scheme--expect-procedure
+                 (caddr arguments) "dynamic-wind after"))
+         (frame (agent-scheme--make-dynamic-wind-frame before after)))
+    (agent-scheme--call-ignoring-values/k
+     before
+     context
+     "dynamic-wind before"
+     (lambda (_ignored)
+       (push frame (agent-scheme--eval-context-dynamic-winds context))
+       (agent-scheme--apply-procedure
+        thunk
+        nil
+        context
+        t
+        (lambda (result)
+          (when (eq (car (agent-scheme--eval-context-dynamic-winds context))
+                    frame)
+            (pop (agent-scheme--eval-context-dynamic-winds context)))
+          (agent-scheme--call-ignoring-values/k
+           after
+           context
+           "dynamic-wind after"
+           (lambda (_after-result)
+             (agent-scheme--continue continuation result)))))))))
 
 (defun agent-scheme--current-exception-handler (context)
   "Return CONTEXT's current exception handler, or nil."
@@ -5235,6 +5524,27 @@ When KEEP-RESULTS is non-nil, return the collected values."
       (setf (agent-scheme--eval-context-exception-handlers context)
             handlers))))
 
+(defun agent-scheme--invoke-exception-handler/k
+    (condition context continuation)
+  "Invoke the current exception handler for CONDITION, then CONTINUATION."
+  (let* ((handlers (agent-scheme--eval-context-exception-handlers context))
+         (handler (car handlers)))
+    (unless handler
+      (agent-scheme--eval-error
+       "unhandled exception: %s"
+       (agent-scheme-value->external condition)))
+    (setf (agent-scheme--eval-context-exception-handlers context)
+          (cdr handlers))
+    (agent-scheme--apply-procedure
+     handler
+     (list condition)
+     context
+     t
+     (lambda (value)
+       (setf (agent-scheme--eval-context-exception-handlers context)
+             handlers)
+       (agent-scheme--continue continuation value)))))
+
 (defun agent-scheme--primitive-with-exception-handler (arguments context)
   "Primitive with-exception-handler over ARGUMENTS."
   (let ((handler (agent-scheme--expect-procedure
@@ -5250,14 +5560,49 @@ When KEEP-RESULTS is non-nil, return the collected values."
       (setf (agent-scheme--eval-context-exception-handlers context)
             old-handlers))))
 
+(defun agent-scheme--primitive-with-exception-handler/k
+    (arguments context continuation)
+  "CPS primitive with-exception-handler over ARGUMENTS."
+  (let ((handler (agent-scheme--expect-procedure
+                  (car arguments) "with-exception-handler handler"))
+        (thunk (agent-scheme--expect-procedure
+                (cadr arguments) "with-exception-handler thunk"))
+        (old-handlers (agent-scheme--eval-context-exception-handlers context)))
+    (setf (agent-scheme--eval-context-exception-handlers context)
+          (cons handler old-handlers))
+    (agent-scheme--apply-procedure
+     thunk
+     nil
+     context
+     t
+     (lambda (value)
+       (setf (agent-scheme--eval-context-exception-handlers context)
+             old-handlers)
+       (agent-scheme--continue continuation value)))))
+
 (defun agent-scheme--primitive-raise-continuable (arguments context)
   "Primitive raise-continuable over ARGUMENTS."
   (agent-scheme--invoke-exception-handler (car arguments) context))
+
+(defun agent-scheme--primitive-raise-continuable/k
+    (arguments context continuation)
+  "CPS primitive raise-continuable over ARGUMENTS."
+  (agent-scheme--invoke-exception-handler/k
+   (car arguments) context continuation))
 
 (defun agent-scheme--primitive-raise (arguments context)
   "Primitive raise over ARGUMENTS."
   (agent-scheme--invoke-exception-handler (car arguments) context)
   (agent-scheme--eval-error "non-continuable exception handler returned"))
+
+(defun agent-scheme--primitive-raise/k (arguments context _continuation)
+  "CPS primitive raise over ARGUMENTS."
+  (agent-scheme--invoke-exception-handler/k
+   (car arguments)
+   context
+   (lambda (_value)
+     (agent-scheme--eval-error
+      "non-continuable exception handler returned"))))
 
 (defun agent-scheme--primitive-error (arguments context)
   "Primitive error over ARGUMENTS."
@@ -5266,6 +5611,15 @@ When KEEP-RESULTS is non-nil, return the collected values."
     (agent-scheme--primitive-raise
      (list (agent-scheme--make-error-object message irritants))
      context)))
+
+(defun agent-scheme--primitive-error/k (arguments context continuation)
+  "CPS primitive error over ARGUMENTS."
+  (let ((message (agent-scheme--expect-string (car arguments) "error message"))
+        (irritants (cdr arguments)))
+    (agent-scheme--primitive-raise/k
+     (list (agent-scheme--make-error-object message irritants))
+     context
+     continuation)))
 
 (defun agent-scheme--primitive-error-object? (arguments _context)
   "Primitive error-object? over ARGUMENTS."

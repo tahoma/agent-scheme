@@ -200,7 +200,7 @@
           "(x y x y)")))
 
 (ert-deftest agent-scheme-eval-test-continuations-and-dynamic-wind ()
-  "Evaluate escape continuations and dynamic-wind exit thunks."
+  "Evaluate re-enterable continuations and dynamic-wind transitions."
   (should
    (equal (agent-scheme-eval-test--external
            "(call/cc (lambda (escape) (+ 1 (escape 42))))")
@@ -218,7 +218,99 @@
                     (escape 'done))
                   (lambda () (add 'after)))))
               (reverse path))")
-          "(before during after)")))
+          "(before during after)"))
+  (should
+   (equal (agent-scheme-eval-test--external
+           "(let ((again #f))
+              (let ((value (call/cc
+                            (lambda (k)
+                              (set! again k)
+                              'first))))
+                (if (eq? value 'first)
+                    (again 'second)
+                  value)))")
+          "second"))
+  (should
+   (equal (agent-scheme-eval-test--external
+           "(let ((again #f)
+                  (seen '()))
+              (let ((value (call/cc
+                            (lambda (k)
+                              (set! again k)
+                              'start))))
+                (set! seen (cons value seen))
+                (if (< (length seen) 3)
+                    (again (length seen))
+                  (reverse seen))))")
+          "(start 1 2)"))
+  (should
+   (equal (agent-scheme-eval-test--external
+           "(let ((again #f)
+                  (outside #f)
+                  (path '()))
+              (define (add tag) (set! path (cons tag path)))
+              (call/cc
+               (lambda (escape)
+                 (set! outside escape)
+                 (dynamic-wind
+                  (lambda () (add 'before-outer))
+                  (lambda ()
+                    (dynamic-wind
+                     (lambda () (add 'before-inner))
+                     (lambda ()
+                       (call/cc
+                        (lambda (k)
+                          (set! again k)
+                          'captured))
+                       (add 'during-inner)
+                       (outside 'escaped))
+                     (lambda () (add 'after-inner))))
+                  (lambda () (add 'after-outer)))))
+              (if again
+                  (let ((resume again))
+                    (set! again #f)
+                    (resume 'resumed))
+                (reverse path)))")
+          "(before-outer before-inner during-inner after-inner after-outer before-outer before-inner during-inner after-inner after-outer)"))
+  (should
+   (equal (agent-scheme-eval-test--external
+           "(let ((again #f))
+              (call-with-values
+               (lambda ()
+                 (call/cc
+                  (lambda (k)
+                    (set! again k)
+                    (values 1 2))))
+               (lambda (a b)
+                 (if (= a 1)
+                     (again 3 4)
+                   (list a b)))))")
+          "(3 4)"))
+  (should
+   (equal (agent-scheme-eval-test--external
+           "(let ((again #f))
+              (let-values (((a b)
+                            (call/cc
+                             (lambda (k)
+                               (set! again k)
+                               (values 1 2)))))
+                (if (= a 1)
+                    (again 3 4)
+                  (list a b))))")
+          "(3 4)"))
+  (should
+   (equal (agent-scheme-eval-test--external
+           "(let ((again #f))
+              (let*-values (((a b)
+                             (call/cc
+                              (lambda (k)
+                                (set! again k)
+                                (values 1 2))))
+                            ((c) (+ a b)))
+                (if (= a 1)
+                    (again 3 4)
+                  (list a b c))))")
+          "(3 4 7)")))
 
 (ert-deftest agent-scheme-eval-test-exceptions-and-guard ()
   "Evaluate R7RS exception handlers, guard, continuable raises, and error."
