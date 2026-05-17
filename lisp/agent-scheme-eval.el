@@ -77,7 +77,10 @@
                (:constructor agent-scheme--make-environment
                              (bindings parent imported-bindings))
                (:copier nil))
-  "Explicit lexical environment frame."
+  "Explicit lexical environment frame.
+BINDINGS maps lexical keys to cells.  IMPORTED-BINDINGS records
+current-frame names that cannot be redefined or mutated by Scheme
+code."
   bindings parent imported-bindings)
 
 (cl-defstruct (agent-scheme--syntax-environment
@@ -91,7 +94,10 @@
                (:constructor agent-scheme--make-syntax-context
                              (id value-environment syntax-environment))
                (:copier nil))
-  "Hygienic context attached to macro-introduced identifiers."
+  "Hygienic context attached to macro-introduced identifiers.
+VALUE-ENVIRONMENT and SYNTAX-ENVIRONMENT are the transformer's
+definition environments; free identifiers introduced by the
+template resolve there instead of at the macro use site."
   id value-environment syntax-environment)
 
 (cl-defstruct (agent-scheme--identifier
@@ -146,6 +152,10 @@
 (cl-defstruct (agent-scheme--eval-context
                (:constructor agent-scheme--make-eval-context)
                (:copier nil))
+  "Mutable state shared by one expansion or evaluation run.
+The context owns resource counters, the active syntax environment,
+the per-run library registry, include policy, and whether the
+base syntax prelude has already been installed."
   steps
   maximum-steps
   maximum-value-nodes
@@ -170,7 +180,11 @@
                (:constructor agent-scheme--make-pattern-binding
                              (depth captures))
                (:copier nil))
-  "Nested pattern-variable captures for one macro expansion."
+  "Nested pattern-variable captures for one macro expansion.
+DEPTH is the ellipsis nesting level where the variable is bound.
+CAPTURES maps index paths such as (0 2) to matched datums, and
+EMPTY-PREFIXES records zero-length repetitions for template
+validation."
   depth captures empty-prefixes)
 
 (cl-defstruct (agent-scheme--syntax-scope
@@ -448,7 +462,10 @@ proper list."
        t))
 
 (defun agent-scheme--environment-cell-for-identifier (environment identifier)
-  "Return cell for IDENTIFIER in ENVIRONMENT, or nil if unbound."
+  "Return cell for IDENTIFIER in ENVIRONMENT, or nil if unbound.
+Macro-introduced identifiers first try their generated lexical key
+at the use site, then fall back to the transformer's definition
+environment for free-template-identifier hygiene."
   (cond
    ((agent-scheme--identifier-p identifier)
     (let ((context (agent-scheme--identifier-context identifier)))
@@ -657,6 +674,8 @@ initializers are evaluated."
           (let ((parsed-definition
                  (agent-scheme--parse-definition definition)))
             (push parsed-definition parsed)
+            ;; Install all internal-definition names before any initializer is
+            ;; evaluated so mutually recursive bodies see allocated locations.
             (unless (eq (gethash (car parsed-definition)
                                   (agent-scheme--environment-bindings
                                    body-environment)
@@ -1045,7 +1064,11 @@ each initializer."
 
 (defun agent-scheme--syntax-binding-for-operator
     (operator environment context)
-  "Return macro transformer for OPERATOR in CONTEXT, or nil."
+  "Return macro transformer for OPERATOR in CONTEXT, or nil.
+Identifier operators introduced by macros first consult their
+definition-time syntax environment.  Plain symbols use the active
+syntax environment unless a value binding shadows the syntactic
+keyword."
   (let ((name (agent-scheme--symbol-name operator)))
     (when (and name
                (not (agent-scheme--operator-shadowed-p operator environment)))
@@ -1190,6 +1213,8 @@ each initializer."
                 agent-scheme--missing-cell)
       (agent-scheme--eval-error
        "duplicate pattern variable: %s" name))
+    ;; PATH is the sequence of repetition indexes leading to this capture.
+    ;; Template expansion uses the same path to distribute nested ellipses.
     (puthash path value captures))
   t)
 
@@ -1395,6 +1420,8 @@ each initializer."
          (ellipsis-index
           (agent-scheme--find-ellipsis-index patterns ellipsis)))
     (if ellipsis-index
+        ;; R7RS ellipses repeat the pattern immediately before the ellipsis.
+        ;; Prefix and suffix patterns stay fixed while PATH tracks each repeat.
         (let* ((prefix-count (1- ellipsis-index))
                (suffix (nthcdr (1+ ellipsis-index) patterns))
                (suffix-count (length suffix))
@@ -1568,7 +1595,10 @@ each initializer."
 
 (defun agent-scheme--expand-template
     (template bindings syntax-context ellipsis &optional path ellipsis-literal)
-  "Expand TEMPLATE using BINDINGS and SYNTAX-CONTEXT."
+  "Expand TEMPLATE using BINDINGS and SYNTAX-CONTEXT.
+PATH identifies the current nested ellipsis position.  Identifiers
+not captured by BINDINGS are wrapped in SYNTAX-CONTEXT so their
+free bindings resolve in the macro definition environment."
   (setq path (or path nil))
   (cond
    ((agent-scheme--identifier-datum-p template)
@@ -1644,6 +1674,8 @@ each initializer."
                  rule form transformer bindings environment
                  use-syntax-environment)
             (setq matched t)
+            ;; Each successful expansion gets a fresh context token so
+            ;; template-introduced bindings cannot collide with caller names.
             (setq result
                   (agent-scheme--expand-template
                    (cdr rule)
@@ -1757,6 +1789,11 @@ When RECURSIVE is non-nil, transformer specs see the new bindings."
     "(scheme lazy)"
     "(scheme write)")
   "Standard R7RS library keys with focused bootstrap support.")
+
+;; Bootstrap libraries are registered lazily into the current evaluation
+;; context.  The required `(scheme base)' library snapshots the active base
+;; environment, while smaller standard libraries are either subsets, primitive
+;; wrappers, or source libraries expanded through the same evaluator.
 
 (defconst agent-scheme--case-lambda-library-source
   "(define-library (scheme case-lambda)
@@ -2250,6 +2287,9 @@ Each spec has (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY)."
            (puthash name object
                     (agent-scheme--environment-bindings value-environment)))
           ((equal library-key agent-scheme--scheme-base-library-key)
+           ;; Programs commonly import `(scheme base)' more than once while
+           ;; bootstrapping derived libraries.  Reinstalling the same base name
+           ;; is benign and keeps later import-set processing simple.
            (puthash name object
                     (agent-scheme--environment-bindings value-environment)))
           ((eq existing object))
@@ -2462,6 +2502,9 @@ Each spec has (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY)."
           filename
           (agent-scheme--eval-context-include-directory context))))
     (unless (agent-scheme--eval-context-include-paths context)
+      ;; Includes are the first host-file read path in the evaluator, so they
+      ;; require an explicit allow-list even though the surrounding language is
+      ;; otherwise portable R7RS Scheme.
       (agent-scheme--eval-error
        "include requires policy-gated host file access: %s" filename))
     (unless (agent-scheme--include-policy-allows-file-p path context)
@@ -2606,6 +2649,8 @@ When FOLD-CASE is non-nil, read as if the file began with
         (dolist (declaration
                  (agent-scheme--expand-library-declaration
                   raw-declaration context environment))
+          ;; `cond-expand' and include-library-declarations are flattened
+          ;; before this dispatch so only core R7RS library declarations remain.
           (let* ((declaration-parts
                   (agent-scheme--proper-list-elements
                    declaration "library declaration"))
@@ -2792,6 +2837,8 @@ When TAILP is non-nil, tail calls may return an
    ((consp expression)
     (let ((expanded (agent-scheme--expand-expression
                      expression environment context)))
+      ;; Expansion is interleaved with evaluation so local syntax forms can
+      ;; update CONTEXT before the resulting core expression is evaluated.
       (if (eq expanded expression)
           (agent-scheme--eval-combination expression environment context tailp)
         (agent-scheme--eval-expression expanded environment context tailp))))
@@ -2917,6 +2964,8 @@ top-level definition forms within the sequence."
       (let ((syntax-environment
              (or (agent-scheme--bounce-syntax-environment state)
                  (agent-scheme--eval-context-syntax-environment context))))
+        ;; A bounce carries both the value environment and the syntax
+        ;; environment needed for the next tail step.
         (setq state
               (agent-scheme--with-syntax-environment
                context
@@ -4585,6 +4634,8 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
        (nth 1 entry)
        (nth 2 entry)
        (nth 3 entry)))
+    ;; Derived base procedures are ordinary Scheme definitions evaluated by the
+    ;; same trampoline.  This keeps the bootstrap surface inspectable.
     (agent-scheme--trampoline
      (agent-scheme--make-sequence (agent-scheme--base-prelude-forms) t)
      environment
@@ -4807,7 +4858,11 @@ is the result of the last command or definition."
     (agent-scheme--trampoline sequence eval-environment context)))
 
 ;;;###autoload
-(defalias 'agent-scheme-eval-string #'agent-scheme-eval-source)
+(defalias 'agent-scheme-eval-string #'agent-scheme-eval-source
+  "Read and evaluate all datums in a source string.
+This alias is kept for callers that describe string input
+explicitly; it has the same calling convention as
+`agent-scheme-eval-source'.")
 
 (defun agent-scheme--result-field (name &rest values)
   "Return a Scheme-readable result field named NAME with VALUES."

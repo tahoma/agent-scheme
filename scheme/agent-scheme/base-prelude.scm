@@ -1,4 +1,9 @@
 ;;; Portable derived bindings for the initial `(scheme base)' environment.
+;;;
+;;; This file is loaded as ordinary Scheme source by both evaluator
+;;; implementations after the kernel primitives are installed.  Keep
+;;; definitions small and self-contained: metadata extraction expects each
+;;; top-level form to be one `define'.
 
 (define (not obj)
   (if obj #f #t))
@@ -19,6 +24,8 @@
   (cdr (cdr pair)))
 
 (define (length list)
+  ;; R7RS requires a proper list; reaching a non-pair tail forces an error
+  ;; through a primitive operation instead of silently accepting dotted input.
   (define (loop cursor count)
     (if (null? cursor)
         count
@@ -28,6 +35,8 @@
   (loop list 0))
 
 (define (append . lists)
+  ;; The final argument is reused as the tail, matching Scheme's variadic
+  ;; `append' behavior for both proper and improper final lists.
   (define (append-two left right)
     (if (null? left)
         right
@@ -63,6 +72,8 @@
   (set-car! (list-tail list k) obj))
 
 (define (make-list k . fill)
+  ;; `(if #f #f)' produces the implementation's unspecified value when no fill
+  ;; argument is supplied.
   (define (loop remaining value)
     (if (= remaining 0)
         '()
@@ -174,6 +185,7 @@
   (loop first rest))
 
 (define (map proc first-list . rest-lists)
+  ;; R7RS `map' and `for-each' stop at the shortest input list.
   (define (any-null? lists)
     (if (null? lists)
         #f

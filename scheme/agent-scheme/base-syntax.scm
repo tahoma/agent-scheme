@@ -1,6 +1,13 @@
 ;;; Portable derived syntax for the initial `(scheme base)' syntactic environment.
+;;;
+;;; These macros are evaluated into a fresh syntax environment after the base
+;;; value prelude is available.  Definitions should stay expressible in
+;;; `syntax-rules' so the bootstrap macro expander remains the only expansion
+;;; mechanism required here.
 
 (define-syntax cond
+  ;; Mirrors the R7RS derived-expression definition, including the `=>'
+  ;; receiver clauses that pass the tested value to a procedure.
   (syntax-rules (else =>)
     ((cond (else result1 result2 ...))
      (begin result1 result2 ...))
@@ -87,6 +94,8 @@
          (begin result1 result2 ...)))))
 
 (define-syntax let
+  ;; Named `let' lowers through `letrec' so the tag is bound recursively before
+  ;; the initial call is evaluated.
   (syntax-rules ()
     ((let ((name val) ...) body1 body2 ...)
      ((lambda (name ...) body1 body2 ...)
@@ -108,6 +117,8 @@
          body1 body2 ...)))))
 
 (define-syntax do
+  ;; The `"step"' literal is a private marker used only inside this macro's
+  ;; recursive expansion to choose each variable's optional step expression.
   (syntax-rules ()
     ((do ((var init step ...) ...)
          (test expr ...)
@@ -131,6 +142,8 @@
      y)))
 
 (define-syntax cond-expand
+  ;; Runtime feature checks are intentionally tiny during bootstrap: `r7rs' and
+  ;; `(library (scheme base))' are known, while other features fall through.
   (syntax-rules (and or not else r7rs library scheme base)
     ((cond-expand)
      (syntax-error "Unfulfilled cond-expand"))
