@@ -1928,8 +1928,10 @@ When RECURSIVE is non-nil, transformer specs see the new bindings."
 (defconst agent-scheme--standard-library-keys
   '("(scheme case-lambda)"
     "(scheme char)"
+    "(scheme complex)"
     "(scheme cxr)"
     "(scheme file)"
+    "(scheme inexact)"
     "(scheme lazy)"
     "(scheme write)")
   "Standard R7RS library keys with focused bootstrap support.")
@@ -2218,6 +2220,16 @@ Each spec has (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY)."
       key
       `(("char-upcase" ,#'agent-scheme--primitive-char-upcase 1 1))
       context))
+    ("(scheme complex)"
+     (agent-scheme--register-primitive-library
+      key
+      `(("angle" ,#'agent-scheme--primitive-angle 1 1)
+        ("imag-part" ,#'agent-scheme--primitive-imag-part 1 1)
+        ("magnitude" ,#'agent-scheme--primitive-magnitude 1 1)
+        ("make-polar" ,#'agent-scheme--primitive-make-polar 2 2)
+        ("make-rectangular" ,#'agent-scheme--primitive-make-rectangular 2 2)
+        ("real-part" ,#'agent-scheme--primitive-real-part 1 1))
+      context))
     ("(scheme cxr)"
      (agent-scheme--register-subset-library
       key '("caar" "cadr" "cdar" "cddr") context environment))
@@ -2225,6 +2237,13 @@ Each spec has (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY)."
      (agent-scheme--register-primitive-library
       key
       `(("file-exists?" ,#'agent-scheme--primitive-file-exists? 1 1))
+      context))
+    ("(scheme inexact)"
+     (agent-scheme--register-primitive-library
+      key
+      `(("finite?" ,#'agent-scheme--primitive-finite? 1 1)
+        ("infinite?" ,#'agent-scheme--primitive-infinite? 1 1)
+        ("nan?" ,#'agent-scheme--primitive-nan? 1 1))
       context))
     ("(scheme lazy)"
      (agent-scheme--register-source-library
@@ -3133,37 +3152,39 @@ top-level definition forms within the sequence."
                   t))))))
     (agent-scheme--check-value-budget state context)))
 
-(defun agent-scheme--number->host (datum)
-  "Return DATUM as a host number or signal a Scheme error."
-  (unless (agent-scheme-number-p datum)
-    (agent-scheme--eval-error
-     "expected number, got %s" (agent-scheme-value->external datum)))
-  (pcase (agent-scheme-number-kind datum)
-    ('integer (agent-scheme-number-value datum))
-    ('decimal (agent-scheme-number-value datum))
-    (_
-     (agent-scheme--eval-error
-      "unsupported numeric kind in evaluator kernel: %s"
-      (agent-scheme-number-lexeme datum)))))
+(defun agent-scheme--scheme-boolean (value)
+  "Return the canonical Scheme boolean for host truth VALUE."
+  (if value agent-scheme-true agent-scheme-false))
 
 (defun agent-scheme--number-from-host (number)
   "Return an Agent Scheme number datum for host NUMBER."
   (cond
    ((integerp number)
-    (agent-scheme--make-number
-     (number-to-string number) 'exact 10 'integer number))
+    (agent-scheme--make-canonical-integer number))
    ((floatp number)
-    (agent-scheme--make-number
-     (number-to-string number) 'inexact 10 'decimal number))
+    (let ((text (number-to-string number)))
+      (cond
+       ((string-match-p "NaN" text)
+        (agent-scheme--make-canonical-infnan '+nan.0))
+       ((string-match-p "INF" text)
+        (agent-scheme--make-canonical-infnan
+         (if (string-prefix-p "-" text) '-inf.0 '+inf.0)))
+       (t
+        (agent-scheme--make-canonical-decimal number)))))
    (t
     (agent-scheme--eval-error "unsupported host number result: %S" number))))
 
-(defun agent-scheme--scheme-boolean (value)
-  "Return the canonical Scheme boolean for host truth VALUE."
-  (if value agent-scheme-true agent-scheme-false))
+(defun agent-scheme--expect-number (datum description)
+  "Return DATUM as a number or signal an error naming DESCRIPTION."
+  (unless (agent-scheme-number-p datum)
+    (agent-scheme--eval-error
+     "%s expected number, got %s"
+     description
+     (agent-scheme-value->external datum)))
+  datum)
 
 (defun agent-scheme--number-exact-p (datum)
-  "Return non-nil if DATUM is an exact number in the current numeric slice."
+  "Return non-nil if DATUM is an exact number."
   (and (agent-scheme-number-p datum)
        (eq (agent-scheme-number-exactness datum) 'exact)))
 
@@ -3172,15 +3193,169 @@ top-level definition forms within the sequence."
   (and (agent-scheme-number-p datum)
        (eq (agent-scheme-number-exactness datum) 'inexact)))
 
-(defun agent-scheme--number-integer-p (datum)
-  "Return non-nil if DATUM is integer-valued in the current numeric slice."
+(defun agent-scheme--number-nan-p (datum)
+  "Return non-nil if DATUM is a NaN value."
   (and (agent-scheme-number-p datum)
-       (pcase (agent-scheme-number-kind datum)
-         ('integer t)
-         ('decimal
-          (let ((value (agent-scheme-number-value datum)))
-            (and (floatp value) (= value (ftruncate value)))))
-         (_ nil))))
+       (or (and (eq (agent-scheme-number-kind datum) 'infnan)
+                (eq (agent-scheme-number-value datum) '+nan.0))
+           (and (eq (agent-scheme-number-kind datum) 'complex)
+                (or (agent-scheme--number-nan-p
+                     (car (agent-scheme-number-value datum)))
+                    (agent-scheme--number-nan-p
+                     (cdr (agent-scheme-number-value datum))))))))
+
+(defun agent-scheme--number-infinite-p (datum)
+  "Return non-nil if DATUM is an infinity value."
+  (and (agent-scheme-number-p datum)
+       (or (and (eq (agent-scheme-number-kind datum) 'infnan)
+                (memq (agent-scheme-number-value datum) '(+inf.0 -inf.0)))
+           (and (eq (agent-scheme-number-kind datum) 'complex)
+                (or (agent-scheme--number-infinite-p
+                     (car (agent-scheme-number-value datum)))
+                    (agent-scheme--number-infinite-p
+                     (cdr (agent-scheme-number-value datum))))))))
+
+(defun agent-scheme--number-finite-p (datum)
+  "Return non-nil if DATUM is a finite number."
+  (and (agent-scheme-number-p datum)
+       (not (agent-scheme--number-nan-p datum))
+       (not (agent-scheme--number-infinite-p datum))))
+
+(defun agent-scheme--number-exact-zero-p (datum)
+  "Return non-nil if DATUM is exactly zero."
+  (and (agent-scheme-number-p datum)
+       (agent-scheme--number-exact-p datum)
+       (agent-scheme--number-zero-p datum)))
+
+(defun agent-scheme--number-real-p (datum)
+  "Return non-nil if DATUM is real-valued."
+  (and (agent-scheme-number-p datum)
+       (or (not (eq (agent-scheme-number-kind datum) 'complex))
+           (agent-scheme--number-exact-zero-p
+            (cdr (agent-scheme-number-value datum))))))
+
+(defun agent-scheme--number-rational-p (datum)
+  "Return non-nil if DATUM is rational-valued."
+  (and (agent-scheme--number-real-p datum)
+       (let ((real (if (eq (agent-scheme-number-kind datum) 'complex)
+                       (car (agent-scheme-number-value datum))
+                     datum)))
+         (not (eq (agent-scheme-number-kind real) 'infnan)))))
+
+(defun agent-scheme--number-integer-p (datum)
+  "Return non-nil if DATUM is integer-valued."
+  (and (agent-scheme-number-p datum)
+       (cond
+        ((eq (agent-scheme-number-kind datum) 'complex)
+         (and (agent-scheme--number-exact-zero-p
+               (cdr (agent-scheme-number-value datum)))
+              (agent-scheme--number-integer-p
+               (car (agent-scheme-number-value datum)))))
+        ((eq (agent-scheme-number-kind datum) 'integer) t)
+        ((eq (agent-scheme-number-kind datum) 'rational)
+         (= (cdr (agent-scheme-number-value datum)) 1))
+        ((eq (agent-scheme-number-kind datum) 'decimal)
+         (let ((value (agent-scheme-number-value datum)))
+           (and (floatp value) (= value (ftruncate value)))))
+        (t nil))))
+
+(defun agent-scheme--number->rational-pair (datum description)
+  "Return exact rational pair for DATUM or signal an error naming DESCRIPTION."
+  (setq datum (agent-scheme--expect-number datum description))
+  (pcase (agent-scheme-number-kind datum)
+    ('integer (cons (agent-scheme-number-value datum) 1))
+    ('rational (agent-scheme-number-value datum))
+    ('complex
+     (if (agent-scheme--number-exact-zero-p
+          (cdr (agent-scheme-number-value datum)))
+         (agent-scheme--number->rational-pair
+          (car (agent-scheme-number-value datum)) description)
+       (agent-scheme--eval-error
+        "%s expected real number, got %s"
+        description
+        (agent-scheme-value->external datum))))
+    (_
+     (agent-scheme--eval-error
+      "%s expected exact rational number, got %s"
+      description
+      (agent-scheme-value->external datum)))))
+
+(defun agent-scheme--number->float (datum description)
+  "Return DATUM as a host float or signal an error naming DESCRIPTION."
+  (setq datum (agent-scheme--expect-number datum description))
+  (pcase (agent-scheme-number-kind datum)
+    ('integer (float (agent-scheme-number-value datum)))
+    ('rational
+     (let ((value (agent-scheme-number-value datum)))
+       (/ (float (car value)) (cdr value))))
+    ('decimal (agent-scheme-number-value datum))
+    ('infnan
+     (pcase (agent-scheme-number-value datum)
+       ('+inf.0 (/ 1.0 0.0))
+       ('-inf.0 (/ -1.0 0.0))
+       ('+nan.0 (/ 0.0 0.0))))
+    ('complex
+     (if (agent-scheme--number-exact-zero-p
+          (cdr (agent-scheme-number-value datum)))
+         (agent-scheme--number->float
+          (car (agent-scheme-number-value datum)) description)
+       (agent-scheme--eval-error
+        "%s expected real number, got %s"
+        description
+        (agent-scheme-value->external datum))))))
+
+(defun agent-scheme--number-from-rational-pair
+    (pair &optional exactness)
+  "Return number datum for rational PAIR and EXACTNESS."
+  (let ((number (agent-scheme--make-canonical-rational
+                 (car pair) (cdr pair) (or exactness 'exact) 10)))
+    (if (eq exactness 'inexact)
+        (agent-scheme--make-canonical-decimal
+         (/ (float (car pair)) (cdr pair)))
+      number)))
+
+(defun agent-scheme--number-inexact (datum)
+  "Return an inexact representation of DATUM."
+  (setq datum (agent-scheme--expect-number datum "inexact"))
+  (pcase (agent-scheme-number-kind datum)
+    ((or 'decimal 'infnan) datum)
+    ('integer
+     (agent-scheme--make-canonical-decimal
+      (float (agent-scheme-number-value datum))))
+    ('rational
+     (let ((value (agent-scheme-number-value datum)))
+       (agent-scheme--make-canonical-decimal
+        (/ (float (car value)) (cdr value)))))
+    ('complex
+     (let ((value (agent-scheme-number-value datum)))
+       (agent-scheme--make-canonical-complex
+        (agent-scheme--number-inexact (car value))
+        (agent-scheme--number-inexact (cdr value)))))))
+
+(defun agent-scheme--decimal->exact-rational-pair (number)
+  "Return an exact rational approximation for decimal NUMBER."
+  (let* ((text (number-to-string number))
+         (parsed (agent-scheme-read (concat "#e" text))))
+    (agent-scheme--number->rational-pair parsed "exact")))
+
+(defun agent-scheme--number-exact (datum)
+  "Return an exact representation of DATUM."
+  (setq datum (agent-scheme--expect-number datum "exact"))
+  (pcase (agent-scheme-number-kind datum)
+    ((or 'integer 'rational) datum)
+    ('decimal
+     (agent-scheme--number-from-rational-pair
+      (agent-scheme--decimal->exact-rational-pair
+       (agent-scheme-number-value datum))))
+    ('complex
+     (let ((value (agent-scheme-number-value datum)))
+       (agent-scheme--make-canonical-complex
+        (agent-scheme--number-exact (car value))
+        (agent-scheme--number-exact (cdr value)))))
+    ('infnan
+     (agent-scheme--eval-error
+      "exact cannot represent %s"
+      (agent-scheme-value->external datum)))))
 
 (defun agent-scheme--exact-integer->host (datum description)
   "Return DATUM's exact integer value or signal an error naming DESCRIPTION."
@@ -3285,112 +3460,378 @@ the maximum endpoint for DESCRIPTION."
          "%s start index exceeds end index" description))
       (cons start end))))
 
-(defun agent-scheme--primitive-numbers (arguments)
-  "Return ARGUMENTS converted to host numbers."
-  (mapcar #'agent-scheme--number->host arguments))
+(defun agent-scheme--numeric-arguments (arguments description)
+  "Return ARGUMENTS after checking every item is a number for DESCRIPTION."
+  (mapcar (lambda (argument)
+            (agent-scheme--expect-number argument description))
+          arguments))
+
+(defun agent-scheme--number-complex-p (number)
+  "Return non-nil if NUMBER has an explicit complex representation."
+  (eq (agent-scheme-number-kind number) 'complex))
+
+(defun agent-scheme--complex-parts (number)
+  "Return NUMBER as a cons of real and imaginary number parts."
+  (if (agent-scheme--number-complex-p number)
+      (agent-scheme-number-value number)
+    (cons number (agent-scheme--make-canonical-integer 0))))
+
+(defun agent-scheme--any-inexact-number-p (numbers)
+  "Return non-nil if any item in NUMBERS is inexact."
+  (cl-some #'agent-scheme--number-inexact-p numbers))
+
+(defun agent-scheme--any-complex-number-p (numbers)
+  "Return non-nil if any item in NUMBERS is explicitly complex."
+  (cl-some #'agent-scheme--number-complex-p numbers))
+
+(defun agent-scheme--binary-rational
+    (left right operation description)
+  "Apply exact rational OPERATION to LEFT and RIGHT for DESCRIPTION."
+  (let* ((left-pair (agent-scheme--number->rational-pair left description))
+         (right-pair (agent-scheme--number->rational-pair right description))
+         (left-numerator (car left-pair))
+         (left-denominator (cdr left-pair))
+         (right-numerator (car right-pair))
+         (right-denominator (cdr right-pair)))
+    (pcase operation
+      ('+
+       (agent-scheme--number-from-rational-pair
+        (cons (+ (* left-numerator right-denominator)
+                 (* right-numerator left-denominator))
+              (* left-denominator right-denominator))))
+      ('-
+       (agent-scheme--number-from-rational-pair
+        (cons (- (* left-numerator right-denominator)
+                 (* right-numerator left-denominator))
+              (* left-denominator right-denominator))))
+      ('*
+       (agent-scheme--number-from-rational-pair
+        (cons (* left-numerator right-numerator)
+              (* left-denominator right-denominator))))
+      ('/
+       (when (zerop right-numerator)
+         (agent-scheme--eval-error "%s division by zero" description))
+       (agent-scheme--number-from-rational-pair
+        (cons (* left-numerator right-denominator)
+              (* left-denominator right-numerator)))))))
+
+(defun agent-scheme--special-inexact-binary
+    (left right operation description)
+  "Handle inexact special values for OPERATION, or return nil."
+  (cond
+   ((or (agent-scheme--number-nan-p left)
+        (agent-scheme--number-nan-p right))
+    (agent-scheme--make-canonical-infnan '+nan.0))
+   ((or (eq (agent-scheme-number-kind left) 'infnan)
+        (eq (agent-scheme-number-kind right) 'infnan))
+    (let ((left-kind (and (eq (agent-scheme-number-kind left) 'infnan)
+                          (agent-scheme-number-value left)))
+          (right-kind (and (eq (agent-scheme-number-kind right) 'infnan)
+                           (agent-scheme-number-value right))))
+      (pcase operation
+        ('+
+         (cond
+          ((and left-kind right-kind (not (eq left-kind right-kind)))
+           (agent-scheme--make-canonical-infnan '+nan.0))
+          (left-kind left)
+          (right-kind right)))
+        ('-
+         (cond
+          ((and left-kind right-kind (eq left-kind right-kind))
+           (agent-scheme--make-canonical-infnan '+nan.0))
+          (left-kind left)
+          ((eq right-kind '+inf.0)
+           (agent-scheme--make-canonical-infnan '-inf.0))
+          ((eq right-kind '-inf.0)
+           (agent-scheme--make-canonical-infnan '+inf.0))))
+        (_
+         (agent-scheme--number-from-host
+          (funcall
+           (pcase operation
+             ('* #'*)
+             ('/ #'/))
+           (agent-scheme--number->float left description)
+           (agent-scheme--number->float right description)))))))))
+
+(defun agent-scheme--binary-real-number
+    (left right operation description)
+  "Apply real numeric OPERATION to LEFT and RIGHT for DESCRIPTION."
+  (or (agent-scheme--special-inexact-binary
+       left right operation description)
+      (if (or (agent-scheme--number-inexact-p left)
+              (agent-scheme--number-inexact-p right))
+          (agent-scheme--make-canonical-decimal
+           (funcall
+            (pcase operation
+              ('+ #'+)
+              ('- #'-)
+              ('* #'*)
+              ('/ #'/))
+            (agent-scheme--number->float left description)
+            (agent-scheme--number->float right description)))
+        (agent-scheme--binary-rational left right operation description))))
+
+(defun agent-scheme--binary-number (left right operation description)
+  "Apply numeric OPERATION to LEFT and RIGHT for DESCRIPTION."
+  (if (or (agent-scheme--number-complex-p left)
+          (agent-scheme--number-complex-p right))
+      (let* ((left-parts (agent-scheme--complex-parts left))
+             (right-parts (agent-scheme--complex-parts right))
+             (a (car left-parts))
+             (b (cdr left-parts))
+             (c (car right-parts))
+             (d (cdr right-parts)))
+        (pcase operation
+          ('+
+           (agent-scheme--make-canonical-complex
+            (agent-scheme--binary-number a c '+ description)
+            (agent-scheme--binary-number b d '+ description)))
+          ('-
+           (agent-scheme--make-canonical-complex
+            (agent-scheme--binary-number a c '- description)
+            (agent-scheme--binary-number b d '- description)))
+          ('*
+           (agent-scheme--make-canonical-complex
+            (agent-scheme--binary-number
+             (agent-scheme--binary-number a c '* description)
+             (agent-scheme--binary-number b d '* description)
+             '-
+             description)
+            (agent-scheme--binary-number
+             (agent-scheme--binary-number a d '* description)
+             (agent-scheme--binary-number b c '* description)
+             '+
+             description)))
+          ('/
+           (let ((denominator
+                  (agent-scheme--binary-number
+                   (agent-scheme--binary-number c c '* description)
+                   (agent-scheme--binary-number d d '* description)
+                   '+
+                   description)))
+             (when (agent-scheme--number-zero-p denominator)
+               (agent-scheme--eval-error "%s division by zero" description))
+             (agent-scheme--make-canonical-complex
+              (agent-scheme--binary-number
+               (agent-scheme--binary-number
+                (agent-scheme--binary-number a c '* description)
+                (agent-scheme--binary-number b d '* description)
+                '+
+                description)
+               denominator
+               '/
+               description)
+              (agent-scheme--binary-number
+               (agent-scheme--binary-number
+                (agent-scheme--binary-number b c '* description)
+                (agent-scheme--binary-number a d '* description)
+                '-
+                description)
+               denominator
+               '/
+               description))))))
+    (agent-scheme--binary-real-number left right operation description)))
+
+(defun agent-scheme--fold-numbers
+    (arguments identity operation description &optional unary-inverse)
+  "Fold ARGUMENTS with numeric OPERATION and IDENTITY for DESCRIPTION."
+  (let ((numbers (agent-scheme--numeric-arguments arguments description)))
+    (cond
+     ((null numbers) identity)
+     ((and unary-inverse (= (length numbers) 1))
+      (funcall unary-inverse (car numbers)))
+     (t
+      (let ((result (car numbers)))
+        (dolist (number (cdr numbers))
+          (setq result
+                (agent-scheme--binary-number
+                 result number operation description)))
+        result)))))
 
 (defun agent-scheme--primitive+ (arguments _context)
   "Primitive + over ARGUMENTS."
-  (agent-scheme--number-from-host
-   (apply #'+ (agent-scheme--primitive-numbers arguments))))
+  (agent-scheme--fold-numbers
+   arguments (agent-scheme--make-canonical-integer 0) '+ "+"))
 
 (defun agent-scheme--primitive* (arguments _context)
   "Primitive * over ARGUMENTS."
-  (agent-scheme--number-from-host
-   (apply #'* (agent-scheme--primitive-numbers arguments))))
-
-(defun agent-scheme--scheme-divide (left right)
-  "Return LEFT divided by RIGHT using the current numeric slice."
-  (when (zerop right)
-    (agent-scheme--eval-error "division by zero"))
-  (if (and (integerp left)
-           (integerp right)
-           (zerop (% left right)))
-      (/ left right)
-    (/ (float left) right)))
+  (agent-scheme--fold-numbers
+   arguments (agent-scheme--make-canonical-integer 1) '* "*"))
 
 (defun agent-scheme--primitive- (arguments _context)
   "Primitive - over ARGUMENTS."
-  (let ((numbers (agent-scheme--primitive-numbers arguments)))
-    (agent-scheme--number-from-host
-     (if (= (length numbers) 1)
-         (- (car numbers))
-       (apply #'- numbers)))))
+  (agent-scheme--fold-numbers
+   arguments
+   nil
+   '-
+   "-"
+   (lambda (number)
+     (agent-scheme--binary-number
+      (agent-scheme--make-canonical-integer 0) number '- "-"))))
 
 (defun agent-scheme--primitive/ (arguments _context)
   "Primitive / over ARGUMENTS."
-  (let ((numbers (agent-scheme--primitive-numbers arguments)))
-    (agent-scheme--number-from-host
-     (if (= (length numbers) 1)
-         (agent-scheme--scheme-divide 1 (car numbers))
-       (let ((result (car numbers)))
-         (dolist (number (cdr numbers))
-           (setq result (agent-scheme--scheme-divide result number)))
-         result)))))
+  (agent-scheme--fold-numbers
+   arguments
+   nil
+   '/
+   "/"
+   (lambda (number)
+     (agent-scheme--binary-number
+      (agent-scheme--make-canonical-integer 1) number '/ "/"))))
 
-(defun agent-scheme--primitive-compare (arguments predicate)
+(defun agent-scheme--number-real-part-for-ordering (number description)
+  "Return real part of NUMBER suitable for ordering predicates."
+  (setq number (agent-scheme--expect-number number description))
+  (if (agent-scheme--number-complex-p number)
+      (if (agent-scheme--number-exact-zero-p
+           (cdr (agent-scheme-number-value number)))
+          (car (agent-scheme-number-value number))
+        (agent-scheme--eval-error
+         "%s expected real number, got %s"
+         description
+         (agent-scheme-value->external number)))
+    number))
+
+(defun agent-scheme--number=2 (left right)
+  "Return non-nil if LEFT and RIGHT are numerically equal."
+  (cond
+   ((or (agent-scheme--number-nan-p left)
+        (agent-scheme--number-nan-p right))
+    nil)
+   ((or (agent-scheme--number-complex-p left)
+        (agent-scheme--number-complex-p right))
+    (let ((left-parts (agent-scheme--complex-parts left))
+          (right-parts (agent-scheme--complex-parts right)))
+      (and (agent-scheme--number=2 (car left-parts) (car right-parts))
+           (agent-scheme--number=2 (cdr left-parts) (cdr right-parts)))))
+   ((or (eq (agent-scheme-number-kind left) 'infnan)
+        (eq (agent-scheme-number-kind right) 'infnan))
+    (and (eq (agent-scheme-number-kind left) 'infnan)
+         (eq (agent-scheme-number-kind right) 'infnan)
+         (eq (agent-scheme-number-value left)
+             (agent-scheme-number-value right))))
+   ((or (agent-scheme--number-inexact-p left)
+        (agent-scheme--number-inexact-p right))
+    (= (agent-scheme--number->float left "=")
+       (agent-scheme--number->float right "=")))
+   (t
+    (let ((left-pair (agent-scheme--number->rational-pair left "="))
+          (right-pair (agent-scheme--number->rational-pair right "=")))
+      (= (* (car left-pair) (cdr right-pair))
+         (* (car right-pair) (cdr left-pair)))))))
+
+(defun agent-scheme--number-order2 (left right predicate description)
+  "Return PREDICATE result for real LEFT and RIGHT."
+  (setq left (agent-scheme--number-real-part-for-ordering left description))
+  (setq right (agent-scheme--number-real-part-for-ordering right description))
+  (cond
+   ((or (agent-scheme--number-nan-p left)
+        (agent-scheme--number-nan-p right))
+    nil)
+   ((or (agent-scheme--number-inexact-p left)
+        (agent-scheme--number-inexact-p right)
+        (eq (agent-scheme-number-kind left) 'infnan)
+        (eq (agent-scheme-number-kind right) 'infnan))
+    (let ((left-key (agent-scheme--number->float left description))
+          (right-key (agent-scheme--number->float right description)))
+      (funcall predicate left-key right-key)))
+   (t
+    (let ((left-pair (agent-scheme--number->rational-pair left description))
+          (right-pair (agent-scheme--number->rational-pair right description)))
+      (funcall predicate
+               (* (car left-pair) (cdr right-pair))
+               (* (car right-pair) (cdr left-pair)))))))
+
+(defun agent-scheme--primitive-compare (arguments predicate description)
   "Return Scheme boolean for pairwise PREDICATE over ARGUMENTS."
-  (let ((numbers (agent-scheme--primitive-numbers arguments))
+  (let ((numbers (agent-scheme--numeric-arguments arguments description))
         (ok t))
     (while (and ok (cdr numbers))
-      (setq ok (funcall predicate (car numbers) (cadr numbers)))
+      (setq ok (if (eq predicate #'=)
+                   (agent-scheme--number=2 (car numbers) (cadr numbers))
+                 (agent-scheme--number-order2
+                  (car numbers) (cadr numbers) predicate description)))
       (setq numbers (cdr numbers)))
     (agent-scheme--scheme-boolean ok)))
 
 (defun agent-scheme--primitive= (arguments _context)
   "Primitive numeric = over ARGUMENTS."
-  (agent-scheme--primitive-compare arguments #'=))
+  (agent-scheme--primitive-compare arguments #'= "="))
 
 (defun agent-scheme--primitive< (arguments _context)
   "Primitive numeric < over ARGUMENTS."
-  (agent-scheme--primitive-compare arguments #'<))
+  (agent-scheme--primitive-compare arguments #'< "<"))
 
 (defun agent-scheme--primitive> (arguments _context)
   "Primitive numeric > over ARGUMENTS."
-  (agent-scheme--primitive-compare arguments #'>))
+  (agent-scheme--primitive-compare arguments #'> ">"))
 
 (defun agent-scheme--primitive<= (arguments _context)
   "Primitive numeric <= over ARGUMENTS."
-  (agent-scheme--primitive-compare arguments #'<=))
+  (agent-scheme--primitive-compare arguments #'<= "<="))
 
 (defun agent-scheme--primitive>= (arguments _context)
   "Primitive numeric >= over ARGUMENTS."
-  (agent-scheme--primitive-compare arguments #'>=))
+  (agent-scheme--primitive-compare arguments #'>= ">="))
 
 (defun agent-scheme--primitive-abs (arguments _context)
   "Primitive abs over ARGUMENTS."
-  (agent-scheme--number-from-host
-   (abs (agent-scheme--number->host (car arguments)))))
+  (let ((number (agent-scheme--expect-number (car arguments) "abs")))
+    (if (agent-scheme--number-complex-p number)
+        (agent-scheme--eval-error
+         "abs expected real number, got %s"
+         (agent-scheme-value->external number))
+      (agent-scheme--number-abs number))))
 
 (defun agent-scheme--primitive-min (arguments _context)
   "Primitive min over ARGUMENTS."
-  (agent-scheme--number-from-host
-   (apply #'min (agent-scheme--primitive-numbers arguments))))
+  (let* ((numbers (agent-scheme--numeric-arguments arguments "min"))
+         (inexact (agent-scheme--any-inexact-number-p numbers))
+         (best (car numbers)))
+    (dolist (number (cdr numbers))
+      (when (eq (agent-scheme--primitive-compare
+                 (list number best) #'< "min")
+                agent-scheme-true)
+        (setq best number)))
+    (if inexact (agent-scheme--number-inexact best) best)))
 
 (defun agent-scheme--primitive-max (arguments _context)
   "Primitive max over ARGUMENTS."
-  (agent-scheme--number-from-host
-   (apply #'max (agent-scheme--primitive-numbers arguments))))
+  (let* ((numbers (agent-scheme--numeric-arguments arguments "max"))
+         (inexact (agent-scheme--any-inexact-number-p numbers))
+         (best (car numbers)))
+    (dolist (number (cdr numbers))
+      (when (eq (agent-scheme--primitive-compare
+                 (list number best) #'> "max")
+                agent-scheme-true)
+        (setq best number)))
+    (if inexact (agent-scheme--number-inexact best) best)))
 
 (defun agent-scheme--primitive-square (arguments _context)
   "Primitive square over ARGUMENTS."
-  (let ((number (agent-scheme--number->host (car arguments))))
-    (agent-scheme--number-from-host (* number number))))
+  (let ((number (agent-scheme--expect-number (car arguments) "square")))
+    (agent-scheme--binary-number number number '* "square")))
 
 (defun agent-scheme--primitive-zero? (arguments _context)
   "Primitive zero? over ARGUMENTS."
   (agent-scheme--scheme-boolean
-   (zerop (agent-scheme--number->host (car arguments)))))
+   (agent-scheme--number-zero-p
+    (agent-scheme--expect-number (car arguments) "zero?"))))
 
 (defun agent-scheme--primitive-positive? (arguments _context)
   "Primitive positive? over ARGUMENTS."
-  (agent-scheme--scheme-boolean
-   (> (agent-scheme--number->host (car arguments)) 0)))
+  (agent-scheme--primitive-compare
+   (list (car arguments) (agent-scheme--make-canonical-integer 0))
+   #'>
+   "positive?"))
 
 (defun agent-scheme--primitive-negative? (arguments _context)
   "Primitive negative? over ARGUMENTS."
-  (agent-scheme--scheme-boolean
-   (< (agent-scheme--number->host (car arguments)) 0)))
+  (agent-scheme--primitive-compare
+   (list (car arguments) (agent-scheme--make-canonical-integer 0))
+   #'<
+   "negative?"))
 
 (defun agent-scheme--primitive-odd? (arguments _context)
   "Primitive odd? over ARGUMENTS."
@@ -3411,7 +3852,7 @@ the maximum endpoint for DESCRIPTION."
                 (cadr arguments) description)))
     (when (zerop right)
       (agent-scheme--eval-error "%s division by zero" description))
-    (agent-scheme--number-from-host
+    (agent-scheme--make-canonical-integer
      (funcall quotient-function left right))))
 
 (defun agent-scheme--primitive-quotient (arguments _context)
@@ -3427,7 +3868,14 @@ the maximum endpoint for DESCRIPTION."
 (defun agent-scheme--primitive-truncate-quotient (arguments _context)
   "Primitive truncate-quotient over ARGUMENTS."
   (agent-scheme--primitive-integer-quotient
-   arguments #'truncate "truncate-quotient"))
+   arguments #'agent-scheme--truncate-quotient-value "truncate-quotient"))
+
+(defun agent-scheme--truncate-quotient-value (left right)
+  "Return integer quotient of LEFT over RIGHT truncated toward zero."
+  (let ((quotient (/ (abs left) (abs right))))
+    (if (= (cl-signum left) (cl-signum right))
+        quotient
+      (- quotient))))
 
 (defun agent-scheme--modulo-value (left right)
   "Return Scheme modulo for host integers LEFT and RIGHT."
@@ -3445,7 +3893,12 @@ the maximum endpoint for DESCRIPTION."
                 (cadr arguments) "remainder")))
     (when (zerop right)
       (agent-scheme--eval-error "remainder division by zero"))
-    (agent-scheme--number-from-host (% left right))))
+    (agent-scheme--make-canonical-integer
+     (agent-scheme--truncate-remainder-value left right))))
+
+(defun agent-scheme--truncate-remainder-value (left right)
+  "Return integer remainder of LEFT over RIGHT truncated toward zero."
+  (- left (* right (agent-scheme--truncate-quotient-value left right))))
 
 (defun agent-scheme--primitive-modulo (arguments _context)
   "Primitive modulo over ARGUMENTS."
@@ -3453,7 +3906,7 @@ the maximum endpoint for DESCRIPTION."
         (right (agent-scheme--exact-integer->host (cadr arguments) "modulo")))
     (when (zerop right)
       (agent-scheme--eval-error "modulo division by zero"))
-    (agent-scheme--number-from-host
+    (agent-scheme--make-canonical-integer
      (agent-scheme--modulo-value left right))))
 
 (defun agent-scheme--primitive-floor-remainder (arguments context)
@@ -3464,26 +3917,403 @@ the maximum endpoint for DESCRIPTION."
   "Primitive truncate-remainder over ARGUMENTS."
   (agent-scheme--primitive-remainder arguments context))
 
-(defun agent-scheme--primitive-rounding (arguments function)
-  "Apply unary numeric FUNCTION to ARGUMENTS."
-  (agent-scheme--number-from-host
-   (funcall function (agent-scheme--number->host (car arguments)))))
+(defun agent-scheme--floor-rational-pair (pair)
+  "Return floor of exact rational PAIR."
+  (floor (car pair) (cdr pair)))
+
+(defun agent-scheme--ceiling-rational-pair (pair)
+  "Return ceiling of exact rational PAIR."
+  (ceiling (car pair) (cdr pair)))
+
+(defun agent-scheme--truncate-rational-pair (pair)
+  "Return truncation of exact rational PAIR toward zero."
+  (let* ((numerator (car pair))
+         (denominator (cdr pair))
+         (quotient (/ (abs numerator) denominator)))
+    (if (< numerator 0) (- quotient) quotient)))
+
+(defun agent-scheme--round-rational-pair (pair)
+  "Return rounded exact rational PAIR using ties-to-even."
+  (let* ((numerator (car pair))
+         (denominator (cdr pair))
+         (sign (cl-signum numerator))
+         (absolute (abs numerator))
+         (quotient (/ absolute denominator))
+         (remainder (% absolute denominator))
+         (twice (* 2 remainder))
+         (rounded
+          (cond
+           ((< twice denominator) quotient)
+           ((> twice denominator) (1+ quotient))
+           ((cl-evenp quotient) quotient)
+           (t (1+ quotient)))))
+    (* sign rounded)))
+
+(defun agent-scheme--primitive-rounding (arguments function description)
+  "Apply unary numeric rounding FUNCTION to ARGUMENTS for DESCRIPTION."
+  (let ((number (agent-scheme--number-real-part-for-ordering
+                 (car arguments) description)))
+    (pcase (agent-scheme-number-kind number)
+      ((or 'integer 'rational)
+       (agent-scheme--make-canonical-integer
+        (funcall function
+                 (agent-scheme--number->rational-pair number description))))
+      ('decimal
+       (agent-scheme--make-canonical-decimal
+        (float (funcall
+                function
+                (agent-scheme--decimal->exact-rational-pair
+                 (agent-scheme-number-value number))))))
+      ('infnan number))))
 
 (defun agent-scheme--primitive-floor (arguments _context)
   "Primitive floor over ARGUMENTS."
-  (agent-scheme--primitive-rounding arguments #'floor))
+  (agent-scheme--primitive-rounding
+   arguments #'agent-scheme--floor-rational-pair "floor"))
 
 (defun agent-scheme--primitive-ceiling (arguments _context)
   "Primitive ceiling over ARGUMENTS."
-  (agent-scheme--primitive-rounding arguments #'ceiling))
+  (agent-scheme--primitive-rounding
+   arguments #'agent-scheme--ceiling-rational-pair "ceiling"))
 
 (defun agent-scheme--primitive-truncate (arguments _context)
   "Primitive truncate over ARGUMENTS."
-  (agent-scheme--primitive-rounding arguments #'truncate))
+  (agent-scheme--primitive-rounding
+   arguments #'agent-scheme--truncate-rational-pair "truncate"))
 
 (defun agent-scheme--primitive-round (arguments _context)
   "Primitive round over ARGUMENTS."
-  (agent-scheme--primitive-rounding arguments #'round))
+  (agent-scheme--primitive-rounding
+   arguments #'agent-scheme--round-rational-pair "round"))
+
+(defun agent-scheme--integer-argument (datum description)
+  "Return integer value of DATUM or signal an error naming DESCRIPTION."
+  (setq datum (agent-scheme--expect-number datum description))
+  (cond
+   ((and (agent-scheme--number-exact-p datum)
+         (agent-scheme--number-integer-p datum))
+    (car (agent-scheme--number->rational-pair datum description)))
+   ((and (agent-scheme--number-inexact-p datum)
+         (agent-scheme--number-integer-p datum))
+    (truncate (agent-scheme--number->float datum description)))
+   (t
+    (agent-scheme--eval-error
+     "%s expected integer, got %s"
+     description
+     (agent-scheme-value->external datum)))))
+
+(defun agent-scheme--primitive-gcd (arguments _context)
+  "Primitive gcd over ARGUMENTS."
+  (let ((numbers (agent-scheme--numeric-arguments arguments "gcd"))
+        (result 0)
+        inexact)
+    (dolist (number numbers)
+      (setq inexact (or inexact (agent-scheme--number-inexact-p number)))
+      (setq result
+            (agent-scheme--integer-gcd
+             result
+             (agent-scheme--integer-argument number "gcd"))))
+    (let ((value (agent-scheme--make-canonical-integer result)))
+      (if inexact (agent-scheme--number-inexact value) value))))
+
+(defun agent-scheme--primitive-lcm (arguments _context)
+  "Primitive lcm over ARGUMENTS."
+  (let ((numbers (agent-scheme--numeric-arguments arguments "lcm"))
+        (result 1)
+        inexact)
+    (dolist (number numbers)
+      (let ((value (abs (agent-scheme--integer-argument number "lcm"))))
+        (setq inexact (or inexact (agent-scheme--number-inexact-p number)))
+        (setq result
+              (if (or (zerop result) (zerop value))
+                  0
+                (/ (* result value)
+                   (agent-scheme--integer-gcd result value))))))
+    (let ((value (agent-scheme--make-canonical-integer result)))
+      (if inexact (agent-scheme--number-inexact value) value))))
+
+(defun agent-scheme--primitive-numerator (arguments _context)
+  "Primitive numerator over ARGUMENTS."
+  (let* ((number (agent-scheme--expect-number (car arguments) "numerator"))
+         (pair (if (agent-scheme--number-inexact-p number)
+                   (agent-scheme--decimal->exact-rational-pair
+                    (agent-scheme--number->float number "numerator"))
+                 (agent-scheme--number->rational-pair number "numerator")))
+         (value (agent-scheme--make-canonical-integer (car pair))))
+    (if (agent-scheme--number-inexact-p number)
+        (agent-scheme--number-inexact value)
+      value)))
+
+(defun agent-scheme--primitive-denominator (arguments _context)
+  "Primitive denominator over ARGUMENTS."
+  (let* ((number (agent-scheme--expect-number (car arguments) "denominator"))
+         (pair (if (agent-scheme--number-inexact-p number)
+                   (agent-scheme--decimal->exact-rational-pair
+                    (agent-scheme--number->float number "denominator"))
+                 (agent-scheme--number->rational-pair number "denominator")))
+         (value (agent-scheme--make-canonical-integer (cdr pair))))
+    (if (agent-scheme--number-inexact-p number)
+        (agent-scheme--number-inexact value)
+      value)))
+
+(defun agent-scheme--primitive-exact (arguments _context)
+  "Primitive exact over ARGUMENTS."
+  (agent-scheme--number-exact (car arguments)))
+
+(defun agent-scheme--primitive-inexact (arguments _context)
+  "Primitive inexact over ARGUMENTS."
+  (agent-scheme--number-inexact (car arguments)))
+
+(defun agent-scheme--primitive-expt (arguments _context)
+  "Primitive expt over ARGUMENTS."
+  (let ((base (agent-scheme--expect-number (car arguments) "expt"))
+        (power (agent-scheme--expect-number (cadr arguments) "expt")))
+    (if (and (agent-scheme--number-exact-p base)
+             (agent-scheme--number-exact-p power)
+             (agent-scheme--number-integer-p power)
+             (not (agent-scheme--number-complex-p base)))
+        (let* ((base-pair (agent-scheme--number->rational-pair base "expt"))
+               (exponent (car (agent-scheme--number->rational-pair
+                               power "expt")))
+               (numerator (agent-scheme--integer-power
+                           (car base-pair) (abs exponent)))
+               (denominator (agent-scheme--integer-power
+                             (cdr base-pair) (abs exponent))))
+          (if (>= exponent 0)
+              (agent-scheme--number-from-rational-pair
+               (cons numerator denominator))
+            (agent-scheme--number-from-rational-pair
+             (cons denominator numerator))))
+      (agent-scheme--make-canonical-decimal
+       (expt (agent-scheme--number->float base "expt")
+             (agent-scheme--number->float power "expt"))))))
+
+(defun agent-scheme--integer-sqrt (value)
+  "Return floor square root of non-negative integer VALUE."
+  (let ((low 0)
+        (high (1+ value)))
+    (while (> (- high low) 1)
+      (let ((mid (/ (+ low high) 2)))
+        (if (> (* mid mid) value)
+            (setq high mid)
+          (setq low mid))))
+    low))
+
+(defun agent-scheme--primitive-exact-integer-sqrt (arguments _context)
+  "Primitive exact-integer-sqrt over ARGUMENTS."
+  (let ((value (agent-scheme--exact-integer->host
+                (car arguments) "exact-integer-sqrt")))
+    (when (< value 0)
+      (agent-scheme--eval-error
+       "exact-integer-sqrt expected non-negative integer"))
+    (let ((root (agent-scheme--integer-sqrt value)))
+      (agent-scheme--make-multiple-values
+       (list (agent-scheme--make-canonical-integer root)
+             (agent-scheme--make-canonical-integer
+              (- value (* root root))))))))
+
+(defun agent-scheme--primitive-floor/ (arguments _context)
+  "Primitive floor/ over ARGUMENTS."
+  (let ((left (agent-scheme--exact-integer->host (car arguments) "floor/"))
+        (right (agent-scheme--exact-integer->host (cadr arguments) "floor/")))
+    (when (zerop right)
+      (agent-scheme--eval-error "floor/ division by zero"))
+    (let* ((quotient (floor left right))
+           (remainder (- left (* right quotient))))
+      (agent-scheme--make-multiple-values
+       (list (agent-scheme--make-canonical-integer quotient)
+             (agent-scheme--make-canonical-integer remainder))))))
+
+(defun agent-scheme--primitive-truncate/ (arguments _context)
+  "Primitive truncate/ over ARGUMENTS."
+  (let ((left (agent-scheme--exact-integer->host (car arguments) "truncate/"))
+        (right (agent-scheme--exact-integer->host
+                (cadr arguments) "truncate/")))
+    (when (zerop right)
+      (agent-scheme--eval-error "truncate/ division by zero"))
+    (let* ((quotient (agent-scheme--truncate-quotient-value left right))
+           (remainder (- left (* right quotient))))
+      (agent-scheme--make-multiple-values
+       (list (agent-scheme--make-canonical-integer quotient)
+             (agent-scheme--make-canonical-integer remainder))))))
+
+(defun agent-scheme--primitive-rationalize (arguments _context)
+  "Primitive rationalize over ARGUMENTS."
+  (let* ((x (agent-scheme--expect-number (car arguments) "rationalize"))
+         (y (agent-scheme--expect-number (cadr arguments) "rationalize"))
+         (inexact (or (agent-scheme--number-inexact-p x)
+                      (agent-scheme--number-inexact-p y)))
+         (x-pair (if (agent-scheme--number-inexact-p x)
+                     (agent-scheme--decimal->exact-rational-pair
+                      (agent-scheme--number->float x "rationalize"))
+                   (agent-scheme--number->rational-pair x "rationalize")))
+         (y-pair (if (agent-scheme--number-inexact-p y)
+                     (agent-scheme--decimal->exact-rational-pair
+                      (agent-scheme--number->float y "rationalize"))
+                   (agent-scheme--number->rational-pair y "rationalize")))
+         (result
+          (agent-scheme--rationalize-pair x-pair y-pair)))
+    (if inexact
+        (agent-scheme--number-inexact
+         (agent-scheme--number-from-rational-pair result))
+      (agent-scheme--number-from-rational-pair result))))
+
+(defun agent-scheme--rational-pair< (left right)
+  "Return non-nil if rational pair LEFT is less than RIGHT."
+  (< (* (car left) (cdr right))
+     (* (car right) (cdr left))))
+
+(defun agent-scheme--rational-pair= (left right)
+  "Return non-nil if rational pair LEFT equals RIGHT."
+  (= (* (car left) (cdr right))
+     (* (car right) (cdr left))))
+
+(defun agent-scheme--rational-pair-normalize (pair)
+  "Normalize rational PAIR."
+  (agent-scheme--normalize-rational-pair (car pair) (cdr pair)))
+
+(defun agent-scheme--rational-pair-negate (pair)
+  "Return negated rational PAIR."
+  (cons (- (car pair)) (cdr pair)))
+
+(defun agent-scheme--rational-pair+ (left right)
+  "Return LEFT plus RIGHT as a rational pair."
+  (agent-scheme--rational-pair-normalize
+   (cons (+ (* (car left) (cdr right))
+            (* (car right) (cdr left)))
+         (* (cdr left) (cdr right)))))
+
+(defun agent-scheme--rational-pair- (left right)
+  "Return LEFT minus RIGHT as a rational pair."
+  (agent-scheme--rational-pair+
+   left (agent-scheme--rational-pair-negate right)))
+
+(defun agent-scheme--rational-pair-reciprocal (pair)
+  "Return reciprocal of rational PAIR."
+  (agent-scheme--rational-pair-normalize
+   (cons (cdr pair) (car pair))))
+
+(defun agent-scheme--rational-pair-integer-p (pair)
+  "Return non-nil if rational PAIR is integral."
+  (= (cdr pair) 1))
+
+(defun agent-scheme--simplest-positive-rational-pair (lower upper)
+  "Return simplest rational pair in the positive interval LOWER to UPPER."
+  (cond
+   ((not (agent-scheme--rational-pair<
+          (cons 0 1) lower))
+    (cons 0 1))
+   ((agent-scheme--rational-pair-integer-p lower)
+    lower)
+   (t
+    (let ((lower-floor (floor (car lower) (cdr lower)))
+          (upper-floor (floor (car upper) (cdr upper))))
+      (if (< lower-floor upper-floor)
+          (cons (1+ lower-floor) 1)
+        (agent-scheme--rational-pair+
+         (cons lower-floor 1)
+         (agent-scheme--rational-pair-reciprocal
+          (agent-scheme--simplest-positive-rational-pair
+           (agent-scheme--rational-pair-reciprocal
+            (agent-scheme--rational-pair-
+             upper (cons upper-floor 1)))
+           (agent-scheme--rational-pair-reciprocal
+            (agent-scheme--rational-pair-
+             lower (cons lower-floor 1)))))))))))
+
+(defun agent-scheme--simplest-rational-pair (lower upper)
+  "Return simplest rational pair in interval LOWER to UPPER."
+  (cond
+   ((agent-scheme--rational-pair< upper lower)
+    (agent-scheme--eval-error "rationalize tolerance produced empty interval"))
+   ((not (agent-scheme--rational-pair< (cons 0 1) lower))
+    (if (not (agent-scheme--rational-pair< upper (cons 0 1)))
+        (cons 0 1)
+      (agent-scheme--rational-pair-negate
+       (agent-scheme--simplest-positive-rational-pair
+        (agent-scheme--rational-pair-negate upper)
+        (agent-scheme--rational-pair-negate lower)))))
+   (t
+    (agent-scheme--simplest-positive-rational-pair lower upper))))
+
+(defun agent-scheme--rationalize-pair (x y)
+  "Return the simplest rational pair within Y of X."
+  (agent-scheme--simplest-rational-pair
+   (agent-scheme--rational-pair- x y)
+   (agent-scheme--rational-pair+ x y)))
+
+(defun agent-scheme--primitive-finite? (arguments _context)
+  "Primitive finite? over ARGUMENTS."
+  (agent-scheme--scheme-boolean
+   (agent-scheme--number-finite-p
+    (agent-scheme--expect-number (car arguments) "finite?"))))
+
+(defun agent-scheme--primitive-infinite? (arguments _context)
+  "Primitive infinite? over ARGUMENTS."
+  (agent-scheme--scheme-boolean
+   (agent-scheme--number-infinite-p
+    (agent-scheme--expect-number (car arguments) "infinite?"))))
+
+(defun agent-scheme--primitive-nan? (arguments _context)
+  "Primitive nan? over ARGUMENTS."
+  (agent-scheme--scheme-boolean
+   (agent-scheme--number-nan-p
+    (agent-scheme--expect-number (car arguments) "nan?"))))
+
+(defun agent-scheme--primitive-make-rectangular (arguments _context)
+  "Primitive make-rectangular over ARGUMENTS."
+  (agent-scheme--make-canonical-complex
+   (agent-scheme--expect-number (car arguments) "make-rectangular")
+   (agent-scheme--expect-number (cadr arguments) "make-rectangular")))
+
+(defun agent-scheme--primitive-make-polar (arguments _context)
+  "Primitive make-polar over ARGUMENTS."
+  (let ((magnitude (agent-scheme--number->float
+                    (car arguments) "make-polar"))
+        (angle (agent-scheme--number->float
+                (cadr arguments) "make-polar")))
+    (agent-scheme--make-canonical-complex
+     (agent-scheme--make-canonical-decimal (* magnitude (cos angle)))
+     (agent-scheme--make-canonical-decimal (* magnitude (sin angle))))))
+
+(defun agent-scheme--primitive-real-part (arguments _context)
+  "Primitive real-part over ARGUMENTS."
+  (let ((number (agent-scheme--expect-number (car arguments) "real-part")))
+    (if (agent-scheme--number-complex-p number)
+        (car (agent-scheme-number-value number))
+      number)))
+
+(defun agent-scheme--primitive-imag-part (arguments _context)
+  "Primitive imag-part over ARGUMENTS."
+  (let ((number (agent-scheme--expect-number (car arguments) "imag-part")))
+    (if (agent-scheme--number-complex-p number)
+        (cdr (agent-scheme-number-value number))
+      (agent-scheme--make-canonical-integer 0))))
+
+(defun agent-scheme--primitive-magnitude (arguments _context)
+  "Primitive magnitude over ARGUMENTS."
+  (let ((number (agent-scheme--expect-number (car arguments) "magnitude")))
+    (if (agent-scheme--number-complex-p number)
+        (let* ((parts (agent-scheme-number-value number))
+               (real (agent-scheme--number->float (car parts) "magnitude"))
+               (imaginary (agent-scheme--number->float
+                           (cdr parts) "magnitude")))
+          (agent-scheme--make-canonical-decimal
+           (sqrt (+ (* real real) (* imaginary imaginary)))))
+      (agent-scheme--number-abs number))))
+
+(defun agent-scheme--primitive-angle (arguments _context)
+  "Primitive angle over ARGUMENTS."
+  (let ((number (agent-scheme--expect-number (car arguments) "angle")))
+    (if (agent-scheme--number-complex-p number)
+        (let* ((parts (agent-scheme-number-value number))
+               (real (agent-scheme--number->float (car parts) "angle"))
+               (imaginary (agent-scheme--number->float
+                           (cdr parts) "angle")))
+          (agent-scheme--make-canonical-decimal (atan imaginary real)))
+      (if (agent-scheme--number-negative-p number)
+          (agent-scheme--make-canonical-decimal float-pi)
+        (agent-scheme--make-canonical-decimal 0.0)))))
 
 (defun agent-scheme--primitive-cons (arguments _context)
   "Primitive cons over ARGUMENTS."
@@ -3850,15 +4680,12 @@ DESCRIPTION names the primitive for errors."
 (defun agent-scheme--primitive-real? (arguments _context)
   "Primitive real? over ARGUMENTS."
   (agent-scheme--scheme-boolean
-   (and (agent-scheme-number-p (car arguments))
-        (not (eq (agent-scheme-number-kind (car arguments)) 'complex)))))
+   (agent-scheme--number-real-p (car arguments))))
 
 (defun agent-scheme--primitive-rational? (arguments _context)
   "Primitive rational? over ARGUMENTS."
   (agent-scheme--scheme-boolean
-   (and (agent-scheme-number-p (car arguments))
-        (memq (agent-scheme-number-kind (car arguments))
-              '(integer rational decimal)))))
+   (agent-scheme--number-rational-p (car arguments))))
 
 (defun agent-scheme--primitive-integer? (arguments _context)
   "Primitive integer? over ARGUMENTS."
@@ -3881,19 +4708,79 @@ DESCRIPTION names the primitive for errors."
   (agent-scheme--scheme-boolean
    (agent-scheme--number-inexact-p (car arguments))))
 
+(defun agent-scheme--integer->radix-string (integer radix)
+  "Return INTEGER formatted in RADIX."
+  (let ((digits "0123456789abcdef")
+        (value (abs integer))
+        result)
+    (if (zerop value)
+        (setq result "0")
+      (while (> value 0)
+        (push (aref digits (% value radix)) result)
+        (setq value (/ value radix)))
+      (setq result (apply #'string result)))
+    (if (< integer 0)
+        (concat "-" result)
+      result)))
+
+(defun agent-scheme--number->string (number radix)
+  "Return external numeric string for NUMBER in RADIX."
+  (pcase (agent-scheme-number-kind number)
+    ('integer
+     (agent-scheme--integer->radix-string
+      (agent-scheme-number-value number) radix))
+    ('rational
+     (let ((value (agent-scheme-number-value number)))
+       (concat
+        (agent-scheme--integer->radix-string (car value) radix)
+        "/"
+        (agent-scheme--integer->radix-string (cdr value) radix))))
+    ((or 'decimal 'infnan)
+     (unless (= radix 10)
+       (agent-scheme--eval-error
+        "number->string only supports radix 10 for inexact numbers"))
+     (agent-scheme--number->external number))
+    ('complex
+     (unless (= radix 10)
+       (agent-scheme--eval-error
+        "number->string only supports radix 10 for complex numbers"))
+     (agent-scheme--number->external number))))
+
 (defun agent-scheme--primitive-number->string (arguments _context)
   "Primitive number->string over ARGUMENTS."
-  (let ((number (car arguments)))
-    (unless (agent-scheme-number-p number)
-      (agent-scheme--eval-error "number->string expected a number"))
-    (agent-scheme-number-lexeme number)))
+  (let ((number (agent-scheme--expect-number
+                 (car arguments) "number->string"))
+        (radix (if (cdr arguments)
+                   (agent-scheme--exact-integer->host
+                    (cadr arguments) "number->string radix")
+                 10)))
+    (unless (memq radix '(2 8 10 16))
+      (agent-scheme--eval-error "number->string radix must be 2, 8, 10, or 16"))
+    (agent-scheme--number->string number radix)))
 
 (defun agent-scheme--primitive-string->number (arguments _context)
   "Primitive string->number over ARGUMENTS."
   (let* ((string (agent-scheme--expect-string
                   (car arguments) "string->number"))
+         (radix (if (cdr arguments)
+                    (agent-scheme--exact-integer->host
+                     (cadr arguments) "string->number radix")
+                  10))
+         (source (if (or (not (cdr arguments))
+                         (string-match-p "\\`#[bodxei]" (downcase string)))
+                     string
+                   (concat
+                    (pcase radix
+                      (2 "#b")
+                      (8 "#o")
+                      (10 "#d")
+                      (16 "#x")
+                      (_
+                       (agent-scheme--eval-error
+                        "string->number radix must be 2, 8, 10, or 16")))
+                    string)))
          (value (condition-case nil
-                    (agent-scheme-read string)
+                    (agent-scheme-read source)
                   (agent-scheme-reader-error nil))))
     (if (agent-scheme-number-p value)
         value
@@ -4737,14 +5624,22 @@ When KEEP-RESULTS is non-nil, return the collected values."
     ("error-object-irritants" agent-scheme--primitive-error-object-irritants 1 1)
     ("error-object-message" agent-scheme--primitive-error-object-message 1 1)
     ("error-object?" agent-scheme--primitive-error-object? 1 1)
+    ("denominator" agent-scheme--primitive-denominator 1 1)
+    ("exact" agent-scheme--primitive-exact 1 1)
+    ("exact-integer-sqrt" agent-scheme--primitive-exact-integer-sqrt 1 1)
     ("exact-integer?" agent-scheme--primitive-exact-integer? 1 1)
     ("exact?" agent-scheme--primitive-exact? 1 1)
+    ("expt" agent-scheme--primitive-expt 2 2)
     ("floor" agent-scheme--primitive-floor 1 1)
+    ("floor/" agent-scheme--primitive-floor/ 2 2)
     ("floor-quotient" agent-scheme--primitive-floor-quotient 2 2)
     ("floor-remainder" agent-scheme--primitive-floor-remainder 2 2)
+    ("gcd" agent-scheme--primitive-gcd 0 nil)
+    ("inexact" agent-scheme--primitive-inexact 1 1)
     ("inexact?" agent-scheme--primitive-inexact? 1 1)
     ("integer->char" agent-scheme--primitive-integer->char 1 1)
     ("integer?" agent-scheme--primitive-integer? 1 1)
+    ("lcm" agent-scheme--primitive-lcm 0 nil)
     ("list->string" agent-scheme--primitive-list->string 1 1)
     ("list->vector" agent-scheme--primitive-list->vector 1 1)
     ("list?" agent-scheme--primitive-list? 1 1)
@@ -4753,14 +5648,16 @@ When KEEP-RESULTS is non-nil, return the collected values."
     ("make-vector" agent-scheme--primitive-make-vector 1 2)
     ("modulo" agent-scheme--primitive-modulo 2 2)
     ("null?" agent-scheme--primitive-null? 1 1)
-    ("number->string" agent-scheme--primitive-number->string 1 1)
+    ("number->string" agent-scheme--primitive-number->string 1 2)
     ("number?" agent-scheme--primitive-number? 1 1)
+    ("numerator" agent-scheme--primitive-numerator 1 1)
     ("pair?" agent-scheme--primitive-pair? 1 1)
     ("procedure?" agent-scheme--primitive-procedure? 1 1)
     ("quotient" agent-scheme--primitive-quotient 2 2)
     ("raise" agent-scheme--primitive-raise 1 1)
     ("raise-continuable" agent-scheme--primitive-raise-continuable 1 1)
     ("rational?" agent-scheme--primitive-rational? 1 1)
+    ("rationalize" agent-scheme--primitive-rationalize 2 2)
     ("real?" agent-scheme--primitive-real? 1 1)
     ("remainder" agent-scheme--primitive-remainder 2 2)
     ("round" agent-scheme--primitive-round 1 1)
@@ -4768,7 +5665,7 @@ When KEEP-RESULTS is non-nil, return the collected values."
     ("set-cdr!" agent-scheme--primitive-set-cdr! 2 2)
     ("string" agent-scheme--primitive-string 0 nil)
     ("string->list" agent-scheme--primitive-string->list 1 3)
-    ("string->number" agent-scheme--primitive-string->number 1 1)
+    ("string->number" agent-scheme--primitive-string->number 1 2)
     ("string->symbol" agent-scheme--primitive-string->symbol 1 1)
     ("string->vector" agent-scheme--primitive-string->vector 1 3)
     ("string-append" agent-scheme--primitive-string-append 0 nil)
@@ -4791,6 +5688,7 @@ When KEEP-RESULTS is non-nil, return the collected values."
     ("symbol=?" agent-scheme--primitive-symbol=? 2 nil)
     ("symbol?" agent-scheme--primitive-symbol? 1 1)
     ("truncate" agent-scheme--primitive-truncate 1 1)
+    ("truncate/" agent-scheme--primitive-truncate/ 2 2)
     ("truncate-quotient" agent-scheme--primitive-truncate-quotient 2 2)
     ("truncate-remainder" agent-scheme--primitive-truncate-remainder 2 2)
     ("vector" agent-scheme--primitive-vector 0 nil)

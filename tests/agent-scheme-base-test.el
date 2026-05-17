@@ -83,7 +83,7 @@
   (should
    (equal (agent-scheme-base-test--external
            "(list (/ 5 2) (abs -4) (modulo -13 4) (square 5))")
-          "(2.5 4 3 25)"))
+          "(5/2 4 3 25)"))
   (should
    (equal (agent-scheme-base-test--external
            "(list (boolean=? #t (not #f))
@@ -102,6 +102,73 @@
                   (string-ref (string #\\o #\\k) 1)
                   (string-append \"ag\" \"ent\"))")
           "(65 #\\B #\\k \"agent\")")))
+
+(ert-deftest agent-scheme-base-test-numeric-tower-exact-arithmetic ()
+  "Evaluate exact rational arithmetic, integer division, and rounding."
+  (should
+   (equal (agent-scheme-base-test--external
+           "(list (/ 3 4 5)
+                  (+ 1/2 1/3)
+                  (- 1 3/2)
+                  (* 2/3 9/4)
+                  (numerator (/ 6 4))
+                  (denominator (/ 6 4)))")
+          "(3/20 5/6 -1/2 3/2 3 2)"))
+  (should
+   (equal (agent-scheme-base-test--external
+           "(list (floor 7/2)
+                  (ceiling -7/2)
+                  (truncate -7/2)
+                  (round 7/2)
+                  (round 5/2)
+                  (gcd 32 -36)
+                  (lcm 32 -36)
+                  (expt 2 10)
+                  (rationalize #e.3 1/10))")
+          "(3 -3 -3 4 2 4 288 1024 1/3)"))
+  (should
+   (equal (agent-scheme-base-test--external
+           "(call-with-values (lambda () (exact-integer-sqrt 17)) list)")
+          "(4 1)")))
+
+(ert-deftest agent-scheme-base-test-numeric-tower-conversions-and-radix-io ()
+  "Evaluate exactness conversion and numeric string conversion."
+  (should
+   (equal (agent-scheme-base-test--external
+           "(list (exact? #e1.5)
+                  (inexact? #i3/2)
+                  (exact (inexact 42))
+                  (= #e1.0 1)
+                  (number->string #e1.5)
+                  (number->string (inexact 3/2))
+                  (number->string 42 16)
+                  (string->number \"2a\" 16)
+                  (string->number \"not-a-number\"))")
+          "(#t #t 42 #t \"3/2\" \"1.5\" \"2a\" 42 #f)")))
+
+(ert-deftest agent-scheme-base-test-numeric-tower-complex-and-special-values ()
+  "Evaluate representative complex arithmetic and inexact special predicates."
+  (should
+   (equal (agent-scheme-base-test--external
+           "(import (scheme complex))
+            (list (+ 1+2i 3/4-1/2i)
+                  (* 1+2i 3-4i)
+                  (real? 3+0i)
+                  (real? 3+0.0i)
+                  (integer? 3+0i)
+                  (real-part 3/4-1/2i)
+                  (imag-part 3/4-1/2i))")
+          "(7/4+3/2i 11+2i #t #f #t 3/4 -1/2)"))
+  (should
+   (equal (agent-scheme-base-test--external
+           "(import (scheme inexact))
+            (list (real? +inf.0)
+                  (rational? +inf.0)
+                  (infinite? +inf.0)
+                  (finite? 3/2)
+                  (nan? +nan.0)
+                  (= +nan.0 +nan.0))")
+          "(#t #f #t #t #t #f)")))
 
 (ert-deftest agent-scheme-base-test-vectors-bytevectors-and-higher-order-calls ()
   "Evaluate vector, bytevector, apply, map, and for-each procedures."
