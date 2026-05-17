@@ -667,6 +667,61 @@
                    (get-output-string out))"
                 "\"#<record <pare>>\"")
 
+(check-external 'standard-string-ports-read-and-write
+                "(import (scheme base) (scheme read) (scheme write))
+                 (let ((in (open-input-string \"(alpha 1) \"))
+                       (out (open-output-string)))
+                   (write (read in) out)
+                   (write-char (read-char in) out)
+                   (list (get-output-string out)
+                         (eof-object? (read in))))"
+                "(\"(alpha 1) \" #t)")
+
+(check-external 'standard-string-port-read-write-round-trip
+                "(import (scheme base) (scheme read) (scheme write))
+                 (let ((out (open-output-string)))
+                   (write '(a \"b\" #u8(1 2)) out)
+                   (read (open-input-string (get-output-string out))))"
+                "(a \"b\" #u8(1 2))")
+
+(check-external 'standard-bytevector-ports-read-and-write
+                "(import (scheme base))
+                 (let ((in (open-input-bytevector #u8(1 2 3)))
+                       (out (open-output-bytevector)))
+                   (write-u8 (read-u8 in) out)
+                   (write-bytevector (read-bytevector 4 in) out)
+                   (list (eof-object? (read-u8 in))
+                         (get-output-bytevector out)))"
+                "(#t #u8(1 2 3))")
+
+(check-external 'standard-eval-import-evaluates-scheme
+                "(import (scheme base) (scheme eval))
+                 (eval '(* 7 3) (environment '(scheme base)))"
+                "21")
+
+(check 'standard-eval-immutable-environment-rejects-definition
+       (raises?
+        (lambda ()
+          (agent-scheme-eval-source
+           "(import (scheme base) (scheme eval))
+            (eval '(define foo 32) (environment '(scheme base)))")))
+       #t)
+
+(check 'standard-load-default-denied
+       (raises?
+        (lambda ()
+          (agent-scheme-eval-source
+           "(import (scheme base) (scheme load))
+            (load \"fixtures/r7rs/include-body.scm\")")))
+       #t)
+
+(check-external/options 'standard-load-policy-allowed
+                        "(import (scheme base) (scheme load))
+                         (load \"fixtures/r7rs/include-body.scm\")
+                         answer"
+                        include-policy-options
+                        "42")
+
 (check 'standard-file-import-default-denied
        (raises?
         (lambda ()

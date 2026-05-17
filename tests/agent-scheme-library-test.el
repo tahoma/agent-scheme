@@ -309,6 +309,72 @@
         (get-output-string out))")
     "\"#<record <pare>>\"")))
 
+(ert-deftest agent-scheme-library-test-string-ports-read-and-write-round-trip ()
+  "Use pure textual string ports with the Agent Scheme reader and writer."
+  (should
+   (equal
+    (agent-scheme-library-test--external
+     "(import (scheme base) (scheme read) (scheme write))
+      (let ((in (open-input-string \"(alpha 1) \"))
+            (out (open-output-string)))
+        (write (read in) out)
+        (write-char (read-char in) out)
+        (list (get-output-string out)
+              (eof-object? (read in))))")
+    "(\"(alpha 1) \" #t)"))
+  (should
+   (equal
+    (agent-scheme-library-test--external
+     "(import (scheme base) (scheme read) (scheme write))
+      (let ((out (open-output-string)))
+        (write '(a \"b\" #u8(1 2)) out)
+        (read (open-input-string (get-output-string out))))")
+    "(a \"b\" #u8(1 2))")))
+
+(ert-deftest agent-scheme-library-test-bytevector-ports-read-and-write ()
+  "Use pure binary bytevector ports without host file access."
+  (should
+   (equal
+    (agent-scheme-library-test--external
+     "(import (scheme base))
+      (let ((in (open-input-bytevector #u8(1 2 3)))
+            (out (open-output-bytevector)))
+        (write-u8 (read-u8 in) out)
+        (write-bytevector (read-bytevector 4 in) out)
+        (list (eof-object? (read-u8 in))
+              (get-output-bytevector out)))")
+    "(#t #u8(1 2 3))")))
+
+(ert-deftest agent-scheme-library-test-standard-eval-import-evaluates-scheme ()
+  "Evaluate Scheme datums in explicit immutable Scheme environments."
+  (should
+   (equal
+    (agent-scheme-library-test--external
+     "(import (scheme base) (scheme eval))
+      (eval '(* 7 3) (environment '(scheme base)))")
+    "21"))
+  (should-error
+   (agent-scheme-eval-source
+    "(import (scheme base) (scheme eval))
+     (eval '(define foo 32) (environment '(scheme base)))")
+   :type 'agent-scheme-eval-error))
+
+(ert-deftest agent-scheme-library-test-standard-load-is-policy-gated ()
+  "Load Scheme source only when host file policy allows the path."
+  (should-error
+   (agent-scheme-eval-source
+    "(import (scheme base) (scheme load))
+     (load \"fixtures/r7rs/include-body.scm\")")
+   :type 'agent-scheme-eval-error)
+  (should
+   (equal
+    (agent-scheme-library-test--external/options
+     "(import (scheme base) (scheme load))
+      (load \"fixtures/r7rs/include-body.scm\")
+      answer"
+     agent-scheme-library-test--include-options)
+    "42")))
+
 (ert-deftest agent-scheme-library-test-standard-file-import-is-policy-gated ()
   "Keep `(scheme file)' host file effects behind explicit path policy."
   (should-error
