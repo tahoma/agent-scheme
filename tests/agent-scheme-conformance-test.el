@@ -57,9 +57,14 @@ PRINTED-VALUE strings should use Agent Scheme's stable writer.")
 (defun agent-scheme--conformance-eval-evaluator (source)
   "Evaluate SOURCE and return a conformance result plist."
   (condition-case condition
-      (list :status 'value
-            :value (agent-scheme-value->external
-                    (agent-scheme-eval-source source)))
+      (let ((value (agent-scheme-eval-source source)))
+        (if (agent-scheme--multiple-values-p value)
+            (list :status 'values
+                  :values
+                  (mapcar #'agent-scheme-value->external
+                          (agent-scheme--multiple-values-values value)))
+          (list :status 'value
+                :value (agent-scheme-value->external value))))
     (agent-scheme-eval-error
      (list :status 'error :condition condition))))
 
