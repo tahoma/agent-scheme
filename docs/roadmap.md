@@ -4,6 +4,11 @@ The active roadmap is tracked in GitHub issues, with
 [tahoma/agent-scheme#53](https://github.com/tahoma/agent-scheme/issues/53) as
 the living dependency graph.
 
+Issues also carry a label taxonomy documented in
+[GitHub issue taxonomy](issue-taxonomy.md). The roadmap says when work should
+happen; the taxonomy says where contributors can work and which host or review
+constraints apply.
+
 The architectural baseline for that graph is
 [Architecture and threat model](architecture.md).
 
@@ -17,3 +22,10 @@ The project roadmap follows this design intent:
 
 This document can summarize the current milestone while the issue remains the
 source of truth for ordering.
+
+When adding or revising roadmap issues, keep the GitHub labels current:
+
+- one `surface:*` label
+- one `phase:*` label
+- risk, host, size, review, and documentation labels when they add useful
+  selection or review context
