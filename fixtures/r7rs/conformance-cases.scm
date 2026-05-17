@@ -169,7 +169,7 @@
     ((id library-import-export)
      (category libraries)
      (section "5")
-     (status pending)
+     (status implemented)
      (description "A defined library exports a binding imported by a program.")
      (source "(define-library (agent-scheme fixture math) (export answer) (import (scheme base)) (begin (define answer 42))) (import (agent-scheme fixture math)) answer")
      (expect (value "42")))
