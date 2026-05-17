@@ -3189,11 +3189,6 @@
       (cond
        ((integer? number)
         (agent-scheme-make-canonical-integer number))
-       ((nan? number)
-        (agent-scheme-make-canonical-infnan "+nan.0"))
-       ((infinite? number)
-        (agent-scheme-make-canonical-infnan
-         (if (negative? number) "-inf.0" "+inf.0")))
        (else
         (agent-scheme-make-canonical-decimal number))))
 

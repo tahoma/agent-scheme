@@ -170,6 +170,16 @@
                   (= +nan.0 +nan.0))")
           "(#t #f #t #t #t #f)")))
 
+(ert-deftest agent-scheme-base-test-numeric-tower-polar-special-values ()
+  "Evaluate polar complex operations with canonical inexact special values."
+  (should
+   (equal (agent-scheme-base-test--external
+           "(import (scheme complex))
+            (list (make-polar +inf.0 0)
+                  (make-polar 1 +inf.0)
+                  (make-polar +nan.0 0))")
+          "(+inf.0+nan.0i +nan.0+nan.0i +nan.0+nan.0i)")))
+
 (ert-deftest agent-scheme-base-test-vectors-bytevectors-and-higher-order-calls ()
   "Evaluate vector, bytevector, apply, map, and for-each procedures."
   (should

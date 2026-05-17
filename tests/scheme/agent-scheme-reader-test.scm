@@ -89,6 +89,12 @@
 (check-external 'inexact-rational "#i3/2" "1.5")
 (check-external 'complex-rectangular "3/4-5/6i" "3/4-5/6i")
 (check-external 'infinity "+inf.0" "+inf.0")
+(check-external 'complex-positive-infinity-imaginary "+inf.0i" "0+inf.0i")
+(check-external 'complex-negative-infinity-imaginary "-inf.0i" "0-inf.0i")
+(check-external 'complex-nan-imaginary "+nan.0i" "0+nan.0i")
+(check-external 'polar-infinite-magnitude "+inf.0@0" "+inf.0+nan.0i")
+(check-external 'polar-infinite-angle "1@+inf.0" "+nan.0+nan.0i")
+(check-external 'polar-nan-magnitude "+nan.0@0" "+nan.0+nan.0i")
 (check-external 'bare-i-symbol "i" "i")
 
 (check-external 'dotted-list "(alpha beta . gamma)" "(alpha beta . gamma)")

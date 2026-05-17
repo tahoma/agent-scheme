@@ -375,15 +375,25 @@
          'integer
          value)))
 
+    (define (host-inexact-special-kind value)
+      (cond
+       ((not (= value value)) "+nan.0")
+       ((= value (/ 1.0 0.0)) "+inf.0")
+       ((= value (/ -1.0 0.0)) "-inf.0")
+       (else #f)))
+
     (define (agent-scheme-make-canonical-decimal value . maybe-lexeme)
-      (make-agent-scheme-number
-       (if (null? maybe-lexeme)
-           (number->string value)
-           (car maybe-lexeme))
-       'inexact
-       10
-       'decimal
-       value))
+      (let ((special-kind (host-inexact-special-kind value)))
+        (if special-kind
+            (agent-scheme-make-canonical-infnan special-kind)
+            (make-agent-scheme-number
+             (if (null? maybe-lexeme)
+                 (number->string value)
+                 (car maybe-lexeme))
+             'inexact
+             10
+             'decimal
+             value))))
 
     (define (agent-scheme-make-canonical-rational
              numerator denominator . rest)
@@ -526,13 +536,16 @@
        ((eq? (agent-scheme-number-kind number) 'complex)
         (let* ((value (agent-scheme-number-value number))
                (real (car value))
-               (imaginary (cdr value))
-               (negative? (agent-scheme-number-negative? imaginary))
-               (magnitude (agent-scheme-number-abs imaginary)))
+               (imaginary (cdr value)))
           (string-append
            (agent-scheme-number->external real)
-           (if negative? "-" "+")
-           (agent-scheme-number->external magnitude)
+           (if (eq? (agent-scheme-number-kind imaginary) 'infnan)
+               (agent-scheme-number->external imaginary)
+               (let ((negative? (agent-scheme-number-negative? imaginary))
+                     (magnitude (agent-scheme-number-abs imaginary)))
+                 (string-append
+                  (if negative? "-" "+")
+                  (agent-scheme-number->external magnitude))))
            "i")))
        (else
         (or (agent-scheme-number-lexeme number)
@@ -691,6 +704,13 @@
         (rational-pair->inexact (agent-scheme-number-value number)))
        ((eq? (agent-scheme-number-kind number) 'decimal)
         (agent-scheme-number-value number))
+       ((eq? (agent-scheme-number-kind number) 'infnan)
+        (cond
+         ((string=? (agent-scheme-number-value number) "+inf.0")
+          (/ 1.0 0.0))
+         ((string=? (agent-scheme-number-value number) "-inf.0")
+          (/ -1.0 0.0))
+         (else (/ 0.0 0.0))))
        (else 0.0)))
 
     (define (parse-real-number-body reader token body exactness radix)
