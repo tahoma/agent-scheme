@@ -111,6 +111,12 @@
       (minimum-arity primitive-procedure-minimum-arity)
       (maximum-arity primitive-procedure-maximum-arity))
 
+    (define-record-type <agent-scheme-parameter>
+      (make-parameter value converter)
+      agent-scheme-parameter?
+      (value parameter-value set-parameter-value!)
+      (converter parameter-converter))
+
     (define-record-type <multiple-values>
       (make-multiple-values values)
       multiple-values?
@@ -361,6 +367,7 @@
             (agent-scheme-unspecified? value)
             (agent-scheme-procedure? value)
             (agent-scheme-primitive-procedure? value)
+            (agent-scheme-parameter? value)
             (continuation? value)
             (agent-scheme-error-object? value)
             (agent-scheme-eof-object? value)
@@ -620,6 +627,15 @@
          (else
           (set-cell-value! cell value)))))
 
+    (define (environment-define-or-set! environment name value)
+      (let ((cell (frame-cell environment name)))
+        (if cell
+            (begin
+              (if (current-environment-imported? environment name)
+                  (eval-error "cannot redefine imported binding" name))
+              (set-cell-value! cell value))
+            (environment-define! environment name value))))
+
     (define (environment-ref environment name)
       (let ((cell (environment-cell environment name)))
         (if (not cell)
@@ -725,6 +741,9 @@
     (define (definition-form? form)
       (and (pair? form) (eq? (car form) 'define)))
 
+    (define (define-values-form? form)
+      (and (pair? form) (identifier-named? (car form) 'define-values)))
+
     (define (begin-form? form)
       (and (pair? form) (eq? (car form) 'begin)))
 
@@ -762,11 +781,23 @@
              "define target must be an identifier or function signature"
              form))))))
 
+    (define (parse-define-values form)
+      (let ((parts (proper-list-elements form "define-values form")))
+        (if (not (= (length parts) 3))
+            (eval-error
+             "define-values requires formals and one expression"
+             form))
+        (cons (parse-formals (second parts)) (third parts))))
+
+    (define (define-values-bound-names form)
+      (formals-names (car (parse-define-values form))))
+
     (define (record-definition-form? form)
       (and (pair? form) (identifier-named? (car form) 'define-record-type)))
 
     (define (body-definition-form? form)
       (or (definition-form? form)
+          (define-values-form? form)
           (record-definition-form? form)))
 
     (define (parse-record-definition form)
@@ -1006,6 +1037,20 @@
                                 body-environment
                                 context
                                 #f)))
+                             ((eq? (car (car remaining)) 'define-values)
+                              (let* ((parsed (cdr (car remaining)))
+                                     (value
+                                      (eval-expression
+                                       (cdr parsed)
+                                       body-environment
+                                       context
+                                       #f)))
+                                (define-values-bind
+                                 (car parsed)
+                                 (values-list value)
+                                 body-environment
+                                 context
+                                 "define-values")))
                              ((eq? (car (car remaining)) 'record)
                               (eval-record-definition
                                (cdr (car remaining))
@@ -1031,6 +1076,28 @@
                           (install-loop
                            (cdr rest)
                            (cons (cons 'define parsed-definition)
+                                 parsed))))
+                       ((define-values-form? definition)
+                        (let ((parsed-definition
+                               (parse-define-values definition)))
+                          (let names-loop
+                              ((names (formals-names (car parsed-definition))))
+                            (if (not (null? names))
+                                (begin
+                                  (if (frame-cell
+                                       body-environment
+                                       (car names))
+                                      (eval-error
+                                       "duplicate internal definition"
+                                       (car names)))
+                                  (environment-define!
+                                   body-environment
+                                   (car names)
+                                   undefined)
+                                  (names-loop (cdr names)))))
+                          (install-loop
+                           (cdr rest)
+                           (cons (cons 'define-values parsed-definition)
                                  parsed))))
                        ((record-definition-form? definition)
                         (let names-loop
@@ -1080,6 +1147,63 @@
                          (set-cell-value! cell value))
                        (environment-define! environment name value))
                    (continue continuation agent-scheme-unspecified))))))
+        (if direct-call?
+            (drain-state state context)
+            state)))
+
+    (define (define-values-bind
+             formals values environment context description)
+      (let* ((required (formals-required formals))
+             (rest (formals-rest formals))
+             (required-count (length required))
+             (value-count (length values)))
+        (cond
+         ((and (not rest) (not (= value-count required-count)))
+          (eval-error
+           (string-append description " received wrong number of values")
+           required-count
+           value-count))
+         ((and rest (< value-count required-count))
+          (eval-error
+           (string-append description " received too few values")
+           required-count
+           value-count)))
+        (let loop ((names required) (remaining-values values))
+          (if (null? names)
+              (if rest
+                  (environment-define-or-set!
+                   environment
+                   rest
+                   remaining-values))
+              (begin
+                (environment-define-or-set!
+                 environment
+                 (car names)
+                 (car remaining-values))
+                (loop (cdr names) (cdr remaining-values)))))))
+
+    (define (eval-define-values
+             form environment context . maybe-continuation)
+      (let* ((parsed (parse-define-values form))
+             (direct-call? (null? maybe-continuation))
+             (continuation
+              (if direct-call?
+                  identity-continuation
+                  (car maybe-continuation)))
+             (state
+              (eval-expression
+               (cdr parsed)
+               environment
+               context
+               #f
+               (lambda (raw-value)
+                 (define-values-bind
+                  (car parsed)
+                  (values-list raw-value)
+                  environment
+                  context
+                  "define-values")
+                 (continue continuation agent-scheme-unspecified)))))
         (if direct-call?
             (drain-state state context)
             state)))
@@ -1179,12 +1303,17 @@
                (primitive-eval/k arguments context continuation))
               ((eq? name 'load)
                (primitive-load/k arguments context continuation))
+              ((eq? name 'make-parameter)
+               (primitive-make-parameter/k arguments context continuation))
               (else
                (continue
                 continuation
                 (check-value-budget
                  (function arguments context)
                  context)))))))
+         ((agent-scheme-parameter? procedure)
+          (finish
+           (apply-parameter/k procedure arguments context continuation)))
          ((agent-scheme-procedure? procedure)
           (let* ((call-environment
                   (bind-formals
@@ -2339,7 +2468,11 @@
         (scheme inexact)
         (scheme lazy)
         (scheme load)
+        (scheme process-context)
         (scheme read)
+        (scheme repl)
+        (scheme r5rs)
+        (scheme time)
         (scheme write)))
 
     (define case-lambda-library-source
@@ -2347,14 +2480,25 @@
          (export case-lambda)
          (import (scheme base))
          (begin
+           (define (%case-lambda-matches? formals count)
+             (cond
+              ((symbol? formals) #t)
+              ((null? formals) (= count 0))
+              ((pair? formals)
+               (let loop ((rest formals) (seen 0))
+                 (cond
+                  ((null? rest) (= count seen))
+                  ((pair? rest) (loop (cdr rest) (+ seen 1)))
+                  (else (>= count seen)))))
+              (else #f)))
            (define-syntax case-lambda
              (syntax-rules ()
                ((case-lambda)
                 (lambda args (car '())))
-               ((case-lambda ((param ...) body ...) more ...)
+               ((case-lambda (formals body ...) more ...)
                 (lambda args
-                  (if (= (length args) (length '(param ...)))
-                      (apply (lambda (param ...) body ...) args)
+                  (if (%case-lambda-matches? 'formals (length args))
+                      (apply (lambda formals body ...) args)
                       (apply (case-lambda more ...) args))))))))")
 
     (define lazy-library-source
@@ -2584,6 +2728,153 @@
               value-environment
               syntax-environment)))))
 
+    (define (char-library-specs)
+      (list
+       (list 'char-alphabetic? primitive-char-alphabetic? 1 1)
+       (list 'char-ci<=? primitive-char-ci<=? 2 #f)
+       (list 'char-ci<? primitive-char-ci<? 2 #f)
+       (list 'char-ci=? primitive-char-ci=? 2 #f)
+       (list 'char-ci>=? primitive-char-ci>=? 2 #f)
+       (list 'char-ci>? primitive-char-ci>? 2 #f)
+       (list 'char-downcase primitive-char-downcase 1 1)
+       (list 'char-foldcase primitive-char-foldcase 1 1)
+       (list 'char-lower-case? primitive-char-lower-case? 1 1)
+       (list 'char-numeric? primitive-char-numeric? 1 1)
+       (list 'char-upcase primitive-char-upcase 1 1)
+       (list 'char-upper-case? primitive-char-upper-case? 1 1)
+       (list 'char-whitespace? primitive-char-whitespace? 1 1)
+       (list 'digit-value primitive-digit-value 1 1)
+       (list 'string-ci<=? primitive-string-ci<=? 2 #f)
+       (list 'string-ci<? primitive-string-ci<? 2 #f)
+       (list 'string-ci=? primitive-string-ci=? 2 #f)
+       (list 'string-ci>=? primitive-string-ci>=? 2 #f)
+       (list 'string-ci>? primitive-string-ci>? 2 #f)
+       (list 'string-downcase primitive-string-downcase 1 1)
+       (list 'string-foldcase primitive-string-foldcase 1 1)
+       (list 'string-upcase primitive-string-upcase 1 1)))
+
+    (define cxr-library-base-names
+      '(caar cadr cdar cddr))
+
+    (define cxr-library-extra-names
+      '(caaar caadr cadar caddr cdaar cdadr cddar cdddr
+        caaaar caaadr caadar caaddr cadaar cadadr caddar cadddr
+        cdaaar cdaadr cdadar cdaddr cddaar cddadr cdddar cddddr))
+
+    (define (primitive-cxr-function name)
+      (let ((text (symbol->string name)))
+        (lambda (arguments context)
+          (let loop ((index (- (string-length text) 2))
+                     (value (car arguments)))
+            (if (= index 0)
+                value
+                (let ((step (string-ref text index)))
+                  (loop (- index 1)
+                        (cond
+                         ((char=? step #\a)
+                          (primitive-car (list value) context))
+                         ((char=? step #\d)
+                          (primitive-cdr (list value) context))
+                         (else
+                          (eval-error "invalid cxr name" name))))))))))
+
+    (define (cxr-library-specs)
+      (map (lambda (name)
+             (list name (primitive-cxr-function name) 1 1))
+           cxr-library-extra-names))
+
+    (define (register-cxr-library! key context environment)
+      (if (not (library-registry-ref context key))
+          (let* ((base-library
+                  (resolve-library scheme-base-library-key
+                                   context
+                                   environment))
+                 (base-exports (library-exports base-library))
+                 (base-bindings
+                  (map
+                   (lambda (name)
+                     (or (find-library-export name base-exports)
+                         (eval-error
+                          "standard library binding is not available"
+                          name)))
+                   cxr-library-base-names))
+                 (value-environment (agent-scheme-make-empty-environment))
+                 (syntax-environment (make-empty-syntax-environment #f)))
+            (for-each
+             (lambda (spec)
+               (define-primitive!
+                value-environment
+                (car spec)
+                (second spec)
+                (third spec)
+                (fourth spec)))
+             (cxr-library-specs))
+            (library-registry-set!
+             context
+             key
+             (make-library
+              key
+              key
+              (append
+               base-bindings
+               (snapshot-library-bindings
+                value-environment
+                syntax-environment
+                key))
+              value-environment
+              syntax-environment)))))
+
+    (define (inexact-library-specs)
+      (list
+       (list 'acos primitive-acos 1 1)
+       (list 'asin primitive-asin 1 1)
+       (list 'atan primitive-atan 1 2)
+       (list 'cos primitive-cos 1 1)
+       (list 'exp primitive-exp 1 1)
+       (list 'finite? primitive-finite? 1 1)
+       (list 'infinite? primitive-infinite? 1 1)
+       (list 'log primitive-log 1 2)
+       (list 'nan? primitive-nan? 1 1)
+       (list 'sin primitive-sin 1 1)
+       (list 'sqrt primitive-sqrt 1 1)
+       (list 'tan primitive-tan 1 1)))
+
+    (define (policy-denied-spec name)
+      (list name (policy-denied-primitive (symbol->string name)) 0 #f))
+
+    (define (register-r5rs-library! key context environment)
+      (if (not (library-registry-ref context key))
+          (let* ((base-library
+                  (resolve-library scheme-base-library-key
+                                   context
+                                   environment))
+                 (base-exports (library-exports base-library))
+                 (inexact-binding
+                  (or (find-library-export 'inexact base-exports)
+                      (eval-error "R5RS inexact alias missing")))
+                 (exact-binding
+                  (or (find-library-export 'exact base-exports)
+                      (eval-error "R5RS exact alias missing")))
+                 (exports
+                  (append
+                   base-exports
+                   (list
+                    (library-binding-with-name
+                     inexact-binding
+                     'exact->inexact)
+                    (library-binding-with-name
+                     exact-binding
+                     'inexact->exact)))))
+            (library-registry-set!
+             context
+             key
+             (make-library
+              key
+              key
+              exports
+              (library-value-environment base-library)
+              (library-syntax-environment base-library))))))
+
     (define (register-standard-library! key context environment)
       (cond
        ((equal? key '(scheme case-lambda))
@@ -2594,7 +2885,7 @@
        ((equal? key '(scheme char))
         (register-primitive-library!
          key
-         (list (list 'char-upcase primitive-char-upcase 1 1))
+         (char-library-specs)
          context))
        ((equal? key '(scheme complex))
         (register-primitive-library!
@@ -2608,11 +2899,7 @@
           (list 'real-part primitive-real-part 1 1))
          context))
        ((equal? key '(scheme cxr))
-        (register-subset-library!
-         key
-         '(caar cadr cdar cddr)
-         context
-         environment))
+        (register-cxr-library! key context environment))
        ((equal? key '(scheme eval))
         (register-primitive-library!
          key
@@ -2623,15 +2910,14 @@
        ((equal? key '(scheme file))
         (register-primitive-library!
          key
-         (list (list 'file-exists? primitive-file-exists? 1 1))
+         (list
+          (list 'delete-file primitive-delete-file 1 1)
+          (list 'file-exists? primitive-file-exists? 1 1))
          context))
        ((equal? key '(scheme inexact))
         (register-primitive-library!
          key
-         (list
-          (list 'finite? primitive-finite? 1 1)
-          (list 'infinite? primitive-infinite? 1 1)
-          (list 'nan? primitive-nan? 1 1))
+         (inexact-library-specs)
          context))
        ((equal? key '(scheme lazy))
         (register-source-library!
@@ -2643,10 +2929,33 @@
          key
          (list (list 'load primitive-load 1 2))
          context))
+       ((equal? key '(scheme process-context))
+        (register-primitive-library!
+         key
+         (map policy-denied-spec
+              '(command-line
+                emergency-exit
+                exit
+                get-environment-variable
+                get-environment-variables))
+         context))
        ((equal? key '(scheme read))
         (register-primitive-library!
          key
          (list (list 'read primitive-read 0 1))
+         context))
+       ((equal? key '(scheme repl))
+        (register-primitive-library!
+         key
+         (list (policy-denied-spec 'interaction-environment))
+         context))
+       ((equal? key '(scheme r5rs))
+        (register-r5rs-library! key context environment))
+       ((equal? key '(scheme time))
+        (register-primitive-library!
+         key
+         (map policy-denied-spec
+              '(current-jiffy current-second jiffies-per-second))
          context))
        ((equal? key '(scheme write))
         (register-primitive-library!
@@ -3356,6 +3665,11 @@
            ((and (identifier-named? operator 'define)
                  (special-operator-active? operator environment))
             (eval-error "define is not valid in expression position" parts))
+           ((and (identifier-named? operator 'define-values)
+                 (special-operator-active? operator environment))
+            (eval-error
+             "define-values is not valid in expression position"
+             parts))
            ((and (identifier-named? operator 'define-record-type)
                  (special-operator-active? operator environment))
             (eval-error
@@ -3542,6 +3856,17 @@
                          (after-form value remaining)))
                       (eval-error
                        "define is only allowed before body expressions"
+                       form)))
+                 ((define-values-form? form)
+                  (if allow-definitions?
+                      (eval-define-values
+                       form
+                       environment
+                       context
+                       (lambda (value)
+                         (after-form value remaining)))
+                      (eval-error
+                       "define-values is only allowed before body expressions"
                        form)))
                  ((and allow-definitions? (begin-form? form))
                   (eval-sequence
@@ -3841,6 +4166,7 @@
     (define (expect-procedure datum description)
       (if (or (agent-scheme-procedure? datum)
               (agent-scheme-primitive-procedure? datum)
+              (agent-scheme-parameter? datum)
               (continuation? datum))
           datum
           (eval-error
@@ -4414,6 +4740,57 @@
              (expt (number->host-float base "expt")
                    (number->host-float power "expt"))))))
 
+    (define (primitive-inexact-unary arguments function description)
+      (agent-scheme-make-canonical-decimal
+       (function (number->host-float (car arguments) description))))
+
+    (define (primitive-exp arguments context)
+      (primitive-inexact-unary arguments exp "exp"))
+
+    (define (primitive-log arguments context)
+      (let ((value (primitive-inexact-unary (list (car arguments))
+                                            log
+                                            "log")))
+        (if (null? (cdr arguments))
+            value
+            (let ((base (primitive-inexact-unary
+                         (list (second arguments))
+                         log
+                         "log")))
+              (primitive/ (list value base) context)))))
+
+    (define (primitive-sin arguments context)
+      (primitive-inexact-unary arguments sin "sin"))
+
+    (define (primitive-cos arguments context)
+      (primitive-inexact-unary arguments cos "cos"))
+
+    (define (primitive-tan arguments context)
+      (primitive-inexact-unary arguments tan "tan"))
+
+    (define (primitive-asin arguments context)
+      (primitive-inexact-unary arguments asin "asin"))
+
+    (define (primitive-acos arguments context)
+      (primitive-inexact-unary arguments acos "acos"))
+
+    (define (primitive-atan arguments context)
+      (if (null? (cdr arguments))
+          (primitive-inexact-unary arguments atan "atan")
+          (agent-scheme-make-canonical-decimal
+           (atan (number->host-float (car arguments) "atan")
+                 (number->host-float (second arguments) "atan")))))
+
+    (define (primitive-sqrt arguments context)
+      (let* ((number (expect-number (car arguments) "sqrt"))
+             (value (number->host-float number "sqrt")))
+        (if (and (not (number-complex-representation? number))
+                 (< value 0.0))
+            (agent-scheme-make-canonical-complex
+             (agent-scheme-make-canonical-decimal 0.0)
+             (agent-scheme-make-canonical-decimal (sqrt (- value))))
+            (agent-scheme-make-canonical-decimal (sqrt value)))))
+
     (define (integer-sqrt value)
       (let loop ((low 0) (high (+ value 1)))
         (if (<= (- high low) 1)
@@ -4844,6 +5221,24 @@
                 datum
                 #f)))))
 
+    (define (primitive-string->utf8 arguments context)
+      (let* ((string (expect-string (car arguments) "string->utf8"))
+             (range (optional-range
+                     arguments
+                     1
+                     (string-length string)
+                     "string->utf8")))
+        (string->utf8 (substring string (car range) (cdr range)))))
+
+    (define (primitive-utf8->string arguments context)
+      (let* ((bytes (expect-bytevector (car arguments) "utf8->string"))
+             (range (optional-range
+                     arguments
+                     1
+                     (bytevector-length bytes)
+                     "utf8->string")))
+        (utf8->string bytes (car range) (cdr range))))
+
     (define (primitive-symbol? arguments context)
       (symbol? (car arguments)))
 
@@ -4904,6 +5299,95 @@
 
     (define (primitive-char-upcase arguments context)
       (char-upcase (expect-character (car arguments) "char-upcase")))
+
+    (define (primitive-char-downcase arguments context)
+      (char-downcase (expect-character (car arguments) "char-downcase")))
+
+    (define (primitive-char-foldcase arguments context)
+      (char-foldcase (expect-character (car arguments) "char-foldcase")))
+
+    (define (primitive-char-alphabetic? arguments context)
+      (char-alphabetic? (expect-character
+                         (car arguments)
+                         "char-alphabetic?")))
+
+    (define (primitive-char-numeric? arguments context)
+      (char-numeric? (expect-character (car arguments) "char-numeric?")))
+
+    (define (primitive-char-whitespace? arguments context)
+      (char-whitespace? (expect-character
+                         (car arguments)
+                         "char-whitespace?")))
+
+    (define (primitive-char-upper-case? arguments context)
+      (char-upper-case? (expect-character
+                         (car arguments)
+                         "char-upper-case?")))
+
+    (define (primitive-char-lower-case? arguments context)
+      (char-lower-case? (expect-character
+                         (car arguments)
+                         "char-lower-case?")))
+
+    (define (primitive-digit-value arguments context)
+      (let ((value (digit-value
+                    (expect-character (car arguments) "digit-value"))))
+        (if value
+            (agent-scheme-make-canonical-integer value)
+            #f)))
+
+    (define (primitive-char-ci-compare arguments predicate description)
+      (primitive-char-compare
+       arguments
+       (lambda (left right)
+         (predicate (char-foldcase left) (char-foldcase right)))
+       description))
+
+    (define (primitive-char-ci=? arguments context)
+      (primitive-char-ci-compare arguments char=? "char-ci=?"))
+
+    (define (primitive-char-ci<? arguments context)
+      (primitive-char-ci-compare arguments char<? "char-ci<?"))
+
+    (define (primitive-char-ci>? arguments context)
+      (primitive-char-ci-compare arguments char>? "char-ci>?"))
+
+    (define (primitive-char-ci<=? arguments context)
+      (primitive-char-ci-compare arguments char<=? "char-ci<=?"))
+
+    (define (primitive-char-ci>=? arguments context)
+      (primitive-char-ci-compare arguments char>=? "char-ci>=?"))
+
+    (define (primitive-string-upcase arguments context)
+      (string-upcase (expect-string (car arguments) "string-upcase")))
+
+    (define (primitive-string-downcase arguments context)
+      (string-downcase (expect-string (car arguments) "string-downcase")))
+
+    (define (primitive-string-foldcase arguments context)
+      (string-foldcase (expect-string (car arguments) "string-foldcase")))
+
+    (define (primitive-string-ci-compare arguments predicate description)
+      (primitive-string-compare
+       arguments
+       (lambda (left right)
+         (predicate (string-foldcase left) (string-foldcase right)))
+       description))
+
+    (define (primitive-string-ci=? arguments context)
+      (primitive-string-ci-compare arguments string=? "string-ci=?"))
+
+    (define (primitive-string-ci<? arguments context)
+      (primitive-string-ci-compare arguments string<? "string-ci<?"))
+
+    (define (primitive-string-ci>? arguments context)
+      (primitive-string-ci-compare arguments string>? "string-ci>?"))
+
+    (define (primitive-string-ci<=? arguments context)
+      (primitive-string-ci-compare arguments string<=? "string-ci<=?"))
+
+    (define (primitive-string-ci>=? arguments context)
+      (primitive-string-ci-compare arguments string>=? "string-ci>=?"))
 
     (define (display-string value)
       (agent-scheme-datum->external value 'write #t))
@@ -5417,6 +5901,28 @@
           agent-scheme-unspecified
           (write-to-output-port (car arguments) (second arguments) 'simple #f)))
 
+    (define (primitive-flush-output-port arguments context)
+      (if (not (null? arguments))
+          (expect-output-port (car arguments) "flush-output-port"))
+      agent-scheme-unspecified)
+
+    (define (primitive-read-error? arguments context)
+      #f)
+
+    (define (primitive-file-error? arguments context)
+      #f)
+
+    (define (primitive-features arguments context)
+      '(r7rs ratios exact-complex ieee-float agent-scheme))
+
+    (define (policy-denied description)
+      (eval-error
+       (string-append description " requires policy-gated host access")))
+
+    (define (policy-denied-primitive description)
+      (lambda (arguments context)
+        (policy-denied description)))
+
     (define (resolve-file-policy-path filename context description)
       (let ((path (path-join (context-include-directory context) filename)))
         (cond
@@ -5438,6 +5944,10 @@
               context
               "file-exists?")))
         (file-exists? path)))
+
+    (define (primitive-delete-file arguments context)
+      (expect-string (car arguments) "delete-file")
+      (policy-denied "delete-file"))
 
     (define (primitive-call-with-port arguments context)
       (drain-state
@@ -5763,6 +6273,56 @@
                          (append fixed-arguments tail-arguments)
                          context
                          #f)))
+
+    (define (apply-parameter/k parameter arguments context continuation)
+      (cond
+       ((null? arguments)
+        (continue continuation (parameter-value parameter)))
+       ((not (null? (cdr arguments)))
+        (eval-error
+         "parameter expected 0..1 arguments"
+         (length arguments)))
+       ((parameter-converter parameter)
+        (apply-procedure
+         (parameter-converter parameter)
+         (list (car arguments))
+         context
+         #t
+         (lambda (converted)
+           (set-parameter-value!
+            parameter
+            (single-value converted "parameter converter"))
+           (continue continuation agent-scheme-unspecified))))
+       (else
+        (set-parameter-value! parameter (car arguments))
+        (continue continuation agent-scheme-unspecified))))
+
+    (define (primitive-make-parameter arguments context)
+      (drain-state
+       (primitive-make-parameter/k
+        arguments context identity-continuation)
+       context))
+
+    (define (primitive-make-parameter/k arguments context continuation)
+      (let ((initial (car arguments))
+            (converter (if (null? (cdr arguments))
+                           #f
+                           (second arguments))))
+        (if converter
+            (begin
+              (expect-procedure converter "make-parameter converter")
+              (apply-procedure
+               converter
+               (list initial)
+               context
+               #t
+               (lambda (converted)
+                 (continue
+                  continuation
+                  (make-parameter
+                   (single-value converted "make-parameter converter")
+                   converter)))))
+            (continue continuation (make-parameter initial #f)))))
 
     (define (primitive-apply/k arguments context continuation)
       (let ((procedure (expect-procedure (car arguments) "apply procedure"))
@@ -6267,6 +6827,7 @@
     (define (primitive-procedure? arguments context)
       (or (agent-scheme-procedure? (car arguments))
           (agent-scheme-primitive-procedure? (car arguments))
+          (agent-scheme-parameter? (car arguments))
           (continuation? (car arguments))))
 
     (define (numeric-representation-eqv? left right)
@@ -6449,10 +7010,13 @@
        (list 'exact-integer? primitive-exact-integer? 1 1)
        (list 'exact? primitive-exact? 1 1)
        (list 'expt primitive-expt 2 2)
+       (list 'features primitive-features 0 0)
+       (list 'file-error? primitive-file-error? 1 1)
        (list 'floor primitive-floor 1 1)
        (list 'floor/ primitive-floor/ 2 2)
        (list 'floor-quotient primitive-floor-quotient 2 2)
        (list 'floor-remainder primitive-floor-remainder 2 2)
+       (list 'flush-output-port primitive-flush-output-port 0 1)
        (list 'gcd primitive-gcd 0 #f)
        (list 'get-output-bytevector primitive-get-output-bytevector 1 1)
        (list 'get-output-string primitive-get-output-string 1 1)
@@ -6467,6 +7031,7 @@
        (list 'list->vector primitive-list->vector 1 1)
        (list 'list? primitive-list? 1 1)
        (list 'make-bytevector primitive-make-bytevector 1 2)
+       (list 'make-parameter primitive-make-parameter 1 2)
        (list 'make-string primitive-make-string 1 2)
        (list 'make-vector primitive-make-vector 1 2)
        (list 'modulo primitive-modulo 2 2)
@@ -6494,6 +7059,7 @@
        (list 'read-bytevector primitive-read-bytevector 1 2)
        (list 'read-bytevector! primitive-read-bytevector! 1 4)
        (list 'read-char primitive-read-char 0 1)
+       (list 'read-error? primitive-read-error? 1 1)
        (list 'read-line primitive-read-line 0 1)
        (list 'read-string primitive-read-string 1 2)
        (list 'read-u8 primitive-read-u8 0 1)
@@ -6506,6 +7072,7 @@
        (list 'string->list primitive-string->list 1 3)
        (list 'string->number primitive-string->number 1 2)
        (list 'string->symbol primitive-string->symbol 1 1)
+       (list 'string->utf8 primitive-string->utf8 1 3)
        (list 'string->vector primitive-string->vector 1 3)
        (list 'string-append primitive-string-append 0 #f)
        (list 'string-copy primitive-string-copy 1 3)
@@ -6532,6 +7099,7 @@
        (list 'truncate-quotient primitive-truncate-quotient 2 2)
        (list 'truncate-remainder primitive-truncate-remainder 2 2)
        (list 'u8-ready? primitive-u8-ready? 0 1)
+       (list 'utf8->string primitive-utf8->string 1 3)
        (list 'vector primitive-vector 0 #f)
        (list 'vector->list primitive-vector->list 1 3)
        (list 'vector->string primitive-vector->string 1 3)
@@ -6744,6 +7312,16 @@
            "define target must be an identifier or function signature"
            form)))))
 
+    (define (expand-define-values-form form environment context)
+      (let ((parts (proper-list-elements form "define-values form")))
+        (if (not (= (length parts) 3))
+            (eval-error
+             "define-values requires formals and one expression"
+             form))
+        (list (car parts)
+              (second parts)
+              (expand-expression/fully (third parts) environment context))))
+
     (define (expand-core-combination expression environment context)
       (let* ((parts (proper-list-elements expression "expression"))
              (operator (car parts)))
@@ -6786,6 +7364,11 @@
                 (second parts)
                 (expand-expression/fully
                  (third parts) environment context)))
+         ((and (identifier-named? operator 'define-values)
+               (special-operator-active? operator environment))
+          (eval-error
+           "define-values is not valid in expression position"
+           parts))
          ((and (or (identifier-named? operator 'let-values)
                    (identifier-named? operator 'let*-values))
                (special-operator-active? operator environment))
@@ -6894,6 +7477,11 @@
                       (cons (expand-definition-form
                              form environment context)
                             expanded)))
+               ((and allow-definitions? (define-values-form? form))
+                (loop (cdr rest)
+                      (cons (expand-define-values-form
+                             form environment context)
+                            expanded)))
                ((and allow-definitions? (begin-form? form))
                 (loop (cdr rest)
                       (append
@@ -6982,6 +7570,8 @@
           (list 'procedure
                 (result-field 'kind 'primitive)
                 (result-field 'name (primitive-procedure-name value))))
+         ((agent-scheme-parameter? value)
+          (list 'procedure (result-field 'kind 'parameter)))
          ((agent-scheme-procedure? value)
           (list 'procedure (result-field 'kind 'compound)))
          ((continuation? value)
@@ -7127,6 +7717,8 @@
          ">"))
        ((environment-specifier? value)
         "#<environment>")
+       ((agent-scheme-parameter? value)
+        "#<procedure>")
        ((agent-scheme-procedure? value)
         "#<procedure>")
        ((agent-scheme-primitive-procedure? value)
