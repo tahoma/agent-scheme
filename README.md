@@ -37,4 +37,5 @@ This seed is intentionally small. Initial implementation modules and documentati
 - [Contributing](docs/contributing.md)
 - [Development setup](docs/development.md)
 - [Naming convention](docs/naming.md)
+- [GitHub issue taxonomy](docs/issue-taxonomy.md)
 - [Roadmap note](docs/roadmap.md)
