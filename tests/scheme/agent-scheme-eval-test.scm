@@ -48,6 +48,9 @@
     #f))
 
 (check-external 'literal-number "42" "42")
+(check 'literal-number-is-agent-owned
+       (number? (agent-scheme-eval-source "42"))
+       #f)
 (check-external 'literal-string "\"ok\"" "\"ok\"")
 (check-external 'quote-symbol "'alpha" "alpha")
 (check-external 'quote-list "'(1 2 3)" "(1 2 3)")
