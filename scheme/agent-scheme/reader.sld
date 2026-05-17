@@ -1439,17 +1439,22 @@
           name))
 
     (define (write-character-datum char)
-      (cond
-       ((char=? char (integer->char 7)) "#\\alarm")
-       ((char=? char (integer->char 8)) "#\\backspace")
-       ((char=? char (integer->char 127)) "#\\delete")
-       ((char=? char (integer->char 27)) "#\\escape")
-       ((char=? char #\newline) "#\\newline")
-       ((char=? char (integer->char 0)) "#\\null")
-       ((char=? char #\return) "#\\return")
-       ((char=? char #\space) "#\\space")
-       ((char=? char #\tab) "#\\tab")
-       (else (string-append "#\\" (string char)))))
+      (let ((code (char->integer char)))
+        (cond
+         ((char=? char (integer->char 7)) "#\\alarm")
+         ((char=? char (integer->char 8)) "#\\backspace")
+         ((char=? char (integer->char 127)) "#\\delete")
+         ((char=? char (integer->char 27)) "#\\escape")
+         ((char=? char #\newline) "#\\newline")
+         ((char=? char (integer->char 0)) "#\\null")
+         ((char=? char #\return) "#\\return")
+         ((char=? char #\space) "#\\space")
+         ((char=? char #\tab) "#\\tab")
+         ((or (< code 33) (= code 127))
+          (string-append
+           "#\\x"
+           (agent-scheme-integer->radix-string code 16)))
+         (else (string-append "#\\" (string char))))))
 
     (define (join strings separator)
       (cond
