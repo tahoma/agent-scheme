@@ -141,6 +141,30 @@
     ((do "step" x y)
      y)))
 
+(define-syntax parameterize
+  ;; Parameter binding lowers through `dynamic-wind' so captured continuations
+  ;; restore and re-enter parameter values through the same wind protocol.
+  (syntax-rules ()
+    ((parameterize () body1 body2 ...)
+     (begin body1 body2 ...))
+    ((parameterize ((param value) binding ...)
+       body1 body2 ...)
+     (let ((parameter param)
+           (active-value value))
+       (let ((swap-value #f))
+         (dynamic-wind
+          (lambda ()
+            (set! swap-value (parameter))
+            (parameter active-value)
+            (set! active-value swap-value))
+          (lambda ()
+            (parameterize (binding ...)
+              body1 body2 ...))
+          (lambda ()
+            (set! swap-value (parameter))
+            (parameter active-value)
+            (set! active-value swap-value))))))))
+
 (define-syntax cond-expand
   ;; Runtime feature checks are intentionally tiny during bootstrap: `r7rs' and
   ;; `(library (scheme base))' are known, while other features fall through.

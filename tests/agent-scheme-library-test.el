@@ -219,7 +219,20 @@
          ((x) x)
          ((x y) (+ x y)))
        1 2)")
-    "3")))
+    "3"))
+  (should
+   (equal
+    (agent-scheme-library-test--external
+     "(import (scheme base) (scheme case-lambda))
+      (list
+       ((case-lambda
+          ((x) x)
+          ((x y . rest) (list x y rest)))
+        1 2 3 4)
+       ((case-lambda
+          (all all))
+        'a 'b))")
+    "((1 2 (3 4)) (a b))")))
 
 (ert-deftest agent-scheme-library-test-standard-char-and-cxr-imports ()
   "Import `(scheme char)' and `(scheme cxr)' bindings."
@@ -228,8 +241,17 @@
     (agent-scheme-library-test--external
      "(import (scheme base) (scheme char) (scheme cxr))
       (list (char-upcase #\\a)
-            (cadr '(alpha beta gamma)))")
-    "(#\\A beta)")))
+            (char-downcase #\\Z)
+            (char-foldcase #\\A)
+            (char-alphabetic? #\\A)
+            (char-numeric? #\\9)
+            (char-whitespace? #\\space)
+            (digit-value #\\9)
+            (char-ci=? #\\A #\\a)
+            (string-upcase \"Az\")
+            (string-ci<? \"abc\" \"BCD\")
+            (cadddr '(a b c d e)))")
+    "(#\\A #\\z #\\a #t #t #t 9 #t \"AZ\" #t d)")))
 
 (ert-deftest agent-scheme-library-test-standard-lazy-import-memoizes ()
   "Import `(scheme lazy)' promises with memoizing force."
@@ -389,6 +411,41 @@
       (file-exists? \"fixtures/r7rs/conformance-cases.scm\")"
      agent-scheme-library-test--include-options)
     "#t")))
+
+(ert-deftest agent-scheme-library-test-standard-host-libraries-are-policy-gated ()
+  "Import host-effecting standard libraries while denying effects by default."
+  (should
+   (equal
+    (agent-scheme-library-test--external
+     "(import (scheme process-context) (scheme time) (scheme repl))
+      'ok")
+    "ok"))
+  (should-error
+   (agent-scheme-eval-source
+    "(import (scheme base) (scheme process-context))
+     (command-line)")
+   :type 'agent-scheme-eval-error)
+  (should-error
+   (agent-scheme-eval-source
+    "(import (scheme base) (scheme time))
+     (current-second)")
+   :type 'agent-scheme-eval-error)
+  (should-error
+   (agent-scheme-eval-source
+    "(import (scheme base) (scheme repl))
+     (interaction-environment)")
+   :type 'agent-scheme-eval-error))
+
+(ert-deftest agent-scheme-library-test-standard-r5rs-import ()
+  "Import the practical R5RS compatibility layer."
+  (should
+   (equal
+    (agent-scheme-library-test--external
+     "(import (scheme r5rs))
+      (list (+ 1 2)
+            (exact->inexact 3)
+            (inexact->exact 3.0))")
+    "(3 3.0 3)")))
 
 (ert-deftest agent-scheme-library-test-imported-values-are-immutable ()
   "Reject definitions and assignments that target imported values."

@@ -96,6 +96,10 @@
                   (memq 'call-with-values names)
                   (memq 'call/cc names)
                   (memq 'dynamic-wind names)
+                  (memq 'features names)
+                  (memq 'make-parameter names)
+                  (memq 'string->utf8 names)
+                  (memq 'utf8->string names)
                   (memq 'values names))
              #t
              #f)
@@ -196,6 +200,38 @@
                 "(call-with-values (lambda () (values 4 5))
                                    (lambda (a b) (- b a)))"
                 "1")
+
+(check-external 'define-values-top-level
+                "(define-values (root remainder)
+                   (exact-integer-sqrt 10))
+                 (define-values (head . tail)
+                   (values 'a 'b 'c))
+                 (define-values all
+                   (values 1 2 3))
+                 (list root remainder head tail all)"
+                "(3 1 a (b c) (1 2 3))")
+
+(check-external 'define-values-internal
+                "((lambda ()
+                    (define-values (left right)
+                      (values 'l 'r))
+                    (list left right)))"
+                "(l r)")
+
+(check-external 'base-features-parameters-and-utf8
+                "(let ((available (features))
+                       (setting (make-parameter 'outer)))
+                   (let ((bytes (string->utf8 \"agent\")))
+                     (list (pair? (memq 'r7rs available))
+                           (pair? (memq 'agent-scheme available))
+                           (setting)
+                           (parameterize ((setting 'inner))
+                             (setting))
+                           (setting)
+                           bytes
+                           (utf8->string bytes)
+                           (utf8->string bytes 1 4))))"
+                "(#t #t outer inner outer #u8(97 103 101 110 116) \"agent\" \"gen\")")
 
 (check-external 'call/cc-escape
                 "(call/cc (lambda (escape) (+ 1 (escape 42))))"
@@ -607,11 +643,42 @@
                   1 2)"
                 "3")
 
+(check-external 'standard-case-lambda-rest-import
+                "(import (scheme base) (scheme case-lambda))
+                 (list
+                  ((case-lambda
+                     ((x) x)
+                     ((x y . rest) (list x y rest)))
+                   1 2 3 4)
+                  ((case-lambda
+                     (all all))
+                   'a 'b))"
+                "((1 2 (3 4)) (a b))")
+
 (check-external 'standard-char-and-cxr-imports
                 "(import (scheme base) (scheme char) (scheme cxr))
                  (list (char-upcase #\\a)
-                       (cadr '(alpha beta gamma)))"
-                "(#\\A beta)")
+                       (char-downcase #\\Z)
+                       (char-foldcase #\\A)
+                       (char-alphabetic? #\\A)
+                       (char-numeric? #\\9)
+                       (char-whitespace? #\\space)
+                       (digit-value #\\9)
+                       (char-ci=? #\\A #\\a)
+                       (string-upcase \"Az\")
+                       (string-ci<? \"abc\" \"BCD\")
+                       (cadddr '(a b c d e)))"
+                "(#\\A #\\z #\\a #t #t #t 9 #t \"AZ\" #t d)")
+
+(check-external 'standard-inexact-transcendentals
+                "(import (scheme inexact))
+                 (list (sqrt 9)
+                       (sin 0)
+                       (cos 0)
+                       (tan 0)
+                       (exp 0)
+                       (log 1))"
+                "(3.0 0.0 1.0 0.0 1.0 0.0)")
 
 (check-external 'standard-lazy-import-memoizes
                 "(import (scheme base) (scheme lazy))
@@ -736,6 +803,38 @@
                           \"fixtures/r7rs/conformance-cases.scm\")"
                         include-policy-options
                         "#t")
+
+(check 'standard-host-libraries-import-and-default-deny
+       (and
+        (not
+         (raises?
+          (lambda ()
+            (agent-scheme-eval-source
+             "(import (scheme process-context) (scheme time) (scheme repl))
+              'ok"))))
+        (raises?
+         (lambda ()
+           (agent-scheme-eval-source
+            "(import (scheme base) (scheme process-context))
+             (command-line)")))
+        (raises?
+         (lambda ()
+           (agent-scheme-eval-source
+            "(import (scheme base) (scheme time))
+             (current-second)")))
+        (raises?
+         (lambda ()
+           (agent-scheme-eval-source
+            "(import (scheme base) (scheme repl))
+             (interaction-environment)"))))
+       #t)
+
+(check-external 'standard-r5rs-import
+                "(import (scheme r5rs))
+                 (list (+ 1 2)
+                       (exact->inexact 3)
+                       (inexact->exact 3.0))"
+                "(3 3.0 3)")
 
 (check 'imported-value-set-is-rejected
        (raises?
