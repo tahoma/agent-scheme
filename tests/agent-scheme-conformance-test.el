@@ -27,6 +27,7 @@
     multiple-values
     exceptions
     continuations
+    equivalence
     core-data-types
     numeric-tower
     standard-libraries)

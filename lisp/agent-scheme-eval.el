@@ -350,8 +350,18 @@ SEEN prevents infinite recursion over cyclic host structures."
         (agent-scheme-primitive-procedure-p value)
         (agent-scheme--continuation-p value)
         (agent-scheme-error-object-p value)
-        (agent-scheme--string-output-port-p value))
+        (agent-scheme--string-output-port-p value)
+        (agent-scheme-record-type-p value))
     1)
+   ((agent-scheme-record-p value)
+    (if (gethash value seen)
+        0
+      (puthash value t seen)
+      (let ((count 1))
+        (cl-loop for item across (agent-scheme-record-fields value)
+                 do (cl-incf count
+                             (agent-scheme--value-node-count item seen)))
+        count)))
    ((agent-scheme--multiple-values-p value)
     (1+ (cl-loop for item in (agent-scheme--multiple-values-values value)
                  sum (agent-scheme--value-node-count item seen))))
@@ -782,11 +792,196 @@ Return a cons cell (NAME . INITIALIZER-EXPRESSION)."
         (agent-scheme--eval-error
          "define target must be an identifier or function signature"))))))
 
+(defun agent-scheme--record-definition-form-p (form)
+  "Return non-nil if FORM is a supported define-record-type form."
+  (and (consp form)
+       (agent-scheme--symbol-named-p (car form) "define-record-type")))
+
+(defun agent-scheme--body-definition-form-p (form)
+  "Return non-nil if FORM is a body definition."
+  (or (agent-scheme--definition-form-p form)
+      (agent-scheme--record-definition-form-p form)))
+
+(defun agent-scheme--parse-record-definition (form)
+  "Parse a R7RS define-record-type FORM into a plist."
+  (let ((parts (agent-scheme--proper-list-elements
+                form "define-record-type form")))
+    (unless (>= (length parts) 4)
+      (agent-scheme--eval-error
+       "define-record-type requires name, constructor, predicate, and fields"))
+    (let* ((type-name (agent-scheme--expect-identifier-key
+                       (nth 1 parts) "record type name"))
+           (constructor-spec
+            (agent-scheme--proper-list-elements
+             (nth 2 parts) "record constructor"))
+           (constructor-name
+            (agent-scheme--expect-identifier-key
+             (car constructor-spec) "record constructor name"))
+           (constructor-fields
+            (mapcar (lambda (field)
+                      (agent-scheme--expect-identifier-key
+                       field "record constructor field"))
+                    (cdr constructor-spec)))
+           (predicate-name
+            (agent-scheme--expect-identifier-key
+             (nth 3 parts) "record predicate name"))
+           fields accessors mutators)
+      (dolist (field-spec (nthcdr 4 parts))
+        (let ((field-parts
+               (agent-scheme--proper-list-elements
+                field-spec "record field")))
+          (unless (or (= (length field-parts) 2)
+                      (= (length field-parts) 3))
+            (agent-scheme--eval-error
+             "record field requires name, accessor, and optional mutator"))
+          (let ((field-name (agent-scheme--expect-identifier-key
+                             (car field-parts) "record field name"))
+                (accessor-name (agent-scheme--expect-identifier-key
+                                (cadr field-parts) "record accessor name"))
+                (mutator-name
+                 (and (cddr field-parts)
+                      (agent-scheme--expect-identifier-key
+                       (caddr field-parts) "record mutator name"))))
+            (push field-name fields)
+            (push (cons accessor-name field-name) accessors)
+            (when mutator-name
+              (push (cons mutator-name field-name) mutators)))))
+      (setq fields (nreverse fields)
+            accessors (nreverse accessors)
+            mutators (nreverse mutators))
+      (agent-scheme--ensure-distinct-names fields "record fields")
+      (agent-scheme--ensure-distinct-names
+       (append (mapcar #'car accessors) (mapcar #'car mutators))
+       "record accessors and mutators")
+      (dolist (field constructor-fields)
+        (unless (member field fields)
+          (agent-scheme--eval-error
+           "record constructor references unknown field: %s" field)))
+      (list :type-name type-name
+            :constructor-name constructor-name
+            :constructor-fields constructor-fields
+            :predicate-name predicate-name
+            :fields fields
+            :accessors accessors
+            :mutators mutators))))
+
+(defun agent-scheme--record-definition-bound-names (form)
+  "Return names bound by define-record-type FORM."
+  (let ((spec (agent-scheme--parse-record-definition form)))
+    (append
+     (list (plist-get spec :type-name)
+           (plist-get spec :constructor-name)
+           (plist-get spec :predicate-name))
+     (mapcar #'car (plist-get spec :accessors))
+     (mapcar #'car (plist-get spec :mutators)))))
+
+(defun agent-scheme--record-field-index (record-type field)
+  "Return FIELD index in RECORD-TYPE."
+  (or (cl-position field (agent-scheme-record-type-fields record-type)
+                   :test #'equal)
+      (agent-scheme--eval-error
+       "record type does not contain field: %s" field)))
+
+(defun agent-scheme--expect-record-of-type (value record-type description)
+  "Return VALUE as a record of RECORD-TYPE or signal DESCRIPTION."
+  (unless (and (agent-scheme-record-p value)
+               (eq (agent-scheme-record-type value) record-type))
+    (agent-scheme--eval-error "%s expected record" description))
+  value)
+
+(defun agent-scheme--define-or-set-record-binding (environment name value)
+  "Define NAME as VALUE in ENVIRONMENT, or set an existing local cell."
+  (let ((cell (gethash name
+                       (agent-scheme--environment-bindings environment)
+                       agent-scheme--missing-cell)))
+    (if (not (eq cell agent-scheme--missing-cell))
+        (progn
+          (when (agent-scheme--current-environment-imported-p
+                 environment name)
+            (agent-scheme--eval-error
+             "cannot redefine imported binding: %s" name))
+          (setf (agent-scheme--cell-value cell) value))
+      (agent-scheme--environment-define environment name value))))
+
+(defun agent-scheme--eval-record-definition (form environment _context)
+  "Evaluate a define-record-type FORM in ENVIRONMENT."
+  (let* ((spec (agent-scheme--parse-record-definition form))
+         (type-name (plist-get spec :type-name))
+         (fields (plist-get spec :fields))
+         (record-type (agent-scheme--make-record-type type-name fields))
+         (constructor-fields (plist-get spec :constructor-fields))
+         (constructor
+          (agent-scheme--make-primitive-procedure
+           (plist-get spec :constructor-name)
+           (lambda (arguments _context)
+             (let ((values (make-vector (length fields)
+                                        agent-scheme-unspecified)))
+               (cl-loop for field in constructor-fields
+                        for argument in arguments
+                        do (aset values
+                                 (agent-scheme--record-field-index
+                                  record-type field)
+                                 argument))
+               (agent-scheme--make-record record-type values)))
+           (length constructor-fields)
+           (length constructor-fields)))
+         (predicate
+          (agent-scheme--make-primitive-procedure
+           (plist-get spec :predicate-name)
+           (lambda (arguments _context)
+             (agent-scheme--scheme-boolean
+              (and (agent-scheme-record-p (car arguments))
+                   (eq (agent-scheme-record-type (car arguments))
+                       record-type))))
+           1
+           1)))
+    (agent-scheme--define-or-set-record-binding
+     environment type-name record-type)
+    (agent-scheme--define-or-set-record-binding
+     environment (plist-get spec :constructor-name) constructor)
+    (agent-scheme--define-or-set-record-binding
+     environment (plist-get spec :predicate-name) predicate)
+    (dolist (accessor (plist-get spec :accessors))
+      (let* ((name (car accessor))
+             (field (cdr accessor))
+             (index (agent-scheme--record-field-index record-type field)))
+        (agent-scheme--define-or-set-record-binding
+         environment
+         name
+         (agent-scheme--make-primitive-procedure
+          name
+          (lambda (arguments _context)
+            (aref (agent-scheme-record-fields
+                   (agent-scheme--expect-record-of-type
+                    (car arguments) record-type name))
+                  index))
+          1
+          1))))
+    (dolist (mutator (plist-get spec :mutators))
+      (let* ((name (car mutator))
+             (field (cdr mutator))
+             (index (agent-scheme--record-field-index record-type field)))
+        (agent-scheme--define-or-set-record-binding
+         environment
+         name
+         (agent-scheme--make-primitive-procedure
+          name
+          (lambda (arguments _context)
+            (aset (agent-scheme-record-fields
+                   (agent-scheme--expect-record-of-type
+                    (car arguments) record-type name))
+                  index
+                  (cadr arguments))
+            agent-scheme-unspecified)
+          2
+          2))))
+    agent-scheme-unspecified))
+
 (defun agent-scheme--split-body (body)
   "Split BODY into leading definitions and remaining expressions."
   (let ((cursor body)
         definitions)
-    (while (and cursor (agent-scheme--definition-form-p (car cursor)))
+    (while (and cursor (agent-scheme--body-definition-form-p (car cursor)))
       (push (car cursor) definitions)
       (setq cursor (cdr cursor)))
     (unless cursor
@@ -808,27 +1003,48 @@ initializers are evaluated."
       (let ((body-environment (agent-scheme-make-empty-environment environment))
             parsed)
         (dolist (definition definitions)
-          (let ((parsed-definition
-                 (agent-scheme--parse-definition definition)))
-            (push parsed-definition parsed)
-            ;; Install all internal-definition names before any initializer is
-            ;; evaluated so mutually recursive bodies see allocated locations.
-            (unless (eq (gethash (car parsed-definition)
-                                  (agent-scheme--environment-bindings
-                                   body-environment)
-                                  agent-scheme--missing-cell)
-                        agent-scheme--missing-cell)
-              (agent-scheme--eval-error
-               "duplicate internal definition: %s"
-               (car parsed-definition)))
-            (agent-scheme--environment-define
-             body-environment (car parsed-definition) agent-scheme--undefined)))
+          (cond
+           ((agent-scheme--definition-form-p definition)
+            (let ((parsed-definition
+                   (agent-scheme--parse-definition definition)))
+              (push (cons 'define parsed-definition) parsed)
+              ;; Install all internal-definition names before any initializer is
+              ;; evaluated so mutually recursive bodies see allocated locations.
+              (unless (eq (gethash (car parsed-definition)
+                                    (agent-scheme--environment-bindings
+                                     body-environment)
+                                    agent-scheme--missing-cell)
+                          agent-scheme--missing-cell)
+                (agent-scheme--eval-error
+                 "duplicate internal definition: %s"
+                 (car parsed-definition)))
+              (agent-scheme--environment-define
+               body-environment (car parsed-definition)
+               agent-scheme--undefined)))
+           ((agent-scheme--record-definition-form-p definition)
+            (push (cons 'record definition) parsed)
+            (dolist (name (agent-scheme--record-definition-bound-names
+                           definition))
+              (unless (eq (gethash name
+                                    (agent-scheme--environment-bindings
+                                     body-environment)
+                                    agent-scheme--missing-cell)
+                          agent-scheme--missing-cell)
+                (agent-scheme--eval-error
+                 "duplicate internal definition: %s" name))
+              (agent-scheme--environment-define
+               body-environment name agent-scheme--undefined)))))
         (dolist (parsed-definition (nreverse parsed))
-          (agent-scheme--environment-set-cell
-           body-environment
-           (car parsed-definition)
-           (agent-scheme--eval-expression
-            (cdr parsed-definition) body-environment context nil)))
+          (pcase (car parsed-definition)
+            ('define
+             (agent-scheme--environment-set-cell
+              body-environment
+              (cadr parsed-definition)
+              (agent-scheme--eval-expression
+               (cddr parsed-definition) body-environment context nil)))
+            ('record
+             (agent-scheme--eval-record-definition
+              (cdr parsed-definition) body-environment context))))
         (cons body-environment expressions)))))
 
 (defun agent-scheme--eval-definition
@@ -2426,6 +2642,8 @@ Each spec has (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY)."
       key
       `(("display" ,#'agent-scheme--primitive-display 1 2)
         ("write" ,#'agent-scheme--primitive-write 1 2)
+        ("write-shared" ,#'agent-scheme--primitive-write-shared 1 2)
+        ("write-simple" ,#'agent-scheme--primitive-write-simple 1 2)
         ("open-output-string"
          ,#'agent-scheme--primitive-open-output-string 0 0)
         ("get-output-string"
@@ -3146,9 +3364,13 @@ When FOLD-CASE is non-nil, read as if the file began with
 	             (agent-scheme--special-operator-active-p operator environment))
 	        (agent-scheme--eval-letrec
                  parts environment context tailp t continuation))
-	       ((and (agent-scheme--symbol-named-p operator "define")
+       ((and (agent-scheme--symbol-named-p operator "define")
 	             (agent-scheme--special-operator-active-p operator environment))
 	        (agent-scheme--eval-error "define is not valid in expression position"))
+       ((and (agent-scheme--symbol-named-p operator "define-record-type")
+             (agent-scheme--special-operator-active-p operator environment))
+        (agent-scheme--eval-error
+         "define-record-type is not valid in expression position"))
        ((and (agent-scheme--symbol-named-p operator "define-syntax")
              (agent-scheme--special-operator-active-p operator environment))
         (agent-scheme--eval-error
@@ -3296,6 +3518,15 @@ top-level definition forms within the sequence."
                       nil)
                    (agent-scheme--eval-error
                     "define-syntax is only allowed before body expressions")))
+                ((agent-scheme--record-definition-form-p form)
+                 (if allow-definitions
+                     (after-form
+                      (agent-scheme--eval-record-definition
+                       form environment context)
+                      rest
+                      nil)
+                   (agent-scheme--eval-error
+                    "define-record-type is only allowed before body expressions")))
                 ((agent-scheme--definition-form-p form)
                  (if allow-definitions
                      (agent-scheme--eval-definition
@@ -4730,9 +4961,17 @@ the maximum endpoint for DESCRIPTION."
                (agent-scheme-symbol-p left))
            (agent-scheme--eqv-p left right))))
 
+(defun agent-scheme--equal-seen-p (left right seen)
+  "Return non-nil when LEFT and RIGHT were already compared in SEEN."
+  (memq right (gethash left seen)))
+
+(defun agent-scheme--equal-remember (left right seen)
+  "Remember that LEFT and RIGHT are being compared in SEEN."
+  (puthash left (cons right (gethash left seen)) seen))
+
 (defun agent-scheme--equal-p (left right seen)
   "Return non-nil if LEFT and RIGHT are equal?.
-SEEN tracks compound pairs already compared."
+SEEN tracks compound value identity pairs already compared."
   (cond
    ((agent-scheme--eqv-p left right) t)
    ((and (stringp left) (stringp right))
@@ -4742,21 +4981,23 @@ SEEN tracks compound pairs already compared."
     (equal (agent-scheme-bytevector-bytes left)
            (agent-scheme-bytevector-bytes right)))
    ((and (consp left) (consp right))
-    (let ((key (cons left right)))
-      (or (gethash key seen)
-          (progn
-            (puthash key t seen)
-            (and (agent-scheme--equal-p (car left) (car right) seen)
-                 (agent-scheme--equal-p (cdr left) (cdr right) seen))))))
+    (or (agent-scheme--equal-seen-p left right seen)
+        (progn
+          (agent-scheme--equal-remember left right seen)
+          (and (agent-scheme--equal-p (car left) (car right) seen)
+               (agent-scheme--equal-p (cdr left) (cdr right) seen)))))
    ((and (vectorp left) (vectorp right)
          (= (length left) (length right)))
-    (let ((index 0)
-          (ok t))
-      (while (and ok (< index (length left)))
-        (setq ok (agent-scheme--equal-p
-                  (aref left index) (aref right index) seen))
-        (cl-incf index))
-      ok))
+    (or (agent-scheme--equal-seen-p left right seen)
+        (progn
+          (agent-scheme--equal-remember left right seen)
+          (let ((index 0)
+                (ok t))
+            (while (and ok (< index (length left)))
+              (setq ok (agent-scheme--equal-p
+                        (aref left index) (aref right index) seen))
+              (cl-incf index))
+            ok))))
    (t nil)))
 
 (defun agent-scheme--primitive-eq? (arguments _context)
@@ -4773,7 +5014,7 @@ SEEN tracks compound pairs already compared."
   "Primitive equal? over ARGUMENTS."
   (agent-scheme--scheme-boolean
    (agent-scheme--equal-p
-    (car arguments) (cadr arguments) (make-hash-table :test #'equal))))
+    (car arguments) (cadr arguments) (make-hash-table :test #'eq))))
 
 (defun agent-scheme--list-member (object list predicate description)
   "Return member sublist for OBJECT in LIST using PREDICATE.
@@ -4806,7 +5047,7 @@ DESCRIPTION names the primitive for errors."
    (car arguments)
    (cadr arguments)
    (lambda (left right)
-     (agent-scheme--equal-p left right (make-hash-table :test #'equal)))
+     (agent-scheme--equal-p left right (make-hash-table :test #'eq)))
    "member"))
 
 (defun agent-scheme--alist-assoc (object alist predicate description)
@@ -4842,7 +5083,7 @@ DESCRIPTION names the primitive for errors."
    (car arguments)
    (cadr arguments)
    (lambda (left right)
-     (agent-scheme--equal-p left right (make-hash-table :test #'equal)))
+     (agent-scheme--equal-p left right (make-hash-table :test #'eq)))
    "assoc"))
 
 (defun agent-scheme--primitive-caar (arguments _context)
@@ -5079,12 +5320,7 @@ DESCRIPTION names the primitive for errors."
 
 (defun agent-scheme--display-string (value)
   "Return a focused display representation for VALUE."
-  (cond
-   ((stringp value) value)
-   ((agent-scheme-character-p value)
-    (char-to-string (agent-scheme-character-code value)))
-   (t
-    (agent-scheme-value->external value))))
+  (agent-scheme-datum->external value 'write t))
 
 (defun agent-scheme--expect-string-output-port (value description)
   "Return VALUE as a string output port for DESCRIPTION."
@@ -5092,13 +5328,13 @@ DESCRIPTION names the primitive for errors."
     (agent-scheme--eval-error "%s expected an output string port" description))
   value)
 
-(defun agent-scheme--write-to-output-port (value port displayp)
-  "Write VALUE to PORT using display mode when DISPLAYP is non-nil."
+(defun agent-scheme--write-to-output-port (value port mode displayp)
+  "Write VALUE to PORT using MODE and display rendering when DISPLAYP is non-nil."
   (setf (agent-scheme--string-output-port-contents port)
         (concat (agent-scheme--string-output-port-contents port)
                 (if displayp
                     (agent-scheme--display-string value)
-                  (agent-scheme-value->external value))))
+                  (agent-scheme-datum->external value mode))))
   agent-scheme-unspecified)
 
 (defun agent-scheme--primitive-open-output-string (_arguments _context)
@@ -5118,6 +5354,7 @@ DESCRIPTION names the primitive for errors."
        (car arguments)
        (agent-scheme--expect-string-output-port
         (cadr arguments) "display")
+       'write
        t)
     agent-scheme-unspecified))
 
@@ -5128,6 +5365,29 @@ DESCRIPTION names the primitive for errors."
        (car arguments)
        (agent-scheme--expect-string-output-port
         (cadr arguments) "write")
+       'write
+       nil)
+    agent-scheme-unspecified))
+
+(defun agent-scheme--primitive-write-shared (arguments _context)
+  "Primitive write-shared over ARGUMENTS."
+  (if (cdr arguments)
+      (agent-scheme--write-to-output-port
+       (car arguments)
+       (agent-scheme--expect-string-output-port
+        (cadr arguments) "write-shared")
+       'shared
+       nil)
+    agent-scheme-unspecified))
+
+(defun agent-scheme--primitive-write-simple (arguments _context)
+  "Primitive write-simple over ARGUMENTS."
+  (if (cdr arguments)
+      (agent-scheme--write-to-output-port
+       (car arguments)
+       (agent-scheme--expect-string-output-port
+        (cadr arguments) "write-simple")
+       'simple
        nil)
     agent-scheme-unspecified))
 
@@ -6500,6 +6760,19 @@ objects so result records can be rendered by `agent-scheme-datum->external'."
              (mapcar (lambda (irritant)
                        (agent-scheme--value->result-datum irritant seen))
                      (agent-scheme-error-object-irritants value)))))
+     ((agent-scheme-record-type-p value)
+      (list (agent-scheme--result-symbol "record-type")
+            (agent-scheme--result-field
+             "name"
+             (agent-scheme--syntax-symbol
+              (agent-scheme-record-type-name value)))))
+     ((agent-scheme-record-p value)
+      (list (agent-scheme--result-symbol "record")
+            (agent-scheme--result-field
+             "type"
+             (agent-scheme--syntax-symbol
+              (agent-scheme-record-type-name
+               (agent-scheme-record-type value))))))
      ((consp value)
       (if (gethash value seen)
           (list (agent-scheme--result-symbol "cycle"))

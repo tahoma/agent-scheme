@@ -96,17 +96,38 @@ KIND names the parsed shape, such as `integer', `decimal',
   "Scheme bytevector datum."
   bytes)
 
+(cl-defstruct (agent-scheme-record-type
+               (:constructor agent-scheme--make-record-type
+                             (name fields))
+               (:copier nil))
+  "Scheme record type descriptor datum."
+  name fields)
+
+(cl-defstruct (agent-scheme-record
+               (:constructor agent-scheme--make-record (type fields))
+               (:copier nil))
+  "Scheme record datum."
+  type fields)
+
+(cl-defstruct (agent-scheme--datum-label
+               (:constructor agent-scheme--make-datum-label (id))
+               (:copier nil))
+  "Placeholder for one R7RS datum label while reading."
+  id filled value)
+
 (cl-defstruct (agent-scheme--reader
                (:constructor agent-scheme--make-reader))
   "Mutable state for one reader pass.
 SOURCE is an immutable input snapshot, while POSITION, FOLD-CASE,
-and NODE-COUNT change as lexical directives, comments, and datums
-are consumed.  The remaining slots are per-run resource limits."
+NODE-COUNT, and DATUM-LABELS change as lexical directives,
+comments, and datums are consumed.  The remaining slots are
+per-run resource limits."
   source
   (position 0)
   length
   fold-case
   (node-count 0)
+  datum-labels
   maximum-depth
   maximum-list-length
   maximum-vector-length
@@ -157,6 +178,7 @@ are consumed.  The remaining slots are per-run resource limits."
     (agent-scheme--make-reader
      :source text
      :length (length text)
+     :datum-labels (make-hash-table :test #'equal)
      :maximum-depth
      (agent-scheme--option options :max-depth
                            agent-scheme-reader-maximum-depth)
@@ -1090,6 +1112,47 @@ Signal if the sequence exceeds MAXIMUM-LENGTH."
   "Return abbreviation NAME wrapping DATUM."
   (cons (agent-scheme--intern-symbol name) (cons datum nil)))
 
+(defun agent-scheme--read-datum-label (reader depth)
+  "Read an R7RS datum label or label reference from READER."
+  (agent-scheme--advance reader)
+  (let ((start (agent-scheme--reader-position reader)))
+    (while (let ((char (agent-scheme--peek reader)))
+             (and char (<= ?0 char ?9)))
+      (agent-scheme--advance reader))
+    (when (= start (agent-scheme--reader-position reader))
+      (agent-scheme--reader-error reader "datum label requires digits"))
+    (let* ((id (substring (agent-scheme--reader-source reader)
+                          start
+                          (agent-scheme--reader-position reader)))
+           (labels (agent-scheme--reader-datum-labels reader))
+           (marker (agent-scheme--peek reader)))
+      (cond
+       ((eq marker ?=)
+        (agent-scheme--advance reader)
+        (when (gethash id labels)
+          (agent-scheme--reader-error reader "duplicate datum label %s" id))
+        (let ((label (agent-scheme--make-datum-label id)))
+          (puthash id label labels)
+          (let ((datum (agent-scheme--read-datum reader depth)))
+            (when (eq datum label)
+              (agent-scheme--reader-error
+               reader
+               "datum label %s cannot reference itself directly"
+               id))
+            (setf (agent-scheme--datum-label-value label) datum
+                  (agent-scheme--datum-label-filled label) t)
+            datum)))
+       ((eq marker ?#)
+        (agent-scheme--advance reader)
+        (let ((label (gethash id labels)))
+          (unless label
+            (agent-scheme--reader-error
+             reader "undefined datum label %s" id))
+          label))
+       (t
+        (agent-scheme--reader-error
+         reader "datum label must end with = or #"))))))
+
 (defun agent-scheme--classify-token (reader token)
   "Classify TOKEN as a Scheme simple datum."
   (cond
@@ -1120,10 +1183,37 @@ Signal if the sequence exceeds MAXIMUM-LENGTH."
    ((and (agent-scheme--peek reader 1)
          (>= (agent-scheme--peek reader 1) ?0)
          (<= (agent-scheme--peek reader 1) ?9))
-    (agent-scheme--reader-error
-     reader "datum labels are not supported yet"))
+    (agent-scheme--read-datum-label reader depth))
    (t
     (agent-scheme--classify-token reader (agent-scheme--read-token reader)))))
+
+(defun agent-scheme--resolve-datum-labels (datum reader)
+  "Replace label placeholders inside DATUM with their resolved values."
+  (let ((seen (make-hash-table :test #'eq)))
+    (cl-labels
+        ((resolve (value)
+           (cond
+            ((agent-scheme--datum-label-p value)
+             (unless (agent-scheme--datum-label-filled value)
+               (agent-scheme--reader-error
+                reader
+                "undefined datum label %s"
+                (agent-scheme--datum-label-id value)))
+             (resolve (agent-scheme--datum-label-value value)))
+            ((consp value)
+             (unless (gethash value seen)
+               (puthash value t seen)
+               (setcar value (resolve (car value)))
+               (setcdr value (resolve (cdr value))))
+             value)
+            ((vectorp value)
+             (unless (gethash value seen)
+               (puthash value t seen)
+               (cl-loop for index from 0 below (length value)
+                        do (aset value index (resolve (aref value index)))))
+             value)
+            (t value))))
+      (resolve datum))))
 
 (defun agent-scheme--read-datum (reader depth)
   "Read one datum from READER at DEPTH."
@@ -1192,7 +1282,11 @@ SOURCE may be a string or buffer.  OPTIONS is a plist supporting
 `:max-total-nodes'.  The whole SOURCE must contain exactly one
 datum, apart from intertoken space and comments."
   (let ((reader (agent-scheme--new-reader source options)))
-    (let ((datum (agent-scheme--read-datum reader 0)))
+    (setf (agent-scheme--reader-datum-labels reader)
+          (make-hash-table :test #'equal))
+    (let ((datum (agent-scheme--resolve-datum-labels
+                  (agent-scheme--read-datum reader 0)
+                  reader)))
       (agent-scheme--skip-intertoken-space reader 0)
       (unless (agent-scheme--eof-p reader)
         (agent-scheme--reader-error reader "unexpected trailing input"))
@@ -1209,7 +1303,12 @@ SOURCE may be a string or buffer.  OPTIONS has the same shape as
         datums)
     (agent-scheme--skip-intertoken-space reader 0)
     (while (not (agent-scheme--eof-p reader))
-      (push (agent-scheme--read-datum reader 0) datums)
+      (setf (agent-scheme--reader-datum-labels reader)
+            (make-hash-table :test #'equal))
+      (push (agent-scheme--resolve-datum-labels
+             (agent-scheme--read-datum reader 0)
+             reader)
+            datums)
       (agent-scheme--skip-intertoken-space reader 0))
     (setq datums (nreverse datums))
     (dolist (datum datums)
@@ -1253,10 +1352,11 @@ SEEN prevents infinite recursion over host-created cycles."
     (agent-scheme--validate-note-node reader))
    ((consp datum)
     (unless (gethash datum seen)
-      (puthash datum t seen)
       (let ((cursor datum)
             (count 0))
-        (while (consp cursor)
+        (while (and (consp cursor)
+                    (not (gethash cursor seen)))
+          (puthash cursor t seen)
           (cl-incf count)
           (when (> count (agent-scheme--reader-maximum-list-length reader))
             (agent-scheme--limit-error
@@ -1266,7 +1366,7 @@ SEEN prevents infinite recursion over host-created cycles."
           (agent-scheme--validate-note-node reader)
           (agent-scheme--validate-datum (car cursor) reader (1+ depth) seen)
           (setq cursor (cdr cursor)))
-        (when cursor
+        (when (and cursor (not (gethash cursor seen)))
           (agent-scheme--validate-datum cursor reader (1+ depth) seen)))))
    ((vectorp datum)
     (unless (gethash datum seen)
@@ -1333,56 +1433,191 @@ failures."
       (format "#\\x%x" code))
      (t (concat "#\\" (string code))))))
 
-(defun agent-scheme--write-list (datum)
-  "Return external representation of list or pair DATUM."
-  (let ((parts nil)
-        (cursor datum))
-    (while (consp cursor)
-      (push (agent-scheme-datum->external (car cursor)) parts)
-      (setq cursor (cdr cursor)))
-    (concat
-     "("
-     (mapconcat #'identity (nreverse parts) " ")
-     (if cursor
-         (concat (if parts " . " ". ")
-                 (agent-scheme-datum->external cursor))
-       "")
-     ")")))
+(defun agent-scheme--writer-compound-p (datum)
+  "Return non-nil when DATUM can participate in datum-label graphs."
+  (or (consp datum) (vectorp datum)))
+
+(defun agent-scheme--writer-scan-graph (datum)
+  "Return graph metadata for DATUM as (COUNTS . CYCLIC)."
+  (let ((counts (make-hash-table :test #'eq))
+        (states (make-hash-table :test #'eq))
+        (cyclic (make-hash-table :test #'eq)))
+    (cl-labels
+        ((mark-cycle (target stack)
+           (let ((cursor stack)
+                 done)
+             (while (and cursor (not done))
+               (puthash (car cursor) t cyclic)
+               (setq done (eq (car cursor) target))
+               (setq cursor (cdr cursor)))))
+         (scan (value stack)
+           (when (agent-scheme--writer-compound-p value)
+             (puthash value (1+ (gethash value counts 0)) counts)
+             (pcase (gethash value states)
+               ('visiting
+                (mark-cycle value stack))
+               ('done nil)
+               (_
+                (puthash value 'visiting states)
+                (cond
+                 ((consp value)
+                  (scan (car value) (cons value stack))
+                  (scan (cdr value) (cons value stack)))
+                 ((vectorp value)
+                  (cl-loop for item across value
+                           do (scan item (cons value stack)))))
+                (puthash value 'done states))))))
+      (scan datum nil))
+    (cons counts cyclic)))
+
+(defun agent-scheme--writer-hash-nonempty-p (table)
+  "Return non-nil if hash TABLE contains at least one entry."
+  (let (found)
+    (maphash (lambda (_key _value) (setq found t)) table)
+    found))
+
+(defun agent-scheme--record-name->external (name)
+  "Return NAME as a record tag for writer output."
+  (cond
+   ((stringp name) name)
+   ((agent-scheme-symbol-p name) (agent-scheme-symbol-name name))
+   (t (format "%S" name))))
 
 ;;;###autoload
-(defun agent-scheme-datum->external (datum)
-  "Return a simple external representation for DATUM.
-This writer is for current implementation datums and intentionally
-does not yet implement shared or circular datum labels."
-  (cond
-   ((eq datum agent-scheme-true) "#t")
-   ((eq datum agent-scheme-false) "#f")
-   ((null datum) "()")
-   ((agent-scheme-symbol-p datum)
-    (agent-scheme--write-symbol-name (agent-scheme-symbol-name datum)))
-   ((agent-scheme-character-p datum)
-    (agent-scheme--write-character (agent-scheme-character-code datum)))
-   ((agent-scheme-number-p datum)
-    (agent-scheme--number->external datum))
-   ((stringp datum)
-    (concat "\"" (agent-scheme--escape-string datum) "\""))
-   ((agent-scheme-bytevector-p datum)
-    (concat
-     "#u8("
-     (mapconcat #'number-to-string
-                (append (agent-scheme-bytevector-bytes datum) nil)
-                " ")
-     ")"))
-   ((consp datum)
-    (agent-scheme--write-list datum))
-   ((vectorp datum)
-    (concat
-     "#("
-     (mapconcat #'agent-scheme-datum->external (append datum nil) " ")
-     ")"))
-   (t
-    (signal 'agent-scheme-reader-error
-            (list (format "cannot write unsupported datum %S" datum))))))
+(defun agent-scheme-datum->external (datum &optional mode displayp)
+  "Return an external representation for DATUM.
+MODE is `write' by default, `shared' for write-shared behavior,
+or `simple' for write-simple behavior.  When DISPLAYP is non-nil,
+strings, symbols, and characters use display rendering."
+  (let* ((writer-mode (or mode 'write))
+         (graph (agent-scheme--writer-scan-graph datum))
+         (counts (car graph))
+         (cyclic (cdr graph))
+         (labels (make-hash-table :test #'eq))
+         (emitted (make-hash-table :test #'eq))
+         (next-label 0))
+    (when (and (eq writer-mode 'simple)
+               (agent-scheme--writer-hash-nonempty-p cyclic))
+      (signal 'agent-scheme-reader-error
+              (list "write-simple cannot render circular datum")))
+    (cl-labels
+        ((label-needed-p
+          (value)
+          (and (agent-scheme--writer-compound-p value)
+               (pcase writer-mode
+                 ('shared (> (gethash value counts 0) 1))
+                 ('write (gethash value cyclic))
+                 (_ nil))))
+         (label-reference-ready-p
+          (value)
+          (and (label-needed-p value)
+               (gethash value labels)
+               (gethash value emitted)))
+         (label-for
+          (value)
+          (or (gethash value labels)
+              (let ((label next-label))
+                (setq next-label (1+ next-label))
+                (puthash value label labels)
+                label)))
+         (render
+          (value)
+          (if (label-needed-p value)
+              (let ((label (label-for value)))
+                (if (gethash value emitted)
+                    (format "#%d#" label)
+                  (puthash value t emitted)
+                  (concat (format "#%d=" label) (render-body value))))
+            (render-body value)))
+         (render-list
+          (value)
+          (let ((parts nil)
+                (cursor value)
+                (first t)
+                tail)
+            (while (and (consp cursor)
+                        (not (and (not first)
+                                  (label-reference-ready-p cursor))))
+              (push (render (car cursor)) parts)
+              (setq cursor (cdr cursor))
+              (setq first nil))
+            (setq parts (nreverse parts))
+            (when (and (consp cursor)
+                       (label-reference-ready-p cursor))
+              (setq tail (render cursor)
+                    cursor nil))
+            (concat
+             "("
+             (mapconcat #'identity parts " ")
+             (cond
+              (tail
+               (concat (if parts " . " ". ") tail))
+              (cursor
+               (concat (if parts " . " ". ") (render cursor)))
+              (t ""))
+             ")")))
+         (render-vector
+          (value)
+          (concat
+           "#("
+           (mapconcat #'render (append value nil) " ")
+           ")"))
+         (render-bytevector
+          (value)
+          (concat
+           "#u8("
+           (mapconcat #'number-to-string
+                      (append (agent-scheme-bytevector-bytes value) nil)
+                      " ")
+           ")"))
+         (render-record
+          (value)
+          (format "#<record %s>"
+                  (agent-scheme--record-name->external
+                   (agent-scheme-record-type-name
+                    (agent-scheme-record-type value)))))
+         (render-record-type
+          (value)
+          (format "#<record-type %s>"
+                  (agent-scheme--record-name->external
+                   (agent-scheme-record-type-name value))))
+         (render-body
+          (value)
+          (cond
+           ((eq value agent-scheme-true) "#t")
+           ((eq value agent-scheme-false) "#f")
+           ((null value) "()")
+           ((agent-scheme-symbol-p value)
+            (if displayp
+                (agent-scheme-symbol-name value)
+              (agent-scheme--write-symbol-name
+               (agent-scheme-symbol-name value))))
+           ((agent-scheme-character-p value)
+            (if displayp
+                (char-to-string (agent-scheme-character-code value))
+              (agent-scheme--write-character
+               (agent-scheme-character-code value))))
+           ((agent-scheme-number-p value)
+            (agent-scheme--number->external value))
+           ((stringp value)
+            (if displayp
+                value
+              (concat "\"" (agent-scheme--escape-string value) "\"")))
+           ((agent-scheme-bytevector-p value)
+            (render-bytevector value))
+           ((consp value)
+            (render-list value))
+           ((vectorp value)
+            (render-vector value))
+           ((agent-scheme-record-p value)
+            (render-record value))
+           ((agent-scheme-record-type-p value)
+            (render-record-type value))
+           (t
+            (signal 'agent-scheme-reader-error
+                    (list (format "cannot write unsupported datum %S"
+                                  value)))))))
+      (render datum))))
 
 (provide 'agent-scheme-reader)
 
