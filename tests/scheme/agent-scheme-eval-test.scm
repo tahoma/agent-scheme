@@ -259,6 +259,116 @@
                     (else 'missing)))"
                 "(ok base)")
 
+(check 'import-scheme-base-into-empty-environment
+       (agent-scheme-value->external
+        (agent-scheme-eval-source
+         "(import (scheme base))
+          (+ 1 2)"
+         (agent-scheme-make-empty-environment)))
+       "3")
+
+(check-external 'define-library-import-export
+                "(define-library (agent-scheme fixture math)
+                   (export answer)
+                   (import (scheme base))
+                   (begin
+                     (define answer 42)))
+                 (import (agent-scheme fixture math))
+                 answer"
+                "42")
+
+(check-external 'library-import-set-modifiers
+                "(define-library (agent-scheme fixture modifiers)
+                   (export add sub hidden)
+                   (import (scheme base))
+                   (begin
+                     (define (add x y) (+ x y))
+                     (define (sub x y) (- x y))
+                     (define hidden 99)))
+                 (import (only (agent-scheme fixture modifiers) add)
+                         (except
+                          (prefix (agent-scheme fixture modifiers) lib-)
+                          lib-hidden)
+                         (rename
+                          (agent-scheme fixture modifiers)
+                          (sub minus)))
+                 (list (add 1 2)
+                       (lib-add 3 4)
+                       (lib-sub 10 6)
+                       (minus 8 5))"
+                "(3 7 4 3)")
+
+(check-external 'library-export-rename
+                "(define-library (agent-scheme fixture export-rename)
+                   (export (rename internal external))
+                   (import (scheme base))
+                   (begin
+                     (define internal 42)))
+                 (import (agent-scheme fixture export-rename))
+                 external"
+                "42")
+
+(check-external 'emacs-capability-import-empty
+                "(import (emacs buffer))
+                 'ok"
+                "ok")
+
+(check 'conflicting-library-imports
+       (raises?
+        (lambda ()
+          (agent-scheme-eval-source
+           "(define-library (agent-scheme fixture left)
+              (export value)
+              (import (scheme base))
+              (begin (define value 'left)))
+            (define-library (agent-scheme fixture right)
+              (export value)
+              (import (scheme base))
+              (begin (define value 'right)))
+            (import (agent-scheme fixture left)
+                    (agent-scheme fixture right))
+            value")))
+       #t)
+
+(check-external 'exported-library-macro-keeps-scope
+                "(define-library (agent-scheme fixture syntax)
+                   (export choose)
+                   (import (scheme base))
+                   (begin
+                     (define default 'library)
+                     (define-syntax choose
+                       (syntax-rules ()
+                         ((choose) default)))))
+                 (import (scheme base)
+                         (agent-scheme fixture syntax))
+                 (let ((default 'program))
+                   (choose))"
+                "library")
+
+(check-external 'library-cond-expand-declaration
+                "(define-library (agent-scheme fixture conditional)
+                   (cond-expand
+                     ((library (scheme base))
+                      (export answer)
+                      (import (scheme base))
+                      (begin (define answer 42)))
+                     (else
+                      (export answer)
+                      (begin (define answer 'missing)))))
+                 (import (agent-scheme fixture conditional))
+                 answer"
+                "42")
+
+(check 'include-declarations-are-policy-gated
+       (raises?
+        (lambda ()
+          (agent-scheme-eval-source
+           "(define-library (agent-scheme fixture include)
+              (export answer)
+              (import (scheme base))
+              (include \"fixtures/r7rs/conformance-cases.scm\"))")))
+       #t)
+
 (check 'expand-source-exposes-expanded-forms
        (agent-scheme-value->external
         (agent-scheme-expand-source
