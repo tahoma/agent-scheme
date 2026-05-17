@@ -28,6 +28,7 @@
     exceptions
     continuations
     core-data-types
+    numeric-tower
     standard-libraries)
   "Required R7RS conformance fixture categories.")
 

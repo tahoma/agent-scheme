@@ -123,7 +123,16 @@
                        (square 5)
                        (boolean=? #t (not #f))
                        (string->symbol (symbol->string 'agent-scheme)))"
-                "(2.5 4 3 25 #t agent-scheme)")
+                "(5/2 4 3 25 #t agent-scheme)")
+
+(check-external 'numeric-tower-exact-rationals
+                "(list (/ 3 4 5)
+                       (+ 1/2 1/3)
+                       (numerator (/ 6 4))
+                       (denominator (/ 6 4))
+                       (number->string 42 16)
+                       (string->number \"2a\" 16))"
+                "(3/20 5/6 3 2 \"2a\" 42)")
 
 (check-external 'base-vector-and-bytevector-helpers
                 "(define v (vector 'a 'b 'c))

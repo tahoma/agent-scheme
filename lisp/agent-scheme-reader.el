@@ -478,6 +478,166 @@ DEPTH is used when reading a datum comment's discarded datum."
    ((and (>= char ?A) (<= char ?F)) (+ 10 (- char ?A)))
    (t nil)))
 
+(defun agent-scheme--integer-gcd (left right)
+  "Return the non-negative greatest common divisor of LEFT and RIGHT."
+  (setq left (abs left))
+  (setq right (abs right))
+  (while (not (zerop right))
+    (let ((next (% left right)))
+      (setq left right)
+      (setq right next)))
+  left)
+
+(defun agent-scheme--integer-power (base exponent)
+  "Return BASE raised to non-negative integer EXPONENT."
+  (let ((result 1)
+        (factor base)
+        (power exponent))
+    (while (> power 0)
+      (when (= (% power 2) 1)
+        (setq result (* result factor)))
+      (setq factor (* factor factor))
+      (setq power (/ power 2)))
+    result))
+
+(defun agent-scheme--normalize-rational-pair (numerator denominator)
+  "Return normalized rational pair for NUMERATOR and DENOMINATOR."
+  (when (zerop denominator)
+    (error "zero denominator"))
+  (when (< denominator 0)
+    (setq numerator (- numerator))
+    (setq denominator (- denominator)))
+  (let ((divisor (agent-scheme--integer-gcd numerator denominator)))
+    (cons (/ numerator divisor) (/ denominator divisor))))
+
+(defun agent-scheme--make-canonical-integer (value &optional exactness radix)
+  "Return a canonical integer number datum for VALUE."
+  (let ((exactness (or exactness 'exact))
+        (radix (or radix 10)))
+    (agent-scheme--make-number
+     (number-to-string value) exactness radix 'integer value)))
+
+(defun agent-scheme--make-canonical-decimal (value &optional lexeme)
+  "Return an inexact decimal number datum for VALUE."
+  (agent-scheme--make-number
+   (or lexeme (number-to-string value)) 'inexact 10 'decimal value))
+
+(defun agent-scheme--make-canonical-rational
+    (numerator denominator &optional exactness radix)
+  "Return a normalized rational or integer datum."
+  (let* ((pair (agent-scheme--normalize-rational-pair numerator denominator))
+         (numerator (car pair))
+         (denominator (cdr pair))
+         (exactness (or exactness 'exact))
+         (radix (or radix 10)))
+    (if (= denominator 1)
+        (agent-scheme--make-canonical-integer numerator exactness radix)
+      (agent-scheme--make-number
+       (format "%s/%s" numerator denominator)
+       exactness
+       radix
+       'rational
+       pair))))
+
+(defun agent-scheme--make-canonical-infnan (kind)
+  "Return an inexact infinity or NaN datum for KIND."
+  (agent-scheme--make-number
+   (pcase kind
+     ('+inf.0 "+inf.0")
+     ('-inf.0 "-inf.0")
+     ('+nan.0 "+nan.0")
+     (_ (error "unknown inexact special number: %S" kind)))
+   'inexact 10 'infnan kind))
+
+(defun agent-scheme--make-canonical-complex (real imaginary)
+  "Return a complex number datum from REAL and IMAGINARY number datums."
+  (let ((exactness (if (and (eq (agent-scheme-number-exactness real) 'exact)
+                            (eq (agent-scheme-number-exactness imaginary)
+                                'exact))
+                       'exact
+                     'inexact)))
+    (agent-scheme--make-number nil exactness 10 'complex (cons real imaginary))))
+
+(defun agent-scheme--number-zero-p (number)
+  "Return non-nil if NUMBER is numerically zero."
+  (and (agent-scheme-number-p number)
+       (pcase (agent-scheme-number-kind number)
+         ('integer (zerop (agent-scheme-number-value number)))
+         ('rational (zerop (car (agent-scheme-number-value number))))
+         ('decimal (zerop (agent-scheme-number-value number)))
+         ('complex
+          (and (agent-scheme--number-zero-p
+                (car (agent-scheme-number-value number)))
+               (agent-scheme--number-zero-p
+                (cdr (agent-scheme-number-value number)))))
+         (_ nil))))
+
+(defun agent-scheme--number-negative-p (number)
+  "Return non-nil if real NUMBER is negative."
+  (pcase (agent-scheme-number-kind number)
+    ('integer (< (agent-scheme-number-value number) 0))
+    ('rational (< (car (agent-scheme-number-value number)) 0))
+    ('decimal (< (agent-scheme-number-value number) 0))
+    ('infnan (eq (agent-scheme-number-value number) '-inf.0))
+    (_ nil)))
+
+(defun agent-scheme--number-abs (number)
+  "Return the absolute value of real NUMBER."
+  (pcase (agent-scheme-number-kind number)
+    ('integer
+     (agent-scheme--make-canonical-integer
+      (abs (agent-scheme-number-value number))
+      (agent-scheme-number-exactness number)
+      (agent-scheme-number-radix number)))
+    ('rational
+     (let ((value (agent-scheme-number-value number)))
+       (agent-scheme--make-canonical-rational
+        (abs (car value)) (cdr value)
+        (agent-scheme-number-exactness number)
+        (agent-scheme-number-radix number))))
+    ('decimal
+     (agent-scheme--make-canonical-decimal
+      (abs (agent-scheme-number-value number))))
+    ('infnan
+     (pcase (agent-scheme-number-value number)
+       ('-inf.0 (agent-scheme--make-canonical-infnan '+inf.0))
+       (_ number)))
+    (_ number)))
+
+(defun agent-scheme--number->external (number)
+  "Return canonical external representation for NUMBER."
+  (pcase (agent-scheme-number-kind number)
+    ('integer
+     (number-to-string (agent-scheme-number-value number)))
+    ('rational
+     (let ((value (agent-scheme-number-value number)))
+       (format "%s/%s" (car value) (cdr value))))
+    ('decimal
+     (let ((text (number-to-string (agent-scheme-number-value number))))
+       (if (string-match-p "\\`[+-]?[0-9]+\\'" text)
+           (concat text ".0")
+         text)))
+    ('infnan
+     (pcase (agent-scheme-number-value number)
+       ('+inf.0 "+inf.0")
+       ('-inf.0 "-inf.0")
+       ('+nan.0 "+nan.0")))
+    ('complex
+     (let* ((value (agent-scheme-number-value number))
+            (real (car value))
+            (imaginary (cdr value))
+            (negative (agent-scheme--number-negative-p imaginary))
+            (magnitude (agent-scheme--number-abs imaginary)))
+        (concat
+         (agent-scheme--number->external real)
+        (if negative "-" "+")
+         (agent-scheme--number->external magnitude)
+         "i")))
+    (_
+     (or (agent-scheme-number-lexeme number)
+         (error "cannot write unknown number kind: %S"
+                (agent-scheme-number-kind number))))))
+
 (defun agent-scheme--initial-char-p (char)
   "Return non-nil if CHAR can begin an ordinary identifier."
   (or (agent-scheme--ascii-letter-p char)
@@ -616,12 +776,139 @@ The return value is (BODY EXACTNESS RADIX), or nil."
    "\\`[+-]?\\(?:[0-9]+\\(?:\\.[0-9]*\\)?\\|\\.[0-9]+\\)\\(?:[eE][+-]?[0-9]+\\)?\\'"
    body))
 
-(defun agent-scheme--complex-token-p (body)
-  "Return non-nil if BODY is a supported complex number token spelling."
-  (or (member (downcase body) '("+i" "-i"))
-      (string-match-p
-       "\\`[+-]?\\(?:[0-9]+\\(?:/[0-9]+\\)?\\|[0-9]*\\.[0-9]+\\)\\(?:[+-]\\(?:[0-9]+\\(?:/[0-9]+\\)?\\|[0-9]*\\.[0-9]+\\)?i\\|@[-+]?[0-9]+\\(?:/[0-9]+\\)?\\)\\'"
-       body)))
+(defun agent-scheme--parse-exact-decimal (body)
+  "Return exact rational components for decimal BODY, or nil."
+  (when (string-match
+         "\\`\\([+-]?\\)\\([0-9]*\\)\\(?:\\.\\([0-9]*\\)\\)?\\(?:[eE]\\([+-]?[0-9]+\\)\\)?\\'"
+         body)
+    (let* ((sign (if (string= (match-string 1 body) "-") -1 1))
+           (whole (or (match-string 2 body) ""))
+           (fraction (or (match-string 3 body) ""))
+           (exponent-text (match-string 4 body))
+           (exponent (if exponent-text (string-to-number exponent-text) 0))
+           (digits (concat whole fraction)))
+      (when (and (> (length digits) 0)
+                 (string-match-p "[0-9]" digits))
+        (let* ((integer (or (agent-scheme--parse-unsigned-integer digits 10)
+                            0))
+               (scale (- exponent (length fraction))))
+          (if (>= scale 0)
+              (cons (* sign integer (agent-scheme--integer-power 10 scale)) 1)
+            (cons (* sign integer)
+                  (agent-scheme--integer-power 10 (- scale)))))))))
+
+(defun agent-scheme--parse-real-number-body
+    (reader token body exactness radix)
+  "Parse real numeric BODY using TOKEN, EXACTNESS, and RADIX."
+  (cond
+   ((member (downcase body) '("+inf.0" "-inf.0" "+nan.0" "-nan.0"))
+    (when (eq exactness 'exact)
+      (agent-scheme--reader-error
+       reader "infinite and NaN literals cannot be exact: %s" token))
+    (agent-scheme--make-canonical-infnan
+     (pcase (downcase body)
+       ("+inf.0" '+inf.0)
+       ("-inf.0" '-inf.0)
+       (_ '+nan.0))))
+   ((agent-scheme--parse-signed-integer body radix)
+    (let ((value (agent-scheme--parse-signed-integer body radix)))
+      (if (eq exactness 'inexact)
+          (agent-scheme--make-canonical-decimal (float value))
+        (agent-scheme--make-canonical-integer value 'exact radix))))
+   ((and (string-match-p "\\`[+-]?[[:xdigit:]]+/[[:xdigit:]]+\\'" body)
+         (let* ((parts (split-string body "/"))
+                (denominator
+                 (agent-scheme--parse-unsigned-integer (cadr parts) radix)))
+           (and denominator (not (= denominator 0))
+                (agent-scheme--parse-signed-integer (car parts) radix))))
+    (let* ((parts (split-string body "/"))
+           (numerator
+            (agent-scheme--parse-signed-integer (car parts) radix))
+           (denominator
+            (agent-scheme--parse-unsigned-integer (cadr parts) radix)))
+      (if (eq exactness 'inexact)
+          (agent-scheme--make-canonical-decimal
+           (/ (float numerator) denominator))
+        (agent-scheme--make-canonical-rational
+         numerator denominator 'exact radix))))
+   ((and (= radix 10) (agent-scheme--decimal-token-p body))
+    (if (eq exactness 'exact)
+        (let ((value (agent-scheme--parse-exact-decimal body)))
+          (agent-scheme--make-canonical-rational (car value) (cdr value)))
+      (agent-scheme--make-canonical-decimal (string-to-number body) body)))
+   ((string-match-p "\\`[+-]?[0-9A-Fa-f]+/[0-9A-Fa-f]+\\'" body)
+    (agent-scheme--reader-error reader "invalid rational number %s" token))
+   (t nil)))
+
+(defun agent-scheme--complex-split-index (body)
+  "Return the rectangular complex split index in BODY, or nil."
+  (let ((index 1)
+        split)
+    (while (< index (length body))
+      (let ((char (aref body index))
+            (previous (aref body (1- index))))
+        (when (and (memq char '(?+ ?-))
+                   (not (memq previous '(?e ?E))))
+          (setq split index)))
+      (cl-incf index))
+    split))
+
+(defun agent-scheme--parse-complex-number-body
+    (reader token body exactness radix)
+  "Parse complex numeric BODY using TOKEN, EXACTNESS, and RADIX."
+  (let ((lower (downcase body)))
+    (cond
+     ((and (= radix 10) (string-suffix-p "i" lower))
+      (let* ((rectangular (substring body 0 -1))
+             (split (agent-scheme--complex-split-index rectangular))
+             (real-body (if split (substring rectangular 0 split) "0"))
+             (imaginary-body
+              (if split
+                  (substring rectangular split)
+                rectangular)))
+        (when (string= imaginary-body "")
+          (setq imaginary-body nil))
+        (when (member imaginary-body '("+" "-"))
+          (setq imaginary-body
+                (concat imaginary-body "1")))
+        (when imaginary-body
+          (let ((real
+                 (agent-scheme--parse-real-number-body
+                  reader token real-body exactness radix))
+                (imaginary
+                 (agent-scheme--parse-real-number-body
+                  reader token imaginary-body exactness radix)))
+            (when (and real imaginary)
+              (agent-scheme--make-canonical-complex real imaginary))))))
+     ((and (= radix 10) (string-match-p "@" body))
+      (let* ((parts (split-string body "@"))
+             (magnitude
+              (and (= (length parts) 2)
+                   (agent-scheme--parse-real-number-body
+                    reader token (car parts) exactness radix)))
+             (angle
+              (and (= (length parts) 2)
+                   (agent-scheme--parse-real-number-body
+                    reader token (cadr parts) exactness radix))))
+        (when (and magnitude angle)
+          (let ((r (string-to-number
+                    (agent-scheme--number->external
+                     (if (eq (agent-scheme-number-kind magnitude) 'rational)
+                         (agent-scheme--make-canonical-decimal
+                          (/ (float (car (agent-scheme-number-value magnitude)))
+                             (cdr (agent-scheme-number-value magnitude))))
+                       magnitude))))
+                (theta (string-to-number
+                        (agent-scheme--number->external
+                         (if (eq (agent-scheme-number-kind angle) 'rational)
+                             (agent-scheme--make-canonical-decimal
+                              (/ (float (car (agent-scheme-number-value angle)))
+                                 (cdr (agent-scheme-number-value angle))))
+                           angle)))))
+            (agent-scheme--make-canonical-complex
+             (agent-scheme--make-canonical-decimal (* r (cos theta)))
+             (agent-scheme--make-canonical-decimal (* r (sin theta))))))))
+     (t nil))))
 
 (defun agent-scheme--parse-number-token (reader token)
   "Return number datum for TOKEN, or nil if TOKEN is not a number."
@@ -631,40 +918,10 @@ The return value is (BODY EXACTNESS RADIX), or nil."
          (radix (or (caddr prefix) 10))
          (lower-body (and body (downcase body))))
     (when (and prefix (> (length body) 0))
-      (cond
-       ((member lower-body '("+inf.0" "-inf.0" "+nan.0" "-nan.0"))
-        (agent-scheme--make-number token 'inexact radix 'infnan nil))
-       ((agent-scheme--parse-signed-integer body radix)
-        (agent-scheme--make-number
-         token
-         (or exactness 'exact)
-         radix
-         'integer
-         (agent-scheme--parse-signed-integer body radix)))
-       ((and (string-match-p "\\`[+-]?[[:xdigit:]]+/[[:xdigit:]]+\\'" body)
-             (let* ((parts (split-string body "/"))
-                    (denominator
-                     (agent-scheme--parse-unsigned-integer (cadr parts) radix)))
-               (and denominator (not (= denominator 0))
-                    (agent-scheme--parse-signed-integer (car parts) radix))))
-        (let* ((parts (split-string body "/"))
-               (numerator
-                (agent-scheme--parse-signed-integer (car parts) radix))
-               (denominator
-                (agent-scheme--parse-unsigned-integer (cadr parts) radix)))
-          (agent-scheme--make-number
-           token (or exactness 'exact) radix 'rational
-           (cons numerator denominator))))
-       ((and (= radix 10) (agent-scheme--decimal-token-p body))
-        (agent-scheme--make-number
-         token (or exactness 'inexact) radix 'decimal
-         (string-to-number body)))
-       ((and (= radix 10) (agent-scheme--complex-token-p lower-body))
-        (agent-scheme--make-number
-         token (or exactness 'exact) radix 'complex nil))
-       ((string-match-p "\\`[+-]?[0-9A-Fa-f]+/[0-9A-Fa-f]+\\'" body)
-        (agent-scheme--reader-error reader "invalid rational number %s" token))
-       (t nil)))))
+      (or (agent-scheme--parse-real-number-body
+           reader token body exactness radix)
+          (agent-scheme--parse-complex-number-body
+           reader token lower-body exactness radix)))))
 
 (defun agent-scheme--read-character (reader)
   "Read a character datum from READER after `#\\'."
@@ -1089,7 +1346,7 @@ does not yet implement shared or circular datum labels."
    ((agent-scheme-character-p datum)
     (agent-scheme--write-character (agent-scheme-character-code datum)))
    ((agent-scheme-number-p datum)
-    (agent-scheme-number-lexeme datum))
+    (agent-scheme--number->external datum))
    ((stringp datum)
     (concat "\"" (agent-scheme--escape-string datum) "\""))
    ((agent-scheme-bytevector-p datum)

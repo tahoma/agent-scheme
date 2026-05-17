@@ -28,7 +28,9 @@
           agent-scheme-primitive-procedure?)
   (import (scheme base)
           (scheme char)
+          (scheme complex)
           (scheme file)
+          (scheme inexact)
           (scheme read)
           (agent-scheme reader))
   (begin
@@ -1873,8 +1875,10 @@
     (define standard-library-keys
       '((scheme case-lambda)
         (scheme char)
+        (scheme complex)
         (scheme cxr)
         (scheme file)
+        (scheme inexact)
         (scheme lazy)
         (scheme write)))
 
@@ -2128,6 +2132,17 @@
          key
          (list (list 'char-upcase primitive-char-upcase 1 1))
          context))
+       ((equal? key '(scheme complex))
+        (register-primitive-library!
+         key
+         (list
+          (list 'angle primitive-angle 1 1)
+          (list 'imag-part primitive-imag-part 1 1)
+          (list 'magnitude primitive-magnitude 1 1)
+          (list 'make-polar primitive-make-polar 2 2)
+          (list 'make-rectangular primitive-make-rectangular 2 2)
+          (list 'real-part primitive-real-part 1 1))
+         context))
        ((equal? key '(scheme cxr))
         (register-subset-library!
          key
@@ -2138,6 +2153,14 @@
         (register-primitive-library!
          key
          (list (list 'file-exists? primitive-file-exists? 1 1))
+         context))
+       ((equal? key '(scheme inexact))
+        (register-primitive-library!
+         key
+         (list
+          (list 'finite? primitive-finite? 1 1)
+          (list 'infinite? primitive-infinite? 1 1)
+          (list 'nan? primitive-nan? 1 1))
          context))
        ((equal? key '(scheme lazy))
         (register-source-library!
@@ -3123,10 +3146,7 @@
     (define (scheme-divide left right)
       (if (zero? right)
           (eval-error "division by zero"))
-      (if (and (integer? left) (integer? right)
-               (zero? (remainder left right)))
-          (/ left right)
-          (inexact (/ left right))))
+      (/ left right))
 
     (define (primitive- arguments context)
       (if (= (length arguments) 1)
@@ -3238,6 +3258,80 @@
 
     (define (primitive-round arguments context)
       (round (car arguments)))
+
+    (define (primitive-gcd arguments context)
+      (apply gcd arguments))
+
+    (define (primitive-lcm arguments context)
+      (apply lcm arguments))
+
+    (define (primitive-numerator arguments context)
+      (numerator (car arguments)))
+
+    (define (primitive-denominator arguments context)
+      (denominator (car arguments)))
+
+    (define (primitive-exact arguments context)
+      (exact (car arguments)))
+
+    (define (primitive-inexact arguments context)
+      (inexact (car arguments)))
+
+    (define (primitive-expt arguments context)
+      (expt (car arguments) (second arguments)))
+
+    (define (primitive-exact-integer-sqrt arguments context)
+      (let-values (((root remainder)
+                    (exact-integer-sqrt (car arguments))))
+        (make-multiple-values (list root remainder))))
+
+    (define (primitive-floor/ arguments context)
+      (let ((left (exact-integer->host (car arguments) "floor/"))
+            (right (exact-integer->host (second arguments) "floor/")))
+        (if (zero? right)
+            (eval-error "floor/ division by zero"))
+        (make-multiple-values
+         (list (floor-quotient left right)
+               (floor-remainder left right)))))
+
+    (define (primitive-truncate/ arguments context)
+      (let ((left (exact-integer->host (car arguments) "truncate/"))
+            (right (exact-integer->host (second arguments) "truncate/")))
+        (if (zero? right)
+            (eval-error "truncate/ division by zero"))
+        (make-multiple-values
+         (list (truncate-quotient left right)
+               (truncate-remainder left right)))))
+
+    (define (primitive-rationalize arguments context)
+      (rationalize (car arguments) (second arguments)))
+
+    (define (primitive-finite? arguments context)
+      (finite? (car arguments)))
+
+    (define (primitive-infinite? arguments context)
+      (infinite? (car arguments)))
+
+    (define (primitive-nan? arguments context)
+      (nan? (car arguments)))
+
+    (define (primitive-make-rectangular arguments context)
+      (make-rectangular (car arguments) (second arguments)))
+
+    (define (primitive-make-polar arguments context)
+      (make-polar (car arguments) (second arguments)))
+
+    (define (primitive-real-part arguments context)
+      (real-part (car arguments)))
+
+    (define (primitive-imag-part arguments context)
+      (imag-part (car arguments)))
+
+    (define (primitive-magnitude arguments context)
+      (magnitude (car arguments)))
+
+    (define (primitive-angle arguments context)
+      (angle (car arguments)))
 
     (define (primitive-cons arguments context)
       (cons (car arguments) (second arguments)))
@@ -3395,13 +3489,23 @@
     (define (primitive-number->string arguments context)
       (if (not (number? (car arguments)))
           (eval-error "number->string expected a number"))
-      (number->string (car arguments)))
+      (if (null? (cdr arguments))
+          (number->string (car arguments))
+          (number->string (car arguments) (second arguments))))
 
     (define (primitive-string->number arguments context)
       (let ((source (expect-string (car arguments) "string->number")))
-        (guard (condition (else #f))
+        (guard (condition
+                (else
+                 (if (null? (cdr arguments))
+                     (string->number source)
+                     (string->number source (second arguments)))))
           (let ((datum (agent-scheme-read source)))
-            (if (number? datum) datum #f)))))
+            (if (number? datum)
+                datum
+                (if (null? (cdr arguments))
+                    (string->number source)
+                    (string->number source (second arguments))))))))
 
     (define (primitive-symbol? arguments context)
       (symbol? (car arguments)))
@@ -4235,14 +4339,22 @@
        (list 'error-object-irritants primitive-error-object-irritants 1 1)
        (list 'error-object-message primitive-error-object-message 1 1)
        (list 'error-object? primitive-error-object? 1 1)
+       (list 'denominator primitive-denominator 1 1)
+       (list 'exact primitive-exact 1 1)
+       (list 'exact-integer-sqrt primitive-exact-integer-sqrt 1 1)
        (list 'exact-integer? primitive-exact-integer? 1 1)
        (list 'exact? primitive-exact? 1 1)
+       (list 'expt primitive-expt 2 2)
        (list 'floor primitive-floor 1 1)
+       (list 'floor/ primitive-floor/ 2 2)
        (list 'floor-quotient primitive-floor-quotient 2 2)
        (list 'floor-remainder primitive-floor-remainder 2 2)
+       (list 'gcd primitive-gcd 0 #f)
+       (list 'inexact primitive-inexact 1 1)
        (list 'inexact? primitive-inexact? 1 1)
        (list 'integer->char primitive-integer->char 1 1)
        (list 'integer? primitive-integer? 1 1)
+       (list 'lcm primitive-lcm 0 #f)
        (list 'list->string primitive-list->string 1 1)
        (list 'list->vector primitive-list->vector 1 1)
        (list 'list? primitive-list? 1 1)
@@ -4251,14 +4363,16 @@
        (list 'make-vector primitive-make-vector 1 2)
        (list 'modulo primitive-modulo 2 2)
        (list 'null? primitive-null? 1 1)
-       (list 'number->string primitive-number->string 1 1)
+       (list 'number->string primitive-number->string 1 2)
        (list 'number? primitive-number? 1 1)
+       (list 'numerator primitive-numerator 1 1)
        (list 'pair? primitive-pair? 1 1)
        (list 'procedure? primitive-procedure? 1 1)
        (list 'quotient primitive-quotient 2 2)
        (list 'raise primitive-raise 1 1)
        (list 'raise-continuable primitive-raise-continuable 1 1)
        (list 'rational? primitive-rational? 1 1)
+       (list 'rationalize primitive-rationalize 2 2)
        (list 'real? primitive-real? 1 1)
        (list 'remainder primitive-remainder 2 2)
        (list 'round primitive-round 1 1)
@@ -4266,7 +4380,7 @@
        (list 'set-cdr! primitive-set-cdr! 2 2)
        (list 'string primitive-string 0 #f)
        (list 'string->list primitive-string->list 1 3)
-       (list 'string->number primitive-string->number 1 1)
+       (list 'string->number primitive-string->number 1 2)
        (list 'string->symbol primitive-string->symbol 1 1)
        (list 'string->vector primitive-string->vector 1 3)
        (list 'string-append primitive-string-append 0 #f)
@@ -4289,6 +4403,7 @@
        (list 'symbol=? primitive-symbol=? 2 #f)
        (list 'symbol? primitive-symbol? 1 1)
        (list 'truncate primitive-truncate 1 1)
+       (list 'truncate/ primitive-truncate/ 2 2)
        (list 'truncate-quotient primitive-truncate-quotient 2 2)
        (list 'truncate-remainder primitive-truncate-remainder 2 2)
        (list 'vector primitive-vector 0 #f)

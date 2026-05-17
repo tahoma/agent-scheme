@@ -78,6 +78,22 @@
   (should-error (agent-scheme-read "1/0")
                 :type 'agent-scheme-reader-error))
 
+(ert-deftest agent-scheme-reader-test-numeric-tower-literals ()
+  "Read normalized R7RS rational, exact decimal, and complex literals."
+  (let ((reduced (agent-scheme-read "6/10"))
+        (exact-decimal (agent-scheme-read "#e1.5"))
+        (inexact-rational (agent-scheme-read "#i3/2"))
+        (complex (agent-scheme-read "3/4-5/6i")))
+    (should (eq (agent-scheme-number-kind reduced) 'rational))
+    (should (equal (agent-scheme-number-value reduced) '(3 . 5)))
+    (should (equal (agent-scheme-datum->external reduced) "3/5"))
+    (should (eq (agent-scheme-number-exactness exact-decimal) 'exact))
+    (should (equal (agent-scheme-datum->external exact-decimal) "3/2"))
+    (should (eq (agent-scheme-number-exactness inexact-rational) 'inexact))
+    (should (equal (agent-scheme-datum->external inexact-rational) "1.5"))
+    (should (eq (agent-scheme-number-kind complex) 'complex))
+    (should (equal (agent-scheme-datum->external complex) "3/4-5/6i"))))
+
 (ert-deftest agent-scheme-reader-test-lists-vectors-bytevectors-and-abbreviations ()
   "Read compound datum forms."
   (should

@@ -34,7 +34,7 @@ marked `implemented`.
 | Exceptions | `with-exception-handler`, `guard`, `raise`, `raise-continuable`, `error` | `implemented` | `exceptions-guard-raise`, `exceptions-raise-continuable` | Error objects remain inspectable through `error-object?`, `error-object-message`, and `error-object-irritants`. |
 | Continuations | `call-with-current-continuation`, `call/cc`, `dynamic-wind` | `pending` | `continuations-escape`, `continuations-dynamic-wind-exit` | Escape continuations and dynamic-wind exit cleanup are implemented; re-entering a captured continuation after its host escape extent has returned remains pending. |
 | Core data types | Booleans, numbers, characters, strings, symbols, pairs, lists, vectors, bytevectors, procedures, ports, EOF objects | `pending` | `core-data-vector-ref`, `core-data-eof-object` | Data-type tests should cover predicates, constructors, accessors, mutation, and equality. |
-| Numeric tower | Exact and inexact integers, rationals, reals, complex numbers, arithmetic, comparison, conversions | `pending` | `primitive-procedure-call` | Complex support may move with `(scheme complex)`. |
+| Numeric tower | Exact and inexact integers, rationals, reals, complex numbers, arithmetic, comparison, conversions | `implemented` | `numeric-exact-rational-arithmetic`, `numeric-exactness-conversions`, `numeric-complex-rectangular-arithmetic`, `numeric-inexact-special-values` | Exact rationals reduce to canonical form; rectangular complex arithmetic and focused `(scheme inexact)` special-value predicates are fixture-covered. |
 | Equivalence | `eq?`, `eqv?`, `equal?` across standard datums | `pending` | `core-data-vector-ref` | Add exact edge cases as data representation stabilizes. |
 | Ports and I/O datums | Textual and binary ports, input/output procedures, reader and writer round trips | `pending` | `standard-library-write-display` | External host access is policy-gated separately. |
 
@@ -45,11 +45,11 @@ marked `implemented`.
 | `(scheme base)` | `pending` | `primitive-procedure-call`, `derived-let-expression`, `multiple-values-call-with-values` | Core syntax and procedures. |
 | `(scheme case-lambda)` | `pending` | `standard-library-case-lambda` | Focused fixed-arity `case-lambda` import is implemented; broader clause forms remain pending. |
 | `(scheme char)` | `pending` | `standard-library-char-upcase` | Focused `char-upcase` import is implemented; full character library coverage remains pending. |
-| `(scheme complex)` | `pending` | None yet | Add fixtures when numeric representation lands. |
+| `(scheme complex)` | `implemented` | `numeric-complex-rectangular-arithmetic` | `make-rectangular`, `make-polar`, `real-part`, `imag-part`, `magnitude`, and `angle` are available. |
 | `(scheme cxr)` | `pending` | `standard-library-cxr-cadr` | Focused composed accessor imports are implemented; full three- and four-level accessor coverage remains pending. |
 | `(scheme eval)` | `policy-gated` | None yet | Required semantics should be available only through explicit evaluation policy. |
 | `(scheme file)` | `policy-gated` | `standard-library-file-exists-policy` | Host file-system access must be audited and policy-gated. |
-| `(scheme inexact)` | `pending` | None yet | Inexact numeric operations. |
+| `(scheme inexact)` | `pending` | `numeric-inexact-special-values` | Focused `finite?`, `infinite?`, and `nan?` imports are implemented; transcendental procedures remain pending. |
 | `(scheme lazy)` | `pending` | `standard-library-lazy-force` | Focused promise imports with memoizing `delay` and `force` are implemented; broader lazy edge cases remain pending. |
 | `(scheme load)` | `policy-gated` | None yet | Loading host files requires policy checks. |
 | `(scheme process-context)` | `policy-gated` | None yet | Environment and command-line access require policy checks. |
@@ -69,11 +69,13 @@ ports, and host-effecting bindings remain separate follow-up work.
 Implemented primitive procedure bindings:
 
 - numeric and predicates: `*`, `+`, `-`, `/`, `<`, `<=`, `=`, `>`, `>=`, `abs`,
-  `ceiling`, `complex?`, `even?`, `exact-integer?`, `exact?`, `floor`,
-  `floor-quotient`, `floor-remainder`, `inexact?`, `integer?`, `max`, `min`,
-  `modulo`, `negative?`, `number->string`, `number?`, `odd?`, `positive?`,
-  `quotient`, `rational?`, `real?`, `remainder`, `round`, `square`, `truncate`,
-  `truncate-quotient`, `truncate-remainder`, `zero?`
+  `ceiling`, `complex?`, `denominator`, `even?`, `exact`,
+  `exact-integer-sqrt`, `exact-integer?`, `exact?`, `expt`, `floor`, `floor/`,
+  `floor-quotient`, `floor-remainder`, `gcd`, `inexact`, `inexact?`,
+  `integer?`, `lcm`, `max`, `min`, `modulo`, `negative?`, `number->string`,
+  `number?`, `numerator`, `odd?`, `positive?`, `quotient`, `rational?`,
+  `rationalize`, `real?`, `remainder`, `round`, `square`, `string->number`,
+  `truncate`, `truncate/`, `truncate-quotient`, `truncate-remainder`, `zero?`
 - pairs and lists: `append`, `assoc`, `assq`, `assv`, `caar`, `cadr`, `car`,
   `cdar`, `cddr`, `cdr`, `cons`, `length`, `list`, `list-copy`, `list-ref`,
   `list-set!`, `list-tail`, `list?`, `make-list`, `member`, `memq`, `memv`,
@@ -113,10 +115,10 @@ Pending pure bindings include records
 `force`, `make-promise`), dynamic parameters (`parameterize`), full
 re-enterable continuations after their original host escape extent returns,
 remaining numeric operations (`denominator`, `exact`,
-`exact-integer-sqrt`, `expt`, `gcd`, `inexact`, `lcm`, `numerator`,
-`number->string` radix support, `rationalize`, `string->number` radix support,
-`floor/`, `truncate/`), UTF-8 conversion (`string->utf8`, `utf8->string`), and
-feature/library forms (`features`, `include`, `include-ci`).
+remaining inexact transcendental operations (`exp`, `log`, `sin`, `cos`,
+`tan`, `asin`, `acos`, `atan`, `sqrt`), UTF-8 conversion (`string->utf8`,
+`utf8->string`), and feature/library forms (`features`, `include`,
+`include-ci`).
 
 Policy-gated base bindings are the ones that expose or manipulate host-managed
 ports or process-facing I/O: `binary-port?`, `call-with-port`, `char-ready?`,
