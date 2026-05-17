@@ -230,7 +230,7 @@ ACTUAL is the plist returned by `agent-scheme-conformance-evaluator'."
          (symbol-name (agent-scheme--conformance-field case 'id)))
         matrix)))))
 
-(ert-deftest agent-scheme-conformance-test-pending-cases-are-discoverable ()
+(ert-deftest agent-scheme-conformance-test-non-implemented-cases-are-discoverable ()
   "Confirm non-implemented cases are present without failing prematurely."
   (let ((not-yet-implemented
          (cl-remove-if
@@ -241,7 +241,7 @@ ACTUAL is the plist returned by `agent-scheme-conformance-evaluator'."
     (should
      (cl-some
       (lambda (case)
-        (eq (agent-scheme--conformance-field case 'status) 'pending))
+        (eq (agent-scheme--conformance-field case 'status) 'policy-gated))
       not-yet-implemented))))
 
 (ert-deftest agent-scheme-conformance-test-expectation-comparison ()

@@ -174,7 +174,7 @@
    :type 'agent-scheme-budget-error))
 
 (ert-deftest agent-scheme-eval-test-multiple-values-and-binding-forms ()
-  "Evaluate values, call-with-values, let-values, and let*-values."
+  "Evaluate values, call-with-values, define-values, and binding forms."
   (should
    (string-match-p
     (regexp-quote
@@ -197,7 +197,24 @@
               (let*-values (((a b) (values x y))
                             ((x y) (values a b)))
                 (list a b x y)))")
-          "(x y x y)")))
+          "(x y x y)"))
+  (should
+   (equal (agent-scheme-eval-test--external
+           "(define-values (root remainder)
+              (exact-integer-sqrt 17))
+            (define-values (head . tail)
+              (values 'a 'b 'c))
+            (define-values all
+              (values 8 13))
+            (list root remainder (cons head tail) all)")
+          "(4 1 (a b c) (8 13))"))
+  (should
+   (equal (agent-scheme-eval-test--external
+           "((lambda ()
+               (define-values (left right)
+                 (values 8 13))
+               (list left right)))")
+          "(8 13)")))
 
 (ert-deftest agent-scheme-eval-test-continuations-and-dynamic-wind ()
   "Evaluate re-enterable continuations and dynamic-wind transitions."

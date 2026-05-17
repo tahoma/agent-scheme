@@ -127,6 +127,30 @@
                   (string-append \"ag\" \"ent\"))")
           "(65 #\\B #\\k \"agent\")")))
 
+(ert-deftest agent-scheme-base-test-features-parameters-and-utf8 ()
+  "Evaluate base feature discovery, parameters, and UTF-8 conversion."
+  (should
+   (equal (agent-scheme-base-test--external
+           "(let ((available (features)))
+              (list (pair? (memq 'r7rs available))
+                    (pair? (memq 'agent-scheme available))))")
+          "(#t #t)"))
+  (should
+   (equal (agent-scheme-base-test--external
+           "(let ((setting (make-parameter 'outer)))
+              (list (setting)
+                    (parameterize ((setting 'inner))
+                      (setting))
+                    (setting)))")
+          "(outer inner outer)"))
+  (should
+   (equal (agent-scheme-base-test--external
+           "(let ((bytes (string->utf8 \"agent\")))
+              (list bytes
+                    (utf8->string bytes)
+                    (utf8->string bytes 1 4)))")
+          "(#u8(97 103 101 110 116) \"agent\" \"gen\")")))
+
 (ert-deftest agent-scheme-base-test-numeric-tower-exact-arithmetic ()
   "Evaluate exact rational arithmetic, integer division, and rounding."
   (should
@@ -193,6 +217,19 @@
                   (nan? +nan.0)
                   (= +nan.0 +nan.0))")
           "(#t #f #t #t #t #f)")))
+
+(ert-deftest agent-scheme-base-test-inexact-transcendentals ()
+  "Evaluate representative real-valued `(scheme inexact)' procedures."
+  (should
+   (equal (agent-scheme-base-test--external
+           "(import (scheme inexact))
+            (list (sqrt 9)
+                  (sin 0)
+                  (cos 0)
+                  (tan 0)
+                  (exp 0)
+                  (log 1))")
+          "(3.0 0.0 1.0 0.0 1.0 0.0)")))
 
 (ert-deftest agent-scheme-base-test-numeric-tower-polar-special-values ()
   "Evaluate polar complex operations with canonical inexact special values."
