@@ -48,9 +48,18 @@
 (check-external 'character-hex "#\\X03BB" "#\\λ")
 
 (check-external 'integer "42" "42")
+(check 'integer-is-agent-owned
+       (number? (agent-scheme-read "42"))
+       #f)
 (check-external 'hex-integer "#x2a" "42")
 (check-external 'rational "3/4" "3/4")
 (check-external 'decimal "1.5" "1.5")
+(check-external 'reduced-rational "6/10" "3/5")
+(check-external 'exact-decimal "#e1.5" "3/2")
+(check-external 'inexact-rational "#i3/2" "1.5")
+(check-external 'complex-rectangular "3/4-5/6i" "3/4-5/6i")
+(check-external 'infinity "+inf.0" "+inf.0")
+(check-external 'bare-i-symbol "i" "i")
 
 (check-external 'dotted-list "(alpha beta . gamma)" "(alpha beta . gamma)")
 (check-external 'quote "'alpha" "(quote alpha)")

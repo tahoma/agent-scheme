@@ -9,9 +9,26 @@
   (export agent-scheme-read
           agent-scheme-read-all
           agent-scheme-validate-datum
-          agent-scheme-datum->external)
+          agent-scheme-datum->external
+          agent-scheme-number?
+          agent-scheme-number-lexeme
+          agent-scheme-number-exactness
+          agent-scheme-number-radix
+          agent-scheme-number-kind
+          agent-scheme-number-value
+          agent-scheme-make-canonical-integer
+          agent-scheme-make-canonical-decimal
+          agent-scheme-make-canonical-rational
+          agent-scheme-make-canonical-infnan
+          agent-scheme-make-canonical-complex
+          agent-scheme-number-zero?
+          agent-scheme-number-negative?
+          agent-scheme-number-abs
+          agent-scheme-number->external
+          agent-scheme-integer->radix-string)
   (import (scheme base)
           (scheme char)
+          (scheme inexact)
           (scheme write))
   (begin
     ;; Per-run defaults match the Emacs Lisp host reader.  Callers can override
@@ -51,7 +68,33 @@
       (node-count validation-node-count set-validation-node-count!)
       (maximum-total-nodes validation-maximum-total-nodes))
 
+    (define-record-type <agent-scheme-number>
+      ;; Agent Scheme owns numeric syntax even in the portable implementation.
+      ;; Host numbers are used only as representation pieces inside this datum.
+      (make-agent-scheme-number lexeme exactness radix kind value)
+      agent-scheme-number?
+      (lexeme agent-scheme-number-lexeme)
+      (exactness agent-scheme-number-exactness)
+      (radix agent-scheme-number-radix)
+      (kind agent-scheme-number-kind)
+      (value agent-scheme-number-value))
+
     (define char-page (integer->char 12))
+
+    (define (agent-scheme-integer->radix-string integer radix)
+      (let ((digits "0123456789abcdef")
+            (negative? (< integer 0))
+            (value (abs integer)))
+        (let loop ((remaining value) (parts '()))
+          (if (zero? remaining)
+              (let ((body
+                     (if (null? parts)
+                         "0"
+                         (list->string parts))))
+                (if negative? (string-append "-" body) body))
+              (let* ((digit (modulo remaining radix))
+                     (next (quotient remaining radix)))
+                (loop next (cons (string-ref digits digit) parts)))))))
 
     (define (option-ref options key default)
       (let ((cell (assq key options)))
@@ -82,7 +125,9 @@
       (apply error
              (string-append
               "agent-scheme reader error at offset "
-              (number->string (reader-position reader))
+              (agent-scheme-integer->radix-string
+               (reader-position reader)
+               10)
               ": "
               message)
              irritants))
@@ -91,7 +136,9 @@
       (apply error
              (string-append
               "agent-scheme datum limit error at offset "
-              (number->string (reader-position reader))
+              (agent-scheme-integer->radix-string
+               (reader-position reader)
+               10)
               ": "
               message)
              irritants))
@@ -257,6 +304,526 @@
         (+ 10 (- (char->integer char) (char->integer #\A))))
        (else
         #f)))
+
+    (define (string-prefix? prefix text)
+      (let ((prefix-length (string-length prefix))
+            (text-length (string-length text)))
+        (and (<= prefix-length text-length)
+             (string=? prefix (substring text 0 prefix-length)))))
+
+    (define (string-suffix? suffix text)
+      (let ((suffix-length (string-length suffix))
+            (text-length (string-length text)))
+        (and (<= suffix-length text-length)
+             (string=?
+              suffix
+              (substring text (- text-length suffix-length) text-length)))))
+
+    (define (string-index text char start)
+      (let loop ((index start))
+        (cond
+         ((= index (string-length text)) #f)
+         ((char=? (string-ref text index) char) index)
+         (else (loop (+ index 1))))))
+
+    (define (split-on-char text char)
+      (let loop ((index 0) (start 0) (parts '()))
+        (cond
+         ((= index (string-length text))
+          (reverse
+           (cons (substring text start index) parts)))
+         ((char=? (string-ref text index) char)
+          (loop (+ index 1)
+                (+ index 1)
+                (cons (substring text start index) parts)))
+         (else
+          (loop (+ index 1) start parts)))))
+
+    (define (integer-gcd left right)
+      (let loop ((a (abs left)) (b (abs right)))
+        (if (zero? b) a (loop b (modulo a b)))))
+
+    (define (integer-power base exponent)
+      (let loop ((result 1) (factor base) (power exponent))
+        (cond
+         ((zero? power) result)
+         ((odd? power)
+          (loop (* result factor) (* factor factor) (quotient power 2)))
+         (else
+          (loop result (* factor factor) (quotient power 2))))))
+
+    (define (normalize-rational-pair numerator denominator)
+      (if (zero? denominator)
+          (error "zero denominator"))
+      (let* ((adjusted
+              (if (< denominator 0)
+                  (cons (- numerator) (- denominator))
+                  (cons numerator denominator)))
+             (divisor (integer-gcd (car adjusted) (cdr adjusted))))
+        (cons (quotient (car adjusted) divisor)
+              (quotient (cdr adjusted) divisor))))
+
+    (define (agent-scheme-make-canonical-integer value . rest)
+      (let ((exactness (if (null? rest) 'exact (car rest)))
+            (radix (if (or (null? rest) (null? (cdr rest)))
+                       10
+                       (cadr rest))))
+        (make-agent-scheme-number
+         (agent-scheme-integer->radix-string value 10)
+         exactness
+         radix
+         'integer
+         value)))
+
+    (define (agent-scheme-make-canonical-decimal value . maybe-lexeme)
+      (make-agent-scheme-number
+       (if (null? maybe-lexeme)
+           (number->string value)
+           (car maybe-lexeme))
+       'inexact
+       10
+       'decimal
+       value))
+
+    (define (agent-scheme-make-canonical-rational
+             numerator denominator . rest)
+      (let* ((pair (normalize-rational-pair numerator denominator))
+             (normalized-numerator (car pair))
+             (normalized-denominator (cdr pair))
+             (exactness (if (null? rest) 'exact (car rest)))
+             (radix (if (or (null? rest) (null? (cdr rest)))
+                        10
+                        (cadr rest))))
+        (if (= normalized-denominator 1)
+            (agent-scheme-make-canonical-integer
+             normalized-numerator
+             exactness
+             radix)
+            (make-agent-scheme-number
+             (string-append
+              (agent-scheme-integer->radix-string normalized-numerator 10)
+              "/"
+              (agent-scheme-integer->radix-string normalized-denominator 10))
+             exactness
+             radix
+             'rational
+             pair))))
+
+    (define (agent-scheme-make-canonical-infnan kind)
+      (make-agent-scheme-number
+       (cond
+        ((string=? kind "+inf.0") "+inf.0")
+        ((string=? kind "-inf.0") "-inf.0")
+        ((string=? kind "+nan.0") "+nan.0")
+        (else (error "unknown inexact special number" kind)))
+       'inexact
+       10
+       'infnan
+       kind))
+
+    (define (agent-scheme-make-canonical-complex real imaginary)
+      (let ((exactness
+             (if (and (eq? (agent-scheme-number-exactness real) 'exact)
+                      (eq? (agent-scheme-number-exactness imaginary)
+                           'exact))
+                 'exact
+                 'inexact)))
+        (make-agent-scheme-number
+         #f
+         exactness
+         10
+         'complex
+         (cons real imaginary))))
+
+    (define (agent-scheme-number-zero? number)
+      (and (agent-scheme-number? number)
+           (cond
+            ((eq? (agent-scheme-number-kind number) 'integer)
+             (zero? (agent-scheme-number-value number)))
+            ((eq? (agent-scheme-number-kind number) 'rational)
+             (zero? (car (agent-scheme-number-value number))))
+            ((eq? (agent-scheme-number-kind number) 'decimal)
+             (zero? (agent-scheme-number-value number)))
+            ((eq? (agent-scheme-number-kind number) 'complex)
+             (and (agent-scheme-number-zero?
+                   (car (agent-scheme-number-value number)))
+                  (agent-scheme-number-zero?
+                   (cdr (agent-scheme-number-value number)))))
+            (else #f))))
+
+    (define (agent-scheme-number-negative? number)
+      (cond
+       ((eq? (agent-scheme-number-kind number) 'integer)
+        (< (agent-scheme-number-value number) 0))
+       ((eq? (agent-scheme-number-kind number) 'rational)
+        (< (car (agent-scheme-number-value number)) 0))
+       ((eq? (agent-scheme-number-kind number) 'decimal)
+        (< (agent-scheme-number-value number) 0))
+       ((eq? (agent-scheme-number-kind number) 'infnan)
+        (string=? (agent-scheme-number-value number) "-inf.0"))
+       (else #f)))
+
+    (define (agent-scheme-number-abs number)
+      (cond
+       ((eq? (agent-scheme-number-kind number) 'integer)
+        (agent-scheme-make-canonical-integer
+         (abs (agent-scheme-number-value number))
+         (agent-scheme-number-exactness number)
+         (agent-scheme-number-radix number)))
+       ((eq? (agent-scheme-number-kind number) 'rational)
+        (let ((value (agent-scheme-number-value number)))
+          (agent-scheme-make-canonical-rational
+           (abs (car value))
+           (cdr value)
+           (agent-scheme-number-exactness number)
+           (agent-scheme-number-radix number))))
+       ((eq? (agent-scheme-number-kind number) 'decimal)
+        (agent-scheme-make-canonical-decimal
+         (abs (agent-scheme-number-value number))))
+       ((eq? (agent-scheme-number-kind number) 'infnan)
+        (if (string=? (agent-scheme-number-value number) "-inf.0")
+            (agent-scheme-make-canonical-infnan "+inf.0")
+            number))
+       (else number)))
+
+    (define (integer-decimal-text? text)
+      (let ((length (string-length text)))
+        (let ((start
+               (if (and (> length 0)
+                        (or (char=? (string-ref text 0) #\+)
+                            (char=? (string-ref text 0) #\-)))
+                   1
+                   0)))
+          (and (< start length)
+               (let loop ((index start))
+                 (or (= index length)
+                     (and (char>=? (string-ref text index) #\0)
+                          (char<=? (string-ref text index) #\9)
+                          (loop (+ index 1)))))))))
+
+    (define (agent-scheme-number->external number)
+      (cond
+       ((eq? (agent-scheme-number-kind number) 'integer)
+        (agent-scheme-integer->radix-string
+         (agent-scheme-number-value number)
+         10))
+       ((eq? (agent-scheme-number-kind number) 'rational)
+        (let ((value (agent-scheme-number-value number)))
+          (string-append
+           (agent-scheme-integer->radix-string (car value) 10)
+           "/"
+           (agent-scheme-integer->radix-string (cdr value) 10))))
+       ((eq? (agent-scheme-number-kind number) 'decimal)
+        (let ((text (number->string (agent-scheme-number-value number))))
+          (if (integer-decimal-text? text)
+              (string-append text ".0")
+              text)))
+       ((eq? (agent-scheme-number-kind number) 'infnan)
+        (cond
+         ((string=? (agent-scheme-number-value number) "+inf.0") "+inf.0")
+         ((string=? (agent-scheme-number-value number) "-inf.0") "-inf.0")
+         (else "+nan.0")))
+       ((eq? (agent-scheme-number-kind number) 'complex)
+        (let* ((value (agent-scheme-number-value number))
+               (real (car value))
+               (imaginary (cdr value))
+               (negative? (agent-scheme-number-negative? imaginary))
+               (magnitude (agent-scheme-number-abs imaginary)))
+          (string-append
+           (agent-scheme-number->external real)
+           (if negative? "-" "+")
+           (agent-scheme-number->external magnitude)
+           "i")))
+       (else
+        (or (agent-scheme-number-lexeme number)
+            (error "cannot write unknown number kind"
+                   (agent-scheme-number-kind number))))))
+
+    (define (parse-unsigned-integer digits radix)
+      (and (> (string-length digits) 0)
+           (let loop ((index 0) (value 0))
+             (if (= index (string-length digits))
+                 value
+                 (let ((digit (hex-digit-value (string-ref digits index))))
+                   (and digit
+                        (< digit radix)
+                        (loop (+ index 1) (+ (* value radix) digit))))))))
+
+    (define (parse-signed-integer body radix)
+      (let ((length (string-length body)))
+        (and (> length 0)
+             (let* ((first (string-ref body 0))
+                    (negative? (char=? first #\-))
+                    (signed? (or negative? (char=? first #\+)))
+                    (digits (if signed? (substring body 1 length) body))
+                    (value (parse-unsigned-integer digits radix)))
+               (and value (if negative? (- value) value))))))
+
+    (define (number-prefix reader token)
+      (let ((lower (string-foldcase token))
+            (length (string-length token)))
+        (let loop ((index 0)
+                   (exactness #f)
+                   (radix 10)
+                   (seen-exactness? #f)
+                   (seen-radix? #f)
+                   (valid? #f))
+          (if (and (<= (+ index 2) length)
+                   (char=? (string-ref lower index) #\#))
+              (let ((marker (string-ref lower (+ index 1))))
+                (cond
+                 ((or (char=? marker #\e) (char=? marker #\i))
+                  (if seen-exactness?
+                      (reader-error
+                       reader
+                       "duplicate exactness prefix in number"
+                       token))
+                  (loop (+ index 2)
+                        (if (char=? marker #\e) 'exact 'inexact)
+                        radix
+                        #t
+                        seen-radix?
+                        #t))
+                 ((or (char=? marker #\b)
+                      (char=? marker #\o)
+                      (char=? marker #\d)
+                      (char=? marker #\x))
+                  (if seen-radix?
+                      (reader-error
+                       reader
+                       "duplicate radix prefix in number"
+                       token))
+                  (loop (+ index 2)
+                        exactness
+                        (cond
+                         ((char=? marker #\b) 2)
+                         ((char=? marker #\o) 8)
+                         ((char=? marker #\d) 10)
+                         (else 16))
+                        seen-exactness?
+                        #t
+                        #t))
+                 (else #f)))
+              (and (or valid? (not (string-prefix? "#" token)))
+                   (list (substring token index length)
+                         exactness
+                         radix))))))
+
+    (define (decimal-digit? char)
+      (and (char>=? char #\0) (char<=? char #\9)))
+
+    (define (scan-decimal-digits text start)
+      (let loop ((index start) (digits '()))
+        (if (and (< index (string-length text))
+                 (decimal-digit? (string-ref text index)))
+            (loop (+ index 1) (cons (string-ref text index) digits))
+            (cons index (list->string (reverse digits))))))
+
+    (define (decimal-components body)
+      (let* ((length (string-length body))
+             (sign
+              (if (and (> length 0)
+                       (char=? (string-ref body 0) #\-))
+                  -1
+                  1))
+             (start
+              (if (and (> length 0)
+                       (or (char=? (string-ref body 0) #\+)
+                           (char=? (string-ref body 0) #\-)))
+                  1
+                  0))
+             (whole-scan (scan-decimal-digits body start))
+             (after-whole (car whole-scan))
+             (whole-text (cdr whole-scan))
+             (saw-dot?
+              (and (< after-whole length)
+                   (char=? (string-ref body after-whole) #\.)))
+             (fraction-scan
+              (if saw-dot?
+                  (scan-decimal-digits body (+ after-whole 1))
+                  (cons after-whole "")))
+             (after-fraction (car fraction-scan))
+             (fraction-text (cdr fraction-scan))
+             (saw-exponent?
+              (and (< after-fraction length)
+                   (or (char=? (string-ref body after-fraction) #\e)
+                       (char=? (string-ref body after-fraction) #\E))))
+             (exponent
+              (if saw-exponent?
+                  (parse-signed-integer
+                   (substring body (+ after-fraction 1) length)
+                   10)
+                  0))
+             (after-exponent (if saw-exponent? length after-fraction))
+             (digit-count
+              (+ (string-length whole-text)
+                 (string-length fraction-text))))
+        (and (= after-exponent length)
+             exponent
+             (> digit-count 0)
+             (or saw-dot? saw-exponent?)
+             (list sign whole-text fraction-text exponent))))
+
+    (define (parse-exact-decimal body)
+      (let ((components (decimal-components body)))
+        (and components
+             (let* ((sign (car components))
+                    (whole (cadr components))
+                    (fraction (car (cdr (cdr components))))
+                    (exponent (car (cdr (cdr (cdr components)))))
+                    (digits (string-append whole fraction))
+                    (integer (parse-unsigned-integer digits 10))
+                    (scale (- exponent (string-length fraction))))
+               (and integer
+                    (if (>= scale 0)
+                        (cons (* sign integer (integer-power 10 scale)) 1)
+                        (cons (* sign integer)
+                              (integer-power 10 (- scale)))))))))
+
+    (define (rational-pair->inexact pair)
+      (/ (inexact (car pair)) (inexact (cdr pair))))
+
+    (define (number->reader-float number)
+      (cond
+       ((eq? (agent-scheme-number-kind number) 'integer)
+        (inexact (agent-scheme-number-value number)))
+       ((eq? (agent-scheme-number-kind number) 'rational)
+        (rational-pair->inexact (agent-scheme-number-value number)))
+       ((eq? (agent-scheme-number-kind number) 'decimal)
+        (agent-scheme-number-value number))
+       (else 0.0)))
+
+    (define (parse-real-number-body reader token body exactness radix)
+      (let ((lower (string-foldcase body)))
+        (cond
+         ((or (string=? lower "+inf.0")
+              (string=? lower "-inf.0")
+              (string=? lower "+nan.0")
+              (string=? lower "-nan.0"))
+          (if (eq? exactness 'exact)
+              (reader-error
+               reader
+               "infinite and NaN literals cannot be exact"
+               token))
+          (agent-scheme-make-canonical-infnan
+           (cond
+            ((string=? lower "+inf.0") "+inf.0")
+            ((string=? lower "-inf.0") "-inf.0")
+            (else "+nan.0"))))
+         ((parse-signed-integer body radix)
+          => (lambda (value)
+               (if (eq? exactness 'inexact)
+                   (agent-scheme-make-canonical-decimal (inexact value))
+                   (agent-scheme-make-canonical-integer value 'exact radix))))
+         ((string-index body #\/ 0)
+          (let ((parts (split-on-char body #\/)))
+            (if (not (= (length parts) 2))
+                #f
+                (let ((numerator
+                       (parse-signed-integer (car parts) radix))
+                      (denominator
+                       (parse-unsigned-integer (cadr parts) radix)))
+                  (cond
+                   ((and numerator denominator (zero? denominator))
+                    (reader-error reader "invalid rational number" token))
+                   ((and numerator denominator)
+                    (if (eq? exactness 'inexact)
+                        (agent-scheme-make-canonical-decimal
+                         (rational-pair->inexact
+                          (cons numerator denominator)))
+                        (agent-scheme-make-canonical-rational
+                         numerator denominator 'exact radix)))
+                   (else #f))))))
+         ((and (= radix 10) (decimal-components body))
+          (let ((pair (parse-exact-decimal body)))
+            (if (eq? exactness 'exact)
+                (agent-scheme-make-canonical-rational
+                 (car pair)
+                 (cdr pair))
+                (agent-scheme-make-canonical-decimal
+                 (rational-pair->inexact pair)
+                 body))))
+         (else #f))))
+
+    (define (complex-split-index body)
+      (let loop ((index 1) (split #f))
+        (if (>= index (string-length body))
+            split
+            (let ((char (string-ref body index))
+                  (previous (string-ref body (- index 1))))
+              (loop (+ index 1)
+                    (if (and (or (char=? char #\+)
+                                 (char=? char #\-))
+                             (not (or (char=? previous #\e)
+                                      (char=? previous #\E))))
+                        index
+                        split))))))
+
+    (define (parse-complex-number-body reader token body exactness radix)
+      (let ((lower (string-foldcase body)))
+        (cond
+         ((and (= radix 10) (string-suffix? "i" lower))
+          (let* ((rectangular (substring body 0 (- (string-length body) 1)))
+                 (split (complex-split-index rectangular))
+                 (real-body
+                  (if split
+                      (substring rectangular 0 split)
+                      "0"))
+                 (imaginary-body
+                  (if split
+                      (substring rectangular split (string-length rectangular))
+                      rectangular))
+                 (adjusted-imaginary-body
+                  (cond
+                   ((string=? imaginary-body "") #f)
+                   ((or (string=? imaginary-body "+")
+                        (string=? imaginary-body "-"))
+                    (string-append imaginary-body "1"))
+                   (else imaginary-body))))
+            (and adjusted-imaginary-body
+                 (let ((real
+                        (parse-real-number-body
+                         reader token real-body exactness radix))
+                       (imaginary
+                        (parse-real-number-body
+                         reader token adjusted-imaginary-body
+                         exactness radix)))
+                   (and real
+                        imaginary
+                        (agent-scheme-make-canonical-complex
+                         real
+                         imaginary))))))
+         ((and (= radix 10) (string-index body #\@ 0))
+          (let ((parts (split-on-char body #\@)))
+            (and (= (length parts) 2)
+                 (let ((magnitude
+                        (parse-real-number-body
+                         reader token (car parts) exactness radix))
+                       (angle
+                        (parse-real-number-body
+                         reader token (cadr parts) exactness radix)))
+                   (and magnitude
+                        angle
+                        (let ((r (number->reader-float magnitude))
+                              (theta (number->reader-float angle)))
+                          (agent-scheme-make-canonical-complex
+                           (agent-scheme-make-canonical-decimal
+                            (* r (cos theta)))
+                           (agent-scheme-make-canonical-decimal
+                            (* r (sin theta))))))))))
+         (else #f))))
+
+    (define (parse-number-token reader token)
+      (let ((prefix (number-prefix reader token)))
+        (and prefix
+             (let ((body (car prefix))
+                   (exactness (cadr prefix))
+                   (radix (car (cdr (cdr prefix)))))
+               (and (> (string-length body) 0)
+                    (or (parse-real-number-body
+                         reader token body exactness radix)
+                        (parse-complex-number-body
+                         reader token body exactness radix)))))))
 
     (define (hex-scalar->char reader digits)
       (if (= (string-length digits) 0)
@@ -493,7 +1060,7 @@
       (cond
        ((or (string=? token "#t") (string=? token "#true")) #t)
        ((or (string=? token "#f") (string=? token "#false")) #f)
-       ((string->number token) => (lambda (number) number))
+       ((parse-number-token reader token) => (lambda (number) number))
        ((identifier-token? token)
         (string->symbol
          (if (reader-fold-case reader)
@@ -581,11 +1148,17 @@
                              maximum-length))
             (loop (cons datum items) next-count))))))
 
+    (define (exact-integer-value datum)
+      (and (agent-scheme-number? datum)
+           (eq? (agent-scheme-number-kind datum) 'integer)
+           (eq? (agent-scheme-number-exactness datum) 'exact)
+           (agent-scheme-number-value datum)))
+
     (define (exact-byte? datum)
-      (and (integer? datum)
-           (exact? datum)
-           (<= 0 datum)
-           (<= datum 255)))
+      (let ((value (exact-integer-value datum)))
+        (and value
+             (<= 0 value)
+             (<= value 255))))
 
     (define (list->bytevector bytes)
       (let* ((length (length bytes))
@@ -622,7 +1195,7 @@
             (note-node! reader)
             (list->bytevector (reverse bytes)))
            ((exact-byte? (car rest))
-            (loop (cdr rest) (cons (car rest) bytes)))
+            (loop (cdr rest) (cons (exact-integer-value (car rest)) bytes)))
            (else
             (reader-error reader
                           "bytevector element is not an exact byte"
@@ -745,7 +1318,7 @@
        ((or (boolean? datum)
             (symbol? datum)
             (char? datum)
-            (number? datum))
+            (agent-scheme-number? datum))
         (validation-note-node! validation))
        ((string? datum)
         (if (> (string-length datum)
@@ -765,7 +1338,8 @@
         (let loop ((index 0))
           (if (< index (bytevector-length datum))
               (begin
-                (if (not (exact-byte? (bytevector-u8-ref datum index)))
+                (if (not (let ((byte (bytevector-u8-ref datum index)))
+                           (and (integer? byte) (<= 0 byte) (<= byte 255))))
                     (error "agent-scheme reader error: bytevector contains invalid byte"
                            (bytevector-u8-ref datum index)))
                 (loop (+ index 1)))))
@@ -857,7 +1431,7 @@
 
     (define (symbol-needs-bars? name)
       (or (not (identifier-token? name))
-          (string->number name)))
+          (parse-number-token (reader-from-source "" '()) name)))
 
     (define (write-symbol-name name)
       (if (symbol-needs-bars? name)
@@ -910,7 +1484,9 @@
         (if (= index (bytevector-length bytevector))
             (reverse parts)
             (loop (+ index 1)
-                  (cons (number->string (bytevector-u8-ref bytevector index))
+                  (cons (agent-scheme-integer->radix-string
+                         (bytevector-u8-ref bytevector index)
+                         10)
                         parts)))))
 
     (define (vector->strings vector)
@@ -930,7 +1506,7 @@
        ((null? datum) "()")
        ((symbol? datum) (write-symbol-name (symbol->string datum)))
        ((char? datum) (write-character-datum datum))
-       ((number? datum) (number->string datum))
+       ((agent-scheme-number? datum) (agent-scheme-number->external datum))
        ((string? datum)
         (string-append "\"" (escape-string datum) "\""))
        ((bytevector? datum)
