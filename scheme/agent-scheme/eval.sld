@@ -20,6 +20,7 @@
           agent-scheme-procedure?
           agent-scheme-primitive-procedure?)
   (import (scheme base)
+          (scheme char)
           (scheme file)
           (scheme read)
           (agent-scheme reader))
@@ -93,6 +94,12 @@
       (minimum-arity primitive-procedure-minimum-arity)
       (maximum-arity primitive-procedure-maximum-arity))
 
+    (define-record-type <string-output-port>
+      (make-string-output-port contents)
+      string-output-port?
+      (contents string-output-port-contents
+                set-string-output-port-contents!))
+
     (define-record-type <sequence>
       (make-sequence forms allow-definitions)
       sequence?
@@ -110,8 +117,8 @@
       (make-eval-context steps maximum-steps
                          maximum-value-nodes host-callbacks
                          maximum-host-callbacks syntax-environment libraries
-                         include-paths include-directory base-syntax-installed
-                         next-syntax-id)
+                         include-paths include-directory file-paths
+                         base-syntax-installed next-syntax-id)
       eval-context?
       (steps context-steps set-context-steps!)
       (maximum-steps context-maximum-steps)
@@ -124,6 +131,7 @@
       (include-paths context-include-paths)
       (include-directory context-include-directory
                          set-context-include-directory!)
+      (file-paths context-file-paths)
       (base-syntax-installed context-base-syntax-installed
                              set-context-base-syntax-installed!)
       (next-syntax-id context-next-syntax-id set-context-next-syntax-id!))
@@ -235,6 +243,9 @@
         (option-ref options 'include-paths '())
         include-directory)
        include-directory
+       (normalize-include-paths
+        (option-ref options 'file-paths '())
+        include-directory)
        #f
        0)))
 
@@ -263,7 +274,8 @@
             (number? value)
             (agent-scheme-unspecified? value)
             (agent-scheme-procedure? value)
-            (agent-scheme-primitive-procedure? value))
+            (agent-scheme-primitive-procedure? value)
+            (string-output-port? value))
         1)
        ((string? value)
         (+ 1 (string-length value)))
@@ -1633,6 +1645,61 @@
         (emacs project)
         (emacs window)))
 
+    (define standard-library-keys
+      '((scheme case-lambda)
+        (scheme char)
+        (scheme cxr)
+        (scheme file)
+        (scheme lazy)
+        (scheme write)))
+
+    (define case-lambda-library-source
+      "(define-library (scheme case-lambda)
+         (export case-lambda)
+         (import (scheme base))
+         (begin
+           (define-syntax case-lambda
+             (syntax-rules ()
+               ((case-lambda)
+                (lambda args (car '())))
+               ((case-lambda ((param ...) body ...) more ...)
+                (lambda args
+                  (if (= (length args) (length '(param ...)))
+                      (apply (lambda (param ...) body ...) args)
+                      (apply (case-lambda more ...) args))))))))")
+
+    (define lazy-library-source
+      "(define-library (scheme lazy)
+         (export delay delay-force force make-promise promise?)
+         (import (scheme base))
+         (begin
+           (define (%promise lazy? value)
+             (list 'agent-scheme-promise lazy? value))
+           (define (promise? obj)
+             (and (pair? obj)
+                  (eq? (car obj) 'agent-scheme-promise)))
+           (define (make-promise obj)
+             (if (promise? obj)
+                 obj
+                 (%promise #t obj)))
+           (define (force promise)
+             (if (promise? promise)
+                 (if (cadr promise)
+                     (car (cdr (cdr promise)))
+                     (let ((value ((car (cdr (cdr promise))))))
+                       (set-car! (cdr promise) #t)
+                       (set-car! (cdr (cdr promise)) value)
+                       value))
+                 promise))
+           (define-syntax delay-force
+             (syntax-rules ()
+               ((delay-force expression)
+                (%promise #f (lambda () expression)))))
+           (define-syntax delay
+             (syntax-rules ()
+               ((delay expression)
+                (delay-force expression))))))")
+
     (define (proper-library-name? datum)
       (and (pair? datum)
            (let ((parts (proper-list-elements/maybe datum)))
@@ -1761,9 +1828,113 @@
              key
              (make-library key key '() value-environment syntax-environment)))))
 
+    (define (register-source-library! source context environment)
+      (eval-define-library
+       (agent-scheme-read source)
+       environment
+       context))
+
+    (define (find-library-export name exports)
+      (cond
+       ((null? exports) #f)
+       ((eq? name (library-binding-name (car exports))) (car exports))
+       (else (find-library-export name (cdr exports)))))
+
+    (define (register-subset-library! key export-names context environment)
+      (if (not (library-registry-ref context key))
+          (let* ((base-library
+                  (resolve-library scheme-base-library-key
+                                   context
+                                   environment))
+                 (base-exports (library-exports base-library))
+                 (exports
+                  (map
+                   (lambda (name)
+                     (or (find-library-export name base-exports)
+                         (eval-error
+                          "standard library binding is not available"
+                          name)))
+                   export-names)))
+            (library-registry-set!
+             context
+             key
+             (make-library
+              key
+              key
+              exports
+              (library-value-environment base-library)
+              (library-syntax-environment base-library))))))
+
+    (define (register-primitive-library! key primitive-specs context)
+      (if (not (library-registry-ref context key))
+          (let ((value-environment (agent-scheme-make-empty-environment))
+                (syntax-environment (make-empty-syntax-environment #f)))
+            (for-each
+             (lambda (spec)
+               (define-primitive!
+                value-environment
+                (car spec)
+                (second spec)
+                (third spec)
+                (fourth spec)))
+             primitive-specs)
+            (library-registry-set!
+             context
+             key
+             (make-library
+              key
+              key
+              (snapshot-library-bindings
+               value-environment
+               syntax-environment
+               key)
+              value-environment
+              syntax-environment)))))
+
+    (define (register-standard-library! key context environment)
+      (cond
+       ((equal? key '(scheme case-lambda))
+        (register-source-library!
+         case-lambda-library-source
+         context
+         environment))
+       ((equal? key '(scheme char))
+        (register-primitive-library!
+         key
+         (list (list 'char-upcase primitive-char-upcase 1 1))
+         context))
+       ((equal? key '(scheme cxr))
+        (register-subset-library!
+         key
+         '(caar cadr cdar cddr)
+         context
+         environment))
+       ((equal? key '(scheme file))
+        (register-primitive-library!
+         key
+         (list (list 'file-exists? primitive-file-exists? 1 1))
+         context))
+       ((equal? key '(scheme lazy))
+        (register-source-library!
+         lazy-library-source
+         context
+         environment))
+       ((equal? key '(scheme write))
+        (register-primitive-library!
+         key
+         (list
+          (list 'display primitive-display 1 2)
+          (list 'write primitive-write 1 2)
+          (list 'open-output-string primitive-open-output-string 0 0)
+          (list 'get-output-string primitive-get-output-string 1 1))
+         context))
+       (else
+        (eval-error "unknown standard library" key))))
+
     (define (library-available? name context environment)
       (let ((key (library-name-key name)))
         (or (equal? key scheme-base-library-key)
+            (member key standard-library-keys)
             (member key empty-emacs-capability-library-keys)
             (and (library-registry-ref context key) #t))))
 
@@ -1772,6 +1943,8 @@
         (cond
          ((equal? key scheme-base-library-key)
           (register-scheme-base-library! context environment))
+         ((member key standard-library-keys)
+          (register-standard-library! key context environment))
          ((member key empty-emacs-capability-library-keys)
           (register-empty-emacs-capability-library! key context)))
         (or (library-registry-ref context key)
@@ -2101,14 +2274,17 @@
           (substring path 0 (- (string-length path) 1))
           path))
 
-    (define (include-policy-allows-file? path context)
-      (let loop ((rest (context-include-paths context)))
+    (define (path-policy-allows-file? path allowed-paths)
+      (let loop ((rest allowed-paths))
         (and (not (null? rest))
              (let* ((allowed (strip-trailing-slash (car rest)))
                     (allowed-directory (string-append allowed "/")))
                (or (string=? path allowed)
                    (string-prefix? allowed-directory path)
                    (loop (cdr rest)))))))
+
+    (define (include-policy-allows-file? path context)
+      (path-policy-allows-file? path (context-include-paths context)))
 
     (define (resolve-include-file filename context)
       (let ((path (path-join (context-include-directory context) filename)))
@@ -3005,6 +3181,79 @@
 
     (define (primitive-char>=? arguments context)
       (primitive-char-compare arguments char>=? "char>=?"))
+
+    (define (primitive-char-upcase arguments context)
+      (char-upcase (expect-character (car arguments) "char-upcase")))
+
+    (define (display-string value)
+      (cond
+       ((string? value) value)
+       ((char? value) (string value))
+       (else (agent-scheme-value->external value))))
+
+    (define (expect-string-output-port value description)
+      (if (not (string-output-port? value))
+          (eval-error
+           (string-append description " expected an output string port")
+           value))
+      value)
+
+    (define (write-to-output-port value port display?)
+      (set-string-output-port-contents!
+       port
+       (string-append
+        (string-output-port-contents port)
+        (if display?
+            (display-string value)
+            (agent-scheme-value->external value))))
+      agent-scheme-unspecified)
+
+    (define (primitive-open-output-string arguments context)
+      (make-string-output-port ""))
+
+    (define (primitive-get-output-string arguments context)
+      (string-output-port-contents
+       (expect-string-output-port
+        (car arguments)
+        "get-output-string")))
+
+    (define (primitive-display arguments context)
+      (if (null? (cdr arguments))
+          agent-scheme-unspecified
+          (write-to-output-port
+           (car arguments)
+           (expect-string-output-port (second arguments) "display")
+           #t)))
+
+    (define (primitive-write arguments context)
+      (if (null? (cdr arguments))
+          agent-scheme-unspecified
+          (write-to-output-port
+           (car arguments)
+           (expect-string-output-port (second arguments) "write")
+           #f)))
+
+    (define (resolve-file-policy-path filename context description)
+      (let ((path (path-join (context-include-directory context) filename)))
+        (cond
+         ((null? (context-file-paths context))
+          (eval-error
+           (string-append description
+                          " requires policy-gated host file access")
+           filename))
+         ((not (path-policy-allows-file? path (context-file-paths context)))
+          (eval-error
+           (string-append description " file is not allowed by policy")
+           filename))
+         (else path))))
+
+    (define (primitive-file-exists? arguments context)
+      (let ((path
+             (resolve-file-policy-path
+              (expect-string (car arguments) "file-exists?")
+              context
+              "file-exists?")))
+        (file-exists? path)))
 
     (define (primitive-string? arguments context)
       (string? (car arguments)))

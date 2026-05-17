@@ -121,6 +121,13 @@
   "Registered primitive procedure value."
   name function minimum-arity maximum-arity)
 
+(cl-defstruct (agent-scheme--string-output-port
+               (:constructor agent-scheme--make-string-output-port
+                             (contents))
+               (:copier nil))
+  "In-memory textual output port used by `(scheme write)'."
+  contents)
+
 (cl-defstruct (agent-scheme--sequence
                (:constructor agent-scheme--make-sequence
                              (forms allow-definitions))
@@ -148,6 +155,7 @@
   libraries
   include-paths
   include-directory
+  file-paths
   base-syntax-installed)
 
 (cl-defstruct (agent-scheme--syntax-transformer
@@ -243,6 +251,10 @@
       (agent-scheme--eval-option options :include-paths nil)
       include-directory)
      :include-directory include-directory
+     :file-paths
+     (agent-scheme--normalize-include-paths
+      (agent-scheme--eval-option options :file-paths nil)
+      include-directory)
      :base-syntax-installed nil)))
 
 (defun agent-scheme--eval-error (message &rest args)
@@ -286,7 +298,8 @@ SEEN prevents infinite recursion over cyclic host structures."
         (agent-scheme-character-p value)
         (agent-scheme-number-p value)
         (agent-scheme-procedure-p value)
-        (agent-scheme-primitive-procedure-p value))
+        (agent-scheme-primitive-procedure-p value)
+        (agent-scheme--string-output-port-p value))
     1)
    ((stringp value)
     (1+ (length value)))
@@ -1687,6 +1700,64 @@ When RECURSIVE is non-nil, transformer specs see the new bindings."
     "(emacs window)")
   "Recognized Emacs capability libraries without bootstrap exports yet.")
 
+(defconst agent-scheme--standard-library-keys
+  '("(scheme case-lambda)"
+    "(scheme char)"
+    "(scheme cxr)"
+    "(scheme file)"
+    "(scheme lazy)"
+    "(scheme write)")
+  "Standard R7RS library keys with focused bootstrap support.")
+
+(defconst agent-scheme--case-lambda-library-source
+  "(define-library (scheme case-lambda)
+     (export case-lambda)
+     (import (scheme base))
+     (begin
+       (define-syntax case-lambda
+         (syntax-rules ()
+           ((case-lambda)
+            (lambda args (car '())))
+           ((case-lambda ((param ...) body ...) more ...)
+            (lambda args
+              (if (= (length args) (length '(param ...)))
+                  (apply (lambda (param ...) body ...) args)
+                  (apply (case-lambda more ...) args))))))))"
+  "Portable bootstrap source for `(scheme case-lambda)'.")
+
+(defconst agent-scheme--lazy-library-source
+  "(define-library (scheme lazy)
+     (export delay delay-force force make-promise promise?)
+     (import (scheme base))
+     (begin
+       (define (%promise lazy? value)
+         (list 'agent-scheme-promise lazy? value))
+       (define (promise? obj)
+         (and (pair? obj)
+              (eq? (car obj) 'agent-scheme-promise)))
+       (define (make-promise obj)
+         (if (promise? obj)
+             obj
+             (%promise #t obj)))
+       (define (force promise)
+         (if (promise? promise)
+             (if (cadr promise)
+                 (car (cdr (cdr promise)))
+                 (let ((value ((car (cdr (cdr promise))))))
+                   (set-car! (cdr promise) #t)
+                   (set-car! (cdr (cdr promise)) value)
+                   value))
+             promise))
+       (define-syntax delay-force
+         (syntax-rules ()
+           ((delay-force expression)
+            (%promise #f (lambda () expression)))))
+       (define-syntax delay
+         (syntax-rules ()
+           ((delay expression)
+            (delay-force expression))))))"
+  "Portable bootstrap source for `(scheme lazy)'.")
+
 (defun agent-scheme--nonnegative-exact-integer-datum-p (datum)
   "Return non-nil if DATUM is an exact non-negative integer datum."
   (and (agent-scheme-number-p datum)
@@ -1833,11 +1904,121 @@ When RECURSIVE is non-nil, transformer specs see the new bindings."
           syntax-environment)
          registry)))))
 
+(defun agent-scheme--register-source-library
+    (source context environment)
+  "Evaluate one define-library SOURCE into CONTEXT."
+  (agent-scheme--eval-define-library
+   (agent-scheme-read source)
+   environment
+   context))
+
+(defun agent-scheme--find-library-export (name exports)
+  "Return export named NAME from EXPORTS, or nil."
+  (cl-find name exports
+           :key #'agent-scheme--library-binding-name
+           :test #'equal))
+
+(defun agent-scheme--register-subset-library
+    (key export-names context environment)
+  "Register KEY as a subset of `(scheme base)' EXPORT-NAMES."
+  (let ((registry (agent-scheme--eval-context-libraries context)))
+    (unless (gethash key registry)
+      (let* ((base-library
+              (agent-scheme--resolve-library
+               (agent-scheme-read agent-scheme--scheme-base-library-key)
+               context
+               environment))
+             (base-exports
+              (agent-scheme--library-exports base-library))
+             (exports
+              (mapcar
+               (lambda (name)
+                 (or (agent-scheme--find-library-export
+                      name base-exports)
+                     (agent-scheme--eval-error
+                      "standard library binding is not available: %s"
+                      name)))
+               export-names)))
+        (puthash
+         key
+         (agent-scheme--make-library
+          (agent-scheme-read key)
+          key
+          exports
+          (agent-scheme--library-value-environment base-library)
+          (agent-scheme--library-syntax-environment base-library))
+         registry)))))
+
+(defun agent-scheme--register-primitive-library
+    (key primitive-specs context)
+  "Register KEY with PRIMITIVE-SPECS.
+Each spec has (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY)."
+  (let ((registry (agent-scheme--eval-context-libraries context)))
+    (unless (gethash key registry)
+      (let ((value-environment (agent-scheme-make-empty-environment))
+            (syntax-environment
+             (agent-scheme--make-empty-syntax-environment)))
+        (dolist (spec primitive-specs)
+          (agent-scheme--define-primitive
+           value-environment
+           (nth 0 spec)
+           (nth 1 spec)
+           (nth 2 spec)
+           (nth 3 spec)))
+        (puthash
+         key
+         (agent-scheme--make-library
+          (agent-scheme-read key)
+          key
+          (agent-scheme--snapshot-library-bindings
+           value-environment syntax-environment key)
+          value-environment
+          syntax-environment)
+         registry)))))
+
+(defun agent-scheme--register-standard-library
+    (key context environment)
+  "Register focused standard library KEY in CONTEXT."
+  (pcase key
+    ("(scheme case-lambda)"
+     (agent-scheme--register-source-library
+      agent-scheme--case-lambda-library-source context environment))
+    ("(scheme char)"
+     (agent-scheme--register-primitive-library
+      key
+      `(("char-upcase" ,#'agent-scheme--primitive-char-upcase 1 1))
+      context))
+    ("(scheme cxr)"
+     (agent-scheme--register-subset-library
+      key '("caar" "cadr" "cdar" "cddr") context environment))
+    ("(scheme file)"
+     (agent-scheme--register-primitive-library
+      key
+      `(("file-exists?" ,#'agent-scheme--primitive-file-exists? 1 1))
+      context))
+    ("(scheme lazy)"
+     (agent-scheme--register-source-library
+      agent-scheme--lazy-library-source context environment))
+    ("(scheme write)"
+     (agent-scheme--register-primitive-library
+      key
+      `(("display" ,#'agent-scheme--primitive-display 1 2)
+        ("write" ,#'agent-scheme--primitive-write 1 2)
+        ("open-output-string"
+         ,#'agent-scheme--primitive-open-output-string 0 0)
+        ("get-output-string"
+         ,#'agent-scheme--primitive-get-output-string 1 1))
+      context))
+    (_
+     (agent-scheme--eval-error "unknown standard library: %s" key))))
+
 (defun agent-scheme--library-available-p (name context environment)
   "Return non-nil if NAME can be imported."
   (let ((key (agent-scheme--library-name-key name)))
     (cond
      ((equal key agent-scheme--scheme-base-library-key)
+      t)
+     ((member key agent-scheme--standard-library-keys)
       t)
      ((member key agent-scheme--empty-emacs-capability-library-keys)
       t)
@@ -1851,6 +2032,8 @@ When RECURSIVE is non-nil, transformer specs see the new bindings."
     (cond
      ((equal key agent-scheme--scheme-base-library-key)
       (agent-scheme--register-scheme-base-library context environment))
+     ((member key agent-scheme--standard-library-keys)
+      (agent-scheme--register-standard-library key context environment))
      ((member key agent-scheme--empty-emacs-capability-library-keys)
       (agent-scheme--register-empty-emacs-capability-library key context)))
     (or (gethash key (agent-scheme--eval-context-libraries context))
@@ -2197,8 +2380,8 @@ When RECURSIVE is non-nil, transformer specs see the new bindings."
       (file-truename path)
     (expand-file-name path)))
 
-(defun agent-scheme--include-policy-allows-file-p (path context)
-  "Return non-nil if CONTEXT policy allows reading PATH."
+(defun agent-scheme--path-policy-allows-file-p (path allowed-paths)
+  "Return non-nil if ALLOWED-PATHS allow reading PATH."
   (let ((canonical-path
          (agent-scheme--file-truename-or-expanded path)))
     (cl-some
@@ -2209,7 +2392,13 @@ When RECURSIVE is non-nil, transformer specs see the new bindings."
              (and (file-directory-p canonical-allowed)
                   (file-in-directory-p canonical-path
                                        canonical-allowed)))))
-     (agent-scheme--eval-context-include-paths context))))
+     allowed-paths)))
+
+(defun agent-scheme--include-policy-allows-file-p (path context)
+  "Return non-nil if CONTEXT policy allows reading PATH."
+  (agent-scheme--path-policy-allows-file-p
+   path
+   (agent-scheme--eval-context-include-paths context)))
 
 (defun agent-scheme--resolve-include-file (filename context)
   "Return policy-checked absolute include path for FILENAME."
@@ -3510,6 +3699,91 @@ DESCRIPTION names the primitive for errors."
 (defun agent-scheme--primitive-char>=? (arguments _context)
   "Primitive char>=? over ARGUMENTS."
   (agent-scheme--primitive-char-compare arguments #'>= "char>=?"))
+
+(defun agent-scheme--primitive-char-upcase (arguments _context)
+  "Primitive char-upcase over ARGUMENTS."
+  (let ((code (agent-scheme--expect-character
+               (car arguments) "char-upcase")))
+    (agent-scheme--make-character (upcase code))))
+
+(defun agent-scheme--display-string (value)
+  "Return a focused display representation for VALUE."
+  (cond
+   ((stringp value) value)
+   ((agent-scheme-character-p value)
+    (char-to-string (agent-scheme-character-code value)))
+   (t
+    (agent-scheme-value->external value))))
+
+(defun agent-scheme--expect-string-output-port (value description)
+  "Return VALUE as a string output port for DESCRIPTION."
+  (unless (agent-scheme--string-output-port-p value)
+    (agent-scheme--eval-error "%s expected an output string port" description))
+  value)
+
+(defun agent-scheme--write-to-output-port (value port displayp)
+  "Write VALUE to PORT using display mode when DISPLAYP is non-nil."
+  (setf (agent-scheme--string-output-port-contents port)
+        (concat (agent-scheme--string-output-port-contents port)
+                (if displayp
+                    (agent-scheme--display-string value)
+                  (agent-scheme-value->external value))))
+  agent-scheme-unspecified)
+
+(defun agent-scheme--primitive-open-output-string (_arguments _context)
+  "Primitive open-output-string."
+  (agent-scheme--make-string-output-port ""))
+
+(defun agent-scheme--primitive-get-output-string (arguments _context)
+  "Primitive get-output-string over ARGUMENTS."
+  (agent-scheme--string-output-port-contents
+   (agent-scheme--expect-string-output-port
+    (car arguments) "get-output-string")))
+
+(defun agent-scheme--primitive-display (arguments _context)
+  "Primitive display over ARGUMENTS."
+  (if (cdr arguments)
+      (agent-scheme--write-to-output-port
+       (car arguments)
+       (agent-scheme--expect-string-output-port
+        (cadr arguments) "display")
+       t)
+    agent-scheme-unspecified))
+
+(defun agent-scheme--primitive-write (arguments _context)
+  "Primitive write over ARGUMENTS."
+  (if (cdr arguments)
+      (agent-scheme--write-to-output-port
+       (car arguments)
+       (agent-scheme--expect-string-output-port
+        (cadr arguments) "write")
+       nil)
+    agent-scheme-unspecified))
+
+(defun agent-scheme--resolve-file-policy-path (filename context description)
+  "Return absolute path for FILENAME after CONTEXT file policy checks."
+  (let ((path
+         (expand-file-name
+          filename
+          (agent-scheme--eval-context-include-directory context))))
+    (unless (agent-scheme--eval-context-file-paths context)
+      (agent-scheme--eval-error
+       "%s requires policy-gated host file access: %s"
+       description filename))
+    (unless (agent-scheme--path-policy-allows-file-p
+             path
+             (agent-scheme--eval-context-file-paths context))
+      (agent-scheme--eval-error
+       "%s file is not allowed by policy: %s" description filename))
+    path))
+
+(defun agent-scheme--primitive-file-exists? (arguments context)
+  "Primitive file-exists? over ARGUMENTS."
+  (let* ((filename (agent-scheme--expect-string
+                    (car arguments) "file-exists?"))
+         (path (agent-scheme--resolve-file-policy-path
+                filename context "file-exists?")))
+    (agent-scheme--scheme-boolean (file-exists-p path))))
 
 (defun agent-scheme--primitive-string? (arguments _context)
   "Primitive string? over ARGUMENTS."

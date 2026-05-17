@@ -25,6 +25,9 @@
   (list :include-directory agent-scheme-library-test--root
         :include-paths
         (list (expand-file-name "fixtures/r7rs"
+                                agent-scheme-library-test--root))
+        :file-paths
+        (list (expand-file-name "fixtures/r7rs"
                                 agent-scheme-library-test--root)))
   "Policy options that allow R7RS fixture includes.")
 
@@ -205,5 +208,70 @@
       answer"
      agent-scheme-library-test--include-options)
     "42")))
+
+(ert-deftest agent-scheme-library-test-standard-case-lambda-import ()
+  "Import `(scheme case-lambda)' through the library registry."
+  (should
+   (equal
+    (agent-scheme-library-test--external
+     "(import (scheme base) (scheme case-lambda))
+      ((case-lambda
+         ((x) x)
+         ((x y) (+ x y)))
+       1 2)")
+    "3")))
+
+(ert-deftest agent-scheme-library-test-standard-char-and-cxr-imports ()
+  "Import `(scheme char)' and `(scheme cxr)' bindings."
+  (should
+   (equal
+    (agent-scheme-library-test--external
+     "(import (scheme base) (scheme char) (scheme cxr))
+      (list (char-upcase #\\a)
+            (cadr '(alpha beta gamma)))")
+    "(#\\A beta)")))
+
+(ert-deftest agent-scheme-library-test-standard-lazy-import-memoizes ()
+  "Import `(scheme lazy)' promises with memoizing force."
+  (should
+   (equal
+    (agent-scheme-library-test--external
+     "(import (scheme base) (scheme lazy))
+      (let ((count 0))
+        (let ((promise
+               (delay
+                 (begin
+                   (set! count (+ count 1))
+                   count))))
+          (list (force promise)
+                (force promise)
+                count)))")
+    "(1 1 1)")))
+
+(ert-deftest agent-scheme-library-test-standard-write-import-string-output ()
+  "Import `(scheme write)' in-memory string output procedures."
+  (should
+   (equal
+    (agent-scheme-library-test--external
+     "(import (scheme base) (scheme write))
+      (let ((out (open-output-string)))
+        (display \"ok\" out)
+        (get-output-string out))")
+    "\"ok\"")))
+
+(ert-deftest agent-scheme-library-test-standard-file-import-is-policy-gated ()
+  "Keep `(scheme file)' host file effects behind explicit path policy."
+  (should-error
+   (agent-scheme-eval-source
+    "(import (scheme base) (scheme file))
+     (file-exists? \"fixtures/r7rs/conformance-cases.scm\")")
+   :type 'agent-scheme-eval-error)
+  (should
+   (equal
+    (agent-scheme-library-test--external/options
+     "(import (scheme base) (scheme file))
+      (file-exists? \"fixtures/r7rs/conformance-cases.scm\")"
+     agent-scheme-library-test--include-options)
+    "#t")))
 
 ;;; agent-scheme-library-test.el ends here

@@ -371,7 +371,8 @@
 
 (define include-policy-options
   '((include-directory . ".")
-    (include-paths . ("fixtures/r7rs"))))
+    (include-paths . ("fixtures/r7rs"))
+    (file-paths . ("fixtures/r7rs"))))
 
 (check-external/options 'include-reads-policy-allowed-body
                         "(define-library (agent-scheme fixture include-body)
@@ -403,6 +404,55 @@
                          answer"
                         include-policy-options
                         "42")
+
+(check-external 'standard-case-lambda-import
+                "(import (scheme base) (scheme case-lambda))
+                 ((case-lambda
+                    ((x) x)
+                    ((x y) (+ x y)))
+                  1 2)"
+                "3")
+
+(check-external 'standard-char-and-cxr-imports
+                "(import (scheme base) (scheme char) (scheme cxr))
+                 (list (char-upcase #\\a)
+                       (cadr '(alpha beta gamma)))"
+                "(#\\A beta)")
+
+(check-external 'standard-lazy-import-memoizes
+                "(import (scheme base) (scheme lazy))
+                 (let ((count 0))
+                   (let ((promise
+                          (delay
+                            (begin
+                              (set! count (+ count 1))
+                              count))))
+                     (list (force promise)
+                           (force promise)
+                           count)))"
+                "(1 1 1)")
+
+(check-external 'standard-write-import-string-output
+                "(import (scheme base) (scheme write))
+                 (let ((out (open-output-string)))
+                   (display \"ok\" out)
+                   (get-output-string out))"
+                "\"ok\"")
+
+(check 'standard-file-import-default-denied
+       (raises?
+        (lambda ()
+          (agent-scheme-eval-source
+           "(import (scheme base) (scheme file))
+            (file-exists? \"fixtures/r7rs/conformance-cases.scm\")")))
+       #t)
+
+(check-external/options 'standard-file-import-policy-allowed
+                        "(import (scheme base) (scheme file))
+                         (file-exists?
+                          \"fixtures/r7rs/conformance-cases.scm\")"
+                        include-policy-options
+                        "#t")
 
 (check 'expand-source-exposes-expanded-forms
        (agent-scheme-value->external
