@@ -1,3 +1,10 @@
+;;; Portable R7RS evaluator kernel for Agent Scheme.
+;;;
+;;; This library mirrors the Emacs Lisp bootstrap evaluator in portable Scheme.
+;;; It keeps runtime state as Scheme-readable records, uses explicit lexical
+;;; and syntactic environments, and preserves tail calls with an explicit
+;;; trampoline instead of delegating evaluation to the host implementation.
+
 (define-library (agent-scheme eval)
   (export agent-scheme-eval
           agent-scheme-eval-source
@@ -25,6 +32,8 @@
           (scheme read)
           (agent-scheme reader))
   (begin
+    ;; These defaults bound a single expansion/evaluation run.  The public
+    ;; entry points accept an association list with matching option names.
     (define agent-scheme-default-maximum-steps 100000)
     (define agent-scheme-default-maximum-value-nodes 100000)
     (define agent-scheme-default-maximum-host-callbacks 10000)
@@ -49,6 +58,8 @@
       (value cell-value set-cell-value!))
 
     (define-record-type <environment>
+      ;; FRAME maps lexical keys to mutable cells.  IMPORTED-NAMES marks
+      ;; current-frame imports that Scheme code may not redefine or mutate.
       (make-environment frame parent imported-names)
       environment?
       (frame environment-frame set-environment-frame!)
@@ -65,6 +76,8 @@
                       set-syntax-environment-imported-names!))
 
     (define-record-type <syntax-context>
+      ;; Macro templates attach this context to introduced identifiers so free
+      ;; identifiers resolve in the transformer's definition environments.
       (make-syntax-context id value-environment syntax-environment)
       syntax-context?
       (id syntax-context-id)
@@ -118,6 +131,8 @@
       (syntax-environment bounce-syntax-environment))
 
     (define-record-type <eval-context>
+      ;; A context owns mutable run state: budgets, active syntax bindings,
+      ;; lazy library registrations, include policy, and syntax-id allocation.
       (make-eval-context steps maximum-steps
                          maximum-value-nodes host-callbacks
                          maximum-host-callbacks syntax-environment libraries
@@ -151,6 +166,8 @@
       (syntax-environment syntax-transformer-syntax-environment))
 
     (define-record-type <pattern-binding>
+      ;; Captures are keyed by nested ellipsis paths such as `(0 2)'.  Empty
+      ;; prefixes record zero-length repetitions needed by template checks.
       (make-pattern-binding depth captures empty-prefixes)
       pattern-binding?
       (depth pattern-binding-depth set-pattern-binding-depth!)
@@ -432,6 +449,9 @@
                   value)))))
 
     (define (environment-cell-for-identifier environment identifier)
+      ;; Hygienic identifiers first try their generated lexical key at the use
+      ;; site, then fall back to the macro definition environment for free
+      ;; template identifiers.
       (cond
        ((identifier? identifier)
         (let ((context (identifier-context identifier)))
@@ -597,6 +617,9 @@
                                       (car parsed-definition))
                           (eval-error "duplicate internal definition"
                                       (car parsed-definition)))
+                      ;; Allocate every internal-definition cell before any
+                      ;; initializer runs so recursive references have a
+                      ;; location, even if its value is still undefined.
                       (environment-define!
                        body-environment
                        (car parsed-definition)
@@ -944,6 +967,9 @@
                (not (operator-shadowed? operator environment)))))
 
     (define (syntax-binding-for-operator operator environment context)
+      ;; Macro-introduced operators consult their definition-time syntax
+      ;; environment.  Plain symbols use the active syntax environment unless a
+      ;; value binding shadows the syntactic keyword.
       (let ((name (identifier-datum-name operator)))
         (if (and name (not (operator-shadowed? operator environment)))
             (or
@@ -1084,6 +1110,8 @@
              (captures (pattern-binding-captures entry)))
         (if (assoc path captures)
             (eval-error "duplicate pattern variable" name))
+        ;; PATH is the repetition-index trail leading to this capture.
+        ;; Template expansion reuses it to distribute nested ellipses.
         (set-pattern-binding-captures!
          entry
          (cons (cons path value) captures)))
@@ -1295,6 +1323,9 @@
       (let* ((ellipsis (syntax-transformer-ellipsis transformer))
              (ellipsis-index (find-ellipsis-index patterns ellipsis)))
         (if ellipsis-index
+            ;; R7RS ellipses repeat the pattern immediately before the
+            ;; ellipsis.  Prefix and suffix patterns remain fixed while PATH
+            ;; tracks each repeated match.
             (let* ((prefix-count (- ellipsis-index 1))
                    (suffix (list-drop patterns (+ ellipsis-index 1)))
                    (suffix-count (length suffix))
@@ -1497,6 +1528,8 @@
             (eval-error "missing pattern variable capture" name))))
 
     (define (expand-template template bindings syntax-context ellipsis . rest)
+      ;; Identifiers not captured by BINDINGS are wrapped with SYNTAX-CONTEXT
+      ;; so free template identifiers keep their definition-time bindings.
       (let ((path (if (null? rest) '() (car rest)))
             (ellipsis-literal? (if (or (null? rest) (null? (cdr rest)))
                                    #f
@@ -1581,6 +1614,8 @@
          (else template))))
 
     (define (next-syntax-context! context value-environment syntax-environment)
+      ;; Each expansion gets a fresh context id so introduced bindings cannot
+      ;; collide accidentally with names from the macro use site.
       (let ((id (context-next-syntax-id context)))
         (set-context-next-syntax-id! context (+ id 1))
         (make-syntax-context id value-environment syntax-environment)))
@@ -1673,6 +1708,9 @@
 
     (define scheme-base-library-key '(scheme base))
 
+    ;; Bootstrap libraries are registered lazily into the current context.  The
+    ;; required base library snapshots the active base environment; smaller
+    ;; standard libraries are subsets, primitive wrappers, or source libraries.
     (define empty-emacs-capability-library-keys
       '((emacs buffer)
         (emacs buffer edit)
@@ -2130,6 +2168,9 @@
                (cons (cons name object)
                      (environment-frame value-environment))))
              ((equal? binding-library-key scheme-base-library-key)
+              ;; Repeated `(scheme base)' imports are common while source
+              ;; libraries bootstrap; reinstalling the same base name is
+              ;; harmless and keeps import-set handling small.
               (set-environment-frame!
                value-environment
                (cons (cons name object)
@@ -2337,6 +2378,8 @@
       (let ((path (path-join (context-include-directory context) filename)))
         (cond
          ((null? (context-include-paths context))
+          ;; Includes are host file reads, so even portable Scheme evaluation
+          ;; requires an explicit allow-list before opening a file.
           (eval-error "include requires policy-gated host file access"
                       filename))
          ((not (include-policy-allows-file? path context))
@@ -2507,6 +2550,9 @@
                                  declaration
                                  "library declaration"))
                                (operator (car declaration-parts)))
+                          ;; `cond-expand' and include-library-declarations are
+                          ;; flattened before this dispatch; only core library
+                          ;; declarations should reach this point.
                           (cond
                            ((identifier-named? operator 'export)
                             (declaration-loop
@@ -2686,6 +2732,8 @@
         (eval-error "empty list is not an expression"))
        ((pair? expression)
         (let ((expanded (expand-expression expression environment context)))
+          ;; Expansion is interleaved with evaluation so local syntax forms can
+          ;; update CONTEXT before the resulting core expression is evaluated.
           (if (eq? expanded expression)
               (eval-combination expression environment context tail?)
               (eval-expression expanded environment context tail?))))
@@ -2809,6 +2857,8 @@
                                      environment
                                      (context-syntax-environment context))))
         (if (bounce? state)
+            ;; A bounce carries both the value environment and syntax
+            ;; environment needed by the next tail step.
             (loop
              (with-syntax-environment
               context
@@ -3840,6 +3890,8 @@
         (if result result #f)))
 
     (define base-primitive-registry
+      ;; Each entry is `(name procedure minimum-arity maximum-arity)'.  A false
+      ;; maximum means the primitive accepts arbitrarily many arguments.
       (list
        (list '* primitive* 0 #f)
        (list '+ primitive+ 0 #f)
@@ -3956,6 +4008,8 @@
            base-primitive-registry))
 
     (define agent-scheme-base-prelude-load-paths
+      ;; Portable Scheme tests may run from the project root or with the
+      ;; `agent-scheme' directory on the implementation's library path.
       '("scheme/agent-scheme/base-prelude.scm"
         "agent-scheme/base-prelude.scm"))
 
@@ -4062,6 +4116,8 @@
         (let loop ((rest base-primitive-registry))
           (if (null? rest)
               (begin
+                ;; Derived base procedures are ordinary Scheme definitions
+                ;; loaded through the same evaluator and trampoline.
                 (trampoline
                  (make-sequence (base-prelude-forms) #t)
                  environment
