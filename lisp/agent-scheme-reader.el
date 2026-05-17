@@ -98,6 +98,10 @@ KIND names the parsed shape, such as `integer', `decimal',
 
 (cl-defstruct (agent-scheme--reader
                (:constructor agent-scheme--make-reader))
+  "Mutable state for one reader pass.
+SOURCE is an immutable input snapshot, while POSITION, FOLD-CASE,
+and NODE-COUNT change as lexical directives, comments, and datums
+are consumed.  The remaining slots are per-run resource limits."
   source
   (position 0)
   length
@@ -315,6 +319,8 @@ DEPTH is used when reading a datum comment's discarded datum."
        ((agent-scheme--starts-with-p reader "#;")
         (setq again t)
         (agent-scheme--advance reader 2)
+        ;; R7RS datum comments consume a complete datum, not just the next
+        ;; token, so the recursive read must share the current reader state.
         (agent-scheme--skip-intertoken-space reader depth)
         (agent-scheme--read-datum reader depth))))))
 
@@ -703,6 +709,8 @@ The return value is (BODY EXACTNESS RADIX), or nil."
         (setq done t))
        (t
         (let ((saved (agent-scheme--reader-position reader)))
+          ;; A period is dotted-pair syntax only when it is a delimited token;
+          ;; otherwise it belongs to the ordinary token being read below.
           (if (and (eq (agent-scheme--peek reader) ?.)
                    (progn
                      (agent-scheme--advance reader)
@@ -1069,7 +1077,9 @@ failures."
 
 ;;;###autoload
 (defun agent-scheme-datum->external (datum)
-  "Return a simple external representation for DATUM."
+  "Return a simple external representation for DATUM.
+This writer is for current implementation datums and intentionally
+does not yet implement shared or circular datum labels."
   (cond
    ((eq datum agent-scheme-true) "#t")
    ((eq datum agent-scheme-false) "#f")

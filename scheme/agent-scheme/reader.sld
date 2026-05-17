@@ -1,3 +1,10 @@
+;;; Portable R7RS datum reader for Agent Scheme.
+;;;
+;;; This library mirrors the Emacs Lisp reader in portable Scheme.  It returns
+;;; native Scheme datums, but it still enforces the same resource limits and
+;;; reader-directive behavior so portable bootstrap tests exercise the same
+;;; language boundary.
+
 (define-library (agent-scheme reader)
   (export agent-scheme-read
           agent-scheme-read-all
@@ -7,6 +14,8 @@
           (scheme char)
           (scheme write))
   (begin
+    ;; Per-run defaults match the Emacs Lisp host reader.  Callers can override
+    ;; them with an association list, using keys such as `max-depth'.
     (define agent-scheme-default-maximum-depth 256)
     (define agent-scheme-default-maximum-list-length 100000)
     (define agent-scheme-default-maximum-vector-length 100000)
@@ -15,6 +24,8 @@
     (define agent-scheme-default-maximum-total-nodes 1000000)
 
     (define-record-type <reader>
+      ;; Reader state is mutable only for cursor position, fold-case mode, and
+      ;; node count.  SOURCE remains the immutable snapshot of input text.
       (make-reader source position length fold-case node-count
                    maximum-depth maximum-list-length maximum-vector-length
                    maximum-bytevector-length maximum-string-size
@@ -33,6 +44,8 @@
       (maximum-total-nodes reader-maximum-total-nodes))
 
     (define-record-type <validation>
+      ;; Validation walks host-created datums after parsing.  It has its own
+      ;; counter so callers cannot bypass node limits by constructing values.
       (make-validation node-count maximum-total-nodes)
       validation?
       (node-count validation-node-count set-validation-node-count!)
@@ -213,6 +226,8 @@
           (loop))
          ((starts-with? reader "#;")
           (advance! reader 2)
+          ;; A datum comment consumes a full datum, including nested comments
+          ;; and directives, so keep using the active reader state.
           (skip-intertoken-space! reader depth)
           (read-datum reader depth)
           (loop))
@@ -520,6 +535,8 @@
             head)
            (else
             (let ((saved (reader-position reader)))
+              ;; A period is dotted-tail syntax only when it is a delimited
+              ;; token.  Otherwise restore the cursor and classify it normally.
               (if (and (char=? (peek reader) #\.)
                        (begin
                          (advance! reader)
@@ -621,6 +638,8 @@
        ((starts-with? reader "#\\") (read-character-literal reader))
        ((let ((char (peek reader 1)))
           (and char (char>=? char #\0) (char<=? char #\9)))
+        ;; Datum labels need graph-aware allocation and writing; reject them
+        ;; until the runtime has explicit support for shared/circular datums.
         (reader-error reader "datum labels are not supported yet"))
        (else
         (classify-token reader (read-token reader)))))
@@ -904,6 +923,8 @@
                         parts)))))
 
     (define (agent-scheme-datum->external datum)
+      ;; This writer is intentionally simple: it renders current bootstrap
+      ;; datums but does not generate labels for shared or circular structure.
       (cond
        ((boolean? datum) (if datum "#t" "#f"))
        ((null? datum) "()")
