@@ -110,7 +110,8 @@
       (make-eval-context steps maximum-steps
                          maximum-value-nodes host-callbacks
                          maximum-host-callbacks syntax-environment libraries
-                         base-syntax-installed next-syntax-id)
+                         include-paths include-directory base-syntax-installed
+                         next-syntax-id)
       eval-context?
       (steps context-steps set-context-steps!)
       (maximum-steps context-maximum-steps)
@@ -120,6 +121,9 @@
       (syntax-environment context-syntax-environment
                           set-context-syntax-environment!)
       (libraries context-libraries set-context-libraries!)
+      (include-paths context-include-paths)
+      (include-directory context-include-directory
+                         set-context-include-directory!)
       (base-syntax-installed context-base-syntax-installed
                              set-context-base-syntax-installed!)
       (next-syntax-id context-next-syntax-id set-context-next-syntax-id!))
@@ -179,7 +183,38 @@
              (string-append "agent-scheme budget error: " message)
              irritants))
 
+    (define (normalize-include-directory directory)
+      (cond
+       ((or (string=? directory "")
+            (string=? directory "."))
+        "")
+       ((char=? (string-ref directory (- (string-length directory) 1)) #\/)
+        directory)
+       (else
+        (string-append directory "/"))))
+
+    (define (path-absolute? path)
+      (and (> (string-length path) 0)
+           (char=? (string-ref path 0) #\/)))
+
+    (define (path-join directory path)
+      (cond
+       ((or (string=? directory "") (path-absolute? path))
+        path)
+       ((char=? (string-ref directory (- (string-length directory) 1)) #\/)
+        (string-append directory path))
+       (else
+        (string-append directory "/" path))))
+
+    (define (normalize-include-paths paths directory)
+      (map (lambda (path)
+             (path-join directory path))
+           paths))
+
     (define (new-eval-context options)
+      (let ((include-directory
+             (normalize-include-directory
+              (option-ref options 'include-directory "."))))
       (make-eval-context
        0
        (if (assq 'max-steps options)
@@ -196,8 +231,12 @@
                    agent-scheme-default-maximum-host-callbacks)
        (make-syntax-environment '() #f)
        '()
+       (normalize-include-paths
+        (option-ref options 'include-paths '())
+        include-directory)
+       include-directory
        #f
-       0))
+       0)))
 
     (define (note-step! context)
       (set-context-steps! context (+ (context-steps context) 1))
@@ -2013,18 +2052,150 @@
                   (loop (cdr rest)))))))
 
     (define (expand-library-declaration declaration context environment)
-      (if (form-named? declaration 'cond-expand)
-          (apply append
-                 (map
-                  (lambda (nested)
-                    (expand-library-declaration nested context environment))
-                  (expand-library-cond-expand
-                   (cdr (proper-list-elements
-                         declaration
-                         "library cond-expand"))
-                   context
-                   environment)))
-          (list declaration)))
+      (cond
+       ((form-named? declaration 'cond-expand)
+        (apply append
+               (map
+                (lambda (nested)
+                  (expand-library-declaration nested context environment))
+                (expand-library-cond-expand
+                 (cdr (proper-list-elements
+                       declaration
+                       "library cond-expand"))
+                 context
+                 environment))))
+       ((form-named? declaration 'include-library-declarations)
+        (expand-include-library-declarations
+         declaration
+         context
+         environment))
+       (else
+        (list declaration))))
+
+    (define (include-filenames declaration)
+      (let* ((parts (proper-list-elements declaration "include declaration"))
+             (operator (identifier-datum-name (car parts))))
+        (if (null? (cdr parts))
+            (eval-error "include requires at least one filename" operator))
+        (map
+         (lambda (filename)
+           (if (not (string? filename))
+               (eval-error "include filename must be a string literal"
+                           operator))
+           filename)
+         (cdr parts))))
+
+    (define (string-prefix? prefix string)
+      (let ((prefix-length (string-length prefix))
+            (string-length-value (string-length string)))
+        (and (<= prefix-length string-length-value)
+             (let loop ((index 0))
+               (or (= index prefix-length)
+                   (and (char=? (string-ref prefix index)
+                                (string-ref string index))
+                        (loop (+ index 1))))))))
+
+    (define (strip-trailing-slash path)
+      (if (and (> (string-length path) 0)
+               (char=? (string-ref path (- (string-length path) 1)) #\/))
+          (substring path 0 (- (string-length path) 1))
+          path))
+
+    (define (include-policy-allows-file? path context)
+      (let loop ((rest (context-include-paths context)))
+        (and (not (null? rest))
+             (let* ((allowed (strip-trailing-slash (car rest)))
+                    (allowed-directory (string-append allowed "/")))
+               (or (string=? path allowed)
+                   (string-prefix? allowed-directory path)
+                   (loop (cdr rest)))))))
+
+    (define (resolve-include-file filename context)
+      (let ((path (path-join (context-include-directory context) filename)))
+        (cond
+         ((null? (context-include-paths context))
+          (eval-error "include requires policy-gated host file access"
+                      filename))
+         ((not (include-policy-allows-file? path context))
+          (eval-error "include file is not allowed by policy" filename))
+         ((not (file-exists? path))
+          (eval-error "include file is not readable" filename))
+         (else path))))
+
+    (define (path-directory path)
+      (let loop ((index (- (string-length path) 1)))
+        (cond
+         ((< index 0) "")
+         ((char=? (string-ref path index) #\/)
+          (substring path 0 index))
+         (else (loop (- index 1))))))
+
+    (define (read-file-string path)
+      (call-with-input-file
+       path
+       (lambda (port)
+         (let loop ((chars '()))
+           (let ((char (read-char port)))
+             (if (eof-object? char)
+                 (list->string (reverse chars))
+                 (loop (cons char chars))))))))
+
+    (define (with-include-directory context directory thunk)
+      (let ((previous-directory (context-include-directory context)))
+        (dynamic-wind
+          (lambda ()
+            (set-context-include-directory!
+             context
+             (normalize-include-directory directory)))
+          thunk
+          (lambda ()
+            (set-context-include-directory!
+             context
+             previous-directory)))))
+
+    (define (read-include-file-forms filename context fold-case?)
+      (let* ((path (resolve-include-file filename context))
+             (source (read-file-string path)))
+        (cons
+         (agent-scheme-read-all
+          (if fold-case?
+              (string-append "#!fold-case\n" source)
+              source))
+         (path-directory path))))
+
+    (define (library-include-body-forms declaration context fold-case?)
+      (apply append
+             (map (lambda (filename)
+                    (car (read-include-file-forms
+                          filename
+                          context
+                          fold-case?)))
+                  (include-filenames declaration))))
+
+    (define (expand-include-library-declarations declaration context
+                                                 environment)
+      (apply
+       append
+       (map
+        (lambda (filename)
+          (let* ((read-result
+                  (read-include-file-forms filename context #f))
+                 (forms (car read-result))
+                 (directory (cdr read-result)))
+            (with-include-directory
+             context
+             directory
+             (lambda ()
+               (apply
+                append
+                (map
+                 (lambda (nested)
+                   (expand-library-declaration
+                    nested
+                    context
+                    environment))
+                 forms))))))
+        (include-filenames declaration))))
 
     (define (library-export-binding spec library-key value-environment
                                     syntax-environment)
@@ -2135,13 +2306,31 @@
                              syntax-environment
                              context)
                             (declaration-loop (cdr declarations) exports))
-                           ((or (identifier-named? operator 'include)
-                                (identifier-named? operator 'include-ci)
-                                (identifier-named?
-                                 operator
-                                 'include-library-declarations))
+                           ((identifier-named? operator 'include)
+                            (eval-library-begin
+                             (library-include-body-forms
+                              declaration
+                              context
+                              #f)
+                             value-environment
+                             syntax-environment
+                             context)
+                            (declaration-loop (cdr declarations) exports))
+                           ((identifier-named? operator 'include-ci)
+                            (eval-library-begin
+                             (library-include-body-forms
+                              declaration
+                              context
+                              #t)
+                             value-environment
+                             syntax-environment
+                             context)
+                            (declaration-loop (cdr declarations) exports))
+                           ((identifier-named?
+                             operator
+                             'include-library-declarations)
                             (eval-error
-                             "library include requires policy-gated host file access"
+                             "include-library-declarations must expand before evaluation"
                              operator))
                            (else
                             (eval-error

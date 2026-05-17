@@ -369,6 +369,41 @@
               (include \"fixtures/r7rs/conformance-cases.scm\"))")))
        #t)
 
+(define include-policy-options
+  '((include-directory . ".")
+    (include-paths . ("fixtures/r7rs"))))
+
+(check-external/options 'include-reads-policy-allowed-body
+                        "(define-library (agent-scheme fixture include-body)
+                           (export answer)
+                           (import (scheme base))
+                           (include \"fixtures/r7rs/include-body.scm\"))
+                         (import (agent-scheme fixture include-body))
+                         answer"
+                        include-policy-options
+                        "42")
+
+(check-external/options 'include-ci-folds-policy-allowed-body
+                        "(define-library (agent-scheme fixture include-ci-body)
+                           (export mixedanswer)
+                           (import (scheme base))
+                           (include-ci \"fixtures/r7rs/include-ci-body.scm\"))
+                         (import (agent-scheme fixture include-ci-body))
+                         mixedanswer"
+                        include-policy-options
+                        "42")
+
+(check-external/options 'include-library-declarations-splice
+                        "(define-library
+                           (agent-scheme fixture included-declarations)
+                           (include-library-declarations
+                            \"fixtures/r7rs/include-library-declarations.scm\"))
+                         (import
+                          (agent-scheme fixture included-declarations))
+                         answer"
+                        include-policy-options
+                        "42")
+
 (check 'expand-source-exposes-expanded-forms
        (agent-scheme-value->external
         (agent-scheme-expand-source

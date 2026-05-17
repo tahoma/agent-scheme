@@ -146,6 +146,8 @@
   maximum-host-callbacks
   syntax-environment
   libraries
+  include-paths
+  include-directory
   base-syntax-installed)
 
 (cl-defstruct (agent-scheme--syntax-transformer
@@ -194,6 +196,20 @@
       (plist-get options key)
     default))
 
+(defun agent-scheme--normalize-include-paths (paths directory)
+  "Return policy PATHS expanded relative to DIRECTORY."
+  (when paths
+    (unless (listp paths)
+      (agent-scheme--eval-error
+       ":include-paths must be a list of file or directory paths"))
+    (mapcar
+     (lambda (path)
+       (unless (stringp path)
+         (agent-scheme--eval-error
+          ":include-paths entries must be strings"))
+       (expand-file-name path directory))
+     paths)))
+
 (defun agent-scheme--new-eval-context (options)
   "Return an evaluator context using OPTIONS."
   (let ((maximum-steps
@@ -202,7 +218,12 @@
            (plist-get options :max-steps))
           ((plist-member options :max-non-tail-steps)
            (plist-get options :max-non-tail-steps))
-          (t agent-scheme-eval-maximum-steps))))
+          (t agent-scheme-eval-maximum-steps)))
+        (include-directory
+         (file-name-as-directory
+          (expand-file-name
+           (agent-scheme--eval-option
+            options :include-directory default-directory)))))
     (agent-scheme--make-eval-context
      :steps 0
      :maximum-steps maximum-steps
@@ -217,6 +238,11 @@
      (agent-scheme--make-syntax-environment
       (make-hash-table :test #'equal) nil)
      :libraries (make-hash-table :test #'equal)
+     :include-paths
+     (agent-scheme--normalize-include-paths
+      (agent-scheme--eval-option options :include-paths nil)
+      include-directory)
+     :include-directory include-directory
      :base-syntax-installed nil)))
 
 (defun agent-scheme--eval-error (message &rest args)
@@ -2130,19 +2156,141 @@ When RECURSIVE is non-nil, transformer specs see the new bindings."
 (defun agent-scheme--expand-library-declaration
     (declaration context environment)
   "Return DECLARATION after expanding library-level cond-expand."
-  (if (agent-scheme--form-named-p declaration "cond-expand")
-      (apply
-       #'append
-       (mapcar
-        (lambda (nested)
-          (agent-scheme--expand-library-declaration
-           nested context environment))
-        (agent-scheme--expand-library-cond-expand
-         (cdr (agent-scheme--proper-list-elements
-               declaration "library cond-expand"))
+  (cond
+   ((agent-scheme--form-named-p declaration "cond-expand")
+    (apply
+     #'append
+     (mapcar
+      (lambda (nested)
+        (agent-scheme--expand-library-declaration
+         nested context environment))
+      (agent-scheme--expand-library-cond-expand
+       (cdr (agent-scheme--proper-list-elements
+             declaration "library cond-expand"))
+       context
+       environment))))
+   ((agent-scheme--form-named-p declaration "include-library-declarations")
+    (agent-scheme--expand-include-library-declarations
+     declaration context environment))
+   (t
+    (list declaration))))
+
+(defun agent-scheme--include-filenames (declaration)
+  "Return validated string filenames from include DECLARATION."
+  (let* ((parts (agent-scheme--proper-list-elements
+                 declaration "include declaration"))
+         (operator-name (agent-scheme--symbol-name (car parts))))
+    (unless (cdr parts)
+      (agent-scheme--eval-error
+       "%s requires at least one filename" operator-name))
+    (mapcar
+     (lambda (filename)
+       (unless (stringp filename)
+         (agent-scheme--eval-error
+          "%s filename must be a string literal" operator-name))
+       filename)
+     (cdr parts))))
+
+(defun agent-scheme--file-truename-or-expanded (path)
+  "Return PATH's truename when possible, otherwise its expanded name."
+  (if (file-exists-p path)
+      (file-truename path)
+    (expand-file-name path)))
+
+(defun agent-scheme--include-policy-allows-file-p (path context)
+  "Return non-nil if CONTEXT policy allows reading PATH."
+  (let ((canonical-path
+         (agent-scheme--file-truename-or-expanded path)))
+    (cl-some
+     (lambda (allowed)
+       (let ((canonical-allowed
+              (agent-scheme--file-truename-or-expanded allowed)))
+         (or (equal canonical-path canonical-allowed)
+             (and (file-directory-p canonical-allowed)
+                  (file-in-directory-p canonical-path
+                                       canonical-allowed)))))
+     (agent-scheme--eval-context-include-paths context))))
+
+(defun agent-scheme--resolve-include-file (filename context)
+  "Return policy-checked absolute include path for FILENAME."
+  (let ((path
+         (expand-file-name
+          filename
+          (agent-scheme--eval-context-include-directory context))))
+    (unless (agent-scheme--eval-context-include-paths context)
+      (agent-scheme--eval-error
+       "include requires policy-gated host file access: %s" filename))
+    (unless (agent-scheme--include-policy-allows-file-p path context)
+      (agent-scheme--eval-error
+       "include file is not allowed by policy: %s" filename))
+    (unless (file-readable-p path)
+      (agent-scheme--eval-error
+       "include file is not readable: %s" filename))
+    path))
+
+(defun agent-scheme--with-include-directory (context directory thunk)
+  "Call THUNK while CONTEXT resolves relative includes from DIRECTORY."
+  (let ((previous-directory
+         (agent-scheme--eval-context-include-directory context)))
+    (unwind-protect
+        (progn
+          (setf (agent-scheme--eval-context-include-directory context)
+                (file-name-as-directory directory))
+          (funcall thunk))
+      (setf (agent-scheme--eval-context-include-directory context)
+            previous-directory))))
+
+(defun agent-scheme--read-include-file-forms (filename context fold-case)
+  "Read FILENAME into forms after include policy checks.
+When FOLD-CASE is non-nil, read as if the file began with
+`#!fold-case'.  The return value is (FORMS . DIRECTORY)."
+  (let* ((path (agent-scheme--resolve-include-file filename context))
+         (source
+          (with-temp-buffer
+            (insert-file-contents path)
+            (buffer-string)))
+         (forms
+          (agent-scheme-read-all
+           (if fold-case
+               (concat "#!fold-case\n" source)
+             source))))
+    (cons forms (file-name-directory path))))
+
+(defun agent-scheme--library-include-body-forms
+    (declaration context fold-case)
+  "Return body forms read by include DECLARATION."
+  (apply
+   #'append
+   (mapcar
+    (lambda (filename)
+      (car (agent-scheme--read-include-file-forms
+            filename context fold-case)))
+    (agent-scheme--include-filenames declaration))))
+
+(defun agent-scheme--expand-include-library-declarations
+    (declaration context environment)
+  "Return declarations spliced from include-library-declarations DECLARATION."
+  (apply
+   #'append
+   (mapcar
+    (lambda (filename)
+      (let* ((read-result
+              (agent-scheme--read-include-file-forms
+               filename context nil))
+             (forms (car read-result))
+             (directory (cdr read-result)))
+        (agent-scheme--with-include-directory
          context
-         environment)))
-    (list declaration)))
+         directory
+         (lambda ()
+           (apply
+            #'append
+            (mapcar
+             (lambda (nested)
+               (agent-scheme--expand-library-declaration
+                nested context environment))
+             forms))))))
+    (agent-scheme--include-filenames declaration))))
 
 (defun agent-scheme--library-export-binding
     (spec library-key value-environment syntax-environment)
@@ -2234,13 +2382,24 @@ When RECURSIVE is non-nil, transformer specs see the new bindings."
                value-environment
                syntax-environment
                context))
-             ((member (agent-scheme--symbol-name operator)
-                      '("include"
-                        "include-ci"
-                        "include-library-declarations"))
+             ((agent-scheme--symbol-named-p operator "include")
+              (agent-scheme--eval-library-begin
+               (agent-scheme--library-include-body-forms
+                declaration context nil)
+               value-environment
+               syntax-environment
+               context))
+             ((agent-scheme--symbol-named-p operator "include-ci")
+              (agent-scheme--eval-library-begin
+               (agent-scheme--library-include-body-forms
+                declaration context t)
+               value-environment
+               syntax-environment
+               context))
+             ((agent-scheme--symbol-named-p
+               operator "include-library-declarations")
               (agent-scheme--eval-error
-               "%s requires policy-gated host file access"
-               (agent-scheme--symbol-name operator)))
+               "include-library-declarations must expand before evaluation"))
              (t
               (agent-scheme--eval-error
                "unsupported library declaration: %s"

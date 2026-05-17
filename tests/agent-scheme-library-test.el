@@ -15,6 +15,24 @@
   (agent-scheme-value->external
    (agent-scheme-eval-source source environment)))
 
+(defconst agent-scheme-library-test--root
+  (expand-file-name
+   ".."
+   (file-name-directory (or load-file-name buffer-file-name default-directory)))
+  "Repository root for library fixture tests.")
+
+(defconst agent-scheme-library-test--include-options
+  (list :include-directory agent-scheme-library-test--root
+        :include-paths
+        (list (expand-file-name "fixtures/r7rs"
+                                agent-scheme-library-test--root)))
+  "Policy options that allow R7RS fixture includes.")
+
+(defun agent-scheme-library-test--external/options (source options)
+  "Evaluate SOURCE with OPTIONS and return its stable external value."
+  (agent-scheme-value->external
+   (agent-scheme-eval-source source nil options)))
+
 (ert-deftest agent-scheme-library-test-imports-scheme-base-into-empty-environment ()
   "Import `(scheme base)' into an otherwise empty program environment."
   (should
@@ -146,5 +164,46 @@
        (import (scheme base))
        (include \"fixtures/r7rs/conformance-cases.scm\"))")
    :type 'agent-scheme-eval-error))
+
+(ert-deftest agent-scheme-library-test-include-reads-policy-allowed-body ()
+  "Read library body forms from policy-allowed include files."
+  (should
+   (equal
+    (agent-scheme-library-test--external/options
+     "(define-library (agent-scheme fixture include-body)
+        (export answer)
+        (import (scheme base))
+        (include \"fixtures/r7rs/include-body.scm\"))
+      (import (agent-scheme fixture include-body))
+      answer"
+     agent-scheme-library-test--include-options)
+    "42")))
+
+(ert-deftest agent-scheme-library-test-include-ci-folds-policy-allowed-body ()
+  "Read include-ci files with fold-case enabled."
+  (should
+   (equal
+    (agent-scheme-library-test--external/options
+     "(define-library (agent-scheme fixture include-ci-body)
+        (export mixedanswer)
+        (import (scheme base))
+        (include-ci \"fixtures/r7rs/include-ci-body.scm\"))
+      (import (agent-scheme fixture include-ci-body))
+      mixedanswer"
+     agent-scheme-library-test--include-options)
+    "42")))
+
+(ert-deftest agent-scheme-library-test-include-library-declarations-splice ()
+  "Splice policy-allowed library declarations into the current library."
+  (should
+   (equal
+    (agent-scheme-library-test--external/options
+     "(define-library (agent-scheme fixture included-declarations)
+        (include-library-declarations
+         \"fixtures/r7rs/include-library-declarations.scm\"))
+      (import (agent-scheme fixture included-declarations))
+      answer"
+     agent-scheme-library-test--include-options)
+    "42")))
 
 ;;; agent-scheme-library-test.el ends here
