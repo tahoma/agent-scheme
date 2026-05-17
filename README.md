@@ -27,6 +27,12 @@ libraries belong to a future `stdlib-plus` layer tracked separately in
 [tahoma/agent-scheme#54](https://github.com/tahoma/agent-scheme/issues/54), so
 SRFI import failures should not be read as R7RS-small conformance failures.
 
+The multi-host bootstrap strategy lives in
+[docs/multi-host-bootstrap.md](docs/multi-host-bootstrap.md). It records how
+Emacs remains the first host adapter while R7RS-small remains the portable
+language contract for future Scheme implementations, compiled backends, and
+non-Emacs UI surfaces.
+
 ## Design Rules
 
 - Think in Lisp/Scheme first for internal APIs and examples.
@@ -111,6 +117,7 @@ ordinary Scheme code when the host enables them:
 
 - [Repository agent instructions](AGENTS.md)
 - [Architecture and threat model](docs/architecture.md)
+- [Multi-host adapter and bootstrap strategy](docs/multi-host-bootstrap.md)
 - [Scheme references](docs/references.md)
 - [R7RS-small report reference](docs/r7rs-small-report.md)
 - [R7RS-small conformance matrix](docs/r7rs-conformance.md)

@@ -78,6 +78,11 @@ bootstrapping, but modules should keep the following boundary clear:
 Future hosts should be able to reuse the core data model and libraries without
 pretending to be Emacs.
 
+The detailed multi-host adapter and bootstrap stance is recorded in
+[Multi-Host Adapter and Bootstrap Strategy](multi-host-bootstrap.md). New host
+or backend work should preserve that document's R7RS-small contract, portable
+test path, and Scheme-readable adapter boundary.
+
 ### Inspectable Memory
 
 Agent memory must always be inspectable as Lisp/Scheme data. Vector indexes,
