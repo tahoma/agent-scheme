@@ -47,6 +47,36 @@
 (check-external 'character-name "#\\space" "#\\space")
 (check-external 'character-hex "#\\X03BB" "#\\λ")
 
+(define character-writer-cases
+  '(("character-writer-space" "#\\space" "#\\space")
+    ("character-writer-tab" "#\\tab" "#\\tab")
+    ("character-writer-alarm" "#\\alarm" "#\\alarm")
+    ("character-writer-backspace" "#\\backspace" "#\\backspace")
+    ("character-writer-delete-name" "#\\delete" "#\\delete")
+    ("character-writer-escape" "#\\escape" "#\\escape")
+    ("character-writer-newline" "#\\newline" "#\\newline")
+    ("character-writer-null" "#\\null" "#\\null")
+    ("character-writer-return" "#\\return" "#\\return")
+    ("character-writer-printable" "#\\a" "#\\a")
+    ("character-writer-unicode" "#\\x03bb" "#\\λ")
+    ("character-writer-control-start-of-heading" "#\\x1" "#\\x1")
+    ("character-writer-control-unit-separator" "#\\x1f" "#\\x1f")
+    ("character-writer-delete" "#\\x7f" "#\\delete")))
+
+(for-each
+ (lambda (case)
+   (let* ((name (string->symbol (car case)))
+          (source (cadr case))
+          (expected (list-ref case 2))
+          (external (agent-scheme-datum->external
+                     (agent-scheme-read source))))
+     (check name external expected)
+     (check (string->symbol (string-append (car case) "-round-trip"))
+            (agent-scheme-datum->external
+             (agent-scheme-read external))
+            expected)))
+ character-writer-cases)
+
 (check-external 'integer "42" "42")
 (check 'integer-is-agent-owned
        (number? (agent-scheme-read "42"))
