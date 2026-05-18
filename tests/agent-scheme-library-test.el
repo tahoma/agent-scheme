@@ -107,9 +107,14 @@
   (should
    (equal
     (agent-scheme-library-test--external
-     "(import (scheme base) (emacs buffer))
-      (procedure? emacs-current-buffer)")
-    "#t")))
+     "(import (scheme base)
+              (emacs buffer)
+              (emacs frame)
+              (emacs process))
+      (list (procedure? emacs-current-buffer)
+            (procedure? emacs-current-frame)
+            (procedure? emacs-process-list))")
+    "(#t #t #t)")))
 
 (ert-deftest agent-scheme-library-test-conflicting-imports-signal-error ()
   "Reject importing the same local name from different bindings."
