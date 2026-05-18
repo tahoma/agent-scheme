@@ -48,6 +48,7 @@ Implementation files under `lisp/` should follow the package namespace:
 - `lisp/agent-scheme-base.el` provides `agent-scheme-base`
 - `lisp/agent-scheme-library.el` provides `agent-scheme-library`
 - `lisp/agent-scheme-macro.el` provides `agent-scheme-macro`
+- `lisp/agent-scheme-interpreter.el` provides `agent-scheme-interpreter`
 - `lisp/agent-scheme-eval.el` provides `agent-scheme-eval`
 - `lisp/agent-scheme-mcp.el` provides `agent-scheme-mcp`
 
