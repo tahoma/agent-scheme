@@ -70,6 +70,8 @@ Before implementing a ticket, read:
 - [R7RS-small report reference](r7rs-small-report.md)
 - [Roadmap note](roadmap.md)
 - [Contributing](contributing.md)
+- [Project skill bundle](../skills/README.md), for task-specific workflow
+  reminders
 - The GitHub issue you are working on
 
 The GitHub roadmap issue is the source of truth for dependency ordering. Start

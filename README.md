@@ -121,6 +121,7 @@ ordinary Scheme code when the host enables them:
 ## Project Docs
 
 - [Repository agent instructions](AGENTS.md)
+- [Project skill bundle](skills/README.md)
 - [Architecture and threat model](docs/architecture.md)
 - [Multi-host adapter and bootstrap strategy](docs/multi-host-bootstrap.md)
 - [Scheme references](docs/references.md)
