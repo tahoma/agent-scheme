@@ -113,37 +113,34 @@ The bootstrap evaluator now treats `(scheme base)` as the initial R7RS-small
 base library target. Pure bindings are implemented in the evaluator kernel or
 portable Scheme prelude; host/session effects remain explicit policy gates.
 
-Implemented primitive procedure bindings:
+Implemented kernel primitive procedure bindings include:
 
-- numeric and predicates: `*`, `+`, `-`, `/`, `<`, `<=`, `=`, `>`, `>=`, `abs`,
-  `ceiling`, `complex?`, `denominator`, `even?`, `exact`,
+- numeric and predicates: `*`, `+`, `-`, `/`, `<`, `<=`, `=`, `>`, `>=`,
+  `ceiling`, `complex?`, `denominator`, `exact`,
   `exact-integer-sqrt`, `exact-integer?`, `exact?`, `expt`, `floor`, `floor/`,
   `floor-quotient`, `floor-remainder`, `gcd`, `inexact`, `inexact?`,
-  `integer?`, `lcm`, `max`, `min`, `modulo`, `negative?`, `number->string`,
-  `number?`, `numerator`, `odd?`, `positive?`, `quotient`, `rational?`,
-  `rationalize`, `real?`, `remainder`, `round`, `square`, `string->number`,
-  `truncate`, `truncate/`, `truncate-quotient`, `truncate-remainder`, `zero?`
-- pairs and lists: `append`, `assoc`, `assq`, `assv`, `caar`, `cadr`, `car`,
-  `cdar`, `cddr`, `cdr`, `cons`, `length`, `list`, `list-copy`, `list-ref`,
-  `list-set!`, `list-tail`, `list?`, `make-list`, `member`, `memq`, `memv`,
-  `null?`, `pair?`, `reverse`, `set-car!`, `set-cdr!`
+  `integer?`, `lcm`, `modulo`, `number->string`, `number?`, `numerator`,
+  `quotient`, `rational?`, `rationalize`, `real?`, `remainder`, `round`,
+  `string->number`, `truncate`, `truncate/`, `truncate-quotient`,
+  `truncate-remainder`
+- pairs and lists: `car`, `cdr`, `cons`, `list?`, `null?`, `pair?`,
+  `set-car!`, `set-cdr!`
 - booleans, equivalence, symbols, parameters, and procedures: `boolean=?`,
-  `boolean?`, `eq?`, `equal?`, `eqv?`, `features`, `make-parameter`, `not`,
+  `boolean?`, `eq?`, `equal?`, `eqv?`, `features`, `make-parameter`,
   `procedure?`, `string->symbol`, `symbol->string`, `symbol=?`, `symbol?`
 - characters and strings: `char->integer`, `char<=?`, `char<?`, `char=?`,
   `char>=?`, `char>?`, `char?`, `integer->char`, `list->string`,
   `make-string`, `string`, `string->list`, `string->number`, `string->utf8`,
   `string->vector`, `string-append`, `string-copy`, `string-copy!`,
-  `string-fill!`,
-  `string-for-each`, `string-length`, `string-map`, `string-ref`,
-  `string-set!`, `string<=?`, `string<?`, `string=?`, `string>=?`, `string>?`,
-  `string?`, `substring`, `utf8->string`, `vector->string`
+  `string-fill!`, `string-length`, `string-ref`, `string-set!`, `string<=?`,
+  `string<?`, `string=?`, `string>=?`, `string>?`, `string?`, `substring`,
+  `utf8->string`, `vector->string`
 - vectors and bytevectors: `bytevector`, `bytevector-append`, `bytevector-copy`,
   `bytevector-copy!`, `bytevector-length`, `bytevector-u8-ref`,
   `bytevector-u8-set!`, `bytevector?`, `list->vector`, `make-bytevector`,
   `make-vector`, `vector`, `vector->list`, `vector-append`, `vector-copy`,
-  `vector-copy!`, `vector-fill!`, `vector-for-each`, `vector-length`,
-  `vector-map`, `vector-ref`, `vector-set!`, `vector?`
+  `vector-copy!`, `vector-fill!`, `vector-length`, `vector-ref`,
+  `vector-set!`, `vector?`
 - EOF and in-memory ports: `binary-port?`, `call-with-port`, `char-ready?`,
   `close-input-port`, `close-output-port`, `close-port`, `eof-object`,
   `eof-object?`, `get-output-bytevector`, `get-output-string`,
@@ -156,9 +153,19 @@ Implemented primitive procedure bindings:
   `flush-output-port`, `file-error?`, `write-bytevector`, `write-char`,
   `write-string`, `write-u8`
 - higher-order helpers: `apply`, `call-with-current-continuation`,
-  `call-with-values`, `call/cc`, `dynamic-wind`, `for-each`, `map`, `values`,
+  `call-with-values`, `call/cc`, `dynamic-wind`, `values`,
   `with-exception-handler`, `raise`, `raise-continuable`, `error`,
   `error-object?`, `error-object-message`, `error-object-irritants`
+
+Implemented portable prelude procedure bindings include:
+
+- pairs and lists: `append`, `assoc`, `assq`, `assv`, `caar`, `cadr`,
+  `cdar`, `cddr`, `length`, `list`, `list-copy`, `list-ref`, `list-set!`,
+  `list-tail`, `make-list`, `member`, `memq`, `memv`, `reverse`
+- booleans and numeric conveniences: `abs`, `even?`, `max`, `min`,
+  `negative?`, `not`, `odd?`, `positive?`, `square`, `zero?`
+- higher-order traversal helpers: `for-each`, `map`, `string-for-each`,
+  `string-map`, `vector-for-each`, `vector-map`
 
 Implemented macro-expanded and evaluator-supported syntax includes `and`,
 `case`, `cond`, `cond-expand`, `define-record-type`, `define-values`, `do`,

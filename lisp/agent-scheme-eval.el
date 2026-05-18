@@ -7208,53 +7208,6 @@ When KEEP-RESULTS is non-nil, return the collected values."
    context
    nil))
 
-(defun agent-scheme--primitive-string-map (arguments context)
-  "Primitive string-map over ARGUMENTS."
-  (let* ((procedure (agent-scheme--expect-procedure
-                     (car arguments) "string-map procedure"))
-         (strings (mapcar
-                   (lambda (argument)
-                     (agent-scheme--expect-string argument "string-map"))
-                   (cdr arguments)))
-         (length (apply #'min (mapcar #'length strings)))
-         codes)
-    (cl-loop for index from 0 below length
-             do (let ((value
-                       (agent-scheme--apply-procedure
-                        procedure
-                        (mapcar
-                         (lambda (string)
-                           (agent-scheme--make-character
-                            (aref string index)))
-                         strings)
-                        context
-                        nil)))
-                  (push (agent-scheme--expect-character
-                         (agent-scheme--single-value value "string-map result")
-                         "string-map result")
-                        codes)))
-    (apply #'string (nreverse codes))))
-
-(defun agent-scheme--primitive-string-for-each (arguments context)
-  "Primitive string-for-each over ARGUMENTS."
-  (let* ((procedure (agent-scheme--expect-procedure
-                     (car arguments) "string-for-each procedure"))
-         (strings (mapcar
-                   (lambda (argument)
-                     (agent-scheme--expect-string argument "string-for-each"))
-                   (cdr arguments)))
-         (length (apply #'min (mapcar #'length strings))))
-    (cl-loop for index from 0 below length
-             do (agent-scheme--apply-procedure
-                 procedure
-                 (mapcar
-                  (lambda (string)
-                    (agent-scheme--make-character (aref string index)))
-                  strings)
-                 context
-                 nil)))
-  agent-scheme-unspecified)
-
 (defun agent-scheme--primitive-vector? (arguments _context)
   "Primitive vector? over ARGUMENTS."
   (agent-scheme--scheme-boolean (vectorp (car arguments))))
@@ -7348,33 +7301,6 @@ When KEEP-RESULTS is non-nil, return the collected values."
     (cl-loop for index from (car range) below (cdr range)
              do (aset vector index fill))
     agent-scheme-unspecified))
-
-(defun agent-scheme--primitive-vector-map (arguments context)
-  "Primitive vector-map over ARGUMENTS."
-  (let* ((procedure (agent-scheme--expect-procedure
-                     (car arguments) "vector-map procedure"))
-         (vectors (mapcar
-                   (lambda (argument)
-                     (agent-scheme--expect-vector argument "vector-map"))
-                   (cdr arguments)))
-         (length (apply #'min (mapcar #'length vectors)))
-         results)
-    (cl-loop for index from 0 below length
-             do (push
-                 (agent-scheme--single-value
-                  (agent-scheme--apply-procedure
-                   procedure
-                   (mapcar (lambda (vector) (aref vector index)) vectors)
-                   context
-                   nil)
-                  "vector-map result")
-                 results))
-    (vconcat (nreverse results))))
-
-(defun agent-scheme--primitive-vector-for-each (arguments context)
-  "Primitive vector-for-each over ARGUMENTS."
-  (agent-scheme--primitive-vector-map arguments context)
-  agent-scheme-unspecified)
 
 (defun agent-scheme--primitive-bytevector? (arguments _context)
   "Primitive bytevector? over ARGUMENTS."
@@ -7596,9 +7522,7 @@ When KEEP-RESULTS is non-nil, return the collected values."
     ("string-copy" agent-scheme--primitive-string-copy 1 3)
     ("string-copy!" agent-scheme--primitive-string-copy! 3 5)
     ("string-fill!" agent-scheme--primitive-string-fill! 2 4)
-    ("string-for-each" agent-scheme--primitive-string-for-each 2 nil)
     ("string-length" agent-scheme--primitive-string-length 1 1)
-    ("string-map" agent-scheme--primitive-string-map 2 nil)
     ("string-ref" agent-scheme--primitive-string-ref 2 2)
     ("string-set!" agent-scheme--primitive-string-set! 3 3)
     ("string<=?" agent-scheme--primitive-string<=? 2 nil)
@@ -7625,9 +7549,7 @@ When KEEP-RESULTS is non-nil, return the collected values."
     ("vector-copy" agent-scheme--primitive-vector-copy 1 3)
     ("vector-copy!" agent-scheme--primitive-vector-copy! 3 5)
     ("vector-fill!" agent-scheme--primitive-vector-fill! 2 4)
-    ("vector-for-each" agent-scheme--primitive-vector-for-each 2 nil)
     ("vector-length" agent-scheme--primitive-vector-length 1 1)
-    ("vector-map" agent-scheme--primitive-vector-map 2 nil)
     ("vector-ref" agent-scheme--primitive-vector-ref 2 2)
     ("vector-set!" agent-scheme--primitive-vector-set! 3 3)
     ("vector?" agent-scheme--primitive-vector? 1 1)
