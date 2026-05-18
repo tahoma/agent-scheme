@@ -59,6 +59,12 @@ Portable R7RS implementation files under `scheme/agent-scheme/` should mirror
 their library names:
 
 - `scheme/agent-scheme/reader.sld` defines `(agent-scheme reader)`
+- `scheme/agent-scheme/runtime.sld` defines `(agent-scheme runtime)`
+- `scheme/agent-scheme/base.sld` defines `(agent-scheme base)`
+- `scheme/agent-scheme/library.sld` defines `(agent-scheme library)`
+- `scheme/agent-scheme/macro.sld` defines `(agent-scheme macro)`
+- `scheme/agent-scheme/interpreter.sld` defines `(agent-scheme interpreter)`
+- `scheme/agent-scheme/eval.sld` defines `(agent-scheme eval)`
 
 Use `.sld` for portable R7RS `define-library` modules. Use `.scm` for Scheme
 programs, tests, fixtures, and ordinary source snippets that are loaded or run
