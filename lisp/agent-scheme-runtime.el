@@ -321,6 +321,24 @@ MESSAGE and ARGS are passed to `format'."
   "Return non-nil if DATUM is a Scheme symbol named NAME."
   (equal (agent-scheme--symbol-name datum) name))
 
+(defun agent-scheme--proper-list-elements (datum description)
+  "Return proper list DATUM as an Emacs Lisp list.
+Signal an evaluation error naming DESCRIPTION when DATUM is not a
+proper list."
+  (let ((cursor datum)
+        elements)
+    (while (consp cursor)
+      (push (car cursor) elements)
+      (setq cursor (cdr cursor)))
+    (when cursor
+      (agent-scheme--eval-error "%s must be a proper list" description))
+    (nreverse elements)))
+
+(defun agent-scheme--expect-symbol-name (datum description)
+  "Return DATUM's symbol name or signal an error naming DESCRIPTION."
+  (or (agent-scheme--symbol-name datum)
+      (agent-scheme--eval-error "%s must be an identifier" description)))
+
 (defun agent-scheme--syntax-symbol (name)
   "Return Agent Scheme symbol datum for NAME."
   (agent-scheme--intern-symbol name))
