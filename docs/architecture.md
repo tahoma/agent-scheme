@@ -296,6 +296,9 @@ modules:
   application, continuations, dynamic-wind, exception handlers, parameters,
   ports, budgets, and result records belong to the interpreter backend and
   shared runtime support.
+- The `(scheme base)` primitive registry, portable base prelude discovery, and
+  primitive manifest metadata live in `agent-scheme-base.el` so they can be
+  inspected without loading an interpreter backend.
 - Default-denied file, process, time, default-port, and host-capability
   primitives are backend-visible capability calls, but their authority decisions
   belong to policy and adapter modules rather than to portable frontend passes.
@@ -648,6 +651,7 @@ Focused test files should mirror the modules:
 - `tests/agent-scheme-normalize-test.el`
 - `tests/agent-scheme-eval-test.el`
 - `tests/agent-scheme-base-test.el`
+- `tests/agent-scheme-base-module-test.el`
 - `tests/agent-scheme-interpreter-test.el`
 - `tests/agent-scheme-compile-test.el`
 - `tests/agent-scheme-policy-test.el`
