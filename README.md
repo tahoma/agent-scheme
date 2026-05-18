@@ -8,7 +8,10 @@ The project goal is to give agents and users a Lisp-native scripting environment
 - Scheme-readable datums for memory, plans, transcripts, skills, rules, and audit records
 - explicit host capabilities instead of unrestricted host access
 - Emacs as the first host adapter, not the semantic center
-- portable libraries and self-scripting workflows that can eventually run in other UI environments
+- a first-class portable Scheme implementation that can grow into a native
+  reader, evaluator, emitter, and REPL path
+- portable libraries and self-scripting workflows that can eventually run in
+  other UI environments
 
 ## Current Status
 
@@ -39,6 +42,8 @@ non-Emacs UI surfaces.
 - Keep canonical runtime state inspectable as Scheme data.
 - Use JSON, HTTP, Markdown, and other encodings at protocol or document boundaries, not as the internal model.
 - Keep host adapters severable. Emacs is the first body; Agent Scheme should have a portable core.
+- Keep Emacs Lisp and portable R7RS Scheme architecture in parity for core
+  language behavior.
 - Prefer conservative, audited capabilities over broad host access.
 - Use the Agent Scheme project namespace for durable Emacs Lisp APIs and docs.
 

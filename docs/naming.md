@@ -66,6 +66,10 @@ their library names:
 - `scheme/agent-scheme/interpreter.sld` defines `(agent-scheme interpreter)`
 - `scheme/agent-scheme/eval.sld` defines `(agent-scheme eval)`
 
+Here "mirror" means naming and pass-ownership parity, not subordination. Core
+semantic changes should update the corresponding Emacs Lisp and portable R7RS
+modules and test bridges in the same slice when practical.
+
 Use `.sld` for portable R7RS `define-library` modules. Use `.scm` for Scheme
 programs, tests, fixtures, and ordinary source snippets that are loaded or run
 as code rather than imported as libraries.
