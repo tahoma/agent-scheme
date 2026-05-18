@@ -44,4 +44,22 @@
     (should-not
      (string-match-p "(define (agent-scheme-value->external" eval))))
 
+(ert-deftest agent-scheme-scheme-module-ownership-test-base-owns-registry ()
+  "Keep the portable base registry out of the evaluator module."
+  (let ((base
+         (agent-scheme-scheme-module-ownership-test--read
+          "scheme/agent-scheme/base.sld"))
+        (eval
+         (agent-scheme-scheme-module-ownership-test--read
+          "scheme/agent-scheme/eval.sld")))
+    (should-not
+     (agent-scheme-scheme-module-ownership-test--imports-eval-p base))
+    (should
+     (string-match-p "(define base-primitive-registry" base))
+    (should-not
+     (string-match-p "(define base-primitive-registry" eval))
+    (should
+     (string-match-p
+      "(define (agent-scheme-install-base-backend!" base))))
+
 ;;; agent-scheme-scheme-module-ownership-test.el ends here
