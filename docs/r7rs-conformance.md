@@ -23,6 +23,11 @@ comparison adapter when `racket` and the Racket `r7rs` package are installed;
 CHICKEN can be selected the same way when `csi` and the `r7rs` egg are
 installed.
 
+Oracle `implementation-variant` rows are expected to stay visible when they
+reflect genuine reference diversity, such as exactness choices, case-folding
+quirks, datum-label support, or library-loading behavior. They are not Agent
+Scheme failures unless the report status is `agent-mismatch`.
+
 ## Status Values
 
 | Status | Meaning |

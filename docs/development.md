@@ -202,6 +202,17 @@ R7RS value is otherwise clear, such as Chibi's doubled plus sign in complex NaN
 outputs. It does not collapse semantic distinctions such as exact versus
 inexact numbers.
 
+`implementation-variant` reports are intentionally visible. Treat them as
+portability notes rather than failures when Agent Scheme agrees with at least
+one supported reference and the remaining references differ among themselves.
+Current expected sources include exact versus inexact numeric results, special
+NaN and infinity spellings, optional reader support for datum labels in program
+source, reference-specific library loading behavior, and case-folding quirks in
+developer-only references. Add output normalization only for narrow writer
+aliases that preserve the same R7RS datum. Add `oracle-eligibility` metadata
+only when the reference command cannot exercise the same language mode as the
+fixture, not merely because implementations disagree.
+
 To focus the report stream, pass a comma-separated status filter:
 
 ```sh
