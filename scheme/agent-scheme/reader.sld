@@ -51,6 +51,7 @@
     (define agent-scheme-default-maximum-string-size 1048576)
     (define agent-scheme-default-maximum-total-nodes 1000000)
 
+    ;; Reader records own one parse run's immutable source and mutable cursor.
     (define-record-type <reader>
       ;; Reader state is mutable only for cursor position, fold-case mode, and
       ;; node count.  SOURCE remains the immutable snapshot of input text.
@@ -72,6 +73,7 @@
       (maximum-string-size reader-maximum-string-size)
       (maximum-total-nodes reader-maximum-total-nodes))
 
+    ;; Validation records own the post-read resource budget for host datums.
     (define-record-type <validation>
       ;; Validation walks host-created datums after parsing.  It has its own
       ;; counter so callers cannot bypass node limits by constructing values.
@@ -80,12 +82,16 @@
       (node-count validation-node-count set-validation-node-count!)
       (maximum-total-nodes validation-maximum-total-nodes))
 
+    ;; The exported EOF sentinel lets incremental readers distinguish end of
+    ;; input from any Scheme datum a source string can contain.
     (define-record-type <agent-scheme-read-eof>
       (make-agent-scheme-read-eof)
       agent-scheme-read-eof?)
 
     (define agent-scheme-read-eof (make-agent-scheme-read-eof))
 
+    ;; Agent-owned numbers preserve lexical exactness, radix, and special
+    ;; values instead of trusting the host Scheme's numeric tower to round-trip.
     (define-record-type <agent-scheme-number>
       ;; Agent Scheme owns numeric syntax even in the portable implementation.
       ;; Host numbers are used only as representation pieces inside this datum.
@@ -97,18 +103,24 @@
       (kind agent-scheme-number-kind)
       (value agent-scheme-number-value))
 
+    ;; Portable record metadata belongs to Agent Scheme, not the host record
+    ;; system, so evaluator-created records remain printable datums.
     (define-record-type <agent-scheme-record-type>
       (agent-scheme-make-record-type name fields)
       agent-scheme-record-type?
       (name agent-scheme-record-type-name)
       (fields agent-scheme-record-type-fields))
 
+    ;; Portable record instances pair Agent Scheme record metadata with field
+    ;; storage that the evaluator owns and may mutate through generated setters.
     (define-record-type <agent-scheme-record>
       (agent-scheme-make-record type fields)
       agent-scheme-record?
       (type agent-scheme-record-type)
       (fields agent-scheme-record-fields))
 
+    ;; Datum-label records hold placeholders while resolving shared and circular
+    ;; datum syntax; FILLED guards references to labels before their value lands.
     (define-record-type <datum-label>
       (make-datum-label id filled value)
       datum-label?
@@ -118,6 +130,8 @@
 
     (define char-page (integer->char 12))
 
+    ;; Exported writer helper used by the reader, evaluator, and tests whenever
+    ;; Agent Scheme needs canonical integer text independent of host formatting.
     (define (agent-scheme-integer->radix-string integer radix)
       (let ((digits "0123456789abcdef")
             (negative? (< integer 0))
@@ -401,6 +415,8 @@
         (cons (quotient (car adjusted) divisor)
               (quotient (cdr adjusted) divisor))))
 
+    ;; Canonical number constructors are the public boundary for agent-owned
+    ;; numeric values created by readers, primitives, and result renderers.
     (define (agent-scheme-make-canonical-integer value . rest)
       (let ((exactness (if (null? rest) 'exact (car rest)))
             (radix (if (or (null? rest) (null? (cdr rest)))
@@ -483,6 +499,8 @@
          'complex
          (cons real imaginary))))
 
+    ;; Numeric predicates and helpers inspect the agent-owned representation
+    ;; instead of asking the host whether wrapped numbers are ordinary numbers.
     (define (agent-scheme-number-zero? number)
       (and (agent-scheme-number? number)
            (cond
@@ -1410,6 +1428,8 @@
     (define (options-from-rest maybe-options)
       (if (null? maybe-options) '() (car maybe-options)))
 
+    ;; Read one datum from SOURCE, enforce complete input consumption, and
+    ;; validate the resulting host data against Agent Scheme resource limits.
     (define (agent-scheme-read source . maybe-options)
       (let* ((options (options-from-rest maybe-options))
              (reader (reader-from-source source options))
@@ -1422,6 +1442,8 @@
         (agent-scheme-validate-datum datum options)
         datum))
 
+    ;; Read a source body into datums for program/library evaluation.  Datum
+    ;; labels are scoped per datum, matching R7RS external representations.
     (define (agent-scheme-read-all source . maybe-options)
       (let* ((options (options-from-rest maybe-options))
              (reader (reader-from-source source options)))
@@ -1442,6 +1464,8 @@
                              reader)
                             datums)))))))
 
+    ;; Incremental read entry point for ports and REPL-like callers; the cdr of
+    ;; the result is the next source offset no matter which datum was returned.
     (define (agent-scheme-read-from-string-at source position . maybe-options)
       (if (not (string? source))
           (error "agent-scheme reader source must be a string" source))
@@ -1472,6 +1496,8 @@
           (error "agent-scheme datum limit error: datum node count exceeds maximum total nodes"
                  (validation-maximum-total-nodes validation))))
 
+    ;; Datum validation protects the evaluator from host-constructed values that
+    ;; bypassed lexical reader checks, including cycles and oversized objects.
     (define (validate-datum datum options validation depth seen)
       (if (> depth
              (option-ref options 'max-depth
@@ -1566,6 +1592,8 @@
         (error "agent-scheme reader error: datum contains unsupported object"
                datum))))
 
+    ;; Public validation returns DATUM unchanged so callers can place it inline
+    ;; in read/evaluate pipelines while still enforcing depth and size budgets.
     (define (agent-scheme-validate-datum datum . maybe-options)
       (let* ((options (options-from-rest maybe-options))
              (validation
@@ -1648,6 +1676,8 @@
        ((eq? key (caar alist)) (cdr alist))
        (else (cons (car alist) (remove-assq key (cdr alist))))))
 
+    ;; Render Agent Scheme datums with stable external syntax, including shared
+    ;; and circular structure labels for write/shared mode.
     (define (agent-scheme-datum->external datum . maybe-options)
       (let ((mode (if (null? maybe-options) 'write (car maybe-options)))
             (display? (if (or (null? maybe-options)
