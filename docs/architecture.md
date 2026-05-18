@@ -303,6 +303,9 @@ modules:
   `cond-expand`, and `define-library` bootstrap support live in
   `agent-scheme-library.el`; evaluation of library bodies still calls into the
   current interpreter backend.
+- Syntax environments, `syntax-rules` parsing and application, hygienic
+  template expansion, and `agent-scheme-expand` entry points live in
+  `agent-scheme-macro.el`.
 - Default-denied file, process, time, default-port, and host-capability
   primitives are backend-visible capability calls, but their authority decisions
   belong to policy and adapter modules rather than to portable frontend passes.
@@ -653,6 +656,7 @@ Focused test files should mirror the modules:
 - `tests/agent-scheme-library-test.el`
 - `tests/agent-scheme-library-module-test.el`
 - `tests/agent-scheme-macro-test.el`
+- `tests/agent-scheme-macro-module-test.el`
 - `tests/agent-scheme-normalize-test.el`
 - `tests/agent-scheme-eval-test.el`
 - `tests/agent-scheme-base-test.el`
