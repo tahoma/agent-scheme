@@ -32,7 +32,7 @@
   "Registry key for the required R7RS `(scheme base)' library.")
 
 (declare-function agent-scheme--eval-define-syntax "agent-scheme-macro")
-(declare-function agent-scheme--trampoline "agent-scheme-eval")
+(declare-function agent-scheme--trampoline "agent-scheme-interpreter")
 
 (defconst agent-scheme--base-primitive-registry
   '(("*" agent-scheme--primitive* 0 nil)

@@ -306,6 +306,10 @@ modules:
 - Syntax environments, `syntax-rules` parsing and application, hygienic
   template expansion, and `agent-scheme-expand` entry points live in
   `agent-scheme-macro.el`.
+- Evaluation, primitive implementations, procedure application, continuations,
+  the trampoline, and Scheme-readable evaluation result records live in
+  `agent-scheme-interpreter.el`; `agent-scheme-eval.el` remains the public
+  orchestration entry point.
 - Default-denied file, process, time, default-port, and host-capability
   primitives are backend-visible capability calls, but their authority decisions
   belong to policy and adapter modules rather than to portable frontend passes.
@@ -662,6 +666,7 @@ Focused test files should mirror the modules:
 - `tests/agent-scheme-base-test.el`
 - `tests/agent-scheme-base-module-test.el`
 - `tests/agent-scheme-interpreter-test.el`
+- `tests/agent-scheme-interpreter-module-test.el`
 - `tests/agent-scheme-compile-test.el`
 - `tests/agent-scheme-policy-test.el`
 - `tests/agent-scheme-capability-test.el`

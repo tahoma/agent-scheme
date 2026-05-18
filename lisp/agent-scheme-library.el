@@ -20,9 +20,9 @@
   "Directory containing the loaded Agent Scheme library source.")
 
 (declare-function agent-scheme--make-empty-syntax-environment "agent-scheme-macro")
-(declare-function agent-scheme--policy-denied "agent-scheme-eval")
+(declare-function agent-scheme--policy-denied "agent-scheme-interpreter")
 (declare-function agent-scheme--syntax-environment-ref "agent-scheme-macro")
-(declare-function agent-scheme--trampoline "agent-scheme-eval")
+(declare-function agent-scheme--trampoline "agent-scheme-interpreter")
 (declare-function agent-scheme--with-syntax-environment "agent-scheme-macro")
 
 (cl-defstruct (agent-scheme--library-binding
