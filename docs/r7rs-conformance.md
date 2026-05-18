@@ -12,6 +12,11 @@ Fixture cases live in the shared `agent-scheme-fixture-suite` at
 `kind r7rs-conformance`, validates every conformance fixture, and runs cases
 marked `implemented`.
 
+`make conformance-oracle` runs a separate reference implementation oracle over
+pure shared fixtures. The first adapter targets Chibi Scheme through
+`AGENT_SCHEME_CHIBI` or `chibi-scheme` on `PATH`; missing references are
+reported as `unsupported-reference` without affecting `make test`.
+
 ## Status Values
 
 | Status | Meaning |

@@ -15,6 +15,7 @@ small and will grow as implementation tickets land.
 Optional but useful:
 
 - Chibi Scheme, `chibi-scheme`, for running portable R7RS bootstrap tests
+  and the reference implementation oracle runner
 - ShellCheck or other local lint tools for future scripts
 
 ## GitHub Access
@@ -146,6 +147,32 @@ Lisp harness, portable Scheme harness, and conformance runner select from the
 same indexed cases. Fixtures marked `pending`, `policy-gated`, or `unavailable`
 are loaded and validated by ERT without being executed. Fixtures marked
 `implemented` must run through `make test`.
+
+## Reference Oracle
+
+Pure shared R7RS conformance fixtures can also be compared with external Scheme
+implementations through the oracle runner:
+
+```sh
+make conformance-oracle
+```
+
+The first reference adapter is Chibi Scheme. The runner uses
+`AGENT_SCHEME_CHIBI` when set, otherwise it searches for `chibi-scheme` on
+`PATH`. The Chibi adapter writes each eligible fixture to a temporary R7RS
+program and invokes Chibi with that file as the command-line program argument.
+Missing reference implementations are reported as `unsupported-reference` in
+Scheme-readable oracle reports and do not affect the default `make test`
+command.
+
+Oracle reports identify each fixture by case id and classify the comparison as
+`portable-agree`, `implementation-variant`, `agent-mismatch`,
+`unsupported-reference`, `policy-gated`, or `not-oracle-eligible`. The runner
+intentionally skips Agent Scheme-specific result fixtures, resource-limit
+fixtures, and host-effecting R7RS libraries such as `(scheme file)`,
+`(scheme load)`, `(scheme process-context)`, `(scheme repl)`, and
+`(scheme time)`. The target is report-oriented; inspect `agent-mismatch`
+reports as conformance investigation signals.
 
 ## Verification
 
