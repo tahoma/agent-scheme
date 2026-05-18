@@ -191,7 +191,10 @@ Oracle reports identify each fixture by case id and classify the comparison as
 intentionally skips Agent Scheme-specific result fixtures, resource-limit
 fixtures, and host-effecting R7RS libraries such as `(scheme file)`,
 `(scheme load)`, `(scheme process-context)`, `(scheme repl)`, and
-`(scheme time)`. The target is report-oriented; inspect `agent-mismatch`
+`(scheme time)`. It also skips fixtures whose result depends on whether a
+reference command reads a file as a strict R7RS program or as REPL input from a
+file, since R7RS permits the latter mode to accept import declarations outside
+the program prefix. The target is report-oriented; inspect `agent-mismatch`
 reports as conformance investigation signals.
 
 The oracle normalizes narrow reference writer spelling variation when the same

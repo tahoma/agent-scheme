@@ -75,6 +75,20 @@
     (should (eq (agent-scheme-oracle-case-classification metadata-case)
                 'policy-gated))))
 
+(ert-deftest agent-scheme-oracle-test-skips-reference-mode-sensitive-program-case ()
+  "Skip strict program-shape fixtures when references run file-REPL modes."
+  (let ((case
+         (cl-find-if
+          (lambda (candidate)
+            (eq (agent-scheme-oracle--field candidate 'id)
+                'program-import-after-expression-error))
+          (agent-scheme-oracle-fixture-cases))))
+    (should case)
+    (should (eq (agent-scheme-oracle--field case 'oracle-reason)
+                'implementation-dependent))
+    (should (eq (agent-scheme-oracle-case-classification case)
+                'not-oracle-eligible))))
+
 (ert-deftest agent-scheme-oracle-test-reports-missing-reference ()
   "Missing optional reference implementations produce readable reports."
   (let* ((case (agent-scheme-test-fixture-case 'primitive-procedure-call))

@@ -349,6 +349,8 @@
      (section "5.1")
      (status implemented)
      (oracle shared)
+     (oracle-eligibility not-oracle-eligible)
+     (oracle-reason implementation-dependent)
      (options ())
      (description "Program import declarations must precede body expressions.")
      (source "(import (scheme base)) 1 (import (scheme cxr)) 'ok")
