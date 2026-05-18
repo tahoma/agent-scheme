@@ -84,10 +84,11 @@ need while editing `.sld` and `.scm` files.
 
 - Start each portable Scheme file with a `;;;` header that names the library or
   source file responsibility and the host/core boundary it belongs to.
-- Put a leading `;;` comment before exported Scheme bindings,
-  `define-record-type` forms, `define-syntax` forms, and nontrivial private
-  helpers.  The comment should describe the contract, data shape, invariant, or
-  pass boundary that is not obvious from the identifier.
+- Put a leading `;;` comment before every top-level Scheme `define`,
+  `define-record-type`, and `define-syntax` form.  The comment should describe
+  the contract, data shape, invariant, or pass boundary that is not obvious
+  from the identifier.  Section comments may supplement these comments, but they
+  do not replace the per-binding leading comment.
 - For record types, document ownership of the record shape, any mutable fields,
   and whether the record is part of the public Agent Scheme datum surface or an
   internal implementation record.
@@ -96,9 +97,9 @@ need while editing `.sld` and `.scm` files.
 - Comment primitive/kernel boundaries, policy or capability assumptions,
   compiler/backend assumptions, include/load paths, and other places where a
   small local change would affect runtime authority or portability.
-- A short section comment may cover a run of tiny R7RS helpers whose names and
-  surrounding source fully state the contract.  Do not add line-by-line
-  narration for simple selectors, wrappers, or local loops.
+- Keep comments concise for tiny R7RS helpers whose names and surrounding
+  source fully state most of the contract.  Do not add line-by-line narration
+  for simple selectors, wrappers, or local loops.
 - Keep Scheme comments public-repo safe: avoid project history, personal
   machine paths, secrets, transcripts, and non-project branding.
 

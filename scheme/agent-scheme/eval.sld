@@ -32,26 +32,35 @@
           (scheme inexact)
           (agent-scheme reader))
   (begin
-    ;; These defaults bound a single expansion/evaluation run.  The public
-    ;; entry points accept an association list with matching option names.
+    ;; Default evaluator step budget for one expansion or evaluation run.
     (define agent-scheme-default-maximum-steps 100000)
+    ;; Default maximum result value graph size before budget failure.
     (define agent-scheme-default-maximum-value-nodes 100000)
+    ;; Default maximum primitive callback count allowed during evaluation.
     (define agent-scheme-default-maximum-host-callbacks 10000)
 
+    ;; Record type for the singleton unspecified value returned by effect-only
+    ;; forms.
     (define-record-type <agent-scheme-unspecified>
       (make-unspecified)
       agent-scheme-unspecified?
       (tag unspecified-tag))
 
+    ;; Singleton value representing Scheme results whose value is unspecified.
     (define agent-scheme-unspecified (make-unspecified))
 
+    ;; Record type for internal uninitialized bindings used during recursive
+    ;; setup.
     (define-record-type <undefined>
       (make-undefined)
       undefined?
       (tag undefined-tag))
 
+    ;; Singleton sentinel for internal bindings that must not be read yet.
     (define undefined (make-undefined))
 
+    ;; Record type for mutable lexical storage shared by closures and
+    ;; environments.
     (define-record-type <cell>
       (make-cell value)
       cell?
@@ -69,6 +78,8 @@
       (imported-names environment-imported-names
                       set-environment-imported-names!))
 
+    ;; Record type for syntax frames, parent links, and immutable imported
+    ;; syntax names.
     (define-record-type <syntax-environment>
       (make-syntax-environment frame parent imported-names)
       syntax-environment?
@@ -88,18 +99,23 @@
       (value-environment syntax-context-value-environment)
       (syntax-environment syntax-context-syntax-environment))
 
+    ;; Record type for an identifier name plus optional macro syntax context.
     (define-record-type <identifier>
       (make-identifier name context)
       identifier?
       (name identifier-name)
       (context identifier-context))
 
+    ;; Record type for parsed lambda formals split into required and rest
+    ;; names.
     (define-record-type <formals>
       (make-formals required rest)
       formals?
       (required formals-required)
       (rest formals-rest))
 
+    ;; Record type for compound Scheme procedures and their closure
+    ;; environment.
     (define-record-type <procedure>
       (make-procedure formals body environment)
       agent-scheme-procedure?
@@ -117,12 +133,16 @@
       (minimum-arity primitive-procedure-minimum-arity)
       (maximum-arity primitive-procedure-maximum-arity))
 
+    ;; Record type for parameter procedure state and optional conversion
+    ;; function.
     (define-record-type <agent-scheme-parameter>
       (make-parameter value converter)
       agent-scheme-parameter?
       (value parameter-value set-parameter-value!)
       (converter parameter-converter))
 
+    ;; Record type for packaged multiple return values crossing evaluator
+    ;; boundaries.
     (define-record-type <multiple-values>
       (make-multiple-values values)
       multiple-values?
@@ -137,22 +157,26 @@
       (dynamic-winds continuation-dynamic-winds)
       (exception-handlers continuation-exception-handlers))
 
+    ;; Record type for before/after thunks active in dynamic-wind stacks.
     (define-record-type <dynamic-wind-frame>
       (make-dynamic-wind-frame before after)
       dynamic-wind-frame?
       (before dynamic-wind-frame-before)
       (after dynamic-wind-frame-after))
 
+    ;; Record type for Scheme error objects with messages and irritants.
     (define-record-type <agent-scheme-error-object>
       (make-agent-scheme-error-object message irritants)
       agent-scheme-error-object?
       (message agent-scheme-error-object-message)
       (irritants agent-scheme-error-object-irritants))
 
+    ;; Record type for the singleton EOF object used by Agent Scheme ports.
     (define-record-type <agent-scheme-eof-object>
       (make-agent-scheme-eof-object)
       agent-scheme-eof-object?)
 
+    ;; Singleton EOF object returned by Agent Scheme input primitives.
     (define agent-scheme-eof-object (make-agent-scheme-eof-object))
 
     ;; Portable ports keep backing storage as Scheme data; host-file access is
@@ -174,6 +198,7 @@
       (contents agent-scheme-port-contents
                 set-agent-scheme-port-contents!))
 
+    ;; Record type for eval environment specifiers and their mutability policy.
     (define-record-type <environment-specifier>
       (make-environment-specifier environment syntax-environment immutable?)
       environment-specifier?
@@ -181,18 +206,22 @@
       (syntax-environment environment-specifier-syntax-environment)
       (immutable? environment-specifier-immutable?))
 
+    ;; Record type for accumulating string output port contents.
     (define-record-type <string-output-port>
       (make-string-output-port contents)
       string-output-port?
       (contents string-output-port-contents
                 set-string-output-port-contents!))
 
+    ;; Record type for evaluation bodies and whether definitions are currently
+    ;; allowed.
     (define-record-type <sequence>
       (make-sequence forms allow-definitions)
       sequence?
       (forms sequence-forms)
       (allow-definitions sequence-allow-definitions))
 
+    ;; Record type for trampoline states that preserve tail calls.
     (define-record-type <bounce>
       (make-bounce expression environment syntax-environment continuation)
       bounce?
@@ -247,6 +276,7 @@
       (value-environment syntax-transformer-value-environment)
       (syntax-environment syntax-transformer-syntax-environment))
 
+    ;; Record type for syntax-rules pattern captures and ellipsis paths.
     (define-record-type <pattern-binding>
       ;; Captures are keyed by nested ellipsis paths such as `(0 2)'.  Empty
       ;; prefixes record zero-length repetitions needed by template checks.
@@ -257,12 +287,15 @@
       (empty-prefixes pattern-binding-empty-prefixes
                       set-pattern-binding-empty-prefixes!))
 
+    ;; Record type for expanded forms that must run under a specific syntax
+    ;; environment.
     (define-record-type <syntax-scope>
       (make-syntax-scope forms syntax-environment)
       syntax-scope?
       (forms syntax-scope-forms)
       (syntax-environment syntax-scope-syntax-environment))
 
+    ;; Record type for imported/exported library value and syntax bindings.
     (define-record-type <library-binding>
       (make-library-binding name kind object library-key)
       library-binding?
@@ -282,20 +315,24 @@
       (value-environment library-value-environment)
       (syntax-environment library-syntax-environment))
 
+    ;; Return the option value for KEY or DEFAULT when KEY is absent.
     (define (option-ref options key default)
       (let ((cell (assq key options)))
         (if cell (cdr cell) default)))
 
+    ;; Raise an evaluator error with the Agent Scheme diagnostic prefix.
     (define (eval-error message . irritants)
       (apply error
              (string-append "agent-scheme eval error: " message)
              irritants))
 
+    ;; Raise an evaluator budget error with the Agent Scheme diagnostic prefix.
     (define (budget-error message . irritants)
       (apply error
              (string-append "agent-scheme budget error: " message)
              irritants))
 
+    ;; Normalize include-directory options to a stable prefix form.
     (define (normalize-include-directory directory)
       (cond
        ((or (string=? directory "")
@@ -306,10 +343,12 @@
        (else
         (string-append directory "/"))))
 
+    ;; Report whether PATH is absolute for include/load path resolution.
     (define (path-absolute? path)
       (and (> (string-length path) 0)
            (char=? (string-ref path 0) #\/)))
 
+    ;; Join DIRECTORY and PATH unless PATH is already absolute.
     (define (path-join directory path)
       (cond
        ((or (string=? directory "") (path-absolute? path))
@@ -319,11 +358,13 @@
        (else
         (string-append directory "/" path))))
 
+    ;; Resolve relative include paths against the active include directory.
     (define (normalize-include-paths paths directory)
       (map (lambda (path)
              (path-join directory path))
            paths))
 
+    ;; Create a fresh evaluation context from user option overrides.
     (define (new-eval-context options)
       (let ((include-directory
              (normalize-include-directory
@@ -357,12 +398,14 @@
        '()
        '())))
 
+    ;; Charge one evaluator step against the active step budget.
     (define (note-step! context)
       (set-context-steps! context (+ (context-steps context) 1))
       (if (> (context-steps context) (context-maximum-steps context))
           (budget-error "evaluation step budget exceeded"
                         (context-maximum-steps context))))
 
+    ;; Charge one primitive callback against the host-callback budget.
     (define (note-host-callback! context primitive)
       (set-context-host-callbacks!
        context
@@ -372,6 +415,7 @@
           (budget-error "host callback budget exceeded"
                         (primitive-procedure-name primitive))))
 
+    ;; Count the reachable nodes in VALUE while tolerating cycles.
     (define (value-node-count value seen)
       (cond
        ((or (boolean? value)
@@ -436,6 +480,7 @@
        (else
         (eval-error "unsupported Scheme value" value))))
 
+    ;; Reject VALUE when its reachable node count exceeds the result budget.
     (define (check-value-budget value context)
       (let ((count (value-node-count value '())))
         (if (> count (context-maximum-value-nodes context))
@@ -444,11 +489,13 @@
                           (context-maximum-value-nodes context))))
       value)
 
+    ;; Unpack a single or multiple-value result into a list.
     (define (values-list value)
       (if (multiple-values? value)
           (multiple-values-values value)
           (list value)))
 
+    ;; Require VALUE to contain exactly one Scheme value.
     (define (single-value value description)
       (let ((values (values-list value)))
         (if (not (= (length values) 1))
@@ -457,17 +504,21 @@
              (length values)))
         (car values)))
 
+    ;; Default continuation that returns its input value unchanged.
     (define (identity-continuation value)
       value)
 
+    ;; Invoke a continuation procedure with VALUE.
     (define (continue continuation value)
       (continuation value))
 
+    ;; Package continuation arguments as one value or multiple values.
     (define (continuation-value arguments)
       (if (= (length arguments) 1)
           (car arguments)
           (make-multiple-values arguments)))
 
+    ;; Return the stack prefix before FRAME in dynamic-wind order.
     (define (dynamic-wind-prefix-before frame stack)
       (let loop ((cursor stack) (prefix '()))
         (cond
@@ -475,6 +526,7 @@
          ((eq? (car cursor) frame) (reverse prefix))
          (else (loop (cdr cursor) (cons (car cursor) prefix))))))
 
+    ;; Find the outermost shared frame between dynamic-wind stacks.
     (define (dynamic-wind-common-frame current target)
       (let loop ((current-outer (reverse current))
                  (target-outer (reverse target))
@@ -487,11 +539,13 @@
                   (car current-outer))
             common)))
 
+    ;; Call PROCEDURE for dynamic control effects and discard its values.
     (define (call-ignoring-values procedure context description)
       (expect-procedure procedure description)
       (apply-procedure procedure '() context #f)
       agent-scheme-unspecified)
 
+    ;; Continuation-aware variant of call-ignoring-values.
     (define (call-ignoring-values/k
              procedure context description continuation)
       (expect-procedure procedure description)
@@ -538,6 +592,7 @@
          (reverse entering))
         (set-context-dynamic-winds! context (append target '()))))
 
+    ;; Return DATUM as a proper list or raise an evaluator error.
     (define (proper-list-elements datum description)
       (let loop ((cursor datum) (elements '()))
         (cond
@@ -547,15 +602,19 @@
           (eval-error
            (string-append description " must be a proper list"))))))
 
+    ;; Return the second element of LIST for parser helpers.
     (define (second list)
       (car (cdr list)))
 
+    ;; Return the third element of LIST for parser helpers.
     (define (third list)
       (car (cdr (cdr list))))
 
+    ;; Return the fourth element of LIST for parser helpers.
     (define (fourth list)
       (car (cdr (cdr (cdr list)))))
 
+    ;; Validate that DATUM is a symbol for a named syntax context.
     (define (expect-symbol datum description)
       (if (symbol? datum)
           datum
@@ -563,15 +622,18 @@
            (string-append description " must be an identifier")
            datum)))
 
+    ;; Report whether DATUM is a symbol or wrapped syntax identifier.
     (define (identifier-datum? datum)
       (or (symbol? datum) (identifier? datum)))
 
+    ;; Return the symbolic name from a raw or wrapped identifier.
     (define (identifier-datum-name datum)
       (cond
        ((symbol? datum) datum)
        ((identifier? datum) (identifier-name datum))
        (else #f)))
 
+    ;; Return the lookup key for an identifier, preserving macro context.
     (define (identifier-key identifier)
       (cond
        ((identifier? identifier)
@@ -585,10 +647,12 @@
        (else
         (eval-error "expected identifier" identifier))))
 
+    ;; Report whether DATUM names the given symbol after identifier unwrapping.
     (define (identifier-named? datum name)
       (let ((actual (identifier-datum-name datum)))
         (and actual (eq? actual name))))
 
+    ;; Return an identifier lookup key or raise a syntax-specific error.
     (define (expect-identifier-key datum description)
       (if (identifier-datum? datum)
           (identifier-key datum)
@@ -596,16 +660,20 @@
            (string-append description " must be an identifier")
            datum)))
 
+    ;; Public constructor for a mutable lexical environment with an optional
+    ;; parent.
     (define (agent-scheme-make-empty-environment . maybe-parent)
       (make-environment
        '()
        (if (null? maybe-parent) #f (car maybe-parent))
        '()))
 
+    ;; Return the cell for NAME in ENVIRONMENT's current frame, or #f.
     (define (frame-cell environment name)
       (let ((cell (assoc name (environment-frame environment))))
         (if cell (cdr cell) #f)))
 
+    ;; Return the nearest lexical cell for NAME, walking parent environments.
     (define (environment-cell environment name)
       (let loop ((cursor environment))
         (cond
@@ -613,6 +681,7 @@
          ((frame-cell cursor name) => (lambda (cell) cell))
          (else (loop (environment-parent cursor))))))
 
+    ;; Report whether CELL is marked imported in ENVIRONMENT or its parents.
     (define (environment-cell-imported? environment cell)
       (let environment-loop ((cursor environment))
         (and cursor
@@ -624,9 +693,11 @@
                             (frame-loop (cdr frame)))))
                  (environment-loop (environment-parent cursor))))))
 
+    ;; Report whether NAME is an imported binding in ENVIRONMENT's own frame.
     (define (current-environment-imported? environment name)
       (memq name (environment-imported-names environment)))
 
+    ;; Add NAME to ENVIRONMENT's current frame unless it would redefine import.
     (define (environment-define! environment name value)
       (if (current-environment-imported? environment name)
           (eval-error "cannot redefine imported binding" name))
@@ -635,6 +706,7 @@
        (cons (cons name (make-cell value))
              (environment-frame environment))))
 
+    ;; Mutate an existing lexical binding, rejecting unbound and imported names.
     (define (environment-set! environment name value)
       (let ((cell (environment-cell environment name)))
         (cond
@@ -645,6 +717,7 @@
          (else
           (set-cell-value! cell value)))))
 
+    ;; Update NAME in the current frame, or define it if no current cell exists.
     (define (environment-define-or-set! environment name value)
       (let ((cell (frame-cell environment name)))
         (if cell
@@ -654,6 +727,7 @@
               (set-cell-value! cell value))
             (environment-define! environment name value))))
 
+    ;; Return NAME's value, rejecting unbound or still-undefined bindings.
     (define (environment-ref environment name)
       (let ((cell (environment-cell environment name)))
         (if (not cell)
@@ -665,6 +739,7 @@
                    name)
                   value)))))
 
+    ;; Resolve a raw or hygienic identifier to its lexical cell.
     (define (environment-cell-for-identifier environment identifier)
       ;; Hygienic identifiers first try their generated lexical key at the use
       ;; site, then fall back to the macro definition environment for free
@@ -684,6 +759,7 @@
         (environment-cell environment identifier))
        (else #f)))
 
+    ;; Return IDENTIFIER's value after hygienic lookup and undefined checks.
     (define (environment-ref-identifier environment identifier)
       (let ((cell (environment-cell-for-identifier environment identifier)))
         (if (not cell)
@@ -695,6 +771,7 @@
                    (identifier-datum-name identifier))
                   value)))))
 
+    ;; Mutate IDENTIFIER's binding after hygienic lookup and import checks.
     (define (environment-set-identifier! environment identifier value)
       (let ((cell (environment-cell-for-identifier environment identifier)))
         (cond
@@ -707,6 +784,7 @@
          (else
           (set-cell-value! cell value)))))
 
+    ;; Reject duplicate symbols in NAMES using DESCRIPTION for diagnostics.
     (define (ensure-distinct-names names description)
       (let loop ((rest names) (seen '()))
         (if (not (null? rest))
@@ -717,6 +795,7 @@
                    (car rest)))
               (loop (cdr rest) (cons (car rest) seen))))))
 
+    ;; Parse lambda formals into required-name and optional-rest metadata.
     (define (parse-formals formals)
       (cond
        ((symbol? formals)
@@ -745,6 +824,7 @@
              "lambda formals must be an identifier, a proper list, or a dotted list"
              formals)))))))
 
+    ;; Report whether EXPRESSION evaluates to itself in core evaluation.
     (define (self-evaluating? expression)
       (or (boolean? expression)
           (agent-scheme-number? expression)
@@ -753,21 +833,27 @@
           (vector? expression)
           (bytevector? expression)))
 
+    ;; Implement Scheme truthiness, where only #f is false.
     (define (true-value? value)
       (not (eq? value #f)))
 
+    ;; Report whether FORM is a core define form headed by the raw symbol.
     (define (definition-form? form)
       (and (pair? form) (eq? (car form) 'define)))
 
+    ;; Report whether FORM is a define-values form after identifier unwrapping.
     (define (define-values-form? form)
       (and (pair? form) (identifier-named? (car form) 'define-values)))
 
+    ;; Report whether FORM is a core begin form headed by the raw symbol.
     (define (begin-form? form)
       (and (pair? form) (eq? (car form) 'begin)))
 
+    ;; Construct the lambda expression used by function-definition shorthand.
     (define (make-lambda-expression formals body)
       (cons 'lambda (cons formals body)))
 
+    ;; Parse variable or procedure define syntax into a name/expression pair.
     (define (parse-definition form)
       (let ((parts (proper-list-elements form "define form")))
         (if (< (length parts) 3)
@@ -799,6 +885,7 @@
              "define target must be an identifier or function signature"
              form))))))
 
+    ;; Parse define-values syntax into formals metadata and an initializer.
     (define (parse-define-values form)
       (let ((parts (proper-list-elements form "define-values form")))
         (if (not (= (length parts) 3))
@@ -807,17 +894,22 @@
              form))
         (cons (parse-formals (second parts)) (third parts))))
 
+    ;; Return every name bound by a define-values form.
     (define (define-values-bound-names form)
       (formals-names (car (parse-define-values form))))
 
+    ;; Report whether FORM is a define-record-type form.
     (define (record-definition-form? form)
       (and (pair? form) (identifier-named? (car form) 'define-record-type)))
 
+    ;; Report whether FORM is any definition accepted at body start.
     (define (body-definition-form? form)
       (or (definition-form? form)
           (define-values-form? form)
           (record-definition-form? form)))
 
+    ;; Parse define-record-type syntax into constructor, predicate, and field
+    ;; specs.
     (define (parse-record-definition form)
       (let ((parts (proper-list-elements form "define-record-type form")))
         (if (< (length parts) 4)
@@ -899,6 +991,7 @@
                               (cons (cons mutator-name field-name) mutators)
                               mutators)))))))))
 
+    ;; Return every binding introduced by a define-record-type form.
     (define (record-definition-bound-names form)
       (let ((spec (parse-record-definition form)))
         (append
@@ -908,6 +1001,7 @@
          (map car (second (assq 'accessors spec)))
          (map car (second (assq 'mutators spec))))))
 
+    ;; Return FIELD's zero-based index in RECORD-TYPE, or raise on mismatch.
     (define (record-field-index record-type field)
       (let loop ((rest (agent-scheme-record-type-fields record-type))
                  (index 0))
@@ -917,6 +1011,7 @@
          ((eq? (car rest) field) index)
          (else (loop (cdr rest) (+ index 1))))))
 
+    ;; Validate record of type input and raise an evaluator error on mismatch.
     (define (expect-record-of-type value record-type description)
       (if (not (and (agent-scheme-record? value)
                     (eq? (agent-scheme-record-type value) record-type)))
@@ -925,6 +1020,8 @@
            value))
       value)
 
+    ;; Install or update a record-related binding while preserving import
+    ;; protection.
     (define (define-or-set-record-binding! environment name value)
       (let ((cell (frame-cell environment name)))
         (if cell
@@ -934,6 +1031,8 @@
               (set-cell-value! cell value))
             (environment-define! environment name value))))
 
+    ;; Install a record type plus generated constructor, predicate, and field
+    ;; procedures.
     (define (eval-record-definition form environment context)
       (let* ((spec (parse-record-definition form))
              (type-name (second (assq 'type-name spec)))
@@ -1021,6 +1120,7 @@
          (second (assq 'mutators spec)))
         agent-scheme-unspecified))
 
+    ;; Split a body into leading internal definitions and remaining expressions.
     (define (split-body body)
       (let loop ((cursor body) (definitions '()))
         (cond
@@ -1031,6 +1131,7 @@
          (else
           (cons (reverse definitions) cursor)))))
 
+    ;; Allocate and initialize an internal-definition environment for BODY.
     (define (prepare-body-environment body environment context)
       (let* ((split (split-body body))
              (definitions (car split))
@@ -1136,6 +1237,7 @@
                          (cdr rest)
                          (cons (cons 'record definition) parsed)))))))))))
 
+    ;; Evaluate a define form and install the resulting single value.
     (define (eval-definition form environment context . maybe-continuation)
       (let* ((parsed (parse-definition form))
              (name (car parsed))
@@ -1169,6 +1271,7 @@
             (drain-state state context)
             state)))
 
+    ;; Bind multiple values to define-values formals in ENVIRONMENT.
     (define (define-values-bind
              formals values environment context description)
       (let* ((required (formals-required formals))
@@ -1200,6 +1303,7 @@
                  (car remaining-values))
                 (loop (cdr names) (cdr remaining-values)))))))
 
+    ;; Evaluate a define-values form and install all returned values.
     (define (eval-define-values
              form environment context . maybe-continuation)
       (let* ((parsed (parse-define-values form))
@@ -1226,6 +1330,7 @@
             (drain-state state context)
             state)))
 
+    ;; Create a call environment and bind FORMALS to ARGUMENTS.
     (define (bind-formals formals arguments closure-environment context)
       (let ((environment
              (agent-scheme-make-empty-environment closure-environment)))
@@ -1233,6 +1338,7 @@
          formals arguments environment context "procedure")
         environment))
 
+    ;; Bind FORMALS to ARGUMENTS inside an existing call environment.
     (define (bind-formals-in-environment
              formals arguments environment context description)
       (let* ((required (formals-required formals))
@@ -1265,11 +1371,13 @@
                                      (car values))
                 (loop (cdr names) (cdr values)))))))
 
+    ;; Return every symbol named by parsed FORMALS.
     (define (formals-names formals)
       (if (formals-rest formals)
           (append (formals-required formals) (list (formals-rest formals)))
           (formals-required formals)))
 
+    ;; Report whether COUNT satisfies PRIMITIVE's arity bounds.
     (define (arity-match? primitive count)
       (and (>= count (primitive-procedure-minimum-arity primitive))
            (let ((maximum (primitive-procedure-maximum-arity primitive)))
@@ -1360,6 +1468,7 @@
           (eval-error "attempted to call non-procedure"
                       (agent-scheme-value->external procedure))))))
 
+    ;; Evaluate an if form, preserving tail position for selected branches.
     (define (eval-if parts environment context tail? continuation)
       (if (not (or (= (length parts) 3) (= (length parts) 4)))
           (eval-error
@@ -1392,6 +1501,7 @@
             (else
              (continue continuation agent-scheme-unspecified)))))))
 
+    ;; Evaluate a set! form and mutate the target identifier binding.
     (define (eval-set! parts environment context continuation)
       (if (not (= (length parts) 3))
           (eval-error "set! requires an identifier and an expression" parts))
@@ -1408,10 +1518,12 @@
              (environment-set-identifier! environment target value)
              (continue continuation agent-scheme-unspecified))))))
 
+    ;; Report whether DATUM is a pair headed by identifier TAG.
     (define (tagged-list? datum tag)
       (and (pair? datum)
            (identifier-named? (car datum) tag)))
 
+    ;; Return the sole operand from FORM or raise a syntax error.
     (define (single-argument-syntax form description)
       (let ((parts (proper-list-elements form description)))
         (if (not (= (length parts) 2))
@@ -1420,9 +1532,11 @@
              form))
         (second parts)))
 
+    ;; Report whether FORM is a syntax-error expansion result.
     (define (syntax-error-form? form)
       (tagged-list? form 'syntax-error))
 
+    ;; Render syntax-error operands into one diagnostic message.
     (define (syntax-error-message form)
       (let ((parts (proper-list-elements form "syntax-error form")))
         (let loop ((rest (cdr parts)) (message ""))
@@ -1437,6 +1551,7 @@
                    " "
                    (agent-scheme-value->external (car rest)))))))))
 
+    ;; Raise the diagnostic represented by a syntax-error form.
     (define (raise-syntax-error form . maybe-source-form)
       (let ((message (syntax-error-message form)))
         (if (null? maybe-source-form)
@@ -1448,6 +1563,7 @@
               ": "
               message)))))
 
+    ;; Evaluate a quasiquote list template, including depth-aware splicing.
     (define (eval-quasiquote-list template depth environment context)
       (let loop ((cursor template) (output '()))
         (if (pair? cursor)
@@ -1491,6 +1607,7 @@
                (eval-quasiquote-template
                 cursor depth environment context)))))))
 
+    ;; Evaluate one quasiquote template with nested quasiquote depth tracking.
     (define (eval-quasiquote-template template depth environment context)
       (cond
        ((tagged-list? template 'unquote)
@@ -1525,11 +1642,13 @@
           (vector->list template) depth environment context)))
        (else template)))
 
+    ;; Evaluate a quasiquote form after validating its single template operand.
     (define (eval-quasiquote parts environment context)
       (if (not (= (length parts) 2))
           (eval-error "quasiquote requires exactly one template" parts))
       (eval-quasiquote-template (second parts) 1 environment context))
 
+    ;; Parse one letrec or letrec* binding into a name/expression pair.
     (define (parse-letrec-binding binding description)
       (let ((parts (proper-list-elements binding description)))
         (if (not (= (length parts) 2))
@@ -1540,6 +1659,7 @@
         (cons (expect-identifier-key (car parts) description)
               (second parts))))
 
+    ;; Evaluate letrec or letrec* with preallocated recursive binding cells.
     (define (eval-letrec
              parts environment context tail? sequential? . maybe-continuation)
       (if (< (length parts) 3)
@@ -1602,6 +1722,7 @@
                            identity-continuation
                            (car maybe-continuation)))))
 
+    ;; Parse one let-values binding into formals metadata and initializer.
     (define (parse-mv-binding binding description)
       (let ((parts (proper-list-elements binding description)))
         (if (not (= (length parts) 2))
@@ -1612,6 +1733,7 @@
         (cons (parse-formals (car parts))
               (second parts))))
 
+    ;; Evaluate let-values or let*-values with parallel or sequential binding.
     (define (eval-let-values
              parts environment context tail? sequential? . maybe-continuation)
       (if (< (length parts) 3)
@@ -1693,9 +1815,11 @@
               (drain-state state context)
               state))))
 
+    ;; Construct an empty syntax environment with an optional parent.
     (define (make-empty-syntax-environment parent)
       (make-syntax-environment '() parent '()))
 
+    ;; Return NAME's syntax transformer by walking syntax-environment parents.
     (define (syntax-environment-ref syntax-environment name)
       (let loop ((cursor syntax-environment))
         (cond
@@ -1704,6 +1828,7 @@
           => (lambda (cell) (cdr cell)))
          (else (loop (syntax-environment-parent cursor))))))
 
+    ;; Add a syntax binding unless NAME is imported into this syntax frame.
     (define (syntax-environment-define! syntax-environment name transformer)
       (if (memq name (syntax-environment-imported-names syntax-environment))
           (eval-error "cannot redefine imported syntax binding" name))
@@ -1712,6 +1837,7 @@
        (cons (cons name transformer)
              (syntax-environment-frame syntax-environment))))
 
+    ;; Run THUNK with CONTEXT temporarily using SYNTAX-ENVIRONMENT.
     (define (with-syntax-environment context syntax-environment thunk)
       (let ((old-syntax-environment (context-syntax-environment context)))
         (set-context-syntax-environment! context syntax-environment)
@@ -1719,14 +1845,17 @@
           (set-context-syntax-environment! context old-syntax-environment)
           value)))
 
+    ;; Report whether OPERATOR is shadowed by a value binding.
     (define (operator-shadowed? operator environment)
       (and (symbol? operator) (environment-cell environment operator)))
 
+    ;; Report whether OPERATOR can still dispatch as syntax in ENVIRONMENT.
     (define (special-operator-active? operator environment)
       (and (identifier-datum? operator)
            (or (identifier? operator)
                (not (operator-shadowed? operator environment)))))
 
+    ;; Resolve OPERATOR to its active syntax transformer, respecting hygiene.
     (define (syntax-binding-for-operator operator environment context)
       ;; Macro-introduced operators consult their definition-time syntax
       ;; environment.  Plain symbols use the active syntax environment unless a
@@ -1749,10 +1878,12 @@
               name))
             #f)))
 
+    ;; Report whether DATUM names the active syntax-rules ellipsis identifier.
     (define (ellipsis-identifier? datum ellipsis)
       (and (identifier-datum? datum)
            (eq? (identifier-datum-name datum) ellipsis)))
 
+    ;; Return DATUM's list elements, or #f when DATUM is not a proper list.
     (define (proper-list-elements/maybe datum)
       (let loop ((cursor datum) (elements '()))
         (cond
@@ -1760,9 +1891,11 @@
          ((pair? cursor) (loop (cdr cursor) (cons (car cursor) elements)))
          (else #f))))
 
+    ;; Report whether FORM is a syntax-rules transformer spec.
     (define (syntax-rules-spec? form)
       (and (pair? form) (identifier-named? (car form) 'syntax-rules)))
 
+    ;; Parse one syntax-rules rule into pattern and template.
     (define (parse-syntax-rule rule)
       (let ((parts (proper-list-elements rule "syntax-rules rule")))
         (if (not (= (length parts) 2))
@@ -1777,6 +1910,7 @@
                pattern))
           (cons pattern (second parts)))))
 
+    ;; Parse a syntax-rules transformer, including optional custom ellipsis.
     (define (parse-syntax-rules form value-environment syntax-environment)
       (if (not (syntax-rules-spec? form))
           (eval-error "transformer spec must be a syntax-rules form" form))
@@ -1816,6 +1950,7 @@
            value-environment
            syntax-environment))))
 
+    ;; Report whether IDENTIFIER names one of the syntax-rules literals.
     (define (syntax-literal? identifier literals)
       (let ((name (identifier-datum-name identifier)))
         (let loop ((rest literals))
@@ -1824,19 +1959,24 @@
            ((eq? name (identifier-datum-name (car rest))) #t)
            (else (loop (cdr rest)))))))
 
+    ;; Create the mutable capture table used while matching one macro rule.
     (define (make-pattern-bindings)
       (list 'bindings))
 
+    ;; Return the capture-table cell for pattern variable NAME, or #f.
     (define (pattern-binding-cell bindings name)
       (assoc name (cdr bindings)))
 
+    ;; Return the pattern binding entry for NAME, or #f.
     (define (pattern-binding bindings name)
       (let ((cell (pattern-binding-cell bindings name)))
         (if cell (cdr cell) #f)))
 
+    ;; Add ENTRY for pattern variable NAME to the capture table.
     (define (add-pattern-binding! bindings name entry)
       (set-cdr! bindings (cons (cons name entry) (cdr bindings))))
 
+    ;; Report whether PREFIX is an initial segment of repetition PATH.
     (define (path-prefix? prefix path)
       (cond
        ((null? prefix) #t)
@@ -1845,10 +1985,12 @@
         (path-prefix? (cdr prefix) (cdr path)))
        (else #f)))
 
+    ;; Return the capture stored for PATH, or #f when none exists.
     (define (capture-ref captures path)
       (let ((cell (assoc path captures)))
         (if cell (cdr cell) #f)))
 
+    ;; Return NAME's capture entry, creating it with DEPTH when needed.
     (define (ensure-pattern-binding! bindings name depth)
       (let ((entry (pattern-binding bindings name)))
         (cond
@@ -1866,6 +2008,7 @@
               (set-pattern-binding-depth! entry depth))
           entry))))
 
+    ;; Record VALUE as NAME's capture at the current ellipsis PATH.
     (define (syntax-bind-pattern-variable! bindings name value path)
       (let* ((entry (ensure-pattern-binding! bindings name (length path)))
              (captures (pattern-binding-captures entry)))
@@ -1878,17 +2021,20 @@
          (cons (cons path value) captures)))
       #t)
 
+    ;; Split DATUM into list elements and the final tail value.
     (define (list-elements-tail datum)
       (let loop ((cursor datum) (elements '()))
         (if (pair? cursor)
             (loop (cdr cursor) (cons (car cursor) elements))
             (cons (reverse elements) cursor))))
 
+    ;; Append ELEMENTS in front of TAIL without requiring TAIL to be a list.
     (define (append-tail elements tail)
       (if (null? elements)
           tail
           (cons (car elements) (append-tail (cdr elements) tail))))
 
+    ;; Return every pattern variable name introduced by PATTERN.
     (define (pattern-variable-names pattern literals ellipsis)
       (cond
        ((identifier-datum? pattern)
@@ -1918,6 +2064,7 @@
                     (vector->list pattern))))
        (else '())))
 
+    ;; Mark repeated variables under PATTERN as captured zero times at PATH.
     (define (bind-empty-repeated-pattern-variables!
              pattern literals ellipsis bindings path)
       (for-each
@@ -1930,20 +2077,24 @@
                 (cons path (pattern-binding-empty-prefixes entry))))))
        (pattern-variable-names pattern literals ellipsis)))
 
+    ;; Return the first COUNT elements of LIST.
     (define (list-take list count)
       (let loop ((rest list) (remaining count) (result '()))
         (if (= remaining 0)
             (reverse result)
             (loop (cdr rest) (- remaining 1) (cons (car rest) result)))))
 
+    ;; Return LIST after skipping COUNT elements.
     (define (list-drop list count)
       (if (= count 0)
           list
           (list-drop (cdr list) (- count 1))))
 
+    ;; Return the last COUNT elements of LIST.
     (define (list-last-n list count)
       (list-drop list (- (length list) count)))
 
+    ;; Resolve IDENTIFIER's syntax binding in a given syntax environment.
     (define (identifier-syntax-binding-in identifier syntax-environment)
       (let ((name (identifier-datum-name identifier)))
         (and name
@@ -1961,6 +2112,7 @@
               (and syntax-environment
                    (syntax-environment-ref syntax-environment name))))))
 
+    ;; Return the value or syntax token used for literal-identifier comparison.
     (define (identifier-binding-token identifier value-environment
                                       syntax-environment)
       (let ((cell
@@ -1974,6 +2126,8 @@
          (syntax-binding (cons 'syntax syntax-binding))
          (else #f))))
 
+    ;; Report whether two literal-identifier binding tokens denote the same
+    ;; binding.
     (define (binding-tokens-equal? left right)
       (cond
        ((and (not left) (not right)) #t)
@@ -1983,6 +2137,7 @@
         #t)
        (else #f)))
 
+    ;; Report whether a syntax-rules literal matches by name and binding.
     (define (literal-identifier-match? pattern input transformer
                                        use-environment use-syntax-environment)
       (and (identifier-datum? input)
@@ -1996,6 +2151,7 @@
             (identifier-binding-token
              input use-environment use-syntax-environment))))
 
+    ;; Match one syntax-rules pattern node and record pattern captures.
     (define (match-pattern pattern input transformer bindings path
                            use-environment use-syntax-environment)
       (let ((literals (syntax-transformer-literals transformer))
@@ -2045,6 +2201,7 @@
          (else
           (equal? pattern input)))))
 
+    ;; Return the index of the ellipsis marker in PATTERNS, or #f.
     (define (find-ellipsis-index patterns ellipsis)
       (if (null? patterns)
           #f
@@ -2054,6 +2211,7 @@
              ((ellipsis-identifier? (car rest) ellipsis) index)
              (else (loop (cdr rest) (+ index 1)))))))
 
+    ;; Match fixed pattern and input element lists from left to right.
     (define (match-pattern-list patterns inputs transformer bindings path
                                 use-environment use-syntax-environment)
       (cond
@@ -2075,9 +2233,11 @@
                             use-syntax-environment))
        (else #f)))
 
+    ;; Return PATH extended with one repetition INDEX.
     (define (path-add-index path index)
       (append path (list index)))
 
+    ;; Match list/vector pattern elements, including one ellipsis repetition.
     (define (match-pattern-elements patterns pattern-tail input-elements
                                     input-tail transformer bindings path
                                     use-environment use-syntax-environment)
@@ -2167,6 +2327,7 @@
                                       use-syntax-environment)
                        (and (null? remaining) (null? input-tail))))))))
 
+    ;; Try one syntax-rules rule against FORM and fill BINDINGS on success.
     (define (match-syntax-rule rule form transformer bindings
                                use-environment use-syntax-environment)
       (let* ((pattern-pieces (list-elements-tail (car rule)))
@@ -2187,6 +2348,7 @@
               use-environment
               use-syntax-environment))))
 
+    ;; Return captured pattern variables referenced by a template fragment.
     (define (template-pattern-variable-names template bindings ellipsis)
       (cond
        ((identifier-datum? template)
@@ -2216,6 +2378,7 @@
                     (vector->list template))))
        (else '())))
 
+    ;; Return the greatest number in a nonempty list.
     (define (max-number-list numbers)
       (let loop ((rest (cdr numbers)) (best (car numbers)))
         (if (null? rest)
@@ -2223,6 +2386,7 @@
             (loop (cdr rest)
                   (if (> (car rest) best) (car rest) best)))))
 
+    ;; Return distinct repetition indices immediately under PATH.
     (define (collect-next-indices paths path)
       (let ((path-length (length path)))
         (let loop ((rest paths) (indices '()))
@@ -2238,6 +2402,7 @@
            (else
             (loop (cdr rest) indices))))))
 
+    ;; Return how many repetitions ENTRY has below PATH, if knowable.
     (define (pattern-binding-repeat-count-at entry path)
       (if (<= (pattern-binding-depth entry) (length path))
           #f
@@ -2253,6 +2418,7 @@
              ((member path empty-prefixes) 0)
              (else #f)))))
 
+    ;; Determine the repetition count required for a template ellipsis.
     (define (template-repeat-count template bindings ellipsis path)
       (let loop ((names (template-pattern-variable-names
                          template bindings ellipsis))
@@ -2275,6 +2441,7 @@
                       (loop (cdr names) entry-count))
                 (loop (cdr names) count)))))))
 
+    ;; Return NAME's captured value at PATH, enforcing ellipsis depth.
     (define (pattern-binding-value-at entry name path)
       (let* ((depth (pattern-binding-depth entry))
              (capture-path
@@ -2288,6 +2455,7 @@
             (cdr cell)
             (eval-error "missing pattern variable capture" name))))
 
+    ;; Expand a syntax-rules template using captured pattern bindings.
     (define (expand-template template bindings syntax-context ellipsis . rest)
       ;; Identifiers not captured by BINDINGS are wrapped with SYNTAX-CONTEXT
       ;; so free template identifiers keep their definition-time bindings.
@@ -2374,6 +2542,7 @@
                             ellipsis-literal?)))
          (else template))))
 
+    ;; Allocate a fresh syntax context for identifiers introduced by a macro.
     (define (next-syntax-context! context value-environment syntax-environment)
       ;; Each expansion gets a fresh context id so introduced bindings cannot
       ;; collide accidentally with names from the macro use site.
@@ -2381,6 +2550,7 @@
         (set-context-next-syntax-id! context (+ id 1))
         (make-syntax-context id value-environment syntax-environment)))
 
+    ;; Apply TRANSFORMER to FORM by matching rules and expanding the template.
     (define (apply-syntax-transformer transformer form environment context)
       (let loop ((rules (syntax-transformer-rules transformer)))
         (if (null? rules)
@@ -2409,9 +2579,11 @@
                         result))
                   (loop (cdr rules)))))))
 
+    ;; Report whether FORM is a define-syntax form.
     (define (syntax-definition-form? form)
       (and (pair? form) (identifier-named? (car form) 'define-syntax)))
 
+    ;; Evaluate a define-syntax form and install its transformer.
     (define (eval-define-syntax form environment context syntax-environment)
       (let ((parts (proper-list-elements form "define-syntax form")))
         (if (not (= (length parts) 3))
@@ -2428,6 +2600,7 @@
            syntax-environment keyword transformer)
           agent-scheme-unspecified)))
 
+    ;; Parse one let-syntax binding into keyword and transformer spec.
     (define (parse-let-syntax-binding binding)
       (let ((parts (proper-list-elements binding "syntax binding")))
         (if (not (= (length parts) 2))
@@ -2437,6 +2610,7 @@
         (cons (expect-symbol (car parts) "syntax binding keyword")
               (second parts))))
 
+    ;; Build the syntax scope created by let-syntax or letrec-syntax.
     (define (make-local-syntax-scope parts environment context recursive?)
       (if (< (length parts) 3)
           (eval-error
@@ -2467,6 +2641,7 @@
          bindings)
         (make-syntax-scope (cddr parts) local-syntax-environment)))
 
+    ;; Canonical key for the required `(scheme base)' library.
     (define scheme-base-library-key '(scheme base))
 
     ;; Bootstrap libraries are registered lazily into the current context.  The
@@ -2479,6 +2654,7 @@
         (emacs project)
         (emacs window)))
 
+    ;; Standard library keys recognized by the portable library registry.
     (define standard-library-keys
       '((scheme case-lambda)
         (scheme char)
@@ -2496,6 +2672,7 @@
         (scheme time)
         (scheme write)))
 
+    ;; Source used to bootstrap `(scheme case-lambda)' as a Scheme library.
     (define case-lambda-library-source
       "(define-library (scheme case-lambda)
          (export case-lambda)
@@ -2522,6 +2699,7 @@
                       (apply (lambda formals body ...) args)
                       (apply (case-lambda more ...) args))))))))")
 
+    ;; Source used to bootstrap `(scheme lazy)' as a Scheme library.
     (define lazy-library-source
       "(define-library (scheme lazy)
          (export delay delay-force force make-promise promise?)
@@ -2554,6 +2732,7 @@
                ((delay expression)
                 (delay-force expression))))))")
 
+    ;; Report whether DATUM is a proper R7RS library name.
     (define (proper-library-name? datum)
       (and (pair? datum)
            (let ((parts (proper-list-elements/maybe datum)))
@@ -2571,21 +2750,25 @@
                       (loop (cdr rest)))
                      (else #f)))))))
 
+    ;; Validate and return NAME as a library registry key.
     (define (library-name-key name)
       (if (proper-library-name? name)
           name
           (eval-error "invalid library name" name)))
 
+    ;; Search ALIST for KEY using equal? comparison.
     (define (assoc/equal key alist)
       (cond
        ((null? alist) #f)
        ((equal? key (caar alist)) (car alist))
        (else (assoc/equal key (cdr alist)))))
 
+    ;; Return the registered library for KEY in CONTEXT, or #f.
     (define (library-registry-ref context key)
       (let ((cell (assoc/equal key (context-libraries context))))
         (if cell (cdr cell) #f)))
 
+    ;; Store LIBRARY under KEY in CONTEXT's registry.
     (define (library-registry-set! context key library)
       (let replace ((rest (context-libraries context)) (prefix '()))
         (cond
@@ -2601,19 +2784,24 @@
          (else
           (replace (cdr rest) (cons (car rest) prefix))))))
 
+    ;; Return NAME's binding from SYNTAX-ENVIRONMENT's current frame only.
     (define (current-syntax-binding syntax-environment name)
       (let ((cell (assq name (syntax-environment-frame syntax-environment))))
         (if cell (cdr cell) #f)))
 
+    ;; Report whether FORM is headed by identifier NAME.
     (define (form-named? form name)
       (and (pair? form) (identifier-named? (car form) name)))
 
+    ;; Report whether FORM is an import declaration.
     (define (import-form? form)
       (form-named? form 'import))
 
+    ;; Report whether FORM is a define-library declaration.
     (define (define-library-form? form)
       (form-named? form 'define-library))
 
+    ;; Return BINDING under exported NAME while preserving its target object.
     (define (library-binding-with-name binding name)
       (make-library-binding
        name
@@ -2621,6 +2809,7 @@
        (library-binding-object binding)
        (library-binding-library-key binding)))
 
+    ;; Report whether two library bindings refer to the same exported object.
     (define (same-library-binding? left right)
       (and (library-binding? left)
            (library-binding? right)
@@ -2628,6 +2817,7 @@
            (eq? (library-binding-object left)
                 (library-binding-object right))))
 
+    ;; Snapshot current value and syntax frames as exports for LIBRARY-KEY.
     (define (snapshot-library-bindings value-environment syntax-environment
                                        library-key)
       (append
@@ -2646,6 +2836,7 @@
                library-key))
             (syntax-environment-frame syntax-environment))))
 
+    ;; Register `(scheme base)' from the active or freshly built base state.
     (define (register-scheme-base-library! context environment)
       (if (not (library-registry-ref context scheme-base-library-key))
           (let* ((use-current-environment?
@@ -2677,6 +2868,7 @@
                 base-environment
                 base-syntax-environment))))))
 
+    ;; Register an intentionally empty capability library for KEY.
     (define (register-empty-emacs-capability-library! key context)
       (if (not (library-registry-ref context key))
           (let ((value-environment (agent-scheme-make-empty-environment))
@@ -2686,18 +2878,21 @@
              key
              (make-library key key '() value-environment syntax-environment)))))
 
+    ;; Read and evaluate a define-library form from SOURCE.
     (define (register-source-library! source context environment)
       (eval-define-library
        (agent-scheme-read source)
        environment
        context))
 
+    ;; Return NAME's binding from EXPORTS, or #f when absent.
     (define (find-library-export name exports)
       (cond
        ((null? exports) #f)
        ((eq? name (library-binding-name (car exports))) (car exports))
        (else (find-library-export name (cdr exports)))))
 
+    ;; Register KEY as a subset of `(scheme base)' exports.
     (define (register-subset-library! key export-names context environment)
       (if (not (library-registry-ref context key))
           (let* ((base-library
@@ -2723,6 +2918,7 @@
               (library-value-environment base-library)
               (library-syntax-environment base-library))))))
 
+    ;; Register KEY as a library populated from primitive specs.
     (define (register-primitive-library! key primitive-specs context)
       (if (not (library-registry-ref context key))
           (let ((value-environment (agent-scheme-make-empty-environment))
@@ -2749,6 +2945,7 @@
               value-environment
               syntax-environment)))))
 
+    ;; Return primitive specs for `(scheme char)'.
     (define (char-library-specs)
       (list
        (list 'char-alphabetic? primitive-char-alphabetic? 1 1)
@@ -2774,14 +2971,18 @@
        (list 'string-foldcase primitive-string-foldcase 1 1)
        (list 'string-upcase primitive-string-upcase 1 1)))
 
+    ;; Base-library cxr names re-exported by `(scheme cxr)'.
     (define cxr-library-base-names
       '(caar cadr cdar cddr))
 
+    ;; Additional cxr names implemented directly by `(scheme cxr)'.
     (define cxr-library-extra-names
       '(caaar caadr cadar caddr cdaar cdadr cddar cdddr
         caaaar caaadr caadar caaddr cadaar cadadr caddar cadddr
         cdaaar cdaadr cdadar cdaddr cddaar cddadr cdddar cddddr))
 
+    ;; Implement the `cxr-function` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-cxr-function name)
       (let ((text (symbol->string name)))
         (lambda (arguments context)
@@ -2799,11 +3000,13 @@
                          (else
                           (eval-error "invalid cxr name" name))))))))))
 
+    ;; Return primitive specs for generated cxr selectors.
     (define (cxr-library-specs)
       (map (lambda (name)
              (list name (primitive-cxr-function name) 1 1))
            cxr-library-extra-names))
 
+    ;; Register `(scheme cxr)' from base selectors and generated selectors.
     (define (register-cxr-library! key context environment)
       (if (not (library-registry-ref context key))
           (let* ((base-library
@@ -2845,6 +3048,7 @@
               value-environment
               syntax-environment)))))
 
+    ;; Return primitive specs for `(scheme inexact)'.
     (define (inexact-library-specs)
       (list
        (list 'acos primitive-acos 1 1)
@@ -2860,9 +3064,11 @@
        (list 'sqrt primitive-sqrt 1 1)
        (list 'tan primitive-tan 1 1)))
 
+    ;; Return a primitive spec that always raises a policy-denied error.
     (define (policy-denied-spec name)
       (list name (policy-denied-primitive (symbol->string name)) 0 #f))
 
+    ;; Register `(scheme r5rs)' with R5RS aliases for exact/inexact conversion.
     (define (register-r5rs-library! key context environment)
       (if (not (library-registry-ref context key))
           (let* ((base-library
@@ -2896,6 +3102,7 @@
               (library-value-environment base-library)
               (library-syntax-environment base-library))))))
 
+    ;; Register a supported standard library by KEY.
     (define (register-standard-library! key context environment)
       (cond
        ((equal? key '(scheme case-lambda))
@@ -2990,6 +3197,7 @@
        (else
         (eval-error "unknown standard library" key))))
 
+    ;; Report whether NAME is a known or already registered library.
     (define (library-available? name context environment)
       (let ((key (library-name-key name)))
         (or (equal? key scheme-base-library-key)
@@ -2997,6 +3205,7 @@
             (member key empty-emacs-capability-library-keys)
             (and (library-registry-ref context key) #t))))
 
+    ;; Resolve NAME to a library, registering lazy standard libraries as needed.
     (define (resolve-library name context environment)
       (let ((key (library-name-key name)))
         (cond
@@ -3009,12 +3218,14 @@
         (or (library-registry-ref context key)
             (eval-error "unknown library" key))))
 
+    ;; Return NAME's import binding from BINDINGS, or #f.
     (define (find-import-binding name bindings)
       (cond
        ((null? bindings) #f)
        ((eq? name (library-binding-name (car bindings))) (car bindings))
        (else (find-import-binding name (cdr bindings)))))
 
+    ;; Reject import modifiers naming exports that are absent from BINDINGS.
     (define (ensure-import-names-present names bindings description)
       (for-each
        (lambda (name)
@@ -3024,6 +3235,7 @@
               name)))
        names))
 
+    ;; Merge duplicate compatible imports and reject conflicting imports.
     (define (ensure-compatible-import-bindings bindings)
       (let loop ((rest bindings) (seen '()) (result '()))
         (if (null? rest)
@@ -3043,9 +3255,11 @@
                  "conflicting imports for identifier"
                  name)))))))
 
+    ;; Validate import modifier operands as symbols.
     (define (import-modifier-identifiers forms description)
       (map (lambda (form) (expect-symbol form description)) forms))
 
+    ;; Resolve an import set, applying only/except/prefix/rename modifiers.
     (define (resolve-import-set import-set context environment)
       (cond
        ((proper-library-name? import-set)
@@ -3138,6 +3352,7 @@
        (else
         (eval-error "invalid import set" import-set))))
 
+    ;; Install one imported value or syntax binding into the target frames.
     (define (install-imported-binding! binding value-environment
                                        syntax-environment)
       (let ((name (library-binding-name binding))
@@ -3191,6 +3406,7 @@
          (else
           (eval-error "unsupported library binding kind" kind)))))
 
+    ;; Resolve IMPORT-SET and install all compatible imported bindings.
     (define (install-import-set! import-set value-environment
                                  syntax-environment context)
       (for-each
@@ -3201,6 +3417,7 @@
        (ensure-compatible-import-bindings
         (resolve-import-set import-set context value-environment))))
 
+    ;; Evaluate an import declaration into the active value and syntax frames.
     (define (eval-import form environment context)
       (let ((parts (proper-list-elements form "import declaration")))
         (if (< (length parts) 2)
@@ -3215,6 +3432,7 @@
          (cdr parts))
         agent-scheme-unspecified))
 
+    ;; Parse export clauses into internal-name/external-name pairs.
     (define (export-specs forms)
       (let loop ((rest forms) (specs '()))
         (if (null? rest)
@@ -3243,6 +3461,7 @@
                (else
                 (eval-error "invalid export spec" form)))))))
 
+    ;; Report whether a cond-expand feature requirement is satisfied.
     (define (feature-requirement-satisfied? requirement context environment)
       (cond
        ((identifier-datum? requirement)
@@ -3284,6 +3503,7 @@
            (else #f))))
        (else #f)))
 
+    ;; Select declarations from the first satisfied library cond-expand clause.
     (define (expand-library-cond-expand clauses context environment)
       (let loop ((rest clauses))
         (if (null? rest)
@@ -3298,6 +3518,7 @@
                   (cdr parts)
                   (loop (cdr rest)))))))
 
+    ;; Expand library declaration wrappers such as cond-expand and includes.
     (define (expand-library-declaration declaration context environment)
       (cond
        ((form-named? declaration 'cond-expand)
@@ -3319,6 +3540,7 @@
        (else
         (list declaration))))
 
+    ;; Return string literal filenames from an include-style declaration.
     (define (include-filenames declaration)
       (let* ((parts (proper-list-elements declaration "include declaration"))
              (operator (identifier-datum-name (car parts))))
@@ -3332,6 +3554,7 @@
            filename)
          (cdr parts))))
 
+    ;; Test whether TEXT begins with PREFIX.
     (define (string-prefix? prefix string)
       (let ((prefix-length (string-length prefix))
             (string-length-value (string-length string)))
@@ -3342,12 +3565,14 @@
                                 (string-ref string index))
                         (loop (+ index 1))))))))
 
+    ;; Remove a single trailing slash from PATH for policy-prefix checks.
     (define (strip-trailing-slash path)
       (if (and (> (string-length path) 0)
                (char=? (string-ref path (- (string-length path) 1)) #\/))
           (substring path 0 (- (string-length path) 1))
           path))
 
+    ;; Report whether PATH is exactly allowed or inside an allowed directory.
     (define (path-policy-allows-file? path allowed-paths)
       (let loop ((rest allowed-paths))
         (and (not (null? rest))
@@ -3357,9 +3582,11 @@
                    (string-prefix? allowed-directory path)
                    (loop (cdr rest)))))))
 
+    ;; Report whether PATH satisfies the current include allow-list policy.
     (define (include-policy-allows-file? path context)
       (path-policy-allows-file? path (context-include-paths context)))
 
+    ;; Resolve FILENAME against the include directory and enforce file policy.
     (define (resolve-include-file filename context)
       (let ((path (path-join (context-include-directory context) filename)))
         (cond
@@ -3374,6 +3601,7 @@
           (eval-error "include file is not readable" filename))
          (else path))))
 
+    ;; Return PATH's directory component without the trailing slash.
     (define (path-directory path)
       (let loop ((index (- (string-length path) 1)))
         (cond
@@ -3382,6 +3610,7 @@
           (substring path 0 index))
          (else (loop (- index 1))))))
 
+    ;; Read PATH into a string using the Scheme file API.
     (define (read-file-string path)
       (call-with-input-file
        path
@@ -3392,6 +3621,7 @@
                  (list->string (reverse chars))
                  (loop (cons char chars))))))))
 
+    ;; Run THUNK with CONTEXT's include directory temporarily set.
     (define (with-include-directory context directory thunk)
       (let ((previous-directory (context-include-directory context)))
         (dynamic-wind
@@ -3405,6 +3635,8 @@
              context
              previous-directory)))))
 
+    ;; Read and parse all forms from an include file, returning forms and
+    ;; directory.
     (define (read-include-file-forms filename context fold-case?)
       (let* ((path (resolve-include-file filename context))
              (source (read-file-string path)))
@@ -3415,6 +3647,7 @@
               source))
          (path-directory path))))
 
+    ;; Return all body forms read by an include or include-ci declaration.
     (define (library-include-body-forms declaration context fold-case?)
       (apply append
              (map (lambda (filename)
@@ -3424,6 +3657,7 @@
                           fold-case?)))
                   (include-filenames declaration))))
 
+    ;; Read include-library-declarations files and expand their declarations.
     (define (expand-include-library-declarations declaration context
                                                  environment)
       (apply
@@ -3449,6 +3683,7 @@
                  forms))))))
         (include-filenames declaration))))
 
+    ;; Resolve one export spec to a value or syntax library binding.
     (define (library-export-binding spec library-key value-environment
                                     syntax-environment)
       (let* ((internal-name (car spec))
@@ -3471,6 +3706,7 @@
          (else
           (eval-error "exported identifier is not bound" internal-name)))))
 
+    ;; Build checked library exports from parsed export specs.
     (define (library-exports-from-specs specs library-key value-environment
                                         syntax-environment)
       (ensure-distinct-names (map cdr specs) "library exports")
@@ -3482,6 +3718,7 @@
                                       syntax-environment))
             specs)))
 
+    ;; Evaluate library body forms under the library syntax environment.
     (define (eval-library-begin forms value-environment
                                 syntax-environment context)
       (with-syntax-environment
@@ -3493,6 +3730,7 @@
           value-environment
           context))))
 
+    ;; Evaluate a define-library form and register its exported bindings.
     (define (eval-define-library form environment context)
       (let ((parts (proper-list-elements form "define-library form")))
         (if (< (length parts) 2)
@@ -3593,6 +3831,7 @@
                              "unsupported library declaration"
                              declaration))))))))))))
 
+    ;; Expand one expression enough to expose core forms or syntax scopes.
     (define (expand-expression expression environment context)
       (if (not (pair? expression))
           expression
@@ -3616,6 +3855,7 @@
                                              context)))
              (else expression)))))
 
+    ;; Evaluate procedure operands from left to right into argument values.
     (define (eval-arguments operands environment context arguments continuation)
       (if (null? operands)
           (continue continuation (reverse arguments))
@@ -3633,6 +3873,7 @@
                     arguments)
               continuation)))))
 
+    ;; Evaluate a combination or special form with tail-position awareness.
     (define (eval-combination expression environment context tail? continuation)
       (let ((parts (proper-list-elements expression "expression")))
         (if (null? parts)
@@ -3737,6 +3978,8 @@
                      tail?
                      continuation)))))))))))
 
+    ;; Evaluate one expression, interleaving macro expansion and trampoline
+    ;; setup.
     (define (eval-expression
              expression environment context tail? . maybe-continuation)
       (let ((direct-call? (null? maybe-continuation))
@@ -3795,6 +4038,7 @@
               (drain-state state context)
               state))))
 
+    ;; Reject import declarations that appear after body expressions.
     (define (ensure-imports-precede-body forms)
       (let loop ((rest forms) (imports-open? #t))
         (if (not (null? rest))
@@ -3811,6 +4055,7 @@
                (else
                 (loop (cdr rest) #f)))))))
 
+    ;; Evaluate a sequence, optionally accepting leading definitions/imports.
     (define (eval-sequence
              forms environment context tail? allow-definitions?
              . maybe-continuation)
@@ -3916,6 +4161,7 @@
                      (step remaining))))))))
         (step forms)))
 
+    ;; Run bounce states until evaluation produces a final value.
     (define (drain-state state context)
       (let loop ((state state))
         (if (bounce? state)
@@ -3933,6 +4179,7 @@
                                  (bounce-continuation state)))))
             state)))
 
+    ;; Evaluate EXPRESSION in tail-call trampoline mode and budget the result.
     (define (trampoline expression environment context)
       (check-value-budget
        (drain-state
@@ -3943,6 +4190,7 @@
         context)
        context))
 
+    ;; Validate number input and raise an evaluator error on mismatch.
     (define (expect-number datum description)
       (if (agent-scheme-number? datum)
           datum
@@ -3950,14 +4198,17 @@
            (string-append description " expected number")
            datum)))
 
+    ;; Report whether DATUM is an exact Agent Scheme number.
     (define (number-exact? datum)
       (and (agent-scheme-number? datum)
            (eq? (agent-scheme-number-exactness datum) 'exact)))
 
+    ;; Report whether DATUM is an inexact Agent Scheme number.
     (define (number-inexact? datum)
       (and (agent-scheme-number? datum)
            (eq? (agent-scheme-number-exactness datum) 'inexact)))
 
+    ;; Report whether DATUM contains a NaN numeric component.
     (define (number-nan? datum)
       (and (agent-scheme-number? datum)
            (or (and (eq? (agent-scheme-number-kind datum) 'infnan)
@@ -3968,6 +4219,7 @@
                         (number-nan?
                          (cdr (agent-scheme-number-value datum))))))))
 
+    ;; Report whether DATUM contains an infinite numeric component.
     (define (number-infinite? datum)
       (and (agent-scheme-number? datum)
            (or (and (eq? (agent-scheme-number-kind datum) 'infnan)
@@ -3979,29 +4231,35 @@
                         (number-infinite?
                          (cdr (agent-scheme-number-value datum))))))))
 
+    ;; Report whether DATUM is neither infinite nor NaN.
     (define (number-finite? datum)
       (and (agent-scheme-number? datum)
            (not (number-nan? datum))
            (not (number-infinite? datum))))
 
+    ;; Report whether DATUM is exactly zero.
     (define (number-exact-zero? datum)
       (and (number-exact? datum)
            (agent-scheme-number-zero? datum)))
 
+    ;; Report whether NUMBER is stored as a complex pair.
     (define (number-complex-representation? number)
       (eq? (agent-scheme-number-kind number) 'complex))
 
+    ;; Return NUMBER's rectangular parts, using zero imaginary part for reals.
     (define (complex-parts number)
       (if (number-complex-representation? number)
           (agent-scheme-number-value number)
           (cons number (agent-scheme-make-canonical-integer 0))))
 
+    ;; Report whether DATUM has no nonzero imaginary component.
     (define (number-real? datum)
       (and (agent-scheme-number? datum)
            (or (not (number-complex-representation? datum))
                (number-exact-zero?
                 (cdr (agent-scheme-number-value datum))))))
 
+    ;; Report whether DATUM is a finite real number.
     (define (number-rational? datum)
       (and (number-real? datum)
            (let ((real (if (number-complex-representation? datum)
@@ -4009,6 +4267,7 @@
                            datum)))
              (not (eq? (agent-scheme-number-kind real) 'infnan)))))
 
+    ;; Report whether DATUM represents an integer numeric value.
     (define (number-integer? datum)
       (and (agent-scheme-number? datum)
            (cond
@@ -4025,6 +4284,7 @@
                (= value (truncate value))))
             (else #f))))
 
+    ;; Convert DATUM to an exact numerator/denominator pair.
     (define (number->rational-pair datum description)
       (let ((number (expect-number datum description)))
         (cond
@@ -4045,6 +4305,7 @@
            (string-append description " expected exact rational number")
            datum)))))
 
+    ;; Convert DATUM to a host inexact real for transcendental operations.
     (define (number->host-float datum description)
       (let ((number (expect-number datum description)))
         (cond
@@ -4071,6 +4332,7 @@
                (string-append description " expected real number")
                datum))))))
 
+    ;; Convert a host numeric result to the canonical Agent Scheme number.
     (define (host-number->agent-number number)
       (cond
        ((integer? number)
@@ -4078,6 +4340,7 @@
        (else
         (agent-scheme-make-canonical-decimal number))))
 
+    ;; Build an Agent Scheme number from a numerator/denominator pair.
     (define (number-from-rational-pair pair . maybe-exactness)
       (let* ((exactness
               (if (null? maybe-exactness) 'exact (car maybe-exactness)))
@@ -4092,6 +4355,7 @@
              (/ (inexact (car pair)) (inexact (cdr pair))))
             number)))
 
+    ;; Convert NUMBER to an inexact Agent Scheme number.
     (define (number-inexact number)
       (let ((datum (expect-number number "inexact")))
         (cond
@@ -4111,12 +4375,14 @@
              (number-inexact (car value))
              (number-inexact (cdr value))))))))
 
+    ;; Reparse an inexact decimal as its exact rational representation.
     (define (decimal->exact-rational-pair number)
       (number->rational-pair
        (agent-scheme-read
         (string-append "#e" (agent-scheme-number->external number)))
        "exact"))
 
+    ;; Convert NUMBER to an exact Agent Scheme number when representable.
     (define (number-exact number)
       (let ((datum (expect-number number "exact")))
         (cond
@@ -4134,6 +4400,7 @@
          ((eq? (agent-scheme-number-kind datum) 'infnan)
           (eval-error "exact cannot represent inexact special value" datum)))))
 
+    ;; Return DATUM as a host exact integer or raise a typed error.
     (define (exact-integer->host datum description)
       (if (and (agent-scheme-number? datum)
                (eq? (agent-scheme-number-kind datum) 'integer)
@@ -4143,6 +4410,8 @@
            (string-append description " must be an exact integer")
            datum)))
 
+    ;; Validate nonnegative index input and raise an evaluator error on
+    ;; mismatch.
     (define (expect-nonnegative-index datum limit description allow-end?)
       (let ((index (exact-integer->host datum description)))
         (if (not (and (<= 0 index)
@@ -4152,6 +4421,7 @@
              index))
         index))
 
+    ;; Validate byte input and raise an evaluator error on mismatch.
     (define (expect-byte datum description)
       (let ((byte (exact-integer->host datum description)))
         (if (not (and (<= 0 byte) (<= byte 255)))
@@ -4160,11 +4430,13 @@
              byte))
         byte))
 
+    ;; Validate string input and raise an evaluator error on mismatch.
     (define (expect-string datum description)
       (if (string? datum)
           datum
           (eval-error (string-append description " must be a string") datum)))
 
+    ;; Validate character input and raise an evaluator error on mismatch.
     (define (expect-character datum description)
       (if (char? datum)
           datum
@@ -4172,11 +4444,13 @@
            (string-append description " must be a character")
            datum)))
 
+    ;; Validate vector input and raise an evaluator error on mismatch.
     (define (expect-vector datum description)
       (if (vector? datum)
           datum
           (eval-error (string-append description " must be a vector") datum)))
 
+    ;; Validate bytevector input and raise an evaluator error on mismatch.
     (define (expect-bytevector datum description)
       (if (bytevector? datum)
           datum
@@ -4184,6 +4458,7 @@
            (string-append description " must be a bytevector")
            datum)))
 
+    ;; Validate procedure input and raise an evaluator error on mismatch.
     (define (expect-procedure datum description)
       (if (or (agent-scheme-procedure? datum)
               (agent-scheme-primitive-procedure? datum)
@@ -4194,6 +4469,7 @@
            (string-append description " must be a procedure")
            datum)))
 
+    ;; Parse optional start/end indices for sequence operations.
     (define (optional-range arguments offset limit description)
       (let ((optional-count (- (length arguments) offset)))
         (if (not (and (<= 0 optional-count) (<= optional-count 2)))
@@ -4219,16 +4495,19 @@
                (string-append description " start index exceeds end index")))
           (cons start end))))
 
+    ;; Validate all ARGUMENTS as numbers.
     (define (numeric-arguments arguments description)
       (map (lambda (argument) (expect-number argument description))
            arguments))
 
+    ;; Report whether any number in NUMBERS is inexact.
     (define (any-number-inexact? numbers)
       (let loop ((rest numbers))
         (and (not (null? rest))
              (or (number-inexact? (car rest))
                  (loop (cdr rest))))))
 
+    ;; Apply exact rational arithmetic for one binary operation.
     (define (binary-rational left right operation description)
       (let* ((left-pair (number->rational-pair left description))
              (right-pair (number->rational-pair right description))
@@ -4258,6 +4537,7 @@
            (cons (* left-numerator right-denominator)
                  (* left-denominator right-numerator)))))))
 
+    ;; Handle NaN and infinity cases for inexact binary arithmetic.
     (define (special-inexact-binary left right operation description)
       (cond
        ((or (number-nan? left) (number-nan? right))
@@ -4295,6 +4575,7 @@
               (number->host-float right description)))))))
        (else #f)))
 
+    ;; Apply a binary arithmetic operation to real numbers.
     (define (binary-real-number left right operation description)
       (or (special-inexact-binary left right operation description)
           (if (or (number-inexact? left) (number-inexact? right))
@@ -4308,6 +4589,7 @@
                 (number->host-float right description)))
               (binary-rational left right operation description))))
 
+    ;; Apply a binary arithmetic operation to real or complex numbers.
     (define (binary-number left right operation description)
       (if (or (number-complex-representation? left)
               (number-complex-representation? right))
@@ -4369,6 +4651,7 @@
                   description))))))
           (binary-real-number left right operation description)))
 
+    ;; Fold a variadic numeric primitive with optional unary inverse behavior.
     (define (fold-numbers arguments identity operation description
                           . maybe-unary-inverse)
       (let ((numbers (numeric-arguments arguments description))
@@ -4388,6 +4671,7 @@
                                      description)
                       (cdr rest))))))))
 
+    ;; Implement the `+' primitive over any number of numeric arguments.
     (define (primitive+ arguments context)
       (fold-numbers
        arguments
@@ -4395,6 +4679,7 @@
        '+
        "+"))
 
+    ;; Implement the `*' primitive over any number of numeric arguments.
     (define (primitive* arguments context)
       (fold-numbers
        arguments
@@ -4402,6 +4687,7 @@
        '*
        "*"))
 
+    ;; Implement the `-' primitive, including unary negation.
     (define (primitive- arguments context)
       (fold-numbers
        arguments
@@ -4415,6 +4701,7 @@
           '-
           "-"))))
 
+    ;; Implement the `/' primitive, including unary reciprocal.
     (define (primitive/ arguments context)
       (fold-numbers
        arguments
@@ -4428,6 +4715,7 @@
           '/
           "/"))))
 
+    ;; Return NUMBER's real component or reject non-real complex values.
     (define (number-real-part-for-ordering number description)
       (let ((datum (expect-number number description)))
         (if (number-complex-representation? datum)
@@ -4438,6 +4726,7 @@
                  datum))
             datum)))
 
+    ;; Compare two Agent Scheme numbers for Scheme numeric equality.
     (define (number=2 left right)
       (cond
        ((or (number-nan? left) (number-nan? right)) #f)
@@ -4462,6 +4751,7 @@
           (= (* (car left-pair) (cdr right-pair))
              (* (car right-pair) (cdr left-pair)))))))
 
+    ;; Compare two real Agent Scheme numbers with PREDICATE.
     (define (number-order2 left right predicate description)
       (let ((ordered-left (number-real-part-for-ordering left description))
             (ordered-right (number-real-part-for-ordering right description)))
@@ -4482,6 +4772,8 @@
              (* (car left-pair) (cdr right-pair))
              (* (car right-pair) (cdr left-pair))))))))
 
+    ;; Implement the `compare` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-compare arguments predicate description)
       (let loop ((numbers (numeric-arguments arguments description)))
         (cond
@@ -4495,27 +4787,36 @@
           (loop (cdr numbers)))
          (else #f))))
 
+    ;; Implement the `=' primitive over adjacent numeric pairs.
     (define (primitive= arguments context)
       (primitive-compare arguments = "="))
 
+    ;; Implement the `<' primitive over adjacent numeric pairs.
     (define (primitive< arguments context)
       (primitive-compare arguments < "<"))
 
+    ;; Implement the `>' primitive over adjacent numeric pairs.
     (define (primitive> arguments context)
       (primitive-compare arguments > ">"))
 
+    ;; Implement the `<=' primitive over adjacent numeric pairs.
     (define (primitive<= arguments context)
       (primitive-compare arguments <= "<="))
 
+    ;; Implement the `>=' primitive over adjacent numeric pairs.
     (define (primitive>= arguments context)
       (primitive-compare arguments >= ">="))
 
+    ;; Implement the `abs` primitive with argument validation and Agent Scheme
+    ;; values.
     (define (primitive-abs arguments context)
       (let ((number (expect-number (car arguments) "abs")))
         (if (number-complex-representation? number)
             (eval-error "abs expected real number" number)
             (agent-scheme-number-abs number))))
 
+    ;; Implement the `min` primitive with argument validation and Agent Scheme
+    ;; values.
     (define (primitive-min arguments context)
       (let ((numbers (numeric-arguments arguments "min")))
         (let loop ((best (car numbers)) (rest (cdr numbers)))
@@ -4526,6 +4827,8 @@
                         best)
                     (cdr rest))))))
 
+    ;; Implement the `max` primitive with argument validation and Agent Scheme
+    ;; values.
     (define (primitive-max arguments context)
       (let ((numbers (numeric-arguments arguments "max")))
         (let loop ((best (car numbers)) (rest (cdr numbers)))
@@ -4536,31 +4839,44 @@
                         best)
                     (cdr rest))))))
 
+    ;; Implement the `square` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-square arguments context)
       (let ((number (expect-number (car arguments) "square")))
         (binary-number number number '* "square")))
 
+    ;; Implement the `zero?` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-zero? arguments context)
       (agent-scheme-number-zero? (expect-number (car arguments) "zero?")))
 
+    ;; Implement the `positive?` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-positive? arguments context)
       (primitive-compare
        (list (car arguments) (agent-scheme-make-canonical-integer 0))
        >
        "positive?"))
 
+    ;; Implement the `negative?` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-negative? arguments context)
       (primitive-compare
        (list (car arguments) (agent-scheme-make-canonical-integer 0))
        <
        "negative?"))
 
+    ;; Implement the `odd?` primitive with argument validation and Agent Scheme
+    ;; values.
     (define (primitive-odd? arguments context)
       (odd? (exact-integer->host (car arguments) "odd?")))
 
+    ;; Implement the `even?` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-even? arguments context)
       (even? (exact-integer->host (car arguments) "even?")))
 
+    ;; Return integer quotient rounded toward zero for exact host integers.
     (define (truncate-quotient-value left right)
       (let ((quotient (quotient (abs left) (abs right))))
         (if (= (if (< left 0) -1 1)
@@ -4568,9 +4884,11 @@
             quotient
             (- quotient))))
 
+    ;; Return the remainder paired with truncate-quotient-value.
     (define (truncate-remainder-value left right)
       (- left (* right (truncate-quotient-value left right))))
 
+    ;; Validate two exact integers and apply QUOTIENT-FUNCTION.
     (define (integer-quotient arguments quotient-function description)
       (let ((left (exact-integer->host (car arguments) description))
             (right (exact-integer->host (second arguments) description)))
@@ -4579,15 +4897,23 @@
         (agent-scheme-make-canonical-integer
          (quotient-function left right))))
 
+    ;; Implement the `quotient` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-quotient arguments context)
       (integer-quotient arguments truncate-quotient-value "quotient"))
 
+    ;; Implement the `floor-quotient` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-floor-quotient arguments context)
       (integer-quotient arguments floor-quotient "floor-quotient"))
 
+    ;; Implement the `truncate-quotient` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-truncate-quotient arguments context)
       (integer-quotient arguments truncate-quotient-value "truncate-quotient"))
 
+    ;; Implement the `remainder` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-remainder arguments context)
       (let ((left (exact-integer->host (car arguments) "remainder"))
             (right (exact-integer->host (second arguments) "remainder")))
@@ -4596,6 +4922,8 @@
         (agent-scheme-make-canonical-integer
          (truncate-remainder-value left right))))
 
+    ;; Implement the `modulo` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-modulo arguments context)
       (let ((left (exact-integer->host (car arguments) "modulo"))
             (right (exact-integer->host (second arguments) "modulo")))
@@ -4604,24 +4932,32 @@
         (agent-scheme-make-canonical-integer
          (floor-remainder left right))))
 
+    ;; Implement the `floor-remainder` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-floor-remainder arguments context)
       (primitive-modulo arguments context))
 
+    ;; Implement the `truncate-remainder` primitive with argument validation
+    ;; and Agent Scheme values.
     (define (primitive-truncate-remainder arguments context)
       (primitive-remainder arguments context))
 
+    ;; Return the mathematical floor of a rational pair.
     (define (floor-rational-pair pair)
       (floor-quotient (car pair) (cdr pair)))
 
+    ;; Return the mathematical ceiling of a rational pair.
     (define (ceiling-rational-pair pair)
       (- (floor-quotient (- (car pair)) (cdr pair))))
 
+    ;; Return a rational pair rounded toward zero.
     (define (truncate-rational-pair pair)
       (let* ((numerator (car pair))
              (denominator (cdr pair))
              (quotient (quotient (abs numerator) denominator)))
         (if (< numerator 0) (- quotient) quotient)))
 
+    ;; Return a rational pair rounded using Scheme's ties-to-even rule.
     (define (round-rational-pair pair)
       (let* ((numerator (car pair))
              (denominator (cdr pair))
@@ -4638,6 +4974,8 @@
                (else (+ quotient 1)))))
         (* sign rounded)))
 
+    ;; Implement the `rounding` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-rounding arguments function description)
       (let ((number
              (number-real-part-for-ordering (car arguments) description)))
@@ -4653,18 +4991,27 @@
          ((eq? (agent-scheme-number-kind number) 'infnan)
           number))))
 
+    ;; Implement the `floor` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-floor arguments context)
       (primitive-rounding arguments floor-rational-pair "floor"))
 
+    ;; Implement the `ceiling` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-ceiling arguments context)
       (primitive-rounding arguments ceiling-rational-pair "ceiling"))
 
+    ;; Implement the `truncate` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-truncate arguments context)
       (primitive-rounding arguments truncate-rational-pair "truncate"))
 
+    ;; Implement the `round` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-round arguments context)
       (primitive-rounding arguments round-rational-pair "round"))
 
+    ;; Return DATUM as a host integer, accepting exact and inexact integers.
     (define (integer-argument datum description)
       (let ((number (expect-number datum description)))
         (cond
@@ -4677,10 +5024,12 @@
            (string-append description " expected integer")
            datum)))))
 
+    ;; Compute the nonnegative greatest common divisor for exact integers.
     (define (integer-gcd left right)
       (let loop ((a (abs left)) (b (abs right)))
         (if (zero? b) a (loop b (modulo a b)))))
 
+    ;; Compute BASE raised to nonnegative EXPONENT for reader number parsing.
     (define (integer-power base exponent)
       (let loop ((result 1) (factor base) (power exponent))
         (cond
@@ -4690,6 +5039,8 @@
          (else
           (loop result (* factor factor) (quotient power 2))))))
 
+    ;; Implement the `gcd` primitive with argument validation and Agent Scheme
+    ;; values.
     (define (primitive-gcd arguments context)
       (let loop ((rest (numeric-arguments arguments "gcd"))
                  (result 0)
@@ -4701,6 +5052,8 @@
                   (integer-gcd result (integer-argument (car rest) "gcd"))
                   (or inexact? (number-inexact? (car rest)))))))
 
+    ;; Implement the `lcm` primitive with argument validation and Agent Scheme
+    ;; values.
     (define (primitive-lcm arguments context)
       (let loop ((rest (numeric-arguments arguments "lcm"))
                  (result 1)
@@ -4716,6 +5069,8 @@
                                   (integer-gcd result value)))
                     (or inexact? (number-inexact? (car rest))))))))
 
+    ;; Implement the `numerator` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-numerator arguments context)
       (let* ((number (expect-number (car arguments) "numerator"))
              (pair (if (number-inexact? number)
@@ -4724,6 +5079,8 @@
              (value (agent-scheme-make-canonical-integer (car pair))))
         (if (number-inexact? number) (number-inexact value) value)))
 
+    ;; Implement the `denominator` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-denominator arguments context)
       (let* ((number (expect-number (car arguments) "denominator"))
              (pair (if (number-inexact? number)
@@ -4732,12 +5089,18 @@
              (value (agent-scheme-make-canonical-integer (cdr pair))))
         (if (number-inexact? number) (number-inexact value) value)))
 
+    ;; Implement the `exact` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-exact arguments context)
       (number-exact (car arguments)))
 
+    ;; Implement the `inexact` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-inexact arguments context)
       (number-inexact (car arguments)))
 
+    ;; Implement the `expt` primitive with argument validation and Agent Scheme
+    ;; values.
     (define (primitive-expt arguments context)
       (let ((base (expect-number (car arguments) "expt"))
             (power (expect-number (second arguments) "expt")))
@@ -4761,13 +5124,19 @@
              (expt (number->host-float base "expt")
                    (number->host-float power "expt"))))))
 
+    ;; Implement the `inexact-unary` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-inexact-unary arguments function description)
       (agent-scheme-make-canonical-decimal
        (function (number->host-float (car arguments) description))))
 
+    ;; Implement the `exp` primitive with argument validation and Agent Scheme
+    ;; values.
     (define (primitive-exp arguments context)
       (primitive-inexact-unary arguments exp "exp"))
 
+    ;; Implement the `log` primitive with argument validation and Agent Scheme
+    ;; values.
     (define (primitive-log arguments context)
       (let ((value (primitive-inexact-unary (list (car arguments))
                                             log
@@ -4780,21 +5149,33 @@
                          "log")))
               (primitive/ (list value base) context)))))
 
+    ;; Implement the `sin` primitive with argument validation and Agent Scheme
+    ;; values.
     (define (primitive-sin arguments context)
       (primitive-inexact-unary arguments sin "sin"))
 
+    ;; Implement the `cos` primitive with argument validation and Agent Scheme
+    ;; values.
     (define (primitive-cos arguments context)
       (primitive-inexact-unary arguments cos "cos"))
 
+    ;; Implement the `tan` primitive with argument validation and Agent Scheme
+    ;; values.
     (define (primitive-tan arguments context)
       (primitive-inexact-unary arguments tan "tan"))
 
+    ;; Implement the `asin` primitive with argument validation and Agent Scheme
+    ;; values.
     (define (primitive-asin arguments context)
       (primitive-inexact-unary arguments asin "asin"))
 
+    ;; Implement the `acos` primitive with argument validation and Agent Scheme
+    ;; values.
     (define (primitive-acos arguments context)
       (primitive-inexact-unary arguments acos "acos"))
 
+    ;; Implement the `atan` primitive with argument validation and Agent Scheme
+    ;; values.
     (define (primitive-atan arguments context)
       (if (null? (cdr arguments))
           (primitive-inexact-unary arguments atan "atan")
@@ -4802,6 +5183,8 @@
            (atan (number->host-float (car arguments) "atan")
                  (number->host-float (second arguments) "atan")))))
 
+    ;; Implement the `sqrt` primitive with argument validation and Agent Scheme
+    ;; values.
     (define (primitive-sqrt arguments context)
       (let* ((number (expect-number (car arguments) "sqrt"))
              (value (number->host-float number "sqrt")))
@@ -4812,6 +5195,7 @@
              (agent-scheme-make-canonical-decimal (sqrt (- value))))
             (agent-scheme-make-canonical-decimal (sqrt value)))))
 
+    ;; Return the greatest integer whose square is no larger than VALUE.
     (define (integer-sqrt value)
       (let loop ((low 0) (high (+ value 1)))
         (if (<= (- high low) 1)
@@ -4821,6 +5205,8 @@
                   (loop low mid)
                   (loop mid high))))))
 
+    ;; Implement the `exact-integer-sqrt` primitive with argument validation
+    ;; and Agent Scheme values.
     (define (primitive-exact-integer-sqrt arguments context)
       (let ((value (exact-integer->host
                     (car arguments)
@@ -4834,6 +5220,8 @@
                  (agent-scheme-make-canonical-integer
                   (- value (* root root))))))))
 
+    ;; Implement the `floor/` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-floor/ arguments context)
       (let ((left (exact-integer->host (car arguments) "floor/"))
             (right (exact-integer->host (second arguments) "floor/")))
@@ -4845,6 +5233,8 @@
            (list (agent-scheme-make-canonical-integer quotient)
                  (agent-scheme-make-canonical-integer remainder))))))
 
+    ;; Implement the `truncate/` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-truncate/ arguments context)
       (let ((left (exact-integer->host (car arguments) "truncate/"))
             (right (exact-integer->host (second arguments) "truncate/")))
@@ -4856,10 +5246,12 @@
            (list (agent-scheme-make-canonical-integer quotient)
                  (agent-scheme-make-canonical-integer remainder))))))
 
+    ;; Report whether rational pair LEFT is less than RIGHT.
     (define (rational-pair< left right)
       (< (* (car left) (cdr right))
          (* (car right) (cdr left))))
 
+    ;; Normalize a rational pair to positive denominator and lowest terms.
     (define (rational-pair-normalize pair)
       (let* ((numerator (car pair))
              (denominator (cdr pair))
@@ -4871,24 +5263,30 @@
         (cons (quotient (car adjusted) divisor)
               (quotient (cdr adjusted) divisor))))
 
+    ;; Negate a rational pair without changing its denominator.
     (define (rational-pair-negate pair)
       (cons (- (car pair)) (cdr pair)))
 
+    ;; Add two rational pairs and normalize the result.
     (define (rational-pair+ left right)
       (rational-pair-normalize
        (cons (+ (* (car left) (cdr right))
                 (* (car right) (cdr left)))
              (* (cdr left) (cdr right)))))
 
+    ;; Subtract RIGHT from LEFT as rational pairs.
     (define (rational-pair- left right)
       (rational-pair+ left (rational-pair-negate right)))
 
+    ;; Return the reciprocal of a rational pair in normalized form.
     (define (rational-pair-reciprocal pair)
       (rational-pair-normalize (cons (cdr pair) (car pair))))
 
+    ;; Report whether a rational pair has denominator one.
     (define (rational-pair-integer? pair)
       (= (cdr pair) 1))
 
+    ;; Return the simplest nonnegative rational pair in [LOWER, UPPER].
     (define (simplest-positive-rational-pair lower upper)
       (cond
        ((not (rational-pair< (cons 0 1) lower))
@@ -4913,6 +5311,7 @@
                    lower
                    (cons lower-floor 1)))))))))))
 
+    ;; Return the simplest rational pair in the interval [LOWER, UPPER].
     (define (simplest-rational-pair lower upper)
       (cond
        ((rational-pair< upper lower)
@@ -4927,11 +5326,14 @@
        (else
         (simplest-positive-rational-pair lower upper))))
 
+    ;; Return the rationalize result pair for X with tolerance Y.
     (define (rationalize-pair x y)
       (simplest-rational-pair
        (rational-pair- x y)
        (rational-pair+ x y)))
 
+    ;; Implement the `rationalize` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-rationalize arguments context)
       (let* ((x (expect-number (car arguments) "rationalize"))
              (y (expect-number (second arguments) "rationalize"))
@@ -4950,20 +5352,30 @@
             (number-inexact (number-from-rational-pair result))
             (number-from-rational-pair result))))
 
+    ;; Implement the `finite?` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-finite? arguments context)
       (number-finite? (expect-number (car arguments) "finite?")))
 
+    ;; Implement the `infinite?` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-infinite? arguments context)
       (number-infinite? (expect-number (car arguments) "infinite?")))
 
+    ;; Implement the `nan?` primitive with argument validation and Agent Scheme
+    ;; values.
     (define (primitive-nan? arguments context)
       (number-nan? (expect-number (car arguments) "nan?")))
 
+    ;; Implement the `make-rectangular` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-make-rectangular arguments context)
       (agent-scheme-make-canonical-complex
        (expect-number (car arguments) "make-rectangular")
        (expect-number (second arguments) "make-rectangular")))
 
+    ;; Implement the `make-polar` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-make-polar arguments context)
       (let ((magnitude (number->host-float
                         (car arguments)
@@ -4977,18 +5389,24 @@
          (agent-scheme-make-canonical-decimal
           (* magnitude (sin angle))))))
 
+    ;; Implement the `real-part` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-real-part arguments context)
       (let ((number (expect-number (car arguments) "real-part")))
         (if (number-complex-representation? number)
             (car (agent-scheme-number-value number))
             number)))
 
+    ;; Implement the `imag-part` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-imag-part arguments context)
       (let ((number (expect-number (car arguments) "imag-part")))
         (if (number-complex-representation? number)
             (cdr (agent-scheme-number-value number))
             (agent-scheme-make-canonical-integer 0))))
 
+    ;; Implement the `magnitude` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-magnitude arguments context)
       (let ((number (expect-number (car arguments) "magnitude")))
         (if (number-complex-representation? number)
@@ -5001,6 +5419,8 @@
                (sqrt (+ (* real real) (* imaginary imaginary)))))
             (agent-scheme-number-abs number))))
 
+    ;; Implement the `angle` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-angle arguments context)
       (let ((number (expect-number (car arguments) "angle")))
         (if (number-complex-representation? number)
@@ -5014,24 +5434,33 @@
                 (agent-scheme-make-canonical-decimal 3.141592653589793)
                 (agent-scheme-make-canonical-decimal 0.0)))))
 
+    ;; Implement the `cons` primitive with argument validation and Agent Scheme
+    ;; values.
     (define (primitive-cons arguments context)
       (cons (car arguments) (second arguments)))
 
+    ;; Implement the `car` primitive with argument validation and Agent Scheme
+    ;; values.
     (define (primitive-car arguments context)
       (let ((pair (car arguments)))
         (if (pair? pair)
             (car pair)
             (eval-error "car expected pair" pair))))
 
+    ;; Implement the `cdr` primitive with argument validation and Agent Scheme
+    ;; values.
     (define (primitive-cdr arguments context)
       (let ((pair (car arguments)))
         (if (pair? pair)
             (cdr pair)
             (eval-error "cdr expected pair" pair))))
 
+    ;; Implement the `list` primitive with argument validation and Agent Scheme
+    ;; values.
     (define (primitive-list arguments context)
       arguments)
 
+    ;; Report whether VALUE is a proper, acyclic list.
     (define (proper-list? value)
       (let loop ((cursor value) (seen '()))
         (cond
@@ -5040,18 +5469,28 @@
          ((memq cursor seen) #f)
          (else (loop (cdr cursor) (cons cursor seen))))))
 
+    ;; Implement the `list?` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-list? arguments context)
       (proper-list? (car arguments)))
 
+    ;; Implement the `length` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-length arguments context)
       (length (proper-list-elements (car arguments) "length")))
 
+    ;; Implement the `append` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-append arguments context)
       (apply append arguments))
 
+    ;; Implement the `reverse` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-reverse arguments context)
       (reverse (proper-list-elements (car arguments) "reverse")))
 
+    ;; Implement the `list-tail` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-list-tail arguments context)
       (let ((index (exact-integer->host (second arguments) "list-tail")))
         (if (< index 0)
@@ -5062,12 +5501,16 @@
            ((pair? cursor) (loop (cdr cursor) (- remaining 1)))
            (else (eval-error "list-tail index exceeds list length"))))))
 
+    ;; Implement the `list-ref` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-list-ref arguments context)
       (let ((tail (primitive-list-tail arguments context)))
         (if (pair? tail)
             (car tail)
             (eval-error "list-ref index exceeds list length"))))
 
+    ;; Implement the `list-set!` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-list-set! arguments context)
       (let ((tail (primitive-list-tail arguments context)))
         (if (not (pair? tail))
@@ -5075,6 +5518,8 @@
         (set-car! tail (third arguments))
         agent-scheme-unspecified))
 
+    ;; Implement the `set-car!` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-set-car! arguments context)
       (let ((pair (car arguments)))
         (if (not (pair? pair))
@@ -5082,6 +5527,8 @@
         (set-car! pair (second arguments))
         agent-scheme-unspecified))
 
+    ;; Implement the `set-cdr!` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-set-cdr! arguments context)
       (let ((pair (car arguments)))
         (if (not (pair? pair))
@@ -5089,6 +5536,8 @@
         (set-cdr! pair (second arguments))
         agent-scheme-unspecified))
 
+    ;; Implement the `make-list` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-make-list arguments context)
       (let ((length (exact-integer->host (car arguments) "make-list"))
             (fill (if (null? (cdr arguments))
@@ -5098,39 +5547,60 @@
             (eval-error "make-list length must be non-negative"))
         (make-list length fill)))
 
+    ;; Copy a pair spine while preserving any improper tail.
     (define (copy-list value)
       (cond
        ((null? value) '())
        ((pair? value) (cons (car value) (copy-list (cdr value))))
        (else value)))
 
+    ;; Implement the `list-copy` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-list-copy arguments context)
       (copy-list (car arguments)))
 
+    ;; Implement the `caar` primitive with argument validation and Agent Scheme
+    ;; values.
     (define (primitive-caar arguments context)
       (primitive-car (list (primitive-car arguments context)) context))
 
+    ;; Implement the `cadr` primitive with argument validation and Agent Scheme
+    ;; values.
     (define (primitive-cadr arguments context)
       (primitive-car (list (primitive-cdr arguments context)) context))
 
+    ;; Implement the `cdar` primitive with argument validation and Agent Scheme
+    ;; values.
     (define (primitive-cdar arguments context)
       (primitive-cdr (list (primitive-car arguments context)) context))
 
+    ;; Implement the `cddr` primitive with argument validation and Agent Scheme
+    ;; values.
     (define (primitive-cddr arguments context)
       (primitive-cdr (list (primitive-cdr arguments context)) context))
 
+    ;; Implement the `null?` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-null? arguments context)
       (null? (car arguments)))
 
+    ;; Implement the `pair?` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-pair? arguments context)
       (pair? (car arguments)))
 
+    ;; Implement the `not` primitive with argument validation and Agent Scheme
+    ;; values.
     (define (primitive-not arguments context)
       (if (eq? (car arguments) #f) #t #f))
 
+    ;; Implement the `boolean?` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-boolean? arguments context)
       (boolean? (car arguments)))
 
+    ;; Implement the `boolean=?` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-boolean=? arguments context)
       (let ((first (car arguments)))
         (if (not (boolean? first))
@@ -5143,31 +5613,48 @@
            ((eq? first (car rest)) (loop (cdr rest)))
            (else #f)))))
 
+    ;; Implement the `number?` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-number? arguments context)
       (agent-scheme-number? (car arguments)))
 
+    ;; Implement the `complex?` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-complex? arguments context)
       (agent-scheme-number? (car arguments)))
 
+    ;; Implement the `real?` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-real? arguments context)
       (number-real? (car arguments)))
 
+    ;; Implement the `rational?` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-rational? arguments context)
       (number-rational? (car arguments)))
 
+    ;; Implement the `integer?` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-integer? arguments context)
       (number-integer? (car arguments)))
 
+    ;; Implement the `exact-integer?` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-exact-integer? arguments context)
       (and (number-integer? (car arguments))
            (number-exact? (car arguments))))
 
+    ;; Implement the `exact?` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-exact? arguments context)
       (number-exact? (car arguments)))
 
+    ;; Implement the `inexact?` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-inexact? arguments context)
       (number-inexact? (car arguments)))
 
+    ;; Render NUMBER using RADIX for exact integers and rationals.
     (define (number->string/radix number radix)
       (cond
        ((eq? (agent-scheme-number-kind number) 'integer)
@@ -5192,6 +5679,8 @@
              "number->string only supports radix 10 for complex numbers"))
         (agent-scheme-number->external number))))
 
+    ;; Implement the `number->string` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-number->string arguments context)
       (let ((number (expect-number (car arguments) "number->string"))
             (radix (if (null? (cdr arguments))
@@ -5203,6 +5692,8 @@
             (eval-error "number->string radix must be 2, 8, 10, or 16"))
         (number->string/radix number radix)))
 
+    ;; Report whether TEXT begins with an explicit reader radix/exactness
+    ;; prefix.
     (define (explicit-number-prefix? text)
       (and (>= (string-length text) 2)
            (char=? (string-ref text 0) #\#)
@@ -5214,6 +5705,8 @@
                  (char=? marker #\e)
                  (char=? marker #\i)))))
 
+    ;; Implement the `string->number` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-string->number arguments context)
       (let* ((source-text (expect-string (car arguments) "string->number"))
              (radix (if (null? (cdr arguments))
@@ -5242,6 +5735,8 @@
                 datum
                 #f)))))
 
+    ;; Implement the `string->utf8` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-string->utf8 arguments context)
       (let* ((string (expect-string (car arguments) "string->utf8"))
              (range (optional-range
@@ -5251,6 +5746,8 @@
                      "string->utf8")))
         (string->utf8 (substring string (car range) (cdr range)))))
 
+    ;; Implement the `utf8->string` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-utf8->string arguments context)
       (let* ((bytes (expect-bytevector (car arguments) "utf8->string"))
              (range (optional-range
@@ -5260,17 +5757,25 @@
                      "utf8->string")))
         (utf8->string bytes (car range) (cdr range))))
 
+    ;; Implement the `symbol?` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-symbol? arguments context)
       (symbol? (car arguments)))
 
+    ;; Implement the `symbol->string` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-symbol->string arguments context)
       (if (not (symbol? (car arguments)))
           (eval-error "symbol->string expected a symbol"))
       (symbol->string (car arguments)))
 
+    ;; Implement the `string->symbol` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-string->symbol arguments context)
       (string->symbol (expect-string (car arguments) "string->symbol")))
 
+    ;; Implement the `symbol=?` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-symbol=? arguments context)
       (let ((first (car arguments)))
         (if (not (symbol? first))
@@ -5283,17 +5788,25 @@
            ((eq? first (car rest)) (loop (cdr rest)))
            (else #f)))))
 
+    ;; Implement the `char?` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-char? arguments context)
       (char? (car arguments)))
 
+    ;; Implement the `char->integer` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-char->integer arguments context)
       (char->integer
        (expect-character (car arguments) "char->integer")))
 
+    ;; Implement the `integer->char` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-integer->char arguments context)
       (integer->char
        (exact-integer->host (car arguments) "integer->char")))
 
+    ;; Implement the `char-compare` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-char-compare arguments predicate description)
       (let loop ((rest arguments))
         (cond
@@ -5303,53 +5816,81 @@
                 (right (expect-character (second rest) description)))
             (and (predicate left right) (loop (cdr rest))))))))
 
+    ;; Implement the `char=?` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-char=? arguments context)
       (primitive-char-compare arguments char=? "char=?"))
 
+    ;; Implement the `char<?` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-char<? arguments context)
       (primitive-char-compare arguments char<? "char<?"))
 
+    ;; Implement the `char>?` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-char>? arguments context)
       (primitive-char-compare arguments char>? "char>?"))
 
+    ;; Implement the `char<=?` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-char<=? arguments context)
       (primitive-char-compare arguments char<=? "char<=?"))
 
+    ;; Implement the `char>=?` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-char>=? arguments context)
       (primitive-char-compare arguments char>=? "char>=?"))
 
+    ;; Implement the `char-upcase` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-char-upcase arguments context)
       (char-upcase (expect-character (car arguments) "char-upcase")))
 
+    ;; Implement the `char-downcase` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-char-downcase arguments context)
       (char-downcase (expect-character (car arguments) "char-downcase")))
 
+    ;; Implement the `char-foldcase` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-char-foldcase arguments context)
       (char-foldcase (expect-character (car arguments) "char-foldcase")))
 
+    ;; Implement the `char-alphabetic?` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-char-alphabetic? arguments context)
       (char-alphabetic? (expect-character
                          (car arguments)
                          "char-alphabetic?")))
 
+    ;; Implement the `char-numeric?` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-char-numeric? arguments context)
       (char-numeric? (expect-character (car arguments) "char-numeric?")))
 
+    ;; Implement the `char-whitespace?` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-char-whitespace? arguments context)
       (char-whitespace? (expect-character
                          (car arguments)
                          "char-whitespace?")))
 
+    ;; Implement the `char-upper-case?` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-char-upper-case? arguments context)
       (char-upper-case? (expect-character
                          (car arguments)
                          "char-upper-case?")))
 
+    ;; Implement the `char-lower-case?` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-char-lower-case? arguments context)
       (char-lower-case? (expect-character
                          (car arguments)
                          "char-lower-case?")))
 
+    ;; Implement the `digit-value` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-digit-value arguments context)
       (let ((value (digit-value
                     (expect-character (car arguments) "digit-value"))))
@@ -5357,6 +5898,8 @@
             (agent-scheme-make-canonical-integer value)
             #f)))
 
+    ;; Implement the `char-ci-compare` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-char-ci-compare arguments predicate description)
       (primitive-char-compare
        arguments
@@ -5364,30 +5907,48 @@
          (predicate (char-foldcase left) (char-foldcase right)))
        description))
 
+    ;; Implement the `char-ci=?` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-char-ci=? arguments context)
       (primitive-char-ci-compare arguments char=? "char-ci=?"))
 
+    ;; Implement the `char-ci<?` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-char-ci<? arguments context)
       (primitive-char-ci-compare arguments char<? "char-ci<?"))
 
+    ;; Implement the `char-ci>?` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-char-ci>? arguments context)
       (primitive-char-ci-compare arguments char>? "char-ci>?"))
 
+    ;; Implement the `char-ci<=?` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-char-ci<=? arguments context)
       (primitive-char-ci-compare arguments char<=? "char-ci<=?"))
 
+    ;; Implement the `char-ci>=?` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-char-ci>=? arguments context)
       (primitive-char-ci-compare arguments char>=? "char-ci>=?"))
 
+    ;; Implement the `string-upcase` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-string-upcase arguments context)
       (string-upcase (expect-string (car arguments) "string-upcase")))
 
+    ;; Implement the `string-downcase` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-string-downcase arguments context)
       (string-downcase (expect-string (car arguments) "string-downcase")))
 
+    ;; Implement the `string-foldcase` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-string-foldcase arguments context)
       (string-foldcase (expect-string (car arguments) "string-foldcase")))
 
+    ;; Implement the `string-ci-compare` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-string-ci-compare arguments predicate description)
       (primitive-string-compare
        arguments
@@ -5395,29 +5956,42 @@
          (predicate (string-foldcase left) (string-foldcase right)))
        description))
 
+    ;; Implement the `string-ci=?` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-string-ci=? arguments context)
       (primitive-string-ci-compare arguments string=? "string-ci=?"))
 
+    ;; Implement the `string-ci<?` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-string-ci<? arguments context)
       (primitive-string-ci-compare arguments string<? "string-ci<?"))
 
+    ;; Implement the `string-ci>?` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-string-ci>? arguments context)
       (primitive-string-ci-compare arguments string>? "string-ci>?"))
 
+    ;; Implement the `string-ci<=?` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-string-ci<=? arguments context)
       (primitive-string-ci-compare arguments string<=? "string-ci<=?"))
 
+    ;; Implement the `string-ci>=?` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-string-ci>=? arguments context)
       (primitive-string-ci-compare arguments string>=? "string-ci>=?"))
 
+    ;; Render VALUE for display output rather than write output.
     (define (display-string value)
       (agent-scheme-datum->external value 'write #t))
 
+    ;; Validate port input and raise an evaluator error on mismatch.
     (define (expect-port value description)
       (if (not (agent-scheme-port? value))
           (eval-error (string-append description " expected a port") value))
       value)
 
+    ;; Validate open port input and raise an evaluator error on mismatch.
     (define (expect-open-port value description)
       (let ((port (expect-port value description)))
         (if (not (agent-scheme-port-open? port))
@@ -5426,6 +6000,7 @@
              value))
         port))
 
+    ;; Validate input port input and raise an evaluator error on mismatch.
     (define (expect-input-port value description)
       (let ((port (expect-open-port value description)))
         (if (not (agent-scheme-port-input? port))
@@ -5434,6 +6009,7 @@
              value))
         port))
 
+    ;; Validate output port input and raise an evaluator error on mismatch.
     (define (expect-output-port value description)
       (let ((port (expect-open-port value description)))
         (if (not (agent-scheme-port-output? port))
@@ -5442,6 +6018,8 @@
              value))
         port))
 
+    ;; Validate textual input port input and raise an evaluator error on
+    ;; mismatch.
     (define (expect-textual-input-port value description)
       (let ((port (expect-input-port value description)))
         (if (not (agent-scheme-port-textual? port))
@@ -5450,6 +6028,8 @@
              value))
         port))
 
+    ;; Validate textual output port input and raise an evaluator error on
+    ;; mismatch.
     (define (expect-textual-output-port value description)
       (let ((port (expect-output-port value description)))
         (if (not (agent-scheme-port-textual? port))
@@ -5458,6 +6038,8 @@
              value))
         port))
 
+    ;; Validate binary input port input and raise an evaluator error on
+    ;; mismatch.
     (define (expect-binary-input-port value description)
       (let ((port (expect-input-port value description)))
         (if (not (agent-scheme-port-binary? port))
@@ -5466,6 +6048,8 @@
              value))
         port))
 
+    ;; Validate binary output port input and raise an evaluator error on
+    ;; mismatch.
     (define (expect-binary-output-port value description)
       (let ((port (expect-output-port value description)))
         (if (not (agent-scheme-port-binary? port))
@@ -5474,6 +6058,8 @@
              value))
         port))
 
+    ;; Validate string output port input and raise an evaluator error on
+    ;; mismatch.
     (define (expect-string-output-port value description)
       (let ((port (expect-textual-output-port value description)))
         (if (not (eq? (agent-scheme-port-medium port) 'string))
@@ -5482,6 +6068,8 @@
              value))
         port))
 
+    ;; Validate bytevector output port input and raise an evaluator error on
+    ;; mismatch.
     (define (expect-bytevector-output-port value description)
       (let ((port (expect-binary-output-port value description)))
         (if (not (eq? (agent-scheme-port-medium port) 'bytevector))
@@ -5491,6 +6079,7 @@
              value))
         port))
 
+    ;; Write text to port data through the Agent Scheme port or datum renderer.
     (define (write-text-to-port text port description)
       (let ((output (expect-textual-output-port port description)))
         (if (not (eq? (agent-scheme-port-medium output) 'string))
@@ -5503,6 +6092,8 @@
          (string-append (agent-scheme-port-contents output) text))
         agent-scheme-unspecified))
 
+    ;; Write to output port data through the Agent Scheme port or datum
+    ;; renderer.
     (define (write-to-output-port value port mode display?)
       (write-text-to-port
        (if display?
@@ -5511,74 +6102,108 @@
        port
        (if display? "display" "write")))
 
+    ;; Implement the `eof-object?` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-eof-object? arguments context)
       (agent-scheme-eof-object? (car arguments)))
 
+    ;; Implement the `eof-object` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-eof-object arguments context)
       agent-scheme-eof-object)
 
+    ;; Implement the `port?` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-port? arguments context)
       (agent-scheme-port? (car arguments)))
 
+    ;; Implement the `input-port?` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-input-port? arguments context)
       (and (agent-scheme-port? (car arguments))
            (agent-scheme-port-input? (car arguments))))
 
+    ;; Implement the `output-port?` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-output-port? arguments context)
       (and (agent-scheme-port? (car arguments))
            (agent-scheme-port-output? (car arguments))))
 
+    ;; Implement the `textual-port?` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-textual-port? arguments context)
       (and (agent-scheme-port? (car arguments))
            (agent-scheme-port-textual? (car arguments))))
 
+    ;; Implement the `binary-port?` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-binary-port? arguments context)
       (and (agent-scheme-port? (car arguments))
            (agent-scheme-port-binary? (car arguments))))
 
+    ;; Implement the `input-port-open?` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-input-port-open? arguments context)
       (let ((port (expect-port (car arguments) "input-port-open?")))
         (and (agent-scheme-port-input? port)
              (agent-scheme-port-open? port))))
 
+    ;; Implement the `output-port-open?` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-output-port-open? arguments context)
       (let ((port (expect-port (car arguments) "output-port-open?")))
         (and (agent-scheme-port-output? port)
              (agent-scheme-port-open? port))))
 
+    ;; Mark PORT closed and return the unspecified value.
     (define (close-port-value port)
       (set-agent-scheme-port-open?! port #f)
       agent-scheme-unspecified)
 
+    ;; Implement the `close-port` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-close-port arguments context)
       (close-port-value (expect-port (car arguments) "close-port")))
 
+    ;; Implement the `close-input-port` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-close-input-port arguments context)
       (close-port-value
        (expect-input-port (car arguments) "close-input-port")))
 
+    ;; Implement the `close-output-port` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-close-output-port arguments context)
       (close-port-value
        (expect-output-port (car arguments) "close-output-port")))
 
+    ;; Implement the `open-output-string` primitive with argument validation
+    ;; and Agent Scheme values.
     (define (primitive-open-output-string arguments context)
       (make-agent-scheme-port 'string #f #t #t #f #t #f 0 ""))
 
+    ;; Implement the `open-input-string` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-open-input-string arguments context)
       (make-agent-scheme-port
        'string #t #f #t #f #t
        (expect-string (car arguments) "open-input-string")
        0 #f))
 
+    ;; Implement the `get-output-string` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-get-output-string arguments context)
       (agent-scheme-port-contents
        (expect-string-output-port
         (car arguments)
         "get-output-string")))
 
+    ;; Implement the `open-output-bytevector` primitive with argument
+    ;; validation and Agent Scheme values.
     (define (primitive-open-output-bytevector arguments context)
       (make-agent-scheme-port 'bytevector #f #t #f #t #t #f 0 '()))
 
+    ;; Return a fresh bytevector with the same bytes as BYTES.
     (define (copy-bytevector bytes)
       (let* ((length (bytevector-length bytes))
              (copy (make-bytevector length 0)))
@@ -5589,6 +6214,8 @@
                 (loop (+ index 1)))))
         copy))
 
+    ;; Implement the `open-input-bytevector` primitive with argument validation
+    ;; and Agent Scheme values.
     (define (primitive-open-input-bytevector arguments context)
       (make-agent-scheme-port
        'bytevector #t #f #f #t #t
@@ -5596,6 +6223,7 @@
         (expect-bytevector (car arguments) "open-input-bytevector"))
        0 #f))
 
+    ;; Convert a list of exact byte values into a bytevector.
     (define (list->bytevector bytes)
       (let ((result (make-bytevector (length bytes) 0)))
         (let loop ((index 0) (rest bytes))
@@ -5605,6 +6233,8 @@
                 (bytevector-u8-set! result index (car rest))
                 (loop (+ index 1) (cdr rest)))))))
 
+    ;; Implement the `get-output-bytevector` primitive with argument validation
+    ;; and Agent Scheme values.
     (define (primitive-get-output-bytevector arguments context)
       (list->bytevector
        (agent-scheme-port-contents
@@ -5612,6 +6242,8 @@
          (car arguments)
          "get-output-bytevector"))))
 
+    ;; Implement the `read` primitive with argument validation and Agent Scheme
+    ;; values.
     (define (primitive-read arguments context)
       (if (null? arguments)
           agent-scheme-eof-object
@@ -5625,6 +6257,7 @@
                 agent-scheme-eof-object
                 (car result)))))
 
+    ;; Return the next character from PORT, optionally advancing its cursor.
     (define (text-port-next-char port advance? description)
       (let ((input (expect-textual-input-port port description)))
         (if (not (eq? (agent-scheme-port-medium input) 'string))
@@ -5641,21 +6274,29 @@
                     (set-agent-scheme-port-position! input (+ position 1)))
                 char)))))
 
+    ;; Implement the `read-char` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-read-char arguments context)
       (if (null? arguments)
           agent-scheme-eof-object
           (text-port-next-char (car arguments) #t "read-char")))
 
+    ;; Implement the `peek-char` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-peek-char arguments context)
       (if (null? arguments)
           agent-scheme-eof-object
           (text-port-next-char (car arguments) #f "peek-char")))
 
+    ;; Implement the `char-ready?` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-char-ready? arguments context)
       (if (not (null? arguments))
           (expect-textual-input-port (car arguments) "char-ready?"))
       #t)
 
+    ;; Implement the `read-string` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-read-string arguments context)
       (let ((count (exact-integer->host (car arguments) "read-string"))
             (port (if (null? (cdr arguments))
@@ -5681,6 +6322,8 @@
               (set-agent-scheme-port-position! port (+ position amount))
               (substring source position (+ position amount)))))))))
 
+    ;; Implement the `read-line` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-read-line arguments context)
       (if (null? arguments)
           agent-scheme-eof-object
@@ -5716,6 +6359,7 @@
                           (set-agent-scheme-port-position! port position)
                           line))))))))
 
+    ;; Write byte to port data through the Agent Scheme port or datum renderer.
     (define (write-byte-to-port byte port description)
       (let ((output (expect-binary-output-port port description)))
         (if (not (eq? (agent-scheme-port-medium output) 'bytevector))
@@ -5728,6 +6372,8 @@
          (append (agent-scheme-port-contents output) (list byte)))
         agent-scheme-unspecified))
 
+    ;; Implement the `read-u8` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-read-u8 arguments context)
       (if (null? arguments)
           agent-scheme-eof-object
@@ -5744,6 +6390,8 @@
                   (host-number->agent-number
                    (bytevector-u8-ref source position)))))))
 
+    ;; Implement the `peek-u8` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-peek-u8 arguments context)
       (if (null? arguments)
           agent-scheme-eof-object
@@ -5758,11 +6406,14 @@
                 (host-number->agent-number
                  (bytevector-u8-ref source position))))))
 
+    ;; Implement the `u8-ready?` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-u8-ready? arguments context)
       (if (not (null? arguments))
           (expect-binary-input-port (car arguments) "u8-ready?"))
       #t)
 
+    ;; Return SOURCE bytes in the half-open range [START, END).
     (define (subbytevector source start end)
       (let ((result (make-bytevector (- end start) 0)))
         (let loop ((index start))
@@ -5775,6 +6426,8 @@
                 (loop (+ index 1)))))
         result))
 
+    ;; Implement the `read-bytevector` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-read-bytevector arguments context)
       (let ((count (exact-integer->host
                     (car arguments)
@@ -5803,6 +6456,8 @@
               (set-agent-scheme-port-position! port (+ position amount))
               (subbytevector source position (+ position amount)))))))))
 
+    ;; Implement the `read-bytevector!` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-read-bytevector! arguments context)
       (let* ((target (expect-bytevector
                       (car arguments)
@@ -5849,6 +6504,8 @@
                     (set-agent-scheme-port-position! port (+ position amount))
                     (host-number->agent-number amount)))))))
 
+    ;; Implement the `write-u8` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-write-u8 arguments context)
       (if (not (null? (cdr arguments)))
           (write-byte-to-port
@@ -5857,6 +6514,8 @@
            "write-u8"))
       agent-scheme-unspecified)
 
+    ;; Implement the `write-bytevector` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-write-bytevector arguments context)
       (if (not (null? (cdr arguments)))
           (let* ((bytes (expect-bytevector
@@ -5876,6 +6535,8 @@
                     (loop (+ index 1)))))))
       agent-scheme-unspecified)
 
+    ;; Implement the `write-char` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-write-char arguments context)
       (if (not (null? (cdr arguments)))
           (write-text-to-port
@@ -5884,6 +6545,8 @@
            "write-char"))
       agent-scheme-unspecified)
 
+    ;; Implement the `write-string` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-write-string arguments context)
       (if (not (null? (cdr arguments)))
           (let* ((string (expect-string (car arguments) "write-string"))
@@ -5897,53 +6560,74 @@
              "write-string")))
       agent-scheme-unspecified)
 
+    ;; Implement the `newline` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-newline arguments context)
       (if (not (null? arguments))
           (write-text-to-port "\n" (car arguments) "newline"))
       agent-scheme-unspecified)
 
+    ;; Implement the `display` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-display arguments context)
       (if (null? (cdr arguments))
           agent-scheme-unspecified
           (write-to-output-port (car arguments) (second arguments) 'write #t)))
 
+    ;; Implement the `write` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-write arguments context)
       (if (null? (cdr arguments))
           agent-scheme-unspecified
           (write-to-output-port (car arguments) (second arguments) 'write #f)))
 
+    ;; Implement the `write-shared` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-write-shared arguments context)
       (if (null? (cdr arguments))
           agent-scheme-unspecified
           (write-to-output-port (car arguments) (second arguments) 'shared #f)))
 
+    ;; Implement the `write-simple` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-write-simple arguments context)
       (if (null? (cdr arguments))
           agent-scheme-unspecified
           (write-to-output-port (car arguments) (second arguments) 'simple #f)))
 
+    ;; Implement the `flush-output-port` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-flush-output-port arguments context)
       (if (not (null? arguments))
           (expect-output-port (car arguments) "flush-output-port"))
       agent-scheme-unspecified)
 
+    ;; Implement the `read-error?` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-read-error? arguments context)
       #f)
 
+    ;; Implement the `file-error?` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-file-error? arguments context)
       #f)
 
+    ;; Implement the `features` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-features arguments context)
       '(r7rs ratios exact-complex ieee-float agent-scheme))
 
+    ;; Raise a policy-gated host-access denial for DESCRIPTION.
     (define (policy-denied description)
       (eval-error
        (string-append description " requires policy-gated host access")))
 
+    ;; Return a primitive callback that always raises a policy denial.
     (define (policy-denied-primitive description)
       (lambda (arguments context)
         (policy-denied description)))
 
+    ;; Resolve FILENAME and enforce the file-operation allow-list policy.
     (define (resolve-file-policy-path filename context description)
       (let ((path (path-join (context-include-directory context) filename)))
         (cond
@@ -5958,6 +6642,8 @@
            filename))
          (else path))))
 
+    ;; Implement the `file-exists?` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-file-exists? arguments context)
       (let ((path
              (resolve-file-policy-path
@@ -5966,16 +6652,22 @@
               "file-exists?")))
         (file-exists? path)))
 
+    ;; Implement the `delete-file` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-delete-file arguments context)
       (expect-string (car arguments) "delete-file")
       (policy-denied "delete-file"))
 
+    ;; Implement the `call-with-port` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-call-with-port arguments context)
       (drain-state
        (primitive-call-with-port/k
         arguments context identity-continuation)
        context))
 
+    ;; Continuation-aware implementation of the `call-with-port` primitive for
+    ;; trampoline evaluation.
     (define (primitive-call-with-port/k arguments context continuation)
       (let ((port (expect-port (car arguments) "call-with-port port"))
             (procedure
@@ -5989,6 +6681,8 @@
            (close-port-value port)
            (continue continuation value)))))
 
+    ;; Implement the `environment` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-environment arguments context)
       (let ((environment (agent-scheme-make-empty-environment))
             (syntax-environment (make-syntax-environment '() #f '())))
@@ -5999,6 +6693,8 @@
            (eval-import (cons 'import arguments) environment context)))
         (make-environment-specifier environment syntax-environment #t)))
 
+    ;; Validate environment specifier input and raise an evaluator error on
+    ;; mismatch.
     (define (expect-environment-specifier value description)
       (if (not (environment-specifier? value))
           (eval-error
@@ -6006,6 +6702,7 @@
            value))
       value)
 
+    ;; Report whether FORM mutates an evaluation environment.
     (define (eval-form-mutates-environment? form)
       (or (import-form? form)
           (define-library-form? form)
@@ -6013,11 +6710,15 @@
           (record-definition-form? form)
           (definition-form? form)))
 
+    ;; Implement the `eval` primitive with argument validation and Agent Scheme
+    ;; values.
     (define (primitive-eval arguments context)
       (drain-state
        (primitive-eval/k arguments context identity-continuation)
        context))
 
+    ;; Continuation-aware implementation of the `eval` primitive for trampoline
+    ;; evaluation.
     (define (primitive-eval/k arguments context continuation)
       (let* ((expression (car arguments))
              (specifier
@@ -6038,6 +6739,7 @@
                (eval-expression
                 expression environment context #t continuation))))))
 
+    ;; Read policy-approved source file forms and return forms plus directory.
     (define (read-policy-file-forms filename context description)
       (let ((path (resolve-file-policy-path filename context description)))
         (if (not (file-exists? path))
@@ -6047,6 +6749,7 @@
         (cons (agent-scheme-read-all (read-file-string path))
               (path-directory path))))
 
+    ;; Return the value and syntax environments targeted by load.
     (define (load-target arguments context)
       (if (not (null? (cdr arguments)))
           (let ((specifier
@@ -6060,11 +6763,15 @@
                     (agent-scheme-make-base-environment))
                 (context-syntax-environment context))))
 
+    ;; Implement the `load` primitive with argument validation and Agent Scheme
+    ;; values.
     (define (primitive-load arguments context)
       (drain-state
        (primitive-load/k arguments context identity-continuation)
        context))
 
+    ;; Continuation-aware implementation of the `load` primitive for trampoline
+    ;; evaluation.
     (define (primitive-load/k arguments context continuation)
       (let* ((filename (expect-string (car arguments) "load"))
              (read-result
@@ -6087,9 +6794,13 @@
                (lambda (value)
                  (continue continuation agent-scheme-unspecified)))))))))
 
+    ;; Implement the `string?` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-string? arguments context)
       (string? (car arguments)))
 
+    ;; Implement the `make-string` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-make-string arguments context)
       (let ((length (exact-integer->host (car arguments) "make-string"))
             (fill (if (null? (cdr arguments))
@@ -6101,15 +6812,21 @@
             (eval-error "make-string length must be non-negative"))
         (make-string length fill)))
 
+    ;; Implement the `string` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-string arguments context)
       (list->string
        (map (lambda (argument)
               (expect-character argument "string"))
             arguments)))
 
+    ;; Implement the `string-length` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-string-length arguments context)
       (string-length (expect-string (car arguments) "string-length")))
 
+    ;; Implement the `string-ref` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-string-ref arguments context)
       (let* ((string (expect-string (car arguments) "string-ref"))
              (index (expect-nonnegative-index
@@ -6119,6 +6836,8 @@
                      #f)))
         (string-ref string index)))
 
+    ;; Implement the `string-set!` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-string-set! arguments context)
       (let* ((string (expect-string (car arguments) "string-set!"))
              (index (expect-nonnegative-index
@@ -6130,6 +6849,8 @@
         (string-set! string index char)
         agent-scheme-unspecified))
 
+    ;; Implement the `substring` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-substring arguments context)
       (let* ((string (expect-string (car arguments) "substring"))
              (start (expect-nonnegative-index
@@ -6146,12 +6867,16 @@
             (eval-error "substring start exceeds end"))
         (substring string start end)))
 
+    ;; Implement the `string-append` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-string-append arguments context)
       (apply string-append
              (map (lambda (argument)
                     (expect-string argument "string-append"))
                   arguments)))
 
+    ;; Implement the `string->list` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-string->list arguments context)
       (let* ((string (expect-string (car arguments) "string->list"))
              (range (optional-range
@@ -6165,15 +6890,21 @@
               (loop (+ index 1)
                     (cons (string-ref string index) result))))))
 
+    ;; Implement the `list->string` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-list->string arguments context)
       (list->string
        (map (lambda (argument)
               (expect-character argument "list->string"))
             (proper-list-elements (car arguments) "list->string"))))
 
+    ;; Implement the `string->vector` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-string->vector arguments context)
       (list->vector (primitive-string->list arguments context)))
 
+    ;; Implement the `vector->string` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-vector->string arguments context)
       (let* ((vector (expect-vector (car arguments) "vector->string"))
              (range (optional-range
@@ -6190,6 +6921,8 @@
                            "vector->string")
                           result))))))
 
+    ;; Implement the `string-copy` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-string-copy arguments context)
       (let* ((string (expect-string (car arguments) "string-copy"))
              (range (optional-range
@@ -6199,6 +6932,8 @@
                      "string-copy")))
         (substring string (car range) (cdr range))))
 
+    ;; Implement the `string-copy!` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-string-copy! arguments context)
       (let* ((to (expect-string (car arguments) "string-copy! target"))
              (at (expect-nonnegative-index
@@ -6221,6 +6956,8 @@
                 (loop (+ source-index 1) (+ target-index 1)))))
         agent-scheme-unspecified))
 
+    ;; Implement the `string-fill!` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-string-fill! arguments context)
       (let* ((string (expect-string (car arguments) "string-fill!"))
              (fill (expect-character (second arguments) "string-fill! value"))
@@ -6236,6 +6973,8 @@
                 (loop (+ index 1)))))
         agent-scheme-unspecified))
 
+    ;; Implement the `string-compare` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-string-compare arguments predicate description)
       (let loop ((rest arguments))
         (cond
@@ -6245,21 +6984,32 @@
                 (right (expect-string (second rest) description)))
             (and (predicate left right) (loop (cdr rest))))))))
 
+    ;; Implement the `string=?` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-string=? arguments context)
       (primitive-string-compare arguments string=? "string=?"))
 
+    ;; Implement the `string<?` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-string<? arguments context)
       (primitive-string-compare arguments string<? "string<?"))
 
+    ;; Implement the `string>?` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-string>? arguments context)
       (primitive-string-compare arguments string>? "string>?"))
 
+    ;; Implement the `string<=?` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-string<=? arguments context)
       (primitive-string-compare arguments string<=? "string<=?"))
 
+    ;; Implement the `string>=?` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-string>=? arguments context)
       (primitive-string-compare arguments string>=? "string>=?"))
 
+    ;; Apply PROCEDURE over LISTS, collecting results only when requested.
     (define (map-over-lists procedure lists context keep-results?)
       (let loop ((cursors lists) (results '()))
         (cond
@@ -6283,6 +7033,8 @@
                       (cons (single-value value "map result") results)
                       results)))))))
 
+    ;; Implement the `apply` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-apply arguments context)
       (let ((procedure (expect-procedure (car arguments) "apply procedure"))
             (fixed-arguments (reverse (cdr (reverse (cdr arguments)))))
@@ -6295,6 +7047,7 @@
                          context
                          #f)))
 
+    ;; Apply a parameter procedure in continuation-passing form.
     (define (apply-parameter/k parameter arguments context continuation)
       (cond
        ((null? arguments)
@@ -6318,12 +7071,16 @@
         (set-parameter-value! parameter (car arguments))
         (continue continuation agent-scheme-unspecified))))
 
+    ;; Implement the `make-parameter` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-make-parameter arguments context)
       (drain-state
        (primitive-make-parameter/k
         arguments context identity-continuation)
        context))
 
+    ;; Continuation-aware implementation of the `make-parameter` primitive for
+    ;; trampoline evaluation.
     (define (primitive-make-parameter/k arguments context continuation)
       (let ((initial (car arguments))
             (converter (if (null? (cdr arguments))
@@ -6345,6 +7102,8 @@
                    converter)))))
             (continue continuation (make-parameter initial #f)))))
 
+    ;; Continuation-aware implementation of the `apply` primitive for
+    ;; trampoline evaluation.
     (define (primitive-apply/k arguments context continuation)
       (let ((procedure (expect-procedure (car arguments) "apply procedure"))
             (fixed-arguments (reverse (cdr (reverse (cdr arguments)))))
@@ -6358,9 +7117,13 @@
                          #t
                          continuation)))
 
+    ;; Implement the `values` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-values arguments context)
       (make-multiple-values arguments))
 
+    ;; Implement the `call-with-values` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-call-with-values arguments context)
       (let* ((producer (expect-procedure
                         (car arguments)
@@ -6371,6 +7134,8 @@
              (produced (apply-procedure producer '() context #f)))
         (apply-procedure consumer (values-list produced) context #f)))
 
+    ;; Continuation-aware implementation of the `call-with-values` primitive
+    ;; for trampoline evaluation.
     (define (primitive-call-with-values/k
              arguments context continuation)
       (let ((producer (expect-procedure
@@ -6392,12 +7157,16 @@
             #t
             continuation)))))
 
+    ;; Implement the `call/cc` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-call/cc arguments context)
       (drain-state
        (primitive-call/cc/k
         arguments context identity-continuation)
        context))
 
+    ;; Continuation-aware implementation of the `call/cc` primitive for
+    ;; trampoline evaluation.
     (define (primitive-call/cc/k arguments context continuation)
       (let* ((procedure
               (expect-procedure
@@ -6415,6 +7184,7 @@
          #t
          continuation)))
 
+    ;; Restore a captured continuation's dynamic context and pass arguments.
     (define (invoke-continuation continuation arguments context)
       (switch-dynamic-winds!
        (continuation-dynamic-winds continuation)
@@ -6426,12 +7196,16 @@
        (continuation-procedure continuation)
        (continuation-value arguments)))
 
+    ;; Implement the `dynamic-wind` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-dynamic-wind arguments context)
       (drain-state
        (primitive-dynamic-wind/k
         arguments context identity-continuation)
        context))
 
+    ;; Continuation-aware implementation of the `dynamic-wind` primitive for
+    ;; trampoline evaluation.
     (define (primitive-dynamic-wind/k arguments context continuation)
       (let ((before (expect-procedure (car arguments) "dynamic-wind before"))
             (thunk (expect-procedure (second arguments) "dynamic-wind thunk"))
@@ -6463,12 +7237,14 @@
                  (lambda (after-result)
                    (continue continuation result))))))))))
 
+    ;; Invoke the current exception handler and drain its trampoline state.
     (define (invoke-exception-handler condition context)
       (drain-state
        (invoke-exception-handler/k
         condition context identity-continuation)
        context))
 
+    ;; Invoke the current exception handler in continuation-passing form.
     (define (invoke-exception-handler/k
              condition context continuation)
       (let ((handlers (context-exception-handlers context)))
@@ -6486,12 +7262,16 @@
            (set-context-exception-handlers! context handlers)
            (continue continuation value)))))
 
+    ;; Implement the `with-exception-handler` primitive with argument
+    ;; validation and Agent Scheme values.
     (define (primitive-with-exception-handler arguments context)
       (drain-state
        (primitive-with-exception-handler/k
         arguments context identity-continuation)
        context))
 
+    ;; Continuation-aware implementation of the `with-exception-handler`
+    ;; primitive for trampoline evaluation.
     (define (primitive-with-exception-handler/k
              arguments context continuation)
       (let ((handler (expect-procedure
@@ -6515,18 +7295,26 @@
             old-handlers)
            (continue continuation value)))))
 
+    ;; Implement the `raise-continuable` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-raise-continuable arguments context)
       (invoke-exception-handler (car arguments) context))
 
+    ;; Continuation-aware implementation of the `raise-continuable` primitive
+    ;; for trampoline evaluation.
     (define (primitive-raise-continuable/k
              arguments context continuation)
       (invoke-exception-handler/k
        (car arguments) context continuation))
 
+    ;; Implement the `raise` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-raise arguments context)
       (invoke-exception-handler (car arguments) context)
       (eval-error "non-continuable exception handler returned"))
 
+    ;; Continuation-aware implementation of the `raise` primitive for
+    ;; trampoline evaluation.
     (define (primitive-raise/k arguments context continuation)
       (invoke-exception-handler/k
        (car arguments)
@@ -6535,6 +7323,8 @@
          (eval-error
           "non-continuable exception handler returned"))))
 
+    ;; Implement the `error` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-error arguments context)
       (let ((message (expect-string (car arguments) "error message"))
             (irritants (cdr arguments)))
@@ -6542,6 +7332,8 @@
          (list (make-agent-scheme-error-object message irritants))
          context)))
 
+    ;; Continuation-aware implementation of the `error` primitive for
+    ;; trampoline evaluation.
     (define (primitive-error/k arguments context continuation)
       (let ((message (expect-string (car arguments) "error message"))
             (irritants (cdr arguments)))
@@ -6550,9 +7342,12 @@
          context
          continuation)))
 
+    ;; Implement the `error-object?` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-error-object? arguments context)
       (agent-scheme-error-object? (car arguments)))
 
+    ;; Validate error object input and raise an evaluator error on mismatch.
     (define (expect-error-object value description)
       (if (agent-scheme-error-object? value)
           value
@@ -6560,14 +7355,20 @@
            (string-append description " expected an error object")
            value)))
 
+    ;; Implement the `error-object-message` primitive with argument validation
+    ;; and Agent Scheme values.
     (define (primitive-error-object-message arguments context)
       (agent-scheme-error-object-message
        (expect-error-object (car arguments) "error-object-message")))
 
+    ;; Implement the `error-object-irritants` primitive with argument
+    ;; validation and Agent Scheme values.
     (define (primitive-error-object-irritants arguments context)
       (agent-scheme-error-object-irritants
        (expect-error-object (car arguments) "error-object-irritants")))
 
+    ;; Implement the `map` primitive with argument validation and Agent Scheme
+    ;; values.
     (define (primitive-map arguments context)
       (map-over-lists
        (expect-procedure (car arguments) "map procedure")
@@ -6575,6 +7376,8 @@
        context
        #t))
 
+    ;; Implement the `for-each` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-for-each arguments context)
       (map-over-lists
        (expect-procedure (car arguments) "for-each procedure")
@@ -6582,6 +7385,8 @@
        context
        #f))
 
+    ;; Implement the `string-map` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-string-map arguments context)
       (let* ((procedure (expect-procedure
                          (car arguments)
@@ -6606,6 +7411,8 @@
                              "string-map result")
                             result)))))))
 
+    ;; Implement the `string-for-each` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-string-for-each arguments context)
       (let* ((procedure (expect-procedure
                          (car arguments)
@@ -6625,9 +7432,13 @@
                 (loop (+ index 1)))))
         agent-scheme-unspecified))
 
+    ;; Implement the `vector?` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-vector? arguments context)
       (vector? (car arguments)))
 
+    ;; Implement the `make-vector` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-make-vector arguments context)
       (let ((length (exact-integer->host (car arguments) "make-vector"))
             (fill (if (null? (cdr arguments))
@@ -6637,12 +7448,18 @@
             (eval-error "make-vector length must be non-negative"))
         (make-vector length fill)))
 
+    ;; Implement the `vector` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-vector arguments context)
       (list->vector arguments))
 
+    ;; Implement the `vector-length` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-vector-length arguments context)
       (vector-length (expect-vector (car arguments) "vector-length")))
 
+    ;; Implement the `vector-ref` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-vector-ref arguments context)
       (let* ((vector (expect-vector (car arguments) "vector-ref"))
              (index (expect-nonnegative-index
@@ -6652,6 +7469,8 @@
                      #f)))
         (vector-ref vector index)))
 
+    ;; Implement the `vector-set!` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-vector-set! arguments context)
       (let* ((vector (expect-vector (car arguments) "vector-set!"))
              (index (expect-nonnegative-index
@@ -6662,6 +7481,8 @@
         (vector-set! vector index (third arguments))
         agent-scheme-unspecified))
 
+    ;; Implement the `vector->list` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-vector->list arguments context)
       (let* ((vector (expect-vector (car arguments) "vector->list"))
              (range (optional-range
@@ -6675,13 +7496,19 @@
               (loop (+ index 1)
                     (cons (vector-ref vector index) result))))))
 
+    ;; Implement the `list->vector` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-list->vector arguments context)
       (list->vector
        (proper-list-elements (car arguments) "list->vector")))
 
+    ;; Implement the `vector-copy` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-vector-copy arguments context)
       (list->vector (primitive-vector->list arguments context)))
 
+    ;; Implement the `vector-copy!` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-vector-copy! arguments context)
       (let* ((to (expect-vector (car arguments) "vector-copy! target"))
              (at (expect-nonnegative-index
@@ -6705,6 +7532,8 @@
                 (loop (+ source-index 1) (+ target-index 1)))))
         agent-scheme-unspecified))
 
+    ;; Implement the `vector-append` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-vector-append arguments context)
       (list->vector
        (apply append
@@ -6713,6 +7542,8 @@
                       (expect-vector argument "vector-append")))
                    arguments))))
 
+    ;; Implement the `vector-fill!` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-vector-fill! arguments context)
       (let* ((vector (expect-vector (car arguments) "vector-fill!"))
              (fill (second arguments))
@@ -6728,6 +7559,8 @@
                 (loop (+ index 1)))))
         agent-scheme-unspecified))
 
+    ;; Implement the `vector-map` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-vector-map arguments context)
       (let* ((procedure (expect-procedure
                          (car arguments)
@@ -6751,13 +7584,19 @@
                       "vector-map result")
                      result))))))
 
+    ;; Implement the `vector-for-each` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-vector-for-each arguments context)
       (primitive-vector-map arguments context)
       agent-scheme-unspecified)
 
+    ;; Implement the `bytevector?` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-bytevector? arguments context)
       (bytevector? (car arguments)))
 
+    ;; Implement the `make-bytevector` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-make-bytevector arguments context)
       (let ((length (exact-integer->host (car arguments) "make-bytevector"))
             (fill (if (null? (cdr arguments))
@@ -6769,16 +7608,22 @@
             (eval-error "make-bytevector length must be non-negative"))
         (make-bytevector length fill)))
 
+    ;; Implement the `bytevector` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-bytevector arguments context)
       (apply bytevector
              (map (lambda (argument)
                     (expect-byte argument "bytevector"))
                   arguments)))
 
+    ;; Implement the `bytevector-length` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-bytevector-length arguments context)
       (bytevector-length
        (expect-bytevector (car arguments) "bytevector-length")))
 
+    ;; Implement the `bytevector-u8-ref` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-bytevector-u8-ref arguments context)
       (let* ((bytevector
               (expect-bytevector
@@ -6791,6 +7636,8 @@
                      #f)))
         (bytevector-u8-ref bytevector index)))
 
+    ;; Implement the `bytevector-u8-set!` primitive with argument validation
+    ;; and Agent Scheme values.
     (define (primitive-bytevector-u8-set! arguments context)
       (let* ((bytevector
               (expect-bytevector
@@ -6807,6 +7654,8 @@
         (bytevector-u8-set! bytevector index byte)
         agent-scheme-unspecified))
 
+    ;; Implement the `bytevector-copy` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-bytevector-copy arguments context)
       (let* ((bytevector
               (expect-bytevector (car arguments) "bytevector-copy"))
@@ -6817,6 +7666,8 @@
                      "bytevector-copy")))
         (bytevector-copy bytevector (car range) (cdr range))))
 
+    ;; Implement the `bytevector-copy!` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-bytevector-copy! arguments context)
       (let* ((to (expect-bytevector
                   (car arguments)
@@ -6839,18 +7690,23 @@
         (bytevector-copy! to at from (car range) (cdr range))
         agent-scheme-unspecified))
 
+    ;; Implement the `bytevector-append` primitive with argument validation and
+    ;; Agent Scheme values.
     (define (primitive-bytevector-append arguments context)
       (apply bytevector-append
              (map (lambda (argument)
                     (expect-bytevector argument "bytevector-append"))
                   arguments)))
 
+    ;; Implement the `procedure?` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-procedure? arguments context)
       (or (agent-scheme-procedure? (car arguments))
           (agent-scheme-primitive-procedure? (car arguments))
           (agent-scheme-parameter? (car arguments))
           (continuation? (car arguments))))
 
+    ;; Report whether two numbers share kind, exactness, and stored value.
     (define (numeric-representation-eqv? left right)
       (and (agent-scheme-number? left)
            (agent-scheme-number? right)
@@ -6869,17 +7725,20 @@
                (equal? (agent-scheme-number-value left)
                        (agent-scheme-number-value right)))))
 
+    ;; Implement eqv? comparison with Agent Scheme numeric representation.
     (define (eqv-value? left right)
       (if (and (agent-scheme-number? left) (agent-scheme-number? right))
           (numeric-representation-eqv? left right)
           (eqv? left right)))
 
+    ;; Implement eq? comparison with canonical-number identity semantics.
     (define (eq-value? left right)
       (or (eq? left right)
           (and (agent-scheme-number? left)
                (agent-scheme-number? right)
                (numeric-representation-eqv? left right))))
 
+    ;; Report whether LEFT/RIGHT was already visited during equal? traversal.
     (define (equal-seen-pair? left right seen)
       (cond
        ((null? seen) #f)
@@ -6889,6 +7748,7 @@
        (else
         (equal-seen-pair? left right (cdr seen)))))
 
+    ;; Implement equal? comparison with cycle detection for pairs and vectors.
     (define (equal-value? left right seen)
       (cond
        ((eqv-value? left right) #t)
@@ -6917,19 +7777,29 @@
        (else
         (equal? left right))))
 
+    ;; Implement the `eq?` primitive with argument validation and Agent Scheme
+    ;; values.
     (define (primitive-eq? arguments context)
       (eq-value? (car arguments) (second arguments)))
 
+    ;; Implement the `eqv?` primitive with argument validation and Agent Scheme
+    ;; values.
     (define (primitive-eqv? arguments context)
       (eqv-value? (car arguments) (second arguments)))
 
+    ;; Implement the `equal?` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-equal? arguments context)
       (equal-value? (car arguments) (second arguments) '()))
 
+    ;; Implement the `memq` primitive with argument validation and Agent Scheme
+    ;; values.
     (define (primitive-memq arguments context)
       (let ((result (memq (car arguments) (second arguments))))
         (if result result #f)))
 
+    ;; Implement the `memv` primitive with argument validation and Agent Scheme
+    ;; values.
     (define (primitive-memv arguments context)
       (let loop ((cursor (second arguments)))
         (cond
@@ -6938,6 +7808,8 @@
          ((eqv-value? (car arguments) (car cursor)) cursor)
          (else (loop (cdr cursor))))))
 
+    ;; Implement the `member` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-member arguments context)
       (let loop ((cursor (second arguments)))
         (cond
@@ -6946,10 +7818,14 @@
          ((equal-value? (car arguments) (car cursor) '()) cursor)
          (else (loop (cdr cursor))))))
 
+    ;; Implement the `assq` primitive with argument validation and Agent Scheme
+    ;; values.
     (define (primitive-assq arguments context)
       (let ((result (assq (car arguments) (second arguments))))
         (if result result #f)))
 
+    ;; Implement the `assv` primitive with argument validation and Agent Scheme
+    ;; values.
     (define (primitive-assv arguments context)
       (let loop ((cursor (second arguments)))
         (cond
@@ -6960,6 +7836,8 @@
           (car cursor))
          (else (loop (cdr cursor))))))
 
+    ;; Implement the `assoc` primitive with argument validation and Agent
+    ;; Scheme values.
     (define (primitive-assoc arguments context)
       (let loop ((cursor (second arguments)))
         (cond
@@ -6970,6 +7848,8 @@
           (car cursor))
          (else (loop (cdr cursor))))))
 
+    ;; Registry mapping primitive names to implementation procedures and
+    ;; arities.
     (define base-primitive-registry
       ;; Each entry is `(name procedure minimum-arity maximum-arity)'.  A false
       ;; maximum means the primitive accepts arbitrarily many arguments.
@@ -7149,6 +8029,7 @@
     (define (agent-scheme-base-primitive-names)
       (map car base-primitive-registry))
 
+    ;; Public metadata accessor for kernel primitive arity and source specs.
     (define (agent-scheme-base-primitive-specs)
       (map (lambda (entry)
              (list (list 'name (car entry))
@@ -7171,9 +8052,13 @@
       '("scheme/agent-scheme/base-syntax.scm"
         "agent-scheme/base-syntax.scm"))
 
+    ;; Cache for parsed base prelude forms shared across base environment
+    ;; creation.
     (define base-prelude-forms-cache #f)
+    ;; Cache for parsed syntax prelude forms shared across evaluation contexts.
     (define base-syntax-forms-cache #f)
 
+    ;; Read all characters from PORT into a string.
     (define (read-port-string port)
       (let loop ((chars '()))
         (let ((char (read-char port)))
@@ -7181,6 +8066,7 @@
               (list->string (reverse chars))
               (loop (cons char chars))))))
 
+    ;; Read and parse all datums from PORT.
     (define (read-all-datums port)
       (agent-scheme-read-all (read-port-string port)))
 
@@ -7216,6 +8102,7 @@
             (set! base-syntax-forms-cache forms)
             forms)))
 
+    ;; Return minimum and maximum arity metadata for Scheme formals.
     (define (formals-arity formals)
       (cond
        ((symbol? formals)
@@ -7232,6 +8119,7 @@
            (else
             (eval-error "prelude definition has invalid formals")))))))
 
+    ;; Extract name, arity, and source metadata from one prelude define.
     (define (prelude-definition-spec form)
       (if (not (and (pair? form)
                     (eq? (car form) 'define)
@@ -7270,15 +8158,18 @@
     (define (agent-scheme-base-prelude-binding-specs)
       (map prelude-definition-spec (base-prelude-forms)))
 
+    ;; Public metadata accessor for derived base prelude names.
     (define (agent-scheme-base-prelude-binding-names)
       (map (lambda (spec)
              (second (assq 'name spec)))
            (agent-scheme-base-prelude-binding-specs)))
 
+    ;; Public metadata accessor for all base binding specs.
     (define (agent-scheme-base-binding-specs)
       (append (agent-scheme-base-primitive-specs)
               (agent-scheme-base-prelude-binding-specs)))
 
+    ;; Install a primitive procedure binding into ENVIRONMENT.
     (define (define-primitive! environment
                                name
                                function
@@ -7312,6 +8203,7 @@
                                    (fourth (car rest)))
                 (loop (cdr rest)))))))
 
+    ;; Install derived base syntax into CONTEXT once.
     (define (ensure-base-syntax! context environment)
       (if (not (context-base-syntax-installed context))
           (begin
@@ -7325,6 +8217,7 @@
              (base-syntax-forms))
             (set-context-base-syntax-installed! context #t))))
 
+    ;; Fully expand a define form while preserving its definition shape.
     (define (expand-definition-form form environment context)
       (let* ((parts (proper-list-elements form "define form"))
              (target (second parts)))
@@ -7347,6 +8240,7 @@
            "define target must be an identifier or function signature"
            form)))))
 
+    ;; Fully expand the initializer in a define-values form.
     (define (expand-define-values-form form environment context)
       (let ((parts (proper-list-elements form "define-values form")))
         (if (not (= (length parts) 3))
@@ -7357,6 +8251,7 @@
               (second parts)
               (expand-expression/fully (third parts) environment context))))
 
+    ;; Fully expand core special forms and ordinary combinations.
     (define (expand-core-combination expression environment context)
       (let* ((parts (proper-list-elements expression "expression"))
              (operator (car parts)))
@@ -7466,6 +8361,7 @@
                  (expand-expression/fully part environment context))
                parts)))))
 
+    ;; Recursively expand EXPRESSION until no macro expansion remains.
     (define (expand-expression/fully expression environment context)
       (let ((expanded (expand-expression expression environment context)))
         (cond
@@ -7488,6 +8384,7 @@
           (expand-core-combination expression environment context))
          (else expression))))
 
+    ;; Fully expand a sequence, executing allowed definition-time forms.
     (define (expand-sequence-forms forms environment context allow-definitions?)
       (let loop ((rest forms) (expanded '()))
         (if (null? rest)
@@ -7533,11 +8430,13 @@
                              form environment context)
                             expanded))))))))
 
+    ;; Return the optional caller environment or a fresh base environment.
     (define (rest-environment rest)
       (if (or (null? rest) (not (car rest)))
           (agent-scheme-make-base-environment)
           (car rest)))
 
+    ;; Return the optional caller options alist, defaulting to empty.
     (define (rest-options rest)
       (if (or (null? rest) (null? (cdr rest)))
           '()
@@ -7581,6 +8480,7 @@
         (ensure-base-syntax! context environment)
         (expand-sequence-forms forms environment context #t)))
 
+    ;; Construct a named field for public result datums.
     (define (result-field name . values)
       (cons name values))
 
@@ -7656,6 +8556,7 @@
          (list 'host-object
                 (result-field 'printed "#<host-object>"))))))
 
+    ;; Remove hygienic identifier wrappers from VALUE for readable output.
     (define (strip-identifiers value . maybe-seen)
       (let ((seen (if (null? maybe-seen) '() (car maybe-seen))))
         (cond
@@ -7679,6 +8580,7 @@
           value)
          (else value))))
 
+    ;; Build the budget field for a public evaluation-result datum.
     (define (budget-result-field context)
       (result-field
        'budget
@@ -7690,6 +8592,7 @@
         (agent-scheme-make-canonical-integer
          (context-host-callbacks context)))))
 
+    ;; Build a successful evaluation-result datum for VALUE.
     (define (ok-result-datum value context)
       (if (multiple-values? value)
           (list 'evaluation-result
@@ -7706,11 +8609,13 @@
                 (result-field 'events '())
                 (budget-result-field context))))
 
+    ;; Return a printable message for a caught Scheme condition.
     (define (condition-message condition)
       (if (error-object? condition)
           (error-object-message condition)
           "error"))
 
+    ;; Build an error evaluation-result datum for CONDITION.
     (define (condition-result-datum condition context)
       (list 'evaluation-result
             (result-field 'status 'error)

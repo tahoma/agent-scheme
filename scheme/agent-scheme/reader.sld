@@ -42,13 +42,17 @@
           (scheme inexact)
           (scheme write))
   (begin
-    ;; Per-run defaults match the Emacs Lisp host reader.  Callers can override
-    ;; them with an association list, using keys such as `max-depth'.
+    ;; Default maximum nested datum depth accepted by the portable reader.
     (define agent-scheme-default-maximum-depth 256)
+    ;; Default maximum list length accepted by the portable reader.
     (define agent-scheme-default-maximum-list-length 100000)
+    ;; Default maximum vector length accepted by the portable reader.
     (define agent-scheme-default-maximum-vector-length 100000)
+    ;; Default maximum bytevector length accepted by the portable reader.
     (define agent-scheme-default-maximum-bytevector-length 100000)
+    ;; Default maximum string size accepted by the portable reader.
     (define agent-scheme-default-maximum-string-size 1048576)
+    ;; Default maximum total datum node count accepted by reader validation.
     (define agent-scheme-default-maximum-total-nodes 1000000)
 
     ;; Reader records own one parse run's immutable source and mutable cursor.
@@ -88,6 +92,8 @@
       (make-agent-scheme-read-eof)
       agent-scheme-read-eof?)
 
+    ;; Singleton EOF sentinel returned by incremental reader calls at end of
+    ;; input.
     (define agent-scheme-read-eof (make-agent-scheme-read-eof))
 
     ;; Agent-owned numbers preserve lexical exactness, radix, and special
@@ -128,6 +134,7 @@
       (filled datum-label-filled? set-datum-label-filled!)
       (value datum-label-value set-datum-label-value!))
 
+    ;; Character constant for R7RS page whitespace.
     (define char-page (integer->char 12))
 
     ;; Exported writer helper used by the reader, evaluator, and tests whenever
@@ -147,10 +154,12 @@
                      (next (quotient remaining radix)))
                 (loop next (cons (string-ref digits digit) parts)))))))
 
+    ;; Return the option value for KEY or DEFAULT when KEY is absent.
     (define (option-ref options key default)
       (let ((cell (assq key options)))
         (if cell (cdr cell) default)))
 
+    ;; Create a reader state object from SOURCE and per-run option overrides.
     (define (reader-from-source source options)
       (if (not (string? source))
           (error "agent-scheme reader source must be a string" source)
@@ -173,6 +182,7 @@
                        (option-ref options 'max-total-nodes
                                    agent-scheme-default-maximum-total-nodes))))
 
+    ;; Raise a reader error annotated with the current source offset.
     (define (reader-error reader message . irritants)
       (apply error
              (string-append
@@ -184,6 +194,8 @@
               message)
              irritants))
 
+    ;; Raise a datum resource-limit error annotated with the current source
+    ;; offset.
     (define (limit-error reader message . irritants)
       (apply error
              (string-append
@@ -195,6 +207,7 @@
               message)
              irritants))
 
+    ;; Enforce the active reader maximum depth budget.
     (define (check-depth reader depth)
       (if (> depth (reader-maximum-depth reader))
           (limit-error reader
@@ -202,6 +215,7 @@
                        depth
                        (reader-maximum-depth reader))))
 
+    ;; Charge one reader datum node against the active total-node budget.
     (define (note-node! reader)
       (set-reader-node-count! reader (+ (reader-node-count reader) 1))
       (if (> (reader-node-count reader) (reader-maximum-total-nodes reader))
@@ -209,9 +223,12 @@
                        "datum node count exceeds maximum total nodes"
                        (reader-maximum-total-nodes reader))))
 
+    ;; Report whether the reader cursor has reached the source length.
     (define (eof? reader)
       (>= (reader-position reader) (reader-length reader)))
 
+    ;; Return the source character at the current cursor plus an optional
+    ;; offset.
     (define (peek reader . maybe-offset)
       (let* ((offset (if (null? maybe-offset) 0 (car maybe-offset)))
              (index (+ (reader-position reader) offset)))
@@ -219,10 +236,12 @@
             (string-ref (reader-source reader) index)
             #f)))
 
+    ;; Move the reader cursor forward by one character or the requested count.
     (define (advance! reader . maybe-count)
       (let ((count (if (null? maybe-count) 1 (car maybe-count))))
         (set-reader-position! reader (+ (reader-position reader) count))))
 
+    ;; Test whether TEXT appears at the reader cursor without advancing it.
     (define (starts-with? reader text)
       (let ((position (reader-position reader))
             (end (+ (reader-position reader) (string-length text))))
@@ -232,6 +251,7 @@
                                   position
                                   end)))))
 
+    ;; Recognize R7RS whitespace characters accepted between tokens.
     (define (whitespace? char)
       (and char
            (or (char=? char #\space)
@@ -240,11 +260,13 @@
                (char=? char #\return)
                (char=? char char-page))))
 
+    ;; Recognize spaces and tabs used inside string continuations.
     (define (intraline-whitespace? char)
       (and char
            (or (char=? char #\space)
                (char=? char #\tab))))
 
+    ;; Recognize characters that terminate reader tokens.
     (define (delimiter? char)
       (or (not char)
           (whitespace? char)
@@ -254,6 +276,7 @@
           (char=? char #\")
           (char=? char #\;)))
 
+    ;; Recognize reserved reader characters that must signal syntax errors.
     (define (reserved? char)
       (and char
            (or (char=? char #\[)
@@ -261,6 +284,7 @@
                (char=? char #\{)
                (char=? char #\}))))
 
+    ;; Skip an R7RS line comment and its optional line ending.
     (define (skip-line-comment! reader)
       (let loop ()
         (if (and (not (eof? reader))
@@ -278,6 +302,7 @@
       (if (and (peek reader) (char=? (peek reader) #\newline))
           (advance! reader)))
 
+    ;; Skip a nested block comment while preserving nesting depth.
     (define (skip-nested-comment! reader)
       (let loop ((depth 0))
         (cond
@@ -295,6 +320,7 @@
           (advance! reader)
           (loop depth)))))
 
+    ;; Read and apply reader directives such as fold-case and no-fold-case.
     (define (skip-directive! reader)
       (cond
        ((and (starts-with? reader "#!fold-case")
@@ -308,6 +334,8 @@
        (else
         (reader-error reader "unknown reader directive"))))
 
+    ;; Skip whitespace, comments, directives, and datum comments between
+    ;; datums.
     (define (skip-intertoken-space! reader depth)
       (let loop ()
         (cond
@@ -333,6 +361,7 @@
          (else
           #t))))
 
+    ;; Read a raw token from the current cursor up to the next delimiter.
     (define (read-token reader)
       (let ((start (reader-position reader)))
         (let loop ()
@@ -346,6 +375,7 @@
                 (loop))))
         (substring (reader-source reader) start (reader-position reader))))
 
+    ;; Convert one hexadecimal digit character to its integer value.
     (define (hex-digit-value char)
       (cond
        ((and (char>=? char #\0) (char<=? char #\9))
@@ -357,12 +387,14 @@
        (else
         #f)))
 
+    ;; Test whether TEXT begins with PREFIX.
     (define (string-prefix? prefix text)
       (let ((prefix-length (string-length prefix))
             (text-length (string-length text)))
         (and (<= prefix-length text-length)
              (string=? prefix (substring text 0 prefix-length)))))
 
+    ;; Test whether TEXT ends with SUFFIX.
     (define (string-suffix? suffix text)
       (let ((suffix-length (string-length suffix))
             (text-length (string-length text)))
@@ -371,6 +403,7 @@
               suffix
               (substring text (- text-length suffix-length) text-length)))))
 
+    ;; Find CHAR in TEXT at or after START, returning #f when absent.
     (define (string-index text char start)
       (let loop ((index start))
         (cond
@@ -378,6 +411,7 @@
          ((char=? (string-ref text index) char) index)
          (else (loop (+ index 1))))))
 
+    ;; Split TEXT at each occurrence of CHAR.
     (define (split-on-char text char)
       (let loop ((index 0) (start 0) (parts '()))
         (cond
@@ -391,10 +425,12 @@
          (else
           (loop (+ index 1) start parts)))))
 
+    ;; Compute the nonnegative greatest common divisor for exact integers.
     (define (integer-gcd left right)
       (let loop ((a (abs left)) (b (abs right)))
         (if (zero? b) a (loop b (modulo a b)))))
 
+    ;; Compute BASE raised to nonnegative EXPONENT for reader number parsing.
     (define (integer-power base exponent)
       (let loop ((result 1) (factor base) (power exponent))
         (cond
@@ -404,6 +440,8 @@
          (else
           (loop result (* factor factor) (quotient power 2))))))
 
+    ;; Normalize a rational numerator and denominator to canonical sign and
+    ;; gcd.
     (define (normalize-rational-pair numerator denominator)
       (if (zero? denominator)
           (error "zero denominator"))
@@ -429,6 +467,7 @@
          'integer
          value)))
 
+    ;; Classify host inexact special numbers as infinity, NaN, or ordinary.
     (define (host-inexact-special-kind value)
       (cond
        ((not (= value value)) "+nan.0")
@@ -436,6 +475,7 @@
        ((= value (/ -1.0 0.0)) "-inf.0")
        (else #f)))
 
+    ;; Public constructor for canonical inexact decimal number records.
     (define (agent-scheme-make-canonical-decimal value . maybe-lexeme)
       (let ((special-kind (host-inexact-special-kind value)))
         (if special-kind
@@ -449,6 +489,7 @@
              'decimal
              value))))
 
+    ;; Public constructor for normalized rational number records.
     (define (agent-scheme-make-canonical-rational
              numerator denominator . rest)
       (let* ((pair (normalize-rational-pair numerator denominator))
@@ -473,6 +514,7 @@
              'rational
              pair))))
 
+    ;; Public constructor for canonical infinity and NaN number records.
     (define (agent-scheme-make-canonical-infnan kind)
       (make-agent-scheme-number
        (cond
@@ -485,6 +527,7 @@
        'infnan
        kind))
 
+    ;; Public constructor for canonical rectangular complex number records.
     (define (agent-scheme-make-canonical-complex real imaginary)
       (let ((exactness
              (if (and (eq? (agent-scheme-number-exactness real) 'exact)
@@ -517,6 +560,7 @@
                    (cdr (agent-scheme-number-value number)))))
             (else #f))))
 
+    ;; Public predicate for negative real Agent Scheme number records.
     (define (agent-scheme-number-negative? number)
       (cond
        ((eq? (agent-scheme-number-kind number) 'integer)
@@ -529,6 +573,8 @@
         (string=? (agent-scheme-number-value number) "-inf.0"))
        (else #f)))
 
+    ;; Public helper that returns the absolute value of an Agent Scheme number
+    ;; record.
     (define (agent-scheme-number-abs number)
       (cond
        ((eq? (agent-scheme-number-kind number) 'integer)
@@ -552,6 +598,7 @@
             number))
        (else number)))
 
+    ;; Report whether TEXT is an unsigned decimal integer token.
     (define (integer-decimal-text? text)
       (let ((length (string-length text)))
         (let ((start
@@ -567,6 +614,7 @@
                           (char<=? (string-ref text index) #\9)
                           (loop (+ index 1)))))))))
 
+    ;; Public renderer for Agent Scheme number records.
     (define (agent-scheme-number->external number)
       (cond
        ((eq? (agent-scheme-number-kind number) 'integer)
@@ -608,6 +656,7 @@
             (error "cannot write unknown number kind"
                    (agent-scheme-number-kind number))))))
 
+    ;; Parse DIGITS in RADIX into an exact integer or #f on invalid input.
     (define (parse-unsigned-integer digits radix)
       (and (> (string-length digits) 0)
            (let loop ((index 0) (value 0))
@@ -618,6 +667,7 @@
                         (< digit radix)
                         (loop (+ index 1) (+ (* value radix) digit))))))))
 
+    ;; Parse BODY as an optional-sign integer in RADIX.
     (define (parse-signed-integer body radix)
       (let ((length (string-length body)))
         (and (> length 0)
@@ -628,6 +678,7 @@
                     (value (parse-unsigned-integer digits radix)))
                (and value (if negative? (- value) value))))))
 
+    ;; Parse exactness and radix prefixes from a numeric TOKEN.
     (define (number-prefix reader token)
       (let ((lower (string-foldcase token))
             (length (string-length token)))
@@ -678,9 +729,11 @@
                          exactness
                          radix))))))
 
+    ;; Report whether CHAR is an ASCII decimal digit.
     (define (decimal-digit? char)
       (and (char>=? char #\0) (char<=? char #\9)))
 
+    ;; Return the first index after a run of decimal digits in TEXT.
     (define (scan-decimal-digits text start)
       (let loop ((index start) (digits '()))
         (if (and (< index (string-length text))
@@ -688,6 +741,7 @@
             (loop (+ index 1) (cons (string-ref text index) digits))
             (cons index (list->string (reverse digits))))))
 
+    ;; Split a decimal body into integer, fraction, and exponent components.
     (define (decimal-components body)
       (let* ((length (string-length body))
              (sign
@@ -733,6 +787,7 @@
              (or saw-dot? saw-exponent?)
              (list sign whole-text fraction-text exponent))))
 
+    ;; Parse a finite decimal body into an exact rational pair.
     (define (parse-exact-decimal body)
       (let ((components (decimal-components body)))
         (and components
@@ -749,9 +804,12 @@
                         (cons (* sign integer)
                               (integer-power 10 (- scale)))))))))
 
+    ;; Convert a normalized rational pair to a host inexact approximation.
     (define (rational-pair->inexact pair)
       (/ (inexact (car pair)) (inexact (cdr pair))))
 
+    ;; Convert an Agent Scheme number wrapper to a host float for polar
+    ;; parsing.
     (define (number->reader-float number)
       (cond
        ((eq? (agent-scheme-number-kind number) 'integer)
@@ -769,6 +827,7 @@
          (else (/ 0.0 0.0))))
        (else 0.0)))
 
+    ;; Parse the body of a real-number token into the reader's numeric record.
     (define (parse-real-number-body reader token body exactness radix)
       (let ((lower (string-foldcase body)))
         (cond
@@ -821,6 +880,7 @@
                  body))))
          (else #f))))
 
+    ;; Find the real/imaginary split point in a rectangular complex token.
     (define (complex-split-index body)
       (let loop ((index 1) (split #f))
         (if (>= index (string-length body))
@@ -835,6 +895,7 @@
                         index
                         split))))))
 
+    ;; Parse a complex-number token into rectangular or polar numeric records.
     (define (parse-complex-number-body reader token body exactness radix)
       (let ((lower (string-foldcase body)))
         (cond
@@ -889,6 +950,7 @@
                             (* r (sin theta))))))))))
          (else #f))))
 
+    ;; Parse a complete number token with radix and exactness prefixes.
     (define (parse-number-token reader token)
       (let ((prefix (number-prefix reader token)))
         (and prefix
@@ -901,6 +963,7 @@
                         (parse-complex-number-body
                          reader token body exactness radix)))))))
 
+    ;; Validate and convert a hexadecimal scalar value to a character.
     (define (hex-scalar->char reader digits)
       (if (= (string-length digits) 0)
           (reader-error reader "invalid hexadecimal scalar escape"))
@@ -920,6 +983,7 @@
                                 "invalid hexadecimal scalar escape"
                                 digits))))))
 
+    ;; Read a semicolon-terminated hexadecimal escape from the source.
     (define (read-hex-escape reader)
       (let ((start (reader-position reader)))
         (let loop ()
@@ -936,6 +1000,7 @@
           (advance! reader)
           (hex-scalar->char reader digits))))
 
+    ;; Map a named string or symbol escape character to its value.
     (define (mnemonic-escape reader char)
       (cond
        ((char=? char #\a) (integer->char 7))
@@ -949,6 +1014,7 @@
        (else
         (reader-error reader "unknown escape sequence" char))))
 
+    ;; Read a quoted string literal, escapes, and line continuations.
     (define (read-string-literal reader)
       (advance! reader)
       (let ((result '())
@@ -1012,6 +1078,7 @@
             (advance! reader)
             (loop))))))
 
+    ;; Read an escaped vertical-bar symbol name.
     (define (read-vertical-symbol-name reader)
       (advance! reader)
       (let ((result '()))
@@ -1045,40 +1112,48 @@
             (advance! reader)
             (loop))))))
 
+    ;; Report whether CHAR appears in STRING.
     (define (char-in-string? char string)
       (let loop ((index 0))
         (and (< index (string-length string))
              (or (char=? char (string-ref string index))
                  (loop (+ index 1))))))
 
+    ;; Recognize ASCII letters for identifier token validation.
     (define (ascii-letter? char)
       (or (and (char>=? char #\a) (char<=? char #\z))
           (and (char>=? char #\A) (char<=? char #\Z))))
 
+    ;; Recognize valid initial characters for ordinary identifiers.
     (define (initial-char? char)
       (or (ascii-letter? char)
           (> (char->integer char) 127)
           (char-in-string? char "!$%&*/:<=>?@^_~")))
 
+    ;; Recognize valid subsequent characters for ordinary identifiers.
     (define (subsequent-char? char)
       (or (initial-char? char)
           (and (char>=? char #\0) (char<=? char #\9))
           (char-in-string? char "+-.@")))
 
+    ;; Recognize identifier characters that may follow an initial sign.
     (define (sign-subsequent-char? char)
       (or (initial-char? char)
           (char-in-string? char "+-@")))
 
+    ;; Recognize identifier characters that may follow an initial dot.
     (define (dot-subsequent-char? char)
       (or (sign-subsequent-char? char)
           (char=? char #\.)))
 
+    ;; Check that every character from START satisfies PREDICATE.
     (define (all-chars? string start predicate)
       (let loop ((index start))
         (or (= index (string-length string))
             (and (predicate (string-ref string index))
                  (loop (+ index 1))))))
 
+    ;; Validate TOKEN against R7RS ordinary identifier grammar.
     (define (identifier-token? token)
       (let ((length (string-length token)))
         (cond
@@ -1104,6 +1179,7 @@
           (all-chars? token 2 subsequent-char?))
          (else #f))))
 
+    ;; Read an R7RS character literal after the #\ introducer.
     (define (read-character-literal reader)
       (advance! reader 2)
       (if (eof? reader)
@@ -1132,6 +1208,7 @@
          (else
           (reader-error reader "unknown character literal" token)))))
 
+    ;; Classify a raw token as number, boolean, identifier, or syntax error.
     (define (classify-token reader token)
       (cond
        ((or (string=? token "#t") (string=? token "#true")) #t)
@@ -1147,6 +1224,7 @@
        (else
         (reader-error reader "invalid token" token))))
 
+    ;; Read a proper or dotted list up to a closing parenthesis.
     (define (read-list reader depth)
       (check-depth reader depth)
       (advance! reader)
@@ -1202,6 +1280,7 @@
                     (append! (read-datum reader (+ depth 1)))
                     (loop)))))))))
 
+    ;; Read vector or bytevector elements under the active length budget.
     (define (read-vector-elements reader depth kind close-char maximum-length)
       (check-depth reader depth)
       (let loop ((items '()) (count 0))
@@ -1224,18 +1303,21 @@
                              maximum-length))
             (loop (cons datum items) next-count))))))
 
+    ;; Extract an exact integer value from an Agent Scheme number datum.
     (define (exact-integer-value datum)
       (and (agent-scheme-number? datum)
            (eq? (agent-scheme-number-kind datum) 'integer)
            (eq? (agent-scheme-number-exactness datum) 'exact)
            (agent-scheme-number-value datum)))
 
+    ;; Report whether DATUM is an exact integer byte.
     (define (exact-byte? datum)
       (let ((value (exact-integer-value datum)))
         (and value
              (<= 0 value)
              (<= value 255))))
 
+    ;; Convert a list of exact byte values into a bytevector.
     (define (list->bytevector bytes)
       (let* ((length (length bytes))
              (bytevector (make-bytevector length)))
@@ -1246,6 +1328,7 @@
                 (bytevector-u8-set! bytevector index (car rest))
                 (loop (+ index 1) (cdr rest)))))))
 
+    ;; Read an R7RS vector literal.
     (define (read-vector reader depth)
       (advance! reader 2)
       (let ((items (read-vector-elements
@@ -1257,6 +1340,7 @@
         (note-node! reader)
         (list->vector items)))
 
+    ;; Read an R7RS bytevector literal and validate byte elements.
     (define (read-bytevector reader depth)
       (advance! reader 4)
       (let ((items (read-vector-elements
@@ -1277,9 +1361,11 @@
                           "bytevector element is not an exact byte"
                           (agent-scheme-datum->external (car rest))))))))
 
+    ;; Build the canonical abbreviated quote form for NAME and DATUM.
     (define (quote-datum name datum)
       (list (string->symbol name) datum))
 
+    ;; Find an existing datum-label cell for ID in the reader state.
     (define (reader-label-cell reader id)
       (let loop ((rest (reader-datum-labels reader)))
         (cond
@@ -1287,6 +1373,7 @@
          ((string=? (caar rest) id) (car rest))
          (else (loop (cdr rest))))))
 
+    ;; Read and resolve shared datum label definitions and references.
     (define (read-datum-label reader depth)
       (advance! reader)
       (let ((start (reader-position reader)))
@@ -1329,6 +1416,7 @@
            (else
             (reader-error reader "datum label must end with = or #"))))))
 
+    ;; Read a datum introduced by # dispatch syntax.
     (define (read-dispatch reader depth)
       (cond
        ((starts-with? reader "#(") (read-vector reader depth))
@@ -1340,6 +1428,7 @@
        (else
         (classify-token reader (read-token reader)))))
 
+    ;; Replace datum-label placeholders with their resolved shared values.
     (define (resolve-datum-labels datum reader)
       (let resolve ((value datum) (seen '()))
         (cond
@@ -1371,6 +1460,7 @@
          (else value))))
 
 
+    ;; Read one datum at DEPTH from the current reader cursor.
     (define (read-datum reader depth)
       (check-depth reader depth)
       (skip-intertoken-space! reader depth)
@@ -1425,6 +1515,7 @@
             (note-node! reader)
             datum)))))
 
+    ;; Normalize optional argument lists to an options association list.
     (define (options-from-rest maybe-options)
       (if (null? maybe-options) '() (car maybe-options)))
 
@@ -1487,6 +1578,7 @@
                 (agent-scheme-validate-datum datum options)
                 (cons datum (reader-position reader)))))))
 
+    ;; Charge one validation node against the post-read total-node budget.
     (define (validation-note-node! validation)
       (set-validation-node-count!
        validation
@@ -1604,6 +1696,7 @@
         (validate-datum datum options validation 0 '())
         datum))
 
+    ;; Escape string and symbol text for stable external rendering.
     (define (escape-string text)
       (let loop ((index 0) (parts '()))
         (if (= index (string-length text))
@@ -1624,15 +1717,18 @@
                  (else (string char)))
                 parts))))))
 
+    ;; Report whether NAME requires vertical bars in external syntax.
     (define (symbol-needs-bars? name)
       (or (not (identifier-token? name))
           (parse-number-token (reader-from-source "" '()) name)))
 
+    ;; Render a symbol name with escaping when the token grammar requires it.
     (define (write-symbol-name name)
       (if (symbol-needs-bars? name)
           (string-append "|" (escape-string name) "|")
           name))
 
+    ;; Render a character in canonical R7RS external syntax.
     (define (write-character-datum char)
       (let ((code (char->integer char)))
         (cond
@@ -1651,6 +1747,7 @@
            (agent-scheme-integer->radix-string code 16)))
          (else (string-append "#\\" (string char))))))
 
+    ;; Join string fragments with SEPARATOR for writer output.
     (define (join strings separator)
       (cond
        ((null? strings) "")
@@ -1663,13 +1760,16 @@
               (loop (cdr rest)
                     (string-append result separator (car rest))))))))
 
+    ;; Report whether DATUM can participate in shared or circular structure.
     (define (writer-compound? datum)
       (or (pair? datum) (vector? datum)))
 
+    ;; Return the eq?-keyed association value or DEFAULT when absent.
     (define (alist-ref-eq key alist default)
       (let ((cell (assq key alist)))
         (if cell (cdr cell) default)))
 
+    ;; Remove the first eq?-keyed association from an alist.
     (define (remove-assq key alist)
       (cond
        ((null? alist) '())
