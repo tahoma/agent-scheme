@@ -68,8 +68,7 @@
          (begin result1 result2 ...)
          (case key clause clauses ...)))))
 
-;; Short-circuit boolean macros must evaluate each test at most once and return
-;; the original true value where R7RS requires it.
+;; Expand short-circuit conjunction and preserve the final true value.
 (define-syntax and
   (syntax-rules ()
     ((and) #t)
@@ -77,6 +76,7 @@
     ((and test1 test2 ...)
      (if test1 (and test2 ...) #f))))
 
+;; Expand short-circuit disjunction while evaluating each test at most once.
 (define-syntax or
   (syntax-rules ()
     ((or) #f)
@@ -85,14 +85,14 @@
      (let ((temp test1))
        (if temp temp (or test2 ...))))))
 
-;; Conditional sequencing macros are direct `if' / `begin' rewrites and leave
-;; the no-body-result case to the evaluator's unspecified value.
+;; Expand conditional sequencing for true tests through if and begin.
 (define-syntax when
   (syntax-rules ()
     ((when test result1 result2 ...)
      (if test
          (begin result1 result2 ...)))))
 
+;; Expand conditional sequencing for false tests through if and begin.
 (define-syntax unless
   (syntax-rules ()
     ((unless test result1 result2 ...)
