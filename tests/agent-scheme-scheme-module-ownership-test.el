@@ -62,4 +62,22 @@
      (string-match-p
       "(define (agent-scheme-install-base-backend!" base))))
 
+(ert-deftest agent-scheme-scheme-module-ownership-test-library-owns-resolver ()
+  "Keep the portable library resolver out of the evaluator module."
+  (let ((library
+         (agent-scheme-scheme-module-ownership-test--read
+          "scheme/agent-scheme/library.sld"))
+        (eval
+         (agent-scheme-scheme-module-ownership-test--read
+          "scheme/agent-scheme/eval.sld")))
+    (should-not
+     (agent-scheme-scheme-module-ownership-test--imports-eval-p library))
+    (should
+     (string-match-p "(define (resolve-library" library))
+    (should-not
+     (string-match-p "(define (resolve-library" eval))
+    (should
+     (string-match-p
+      "(define (agent-scheme-install-library-backend!" library))))
+
 ;;; agent-scheme-scheme-module-ownership-test.el ends here
