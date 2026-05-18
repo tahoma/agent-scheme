@@ -262,12 +262,12 @@
       (should (equal (agent-scheme-oracle-reference-arguments implementation)
                      '("-r" "7"))))))
 
-(ert-deftest agent-scheme-oracle-test-default-references-include-gauche ()
-  "Use Chibi and Gauche as the default oracle reference set."
+(ert-deftest agent-scheme-oracle-test-default-references-use-chibi-sagittarius ()
+  "Use Chibi and Sagittarius as the default oracle reference set."
   (should
    (equal (mapcar #'agent-scheme-oracle-reference-name
                   (agent-scheme-oracle-default-references))
-          '(chibi gauche))))
+          '(chibi sagittarius))))
 
 (ert-deftest agent-scheme-oracle-test-all-references-include-four-candidates ()
   "Expose the full candidate set separately from defaults."

@@ -767,7 +767,7 @@ When STATUSES is nil, return REPORTS unchanged."
 ;;;###autoload
 (defun agent-scheme-oracle-default-references ()
   "Return the default reference implementation adapters."
-  (agent-scheme-oracle-selected-references '(chibi gauche)))
+  (agent-scheme-oracle-selected-references '(chibi sagittarius)))
 
 ;;;###autoload
 (defun agent-scheme-oracle-parse-reference-filter (value)

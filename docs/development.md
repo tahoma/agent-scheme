@@ -166,8 +166,8 @@ implementations through the oracle runner:
 make conformance-oracle
 ```
 
-The default reference adapters are Chibi Scheme and Gauche. Optional adapters
-also exist for Guile and Sagittarius so contributors can compare a wider
+The default reference adapters are Chibi Scheme and Sagittarius. Gauche and
+Guile remain opt-in comparison adapters so contributors can inspect a wider
 implementation matrix before changing defaults. The runner uses
 `AGENT_SCHEME_CHIBI`, `AGENT_SCHEME_GAUCHE`, `AGENT_SCHEME_GUILE`, and
 `AGENT_SCHEME_SAGITTARIUS` when set, otherwise it searches for `chibi-scheme`,
