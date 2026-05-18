@@ -7,6 +7,7 @@
 
 ;;; Code:
 
+(require 'cl-lib)
 (require 'ert)
 (require 'agent-scheme-eval)
 
@@ -35,6 +36,12 @@
   "Evaluate SOURCE with OPTIONS and return its stable external value."
   (agent-scheme-value->external
    (agent-scheme-eval-source source nil options)))
+
+(defun agent-scheme-library-test--standard-source-spec (name specs)
+  "Return the source library spec named NAME from SPECS."
+  (cl-find name specs
+           :key (lambda (spec) (plist-get spec :name))
+           :test #'equal))
 
 (ert-deftest agent-scheme-library-test-imports-scheme-base-into-empty-environment ()
   "Import `(scheme base)' into an otherwise empty program environment."
@@ -208,6 +215,28 @@
       answer"
      agent-scheme-library-test--include-options)
     "42")))
+
+(ert-deftest agent-scheme-library-test-standard-source-libraries-are-file-backed ()
+  "Discover source files and exports for portable standard libraries."
+  (let ((specs (agent-scheme-standard-source-library-specs)))
+    (dolist (case '(("(scheme case-lambda)" ("case-lambda"))
+                   ("(scheme lazy)"
+                    ("delay" "delay-force" "force" "make-promise"
+                     "promise?"))))
+      (let* ((name (car case))
+             (expected-exports (cadr case))
+             (spec (agent-scheme-library-test--standard-source-spec
+                    name specs))
+             (source-file (plist-get spec :source-file)))
+        (should spec)
+        (should (equal (plist-get spec :exports) expected-exports))
+        (should (file-readable-p source-file))
+        (with-temp-buffer
+          (insert-file-contents source-file)
+          (should
+           (string-match-p
+            (regexp-quote (format "(define-library %s" name))
+            (buffer-string))))))))
 
 (ert-deftest agent-scheme-library-test-standard-case-lambda-import ()
   "Import `(scheme case-lambda)' through the library registry."
