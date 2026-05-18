@@ -2485,62 +2485,80 @@ When RECURSIVE is non-nil, transformer specs see the new bindings."
 ;; environment, while smaller standard libraries are either subsets, primitive
 ;; wrappers, or source libraries expanded through the same evaluator.
 
-(defconst agent-scheme--case-lambda-library-source
-  "(define-library (scheme case-lambda)
-     (export case-lambda)
-     (import (scheme base))
-     (begin
-       (define (%case-lambda-matches? formals count)
-         (if (symbol? formals)
-             #t
-             (let loop ((cursor formals) (required 0))
-               (cond
-                ((null? cursor) (= count required))
-                ((pair? cursor) (loop (cdr cursor) (+ required 1)))
-                (else (>= count required))))))
-       (define-syntax case-lambda
-         (syntax-rules ()
-           ((case-lambda)
-            (lambda args (car '())))
-           ((case-lambda (formals body ...) more ...)
-            (lambda args
-              (if (%case-lambda-matches? 'formals (length args))
-                  (apply (lambda formals body ...) args)
-                  (apply (case-lambda more ...) args))))))))"
-  "Portable bootstrap source for `(scheme case-lambda)'.")
+(defconst agent-scheme--standard-source-library-files
+  '(("(scheme case-lambda)"
+     . "../scheme/agent-scheme/standard-library/scheme/case-lambda.sld")
+    ("(scheme lazy)"
+     . "../scheme/agent-scheme/standard-library/scheme/lazy.sld"))
+  "Checked-in portable standard libraries loaded as Scheme source.")
 
-(defconst agent-scheme--lazy-library-source
-  "(define-library (scheme lazy)
-     (export delay delay-force force make-promise promise?)
-     (import (scheme base))
-     (begin
-       (define (%promise lazy? value)
-         (list 'agent-scheme-promise lazy? value))
-       (define (promise? obj)
-         (and (pair? obj)
-              (eq? (car obj) 'agent-scheme-promise)))
-       (define (make-promise obj)
-         (if (promise? obj)
-             obj
-             (%promise #t obj)))
-       (define (force promise)
-         (if (promise? promise)
-             (if (cadr promise)
-                 (car (cdr (cdr promise)))
-                 (let ((value ((car (cdr (cdr promise))))))
-                   (set-car! (cdr promise) #t)
-                   (set-car! (cdr (cdr promise)) value)
-                   value))
-             promise))
-       (define-syntax delay-force
-         (syntax-rules ()
-           ((delay-force expression)
-            (%promise #f (lambda () expression)))))
-       (define-syntax delay
-         (syntax-rules ()
-           ((delay expression)
-            (delay-force expression))))))"
-  "Portable bootstrap source for `(scheme lazy)'.")
+(defun agent-scheme--standard-source-library-file (key)
+  "Return the bundled source file path for standard library KEY."
+  (let ((relative-file
+         (cdr (assoc key agent-scheme--standard-source-library-files))))
+    (unless relative-file
+      (agent-scheme--eval-error
+       "standard source library is not available: %s" key))
+    (expand-file-name relative-file agent-scheme--source-directory)))
+
+(defun agent-scheme--standard-source-library-source (key)
+  "Return the checked-in source for standard library KEY."
+  (let ((source-file (agent-scheme--standard-source-library-file key)))
+    (unless (file-readable-p source-file)
+      (agent-scheme--eval-error
+       "standard source library file is not readable: %s" source-file))
+    (with-temp-buffer
+      (insert-file-contents source-file)
+      (buffer-string))))
+
+(defun agent-scheme--standard-source-library-form (key)
+  "Return the single define-library form read from KEY's source file."
+  (let ((forms (agent-scheme-read-all
+                (agent-scheme--standard-source-library-source key))))
+    (unless (= (length forms) 1)
+      (agent-scheme--eval-error
+       "standard source library must contain exactly one form: %s" key))
+    (let* ((form (car forms))
+           (parts (agent-scheme--proper-list-elements
+                   form "standard source library")))
+      (unless (and (>= (length parts) 2)
+                   (agent-scheme--symbol-named-p
+                    (car parts) "define-library")
+                   (equal (agent-scheme-datum->external
+                           (agent-scheme--strip-identifiers (cadr parts)))
+                          key))
+        (agent-scheme--eval-error
+         "standard source library name does not match registry key: %s" key))
+      form)))
+
+(defun agent-scheme--standard-source-library-export-names (form)
+  "Return external export names declared by source library FORM."
+  (let ((parts (agent-scheme--proper-list-elements
+                form "standard source library"))
+        exports)
+    (dolist (declaration (cddr parts))
+      (when (agent-scheme--form-named-p declaration "export")
+        (setq exports
+              (append exports
+                      (mapcar
+                       #'cdr
+                       (agent-scheme--export-specs
+                        (cdr (agent-scheme--proper-list-elements
+                              declaration "standard source export"))))))))
+    exports))
+
+(defun agent-scheme-standard-source-library-specs ()
+  "Return metadata for standard libraries loaded from portable source files."
+  (mapcar
+   (lambda (entry)
+     (let* ((key (car entry))
+            (form (agent-scheme--standard-source-library-form key)))
+       (list :name key
+             :exports
+             (agent-scheme--standard-source-library-export-names form)
+             :source-file
+             (agent-scheme--standard-source-library-file key))))
+   agent-scheme--standard-source-library-files))
 
 (defun agent-scheme--nonnegative-exact-integer-datum-p (datum)
   "Return non-nil if DATUM is an exact non-negative integer datum."
@@ -2691,10 +2709,14 @@ When RECURSIVE is non-nil, transformer specs see the new bindings."
 (defun agent-scheme--register-source-library
     (source context environment)
   "Evaluate one define-library SOURCE into CONTEXT."
-  (agent-scheme--eval-define-library
-   (agent-scheme-read source)
-   environment
-   context))
+  (let ((forms (agent-scheme-read-all source)))
+    (unless (= (length forms) 1)
+      (agent-scheme--eval-error
+       "source library must contain exactly one form"))
+    (agent-scheme--eval-define-library
+     (car forms)
+     environment
+     context)))
 
 (defun agent-scheme--find-library-export (name exports)
   "Return export named NAME from EXPORTS, or nil."
@@ -2834,7 +2856,7 @@ Each spec has (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY)."
   (pcase key
     ("(scheme case-lambda)"
      (agent-scheme--register-source-library
-      agent-scheme--case-lambda-library-source context environment))
+      (agent-scheme--standard-source-library-source key) context environment))
     ("(scheme char)"
      (agent-scheme--register-primitive-library
       key
@@ -2922,7 +2944,7 @@ Each spec has (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY)."
       context))
     ("(scheme lazy)"
      (agent-scheme--register-source-library
-      agent-scheme--lazy-library-source context environment))
+      (agent-scheme--standard-source-library-source key) context environment))
     ("(scheme load)"
      (agent-scheme--register-primitive-library
       key

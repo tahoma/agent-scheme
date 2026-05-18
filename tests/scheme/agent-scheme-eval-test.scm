@@ -57,6 +57,13 @@
    ((eq? (cadr (assq 'name (car specs))) name) (car specs))
    (else (find-primitive-spec name (cdr specs)))))
 
+;; Find the source-backed standard library metadata record named NAME in SPECS.
+(define (find-source-library-spec name specs)
+  (cond
+   ((null? specs) #f)
+   ((equal? (cadr (assq 'name (car specs))) name) (car specs))
+   (else (find-source-library-spec name (cdr specs)))))
+
 ;; Return #t when THUNK raises any portable Scheme condition.
 (define (raises? thunk)
   (guard (condition
@@ -133,6 +140,26 @@
          (cadr (assq 'source
                      (find-primitive-spec 'append binding-specs)))
          'prelude))
+
+(let* ((source-specs (agent-scheme-standard-source-library-specs))
+       (case-lambda-spec
+        (find-source-library-spec '(scheme case-lambda) source-specs))
+       (lazy-spec
+        (find-source-library-spec '(scheme lazy) source-specs)))
+  (check 'standard-source-library-case-lambda-exports
+         (and case-lambda-spec
+              (cadr (assq 'exports case-lambda-spec)))
+         '(case-lambda))
+  (check 'standard-source-library-lazy-exports
+         (and lazy-spec
+              (cadr (assq 'exports lazy-spec)))
+         '(delay delay-force force make-promise promise?))
+  (check 'standard-source-library-files
+         (and case-lambda-spec
+              lazy-spec
+              (string? (cadr (assq 'source-file case-lambda-spec)))
+              (string? (cadr (assq 'source-file lazy-spec))))
+         #t))
 
 (check-external 'base-list-helpers
                 "(list (length (append '(1 2) '(3 4)))
