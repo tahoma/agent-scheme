@@ -270,3 +270,31 @@
           (apply proc (cars lists))
           (loop (cdrs lists)))))
   (loop (cons first-list rest-lists)))
+
+;; Apply PROC across one or more strings and collect character results into a
+;; fresh string.
+(define (string-map proc first-string . rest-strings)
+  (list->string
+   (apply map
+          proc
+          (map string->list (cons first-string rest-strings)))))
+
+;; Apply PROC for effects across one or more strings from left to right.
+(define (string-for-each proc first-string . rest-strings)
+  (apply for-each
+         proc
+         (map string->list (cons first-string rest-strings))))
+
+;; Apply PROC across one or more vectors and collect results into a fresh
+;; vector.
+(define (vector-map proc first-vector . rest-vectors)
+  (list->vector
+   (apply map
+          proc
+          (map vector->list (cons first-vector rest-vectors)))))
+
+;; Apply PROC for effects across one or more vectors from left to right.
+(define (vector-for-each proc first-vector . rest-vectors)
+  (apply for-each
+         proc
+         (map vector->list (cons first-vector rest-vectors))))
