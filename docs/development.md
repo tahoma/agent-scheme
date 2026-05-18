@@ -15,6 +15,14 @@ small and will grow as implementation tickets land.
 Optional but useful:
 
 - Chibi Scheme, `chibi-scheme`, for running portable R7RS bootstrap tests
+  and the reference implementation oracle runner
+- Gauche, `gosh`, for additional reference implementation oracle coverage
+- Guile, `guile`, and Sagittarius, `sagittarius`, for broader optional oracle
+  comparison coverage
+- Racket, `racket`, plus its `r7rs` package for developer oracle comparisons;
+  install the package with `raco pkg install --auto r7rs`
+- CHICKEN Scheme, `csi`, plus its `r7rs` egg for developer oracle comparisons;
+  install the egg with `chicken-install r7rs`
 - ShellCheck or other local lint tools for future scripts
 
 ## GitHub Access
@@ -146,6 +154,92 @@ Lisp harness, portable Scheme harness, and conformance runner select from the
 same indexed cases. Fixtures marked `pending`, `policy-gated`, or `unavailable`
 are loaded and validated by ERT without being executed. Fixtures marked
 `implemented` must run through `make test`.
+
+Fixtures may also carry optional `oracle-eligibility` and `oracle-reason`
+fields when a reference implementation should not run the case. The current
+eligibility values are `policy-gated` and `not-oracle-eligible`. Reasons include
+`host-policy`, `agent-specific`, `resource-limit`, `agent-result-record`,
+`implementation-dependent`, and `unspecified`.
+
+## Reference Oracle
+
+Pure shared R7RS conformance fixtures can also be compared with external Scheme
+implementations through the oracle runner:
+
+```sh
+make conformance-oracle
+```
+
+The default reference adapters are Chibi Scheme and Sagittarius. Gauche, Guile,
+Racket, and CHICKEN remain opt-in comparison adapters so contributors can
+inspect a wider implementation matrix before changing defaults. The runner uses
+`AGENT_SCHEME_CHIBI`, `AGENT_SCHEME_GAUCHE`, `AGENT_SCHEME_GUILE`,
+`AGENT_SCHEME_SAGITTARIUS`, `AGENT_SCHEME_RACKET`, and
+`AGENT_SCHEME_CHICKEN` when set, otherwise it searches for `chibi-scheme`,
+`gosh`, `guile`, `sagittarius`, `racket`, and `csi` on `PATH`. The Racket
+adapter requires Racket's separate `r7rs` package and wraps generated fixture
+programs with `#lang r7rs`. The CHICKEN adapter requires the `r7rs` egg and
+invokes `csi` with `-q -R r7rs -s`. Each adapter writes eligible fixtures to a
+temporary R7RS program and invokes the reference implementation with that file
+as the command-line program argument. Missing reference implementations are
+reported as `unsupported-reference` in Scheme-readable oracle reports and do
+not affect the default `make test` command.
+
+| Adapter | Role | Environment override | Discovered command | Notes |
+| --- | --- | --- | --- | --- |
+| Chibi Scheme | default | `AGENT_SCHEME_CHIBI` | `chibi-scheme` | Also used by portable bootstrap tests when available. |
+| Sagittarius | default | `AGENT_SCHEME_SAGITTARIUS` | `sagittarius` | Runs with `-r 7` for R7RS mode. |
+| Gauche | opt-in comparison | `AGENT_SCHEME_GAUCHE` | `gosh` | Useful for library and writer behavior comparisons. |
+| Guile | opt-in comparison | `AGENT_SCHEME_GUILE` | `guile` | Runs with `--no-auto-compile --r7rs`. |
+| Racket | developer-only comparison | `AGENT_SCHEME_RACKET` | `racket` | Requires the Racket `r7rs` package; generated programs are wrapped with `#lang r7rs`. |
+| CHICKEN Scheme | developer-only comparison | `AGENT_SCHEME_CHICKEN` | `csi` | Requires the `r7rs` egg; runs with `-q -R r7rs -s`. |
+
+Oracle reports identify each fixture by case id and classify the comparison as
+`portable-agree`, `implementation-variant`, `agent-mismatch`,
+`unsupported-reference`, `policy-gated`, or `not-oracle-eligible`. The runner
+intentionally skips Agent Scheme-specific result fixtures, resource-limit
+fixtures, and host-effecting R7RS libraries such as `(scheme file)`,
+`(scheme load)`, `(scheme process-context)`, `(scheme repl)`, and
+`(scheme time)`. It also skips fixtures whose result depends on whether a
+reference command reads a file as a strict R7RS program or as REPL input from a
+file, since R7RS permits the latter mode to accept import declarations outside
+the program prefix. The target is report-oriented; inspect `agent-mismatch`
+reports as conformance investigation signals.
+
+The oracle normalizes narrow reference writer spelling variation when the same
+R7RS value is otherwise clear, such as Chibi's doubled plus sign in complex NaN
+outputs. It does not collapse semantic distinctions such as exact versus
+inexact numbers.
+
+`implementation-variant` reports are intentionally visible. Treat them as
+portability notes rather than failures when Agent Scheme agrees with at least
+one supported reference and the remaining references differ among themselves.
+Current expected sources include exact versus inexact numeric results, special
+NaN and infinity spellings, optional reader support for datum labels in program
+source, reference-specific library loading behavior, and case-folding quirks in
+developer-only references. Add output normalization only for narrow writer
+aliases that preserve the same R7RS datum. Add `oracle-eligibility` metadata
+only when the reference command cannot exercise the same language mode as the
+fixture, not merely because implementations disagree.
+
+To focus the report stream, pass a comma-separated status filter:
+
+```sh
+AGENT_SCHEME_ORACLE_STATUSES='agent-mismatch,implementation-variant' make conformance-oracle
+```
+
+To compare a chosen reference implementation set, pass a comma-separated
+reference filter:
+
+```sh
+AGENT_SCHEME_ORACLE_REFERENCES='chibi,gauche,guile,sagittarius,racket,chicken' make conformance-oracle
+```
+
+To print a compact status count before the report stream:
+
+```sh
+AGENT_SCHEME_ORACLE_SUMMARY=1 make conformance-oracle
+```
 
 ## Verification
 

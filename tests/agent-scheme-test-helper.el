@@ -27,6 +27,15 @@
   '(shared emacs-only portable-only)
   "Allowed shared fixture oracle posture values.")
 
+(defconst agent-scheme-test-fixture-oracle-eligibilities
+  '(policy-gated not-oracle-eligible)
+  "Allowed explicit fixture oracle eligibility values.")
+
+(defconst agent-scheme-test-fixture-oracle-reasons
+  '(host-policy agent-specific resource-limit agent-result-record
+    implementation-dependent unspecified)
+  "Allowed explicit fixture oracle eligibility reason values.")
+
 (defconst agent-scheme-test-fixture-required-fields
   '(id kind phase category section status oracle options source expect description)
   "Required fields for one shared fixture case.")
@@ -123,6 +132,10 @@
         (section (agent-scheme-test-fixture-field case 'section))
         (status (agent-scheme-test-fixture-field case 'status))
         (oracle (agent-scheme-test-fixture-field case 'oracle))
+        (oracle-eligibility
+         (agent-scheme-test-fixture-field case 'oracle-eligibility))
+        (oracle-reason
+         (agent-scheme-test-fixture-field case 'oracle-reason))
         (options (agent-scheme-test-fixture-field case 'options))
         (description (agent-scheme-test-fixture-field case 'description))
         (source (agent-scheme-test-fixture-field case 'source)))
@@ -137,6 +150,11 @@
     (should (> (length description) 0))
     (should (stringp source))
     (should (> (length source) 0))
+    (when (or oracle-eligibility oracle-reason)
+      (should (memq oracle-eligibility
+                    agent-scheme-test-fixture-oracle-eligibilities))
+      (should (memq oracle-reason
+                    agent-scheme-test-fixture-oracle-reasons)))
     (agent-scheme-test-fixture-validate-expectation case)))
 
 (defun agent-scheme-test-fixture-validate-suite (suite)
