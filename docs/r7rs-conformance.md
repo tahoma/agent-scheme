@@ -12,6 +12,22 @@ Fixture cases live in the shared `agent-scheme-fixture-suite` at
 `kind r7rs-conformance`, validates every conformance fixture, and runs cases
 marked `implemented`.
 
+`make conformance-oracle` runs a separate reference implementation oracle over
+pure shared fixtures. The default adapters target Chibi Scheme through
+`AGENT_SCHEME_CHIBI` or `chibi-scheme` on `PATH` and Sagittarius through
+`AGENT_SCHEME_SAGITTARIUS` or `sagittarius` on `PATH`; missing references are
+reported as `unsupported-reference` without affecting `make test`. Gauche and
+Guile adapters can be selected with `AGENT_SCHEME_ORACLE_REFERENCES` when
+comparing candidate reference sets. Racket can also be selected as a developer
+comparison adapter when `racket` and the Racket `r7rs` package are installed;
+CHICKEN can be selected the same way when `csi` and the `r7rs` egg are
+installed.
+
+Oracle `implementation-variant` rows are expected to stay visible when they
+reflect genuine reference diversity, such as exactness choices, case-folding
+quirks, datum-label support, or library-loading behavior. They are not Agent
+Scheme failures unless the report status is `agent-mismatch`.
+
 ## Status Values
 
 | Status | Meaning |
@@ -30,7 +46,7 @@ marked `implemented`.
 | Definitions and sequencing | `define`, `define-values`, `begin`, internal definitions | `implemented` | `primitive-procedure-call`, `multiple-values-define-values` | Top-level and internal definitions are supported, including `define-values`. |
 | Derived syntax | `cond`, `case`, `and`, `or`, `when`, `unless`, `let`, `let*`, `letrec`, `letrec*`, `let-values`, `let*-values`, `do`, `delay`, `quasiquote`, `parameterize` | `implemented` | `derived-let-expression`, `derived-cond-arrow-literal-binding`, `derived-case-expression`, `derived-do-expression`, `derived-quasiquote-expression`, `standard-library-lazy-force` | Macro-expanded derived syntax and evaluator-supported forms cover the R7RS-small initial target, including dynamic parameter rebinding through `parameterize`. |
 | `syntax-rules` macros | `define-syntax`, `let-syntax`, `letrec-syntax`, literals, ellipses, hygiene | `implemented` | `syntax-rules-unless`, `syntax-rules-let-syntax-hygiene`, `syntax-rules-dotted-pattern-template`, `syntax-rules-nested-ellipsis`, `syntax-rules-syntax-error` | High-level macro expansion supports top-level `define-syntax`, local `let-syntax` and `letrec-syntax`, hygienic introduced identifiers, literal binding checks, dotted patterns/templates, nested ellipses, an explicit expansion API, and expansion-time `syntax-error` diagnostics that include the originating macro use. |
-| Libraries, imports, exports | `define-library`, `import`, `export`, `include`, `include-ci`, `cond-expand`, library body ordering | `policy-gated` | `cond-expand-r7rs-feature`, `library-import-export`, `library-imported-binding-immutable`, `library-duplicate-export-error`, `program-import-after-expression-error` | Library declarations, imports, modifiers, exported macros, `cond-expand`, immutability checks, and duplicate export checks are implemented. File-reading declarations such as `include` and `include-ci` are policy-gated because they touch host files. |
+| Libraries, imports, exports | `define-library`, `import`, `export`, `include`, `include-ci`, `cond-expand`, library body ordering | `policy-gated` | `cond-expand-r7rs-feature`, `library-import-export`, `library-imported-binding-immutable`, `library-duplicate-export-error`, `program-import-after-expression-error` | Library declarations, imports, modifiers, exported macros, `cond-expand`, immutability checks, and duplicate export checks are implemented. File-reading declarations such as `include` and `include-ci` are policy-gated because they touch host files; the late-import program-shape error remains a conformance fixture but is not oracle-eligible because reference commands can read files as REPL input. |
 | Proper tail recursion | Tail calls in procedures, conditionals, derived syntax, continuations, and library procedures | `implemented` | `proper-tail-recursion-loop` | Procedure, conditional, named-let, and representative continuation loops are fixture-covered through the evaluator trampoline. |
 | Multiple values | `values`, `call-with-values`, `define-values`, `let-values`, `let*-values` | `implemented` | `multiple-values-direct`, `multiple-values-call-with-values`, `multiple-values-let-values`, `multiple-values-define-values` | Multiple-value producers, consumers, definitions, and binding forms are implemented. |
 | Exceptions | `with-exception-handler`, `guard`, `raise`, `raise-continuable`, `error` | `implemented` | `exceptions-guard-raise`, `exceptions-raise-continuable` | Error objects remain inspectable through `error-object?`, `error-object-message`, and `error-object-irritants`. |

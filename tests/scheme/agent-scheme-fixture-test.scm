@@ -27,6 +27,15 @@
 ;; Fixture oracles indicate which host families should run a case.
 (define fixture-oracles '(shared emacs-only portable-only))
 
+;; Optional fixture oracle eligibility marks explain why reference
+;; implementations should not run a case.
+(define fixture-oracle-eligibilities '(policy-gated not-oracle-eligible))
+
+;; Optional fixture oracle reasons give stable skip and policy categories.
+(define fixture-oracle-reasons
+  '(host-policy agent-specific resource-limit agent-result-record
+    implementation-dependent unspecified))
+
 ;; Required fixture fields keep corpus shape stable across hosts.
 (define fixture-required-fields
   '(id kind phase category section status oracle options source expect description))
@@ -109,6 +118,19 @@
        (= (length entry) 2)
        (symbol? (car entry))))
 
+;; Validate optional oracle eligibility metadata when a case carries it.
+(define (oracle-metadata-valid? case)
+  (let ((eligibility-present? (field-present? case 'oracle-eligibility))
+        (reason-present? (field-present? case 'oracle-reason)))
+    (if (or eligibility-present? reason-present?)
+        (and eligibility-present?
+             reason-present?
+             (memq (field case 'oracle-eligibility)
+                   fixture-oracle-eligibilities)
+             (memq (field case 'oracle-reason)
+                   fixture-oracle-reasons))
+        #t)))
+
 ;; Validate one fixture CASE against the shared corpus schema.
 (define (case-valid? case)
   (and (all? (lambda (name) (field-present? case name))
@@ -125,6 +147,7 @@
        (> (string-length (field case 'source)) 0)
        (string? (field case 'description))
        (> (string-length (field case 'description)) 0)
+       (oracle-metadata-valid? case)
        (expect-valid? (field case 'expect))))
 
 ;; Return #t when CASES do not repeat fixture ids.
