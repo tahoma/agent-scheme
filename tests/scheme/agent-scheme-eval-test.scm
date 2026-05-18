@@ -1,9 +1,20 @@
+;;; Portable evaluator test runner for the Agent Scheme R7RS library.
+;;;
+;;; This program runs under an external R7RS Scheme and exercises the portable
+;;; evaluator library without loading the Emacs host adapter.
+
 (import (scheme base)
         (scheme write)
         (agent-scheme eval))
 
+;; Shared evaluator behavior runs through agent-scheme-fixture-test.scm. This
+;; file keeps portable evaluator API and bootstrap invariants close to the R7RS
+;; library.
+
 (define failures 0)
 
+;; Record one failed portable evaluator check and keep running the rest of the
+;; suite so failures report together.
 (define (record-failure name expected actual)
   (set! failures (+ failures 1))
   (display "FAIL ")
@@ -14,33 +25,39 @@
   (write actual)
   (newline))
 
+;; Compare ACTUAL and EXPECTED using R7RS equal? and record a named failure.
 (define (check name actual expected)
   (if (not (equal? actual expected))
       (record-failure name expected actual)))
 
+;; Evaluate SOURCE and compare the stable external value representation.
 (define (check-external name source expected)
   (check name
          (agent-scheme-value->external (agent-scheme-eval-source source))
          expected))
 
+;; Evaluate SOURCE with OPTIONS and compare the stable external value.
 (define (check-external/options name source options expected)
   (check name
          (agent-scheme-value->external
           (agent-scheme-eval-source source #f options))
          expected))
 
+;; Evaluate SOURCE as an evaluation-result datum and compare its external form.
 (define (check-result-external name source expected)
   (check name
          (agent-scheme-result->external
           (agent-scheme-eval-source-result source))
          expected))
 
+;; Find the primitive binding metadata record named NAME in SPECS.
 (define (find-primitive-spec name specs)
   (cond
    ((null? specs) #f)
    ((eq? (cadr (assq 'name (car specs))) name) (car specs))
    (else (find-primitive-spec name (cdr specs)))))
 
+;; Return #t when THUNK raises any portable Scheme condition.
 (define (raises? thunk)
   (guard (condition
           (else #t))
@@ -591,14 +608,16 @@
 
 (check 'include-declarations-are-policy-gated
        (raises?
-        (lambda ()
-          (agent-scheme-eval-source
-           "(define-library (agent-scheme fixture include)
-              (export answer)
-              (import (scheme base))
-              (include \"fixtures/r7rs/conformance-cases.scm\"))")))
+       (lambda ()
+         (agent-scheme-eval-source
+          "(define-library (agent-scheme fixture include)
+             (export answer)
+             (import (scheme base))
+             (include \"fixtures/r7rs/conformance-cases.scm\"))")))
        #t)
 
+;; Include policy options grant this portable test runner access to fixture
+;; files while preserving the evaluator's default-deny host policy cases.
 (define include-policy-options
   '((include-directory . ".")
     (include-paths . ("fixtures/r7rs"))

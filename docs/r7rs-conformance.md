@@ -6,8 +6,10 @@ language text. This matrix tracks the language features, standard libraries, and
 representative fixture cases that should move from `pending` to `implemented`
 or `policy-gated` as the runtime lands.
 
-Fixture cases live in `fixtures/r7rs/conformance-cases.scm`. The ERT harness in
-`tests/agent-scheme-conformance-test.el` validates every fixture and runs cases
+Fixture cases live in the shared `agent-scheme-fixture-suite` at
+`fixtures/r7rs/conformance-cases.scm`. The ERT harness in
+`tests/agent-scheme-conformance-test.el` filters that corpus to
+`kind r7rs-conformance`, validates every conformance fixture, and runs cases
 marked `implemented`.
 
 ## Status Values
@@ -132,6 +134,9 @@ operations above do not grant host authority.
 
 - Add one fixture for each representative behavior before marking a matrix row
   `implemented`.
+- Use stable fixture ids and the shared fixture fields: `kind`, `phase`,
+  `oracle`, `options`, `source`, and `expect` in addition to the conformance
+  metadata fields.
 - A fixture marked `implemented` must run through `make test` and compare its
   printed value, multiple values, or expected error.
 - Fixtures marked `pending`, `policy-gated`, or `unavailable` are still loaded
