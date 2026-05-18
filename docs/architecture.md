@@ -163,6 +163,138 @@ The agent layer provides self-scripting facilities as Scheme-readable data:
 This layer should be usable from a shared REPL by both the user and the outer
 agent loop.
 
+## Pass-Oriented Frontend and Backends
+
+Agent Scheme should have one shared frontend for reading, resolving libraries,
+expanding macros, and normalizing Scheme programs. Interpreters, native
+compilers, and Emacs Lisp or byte-code backends consume that shared frontend
+output instead of reimplementing reader, library, or macro behavior.
+
+The intended pipeline is:
+
+```text
+source -> datums -> expanded Scheme -> normalized core form or IR -> backend
+```
+
+Library resolution participates in the frontend before and during expansion,
+because imports install both value bindings and syntactic bindings. Frontend
+passes may carry syntax environments, source locations, policy requirements,
+and binding metadata as pass state, but pass outputs that cross a module or
+backend boundary should remain Scheme-readable or printable where practical.
+
+### Frontend Pass Boundaries
+
+The reader and datum validator turn source text into Agent Scheme datums. This
+pass owns lexical grammar, datum labels, abbreviation syntax, numeric and
+character external representations, and depth, node, and string-size limits. It
+does not resolve identifiers, run macros, import libraries, or perform host
+effects.
+
+The program and library-shape pass checks that datums form legal program or
+`define-library` units. It separates import declarations, export declarations,
+body forms, definitions, and expressions; enforces top-level ordering such as
+imports before body forms; and preserves enough source context for diagnostics
+and later debugging.
+
+The library resolver maps R7RS library names and import sets to value and syntax
+bindings. It owns `only`, `except`, `prefix`, `rename`, `cond-expand`,
+`include`, `include-ci`, and `include-library-declarations` decisions. Source
+inclusion is a host file observation, so it must lower to a policy-checked
+frontend request rather than silently reading arbitrary host files.
+
+The macro expander owns `syntax-rules`, `define-syntax`, `let-syntax`,
+`letrec-syntax`, hygiene, expansion-time `syntax-error`, and derived syntax
+lowering that is implemented through portable macro libraries. Its output is
+expanded Scheme that uses a small set of core syntactic forms plus explicit
+syntax or binding metadata when needed. It may evaluate transformer code in a
+restricted expansion environment, but it must not call backend-specific runtime
+shortcuts.
+
+The normalizer turns expanded Scheme into a target-independent core form or IR.
+The first representation can stay close to Scheme datums, but it should make the
+remaining semantic cases explicit enough for all backends: literal data,
+lexical references and binding sites, assignments, sequences, conditionals,
+closures, applications, multiple-value contexts, dynamic-wind boundaries,
+continuation-sensitive calls, and policy-visible capability requests. The
+normalizer preserves tail-position metadata and source context so every backend
+can honor proper tail recursion and produce useful diagnostics.
+
+### Backend Boundaries
+
+The interpreter backend consumes normalized core forms and runs them directly.
+It owns runtime environments, mutable cells, closure values, parameter state,
+ports, multiple values, continuations, dynamic-wind state, exception handlers,
+the trampoline or equivalent tail-call machinery, primitive application,
+resource counters, and result rendering. The current evaluator is this first
+backend, even though it still hosts several frontend responsibilities while the
+runtime is bootstrapping.
+
+Future native compiler backends consume the same normalized core form or IR and
+emit executable code for a Scheme, byte-code, native, or other runtime target.
+They may choose different calling conventions or storage layouts, but they must
+preserve the R7RS-small contract, Agent Scheme policy behavior, inspectable
+result records, and the shared library and macro semantics supplied by the
+frontend.
+
+Future Emacs Lisp or byte-code backends also consume the normalized core form or
+IR. Generated Emacs Lisp remains an implementation detail behind
+`agent-scheme-` APIs and must not expose raw Emacs objects as Scheme values. Any
+compiled call that reaches Emacs buffers, files, processes, commands, or
+windows goes through the same capability, policy, handle, and audit surfaces as
+the interpreter backend.
+
+Backend results should be comparable as Scheme-readable data. A backend may
+keep private caches, byte-code objects, closure layouts, or indexes, but those
+objects are rebuildable acceleration structures over canonical frontend output
+and runtime records.
+
+### Current Bootstrap Placement
+
+The current Emacs Lisp and portable Scheme evaluators intentionally mix
+frontend and interpreter-backend code in one bootstrap module. Future file
+splits should preserve behavior while moving responsibilities to pass-oriented
+modules:
+
+- `agent-scheme-reader.el` and `(agent-scheme reader)` are frontend reader and
+  datum-validation passes.
+- Library registry, import-set resolution, `define-library`, `cond-expand`, and
+  include handling in the evaluator belong to frontend library-resolution
+  modules.
+- `syntax-rules`, syntax environments, identifier hygiene,
+  `agent-scheme-expand`, and `agent-scheme-expand-source` belong to frontend
+  expansion modules.
+- Recursive full expansion of core combinations is a frontend lowering step
+  until it is replaced or followed by an explicit normalizer.
+- Environment cells, the evaluator trampoline, procedure and primitive
+  application, continuations, dynamic-wind, exception handlers, parameters,
+  ports, budgets, and result records belong to the interpreter backend and
+  shared runtime support.
+- Default-denied file, process, time, default-port, and host-capability
+  primitives are backend-visible capability calls, but their authority decisions
+  belong to policy and adapter modules rather than to portable frontend passes.
+
+### Fixture Phases
+
+Shared fixtures should be able to test every public pass boundary as it becomes
+executable:
+
+- `read` and `read-all` cover source-to-datum behavior.
+- `expand` covers library resolution, macro expansion, and derived syntax
+  lowering into expanded Scheme.
+- A future `normalize` phase should cover expanded Scheme to core form or IR
+  without running a backend.
+- `eval` and `eval-result` cover the interpreter backend over the shared
+  frontend and, once available, over the normalizer.
+- Future `compile` and `compile-run` phases should verify compiler output shape
+  and compiled execution against the same expected values, errors, and result
+  records used by the interpreter.
+
+Policy-gated fixtures for `include`, `load`, file, process, time, default-port,
+and host-capability behavior should assert capability requests, denials, audit
+records, or result datums. They must not depend on unapproved direct host
+mutation. This keeps pass tests useful for the multi-host bootstrap strategy and
+keeps the R7RS-small contract independent of any one backend.
+
 ## Evaluation Scopes
 
 Agent Scheme has three evaluation scopes:
@@ -444,22 +576,28 @@ Likely portable R7RS modules:
 
 - `scheme/agent-scheme/reader.sld`
 - `scheme/agent-scheme/datum.sld`
-- `scheme/agent-scheme/eval.sld`
-- `scheme/agent-scheme/write.sld`
+- `scheme/agent-scheme/frontend.sld`
 - `scheme/agent-scheme/library.sld`
 - `scheme/agent-scheme/macro.sld`
+- `scheme/agent-scheme/normalize.sld`
+- `scheme/agent-scheme/eval.sld`
+- `scheme/agent-scheme/write.sld`
 - `scheme/agent-scheme/base.sld`
 
 Likely Emacs Lisp bootstrap and adapter modules:
 
 - `lisp/agent-scheme-reader.el`
 - `lisp/agent-scheme-datum.el`
+- `lisp/agent-scheme-library.el`
+- `lisp/agent-scheme-macro.el`
+- `lisp/agent-scheme-normalize.el`
+- `lisp/agent-scheme-interpreter.el`
 - `lisp/agent-scheme-eval.el`
 - `lisp/agent-scheme-env.el`
 - `lisp/agent-scheme-base.el`
 - `lisp/agent-scheme-write.el`
-- `lisp/agent-scheme-library.el`
-- `lisp/agent-scheme-macro.el`
+- `lisp/agent-scheme-compile.el`
+- `lisp/agent-scheme-bytecode.el`
 - `lisp/agent-scheme-policy.el`
 - `lisp/agent-scheme-audit.el`
 - `lisp/agent-scheme-handle.el`
@@ -467,12 +605,20 @@ Likely Emacs Lisp bootstrap and adapter modules:
 - `lisp/agent-scheme-repl.el`
 - `lisp/agent-scheme-mcp.el`
 
+After the split, `agent-scheme-eval.el` can remain the public orchestration
+surface for reading, expanding, normalizing, and invoking the default backend,
+while focused frontend and backend modules own the underlying pass behavior.
+
 Focused test files should mirror the modules:
 
 - `tests/agent-scheme-reader-test.el`
+- `tests/agent-scheme-library-test.el`
+- `tests/agent-scheme-macro-test.el`
+- `tests/agent-scheme-normalize-test.el`
 - `tests/agent-scheme-eval-test.el`
 - `tests/agent-scheme-base-test.el`
-- `tests/agent-scheme-library-test.el`
+- `tests/agent-scheme-interpreter-test.el`
+- `tests/agent-scheme-compile-test.el`
 - `tests/agent-scheme-policy-test.el`
 - `tests/agent-scheme-capability-test.el`
 - `tests/agent-scheme-repl-test.el`
