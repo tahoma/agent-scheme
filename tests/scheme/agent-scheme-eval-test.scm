@@ -248,7 +248,15 @@
               lazy-spec
               (string? (cadr (assq 'source-file case-lambda-spec)))
               (string? (cadr (assq 'source-file lazy-spec))))
-         #t))
+         #t)
+  (check 'standard-source-library-case-lambda-file
+         (and case-lambda-spec
+              (cadr (assq 'source-file case-lambda-spec)))
+         "scheme/standard-library/case-lambda.sld")
+  (check 'standard-source-library-lazy-file
+         (and lazy-spec
+              (cadr (assq 'source-file lazy-spec)))
+         "scheme/standard-library/lazy.sld"))
 
 (check-external 'base-list-helpers
                 "(list (length (append '(1 2) '(3 4)))

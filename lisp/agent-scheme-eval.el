@@ -2487,9 +2487,9 @@ When RECURSIVE is non-nil, transformer specs see the new bindings."
 
 (defconst agent-scheme--standard-source-library-files
   '(("(scheme case-lambda)"
-     . "../scheme/agent-scheme/standard-library/scheme/case-lambda.sld")
+     . "../scheme/standard-library/case-lambda.sld")
     ("(scheme lazy)"
-     . "../scheme/agent-scheme/standard-library/scheme/lazy.sld"))
+     . "../scheme/standard-library/lazy.sld"))
   "Checked-in portable standard libraries loaded as Scheme source.")
 
 (defun agent-scheme--standard-source-library-file (key)
