@@ -115,6 +115,36 @@
               (file-name-as-directory
                (expand-file-name agent-scheme--test-root)))))))
 
+(ert-deftest agent-scheme-capability-test-stale-window-handles-fail-clearly ()
+  "Reject window handles after the live Emacs window disappears."
+  (let ((environment (agent-scheme-make-base-environment))
+        (original-window (selected-window))
+        window handle)
+    (unwind-protect
+        (progn
+          (setq window (split-window original-window nil 'below))
+          (select-window window)
+          (setq handle
+                (agent-scheme-eval-source
+                 "(import (scheme base) (emacs window))
+                  (car (emacs-window-list))"
+                 environment))
+          (delete-window window)
+          (setq window nil)
+          (select-window original-window)
+          (agent-scheme--environment-define environment "stale-window" handle)
+          (let ((condition
+                 (should-error
+                  (agent-scheme-eval-source
+                   "(window-frame stale-window)" environment)
+                  :type 'agent-scheme-eval-error)))
+            (should
+             (string-match-p "stale window handle" (cadr condition)))))
+      (when (window-live-p window)
+        (delete-window window))
+      (when (window-live-p original-window)
+        (select-window original-window)))))
+
 (ert-deftest agent-scheme-capability-test-frame-handles ()
   "Inspect frames through opaque handles."
   (should
