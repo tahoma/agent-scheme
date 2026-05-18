@@ -57,6 +57,15 @@
    ((eq? (cadr (assq 'name (car specs))) name) (car specs))
    (else (find-primitive-spec name (cdr specs)))))
 
+;; Find manifest metadata by LIBRARY and NAME in SPECS.
+(define (find-manifest-spec library name specs)
+  (cond
+   ((null? specs) #f)
+   ((and (equal? (cadr (assq 'library (car specs))) library)
+         (eq? (cadr (assq 'name (car specs))) name))
+    (car specs))
+   (else (find-manifest-spec library name (cdr specs)))))
+
 ;; Find the source-backed standard library metadata record named NAME in SPECS.
 (define (find-source-library-spec name specs)
   (cond
@@ -140,6 +149,70 @@
          (cadr (assq 'source
                      (find-primitive-spec 'append binding-specs)))
          'prelude))
+
+(let* ((manifest-specs (agent-scheme-primitive-manifest-binding-specs))
+       (vector-ref
+        (find-manifest-spec '(scheme base) 'vector-ref manifest-specs))
+       (vector-set
+        (find-manifest-spec '(scheme base) 'vector-set! manifest-specs))
+       (delete-file
+        (find-manifest-spec '(scheme file) 'delete-file manifest-specs))
+       (open-input-file
+        (find-manifest-spec '(scheme file) 'open-input-file manifest-specs))
+       (current-second
+        (find-manifest-spec '(scheme time) 'current-second manifest-specs)))
+  (check 'primitive-manifest-vector-ref
+         (and vector-ref
+              (cadr (assq 'minimum-arity vector-ref))
+              (cadr (assq 'maximum-arity vector-ref))
+              (cadr (assq 'source vector-ref))
+              (cadr (assq 'effect vector-ref))
+              (cadr (assq 'policy vector-ref))
+              (memq 'vector (cadr (assq 'test-categories vector-ref)))
+              #t)
+         #t)
+  (check 'primitive-manifest-vector-set-effect
+         (and vector-set (cadr (assq 'effect vector-set)))
+         'mutation)
+  (check 'primitive-manifest-file-effect
+         (and delete-file
+              (list (cadr (assq 'source delete-file))
+                    (cadr (assq 'effect delete-file))
+                    (cadr (assq 'required-capability delete-file))
+                    (cadr (assq 'policy delete-file))))
+         '(host-capability host-file file-system deny))
+  (check 'primitive-manifest-file-stub-effect
+         (and open-input-file
+              (list (cadr (assq 'minimum-arity open-input-file))
+                    (cadr (assq 'effect open-input-file))
+                    (cadr (assq 'policy open-input-file))))
+         '(1 host-file deny))
+  (check 'primitive-manifest-time-effect
+         (and current-second
+              (list (cadr (assq 'effect current-second))
+                    (cadr (assq 'required-capability current-second))
+                    (cadr (assq 'policy current-second))))
+         '(host-time clock deny))
+  (let loop ((rest (agent-scheme-base-primitive-specs)))
+    (if (not (null? rest))
+        (let* ((spec (car rest))
+               (manifest-spec
+                (find-manifest-spec
+                 '(scheme base)
+                 (cadr (assq 'name spec))
+                 manifest-specs)))
+          (check 'primitive-manifest-base-alignment
+                 (and manifest-spec
+                      (equal? (cadr (assq 'minimum-arity manifest-spec))
+                              (cadr (assq 'minimum-arity spec)))
+                      (equal? (cadr (assq 'maximum-arity manifest-spec))
+                              (cadr (assq 'maximum-arity spec)))
+                      (eq? (cadr (assq 'source manifest-spec))
+                           (cadr (assq 'source spec)))
+                      (eq? (cadr (assq 'effect manifest-spec))
+                           (cadr (assq 'effect spec))))
+                 #t)
+          (loop (cdr rest))))))
 
 (let* ((source-specs (agent-scheme-standard-source-library-specs))
        (case-lambda-spec
