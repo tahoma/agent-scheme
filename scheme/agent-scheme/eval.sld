@@ -57,6 +57,8 @@
       cell?
       (value cell-value set-cell-value!))
 
+    ;; Value environments are internal mutable frames; imported names mark the
+    ;; current frame bindings that Scheme source cannot redefine or mutate.
     (define-record-type <environment>
       ;; FRAME maps lexical keys to mutable cells.  IMPORTED-NAMES marks
       ;; current-frame imports that Scheme code may not redefine or mutate.
@@ -75,6 +77,8 @@
       (imported-names syntax-environment-imported-names
                       set-syntax-environment-imported-names!))
 
+    ;; Syntax contexts carry macro-introduced identifier provenance across
+    ;; expansion without exposing host objects to Scheme values.
     (define-record-type <syntax-context>
       ;; Macro templates attach this context to introduced identifiers so free
       ;; identifiers resolve in the transformer's definition environments.
@@ -103,6 +107,8 @@
       (body procedure-body)
       (environment procedure-environment))
 
+    ;; Primitive procedures are the kernel boundary: each call is budgeted as a
+    ;; host callback even when the primitive implements pure R7RS behavior.
     (define-record-type <primitive-procedure>
       (make-primitive-procedure name function minimum-arity maximum-arity)
       agent-scheme-primitive-procedure?
@@ -122,6 +128,8 @@
       multiple-values?
       (values multiple-values-values))
 
+    ;; Continuations snapshot the user procedure plus dynamic context so
+    ;; repeated invocation can re-run dynamic-wind and handler transitions.
     (define-record-type <continuation>
       (make-continuation procedure dynamic-winds exception-handlers)
       continuation?
@@ -147,6 +155,8 @@
 
     (define agent-scheme-eof-object (make-agent-scheme-eof-object))
 
+    ;; Portable ports keep backing storage as Scheme data; host-file access is
+    ;; still explicit policy surface even though this record is host-neutral.
     (define-record-type <agent-scheme-port>
       ;; MEDIUM separates string, bytevector, host-file, and virtual ports.
       ;; SOURCE/POSITION back input ports; CONTENTS backs output ports.
@@ -191,6 +201,8 @@
       (syntax-environment bounce-syntax-environment)
       (continuation bounce-continuation))
 
+    ;; Evaluation context is the per-run owner for budgets, library state,
+    ;; include policy, syntax allocation, and dynamic control stacks.
     (define-record-type <eval-context>
       ;; A context owns mutable run state: budgets, active syntax bindings,
       ;; lazy library registrations, include policy, and syntax-id allocation.
@@ -223,6 +235,8 @@
                           set-context-exception-handlers!)
       (dynamic-winds context-dynamic-winds set-context-dynamic-winds!))
 
+    ;; Syntax transformers remember their definition environments; expansion
+    ;; relies on this for syntax-rules hygiene instead of host macro state.
     (define-record-type <syntax-transformer>
       (make-syntax-transformer ellipsis literals rules
                                value-environment syntax-environment)
@@ -257,6 +271,8 @@
       (object library-binding-object)
       (library-key library-binding-library-key))
 
+    ;; Library records are immutable snapshots of exported value and syntax
+    ;; environments after declarations have been evaluated.
     (define-record-type <library>
       (make-library name key exports value-environment syntax-environment)
       library?
@@ -487,6 +503,8 @@
        (lambda (value)
          (continue continuation agent-scheme-unspecified))))
 
+    ;; Continuation jumps call each after thunk being exited and each before
+    ;; thunk being entered, updating the active stack as those callbacks run.
     (define (switch-dynamic-winds! target context)
       (let* ((current (context-dynamic-winds context))
              (common (dynamic-wind-common-frame current target))
@@ -1257,6 +1275,9 @@
            (let ((maximum (primitive-procedure-maximum-arity primitive)))
              (or (not maximum) (<= count maximum)))))
 
+    ;; All callable values pass through this boundary so primitive callbacks,
+    ;; parameter procedures, compound procedures, and continuations share arity,
+    ;; budget, tail-position, and trampoline behavior.
     (define (apply-procedure procedure arguments context tail? . maybe-continuation)
       (let ((direct-call? (null? maybe-continuation))
             (continuation
@@ -7123,6 +7144,8 @@
        (list 'write-string primitive-write-string 1 4)
        (list 'write-u8 primitive-write-u8 1 2)))
 
+    ;; Primitive metadata is exported for tests and future conformance reports;
+    ;; it describes the kernel surface without exposing implementation closures.
     (define (agent-scheme-base-primitive-names)
       (map car base-primitive-registry))
 
@@ -7134,12 +7157,16 @@
                    (list 'source 'kernel)))
            base-primitive-registry))
 
+    ;; Prelude source paths are the only host-files read during base environment
+    ;; construction; they support project-root and library-path test layouts.
     (define agent-scheme-base-prelude-load-paths
       ;; Portable Scheme tests may run from the project root or with the
       ;; `agent-scheme' directory on the implementation's library path.
       '("scheme/agent-scheme/base-prelude.scm"
         "agent-scheme/base-prelude.scm"))
 
+    ;; Syntax prelude paths mirror value prelude loading so derived syntax stays
+    ;; portable source, not embedded host data.
     (define agent-scheme-base-syntax-load-paths
       '("scheme/agent-scheme/base-syntax.scm"
         "agent-scheme/base-syntax.scm"))
@@ -7157,6 +7184,8 @@
     (define (read-all-datums port)
       (agent-scheme-read-all (read-port-string port)))
 
+    ;; Prelude forms are cached after reader validation; metadata extraction
+    ;; depends on each top-level form remaining one define.
     (define (base-prelude-forms)
       (or base-prelude-forms-cache
           (let ((forms
@@ -7171,6 +7200,8 @@
             (set! base-prelude-forms-cache forms)
             forms)))
 
+    ;; Syntax prelude forms are cached separately because they install into the
+    ;; current syntax environment, not the value environment.
     (define (base-syntax-forms)
       (or base-syntax-forms-cache
           (let ((forms
@@ -7234,6 +7265,8 @@
            "prelude define target must be an identifier or function signature"
            form)))))
 
+    ;; Prelude binding specs identify derived procedures separately from kernel
+    ;; primitives so tests can catch accidental boundary movement.
     (define (agent-scheme-base-prelude-binding-specs)
       (map prelude-definition-spec (base-prelude-forms)))
 
@@ -7257,6 +7290,8 @@
        (make-primitive-procedure
         name function minimum-arity maximum-arity)))
 
+    ;; The base environment installs primitive kernel bindings first, then
+    ;; evaluates derived Scheme definitions in the same environment.
     (define (agent-scheme-make-base-environment)
       (let ((environment (agent-scheme-make-empty-environment)))
         (let loop ((rest base-primitive-registry))
@@ -7508,6 +7543,8 @@
           '()
           (second rest)))
 
+    ;; Evaluate one already-read expression in the supplied environment, or a
+    ;; fresh base environment when no environment is provided.
     (define (agent-scheme-eval expression . rest)
       (let ((context (new-eval-context (rest-options rest)))
             (environment (rest-environment rest)))
@@ -7515,6 +7552,8 @@
         (ensure-base-syntax! context environment)
         (trampoline expression environment context)))
 
+    ;; Read and evaluate a source body as a sequence that may contain
+    ;; definitions, imports, libraries, and expressions.
     (define (agent-scheme-eval-source source . rest)
       (let ((context (new-eval-context (rest-options rest)))
             (environment (rest-environment rest))
@@ -7523,14 +7562,18 @@
         (ensure-base-syntax! context environment)
         (trampoline (make-sequence forms #t) environment context)))
 
+    ;; String evaluation is an alias kept for callers that name the source kind.
     (define agent-scheme-eval-string agent-scheme-eval-source)
 
+    ;; Fully expand one already-read expression without evaluating its result.
     (define (agent-scheme-expand expression . rest)
       (let ((context (new-eval-context (rest-options rest)))
             (environment (rest-environment rest)))
         (ensure-base-syntax! context environment)
         (expand-expression/fully expression environment context)))
 
+    ;; Read and expand a source body, preserving top-level definition structure
+    ;; for tests and future compiler/backend passes.
     (define (agent-scheme-expand-source source . rest)
       (let ((context (new-eval-context (rest-options rest)))
             (environment (rest-environment rest))
@@ -7541,6 +7584,8 @@
     (define (result-field name . values)
       (cons name values))
 
+    ;; Result datums are the public reporting surface: they preserve useful
+    ;; Scheme data while reducing procedures, ports, and host objects to handles.
     (define (value->result-datum value . maybe-seen)
       (let ((seen (if (null? maybe-seen) '() (car maybe-seen))))
         (cond
@@ -7676,6 +7721,8 @@
             (result-field 'events '())
             (budget-result-field context)))
 
+    ;; Result-producing evaluation catches conditions and returns an inspectable
+    ;; Scheme-readable evaluation-result datum instead of raising to the host.
     (define (agent-scheme-eval-result expression . rest)
       (let ((context (new-eval-context (rest-options rest)))
             (environment (rest-environment rest)))
@@ -7687,6 +7734,8 @@
            (trampoline expression environment context)
            context))))
 
+    ;; Source result evaluation combines reader, evaluator, condition capture,
+    ;; and budget reporting for REPL and protocol-boundary callers.
     (define (agent-scheme-eval-source-result source . rest)
       (let ((context (new-eval-context (rest-options rest)))
             (environment (rest-environment rest)))
@@ -7699,9 +7748,12 @@
              (trampoline (make-sequence forms #t) environment context)
              context)))))
 
+    ;; Render an evaluation-result datum using the reader/writer external form.
     (define (agent-scheme-result->external result)
       (agent-scheme-datum->external result))
 
+    ;; Render runtime values for diagnostics while keeping non-datum values
+    ;; opaque and stripping macro identifier wrappers from datum-like results.
     (define (agent-scheme-value->external value)
       (cond
        ((agent-scheme-unspecified? value)
