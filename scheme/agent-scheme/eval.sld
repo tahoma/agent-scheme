@@ -2677,11 +2677,11 @@
     ;; Checked-in standard libraries loaded as portable Scheme source files.
     (define standard-source-library-load-paths
       '(((scheme case-lambda)
-         "scheme/agent-scheme/standard-library/scheme/case-lambda.sld"
-         "agent-scheme/standard-library/scheme/case-lambda.sld")
+         "scheme/standard-library/case-lambda.sld"
+         "standard-library/case-lambda.sld")
         ((scheme lazy)
-         "scheme/agent-scheme/standard-library/scheme/lazy.sld"
-         "agent-scheme/standard-library/scheme/lazy.sld")))
+         "scheme/standard-library/lazy.sld"
+         "standard-library/lazy.sld")))
 
     ;; Cache selected source path and contents by standard library key.
     (define standard-source-library-source-cache '())

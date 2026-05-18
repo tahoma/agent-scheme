@@ -505,12 +505,12 @@ which source installed each binding so later conformance work can reduce the
 host surface without losing visibility into the supported base environment.
 
 Portable source for pure, non-base standard libraries belongs under
-`scheme/agent-scheme/standard-library/scheme/`, using one `.sld` file per R7RS
-library.  For example, `(scheme case-lambda)` lives in
-`scheme/agent-scheme/standard-library/scheme/case-lambda.sld`.  Both the Emacs
-Lisp bootstrap evaluator and the portable Scheme evaluator load those checked-in
-source files directly as implementation bootstrap data; this is separate from
-user-level `include` and `load`, which remain policy-gated host file access.
+`scheme/standard-library/`, using one `.sld` file per R7RS library.  For
+example, `(scheme case-lambda)` lives in
+`scheme/standard-library/case-lambda.sld`.  Both the Emacs Lisp bootstrap
+evaluator and the portable Scheme evaluator load those checked-in source files
+directly as implementation bootstrap data; this is separate from user-level
+`include` and `load`, which remain policy-gated host file access.
 Host-effecting standard libraries continue to be registered through explicit
 adapter or primitive policy surfaces instead of portable source files.
 

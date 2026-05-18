@@ -219,17 +219,22 @@
 (ert-deftest agent-scheme-library-test-standard-source-libraries-are-file-backed ()
   "Discover source files and exports for portable standard libraries."
   (let ((specs (agent-scheme-standard-source-library-specs)))
-    (dolist (case '(("(scheme case-lambda)" ("case-lambda"))
+    (dolist (case '(("(scheme case-lambda)"
+                     ("case-lambda")
+                     "scheme/standard-library/case-lambda.sld")
                    ("(scheme lazy)"
                     ("delay" "delay-force" "force" "make-promise"
-                     "promise?"))))
+                     "promise?")
+                     "scheme/standard-library/lazy.sld")))
       (let* ((name (car case))
              (expected-exports (cadr case))
+             (expected-source-suffix (caddr case))
              (spec (agent-scheme-library-test--standard-source-spec
                     name specs))
              (source-file (plist-get spec :source-file)))
         (should spec)
         (should (equal (plist-get spec :exports) expected-exports))
+        (should (string-suffix-p expected-source-suffix source-file))
         (should (file-readable-p source-file))
         (with-temp-buffer
           (insert-file-contents source-file)
