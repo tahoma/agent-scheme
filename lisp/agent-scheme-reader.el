@@ -109,6 +109,15 @@ KIND names the parsed shape, such as `integer', `decimal',
   "Scheme record datum."
   type fields)
 
+(cl-defstruct (agent-scheme-handle
+               (:constructor agent-scheme--make-handle (kind id))
+               (:copier nil))
+  "Opaque Scheme-visible handle for a host adapter object.
+KIND is a symbol naming the adapter object family, and ID is a printable
+string key into a private host-side registry.  The live host object itself is
+never stored in the Scheme value."
+  kind id)
+
 (cl-defstruct (agent-scheme--datum-label
                (:constructor agent-scheme--make-datum-label (id))
                (:copier nil))
@@ -1356,7 +1365,8 @@ SEEN prevents infinite recursion over host-created cycles."
    ((or (agent-scheme-boolean-p datum)
         (agent-scheme-symbol-p datum)
         (agent-scheme-character-p datum)
-        (agent-scheme-number-p datum))
+        (agent-scheme-number-p datum)
+        (agent-scheme-handle-p datum))
     (agent-scheme--validate-note-node reader))
    ((stringp datum)
     (when (> (length datum) (agent-scheme--reader-maximum-string-size reader))
@@ -1608,6 +1618,13 @@ strings, symbols, and characters use display rendering."
           (format "#<record-type %s>"
                   (agent-scheme--record-name->external
                    (agent-scheme-record-type-name value))))
+         (render-handle
+          (value)
+          (format "(handle %s %s)"
+                  (agent-scheme--write-symbol-name
+                   (symbol-name (agent-scheme-handle-kind value)))
+                  (agent-scheme--write-symbol-name
+                   (agent-scheme-handle-id value))))
          (render-body
           (value)
           (cond
@@ -1640,6 +1657,8 @@ strings, symbols, and characters use display rendering."
             (render-record value))
            ((agent-scheme-record-type-p value)
             (render-record-type value))
+           ((agent-scheme-handle-p value)
+            (render-handle value))
            (t
             (signal 'agent-scheme-reader-error
                     (list (format "cannot write unsupported datum %S"
