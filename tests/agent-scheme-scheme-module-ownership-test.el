@@ -80,4 +80,21 @@
      (string-match-p
       "(define (agent-scheme-install-library-backend!" library))))
 
+(ert-deftest agent-scheme-scheme-module-ownership-test-macro-owns-expander ()
+  "Keep the portable macro expander out of the evaluator module."
+  (let ((macro
+         (agent-scheme-scheme-module-ownership-test--read
+          "scheme/agent-scheme/macro.sld"))
+        (eval
+         (agent-scheme-scheme-module-ownership-test--read
+          "scheme/agent-scheme/eval.sld")))
+    (should-not
+     (agent-scheme-scheme-module-ownership-test--imports-eval-p macro))
+    (should
+     (string-match-p "(define (apply-syntax-transformer" macro))
+    (should-not
+     (string-match-p "(define (apply-syntax-transformer" eval))
+    (should
+     (string-match-p "(define (agent-scheme-expand-source" macro))))
+
 ;;; agent-scheme-scheme-module-ownership-test.el ends here
