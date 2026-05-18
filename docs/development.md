@@ -174,6 +174,18 @@ fixtures, and host-effecting R7RS libraries such as `(scheme file)`,
 `(scheme time)`. The target is report-oriented; inspect `agent-mismatch`
 reports as conformance investigation signals.
 
+To focus the report stream, pass a comma-separated status filter:
+
+```sh
+AGENT_SCHEME_ORACLE_STATUSES='agent-mismatch,implementation-variant' make conformance-oracle
+```
+
+To print a compact status count before the report stream:
+
+```sh
+AGENT_SCHEME_ORACLE_SUMMARY=1 make conformance-oracle
+```
+
 ## Verification
 
 The default local verification command is:

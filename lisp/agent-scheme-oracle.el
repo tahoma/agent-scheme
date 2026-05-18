@@ -43,6 +43,15 @@ AGENT_SCHEME_CHIBI and then PATH."
     (scheme time))
   "R7RS libraries whose host effects are policy-gated in Agent Scheme.")
 
+(defconst agent-scheme-oracle-statuses
+  '(portable-agree
+    implementation-variant
+    agent-mismatch
+    unsupported-reference
+    policy-gated
+    not-oracle-eligible)
+  "Stable oracle report status order.")
+
 (cl-defstruct (agent-scheme-oracle-reference
                (:constructor agent-scheme-oracle-reference
                              (&key name command evaluator)))
@@ -557,6 +566,50 @@ multiple values."
      (status ,(agent-scheme-oracle-report-status report)))))
 
 ;;;###autoload
+(defun agent-scheme-oracle-filter-reports (reports statuses)
+  "Return REPORTS whose status is included in STATUSES.
+When STATUSES is nil, return REPORTS unchanged."
+  (if statuses
+      (cl-remove-if-not
+       (lambda (report)
+         (memq (agent-scheme-oracle-report-status report) statuses))
+       reports)
+    reports))
+
+(defun agent-scheme-oracle--summary-datum (reports)
+  "Return a Scheme-readable summary datum for REPORTS."
+  `(oracle-summary
+    (total ,(length reports))
+    ,@(mapcar
+       (lambda (status)
+         (list status
+               (cl-count-if
+                (lambda (report)
+                  (eq (agent-scheme-oracle-report-status report) status))
+                reports)))
+       agent-scheme-oracle-statuses)))
+
+;;;###autoload
+(defun agent-scheme-oracle-summary->external (reports)
+  "Return a Scheme-readable summary for REPORTS."
+  (agent-scheme-oracle--host-external
+   (agent-scheme-oracle--summary-datum reports)))
+
+;;;###autoload
+(defun agent-scheme-oracle-parse-status-filter (value)
+  "Parse comma-separated oracle status filter VALUE."
+  (when (and value (> (length (string-trim value)) 0))
+    (let ((statuses
+           (mapcar
+            (lambda (part)
+              (intern (string-trim part)))
+            (split-string value "," t "[[:space:]\n\t]+"))))
+      (dolist (status statuses)
+        (unless (memq status agent-scheme-oracle-statuses)
+          (error "Unknown oracle status filter: %S" status)))
+      statuses)))
+
+;;;###autoload
 (defun agent-scheme-oracle-chibi-reference ()
   "Return the Chibi Scheme reference adapter."
   (let ((configured (or agent-scheme-oracle-chibi-command
@@ -576,9 +629,17 @@ multiple values."
 ;;;###autoload
 (defun agent-scheme-oracle-batch-main ()
   "Run the oracle suite and print Scheme-readable reports."
-  (dolist (report (agent-scheme-oracle-run-suite))
-    (princ (agent-scheme-oracle-report->external report))
-    (princ "\n")))
+  (let* ((reports (agent-scheme-oracle-run-suite))
+         (statuses
+          (agent-scheme-oracle-parse-status-filter
+           (getenv "AGENT_SCHEME_ORACLE_STATUSES")))
+         (selected (agent-scheme-oracle-filter-reports reports statuses)))
+    (when (getenv "AGENT_SCHEME_ORACLE_SUMMARY")
+      (princ (agent-scheme-oracle-summary->external reports))
+      (princ "\n"))
+    (dolist (report selected)
+      (princ (agent-scheme-oracle-report->external report))
+      (princ "\n"))))
 
 (provide 'agent-scheme-oracle)
 

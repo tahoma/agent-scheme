@@ -116,6 +116,56 @@
            "(value #0=(a . #0#))")
           '(:status value :value "#0=(a . #0#)"))))
 
+(ert-deftest agent-scheme-oracle-test-filters-reports-by-status ()
+  "Filter oracle reports to requested status names."
+  (let ((reports
+         (list
+          (agent-scheme-oracle--make-report
+           :case-id 'portable :results nil :status 'portable-agree)
+          (agent-scheme-oracle--make-report
+           :case-id 'mismatch :results nil :status 'agent-mismatch)
+          (agent-scheme-oracle--make-report
+           :case-id 'variant :results nil :status 'implementation-variant))))
+    (should
+     (equal
+      (mapcar #'agent-scheme-oracle-report-case-id
+              (agent-scheme-oracle-filter-reports
+               reports
+               '(agent-mismatch implementation-variant)))
+      '(mismatch variant)))
+    (should
+     (equal
+      (mapcar #'agent-scheme-oracle-report-case-id
+              (agent-scheme-oracle-filter-reports reports nil))
+      '(portable mismatch variant)))))
+
+(ert-deftest agent-scheme-oracle-test-renders-summary ()
+  "Render a Scheme-readable summary of oracle report statuses."
+  (let ((reports
+         (list
+          (agent-scheme-oracle--make-report
+           :case-id 'portable :results nil :status 'portable-agree)
+          (agent-scheme-oracle--make-report
+           :case-id 'mismatch :results nil :status 'agent-mismatch)
+          (agent-scheme-oracle--make-report
+           :case-id 'variant :results nil :status 'implementation-variant)
+          (agent-scheme-oracle--make-report
+           :case-id 'policy :results nil :status 'policy-gated))))
+    (should
+     (equal
+      (agent-scheme-oracle-summary->external reports)
+      "(oracle-summary (total 4) (portable-agree 1) (implementation-variant 1) (agent-mismatch 1) (unsupported-reference 0) (policy-gated 1) (not-oracle-eligible 0))"))))
+
+(ert-deftest agent-scheme-oracle-test-parses-status-filter ()
+  "Parse comma-separated status filters from batch environment text."
+  (should
+   (equal
+    (agent-scheme-oracle-parse-status-filter
+     "agent-mismatch, implementation-variant")
+    '(agent-mismatch implementation-variant)))
+  (should-not (agent-scheme-oracle-parse-status-filter nil))
+  (should-not (agent-scheme-oracle-parse-status-filter "")))
+
 (ert-deftest agent-scheme-oracle-test-chibi-runs-simple-fixture ()
   "Run one small pure fixture through Chibi when it is available."
   (let ((implementation (agent-scheme-oracle-chibi-reference)))
