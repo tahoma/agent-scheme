@@ -195,9 +195,13 @@ RESULTS is a list of plists with `:name', `:status', and optional
         (phase (agent-scheme-oracle--field case 'phase))
         (status (agent-scheme-oracle--field case 'status))
         (oracle (agent-scheme-oracle--field case 'oracle))
+        (oracle-eligibility
+         (agent-scheme-oracle--field case 'oracle-eligibility))
         (options (agent-scheme-oracle--field case 'options))
         (source (agent-scheme-oracle--field case 'source)))
     (cond
+     ((memq oracle-eligibility '(policy-gated not-oracle-eligible))
+      oracle-eligibility)
      ((eq status 'policy-gated)
       'policy-gated)
      ((not (eq kind 'r7rs-conformance))

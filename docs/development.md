@@ -148,6 +148,12 @@ same indexed cases. Fixtures marked `pending`, `policy-gated`, or `unavailable`
 are loaded and validated by ERT without being executed. Fixtures marked
 `implemented` must run through `make test`.
 
+Fixtures may also carry optional `oracle-eligibility` and `oracle-reason`
+fields when a reference implementation should not run the case. The current
+eligibility values are `policy-gated` and `not-oracle-eligible`. Reasons include
+`host-policy`, `agent-specific`, `resource-limit`, `agent-result-record`,
+`implementation-dependent`, and `unspecified`.
+
 ## Reference Oracle
 
 Pure shared R7RS conformance fixtures can also be compared with external Scheme

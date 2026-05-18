@@ -56,6 +56,25 @@
     (should (eq (agent-scheme-oracle-case-classification agent-case)
                 'not-oracle-eligible))))
 
+(ert-deftest agent-scheme-oracle-test-classifies-explicit-eligibility-metadata ()
+  "Honor explicit restrictive oracle eligibility metadata."
+  (let ((metadata-case
+         '((id explicit-policy)
+           (kind r7rs-conformance)
+           (phase eval)
+           (category standard-libraries)
+           (section "6.13")
+           (status implemented)
+           (oracle shared)
+           (oracle-eligibility policy-gated)
+           (oracle-reason host-policy)
+           (options ())
+           (source "(+ 1 2)")
+           (expect (value "3"))
+           (description "Synthetic metadata case."))))
+    (should (eq (agent-scheme-oracle-case-classification metadata-case)
+                'policy-gated))))
+
 (ert-deftest agent-scheme-oracle-test-reports-missing-reference ()
   "Missing optional reference implementations produce readable reports."
   (let* ((case (agent-scheme-test-fixture-case 'primitive-procedure-call))

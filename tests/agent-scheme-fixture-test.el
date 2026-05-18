@@ -53,6 +53,14 @@
       (category reader-syntax) (section "2") (status implemented)
       (oracle shared) (options ()) (source "1")
       (expect (value 1)) (description "bad expect")))
+   :type 'ert-test-failed)
+  (should-error
+   (agent-scheme-test-fixture-validate-case
+    '((id bad-oracle-metadata) (kind regression) (phase read)
+      (category reader-syntax) (section "2") (status implemented)
+      (oracle shared) (oracle-eligibility surprise)
+      (oracle-reason agent-specific) (options ()) (source "1")
+      (expect (value "1")) (description "bad oracle metadata")))
    :type 'ert-test-failed))
 
 (ert-deftest agent-scheme-fixture-test-runs-reader-and-evaluator-phases ()
