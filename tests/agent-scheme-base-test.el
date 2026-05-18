@@ -16,6 +16,14 @@
   (agent-scheme-value->external
    (agent-scheme-eval-source source nil options)))
 
+(defun agent-scheme-base-test--manifest-spec (library name)
+  "Return manifest metadata for binding NAME in LIBRARY."
+  (seq-find
+   (lambda (spec)
+     (and (equal (plist-get spec :library) library)
+          (equal (plist-get spec :name) name)))
+   (agent-scheme-primitive-manifest-binding-specs)))
+
 (ert-deftest agent-scheme-base-test-registry-is-discoverable ()
   "Expose kernel and prelude binding metadata from Emacs."
   (let ((names (agent-scheme-base-primitive-names))
@@ -53,6 +61,56 @@
            binding-specs)
           :source)
          'prelude))))
+
+(ert-deftest agent-scheme-base-test-primitive-manifest-is-inspectable ()
+  "Expose canonical metadata for primitives and effectful standard bindings."
+  (let ((vector-ref (agent-scheme-base-test--manifest-spec
+                     "(scheme base)" "vector-ref"))
+        (vector-set (agent-scheme-base-test--manifest-spec
+                     "(scheme base)" "vector-set!"))
+        (delete-file (agent-scheme-base-test--manifest-spec
+                      "(scheme file)" "delete-file"))
+        (open-input-file (agent-scheme-base-test--manifest-spec
+                          "(scheme file)" "open-input-file"))
+        (current-second (agent-scheme-base-test--manifest-spec
+                         "(scheme time)" "current-second")))
+    (should vector-ref)
+    (should (equal (plist-get vector-ref :minimum-arity) 2))
+    (should (equal (plist-get vector-ref :maximum-arity) 2))
+    (should (eq (plist-get vector-ref :source) 'kernel))
+    (should (eq (plist-get vector-ref :effect) 'pure))
+    (should (eq (plist-get vector-ref :policy) 'allow))
+    (should (eq (plist-get vector-ref :emacs-hook)
+                'agent-scheme--primitive-vector-ref))
+    (should (memq 'vector (plist-get vector-ref :test-categories)))
+    (should (eq (plist-get vector-set :effect) 'mutation))
+    (should (eq (plist-get delete-file :source) 'host-capability))
+    (should (eq (plist-get delete-file :effect) 'host-file))
+    (should (eq (plist-get delete-file :required-capability) 'file-system))
+    (should (eq (plist-get delete-file :policy) 'deny))
+    (should (equal (plist-get open-input-file :minimum-arity) 1))
+    (should (eq (plist-get open-input-file :effect) 'host-file))
+    (should (eq (plist-get open-input-file :policy) 'deny))
+    (should (eq (plist-get current-second :effect) 'host-time))
+    (should (eq (plist-get current-second :required-capability) 'clock))
+    (should (eq (plist-get current-second :policy) 'deny))))
+
+(ert-deftest agent-scheme-base-test-primitive-registry-aligns-with-manifest ()
+  "Keep Emacs kernel registry names, arities, and effects in the manifest."
+  (dolist (spec (agent-scheme-base-primitive-specs))
+    (let ((manifest-spec
+           (agent-scheme-base-test--manifest-spec
+            "(scheme base)"
+            (plist-get spec :name))))
+      (should manifest-spec)
+      (should (equal (plist-get manifest-spec :minimum-arity)
+                     (plist-get spec :minimum-arity)))
+      (should (equal (plist-get manifest-spec :maximum-arity)
+                     (plist-get spec :maximum-arity)))
+      (should (eq (plist-get manifest-spec :source)
+                  (plist-get spec :source)))
+      (should (eq (plist-get manifest-spec :effect)
+                  (plist-get spec :effect))))))
 
 (ert-deftest agent-scheme-base-test-pairs-lists-and-equality ()
   "Evaluate common pair, list, association, and equality procedures."

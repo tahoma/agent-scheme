@@ -248,6 +248,33 @@ keep private caches, byte-code objects, closure layouts, or indexes, but those
 objects are rebuildable acceleration structures over canonical frontend output
 and runtime records.
 
+### Primitive and Effect Metadata
+
+Primitive and standard-binding metadata is exposed through a shared manifest
+surface instead of being inferred from host registration code alone. The current
+bootstrap accessors are `agent-scheme-primitive-manifest-binding-specs`,
+`agent-scheme-base-primitive-specs`, and
+`agent-scheme-base-prelude-binding-specs`; the portable Scheme evaluator exposes
+the same manifest records as Scheme-readable association lists.
+
+Each manifest record identifies the public binding name, library, minimum and
+maximum arity, source boundary, effect tier, required capability if any,
+interpreter hook names, future emitter hint, policy posture, and test
+categories. The `source` field keeps kernel primitives, portable prelude
+bindings, portable source libraries, and host capabilities distinguishable.
+The `effect` and `policy` fields are advisory metadata today, but they are the
+contract future policy checks, fixture selection, documentation, and compiler
+lowering should consume.
+
+Compiler backends should treat `emitter-hook` as a dispatch hint, not as an
+authorization decision. Pure bindings can be inlined or emitted as ordinary
+runtime calls when the backend knows their representation. Mutation, control,
+port, and dynamic-state effects must lower through runtime helpers that preserve
+Agent Scheme semantics. Host-capability effects such as file, process, time,
+REPL, provider, UI, and future Emacs capability operations must lower to
+capability requests that consult policy and produce audit records; a compiler
+must not bypass the manifest by directly calling host APIs.
+
 ### Current Bootstrap Placement
 
 The current Emacs Lisp and portable Scheme evaluators intentionally mix
