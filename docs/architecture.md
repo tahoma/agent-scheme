@@ -616,14 +616,16 @@ core can take over.
 Likely portable R7RS modules:
 
 - `scheme/agent-scheme/reader.sld`
+- `scheme/agent-scheme/runtime.sld`
+- `scheme/agent-scheme/base.sld`
 - `scheme/agent-scheme/datum.sld`
 - `scheme/agent-scheme/frontend.sld`
 - `scheme/agent-scheme/library.sld`
 - `scheme/agent-scheme/macro.sld`
 - `scheme/agent-scheme/normalize.sld`
+- `scheme/agent-scheme/interpreter.sld`
 - `scheme/agent-scheme/eval.sld`
 - `scheme/agent-scheme/write.sld`
-- `scheme/agent-scheme/base.sld`
 
 Likely Emacs Lisp bootstrap and adapter modules:
 
