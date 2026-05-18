@@ -86,6 +86,8 @@
       '((emacs buffer)
         (emacs buffer edit)
         (emacs command)
+        (emacs frame)
+        (emacs process)
         (emacs project)
         (emacs window)))
 
