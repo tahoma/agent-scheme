@@ -43,6 +43,7 @@ tests that describe public behavior.
 Implementation files under `lisp/` should follow the package namespace:
 
 - `lisp/agent-scheme-reader.el` provides `agent-scheme-reader`
+- `lisp/agent-scheme-runtime.el` provides `agent-scheme-runtime`
 - `lisp/agent-scheme-eval.el` provides `agent-scheme-eval`
 - `lisp/agent-scheme-mcp.el` provides `agent-scheme-mcp`
 
