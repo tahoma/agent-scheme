@@ -17,6 +17,8 @@ Repository conventions override generic workflow defaults. In particular:
 - Branches must follow `author-name/issue-N/short-name`.
 - Pull requests must target `main`, reference the issue, describe verification,
   and avoid unrelated work.
+- GitHub issues that depend on other issues must record those dependencies in
+  the issue description and in GitHub Issues' relationship metadata.
 - Commits must use the Conventional Commits form documented in
   `docs/contributing.md`.
 - Public Agent Scheme identifiers must use `agent-scheme-`; private Emacs Lisp

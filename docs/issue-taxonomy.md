@@ -40,6 +40,7 @@ The phase label mirrors the roadmap issue's current implementation order.
 | `phase:3-emacs-capabilities` | Emacs-facing capability libraries, jobs, compile/test workflows, and budgets tied to live use. |
 | `phase:4-agent-libraries` | Agent-layer libraries, helper workflows, skill interop, package resolution, and collaboration UX. |
 | `phase:5-outward-interfaces` | References, model/provider integrations, persistence, MCP, protocol, and sidecar interfaces. |
+| `phase:6-compiler-backends` | LLIR, compiler backend ABI, compiled execution, and native or byte-code emitters. |
 
 ## Optional Axes
 
