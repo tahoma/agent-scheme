@@ -16,6 +16,7 @@ Optional but useful:
 
 - Chibi Scheme, `chibi-scheme`, for running portable R7RS bootstrap tests
   and the reference implementation oracle runner
+- Gauche, `gosh`, for additional reference implementation oracle coverage
 - ShellCheck or other local lint tools for future scripts
 
 ## GitHub Access
@@ -163,13 +164,13 @@ implementations through the oracle runner:
 make conformance-oracle
 ```
 
-The first reference adapter is Chibi Scheme. The runner uses
-`AGENT_SCHEME_CHIBI` when set, otherwise it searches for `chibi-scheme` on
-`PATH`. The Chibi adapter writes each eligible fixture to a temporary R7RS
-program and invokes Chibi with that file as the command-line program argument.
-Missing reference implementations are reported as `unsupported-reference` in
-Scheme-readable oracle reports and do not affect the default `make test`
-command.
+The default reference adapters are Chibi Scheme and Gauche. The runner uses
+`AGENT_SCHEME_CHIBI` and `AGENT_SCHEME_GAUCHE` when set, otherwise it searches
+for `chibi-scheme` and `gosh` on `PATH`. Each adapter writes eligible fixtures
+to a temporary R7RS program and invokes the reference implementation with that
+file as the command-line program argument. Missing reference implementations are
+reported as `unsupported-reference` in Scheme-readable oracle reports and do not
+affect the default `make test` command.
 
 Oracle reports identify each fixture by case id and classify the comparison as
 `portable-agree`, `implementation-variant`, `agent-mismatch`,

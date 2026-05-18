@@ -3,8 +3,8 @@
 ;;; Commentary:
 
 ;; Compare pure shared Agent Scheme fixture cases with external R7RS
-;; implementations.  The first reference adapter is Chibi Scheme; additional
-;; implementations can be represented with `agent-scheme-oracle-reference'.
+;; implementations.  Reference adapters are represented with
+;; `agent-scheme-oracle-reference'.
 
 ;;; Code:
 
@@ -32,6 +32,13 @@
   "Optional Chibi Scheme executable for oracle runs.
 When nil, `agent-scheme-oracle-chibi-reference' consults
 AGENT_SCHEME_CHIBI and then PATH."
+  :type '(choice (const :tag "Discover automatically" nil) string)
+  :group 'agent-scheme-oracle)
+
+(defcustom agent-scheme-oracle-gauche-command nil
+  "Optional Gauche executable for oracle runs.
+When nil, `agent-scheme-oracle-gauche-reference' consults
+AGENT_SCHEME_GAUCHE and then PATH."
   :type '(choice (const :tag "Discover automatically" nil) string)
   :group 'agent-scheme-oracle)
 
@@ -535,7 +542,7 @@ multiple values."
          :results nil
          :status classification)
       (let* ((active-references (or references
-                                    (list (agent-scheme-oracle-chibi-reference))))
+                                    (agent-scheme-oracle-default-references)))
              (reference-entries
               (mapcar
                (lambda (reference)
@@ -639,12 +646,30 @@ When STATUSES is nil, return REPORTS unchanged."
 ;;;###autoload
 (defun agent-scheme-oracle-chibi-reference ()
   "Return the Chibi Scheme reference adapter."
-  (let ((configured (or agent-scheme-oracle-chibi-command
-                        (let ((env (getenv "AGENT_SCHEME_CHIBI")))
-                          (and env (> (length env) 0) env)))))
+  (let ((configured
+         (or agent-scheme-oracle-chibi-command
+             (let ((env (getenv "AGENT_SCHEME_CHIBI")))
+               (and env (not (string-empty-p env)) env)))))
     (agent-scheme-oracle-reference
      :name 'chibi
      :command (or configured (executable-find "chibi-scheme")))))
+
+;;;###autoload
+(defun agent-scheme-oracle-gauche-reference ()
+  "Return the Gauche reference adapter."
+  (let ((configured
+         (or agent-scheme-oracle-gauche-command
+             (let ((env (getenv "AGENT_SCHEME_GAUCHE")))
+               (and env (not (string-empty-p env)) env)))))
+    (agent-scheme-oracle-reference
+     :name 'gauche
+     :command (or configured (executable-find "gosh")))))
+
+;;;###autoload
+(defun agent-scheme-oracle-default-references ()
+  "Return the default reference implementation adapters."
+  (list (agent-scheme-oracle-chibi-reference)
+        (agent-scheme-oracle-gauche-reference)))
 
 ;;;###autoload
 (defun agent-scheme-oracle-run-suite (&optional references)

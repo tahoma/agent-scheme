@@ -200,9 +200,35 @@
          (report (agent-scheme-oracle-run-case case (list reference))))
     (should (eq (agent-scheme-oracle-report-status report) 'portable-agree))))
 
+(ert-deftest agent-scheme-oracle-test-gauche-reference-uses-environment ()
+  "Build the Gauche adapter from AGENT_SCHEME_GAUCHE when configured."
+  (let ((process-environment
+         (cons "AGENT_SCHEME_GAUCHE=/example/bin/gosh" process-environment))
+        (agent-scheme-oracle-gauche-command nil))
+    (let ((implementation (agent-scheme-oracle-gauche-reference)))
+      (should (eq (agent-scheme-oracle-reference-name implementation)
+                  'gauche))
+      (should (equal (agent-scheme-oracle-reference-command implementation)
+                     "/example/bin/gosh")))))
+
+(ert-deftest agent-scheme-oracle-test-default-references-include-gauche ()
+  "Use Chibi and Gauche as the default oracle reference set."
+  (should
+   (equal (mapcar #'agent-scheme-oracle-reference-name
+                  (agent-scheme-oracle-default-references))
+          '(chibi gauche))))
+
 (ert-deftest agent-scheme-oracle-test-chibi-runs-simple-fixture ()
   "Run one small pure fixture through Chibi when it is available."
   (let ((implementation (agent-scheme-oracle-chibi-reference)))
+    (skip-unless (agent-scheme-oracle-reference-command implementation))
+    (let* ((case (agent-scheme-test-fixture-case 'primitive-procedure-call))
+           (result (agent-scheme-oracle-run-reference implementation case)))
+      (should (equal result '(:status value :value "3"))))))
+
+(ert-deftest agent-scheme-oracle-test-gauche-runs-simple-fixture ()
+  "Run one small pure fixture through Gauche when it is available."
+  (let ((implementation (agent-scheme-oracle-gauche-reference)))
     (skip-unless (agent-scheme-oracle-reference-command implementation))
     (let* ((case (agent-scheme-test-fixture-case 'primitive-procedure-call))
            (result (agent-scheme-oracle-run-reference implementation case)))
