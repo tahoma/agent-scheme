@@ -185,6 +185,15 @@ as the command-line program argument. Missing reference implementations are
 reported as `unsupported-reference` in Scheme-readable oracle reports and do
 not affect the default `make test` command.
 
+| Adapter | Role | Environment override | Discovered command | Notes |
+| --- | --- | --- | --- | --- |
+| Chibi Scheme | default | `AGENT_SCHEME_CHIBI` | `chibi-scheme` | Also used by portable bootstrap tests when available. |
+| Sagittarius | default | `AGENT_SCHEME_SAGITTARIUS` | `sagittarius` | Runs with `-r 7` for R7RS mode. |
+| Gauche | opt-in comparison | `AGENT_SCHEME_GAUCHE` | `gosh` | Useful for library and writer behavior comparisons. |
+| Guile | opt-in comparison | `AGENT_SCHEME_GUILE` | `guile` | Runs with `--no-auto-compile --r7rs`. |
+| Racket | developer-only comparison | `AGENT_SCHEME_RACKET` | `racket` | Requires the Racket `r7rs` package; generated programs are wrapped with `#lang r7rs`. |
+| CHICKEN Scheme | developer-only comparison | `AGENT_SCHEME_CHICKEN` | `csi` | Requires the `r7rs` egg; runs with `-q -R r7rs -s`. |
+
 Oracle reports identify each fixture by case id and classify the comparison as
 `portable-agree`, `implementation-variant`, `agent-mismatch`,
 `unsupported-reference`, `policy-gated`, or `not-oracle-eligible`. The runner
