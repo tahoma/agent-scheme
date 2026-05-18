@@ -120,11 +120,19 @@
                   (not (memq 'cadr names))
                   (not (memq 'length names))
                   (not (memq 'map names))
+                  (not (memq 'string-map names))
+                  (not (memq 'string-for-each names))
+                  (not (memq 'vector-map names))
+                  (not (memq 'vector-for-each names))
                   (not (memq 'zero? names))
                   (memq 'append prelude-names)
                   (memq 'cadr prelude-names)
                   (memq 'length prelude-names)
                   (memq 'map prelude-names)
+                  (memq 'string-map prelude-names)
+                  (memq 'string-for-each prelude-names)
+                  (memq 'vector-map prelude-names)
+                  (memq 'vector-for-each prelude-names)
                   (memq 'zero? prelude-names)
                   (memq 'call-with-values names)
                   (memq 'call/cc names)
@@ -148,6 +156,14 @@
   (check 'base-prelude-source-spec
          (cadr (assq 'source
                      (find-primitive-spec 'append binding-specs)))
+         'prelude)
+  (check 'base-prelude-string-map-source-spec
+         (cadr (assq 'source
+                     (find-primitive-spec 'string-map binding-specs)))
+         'prelude)
+  (check 'base-prelude-vector-for-each-source-spec
+         (cadr (assq 'source
+                     (find-primitive-spec 'vector-for-each binding-specs)))
          'prelude))
 
 (let* ((manifest-specs (agent-scheme-primitive-manifest-binding-specs))
@@ -293,6 +309,25 @@
                  (bytevector-u8-set! b 1 9)
                  (list v b)"
                 "(#(a changed c) #u8(1 9 3))")
+
+(check-external 'base-derived-string-vector-iteration
+                "(let ((chars '())
+                       (indexes (make-list 3)))
+                   (string-for-each
+                    (lambda (c) (set! chars (cons c chars)))
+                    \"abc\")
+                   (vector-for-each
+                    (lambda (index)
+                      (list-set! indexes index (* index index)))
+                    '#(0 1 2))
+                   (list
+                    (string-map
+                     (lambda (c) c)
+                     \"HAL\")
+                    chars
+                    (vector-map + '#(1 2 3) '#(4 5 6 7))
+                    indexes))"
+                "(\"HAL\" (#\\c #\\b #\\a) #(5 7 9) (0 1 4))")
 
 (check-external 'base-higher-order-helpers
                 "(define total 0)

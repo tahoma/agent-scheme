@@ -7430,53 +7430,6 @@
        context
        #f))
 
-    ;; Implement the `string-map` primitive with argument validation and Agent
-    ;; Scheme values.
-    (define (primitive-string-map arguments context)
-      (let* ((procedure (expect-procedure
-                         (car arguments)
-                         "string-map procedure"))
-             (strings (map (lambda (argument)
-                             (expect-string argument "string-map"))
-                           (cdr arguments)))
-             (limit (apply min (map string-length strings))))
-        (let loop ((index 0) (result '()))
-          (if (= index limit)
-              (list->string (reverse result))
-              (let ((value
-                     (apply-procedure
-                      procedure
-                      (map (lambda (string) (string-ref string index))
-                           strings)
-                      context
-                      #f)))
-                (loop (+ index 1)
-                      (cons (expect-character
-                             (single-value value "string-map result")
-                             "string-map result")
-                            result)))))))
-
-    ;; Implement the `string-for-each` primitive with argument validation and
-    ;; Agent Scheme values.
-    (define (primitive-string-for-each arguments context)
-      (let* ((procedure (expect-procedure
-                         (car arguments)
-                         "string-for-each procedure"))
-             (strings (map (lambda (argument)
-                             (expect-string argument "string-for-each"))
-                           (cdr arguments)))
-             (limit (apply min (map string-length strings))))
-        (let loop ((index 0))
-          (if (< index limit)
-              (begin
-                (apply-procedure
-                 procedure
-                 (map (lambda (string) (string-ref string index)) strings)
-                 context
-                 #f)
-                (loop (+ index 1)))))
-        agent-scheme-unspecified))
-
     ;; Implement the `vector?` primitive with argument validation and Agent
     ;; Scheme values.
     (define (primitive-vector? arguments context)
@@ -7603,37 +7556,6 @@
                 (vector-set! vector index fill)
                 (loop (+ index 1)))))
         agent-scheme-unspecified))
-
-    ;; Implement the `vector-map` primitive with argument validation and Agent
-    ;; Scheme values.
-    (define (primitive-vector-map arguments context)
-      (let* ((procedure (expect-procedure
-                         (car arguments)
-                         "vector-map procedure"))
-             (vectors (map (lambda (argument)
-                             (expect-vector argument "vector-map"))
-                           (cdr arguments)))
-             (limit (apply min (map vector-length vectors))))
-        (let loop ((index 0) (result '()))
-          (if (= index limit)
-              (list->vector (reverse result))
-              (loop (+ index 1)
-                    (cons
-                     (single-value
-                      (apply-procedure
-                       procedure
-                       (map (lambda (vector) (vector-ref vector index))
-                            vectors)
-                       context
-                       #f)
-                      "vector-map result")
-                     result))))))
-
-    ;; Implement the `vector-for-each` primitive with argument validation and
-    ;; Agent Scheme values.
-    (define (primitive-vector-for-each arguments context)
-      (primitive-vector-map arguments context)
-      agent-scheme-unspecified)
 
     ;; Implement the `bytevector?` primitive with argument validation and Agent
     ;; Scheme values.
@@ -8024,9 +7946,7 @@
        (list 'string-copy primitive-string-copy 1 3)
        (list 'string-copy! primitive-string-copy! 3 5)
        (list 'string-fill! primitive-string-fill! 2 4)
-       (list 'string-for-each primitive-string-for-each 2 #f)
        (list 'string-length primitive-string-length 1 1)
-       (list 'string-map primitive-string-map 2 #f)
        (list 'string-ref primitive-string-ref 2 2)
        (list 'string-set! primitive-string-set! 3 3)
        (list 'string<=? primitive-string<=? 2 #f)
@@ -8053,9 +7973,7 @@
        (list 'vector-copy primitive-vector-copy 1 3)
        (list 'vector-copy! primitive-vector-copy! 3 5)
        (list 'vector-fill! primitive-vector-fill! 2 4)
-       (list 'vector-for-each primitive-vector-for-each 2 #f)
        (list 'vector-length primitive-vector-length 1 1)
-       (list 'vector-map primitive-vector-map 2 #f)
        (list 'vector-ref primitive-vector-ref 2 2)
        (list 'vector-set! primitive-vector-set! 3 3)
        (list 'vector? primitive-vector? 1 1)

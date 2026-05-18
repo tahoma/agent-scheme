@@ -95,6 +95,21 @@
     (should (eq (plist-get current-second :required-capability) 'clock))
     (should (eq (plist-get current-second :policy) 'deny))))
 
+(ert-deftest agent-scheme-base-test-derived-iteration-helpers-come-from-prelude ()
+  "Keep string and vector higher-order helpers in portable Scheme."
+  (let ((primitive-names (agent-scheme-base-primitive-names))
+        (prelude-names (agent-scheme-base-prelude-binding-names)))
+    (dolist (name '("string-map" "string-for-each"
+                    "vector-map" "vector-for-each"))
+      (should-not (member name primitive-names))
+      (should (member name prelude-names))
+      (let ((spec (agent-scheme-base-test--manifest-spec
+                   "(scheme base)" name)))
+        (should spec)
+        (should (eq (plist-get spec :source) 'prelude))
+        (should (eq (plist-get spec :effect) 'pure))
+        (should (eq (plist-get spec :policy) 'allow))))))
+
 (ert-deftest agent-scheme-base-test-primitive-registry-aligns-with-manifest ()
   "Keep Emacs kernel registry names, arities, and effects in the manifest."
   (dolist (spec (agent-scheme-base-primitive-specs))
@@ -325,7 +340,34 @@
            "(define total 0)
             (for-each (lambda (x) (set! total (+ total x))) '(1 2 3))
             total")
-          "6")))
+          "6"))
+  (should
+   (equal (agent-scheme-base-test--external
+           "(string-map
+              (lambda (c) c)
+              \"HAL\")")
+          "\"HAL\""))
+  (should
+   (equal (agent-scheme-base-test--external
+           "(let ((chars '()))
+              (string-for-each
+                (lambda (c) (set! chars (cons c chars)))
+                \"abc\")
+              chars)")
+          "(#\\c #\\b #\\a)"))
+  (should
+   (equal (agent-scheme-base-test--external
+           "(vector-map + '#(1 2 3) '#(4 5 6 7))")
+          "#(5 7 9)"))
+  (should
+   (equal (agent-scheme-base-test--external
+           "(let ((result (make-list 3)))
+              (vector-for-each
+                (lambda (index)
+                  (list-set! result index (* index index)))
+                '#(0 1 2))
+              result)")
+          "(0 1 4)")))
 
 (ert-deftest agent-scheme-base-test-arity-type-errors-and-result-rendering ()
   "Cover primitive errors and stable Scheme-readable result records."
