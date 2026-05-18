@@ -441,13 +441,36 @@ multiple values."
      '(error))
     (_ nil)))
 
+(defun agent-scheme-oracle--normalize-external (external)
+  "Normalize known reference writer variation in EXTERNAL."
+  (if (stringp external)
+      (replace-regexp-in-string
+       "\\+\\+nan\\.0i"
+       "+nan.0i"
+       external
+       t
+       t)
+    external))
+
+(defun agent-scheme-oracle--normalize-payload (payload)
+  "Normalize oracle report PAYLOAD values before comparison."
+  (if (listp payload)
+      (mapcar #'agent-scheme-oracle--normalize-external payload)
+    (agent-scheme-oracle--normalize-external payload)))
+
 (defun agent-scheme-oracle--result-entry (name actual)
   "Return a report result entry named NAME for ACTUAL."
   (pcase (plist-get actual :status)
     ('value
-     (list :name name :status 'ok :payload (plist-get actual :value)))
+     (list :name name :status 'ok
+           :payload
+           (agent-scheme-oracle--normalize-payload
+            (plist-get actual :value))))
     ('values
-     (list :name name :status 'ok :payload (plist-get actual :values)))
+     (list :name name :status 'ok
+           :payload
+           (agent-scheme-oracle--normalize-payload
+            (plist-get actual :values))))
     ('error
      (list :name name :status 'error
            :message (or (plist-get actual :message)

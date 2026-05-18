@@ -174,6 +174,11 @@ fixtures, and host-effecting R7RS libraries such as `(scheme file)`,
 `(scheme time)`. The target is report-oriented; inspect `agent-mismatch`
 reports as conformance investigation signals.
 
+The oracle normalizes narrow reference writer spelling variation when the same
+R7RS value is otherwise clear, such as Chibi's doubled plus sign in complex NaN
+outputs. It does not collapse semantic distinctions such as exact versus
+inexact numbers.
+
 To focus the report stream, pass a comma-separated status filter:
 
 ```sh

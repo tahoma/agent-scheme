@@ -166,6 +166,21 @@
   (should-not (agent-scheme-oracle-parse-status-filter nil))
   (should-not (agent-scheme-oracle-parse-status-filter "")))
 
+(ert-deftest agent-scheme-oracle-test-normalizes-chibi-complex-nan-output ()
+  "Treat Chibi's complex NaN sign spelling as equivalent report output."
+  (let* ((case (agent-scheme-test-fixture-case 'numeric-polar-special-values))
+         (reference
+          (agent-scheme-oracle-reference
+           :name 'chibi-spelling
+           :command "mock"
+           :evaluator
+           (lambda (_case)
+             '(:status value
+               :value
+               "(0+inf.0i +inf.0++nan.0i +nan.0++nan.0i +nan.0++nan.0i)"))))
+         (report (agent-scheme-oracle-run-case case (list reference))))
+    (should (eq (agent-scheme-oracle-report-status report) 'portable-agree))))
+
 (ert-deftest agent-scheme-oracle-test-chibi-runs-simple-fixture ()
   "Run one small pure fixture through Chibi when it is available."
   (let ((implementation (agent-scheme-oracle-chibi-reference)))
