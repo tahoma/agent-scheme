@@ -20,6 +20,7 @@
           agent-scheme-base-prelude-binding-names
           agent-scheme-base-prelude-binding-specs
           agent-scheme-base-binding-specs
+          agent-scheme-standard-source-library-specs
           agent-scheme-result->external
           agent-scheme-value->external
           agent-scheme-unspecified
@@ -2672,65 +2673,17 @@
         (scheme time)
         (scheme write)))
 
-    ;; Source used to bootstrap `(scheme case-lambda)' as a Scheme library.
-    (define case-lambda-library-source
-      "(define-library (scheme case-lambda)
-         (export case-lambda)
-         (import (scheme base))
-         (begin
-           (define (%case-lambda-matches? formals count)
-             (cond
-              ((symbol? formals) #t)
-              ((null? formals) (= count 0))
-              ((pair? formals)
-               (let loop ((rest formals) (seen 0))
-                 (cond
-                  ((null? rest) (= count seen))
-                  ((pair? rest) (loop (cdr rest) (+ seen 1)))
-                  (else (>= count seen)))))
-              (else #f)))
-           (define-syntax case-lambda
-             (syntax-rules ()
-               ((case-lambda)
-                (lambda args (car '())))
-               ((case-lambda (formals body ...) more ...)
-                (lambda args
-                  (if (%case-lambda-matches? 'formals (length args))
-                      (apply (lambda formals body ...) args)
-                      (apply (case-lambda more ...) args))))))))")
+    ;; Checked-in standard libraries loaded as portable Scheme source files.
+    (define standard-source-library-load-paths
+      '(((scheme case-lambda)
+         "scheme/agent-scheme/standard-library/scheme/case-lambda.sld"
+         "agent-scheme/standard-library/scheme/case-lambda.sld")
+        ((scheme lazy)
+         "scheme/agent-scheme/standard-library/scheme/lazy.sld"
+         "agent-scheme/standard-library/scheme/lazy.sld")))
 
-    ;; Source used to bootstrap `(scheme lazy)' as a Scheme library.
-    (define lazy-library-source
-      "(define-library (scheme lazy)
-         (export delay delay-force force make-promise promise?)
-         (import (scheme base))
-         (begin
-           (define (%promise lazy? value)
-             (list 'agent-scheme-promise lazy? value))
-           (define (promise? obj)
-             (and (pair? obj)
-                  (eq? (car obj) 'agent-scheme-promise)))
-           (define (make-promise obj)
-             (if (promise? obj)
-                 obj
-                 (%promise #t obj)))
-           (define (force promise)
-             (if (promise? promise)
-                 (if (cadr promise)
-                     (car (cdr (cdr promise)))
-                     (let ((value ((car (cdr (cdr promise))))))
-                       (set-car! (cdr promise) #t)
-                       (set-car! (cdr (cdr promise)) value)
-                       value))
-                 promise))
-           (define-syntax delay-force
-             (syntax-rules ()
-               ((delay-force expression)
-                (%promise #f (lambda () expression)))))
-           (define-syntax delay
-             (syntax-rules ()
-               ((delay expression)
-                (delay-force expression))))))")
+    ;; Cache selected source path and contents by standard library key.
+    (define standard-source-library-source-cache '())
 
     ;; Report whether DATUM is a proper R7RS library name.
     (define (proper-library-name? datum)
@@ -2762,6 +2715,93 @@
        ((null? alist) #f)
        ((equal? key (caar alist)) (car alist))
        (else (assoc/equal key (cdr alist)))))
+
+    ;; Return the configured path candidates for source-backed standard library
+    ;; KEY.
+    (define (standard-source-library-paths key)
+      (let ((entry (assoc/equal key standard-source-library-load-paths)))
+        (if entry
+            (cdr entry)
+            (eval-error "standard source library is not available" key))))
+
+    ;; Read KEY's source from the first path that works in this host layout.
+    (define (load-standard-source-library-source key)
+      (let try ((paths (standard-source-library-paths key)))
+        (if (null? paths)
+            (eval-error "unable to load standard source library" key)
+            (guard (condition
+                    (else (try (cdr paths))))
+              (let ((source
+                     (call-with-input-file
+                         (car paths)
+                       read-port-string)))
+                (cons (car paths) source))))))
+
+    ;; Return cached source-file/source pair for source-backed standard library
+    ;; KEY.
+    (define (standard-source-library-source-entry key)
+      (let ((cached (assoc/equal key standard-source-library-source-cache)))
+        (if cached
+            (cdr cached)
+            (let ((loaded (load-standard-source-library-source key)))
+              (set! standard-source-library-source-cache
+                    (cons (cons key loaded)
+                          standard-source-library-source-cache))
+              loaded))))
+
+    ;; Return KEY's portable source text.
+    (define (standard-source-library-source key)
+      (cdr (standard-source-library-source-entry key)))
+
+    ;; Return the single define-library form read from KEY's source file.
+    (define (standard-source-library-form key)
+      (let ((forms (agent-scheme-read-all
+                    (standard-source-library-source key))))
+        (if (not (= (length forms) 1))
+            (eval-error
+             "standard source library must contain exactly one form"
+             key))
+        (let* ((form (car forms))
+               (parts (proper-list-elements
+                       form
+                       "standard source library")))
+          (if (not (and (>= (length parts) 2)
+                        (identifier-named? (car parts) 'define-library)
+                        (equal? (second parts) key)))
+              (eval-error
+               "standard source library name does not match registry key"
+               key))
+          form)))
+
+    ;; Return external export names declared by source library FORM.
+    (define (standard-source-library-export-names form)
+      (apply append
+             (map
+              (lambda (declaration)
+                (if (form-named? declaration 'export)
+                    (map cdr
+                         (export-specs
+                          (cdr
+                           (proper-list-elements
+                            declaration
+                            "standard source export"))))
+                    '()))
+              (cddr
+               (proper-list-elements form "standard source library")))))
+
+    ;; Public metadata accessor for standard libraries backed by source files.
+    (define (agent-scheme-standard-source-library-specs)
+      (map
+       (lambda (entry)
+         (let* ((key (car entry))
+                (source-entry (standard-source-library-source-entry key)))
+           (list
+            (list 'name key)
+            (list 'exports
+                  (standard-source-library-export-names
+                   (standard-source-library-form key)))
+            (list 'source-file (car source-entry)))))
+       standard-source-library-load-paths))
 
     ;; Return the registered library for KEY in CONTEXT, or #f.
     (define (library-registry-ref context key)
@@ -2880,10 +2920,13 @@
 
     ;; Read and evaluate a define-library form from SOURCE.
     (define (register-source-library! source context environment)
-      (eval-define-library
-       (agent-scheme-read source)
-       environment
-       context))
+      (let ((forms (agent-scheme-read-all source)))
+        (if (not (= (length forms) 1))
+            (eval-error "source library must contain exactly one form"))
+        (eval-define-library
+         (car forms)
+         environment
+         context)))
 
     ;; Return NAME's binding from EXPORTS, or #f when absent.
     (define (find-library-export name exports)
@@ -3107,7 +3150,7 @@
       (cond
        ((equal? key '(scheme case-lambda))
         (register-source-library!
-         case-lambda-library-source
+         (standard-source-library-source key)
          context
          environment))
        ((equal? key '(scheme char))
@@ -3149,7 +3192,7 @@
          context))
        ((equal? key '(scheme lazy))
         (register-source-library!
-         lazy-library-source
+         (standard-source-library-source key)
          context
          environment))
        ((equal? key '(scheme load))
