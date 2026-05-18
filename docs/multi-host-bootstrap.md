@@ -5,6 +5,12 @@ each host as a replaceable adapter. Emacs is the first host and the bootstrap
 vehicle, but the portable runtime model should remain able to move into other
 Scheme implementations, compiled backends, and non-Emacs user interfaces.
 
+The portable R7RS implementation is not a demonstration harness or downstream
+copy of the Emacs Lisp bootstrap. It is a first-class implementation path and
+the strategic route toward a natively compiled reader, evaluator, emitter, and
+REPL. While both implementations coexist, language-core work should preserve
+architectural parity instead of allowing the portable side to trail as cleanup.
+
 This document records the host/core boundary for contributors before the
 adapter APIs become executable code.
 
@@ -16,6 +22,8 @@ adapter APIs become executable code.
 - Put host authority behind explicit adapter-provided capability libraries.
 - Make Emacs useful early without making Emacs the semantic center.
 - Keep at least one non-Emacs validation path available for portable core work.
+- Keep Emacs Lisp and portable R7RS modules in parity for language semantics,
+  pass boundaries, standard libraries, fixtures, and public behavior.
 
 ## Core and Adapter Boundary
 
@@ -123,10 +131,10 @@ and auditable at the Scheme boundary.
 
 The Emacs adapter is the first body for Agent Scheme because it can provide
 native buffers, project integration, ERT tests, process management, and policy
-prompts early. Emacs Lisp bootstrap modules may mirror portable behavior while
-the runtime grows, but each mirror should preserve the same library names,
-datum shapes, result rendering, policy expectations, and conformance fixtures as
-the portable core.
+prompts early. That bootstrap role does not make Emacs Lisp the architectural
+reference. While the Emacs Lisp and portable Scheme implementations coexist,
+both sides should preserve the same library names, datum shapes, result
+rendering, policy expectations, pass boundaries, and conformance fixtures.
 
 Emacs-specific facilities should appear through explicit libraries such as:
 
@@ -148,8 +156,9 @@ without changing the language that Agent Scheme promises to users.
 
 Bootstrap work should proceed in this order:
 
-1. Maintain the Emacs Lisp bootstrap implementation and portable R7RS modules
-   against the same conformance fixtures.
+1. Maintain architectural parity between the Emacs Lisp bootstrap
+   implementation and portable R7RS modules against the same conformance
+   fixtures.
 2. Move derived helpers and host-neutral libraries into portable Scheme as soon
    as the evaluator can run them.
 3. Keep host effects policy-gated and represented as data before adapter code
@@ -169,8 +178,8 @@ must not replace the R7RS-small user contract.
 
 | Target | Role | Strengths | Constraints | Validation target |
 | --- | --- | --- | --- | --- |
-| Emacs Lisp adapter | First host and bootstrap mirror | Native editor UX, ERT, project buffers, policy prompts | Host-specific objects and dynamic editor state must stay behind handles | `make test` through ERT |
-| Chibi Scheme | First external R7RS validation path | Small R7RS implementation, `.sld` support, useful for CI-style portability checks | Optional on developer machines; not the product host | `AGENT_SCHEME_CHIBI=chibi-scheme make test` |
+| Emacs Lisp adapter | First host and bootstrap adapter | Native editor UX, ERT, project buffers, policy prompts | Host-specific objects and dynamic editor state must stay behind handles | `make test` through ERT |
+| Chibi Scheme | First external R7RS validation path | Small R7RS implementation, `.sld` support, useful for CI-style portability checks | Optional on developer machines; validates the portable product path but is not itself the product host | `AGENT_SCHEME_CHIBI=chibi-scheme make test` |
 | Gauche, Gambit, or Cyclone | Future R7RS compatibility probes | Broader implementation diversity and performance signals | Library/import behavior and extensions differ by implementation | Additional portable test runners |
 | Chez or another R6RS backend | Possible optimized backend | Mature compiler and runtime, strong performance story | R6RS is not the Agent Scheme language contract | R7RS compatibility adapter plus conformance fixtures |
 | Future compiled backend | Long-term runtime strategy | Fast startup or embedding in non-editor hosts | Must preserve inspectable datums, policy, and library semantics | Same core fixture suite |
@@ -210,6 +219,9 @@ the external run, but the fixture shape should still be validated.
 - Put host adapter tests in focused `tests/agent-scheme-*-test.el` files.
 - Keep capability libraries visibly separate from standard Scheme libraries.
 - Keep host performance caches rebuildable from canonical Scheme-readable data.
+- Update Emacs Lisp and portable Scheme pass modules together for core
+  semantics and refactors when practical; otherwise record the parity follow-up
+  explicitly.
 - Document any backend-specific shortcut as an adapter implementation detail,
   not as a change to Agent Scheme semantics.
 

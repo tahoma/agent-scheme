@@ -2,8 +2,7 @@
 
 ;;; Commentary:
 
-;; ERT bridge for portable R7RS facade libraries that mirror pass-boundary
-;; modules.
+;; ERT bridge for portable R7RS pass-boundary libraries.
 
 ;;; Code:
 
@@ -19,7 +18,7 @@
       (executable-find "chibi-scheme")))))
 
 (ert-deftest agent-scheme-scheme-module-boundary-test-r7rs-suite ()
-  "Run the portable R7RS module-boundary facade tests."
+  "Run the portable R7RS module-boundary tests."
   (let ((runner (agent-scheme--scheme-module-boundary-runner)))
     (skip-unless runner)
     (let ((output-buffer
