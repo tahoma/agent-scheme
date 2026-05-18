@@ -299,6 +299,10 @@ modules:
 - The `(scheme base)` primitive registry, portable base prelude discovery, and
   primitive manifest metadata live in `agent-scheme-base.el` so they can be
   inspected without loading an interpreter backend.
+- Library records, source-library discovery, import-set resolution, includes,
+  `cond-expand`, and `define-library` bootstrap support live in
+  `agent-scheme-library.el`; evaluation of library bodies still calls into the
+  current interpreter backend.
 - Default-denied file, process, time, default-port, and host-capability
   primitives are backend-visible capability calls, but their authority decisions
   belong to policy and adapter modules rather than to portable frontend passes.
@@ -647,6 +651,7 @@ Focused test files should mirror the modules:
 - `tests/agent-scheme-runtime-test.el`
 - `tests/agent-scheme-result-test.el`
 - `tests/agent-scheme-library-test.el`
+- `tests/agent-scheme-library-module-test.el`
 - `tests/agent-scheme-macro-test.el`
 - `tests/agent-scheme-normalize-test.el`
 - `tests/agent-scheme-eval-test.el`

@@ -334,6 +334,24 @@ proper list."
       (agent-scheme--eval-error "%s must be a proper list" description))
     (nreverse elements)))
 
+(defun agent-scheme--proper-list-elements-maybe (datum)
+  "Return DATUM as a proper list of elements, or nil if improper."
+  (let ((cursor datum)
+        elements
+        proper)
+    (catch 'done
+      (while t
+        (cond
+         ((null cursor)
+          (setq proper t)
+          (throw 'done nil))
+         ((consp cursor)
+          (push (car cursor) elements)
+          (setq cursor (cdr cursor)))
+         (t
+          (throw 'done nil)))))
+    (and proper (nreverse elements))))
+
 (defun agent-scheme--expect-symbol-name (datum description)
   "Return DATUM's symbol name or signal an error naming DESCRIPTION."
   (or (agent-scheme--symbol-name datum)
