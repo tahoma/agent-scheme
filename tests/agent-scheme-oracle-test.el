@@ -135,6 +135,20 @@
            "(value #0=(a . #0#))")
           '(:status value :value "#0=(a . #0#)"))))
 
+(ert-deftest agent-scheme-oracle-test-parses-output-after-diagnostic-lines ()
+  "Parse oracle output when an implementation emits startup diagnostics."
+  (should
+   (equal (agent-scheme-oracle--parse-reference-output
+           "*warning* cache unavailable\n(value 3)\n")
+          '(:status value :value "3"))))
+
+(ert-deftest agent-scheme-oracle-test-parses-guile-bytevector-output ()
+  "Normalize Guile bytevector writer spelling before reading output."
+  (should
+   (equal (agent-scheme-oracle--parse-reference-output
+           "(value #vu8(1 2 3))\n")
+          '(:status value :value "#u8(1 2 3)"))))
+
 (ert-deftest agent-scheme-oracle-test-filters-reports-by-status ()
   "Filter oracle reports to requested status names."
   (let ((reports
@@ -211,12 +225,75 @@
       (should (equal (agent-scheme-oracle-reference-command implementation)
                      "/example/bin/gosh")))))
 
+(ert-deftest agent-scheme-oracle-test-reference-carries-command-arguments ()
+  "Keep adapter command arguments separate from the executable."
+  (let ((implementation
+         (agent-scheme-oracle-reference
+          :name 'mock-r7rs
+          :command "mock"
+          :arguments '("--r7rs"))))
+    (should (equal (agent-scheme-oracle-reference-arguments implementation)
+                   '("--r7rs")))))
+
+(ert-deftest agent-scheme-oracle-test-guile-reference-uses-environment ()
+  "Build the Guile adapter from AGENT_SCHEME_GUILE when configured."
+  (let ((process-environment
+         (cons "AGENT_SCHEME_GUILE=/example/bin/guile" process-environment))
+        (agent-scheme-oracle-guile-command nil))
+    (let ((implementation (agent-scheme-oracle-guile-reference)))
+      (should (eq (agent-scheme-oracle-reference-name implementation)
+                  'guile))
+      (should (equal (agent-scheme-oracle-reference-command implementation)
+                     "/example/bin/guile"))
+      (should (equal (agent-scheme-oracle-reference-arguments implementation)
+                     '("--no-auto-compile" "--r7rs"))))))
+
+(ert-deftest agent-scheme-oracle-test-sagittarius-reference-uses-environment ()
+  "Build the Sagittarius adapter from AGENT_SCHEME_SAGITTARIUS when configured."
+  (let ((process-environment
+         (cons "AGENT_SCHEME_SAGITTARIUS=/example/bin/sagittarius"
+               process-environment))
+        (agent-scheme-oracle-sagittarius-command nil))
+    (let ((implementation (agent-scheme-oracle-sagittarius-reference)))
+      (should (eq (agent-scheme-oracle-reference-name implementation)
+                  'sagittarius))
+      (should (equal (agent-scheme-oracle-reference-command implementation)
+                     "/example/bin/sagittarius"))
+      (should (equal (agent-scheme-oracle-reference-arguments implementation)
+                     '("-r" "7"))))))
+
 (ert-deftest agent-scheme-oracle-test-default-references-include-gauche ()
   "Use Chibi and Gauche as the default oracle reference set."
   (should
    (equal (mapcar #'agent-scheme-oracle-reference-name
                   (agent-scheme-oracle-default-references))
           '(chibi gauche))))
+
+(ert-deftest agent-scheme-oracle-test-all-references-include-four-candidates ()
+  "Expose the full candidate set separately from defaults."
+  (should
+   (equal (mapcar #'agent-scheme-oracle-reference-name
+                  (agent-scheme-oracle-all-references))
+          '(chibi gauche guile sagittarius))))
+
+(ert-deftest agent-scheme-oracle-test-parses-reference-filter ()
+  "Parse comma-separated oracle reference names from batch environment text."
+  (should
+   (equal
+    (agent-scheme-oracle-parse-reference-filter "guile, sagittarius")
+    '(guile sagittarius)))
+  (should-not (agent-scheme-oracle-parse-reference-filter nil))
+  (should-error
+   (agent-scheme-oracle-parse-reference-filter "unknown")
+   :type 'error))
+
+(ert-deftest agent-scheme-oracle-test-selects-references-by-name ()
+  "Resolve selected reference adapters in requested order."
+  (should
+   (equal (mapcar #'agent-scheme-oracle-reference-name
+                  (agent-scheme-oracle-selected-references
+                   '(sagittarius guile)))
+          '(sagittarius guile))))
 
 (ert-deftest agent-scheme-oracle-test-chibi-runs-simple-fixture ()
   "Run one small pure fixture through Chibi when it is available."
@@ -229,6 +306,22 @@
 (ert-deftest agent-scheme-oracle-test-gauche-runs-simple-fixture ()
   "Run one small pure fixture through Gauche when it is available."
   (let ((implementation (agent-scheme-oracle-gauche-reference)))
+    (skip-unless (agent-scheme-oracle-reference-command implementation))
+    (let* ((case (agent-scheme-test-fixture-case 'primitive-procedure-call))
+           (result (agent-scheme-oracle-run-reference implementation case)))
+      (should (equal result '(:status value :value "3"))))))
+
+(ert-deftest agent-scheme-oracle-test-guile-runs-simple-fixture ()
+  "Run one small pure fixture through Guile when it is available."
+  (let ((implementation (agent-scheme-oracle-guile-reference)))
+    (skip-unless (agent-scheme-oracle-reference-command implementation))
+    (let* ((case (agent-scheme-test-fixture-case 'primitive-procedure-call))
+           (result (agent-scheme-oracle-run-reference implementation case)))
+      (should (equal result '(:status value :value "3"))))))
+
+(ert-deftest agent-scheme-oracle-test-sagittarius-runs-simple-fixture ()
+  "Run one small pure fixture through Sagittarius when it is available."
+  (let ((implementation (agent-scheme-oracle-sagittarius-reference)))
     (skip-unless (agent-scheme-oracle-reference-command implementation))
     (let* ((case (agent-scheme-test-fixture-case 'primitive-procedure-call))
            (result (agent-scheme-oracle-run-reference implementation case)))

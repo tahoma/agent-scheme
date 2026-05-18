@@ -42,6 +42,20 @@ AGENT_SCHEME_GAUCHE and then PATH."
   :type '(choice (const :tag "Discover automatically" nil) string)
   :group 'agent-scheme-oracle)
 
+(defcustom agent-scheme-oracle-guile-command nil
+  "Optional Guile executable for oracle runs.
+When nil, `agent-scheme-oracle-guile-reference' consults
+AGENT_SCHEME_GUILE and then PATH."
+  :type '(choice (const :tag "Discover automatically" nil) string)
+  :group 'agent-scheme-oracle)
+
+(defcustom agent-scheme-oracle-sagittarius-command nil
+  "Optional Sagittarius executable for oracle runs.
+When nil, `agent-scheme-oracle-sagittarius-reference' consults
+AGENT_SCHEME_SAGITTARIUS and then PATH."
+  :type '(choice (const :tag "Discover automatically" nil) string)
+  :group 'agent-scheme-oracle)
+
 (defconst agent-scheme-oracle--policy-gated-libraries
   '((scheme file)
     (scheme load)
@@ -59,14 +73,20 @@ AGENT_SCHEME_GAUCHE and then PATH."
     not-oracle-eligible)
   "Stable oracle report status order.")
 
+(defconst agent-scheme-oracle-reference-names
+  '(chibi gauche guile sagittarius)
+  "Stable oracle reference adapter name order.")
+
 (cl-defstruct (agent-scheme-oracle-reference
                (:constructor agent-scheme-oracle-reference
-                             (&key name command evaluator)))
+                             (&key name command arguments evaluator)))
   "Reference implementation adapter.
-NAME is a symbol such as `chibi'.  COMMAND is an executable path or
-nil when unavailable.  EVALUATOR is an optional test hook that
-receives a fixture case and returns a normalized actual plist."
-  name command evaluator)
+NAME is a symbol such as `chibi'.  COMMAND is an executable path
+or nil when unavailable.  ARGUMENTS is a list of command-line
+arguments that precede the generated fixture program path.
+EVALUATOR is an optional test hook that receives a fixture case
+and returns a normalized actual plist."
+  name command arguments evaluator)
 
 (cl-defstruct (agent-scheme-oracle-report
                (:constructor agent-scheme-oracle--make-report
@@ -368,30 +388,52 @@ multiple values."
     (phase
      (error "Unsupported oracle phase: %S" phase))))
 
+(defun agent-scheme-oracle--reference-datum-result (datum)
+  "Return normalized oracle result for DATUM, or nil."
+  (cond
+   ((and (consp datum)
+         (agent-scheme-oracle--datum-symbol-p (car datum) "value")
+         (consp (cdr datum))
+         (null (cddr datum)))
+    (list :status 'value
+          :value (agent-scheme-datum->external
+                  (cadr datum))))
+   ((and (consp datum)
+         (agent-scheme-oracle--datum-symbol-p (car datum) "values")
+         (consp (cdr datum))
+         (listp (cadr datum))
+         (null (cddr datum)))
+    (list :status 'values
+          :values
+          (mapcar #'agent-scheme-datum->external
+                  (cadr datum))))))
+
+(defun agent-scheme-oracle--normalize-reference-output-line (line)
+  "Normalize known reference writer spellings in raw output LINE."
+  (replace-regexp-in-string
+   "#vu8("
+   "#u8("
+   line
+   t
+   t))
+
 (defun agent-scheme-oracle--parse-reference-output (output)
   "Parse reference implementation OUTPUT into a normalized actual plist."
-  (let* ((trimmed (string-trim output))
-         (datum (agent-scheme-read trimmed)))
-    (cond
-     ((and (consp datum)
-           (agent-scheme-oracle--datum-symbol-p (car datum) "value")
-           (consp (cdr datum))
-           (null (cddr datum)))
-       (list :status 'value
-             :value (agent-scheme-datum->external
-                     (cadr datum))))
-     ((and (consp datum)
-           (agent-scheme-oracle--datum-symbol-p (car datum) "values")
-           (consp (cdr datum))
-           (listp (cadr datum))
-           (null (cddr datum)))
-       (list :status 'values
-             :values
-             (mapcar #'agent-scheme-datum->external
-                     (cadr datum))))
-      (t
-       (list :status 'error
-             :message (format "Malformed oracle output: %s" trimmed))))))
+  (let ((trimmed (string-trim output)))
+    (or
+     (catch 'result
+       (dolist (line (reverse (split-string trimmed "\n" t "[[:space:]\r]+")))
+         (condition-case nil
+             (let ((result
+                    (agent-scheme-oracle--reference-datum-result
+                     (agent-scheme-read
+                      (agent-scheme-oracle--normalize-reference-output-line
+                       line)))))
+               (when result
+                 (throw 'result result)))
+           (error nil))))
+     (list :status 'error
+           :message (format "Malformed oracle output: %s" trimmed)))))
 
 ;;;###autoload
 (defun agent-scheme-oracle-run-reference (reference case)
@@ -414,12 +456,15 @@ multiple values."
               (insert "\n"))
             (condition-case condition
                 (let ((status
-                       (process-file
+                       (apply
+                        #'process-file
                         (agent-scheme-oracle-reference-command reference)
                         nil
                         output-buffer
                         nil
-                        program-file)))
+                        (append
+                         (agent-scheme-oracle-reference-arguments reference)
+                         (list program-file)))))
                   (with-current-buffer output-buffer
                     (let ((output (buffer-string)))
                       (if (equal status 0)
@@ -643,33 +688,100 @@ When STATUSES is nil, return REPORTS unchanged."
           (error "Unknown oracle status filter: %S" status)))
       statuses)))
 
+(defun agent-scheme-oracle--configured-command (custom env-name executable)
+  "Return CUSTOM, ENV-NAME, or discovered EXECUTABLE command."
+  (or custom
+      (let ((env (getenv env-name)))
+        (and env (not (string-empty-p env)) env))
+      (executable-find executable)))
+
 ;;;###autoload
 (defun agent-scheme-oracle-chibi-reference ()
   "Return the Chibi Scheme reference adapter."
-  (let ((configured
-         (or agent-scheme-oracle-chibi-command
-             (let ((env (getenv "AGENT_SCHEME_CHIBI")))
-               (and env (not (string-empty-p env)) env)))))
-    (agent-scheme-oracle-reference
-     :name 'chibi
-     :command (or configured (executable-find "chibi-scheme")))))
+  (agent-scheme-oracle-reference
+   :name 'chibi
+   :command
+   (agent-scheme-oracle--configured-command
+    agent-scheme-oracle-chibi-command
+    "AGENT_SCHEME_CHIBI"
+    "chibi-scheme")))
 
 ;;;###autoload
 (defun agent-scheme-oracle-gauche-reference ()
   "Return the Gauche reference adapter."
-  (let ((configured
-         (or agent-scheme-oracle-gauche-command
-             (let ((env (getenv "AGENT_SCHEME_GAUCHE")))
-               (and env (not (string-empty-p env)) env)))))
-    (agent-scheme-oracle-reference
-     :name 'gauche
-     :command (or configured (executable-find "gosh")))))
+  (agent-scheme-oracle-reference
+   :name 'gauche
+   :command
+   (agent-scheme-oracle--configured-command
+    agent-scheme-oracle-gauche-command
+    "AGENT_SCHEME_GAUCHE"
+    "gosh")))
+
+;;;###autoload
+(defun agent-scheme-oracle-guile-reference ()
+  "Return the Guile reference adapter."
+  (agent-scheme-oracle-reference
+   :name 'guile
+   :command
+   (agent-scheme-oracle--configured-command
+    agent-scheme-oracle-guile-command
+    "AGENT_SCHEME_GUILE"
+    "guile")
+   :arguments '("--no-auto-compile" "--r7rs")))
+
+;;;###autoload
+(defun agent-scheme-oracle-sagittarius-reference ()
+  "Return the Sagittarius reference adapter."
+  (agent-scheme-oracle-reference
+   :name 'sagittarius
+   :command
+   (agent-scheme-oracle--configured-command
+    agent-scheme-oracle-sagittarius-command
+    "AGENT_SCHEME_SAGITTARIUS"
+    "sagittarius")
+   :arguments '("-r" "7")))
+
+(defun agent-scheme-oracle--reference-builder (name)
+  "Return the reference builder function for NAME."
+  (pcase name
+    ('chibi #'agent-scheme-oracle-chibi-reference)
+    ('gauche #'agent-scheme-oracle-gauche-reference)
+    ('guile #'agent-scheme-oracle-guile-reference)
+    ('sagittarius #'agent-scheme-oracle-sagittarius-reference)
+    (_ (error "Unknown oracle reference: %S" name))))
+
+;;;###autoload
+(defun agent-scheme-oracle-selected-references (names)
+  "Return reference adapters selected by NAMES."
+  (mapcar
+   (lambda (name)
+     (funcall (agent-scheme-oracle--reference-builder name)))
+   names))
+
+;;;###autoload
+(defun agent-scheme-oracle-all-references ()
+  "Return all candidate reference implementation adapters."
+  (agent-scheme-oracle-selected-references
+   agent-scheme-oracle-reference-names))
 
 ;;;###autoload
 (defun agent-scheme-oracle-default-references ()
   "Return the default reference implementation adapters."
-  (list (agent-scheme-oracle-chibi-reference)
-        (agent-scheme-oracle-gauche-reference)))
+  (agent-scheme-oracle-selected-references '(chibi gauche)))
+
+;;;###autoload
+(defun agent-scheme-oracle-parse-reference-filter (value)
+  "Parse comma-separated oracle reference adapter filter VALUE."
+  (when (and value (> (length (string-trim value)) 0))
+    (let ((names
+           (mapcar
+            (lambda (part)
+              (intern (string-trim part)))
+            (split-string value "," t "[[:space:]\n\t]+"))))
+      (dolist (name names)
+        (unless (memq name agent-scheme-oracle-reference-names)
+          (error "Unknown oracle reference filter: %S" name)))
+      names)))
 
 ;;;###autoload
 (defun agent-scheme-oracle-run-suite (&optional references)
@@ -681,7 +793,13 @@ When STATUSES is nil, return REPORTS unchanged."
 ;;;###autoload
 (defun agent-scheme-oracle-batch-main ()
   "Run the oracle suite and print Scheme-readable reports."
-  (let* ((reports (agent-scheme-oracle-run-suite))
+  (let* ((reference-names
+          (agent-scheme-oracle-parse-reference-filter
+           (getenv "AGENT_SCHEME_ORACLE_REFERENCES")))
+         (references
+          (and reference-names
+               (agent-scheme-oracle-selected-references reference-names)))
+         (reports (agent-scheme-oracle-run-suite references))
          (statuses
           (agent-scheme-oracle-parse-status-filter
            (getenv "AGENT_SCHEME_ORACLE_STATUSES")))

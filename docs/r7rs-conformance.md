@@ -16,7 +16,9 @@ marked `implemented`.
 pure shared fixtures. The default adapters target Chibi Scheme through
 `AGENT_SCHEME_CHIBI` or `chibi-scheme` on `PATH` and Gauche through
 `AGENT_SCHEME_GAUCHE` or `gosh` on `PATH`; missing references are reported as
-`unsupported-reference` without affecting `make test`.
+`unsupported-reference` without affecting `make test`. Guile and Sagittarius
+adapters can be selected with `AGENT_SCHEME_ORACLE_REFERENCES` when comparing
+candidate default reference sets.
 
 ## Status Values
 

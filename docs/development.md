@@ -17,6 +17,8 @@ Optional but useful:
 - Chibi Scheme, `chibi-scheme`, for running portable R7RS bootstrap tests
   and the reference implementation oracle runner
 - Gauche, `gosh`, for additional reference implementation oracle coverage
+- Guile, `guile`, and Sagittarius, `sagittarius`, for broader optional oracle
+  comparison coverage
 - ShellCheck or other local lint tools for future scripts
 
 ## GitHub Access
@@ -164,13 +166,16 @@ implementations through the oracle runner:
 make conformance-oracle
 ```
 
-The default reference adapters are Chibi Scheme and Gauche. The runner uses
-`AGENT_SCHEME_CHIBI` and `AGENT_SCHEME_GAUCHE` when set, otherwise it searches
-for `chibi-scheme` and `gosh` on `PATH`. Each adapter writes eligible fixtures
-to a temporary R7RS program and invokes the reference implementation with that
-file as the command-line program argument. Missing reference implementations are
-reported as `unsupported-reference` in Scheme-readable oracle reports and do not
-affect the default `make test` command.
+The default reference adapters are Chibi Scheme and Gauche. Optional adapters
+also exist for Guile and Sagittarius so contributors can compare a wider
+implementation matrix before changing defaults. The runner uses
+`AGENT_SCHEME_CHIBI`, `AGENT_SCHEME_GAUCHE`, `AGENT_SCHEME_GUILE`, and
+`AGENT_SCHEME_SAGITTARIUS` when set, otherwise it searches for `chibi-scheme`,
+`gosh`, `guile`, and `sagittarius` on `PATH`. Each adapter writes eligible
+fixtures to a temporary R7RS program and invokes the reference implementation
+with that file as the command-line program argument. Missing reference
+implementations are reported as `unsupported-reference` in Scheme-readable
+oracle reports and do not affect the default `make test` command.
 
 Oracle reports identify each fixture by case id and classify the comparison as
 `portable-agree`, `implementation-variant`, `agent-mismatch`,
@@ -190,6 +195,13 @@ To focus the report stream, pass a comma-separated status filter:
 
 ```sh
 AGENT_SCHEME_ORACLE_STATUSES='agent-mismatch,implementation-variant' make conformance-oracle
+```
+
+To compare a chosen reference implementation set, pass a comma-separated
+reference filter:
+
+```sh
+AGENT_SCHEME_ORACLE_REFERENCES='chibi,gauche,guile,sagittarius' make conformance-oracle
 ```
 
 To print a compact status count before the report stream:
