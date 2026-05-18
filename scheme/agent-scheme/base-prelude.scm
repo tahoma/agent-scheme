@@ -5,6 +5,8 @@
 ;;; definitions small and self-contained: metadata extraction expects each
 ;;; top-level form to be one `define'.
 
+;; Direct boolean and selector helpers are intentionally terse; their R7RS names
+;; and one-expression bodies fully state their contracts.
 (define (not obj)
   (if obj #f #t))
 
@@ -23,6 +25,8 @@
 (define (cddr pair)
   (cdr (cdr pair)))
 
+;; List traversal helpers document where this prelude relies on primitive
+;; errors to enforce proper-list and index contracts.
 (define (length list)
   ;; R7RS requires a proper list; reaching a non-pair tail forces an error
   ;; through a primitive operation instead of silently accepting dotted input.
@@ -141,6 +145,8 @@
             (loop (cdr cursor)))))
   (loop alist))
 
+;; Numeric helpers are derived from kernel arithmetic primitives so metadata can
+;; distinguish small Scheme definitions from primitive callbacks.
 (define (zero? number)
   (= number 0))
 
@@ -184,6 +190,8 @@
               (cdr remaining))))
   (loop first rest))
 
+;; Higher-order sequence helpers share traversal logic and intentionally stop at
+;; the shortest list, matching the local R7RS-small reference.
 (define (map proc first-list . rest-lists)
   ;; R7RS `map' and `for-each' stop at the shortest input list.
   (define (any-null? lists)

@@ -5,9 +5,9 @@
 ;;; `syntax-rules' so the bootstrap macro expander remains the only expansion
 ;;; mechanism required here.
 
+;; Mirrors the R7RS derived-expression definition, including the `=>' receiver
+;; clauses that pass the tested value to a procedure.
 (define-syntax cond
-  ;; Mirrors the R7RS derived-expression definition, including the `=>'
-  ;; receiver clauses that pass the tested value to a procedure.
   (syntax-rules (else =>)
     ((cond (else result1 result2 ...))
      (begin result1 result2 ...))
@@ -33,6 +33,8 @@
          (begin result1 result2 ...)
          (cond clause1 clause2 ...)))))
 
+;; Uses `memv' against quoted datum lists as in R7RS, while `=>' receiver
+;; clauses receive the selected key value.
 (define-syntax case
   (syntax-rules (else =>)
     ((case (key ...)
@@ -66,6 +68,8 @@
          (begin result1 result2 ...)
          (case key clause clauses ...)))))
 
+;; Short-circuit boolean macros must evaluate each test at most once and return
+;; the original true value where R7RS requires it.
 (define-syntax and
   (syntax-rules ()
     ((and) #t)
@@ -81,6 +85,8 @@
      (let ((temp test1))
        (if temp temp (or test2 ...))))))
 
+;; Conditional sequencing macros are direct `if' / `begin' rewrites and leave
+;; the no-body-result case to the evaluator's unspecified value.
 (define-syntax when
   (syntax-rules ()
     ((when test result1 result2 ...)
@@ -93,9 +99,9 @@
      (if (not test)
          (begin result1 result2 ...)))))
 
+;; Named `let' lowers through `letrec' so the tag is bound recursively before
+;; the initial call is evaluated.
 (define-syntax let
-  ;; Named `let' lowers through `letrec' so the tag is bound recursively before
-  ;; the initial call is evaluated.
   (syntax-rules ()
     ((let ((name val) ...) body1 body2 ...)
      ((lambda (name ...) body1 body2 ...)
@@ -106,6 +112,8 @@
         tag)
       val ...))))
 
+;; Expands to nested `let' forms so each initializer sees earlier bindings
+;; without adding another evaluator special form.
 (define-syntax let*
   (syntax-rules ()
     ((let* () body1 body2 ...)
@@ -116,9 +124,9 @@
        (let* ((name2 val2) ...)
          body1 body2 ...)))))
 
+;; The `"step"' literal is a private marker used only inside this macro's
+;; recursive expansion to choose each variable's optional step expression.
 (define-syntax do
-  ;; The `"step"' literal is a private marker used only inside this macro's
-  ;; recursive expansion to choose each variable's optional step expression.
   (syntax-rules ()
     ((do ((var init step ...) ...)
          (test expr ...)
@@ -141,9 +149,9 @@
     ((do "step" x y)
      y)))
 
+;; Parameter binding lowers through `dynamic-wind' so captured continuations
+;; restore and re-enter parameter values through the same wind protocol.
 (define-syntax parameterize
-  ;; Parameter binding lowers through `dynamic-wind' so captured continuations
-  ;; restore and re-enter parameter values through the same wind protocol.
   (syntax-rules ()
     ((parameterize () body1 body2 ...)
      (begin body1 body2 ...))
@@ -165,9 +173,9 @@
             (parameter active-value)
             (set! active-value swap-value))))))))
 
+;; Runtime feature checks are intentionally tiny during bootstrap: `r7rs' and
+;; `(library (scheme base))' are known, while other features fall through.
 (define-syntax cond-expand
-  ;; Runtime feature checks are intentionally tiny during bootstrap: `r7rs' and
-  ;; `(library (scheme base))' are known, while other features fall through.
   (syntax-rules (and or not else r7rs library scheme base)
     ((cond-expand)
      (syntax-error "Unfulfilled cond-expand"))
@@ -207,6 +215,8 @@
     ((cond-expand (feature-id body ...) more-clauses ...)
      (cond-expand more-clauses ...))))
 
+;; `guard' captures both the normal return path and handler re-raise path so
+;; continuable exceptions preserve R7RS control behavior.
 (define-syntax guard
   (syntax-rules ()
     ((guard (var clause ...) e1 e2 ...)
@@ -232,6 +242,8 @@
                 (lambda ()
                   (apply values args)))))))))))))
 
+;; Private helper macro for `guard'; `reraise' is an expression, not an exposed
+;; binding, and `else' / `=>' keep their ordinary guard-clause roles.
 (define-syntax guard-aux
   (syntax-rules (else =>)
     ((guard-aux reraise (else result1 result2 ...))
