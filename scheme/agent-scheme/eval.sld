@@ -6459,22 +6459,23 @@
     ;; Implement the `read-bytevector!` primitive with argument validation and
     ;; Agent Scheme values.
     (define (primitive-read-bytevector! arguments context)
-      (let* ((target (expect-bytevector
+      (let* ((arity (length arguments))
+             (target (expect-bytevector
                       (car arguments)
                       "read-bytevector! target"))
-             (port (if (null? (cdr arguments))
+             (port (if (< arity 2)
                        #f
                        (expect-binary-input-port
                         (second arguments)
                         "read-bytevector!")))
-             (start (if (null? (cddr arguments))
+             (start (if (< arity 3)
                         0
                         (expect-nonnegative-index
                          (third arguments)
                          (bytevector-length target)
                          "read-bytevector!"
                          #t)))
-             (end (if (null? (cdr (cddr arguments)))
+             (end (if (< arity 4)
                       (bytevector-length target)
                       (expect-nonnegative-index
                        (fourth arguments)
