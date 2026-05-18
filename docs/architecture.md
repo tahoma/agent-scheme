@@ -615,6 +615,7 @@ Likely Emacs Lisp bootstrap and adapter modules:
 
 - `lisp/agent-scheme-reader.el`
 - `lisp/agent-scheme-runtime.el`
+- `lisp/agent-scheme-result.el`
 - `lisp/agent-scheme-datum.el`
 - `lisp/agent-scheme-library.el`
 - `lisp/agent-scheme-macro.el`
@@ -641,6 +642,7 @@ Focused test files should mirror the modules:
 
 - `tests/agent-scheme-reader-test.el`
 - `tests/agent-scheme-runtime-test.el`
+- `tests/agent-scheme-result-test.el`
 - `tests/agent-scheme-library-test.el`
 - `tests/agent-scheme-macro-test.el`
 - `tests/agent-scheme-normalize-test.el`
