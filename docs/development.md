@@ -21,6 +21,8 @@ Optional but useful:
   comparison coverage
 - Racket, `racket`, plus its `r7rs` package for developer oracle comparisons;
   install the package with `raco pkg install --auto r7rs`
+- CHICKEN Scheme, `csi`, plus its `r7rs` egg for developer oracle comparisons;
+  install the egg with `chicken-install r7rs`
 - ShellCheck or other local lint tools for future scripts
 
 ## GitHub Access
@@ -169,17 +171,19 @@ make conformance-oracle
 ```
 
 The default reference adapters are Chibi Scheme and Sagittarius. Gauche, Guile,
-and Racket remain opt-in comparison adapters so contributors can inspect a wider
-implementation matrix before changing defaults. The runner uses
+Racket, and CHICKEN remain opt-in comparison adapters so contributors can
+inspect a wider implementation matrix before changing defaults. The runner uses
 `AGENT_SCHEME_CHIBI`, `AGENT_SCHEME_GAUCHE`, `AGENT_SCHEME_GUILE`,
-`AGENT_SCHEME_SAGITTARIUS`, and `AGENT_SCHEME_RACKET` when set, otherwise it
-searches for `chibi-scheme`, `gosh`, `guile`, `sagittarius`, and `racket` on
-`PATH`. The Racket adapter requires Racket's separate `r7rs` package and wraps
-generated fixture programs with `#lang r7rs`. Each adapter writes eligible
-fixtures to a temporary R7RS program and invokes the reference implementation
-with that file as the command-line program argument. Missing reference
-implementations are reported as `unsupported-reference` in Scheme-readable
-oracle reports and do not affect the default `make test` command.
+`AGENT_SCHEME_SAGITTARIUS`, `AGENT_SCHEME_RACKET`, and
+`AGENT_SCHEME_CHICKEN` when set, otherwise it searches for `chibi-scheme`,
+`gosh`, `guile`, `sagittarius`, `racket`, and `csi` on `PATH`. The Racket
+adapter requires Racket's separate `r7rs` package and wraps generated fixture
+programs with `#lang r7rs`. The CHICKEN adapter requires the `r7rs` egg and
+invokes `csi` with `-q -R r7rs -s`. Each adapter writes eligible fixtures to a
+temporary R7RS program and invokes the reference implementation with that file
+as the command-line program argument. Missing reference implementations are
+reported as `unsupported-reference` in Scheme-readable oracle reports and do
+not affect the default `make test` command.
 
 Oracle reports identify each fixture by case id and classify the comparison as
 `portable-agree`, `implementation-variant`, `agent-mismatch`,
@@ -205,7 +209,7 @@ To compare a chosen reference implementation set, pass a comma-separated
 reference filter:
 
 ```sh
-AGENT_SCHEME_ORACLE_REFERENCES='chibi,gauche,guile,sagittarius,racket' make conformance-oracle
+AGENT_SCHEME_ORACLE_REFERENCES='chibi,gauche,guile,sagittarius,racket,chicken' make conformance-oracle
 ```
 
 To print a compact status count before the report stream:

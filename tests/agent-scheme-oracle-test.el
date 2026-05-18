@@ -292,6 +292,20 @@
                 (agent-scheme-oracle-reference-program-filter implementation)
                 "(import (scheme base))"))))))
 
+(ert-deftest agent-scheme-oracle-test-chicken-reference-uses-environment ()
+  "Build the CHICKEN adapter from AGENT_SCHEME_CHICKEN when configured."
+  (let ((process-environment
+         (cons "AGENT_SCHEME_CHICKEN=/example/bin/csi"
+               process-environment))
+        (agent-scheme-oracle-chicken-command nil))
+    (let ((implementation (agent-scheme-oracle-chicken-reference)))
+      (should (eq (agent-scheme-oracle-reference-name implementation)
+                  'chicken))
+      (should (equal (agent-scheme-oracle-reference-command implementation)
+                     "/example/bin/csi"))
+      (should (equal (agent-scheme-oracle-reference-arguments implementation)
+                     '("-q" "-R" "r7rs" "-s"))))))
+
 (ert-deftest agent-scheme-oracle-test-default-references-use-chibi-sagittarius ()
   "Use Chibi and Sagittarius as the default oracle reference set."
   (should
@@ -299,19 +313,19 @@
                   (agent-scheme-oracle-default-references))
           '(chibi sagittarius))))
 
-(ert-deftest agent-scheme-oracle-test-all-references-include-five-candidates ()
+(ert-deftest agent-scheme-oracle-test-all-references-include-six-candidates ()
   "Expose the full candidate set separately from defaults."
   (should
    (equal (mapcar #'agent-scheme-oracle-reference-name
                   (agent-scheme-oracle-all-references))
-          '(chibi gauche guile sagittarius racket))))
+          '(chibi gauche guile sagittarius racket chicken))))
 
 (ert-deftest agent-scheme-oracle-test-parses-reference-filter ()
   "Parse comma-separated oracle reference names from batch environment text."
   (should
    (equal
-    (agent-scheme-oracle-parse-reference-filter "guile, racket")
-    '(guile racket)))
+    (agent-scheme-oracle-parse-reference-filter "racket, chicken")
+    '(racket chicken)))
   (should-not (agent-scheme-oracle-parse-reference-filter nil))
   (should-error
    (agent-scheme-oracle-parse-reference-filter "unknown")
@@ -353,6 +367,17 @@
   "Run one small pure fixture through Sagittarius when it is available."
   (let ((implementation (agent-scheme-oracle-sagittarius-reference)))
     (skip-unless (agent-scheme-oracle-reference-command implementation))
+    (let* ((case (agent-scheme-test-fixture-case 'primitive-procedure-call))
+           (result (agent-scheme-oracle-run-reference implementation case)))
+      (should (equal result '(:status value :value "3"))))))
+
+(ert-deftest agent-scheme-oracle-test-chicken-runs-simple-fixture ()
+  "Run one small pure fixture through CHICKEN when R7RS mode is available."
+  (let ((implementation (agent-scheme-oracle-chicken-reference)))
+    (skip-unless (agent-scheme-oracle-reference-command implementation))
+    (skip-unless
+     (agent-scheme-oracle--chicken-r7rs-available-p
+      (agent-scheme-oracle-reference-command implementation)))
     (let* ((case (agent-scheme-test-fixture-case 'primitive-procedure-call))
            (result (agent-scheme-oracle-run-reference implementation case)))
       (should (equal result '(:status value :value "3"))))))

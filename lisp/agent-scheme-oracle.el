@@ -63,6 +63,13 @@ AGENT_SCHEME_RACKET and then PATH."
   :type '(choice (const :tag "Discover automatically" nil) string)
   :group 'agent-scheme-oracle)
 
+(defcustom agent-scheme-oracle-chicken-command nil
+  "Optional CHICKEN Scheme executable for oracle runs.
+When nil, `agent-scheme-oracle-chicken-reference' consults
+AGENT_SCHEME_CHICKEN and then PATH."
+  :type '(choice (const :tag "Discover automatically" nil) string)
+  :group 'agent-scheme-oracle)
+
 (defconst agent-scheme-oracle--policy-gated-libraries
   '((scheme file)
     (scheme load)
@@ -81,7 +88,7 @@ AGENT_SCHEME_RACKET and then PATH."
   "Stable oracle report status order.")
 
 (defconst agent-scheme-oracle-reference-names
-  '(chibi gauche guile sagittarius racket)
+  '(chibi gauche guile sagittarius racket chicken)
   "Stable oracle reference adapter name order.")
 
 (cl-defstruct (agent-scheme-oracle-reference
@@ -726,6 +733,17 @@ When STATUSES is nil, return REPORTS unchanged."
           (equal 0 (process-file command nil t nil "-l" "r7rs/lang/reader"))
         (file-error nil)))))
 
+(defun agent-scheme-oracle--chicken-r7rs-available-p (command)
+  "Return non-nil when COMMAND can load CHICKEN's R7RS egg."
+  (when command
+    (with-temp-buffer
+      (condition-case nil
+          (equal 0
+                 (process-file
+                  command nil t nil
+                  "-q" "-R" "r7rs" "-b" "-e" "(import (scheme base))"))
+        (file-error nil)))))
+
 ;;;###autoload
 (defun agent-scheme-oracle-chibi-reference ()
   "Return the Chibi Scheme reference adapter."
@@ -784,6 +802,18 @@ When STATUSES is nil, return REPORTS unchanged."
     "racket")
    :program-filter #'agent-scheme-oracle--racket-r7rs-program))
 
+;;;###autoload
+(defun agent-scheme-oracle-chicken-reference ()
+  "Return the CHICKEN Scheme reference adapter."
+  (agent-scheme-oracle-reference
+   :name 'chicken
+   :command
+   (agent-scheme-oracle--configured-command
+    agent-scheme-oracle-chicken-command
+    "AGENT_SCHEME_CHICKEN"
+    "csi")
+   :arguments '("-q" "-R" "r7rs" "-s")))
+
 (defun agent-scheme-oracle--reference-builder (name)
   "Return the reference builder function for NAME."
   (pcase name
@@ -792,6 +822,7 @@ When STATUSES is nil, return REPORTS unchanged."
     ('guile #'agent-scheme-oracle-guile-reference)
     ('sagittarius #'agent-scheme-oracle-sagittarius-reference)
     ('racket #'agent-scheme-oracle-racket-reference)
+    ('chicken #'agent-scheme-oracle-chicken-reference)
     (_ (error "Unknown oracle reference: %S" name))))
 
 ;;;###autoload
