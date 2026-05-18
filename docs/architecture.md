@@ -83,6 +83,23 @@ The detailed multi-host adapter and bootstrap stance is recorded in
 or backend work should preserve that document's R7RS-small contract, portable
 test path, and Scheme-readable adapter boundary.
 
+### First-Class Portable Scheme
+
+The portable R7RS implementation under `scheme/agent-scheme/` is not a sample,
+downstream mirror, or convenience test harness. It is a peer implementation of
+the language core and the strategic path toward a self-hosted or native reader,
+evaluator, emitter, and REPL. Emacs Lisp is the first host and useful
+bootstrap implementation, but it must not become the sole architectural
+reference.
+
+Changes to reader, evaluator, macro, library, runtime, result, primitive
+manifest, standard-library, conformance fixture, or public test behavior should
+preserve architectural parity between `lisp/agent-scheme-*.el` and
+`scheme/agent-scheme/*.sld`. If a slice must land on one side first, the issue,
+commit, or pull request should name the remaining parity work, and the work
+should not be presented as architecturally complete until both sides are
+handled.
+
 ### Inspectable Memory
 
 Agent memory must always be inspectable as Lisp/Scheme data. Vector indexes,
@@ -277,10 +294,10 @@ must not bypass the manifest by directly calling host APIs.
 
 ### Current Bootstrap Placement
 
-The current Emacs Lisp and portable Scheme evaluators intentionally mix
-frontend and interpreter-backend code in one bootstrap module. Future file
-splits should preserve behavior while moving responsibilities to pass-oriented
-modules:
+The Emacs Lisp and portable Scheme evaluators use matching pass-boundary
+modules while the bootstrap runtime grows. Future file splits should preserve
+behavior and keep both implementations aligned while moving responsibilities to
+more focused frontend, runtime, and backend modules:
 
 - `agent-scheme-reader.el` and `(agent-scheme reader)` are frontend reader and
   datum-validation passes.
@@ -607,11 +624,11 @@ MCP exposure should come after local evaluation, policy, session UX, and
 ## Initial Module and Test Map
 
 Later tickets should use focused modules rather than one large host file.
-Portable R7RS core modules live under `scheme/`, with Emacs Lisp host adapters
-and bootstrap mirrors under `lisp/`. Scheme modules should be usable by another
+Portable R7RS core modules live under `scheme/`, with Emacs Lisp bootstrap and
+host adapter modules under `lisp/`. Scheme modules should be usable by another
 R7RS implementation while Agent Scheme is still self-bootstrapping; Emacs Lisp
-modules own Emacs integration and may mirror core behavior until the portable
-core can take over.
+modules own Emacs integration and must stay aligned with the portable core
+where they implement shared language behavior.
 
 Likely portable R7RS modules:
 

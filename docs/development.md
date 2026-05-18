@@ -78,7 +78,14 @@ with dependency-free or explicitly unblocked issues.
 ## Editing Expectations
 
 - Keep canonical runtime concepts represented as Scheme-readable data.
+- Treat the portable R7RS implementation as a first-class peer of the Emacs
+  Lisp bootstrap, and as the long-term path toward self-hosted or native
+  reader, evaluator, emitter, and REPL work.
 - Prefer portable R7RS Scheme for core logic where practical.
+- Preserve architectural parity between Emacs Lisp and portable Scheme modules
+  for semantic behavior, evaluator pass boundaries, standard libraries,
+  fixtures, and tests. If a slice lands on only one side, record the remaining
+  parity work before calling the issue complete.
 - Keep Emacs-specific behavior behind host adapter modules.
 - Avoid project history or personal machine details in public docs, tests, and
   examples.
@@ -135,6 +142,11 @@ current portable reader harness uses Chibi Scheme when `chibi-scheme` is on
 `PATH`, or the command named by `AGENT_SCHEME_CHIBI`. If Chibi is unavailable,
 the ERT test is skipped so a minimal Emacs-only checkout can still run the
 bootstrap suite.
+
+Core runtime, reader, evaluator, macro, library, and standard-library changes
+should normally add or update portable tests alongside the Emacs Lisp tests.
+Those tests are parity checks for the product path, not optional examples of
+the bootstrap implementation.
 
 The multi-host bootstrap strategy in
 [`docs/multi-host-bootstrap.md`](multi-host-bootstrap.md) defines what belongs

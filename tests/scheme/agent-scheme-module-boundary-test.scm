@@ -1,7 +1,7 @@
 ;;; Portable Agent Scheme module-boundary test runner.
 ;;;
 ;;; This program runs under an external R7RS Scheme and verifies that the
-;;; portable facade libraries mirror the Emacs Lisp pass-boundary modules.
+;;; portable pass-boundary libraries expose their expected public surfaces.
 
 (import (scheme base)
         (scheme write)
@@ -30,23 +30,23 @@
   (if (not (equal? actual expected))
       (record-failure name expected actual)))
 
-(check 'runtime-facade
+(check 'runtime-boundary
        (procedure? runtime:agent-scheme-make-empty-environment)
        #t)
 
-(check 'base-facade
+(check 'base-boundary
        (if (memq '+ (base:agent-scheme-base-primitive-names)) #t #f)
        #t)
 
-(check 'library-facade
+(check 'library-boundary
        (pair? (library:agent-scheme-standard-source-library-specs))
        #t)
 
-(check 'macro-facade
+(check 'macro-boundary
        (procedure? macro:agent-scheme-expand-source)
        #t)
 
-(check 'interpreter-facade
+(check 'interpreter-boundary
        (interpreter:agent-scheme-value->external
         (interpreter:agent-scheme-eval-source "(+ 1 2)"))
        "3")
