@@ -1,9 +1,19 @@
+;;; Portable reader test runner for the Agent Scheme R7RS library.
+;;;
+;;; This program runs under an external R7RS Scheme and exercises the portable
+;;; reader library without loading the Emacs host adapter.
+
 (import (scheme base)
         (scheme write)
         (agent-scheme reader))
 
+;; Shared reader behavior runs through agent-scheme-fixture-test.scm. This file
+;; keeps portable reader API and bootstrap invariants close to the R7RS library.
+
 (define failures 0)
 
+;; Record one failed portable reader check and keep running the rest of the
+;; suite so failures report together.
 (define (record-failure name expected actual)
   (set! failures (+ failures 1))
   (display "FAIL ")
@@ -14,15 +24,18 @@
   (write actual)
   (newline))
 
+;; Compare ACTUAL and EXPECTED using R7RS equal? and record a named failure.
 (define (check name actual expected)
   (if (not (equal? actual expected))
       (record-failure name expected actual)))
 
+;; Read SOURCE through the portable reader and compare its external form.
 (define (check-external name source expected)
   (check name
          (agent-scheme-datum->external (agent-scheme-read source))
          expected))
 
+;; Return #t when THUNK raises any portable Scheme condition.
 (define (raises? thunk)
   (guard (condition
           (else #t))
@@ -47,6 +60,7 @@
 (check-external 'character-name "#\\space" "#\\space")
 (check-external 'character-hex "#\\X03BB" "#\\λ")
 
+;; Character writer fixtures cover named, printable, Unicode, and control forms.
 (define character-writer-cases
   '(("character-writer-space" "#\\space" "#\\space")
     ("character-writer-tab" "#\\tab" "#\\tab")

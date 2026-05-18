@@ -137,11 +137,15 @@ capabilities.
 
 The local R7RS-small report reference lives in
 [`docs/r7rs-small-report.md`](r7rs-small-report.md). The active R7RS-small
-conformance matrix lives in [`docs/r7rs-conformance.md`](r7rs-conformance.md),
-with representative fixtures in `fixtures/r7rs/conformance-cases.scm`. Fixtures
-marked `pending`, `policy-gated`, or `unavailable` are loaded and validated by
-ERT without being executed. Fixtures marked `implemented` must run through
-`make test`.
+conformance matrix lives in [`docs/r7rs-conformance.md`](r7rs-conformance.md).
+The canonical shared fixture corpus lives in
+`fixtures/r7rs/conformance-cases.scm` as an `agent-scheme-fixture-suite`.
+Fixture records carry `id`, `kind`, `phase`, `category`, `section`, `status`,
+`oracle`, `options`, `source`, `expect`, and `description` fields so the Emacs
+Lisp harness, portable Scheme harness, and conformance runner select from the
+same indexed cases. Fixtures marked `pending`, `policy-gated`, or `unavailable`
+are loaded and validated by ERT without being executed. Fixtures marked
+`implemented` must run through `make test`.
 
 ## Verification
 

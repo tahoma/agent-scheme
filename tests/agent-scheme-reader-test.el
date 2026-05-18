@@ -2,7 +2,10 @@
 
 ;;; Commentary:
 
-;; Focused tests for the Agent Scheme R7RS datum reader.
+;; Focused tests for the Emacs Lisp reader implementation. Shared external
+;; reader behavior runs through the canonical fixture corpus; these tests keep
+;; host-side object identity, writer round trips, limit errors, and low-level
+;; reader diagnostics close to the implementation.
 
 ;;; Code:
 
