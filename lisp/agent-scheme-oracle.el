@@ -56,6 +56,13 @@ AGENT_SCHEME_SAGITTARIUS and then PATH."
   :type '(choice (const :tag "Discover automatically" nil) string)
   :group 'agent-scheme-oracle)
 
+(defcustom agent-scheme-oracle-racket-command nil
+  "Optional Racket executable for oracle runs.
+When nil, `agent-scheme-oracle-racket-reference' consults
+AGENT_SCHEME_RACKET and then PATH."
+  :type '(choice (const :tag "Discover automatically" nil) string)
+  :group 'agent-scheme-oracle)
+
 (defconst agent-scheme-oracle--policy-gated-libraries
   '((scheme file)
     (scheme load)
@@ -74,19 +81,22 @@ AGENT_SCHEME_SAGITTARIUS and then PATH."
   "Stable oracle report status order.")
 
 (defconst agent-scheme-oracle-reference-names
-  '(chibi gauche guile sagittarius)
+  '(chibi gauche guile sagittarius racket)
   "Stable oracle reference adapter name order.")
 
 (cl-defstruct (agent-scheme-oracle-reference
                (:constructor agent-scheme-oracle-reference
-                             (&key name command arguments evaluator)))
+                             (&key name command arguments evaluator
+                                   program-filter)))
   "Reference implementation adapter.
 NAME is a symbol such as `chibi'.  COMMAND is an executable path
 or nil when unavailable.  ARGUMENTS is a list of command-line
 arguments that precede the generated fixture program path.
+PROGRAM-FILTER optionally receives generated Scheme source and
+returns source to write for the reference implementation.
 EVALUATOR is an optional test hook that receives a fixture case
 and returns a normalized actual plist."
-  name command arguments evaluator)
+  name command arguments evaluator program-filter)
 
 (cl-defstruct (agent-scheme-oracle-report
                (:constructor agent-scheme-oracle--make-report
@@ -388,6 +398,15 @@ multiple values."
     (phase
      (error "Unsupported oracle phase: %S" phase))))
 
+(defun agent-scheme-oracle--program-for-reference (reference case)
+  "Return a generated source program for REFERENCE and fixture CASE."
+  (let* ((program (agent-scheme-oracle--program-for-case case))
+         (program-filter
+          (agent-scheme-oracle-reference-program-filter reference)))
+    (if program-filter
+        (funcall program-filter program)
+      program)))
+
 (defun agent-scheme-oracle--reference-datum-result (datum)
   "Return normalized oracle result for DATUM, or nil."
   (cond
@@ -445,7 +464,7 @@ multiple values."
     (list :status 'unsupported-reference
           :message "reference command not found"))
    (t
-    (let* ((program (agent-scheme-oracle--program-for-case case))
+    (let* ((program (agent-scheme-oracle--program-for-reference reference case))
            (program-file (make-temp-file "agent-scheme-oracle-" nil ".scm"))
            (output-buffer (generate-new-buffer " *agent-scheme-oracle*"))
            (default-directory agent-scheme-oracle-root-directory))
@@ -695,6 +714,18 @@ When STATUSES is nil, return REPORTS unchanged."
         (and env (not (string-empty-p env)) env))
       (executable-find executable)))
 
+(defun agent-scheme-oracle--racket-r7rs-program (program)
+  "Return PROGRAM wrapped for Racket's R7RS language mode."
+  (concat "#lang r7rs\n" program))
+
+(defun agent-scheme-oracle--racket-r7rs-available-p (command)
+  "Return non-nil when COMMAND can load Racket's R7RS language package."
+  (when command
+    (with-temp-buffer
+      (condition-case nil
+          (equal 0 (process-file command nil t nil "-l" "r7rs/lang/reader"))
+        (file-error nil)))))
+
 ;;;###autoload
 (defun agent-scheme-oracle-chibi-reference ()
   "Return the Chibi Scheme reference adapter."
@@ -741,6 +772,18 @@ When STATUSES is nil, return REPORTS unchanged."
     "sagittarius")
    :arguments '("-r" "7")))
 
+;;;###autoload
+(defun agent-scheme-oracle-racket-reference ()
+  "Return the Racket reference adapter."
+  (agent-scheme-oracle-reference
+   :name 'racket
+   :command
+   (agent-scheme-oracle--configured-command
+    agent-scheme-oracle-racket-command
+    "AGENT_SCHEME_RACKET"
+    "racket")
+   :program-filter #'agent-scheme-oracle--racket-r7rs-program))
+
 (defun agent-scheme-oracle--reference-builder (name)
   "Return the reference builder function for NAME."
   (pcase name
@@ -748,6 +791,7 @@ When STATUSES is nil, return REPORTS unchanged."
     ('gauche #'agent-scheme-oracle-gauche-reference)
     ('guile #'agent-scheme-oracle-guile-reference)
     ('sagittarius #'agent-scheme-oracle-sagittarius-reference)
+    ('racket #'agent-scheme-oracle-racket-reference)
     (_ (error "Unknown oracle reference: %S" name))))
 
 ;;;###autoload

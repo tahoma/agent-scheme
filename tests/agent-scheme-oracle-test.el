@@ -235,6 +235,19 @@
     (should (equal (agent-scheme-oracle-reference-arguments implementation)
                    '("--r7rs")))))
 
+(ert-deftest agent-scheme-oracle-test-reference-can-transform-program-source ()
+  "Allow adapters to wrap generated source before execution."
+  (let* ((case (agent-scheme-test-fixture-case 'primitive-procedure-call))
+         (implementation
+          (agent-scheme-oracle-reference
+           :name 'wrapped-r7rs
+           :command "mock"
+           :program-filter (lambda (program)
+                             (concat ";; wrapped\n" program))))
+         (program
+          (agent-scheme-oracle--program-for-reference implementation case)))
+    (should (string-prefix-p ";; wrapped\n(import " program))))
+
 (ert-deftest agent-scheme-oracle-test-guile-reference-uses-environment ()
   "Build the Guile adapter from AGENT_SCHEME_GUILE when configured."
   (let ((process-environment
@@ -262,6 +275,23 @@
       (should (equal (agent-scheme-oracle-reference-arguments implementation)
                      '("-r" "7"))))))
 
+(ert-deftest agent-scheme-oracle-test-racket-reference-uses-environment ()
+  "Build the Racket adapter from AGENT_SCHEME_RACKET when configured."
+  (let ((process-environment
+         (cons "AGENT_SCHEME_RACKET=/example/bin/racket"
+               process-environment))
+        (agent-scheme-oracle-racket-command nil))
+    (let ((implementation (agent-scheme-oracle-racket-reference)))
+      (should (eq (agent-scheme-oracle-reference-name implementation)
+                  'racket))
+      (should (equal (agent-scheme-oracle-reference-command implementation)
+                     "/example/bin/racket"))
+      (should (string-prefix-p
+               "#lang r7rs\n"
+               (funcall
+                (agent-scheme-oracle-reference-program-filter implementation)
+                "(import (scheme base))"))))))
+
 (ert-deftest agent-scheme-oracle-test-default-references-use-chibi-sagittarius ()
   "Use Chibi and Sagittarius as the default oracle reference set."
   (should
@@ -269,19 +299,19 @@
                   (agent-scheme-oracle-default-references))
           '(chibi sagittarius))))
 
-(ert-deftest agent-scheme-oracle-test-all-references-include-four-candidates ()
+(ert-deftest agent-scheme-oracle-test-all-references-include-five-candidates ()
   "Expose the full candidate set separately from defaults."
   (should
    (equal (mapcar #'agent-scheme-oracle-reference-name
                   (agent-scheme-oracle-all-references))
-          '(chibi gauche guile sagittarius))))
+          '(chibi gauche guile sagittarius racket))))
 
 (ert-deftest agent-scheme-oracle-test-parses-reference-filter ()
   "Parse comma-separated oracle reference names from batch environment text."
   (should
    (equal
-    (agent-scheme-oracle-parse-reference-filter "guile, sagittarius")
-    '(guile sagittarius)))
+    (agent-scheme-oracle-parse-reference-filter "guile, racket")
+    '(guile racket)))
   (should-not (agent-scheme-oracle-parse-reference-filter nil))
   (should-error
    (agent-scheme-oracle-parse-reference-filter "unknown")
@@ -323,6 +353,17 @@
   "Run one small pure fixture through Sagittarius when it is available."
   (let ((implementation (agent-scheme-oracle-sagittarius-reference)))
     (skip-unless (agent-scheme-oracle-reference-command implementation))
+    (let* ((case (agent-scheme-test-fixture-case 'primitive-procedure-call))
+           (result (agent-scheme-oracle-run-reference implementation case)))
+      (should (equal result '(:status value :value "3"))))))
+
+(ert-deftest agent-scheme-oracle-test-racket-runs-simple-fixture ()
+  "Run one small pure fixture through Racket when R7RS mode is available."
+  (let ((implementation (agent-scheme-oracle-racket-reference)))
+    (skip-unless (agent-scheme-oracle-reference-command implementation))
+    (skip-unless
+     (agent-scheme-oracle--racket-r7rs-available-p
+      (agent-scheme-oracle-reference-command implementation)))
     (let* ((case (agent-scheme-test-fixture-case 'primitive-procedure-call))
            (result (agent-scheme-oracle-run-reference implementation case)))
       (should (equal result '(:status value :value "3"))))))

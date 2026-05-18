@@ -18,7 +18,8 @@ pure shared fixtures. The default adapters target Chibi Scheme through
 `AGENT_SCHEME_SAGITTARIUS` or `sagittarius` on `PATH`; missing references are
 reported as `unsupported-reference` without affecting `make test`. Gauche and
 Guile adapters can be selected with `AGENT_SCHEME_ORACLE_REFERENCES` when
-comparing candidate reference sets.
+comparing candidate reference sets. Racket can also be selected as a developer
+comparison adapter when `racket` and the Racket `r7rs` package are installed.
 
 ## Status Values
 

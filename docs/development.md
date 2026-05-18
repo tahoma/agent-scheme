@@ -19,6 +19,8 @@ Optional but useful:
 - Gauche, `gosh`, for additional reference implementation oracle coverage
 - Guile, `guile`, and Sagittarius, `sagittarius`, for broader optional oracle
   comparison coverage
+- Racket, `racket`, plus its `r7rs` package for developer oracle comparisons;
+  install the package with `raco pkg install --auto r7rs`
 - ShellCheck or other local lint tools for future scripts
 
 ## GitHub Access
@@ -166,12 +168,14 @@ implementations through the oracle runner:
 make conformance-oracle
 ```
 
-The default reference adapters are Chibi Scheme and Sagittarius. Gauche and
-Guile remain opt-in comparison adapters so contributors can inspect a wider
+The default reference adapters are Chibi Scheme and Sagittarius. Gauche, Guile,
+and Racket remain opt-in comparison adapters so contributors can inspect a wider
 implementation matrix before changing defaults. The runner uses
-`AGENT_SCHEME_CHIBI`, `AGENT_SCHEME_GAUCHE`, `AGENT_SCHEME_GUILE`, and
-`AGENT_SCHEME_SAGITTARIUS` when set, otherwise it searches for `chibi-scheme`,
-`gosh`, `guile`, and `sagittarius` on `PATH`. Each adapter writes eligible
+`AGENT_SCHEME_CHIBI`, `AGENT_SCHEME_GAUCHE`, `AGENT_SCHEME_GUILE`,
+`AGENT_SCHEME_SAGITTARIUS`, and `AGENT_SCHEME_RACKET` when set, otherwise it
+searches for `chibi-scheme`, `gosh`, `guile`, `sagittarius`, and `racket` on
+`PATH`. The Racket adapter requires Racket's separate `r7rs` package and wraps
+generated fixture programs with `#lang r7rs`. Each adapter writes eligible
 fixtures to a temporary R7RS program and invokes the reference implementation
 with that file as the command-line program argument. Missing reference
 implementations are reported as `unsupported-reference` in Scheme-readable
@@ -201,7 +205,7 @@ To compare a chosen reference implementation set, pass a comma-separated
 reference filter:
 
 ```sh
-AGENT_SCHEME_ORACLE_REFERENCES='chibi,gauche,guile,sagittarius' make conformance-oracle
+AGENT_SCHEME_ORACLE_REFERENCES='chibi,gauche,guile,sagittarius,racket' make conformance-oracle
 ```
 
 To print a compact status count before the report stream:
