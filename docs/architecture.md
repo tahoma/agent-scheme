@@ -614,6 +614,7 @@ Likely portable R7RS modules:
 Likely Emacs Lisp bootstrap and adapter modules:
 
 - `lisp/agent-scheme-reader.el`
+- `lisp/agent-scheme-runtime.el`
 - `lisp/agent-scheme-datum.el`
 - `lisp/agent-scheme-library.el`
 - `lisp/agent-scheme-macro.el`
@@ -639,6 +640,7 @@ while focused frontend and backend modules own the underlying pass behavior.
 Focused test files should mirror the modules:
 
 - `tests/agent-scheme-reader-test.el`
+- `tests/agent-scheme-runtime-test.el`
 - `tests/agent-scheme-library-test.el`
 - `tests/agent-scheme-macro-test.el`
 - `tests/agent-scheme-normalize-test.el`
