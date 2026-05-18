@@ -2,8 +2,10 @@
 
 ;;; Commentary:
 
-;; Focused tests for primitive expression evaluation, lexical environments,
-;; procedures, mutation, tail recursion, and evaluator budgets.
+;; Focused tests for the Emacs Lisp evaluator kernel. Shared external evaluator
+;; behavior runs through the canonical fixture corpus; these tests keep
+;; host-side environment mutation, closure identity, continuation machinery,
+;; budgets, and library internals close to the implementation.
 
 ;;; Code:
 
