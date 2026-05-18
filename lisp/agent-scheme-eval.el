@@ -7644,15 +7644,125 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
   "Return implemented `(scheme base)' primitive procedure names."
   (mapcar #'car agent-scheme--base-primitive-registry))
 
+(defconst agent-scheme--primitive-mutation-names
+  '("bytevector-copy!" "bytevector-u8-set!" "read-bytevector!"
+    "set-car!" "set-cdr!" "string-copy!" "string-fill!" "string-set!"
+    "vector-copy!" "vector-fill!" "vector-set!")
+  "Kernel primitive names that mutate Agent Scheme data.")
+
+(defconst agent-scheme--primitive-port-io-names
+  '("binary-port?" "call-with-port" "char-ready?" "close-input-port"
+    "close-output-port" "close-port" "eof-object" "eof-object?"
+    "file-error?" "flush-output-port" "get-output-bytevector"
+    "get-output-string" "input-port-open?" "input-port?" "newline"
+    "open-input-bytevector" "open-input-string" "open-output-bytevector"
+    "open-output-string" "output-port-open?" "output-port?" "peek-char"
+    "peek-u8" "port?" "read-bytevector" "read-char" "read-error?"
+    "read-line" "read-string" "read-u8" "textual-port?" "u8-ready?"
+    "write-bytevector" "write-char" "write-string" "write-u8")
+  "Kernel primitive names that observe or mutate port state.")
+
+(defconst agent-scheme--primitive-control-names
+  '("apply" "call-with-current-continuation" "call-with-values" "call/cc"
+    "dynamic-wind" "error" "raise" "raise-continuable" "values"
+    "with-exception-handler")
+  "Kernel primitive names that affect evaluator control flow.")
+
+(defun agent-scheme--primitive-effect-for-name (name)
+  "Return the effect tier for primitive NAME."
+  (cond
+   ((member name agent-scheme--primitive-mutation-names)
+    'mutation)
+   ((member name agent-scheme--primitive-port-io-names)
+    'port-io)
+   ((member name agent-scheme--primitive-control-names)
+    'control)
+   ((equal name "make-parameter")
+    'dynamic-state)
+   (t
+    'pure)))
+
+(defun agent-scheme--primitive-emitter-hook-for-effect (effect)
+  "Return a lowering hint symbol for EFFECT."
+  (pcase effect
+    ('mutation 'runtime-mutation)
+    ('port-io 'capability-port)
+    ('control 'runtime-control)
+    ('dynamic-state 'runtime-parameter)
+    ('host-file 'capability-file)
+    ('host-process 'capability-process)
+    ('host-time 'capability-time)
+    ('host-repl 'capability-repl)
+    ('eval 'runtime-eval)
+    (_ 'inline-or-call)))
+
+(defun agent-scheme--primitive-test-categories-for-name (name effect)
+  "Return manifest test category symbols for primitive NAME and EFFECT."
+  (let (categories)
+    (when (string-match-p "bytevector" name)
+      (push 'bytevector categories))
+    (when (string-match-p "vector" name)
+      (push 'vector categories))
+    (when (string-match-p "string" name)
+      (push 'string categories))
+    (when (string-match-p "char" name)
+      (push 'character categories))
+    (when (string-match-p "symbol" name)
+      (push 'symbol categories))
+    (when (string-match-p "boolean" name)
+      (push 'boolean categories))
+    (when (member name
+                  '("+" "-" "*" "/" "<" "<=" "=" ">" ">=" "ceiling"
+                    "complex?" "denominator" "exact" "exact-integer-sqrt"
+                    "exact-integer?" "exact?" "expt" "floor" "floor/"
+                    "floor-quotient" "floor-remainder" "gcd" "inexact"
+                    "inexact?" "integer?" "lcm" "modulo" "number->string"
+                    "number?" "numerator" "quotient" "rational?"
+                    "rationalize" "real?" "remainder" "round"
+                    "string->number" "truncate" "truncate/"
+                    "truncate-quotient" "truncate-remainder"))
+      (push 'numeric categories))
+    (when (eq effect 'port-io)
+      (push 'port categories))
+    (when (eq effect 'control)
+      (push 'control categories))
+    (unless categories
+      (push 'base categories))
+    (nreverse categories)))
+
+(defun agent-scheme--base-primitive-manifest-spec (entry)
+  "Return manifest metadata for base primitive registry ENTRY."
+  (let* ((name (nth 0 entry))
+         (hook (nth 1 entry))
+         (effect (agent-scheme--primitive-effect-for-name name)))
+    (list :name name
+          :library agent-scheme--scheme-base-library-key
+          :minimum-arity (nth 2 entry)
+          :maximum-arity (nth 3 entry)
+          :source 'kernel
+          :effect effect
+          :required-capability nil
+          :emacs-hook hook
+          :portable-hook
+          (intern (replace-regexp-in-string
+                   "\\`agent-scheme--" "" (symbol-name hook)))
+          :emitter-hook
+          (agent-scheme--primitive-emitter-hook-for-effect effect)
+          :policy 'allow
+          :test-categories
+          (agent-scheme--primitive-test-categories-for-name name effect))))
+
 (defun agent-scheme-base-primitive-specs ()
   "Return discoverable metadata for implemented `(scheme base)' primitives."
   (mapcar
-   (lambda (entry)
-     (list :name (nth 0 entry)
-           :minimum-arity (nth 2 entry)
-           :maximum-arity (nth 3 entry)
-           :source 'kernel))
-   agent-scheme--base-primitive-registry))
+   (lambda (spec)
+     (list :name (plist-get spec :name)
+           :minimum-arity (plist-get spec :minimum-arity)
+           :maximum-arity (plist-get spec :maximum-arity)
+           :source (plist-get spec :source)
+           :effect (plist-get spec :effect)))
+   (mapcar #'agent-scheme--base-primitive-manifest-spec
+           agent-scheme--base-primitive-registry)))
 
 (defun agent-scheme--base-prelude-file ()
   "Return the portable `(scheme base)' prelude source file path."
@@ -7758,6 +7868,142 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
   "Return discoverable metadata for kernel and prelude base bindings."
   (append (agent-scheme-base-primitive-specs)
           (agent-scheme-base-prelude-binding-specs)))
+
+(defconst agent-scheme--standard-primitive-manifest-specs
+  '((:name "delete-file" :library "(scheme file)" :minimum-arity 1
+     :maximum-arity 1 :source host-capability :effect host-file
+     :required-capability file-system :emacs-hook agent-scheme--primitive-delete-file
+     :portable-hook primitive-delete-file :emitter-hook capability-file
+     :policy deny :test-categories (file policy))
+    (:name "file-exists?" :library "(scheme file)" :minimum-arity 1
+     :maximum-arity 1 :source host-capability :effect host-file
+     :required-capability file-system :emacs-hook agent-scheme--primitive-file-exists?
+     :portable-hook primitive-file-exists? :emitter-hook capability-file
+     :policy deny :test-categories (file policy))
+    (:name "call-with-input-file" :library "(scheme file)" :minimum-arity 2
+     :maximum-arity 2 :source host-capability :effect host-file
+     :required-capability file-system :emacs-hook agent-scheme--policy-denied-primitive
+     :portable-hook policy-denied-primitive :emitter-hook capability-file
+     :policy deny :test-categories (file policy))
+    (:name "call-with-output-file" :library "(scheme file)" :minimum-arity 2
+     :maximum-arity 2 :source host-capability :effect host-file
+     :required-capability file-system :emacs-hook agent-scheme--policy-denied-primitive
+     :portable-hook policy-denied-primitive :emitter-hook capability-file
+     :policy deny :test-categories (file policy))
+    (:name "open-binary-input-file" :library "(scheme file)" :minimum-arity 1
+     :maximum-arity 1 :source host-capability :effect host-file
+     :required-capability file-system :emacs-hook agent-scheme--policy-denied-primitive
+     :portable-hook policy-denied-primitive :emitter-hook capability-file
+     :policy deny :test-categories (file policy))
+    (:name "open-binary-output-file" :library "(scheme file)" :minimum-arity 1
+     :maximum-arity 1 :source host-capability :effect host-file
+     :required-capability file-system :emacs-hook agent-scheme--policy-denied-primitive
+     :portable-hook policy-denied-primitive :emitter-hook capability-file
+     :policy deny :test-categories (file policy))
+    (:name "open-input-file" :library "(scheme file)" :minimum-arity 1
+     :maximum-arity 1 :source host-capability :effect host-file
+     :required-capability file-system :emacs-hook agent-scheme--policy-denied-primitive
+     :portable-hook policy-denied-primitive :emitter-hook capability-file
+     :policy deny :test-categories (file policy))
+    (:name "open-output-file" :library "(scheme file)" :minimum-arity 1
+     :maximum-arity 1 :source host-capability :effect host-file
+     :required-capability file-system :emacs-hook agent-scheme--policy-denied-primitive
+     :portable-hook policy-denied-primitive :emitter-hook capability-file
+     :policy deny :test-categories (file policy))
+    (:name "with-input-from-file" :library "(scheme file)" :minimum-arity 2
+     :maximum-arity 2 :source host-capability :effect host-file
+     :required-capability file-system :emacs-hook agent-scheme--policy-denied-primitive
+     :portable-hook policy-denied-primitive :emitter-hook capability-file
+     :policy deny :test-categories (file policy))
+    (:name "with-output-to-file" :library "(scheme file)" :minimum-arity 2
+     :maximum-arity 2 :source host-capability :effect host-file
+     :required-capability file-system :emacs-hook agent-scheme--policy-denied-primitive
+     :portable-hook policy-denied-primitive :emitter-hook capability-file
+     :policy deny :test-categories (file policy))
+    (:name "load" :library "(scheme load)" :minimum-arity 1
+     :maximum-arity 2 :source host-capability :effect host-file
+     :required-capability file-system :emacs-hook agent-scheme--primitive-load
+     :portable-hook primitive-load :emitter-hook capability-file
+     :policy deny :test-categories (load file policy))
+    (:name "command-line" :library "(scheme process-context)" :minimum-arity 0
+     :maximum-arity nil :source host-capability :effect host-process
+     :required-capability process-environment :emacs-hook agent-scheme--policy-denied-primitive
+     :portable-hook policy-denied-primitive :emitter-hook capability-process
+     :policy deny :test-categories (process policy))
+    (:name "emergency-exit" :library "(scheme process-context)" :minimum-arity 0
+     :maximum-arity nil :source host-capability :effect host-process
+     :required-capability process-environment :emacs-hook agent-scheme--policy-denied-primitive
+     :portable-hook policy-denied-primitive :emitter-hook capability-process
+     :policy deny :test-categories (process policy))
+    (:name "exit" :library "(scheme process-context)" :minimum-arity 0
+     :maximum-arity nil :source host-capability :effect host-process
+     :required-capability process-environment :emacs-hook agent-scheme--policy-denied-primitive
+     :portable-hook policy-denied-primitive :emitter-hook capability-process
+     :policy deny :test-categories (process policy))
+    (:name "get-environment-variable" :library "(scheme process-context)"
+     :minimum-arity 0 :maximum-arity nil :source host-capability
+     :effect host-process :required-capability process-environment
+     :emacs-hook agent-scheme--policy-denied-primitive
+     :portable-hook policy-denied-primitive :emitter-hook capability-process
+     :policy deny :test-categories (process policy))
+    (:name "get-environment-variables" :library "(scheme process-context)"
+     :minimum-arity 0 :maximum-arity nil :source host-capability
+     :effect host-process :required-capability process-environment
+     :emacs-hook agent-scheme--policy-denied-primitive
+     :portable-hook policy-denied-primitive :emitter-hook capability-process
+     :policy deny :test-categories (process policy))
+    (:name "interaction-environment" :library "(scheme repl)" :minimum-arity 0
+     :maximum-arity nil :source host-capability :effect host-repl
+     :required-capability repl :emacs-hook agent-scheme--policy-denied-primitive
+     :portable-hook policy-denied-primitive :emitter-hook capability-repl
+     :policy deny :test-categories (repl policy))
+    (:name "current-jiffy" :library "(scheme time)" :minimum-arity 0
+     :maximum-arity nil :source host-capability :effect host-time
+     :required-capability clock :emacs-hook agent-scheme--policy-denied-primitive
+     :portable-hook policy-denied-primitive :emitter-hook capability-time
+     :policy deny :test-categories (time policy))
+    (:name "current-second" :library "(scheme time)" :minimum-arity 0
+     :maximum-arity nil :source host-capability :effect host-time
+     :required-capability clock :emacs-hook agent-scheme--policy-denied-primitive
+     :portable-hook policy-denied-primitive :emitter-hook capability-time
+     :policy deny :test-categories (time policy))
+    (:name "jiffies-per-second" :library "(scheme time)" :minimum-arity 0
+     :maximum-arity nil :source host-capability :effect host-time
+     :required-capability clock :emacs-hook agent-scheme--policy-denied-primitive
+     :portable-hook policy-denied-primitive :emitter-hook capability-time
+     :policy deny :test-categories (time policy)))
+  "Explicit manifest metadata for host-effecting standard primitives.")
+
+(defun agent-scheme-standard-primitive-binding-specs ()
+  "Return manifest metadata for standard-library primitive bindings."
+  agent-scheme--standard-primitive-manifest-specs)
+
+(defun agent-scheme--prelude-manifest-spec (spec)
+  "Return manifest metadata for portable prelude SPEC."
+  (let ((name (plist-get spec :name))
+        (effect 'pure))
+    (append spec
+            (list :library agent-scheme--scheme-base-library-key
+                  :effect effect
+                  :required-capability nil
+                  :emacs-hook nil
+                  :portable-hook nil
+                  :emitter-hook 'inline-or-call
+                  :policy 'allow
+                  :test-categories
+                  (agent-scheme--primitive-test-categories-for-name
+                   name effect)))))
+
+(defun agent-scheme-primitive-manifest-binding-specs ()
+  "Return canonical primitive and effect metadata records.
+Each record is inspectable data with name, library, arity, source, effect,
+capability, interpreter hooks, emitter hint, policy, and test categories."
+  (append
+   (mapcar #'agent-scheme--base-primitive-manifest-spec
+           agent-scheme--base-primitive-registry)
+   (mapcar #'agent-scheme--prelude-manifest-spec
+           (agent-scheme-base-prelude-binding-specs))
+   (agent-scheme-standard-primitive-binding-specs)))
 
 (defun agent-scheme--define-primitive
     (environment name function minimum-arity maximum-arity)
