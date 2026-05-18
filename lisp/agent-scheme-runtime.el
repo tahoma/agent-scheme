@@ -553,6 +553,7 @@ SEEN prevents infinite recursion over cyclic host structures."
         (agent-scheme--port-p value)
         (agent-scheme--environment-specifier-p value)
         (agent-scheme--string-output-port-p value)
+        (agent-scheme-handle-p value)
         (agent-scheme-record-type-p value))
     1)
    ((agent-scheme-record-p value)

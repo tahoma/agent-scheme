@@ -14,6 +14,7 @@
 (require 'agent-scheme-runtime)
 (require 'agent-scheme-result)
 (require 'agent-scheme-base)
+(require 'agent-scheme-capability)
 
 (defconst agent-scheme--library-source-directory
   (file-name-directory (or load-file-name buffer-file-name default-directory))
@@ -39,14 +40,6 @@
                (:copier nil))
   "Loaded Scheme library with explicit environments and exports."
   name key exports value-environment syntax-environment)
-
-(defconst agent-scheme--empty-emacs-capability-library-keys
-  '("(emacs buffer)"
-    "(emacs buffer edit)"
-    "(emacs command)"
-    "(emacs project)"
-    "(emacs window)")
-  "Recognized Emacs capability libraries without bootstrap exports yet.")
 
 (defconst agent-scheme--standard-library-keys
   '("(scheme case-lambda)"
@@ -274,23 +267,13 @@
             syntax-environment)
            registry))))))
 
-(defun agent-scheme--register-empty-emacs-capability-library
+(defun agent-scheme--register-emacs-capability-library
     (key context)
-  "Register an empty Emacs capability library named by KEY."
-  (let ((registry (agent-scheme--eval-context-libraries context)))
-    (unless (gethash key registry)
-      (let ((value-environment (agent-scheme-make-empty-environment))
-            (syntax-environment
-             (agent-scheme--make-empty-syntax-environment)))
-        (puthash
-         key
-         (agent-scheme--make-library
-          (agent-scheme-read key)
-          key
-          nil
-          value-environment
-          syntax-environment)
-         registry)))))
+  "Register an Emacs capability library named by KEY."
+  (agent-scheme--register-primitive-library
+   key
+   (agent-scheme-emacs-capability-primitive-specs key)
+   context))
 
 (defun agent-scheme--register-source-library
     (source context environment)
@@ -583,7 +566,7 @@ Each spec has (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY)."
       t)
      ((member key agent-scheme--standard-library-keys)
       t)
-     ((member key agent-scheme--empty-emacs-capability-library-keys)
+     ((member key (agent-scheme-emacs-capability-library-keys))
       t)
      (t
       (and (gethash key (agent-scheme--eval-context-libraries context))
@@ -597,8 +580,8 @@ Each spec has (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY)."
       (agent-scheme--register-scheme-base-library context environment))
      ((member key agent-scheme--standard-library-keys)
       (agent-scheme--register-standard-library key context environment))
-     ((member key agent-scheme--empty-emacs-capability-library-keys)
-      (agent-scheme--register-empty-emacs-capability-library key context)))
+     ((member key (agent-scheme-emacs-capability-library-keys))
+      (agent-scheme--register-emacs-capability-library key context)))
     (or (gethash key (agent-scheme--eval-context-libraries context))
         (agent-scheme--eval-error "unknown library: %s" key))))
 

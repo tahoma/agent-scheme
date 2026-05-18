@@ -102,14 +102,14 @@
       external")
     "42")))
 
-(ert-deftest agent-scheme-library-test-emacs-capability-imports-are-empty ()
-  "Recognize early Emacs capability libraries without adding bindings."
+(ert-deftest agent-scheme-library-test-emacs-capability-imports-export-bindings ()
+  "Import Emacs capability libraries without polluting standard Scheme."
   (should
    (equal
     (agent-scheme-library-test--external
-     "(import (emacs buffer))
-      'ok")
-    "ok")))
+     "(import (scheme base) (emacs buffer))
+      (procedure? emacs-current-buffer)")
+    "#t")))
 
 (ert-deftest agent-scheme-library-test-conflicting-imports-signal-error ()
   "Reject importing the same local name from different bindings."

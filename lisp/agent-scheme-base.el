@@ -11,6 +11,7 @@
 (require 'cl-lib)
 (require 'agent-scheme-reader)
 (require 'agent-scheme-runtime)
+(require 'agent-scheme-capability)
 
 (defconst agent-scheme--base-source-directory
   (file-name-directory (or load-file-name buffer-file-name default-directory))
@@ -563,7 +564,8 @@ capability, interpreter hooks, emitter hint, policy, and test categories."
            agent-scheme--base-primitive-registry)
    (mapcar #'agent-scheme--prelude-manifest-spec
            (agent-scheme-base-prelude-binding-specs))
-   (agent-scheme-standard-primitive-binding-specs)))
+   (agent-scheme-standard-primitive-binding-specs)
+   (agent-scheme-emacs-capability-binding-specs)))
 
 (defun agent-scheme--define-primitive
     (environment name function minimum-arity maximum-arity)
