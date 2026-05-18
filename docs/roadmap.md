@@ -12,6 +12,15 @@ constraints apply.
 The architectural baseline for that graph is
 [Architecture and threat model](architecture.md).
 
+The pass-oriented frontend and backend architecture tracked in
+[tahoma/agent-scheme#97](https://github.com/tahoma/agent-scheme/issues/97)
+guides phase 1 runtime work. Major evaluator splitting should follow that
+architecture: reader, library resolution, macro expansion, and normalization
+are shared frontend passes; the current evaluator is the first interpreter
+backend over those passes; future compiler or byte-code backends plug in after
+the normalized core form or IR rather than reimplementing reader, library, or
+macro behavior.
+
 The project roadmap follows this design intent:
 
 1. R7RS-small language core
