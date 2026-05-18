@@ -699,7 +699,9 @@
                 "42")
 
 (check-external 'emacs-capability-import-empty
-                "(import (emacs buffer))
+                "(import (emacs buffer)
+                         (emacs frame)
+                         (emacs process))
                  'ok"
                 "ok")
 

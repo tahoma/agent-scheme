@@ -115,6 +115,101 @@
               (file-name-as-directory
                (expand-file-name agent-scheme--test-root)))))))
 
+(ert-deftest agent-scheme-capability-test-frame-handles ()
+  "Inspect frames through opaque handles."
+  (should
+   (string-match-p
+    "\\`(handle frame h-[0-9]+)\\'"
+    (agent-scheme-capability-test--external
+     "(import (emacs frame))
+      (emacs-current-frame)")))
+  (should
+   (equal
+    (agent-scheme-capability-test--external
+     "(import (scheme base) (emacs frame) (emacs window))
+      (list (string? (frame-name (emacs-current-frame)))
+            (pair? (emacs-frame-list))
+            (string? (frame-name
+                      (window-frame (car (emacs-window-list))))))")
+    "(#t #t #t)")))
+
+(ert-deftest agent-scheme-capability-test-project-handles ()
+  "Inspect the current project through an opaque project handle."
+  (let ((default-directory agent-scheme--test-root)
+        (expected-root
+         (file-name-as-directory (expand-file-name agent-scheme--test-root))))
+    (should
+     (string-match-p
+      "\\`(handle project h-[0-9]+)\\'"
+      (agent-scheme-capability-test--external
+       "(import (emacs project))
+        (emacs-current-project)")))
+    (should
+     (equal
+      (agent-scheme-capability-test--external
+       "(import (scheme base) (emacs project))
+        (let ((project (emacs-current-project)))
+          (list (not (eq? project #f))
+                (project-root project)
+                (project-root)))")
+      (format "(#t \"%s\" \"%s\")" expected-root expected-root)))))
+
+(ert-deftest agent-scheme-capability-test-process-handles ()
+  "Inspect live processes through opaque handles and reject stale handles."
+  (let ((environment (agent-scheme-make-base-environment))
+        (buffer (generate-new-buffer "agent-scheme-capability-process-buffer"))
+        process handle)
+    (unwind-protect
+        (progn
+          (setq process
+                (start-process
+                 "agent-scheme-capability-process" buffer "cat"))
+          (set-process-query-on-exit-flag process nil)
+          (accept-process-output process 0.1)
+          (should
+           (equal
+            (agent-scheme-capability-test--external
+             "(import (scheme base) (emacs buffer) (emacs process))
+              (define (find-process handles)
+                (cond
+                 ((null? handles) #f)
+                 ((string=? (process-name (car handles))
+                            \"agent-scheme-capability-process\")
+                  (car handles))
+                 (else (find-process (cdr handles)))))
+              (let ((handle (find-process (emacs-process-list))))
+                (list (process-name handle)
+                      (process-status handle)
+                      (buffer-name (process-buffer handle))))")
+            (format "(\"agent-scheme-capability-process\" run \"%s\")"
+                    (buffer-name buffer))))
+          (setq handle
+                (agent-scheme-eval-source
+                 "(import (scheme base) (emacs process))
+                  (define (find-process handles)
+                    (cond
+                     ((null? handles) #f)
+                     ((string=? (process-name (car handles))
+                                \"agent-scheme-capability-process\")
+                      (car handles))
+                     (else (find-process (cdr handles)))))
+                  (find-process (emacs-process-list))"
+                 environment))
+          (delete-process process)
+          (setq process nil)
+          (agent-scheme--environment-define environment "stale-process" handle)
+          (let ((condition
+                 (should-error
+                  (agent-scheme-eval-source
+                   "(process-name stale-process)" environment)
+                  :type 'agent-scheme-eval-error)))
+            (should
+             (string-match-p "stale process handle" (cadr condition)))))
+      (when (process-live-p process)
+        (delete-process process))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer)))))
+
 (ert-deftest agent-scheme-capability-test-documentation-capabilities ()
   "Expose documentation metadata without exposing variable values."
   (should
@@ -141,6 +236,12 @@
                          "(emacs buffer)" "emacs-current-buffer"))
         (buffer-text (agent-scheme-capability-test--manifest-spec
                       "(emacs buffer)" "buffer-text"))
+        (current-frame (agent-scheme-capability-test--manifest-spec
+                        "(emacs frame)" "emacs-current-frame"))
+        (current-project (agent-scheme-capability-test--manifest-spec
+                          "(emacs project)" "emacs-current-project"))
+        (process-status (agent-scheme-capability-test--manifest-spec
+                         "(emacs process)" "process-status"))
         (command-doc (agent-scheme-capability-test--manifest-spec
                       "(emacs command)" "command-doc")))
     (should current-buffer)
@@ -151,6 +252,11 @@
     (should (eq (plist-get current-buffer :policy) 'allow))
     (should (equal (plist-get buffer-text :minimum-arity) 3))
     (should (eq (plist-get buffer-text :required-capability) 'emacs-buffer))
+    (should (eq (plist-get current-frame :required-capability) 'emacs-frame))
+    (should (eq (plist-get current-project :required-capability)
+                'emacs-project))
+    (should (eq (plist-get process-status :required-capability)
+                'emacs-process))
     (should (eq (plist-get command-doc :required-capability)
                 'emacs-documentation))))
 

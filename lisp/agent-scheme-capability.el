@@ -84,13 +84,76 @@
      :emacs-hook agent-scheme--primitive-emacs-window-list
      :portable-hook nil :emitter-hook capability-emacs
      :policy allow :test-categories (emacs window handle))
-    (:name "project-root" :library "(emacs project)"
+    (:name "window-frame" :library "(emacs window)"
+     :minimum-arity 1 :maximum-arity 1
+     :source host-capability :effect host-observation
+     :required-capability emacs-window
+     :emacs-hook agent-scheme--primitive-window-frame
+     :portable-hook nil :emitter-hook capability-emacs
+     :policy allow :test-categories (emacs window frame handle))
+    (:name "emacs-current-frame" :library "(emacs frame)"
      :minimum-arity 0 :maximum-arity 0
+     :source host-capability :effect host-observation
+     :required-capability emacs-frame
+     :emacs-hook agent-scheme--primitive-emacs-current-frame
+     :portable-hook nil :emitter-hook capability-emacs
+     :policy allow :test-categories (emacs frame handle))
+    (:name "emacs-frame-list" :library "(emacs frame)"
+     :minimum-arity 0 :maximum-arity 0
+     :source host-capability :effect host-observation
+     :required-capability emacs-frame
+     :emacs-hook agent-scheme--primitive-emacs-frame-list
+     :portable-hook nil :emitter-hook capability-emacs
+     :policy allow :test-categories (emacs frame handle))
+    (:name "frame-name" :library "(emacs frame)"
+     :minimum-arity 1 :maximum-arity 1
+     :source host-capability :effect host-observation
+     :required-capability emacs-frame
+     :emacs-hook agent-scheme--primitive-frame-name
+     :portable-hook nil :emitter-hook capability-emacs
+     :policy allow :test-categories (emacs frame))
+    (:name "emacs-current-project" :library "(emacs project)"
+     :minimum-arity 0 :maximum-arity 0
+     :source host-capability :effect host-observation
+     :required-capability emacs-project
+     :emacs-hook agent-scheme--primitive-emacs-current-project
+     :portable-hook nil :emitter-hook capability-emacs
+     :policy allow :test-categories (emacs project handle))
+    (:name "project-root" :library "(emacs project)"
+     :minimum-arity 0 :maximum-arity 1
      :source host-capability :effect host-observation
      :required-capability emacs-project
      :emacs-hook agent-scheme--primitive-project-root
      :portable-hook nil :emitter-hook capability-emacs
      :policy allow :test-categories (emacs project))
+    (:name "emacs-process-list" :library "(emacs process)"
+     :minimum-arity 0 :maximum-arity 0
+     :source host-capability :effect host-observation
+     :required-capability emacs-process
+     :emacs-hook agent-scheme--primitive-emacs-process-list
+     :portable-hook nil :emitter-hook capability-emacs
+     :policy allow :test-categories (emacs process handle))
+    (:name "process-name" :library "(emacs process)"
+     :minimum-arity 1 :maximum-arity 1
+     :source host-capability :effect host-observation
+     :required-capability emacs-process
+     :emacs-hook agent-scheme--primitive-process-name
+     :portable-hook nil :emitter-hook capability-emacs
+     :policy allow :test-categories (emacs process))
+    (:name "process-status" :library "(emacs process)"
+     :minimum-arity 1 :maximum-arity 1
+     :source host-capability :effect host-observation
+     :required-capability emacs-process
+     :emacs-hook agent-scheme--primitive-process-status
+     :portable-hook nil :emitter-hook capability-emacs
+     :policy allow :test-categories (emacs process))
+    (:name "process-buffer" :library "(emacs process)"
+     :minimum-arity 1 :maximum-arity 1
+     :source host-capability :effect host-observation
+     :required-capability emacs-process
+     :emacs-hook agent-scheme--primitive-process-buffer
+     :portable-hook nil :emitter-hook capability-emacs
+     :policy allow :test-categories (emacs process buffer handle))
     (:name "command-doc" :library "(emacs command)"
      :minimum-arity 1 :maximum-arity 1
      :source host-capability :effect host-observation
@@ -118,6 +181,8 @@
   '("(emacs buffer)"
     "(emacs buffer edit)"
     "(emacs command)"
+    "(emacs frame)"
+    "(emacs process)"
     "(emacs project)"
     "(emacs window)")
   "Recognized Emacs capability library keys.")
@@ -232,6 +297,31 @@
        "stale window handle: %s" (agent-scheme-handle-id value)))
     window))
 
+(defun agent-scheme--live-frame-for-handle (value description)
+  "Return live Emacs frame for handle VALUE."
+  (let ((frame
+         (agent-scheme--handle-entry-object
+          (agent-scheme--handle-entry-for value 'frame description))))
+    (unless (frame-live-p frame)
+      (agent-scheme--eval-error
+       "stale frame handle: %s" (agent-scheme-handle-id value)))
+    frame))
+
+(defun agent-scheme--project-for-handle (value description)
+  "Return registered Emacs project for handle VALUE."
+  (agent-scheme--handle-entry-object
+   (agent-scheme--handle-entry-for value 'project description)))
+
+(defun agent-scheme--live-process-for-handle (value description)
+  "Return live Emacs process for handle VALUE."
+  (let ((process
+         (agent-scheme--handle-entry-object
+          (agent-scheme--handle-entry-for value 'process description))))
+    (unless (process-live-p process)
+      (agent-scheme--eval-error
+       "stale process handle: %s" (agent-scheme-handle-id value)))
+    process))
+
 (defun agent-scheme--buffer-handle (buffer)
   "Return an opaque handle for BUFFER."
   (agent-scheme--register-handle 'buffer buffer))
@@ -239,6 +329,18 @@
 (defun agent-scheme--window-handle (window)
   "Return an opaque handle for WINDOW."
   (agent-scheme--register-handle 'window window))
+
+(defun agent-scheme--frame-handle (frame)
+  "Return an opaque handle for FRAME."
+  (agent-scheme--register-handle 'frame frame))
+
+(defun agent-scheme--project-handle (project)
+  "Return an opaque handle for PROJECT."
+  (agent-scheme--register-handle 'project project))
+
+(defun agent-scheme--process-handle (process)
+  "Return an opaque handle for PROCESS."
+  (agent-scheme--register-handle 'process process))
 
 (defun agent-scheme--primitive-emacs-current-buffer (_arguments _context)
   "Primitive emacs-current-buffer."
@@ -296,11 +398,70 @@
   "Primitive emacs-window-list."
   (mapcar #'agent-scheme--window-handle (window-list nil 'no-minibuf)))
 
-(defun agent-scheme--primitive-project-root (_arguments _context)
-  "Primitive project-root."
+(defun agent-scheme--primitive-window-frame (arguments _context)
+  "Primitive window-frame over ARGUMENTS."
+  (agent-scheme--frame-handle
+   (window-frame
+    (agent-scheme--live-window-for-handle (car arguments) "window-frame"))))
+
+(defun agent-scheme--primitive-emacs-current-frame (_arguments _context)
+  "Primitive emacs-current-frame."
+  (agent-scheme--frame-handle (selected-frame)))
+
+(defun agent-scheme--primitive-emacs-frame-list (_arguments _context)
+  "Primitive emacs-frame-list."
+  (mapcar #'agent-scheme--frame-handle (frame-list)))
+
+(defun agent-scheme--primitive-frame-name (arguments _context)
+  "Primitive frame-name over ARGUMENTS."
+  (agent-scheme--maybe-string
+   (frame-parameter
+    (agent-scheme--live-frame-for-handle (car arguments) "frame-name")
+    'name)))
+
+(defun agent-scheme--primitive-emacs-current-project (_arguments _context)
+  "Primitive emacs-current-project."
   (let ((project (project-current nil)))
     (if project
+        (agent-scheme--project-handle project)
+      agent-scheme-false)))
+
+(defun agent-scheme--primitive-project-root (arguments _context)
+  "Primitive project-root over optional project handle ARGUMENTS."
+  (let ((project
+         (if arguments
+             (agent-scheme--project-for-handle
+              (car arguments) "project-root")
+           (project-current nil))))
+    (if project
         (file-name-as-directory (expand-file-name (project-root project)))
+      agent-scheme-false)))
+
+(defun agent-scheme--primitive-emacs-process-list (_arguments _context)
+  "Primitive emacs-process-list."
+  (mapcar #'agent-scheme--process-handle
+          (seq-filter #'process-live-p (process-list))))
+
+(defun agent-scheme--primitive-process-name (arguments _context)
+  "Primitive process-name over ARGUMENTS."
+  (process-name
+   (agent-scheme--live-process-for-handle (car arguments) "process-name")))
+
+(defun agent-scheme--primitive-process-status (arguments _context)
+  "Primitive process-status over ARGUMENTS."
+  (agent-scheme--scheme-symbol
+   (process-status
+    (agent-scheme--live-process-for-handle
+     (car arguments) "process-status"))))
+
+(defun agent-scheme--primitive-process-buffer (arguments _context)
+  "Primitive process-buffer over ARGUMENTS."
+  (let ((buffer
+         (process-buffer
+          (agent-scheme--live-process-for-handle
+           (car arguments) "process-buffer"))))
+    (if buffer
+        (agent-scheme--buffer-handle buffer)
       agent-scheme-false)))
 
 (defun agent-scheme--documentation-string (symbol commandp)
