@@ -97,4 +97,21 @@
     (should
      (string-match-p "(define (agent-scheme-expand-source" macro))))
 
+(ert-deftest agent-scheme-scheme-module-ownership-test-interpreter-owns-backend ()
+  "Keep the portable interpreter backend out of the evaluator facade."
+  (let ((interpreter
+         (agent-scheme-scheme-module-ownership-test--read
+          "scheme/agent-scheme/interpreter.sld"))
+        (eval
+         (agent-scheme-scheme-module-ownership-test--read
+          "scheme/agent-scheme/eval.sld")))
+    (should-not
+     (agent-scheme-scheme-module-ownership-test--imports-eval-p interpreter))
+    (should
+     (string-match-p "(define (trampoline" interpreter))
+    (should-not
+     (string-match-p "(define (trampoline" eval))
+    (should
+     (< (length (split-string eval "\n")) 80))))
+
 ;;; agent-scheme-scheme-module-ownership-test.el ends here
