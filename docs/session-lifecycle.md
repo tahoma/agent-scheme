@@ -101,6 +101,31 @@ The Emacs bootstrap also exposes matching `agent-scheme-session-*` functions
 and `agent-scheme-session-eval-source` for evaluating source inside a durable
 session.
 
+## Native Emacs REPL UX
+
+`agent-scheme-start-repl` starts or switches to a project session by default.
+It creates the native, non-vterm buffer set for the session:
+
+```text
+*Agent: PROJECT*
+*Agent Scheme: PROJECT*
+*Agent Events: PROJECT*
+*Agent Audit: PROJECT*
+*Agent Approvals: PROJECT*
+```
+
+`*Agent: PROJECT*` shows the current session record and status. `*Agent
+Scheme: PROJECT*` shows the persistent REPL transcript as Scheme-readable
+`transcript-entry` datums. `*Agent Events: PROJECT*` shows recent `(agent io)`
+records, `*Agent Audit: PROJECT*` shows session-scoped audit entries, and
+`*Agent Approvals: PROJECT*` shows pending request events such as approval
+requests emitted through `(agent-request datum)`.
+
+The `C-c a` dispatch command exposes entries for starting, switching,
+inspecting, stopping, evaluating in, and opening the native session buffers.
+Buffers include a mode-line status indicator in the form
+`Agent[SESSION:STATUS]`.
+
 ## Snapshots
 
 `session-snapshot!` returns a Scheme-readable snapshot record:
