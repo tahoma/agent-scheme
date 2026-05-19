@@ -130,6 +130,8 @@
           context-include-directory
           set-context-include-directory!
           context-file-paths
+          context-policy-actions
+          context-policy-confirmation-function
           context-interaction-environment
           set-context-interaction-environment!
           context-base-syntax-installed
@@ -423,6 +425,7 @@
                          maximum-value-nodes host-callbacks
                          maximum-host-callbacks syntax-environment libraries
                          include-paths include-directory file-paths
+                         policy-actions policy-confirmation-function
                          interaction-environment
                          base-syntax-installed next-syntax-id
                          exception-handlers dynamic-winds)
@@ -439,6 +442,8 @@
       (include-directory context-include-directory
                          set-context-include-directory!)
       (file-paths context-file-paths)
+      (policy-actions context-policy-actions)
+      (policy-confirmation-function context-policy-confirmation-function)
       (interaction-environment context-interaction-environment
                                set-context-interaction-environment!)
       (base-syntax-installed context-base-syntax-installed
@@ -576,6 +581,8 @@
        (normalize-include-paths
         (option-ref options 'file-paths '())
         include-directory)
+       (option-ref options 'policy-actions '())
+       (option-ref options 'policy-confirmation-function #f)
        #f
        #f
        0

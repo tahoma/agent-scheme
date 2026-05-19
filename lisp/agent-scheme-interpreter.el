@@ -16,6 +16,7 @@
 (require 'agent-scheme-base)
 (require 'agent-scheme-library)
 (require 'agent-scheme-macro)
+(require 'agent-scheme-policy)
 
 (defun agent-scheme--dynamic-wind-prefix-before (frame stack)
   "Return the prefix of STACK before FRAME, comparing frames with `eq'."
@@ -3807,10 +3808,14 @@ Advance when ADVANCEP is non-nil.  Signal errors using DESCRIPTION."
    #'agent-scheme--syntax-symbol
    '("r7rs" "ratios" "exact-complex" "ieee-float" "agent-scheme")))
 
-(defun agent-scheme--policy-denied (description)
+(defun agent-scheme--policy-denied (description &optional context)
   "Signal a default-denied host policy error for DESCRIPTION."
-  (agent-scheme--eval-error
-   "%s requires policy-gated host access" description))
+  (agent-scheme-policy-deny
+   'standard-host-effect
+   description
+   nil
+   context
+   (format "%s requires policy-gated host access" description)))
 
 (defun agent-scheme--resolve-file-policy-path (filename context description)
   "Return absolute path for FILENAME after CONTEXT file policy checks."
@@ -3819,14 +3824,31 @@ Advance when ADVANCEP is non-nil.  Signal errors using DESCRIPTION."
           filename
           (agent-scheme--eval-context-include-directory context))))
     (unless (agent-scheme--eval-context-file-paths context)
-      (agent-scheme--eval-error
-       "%s requires policy-gated host file access: %s"
-       description filename))
+      (agent-scheme-policy-deny
+       'standard-host-effect
+       description
+       `((filename . ,filename)
+         (path . ,path))
+       context
+       (format "%s requires policy-gated host file access: %s"
+               description filename)))
     (unless (agent-scheme--path-policy-allows-file-p
              path
              (agent-scheme--eval-context-file-paths context))
-      (agent-scheme--eval-error
-       "%s file is not allowed by policy: %s" description filename))
+      (agent-scheme-policy-deny
+       'standard-host-effect
+       description
+       `((filename . ,filename)
+         (path . ,path))
+       context
+       (format "%s file is not allowed by policy: %s"
+               description filename)))
+    (agent-scheme-policy-authorize
+     'standard-host-effect
+     description
+     `((filename . ,filename)
+       (path . ,path))
+     context)
     path))
 
 (defun agent-scheme--primitive-file-exists? (arguments context)
@@ -3837,10 +3859,15 @@ Advance when ADVANCEP is non-nil.  Signal errors using DESCRIPTION."
                 filename context "file-exists?")))
     (agent-scheme--scheme-boolean (file-exists-p path))))
 
-(defun agent-scheme--primitive-delete-file (arguments _context)
+(defun agent-scheme--primitive-delete-file (arguments context)
   "Primitive delete-file over ARGUMENTS."
-  (agent-scheme--expect-string (car arguments) "delete-file")
-  (agent-scheme--policy-denied "delete-file"))
+  (let ((filename (agent-scheme--expect-string (car arguments) "delete-file")))
+    (agent-scheme-policy-deny
+     'standard-host-effect
+     "delete-file"
+     `((filename . ,filename))
+     context
+     "delete-file requires policy-gated host file mutation")))
 
 (defun agent-scheme--primitive-call-with-port (arguments context)
   "Primitive call-with-port over ARGUMENTS."
