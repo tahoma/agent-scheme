@@ -43,12 +43,17 @@
   (let* ((root (make-temp-file "agent-scheme-skill-test-" t))
          (directory (expand-file-name "example-skill" root)))
     (make-directory directory)
+    (make-directory (expand-file-name "scripts" directory))
     (with-temp-file (expand-file-name "SKILL.md" directory)
       (insert "---\n")
       (insert "name: example-skill\n")
       (insert "description: Example skill\n")
       (insert "---\n")
       (insert "# Example Skill\n\nUse this skill for tests.\n"))
+    (with-temp-file (expand-file-name "scripts/run.sh" directory)
+      (insert "#!/bin/sh\n")
+      (insert "printf '%s\\n' example-skill\n"))
+    (set-file-modes (expand-file-name "scripts/run.sh" directory) #o755)
     directory))
 
 (defmacro agent-scheme-skill-test--with-temp-skill (directory-var &rest body)
@@ -148,5 +153,54 @@
                 "(skill-name \"example-skill\")"
                 "(decision allowed)")))
           (delete-directory root t))))))
+
+(ert-deftest agent-scheme-skill-test-read-resource-helper-audits-denial ()
+  "Audit direct resource-read helper denials before reading skill files."
+  (should (featurep 'agent-scheme-skill))
+  (should (fboundp 'agent-scheme-skill-read-resource))
+  (let ((agent-scheme-policy-category-actions
+         (agent-scheme-skill-test--actions
+          '((skill-resource-read . deny)))))
+    (agent-scheme-audit-clear)
+    (agent-scheme-skill-test--with-temp-skill directory
+      (should-error
+       (agent-scheme-skill-read-resource
+        directory "SKILL.md" '(:skill-name "example-skill"))
+       :type 'agent-scheme-policy-error)
+      (should
+       (agent-scheme-skill-test--audit-entry-matching
+        "(event skill-resource)"
+        "(category skill-resource-read)"
+        "(skill-name \"example-skill\")"
+        "(resource-path"
+        "SKILL.md"
+        "(decision denied)")))))
+
+(ert-deftest agent-scheme-skill-test-bundled-script-request-audits-confirmation ()
+  "Audit bundled script execution requests with confirmation decisions."
+  (should (featurep 'agent-scheme-skill))
+  (should (fboundp 'agent-scheme-skill-script-execution-request))
+  (let ((agent-scheme-policy-category-actions
+         (agent-scheme-skill-test--actions
+          '((skill-script-execution . confirm))))
+        (agent-scheme-policy-confirmation-function (lambda (_request) t)))
+    (agent-scheme-audit-clear)
+    (agent-scheme-skill-test--with-temp-skill directory
+      (let ((external
+             (agent-scheme-result->external
+              (agent-scheme-skill-script-execution-request
+               directory "scripts/run.sh"
+               '(:skill-name "example-skill")))))
+        (should (string-match-p "(skill-script-execution" external))
+        (should (string-match-p "(skill-name \"example-skill\")" external))
+        (should (string-match-p "(decision authorized)" external))
+        (should
+         (agent-scheme-skill-test--audit-entry-matching
+          "(event skill-script)"
+          "(category skill-script-execution)"
+          "(skill-name \"example-skill\")"
+          "(script-path"
+          "scripts/run.sh"
+          "(decision confirmed)"))))))
 
 ;;; agent-scheme-skill-test.el ends here
