@@ -11,10 +11,49 @@
 (require 'agent-scheme-reader)
 (require 'agent-scheme-runtime)
 (require 'agent-scheme-result)
+(require 'agent-scheme-audit)
+(require 'agent-scheme-policy)
 (require 'agent-scheme-base)
 (require 'agent-scheme-library)
 (require 'agent-scheme-macro)
 (require 'agent-scheme-interpreter)
+
+(defun agent-scheme--eval-context-library-keys (context)
+  "Return sorted library keys imported or registered in CONTEXT."
+  (let (keys)
+    (maphash
+     (lambda (key _library)
+       (push key keys))
+     (agent-scheme--eval-context-libraries context))
+    (sort keys #'string<)))
+
+(defun agent-scheme--audit-evaluation-success
+    (input-form value context)
+  "Record a successful evaluation of INPUT-FORM producing VALUE."
+  (agent-scheme-audit-record
+   'evaluation
+   `((category . pure-r7rs)
+     (operation . "evaluate")
+     (input-form . ,input-form)
+     (imported-libraries . ,(agent-scheme--eval-context-library-keys context))
+     (decision . allowed)
+     (result . ,(agent-scheme-value->external value)))))
+
+(defun agent-scheme--audit-evaluation-error
+    (input-form condition context)
+  "Record a failed evaluation of INPUT-FORM with CONDITION."
+  (agent-scheme-audit-record
+   'evaluation
+   `((category . pure-r7rs)
+     (operation . "evaluate")
+     (input-form . ,input-form)
+     (imported-libraries . ,(agent-scheme--eval-context-library-keys context))
+     (decision . error)
+     (error . ,(error-message-string condition)))))
+
+(defun agent-scheme--resignal (condition)
+  "Signal CONDITION again after audit handling."
+  (signal (car condition) (cdr condition)))
 
 ;;;###autoload
 (defun agent-scheme-eval (expression &optional environment options)
@@ -24,26 +63,52 @@ plist supporting `:max-steps', `:max-non-tail-steps',
 `:max-value-nodes', and `:max-host-callbacks'."
   (let ((context (agent-scheme--new-eval-context options))
         (eval-environment (or environment
-                              (agent-scheme-make-base-environment))))
+                              (agent-scheme-make-base-environment)))
+        (input-form (agent-scheme-value->external expression)))
     (setf (agent-scheme--eval-context-interaction-environment context)
           eval-environment)
-    (agent-scheme--ensure-base-syntax context eval-environment)
-    (agent-scheme--trampoline expression eval-environment context)))
+    (condition-case condition
+        (progn
+          (agent-scheme-policy-authorize
+           'pure-r7rs "evaluate" `((input-form . ,input-form)) context)
+          (agent-scheme--ensure-base-syntax context eval-environment)
+          (let ((value
+                 (agent-scheme--trampoline
+                  expression eval-environment context)))
+            (agent-scheme--audit-evaluation-success
+             input-form value context)
+            value))
+      (error
+       (agent-scheme--audit-evaluation-error input-form condition context)
+       (agent-scheme--resignal condition)))))
 
 ;;;###autoload
 (defun agent-scheme-eval-source (source &optional environment options)
   "Read and evaluate all datums in SOURCE.
 ENVIRONMENT defaults to a fresh base environment.  The returned value
 is the result of the last command or definition."
-  (let* ((forms (agent-scheme-read-all source))
-         (context (agent-scheme--new-eval-context options))
+  (let* ((context (agent-scheme--new-eval-context options))
          (eval-environment (or environment
                                (agent-scheme-make-base-environment)))
-         (sequence (agent-scheme--make-sequence forms t)))
+         (input-form source))
     (setf (agent-scheme--eval-context-interaction-environment context)
           eval-environment)
-    (agent-scheme--ensure-base-syntax context eval-environment)
-    (agent-scheme--trampoline sequence eval-environment context)))
+    (condition-case condition
+        (progn
+          (agent-scheme-policy-authorize
+           'pure-r7rs "evaluate" `((input-form . ,input-form)) context)
+          (let* ((forms (agent-scheme-read-all source))
+                 (sequence (agent-scheme--make-sequence forms t)))
+            (agent-scheme--ensure-base-syntax context eval-environment)
+            (let ((value
+                   (agent-scheme--trampoline
+                    sequence eval-environment context)))
+              (agent-scheme--audit-evaluation-success
+               input-form value context)
+              value)))
+      (error
+       (agent-scheme--audit-evaluation-error input-form condition context)
+       (agent-scheme--resignal condition)))))
 
 ;;;###autoload
 (defalias 'agent-scheme-eval-string #'agent-scheme-eval-source
@@ -57,15 +122,23 @@ explicitly; it has the same calling convention as
   "Evaluate EXPRESSION and return a Scheme-readable result datum."
   (let ((context (agent-scheme--new-eval-context options))
         (eval-environment (or environment
-                              (agent-scheme-make-base-environment))))
+                              (agent-scheme-make-base-environment)))
+        (input-form (agent-scheme-value->external expression)))
     (setf (agent-scheme--eval-context-interaction-environment context)
           eval-environment)
-    (agent-scheme--ensure-base-syntax context eval-environment)
     (condition-case condition
-        (agent-scheme--ok-result-datum
-         (agent-scheme--trampoline expression eval-environment context)
-         context)
+        (progn
+          (agent-scheme-policy-authorize
+           'pure-r7rs "evaluate" `((input-form . ,input-form)) context)
+          (agent-scheme--ensure-base-syntax context eval-environment)
+          (let ((value
+                 (agent-scheme--trampoline
+                  expression eval-environment context)))
+            (agent-scheme--audit-evaluation-success
+             input-form value context)
+            (agent-scheme--ok-result-datum value context)))
       (error
+       (agent-scheme--audit-evaluation-error input-form condition context)
        (agent-scheme--condition-result-datum condition context)))))
 
 ;;;###autoload
@@ -73,17 +146,25 @@ explicitly; it has the same calling convention as
   "Read and evaluate SOURCE and return a Scheme-readable result datum."
   (let ((context (agent-scheme--new-eval-context options))
         (eval-environment (or environment
-                              (agent-scheme-make-base-environment))))
+                              (agent-scheme-make-base-environment)))
+        (input-form source))
     (setf (agent-scheme--eval-context-interaction-environment context)
           eval-environment)
-    (agent-scheme--ensure-base-syntax context eval-environment)
     (condition-case condition
-        (let* ((forms (agent-scheme-read-all source))
-               (sequence (agent-scheme--make-sequence forms t)))
-          (agent-scheme--ok-result-datum
-           (agent-scheme--trampoline sequence eval-environment context)
-           context))
+        (progn
+          (agent-scheme-policy-authorize
+           'pure-r7rs "evaluate" `((input-form . ,input-form)) context)
+          (let* ((forms (agent-scheme-read-all source))
+                 (sequence (agent-scheme--make-sequence forms t)))
+            (agent-scheme--ensure-base-syntax context eval-environment)
+            (let ((value
+                   (agent-scheme--trampoline
+                    sequence eval-environment context)))
+              (agent-scheme--audit-evaluation-success
+               input-form value context)
+              (agent-scheme--ok-result-datum value context))))
       (error
+       (agent-scheme--audit-evaluation-error input-form condition context)
        (agent-scheme--condition-result-datum condition context)))))
 
 (provide 'agent-scheme-eval)

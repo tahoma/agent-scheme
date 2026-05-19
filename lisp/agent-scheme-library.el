@@ -15,6 +15,7 @@
 (require 'agent-scheme-result)
 (require 'agent-scheme-base)
 (require 'agent-scheme-capability)
+(require 'agent-scheme-policy)
 
 (defconst agent-scheme--library-source-directory
   (file-name-directory (or load-file-name buffer-file-name default-directory))
@@ -383,8 +384,8 @@ Each spec has (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY)."
 (defun agent-scheme--policy-denied-spec (name)
   "Return a primitive spec for default-denied host effect NAME."
   (list name
-        (lambda (_arguments _context)
-          (agent-scheme--policy-denied name))
+        (lambda (_arguments context)
+          (agent-scheme--policy-denied name context))
         0
         nil))
 
@@ -955,7 +956,7 @@ Each spec has (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY)."
    path
    (agent-scheme--eval-context-include-paths context)))
 
-(defun agent-scheme--resolve-include-file (filename context)
+(defun agent-scheme--resolve-include-file (filename context operation)
   "Return policy-checked absolute include path for FILENAME."
   (let ((path
          (expand-file-name
@@ -965,11 +966,29 @@ Each spec has (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY)."
       ;; Includes are the first host-file read path in the evaluator, so they
       ;; require an explicit allow-list even though the surrounding language is
       ;; otherwise portable R7RS Scheme.
-      (agent-scheme--eval-error
-       "include requires policy-gated host file access: %s" filename))
+      (agent-scheme-policy-deny
+       'standard-host-effect
+       operation
+       `((filename . ,filename)
+         (path . ,path))
+       context
+       (format "%s requires policy-gated host file access: %s"
+               operation filename)))
     (unless (agent-scheme--include-policy-allows-file-p path context)
-      (agent-scheme--eval-error
-       "include file is not allowed by policy: %s" filename))
+      (agent-scheme-policy-deny
+       'standard-host-effect
+       operation
+       `((filename . ,filename)
+         (path . ,path))
+       context
+       (format "%s file is not allowed by policy: %s"
+               operation filename)))
+    (agent-scheme-policy-authorize
+     'standard-host-effect
+     operation
+     `((filename . ,filename)
+       (path . ,path))
+     context)
     (unless (file-readable-p path)
       (agent-scheme--eval-error
        "include file is not readable: %s" filename))
@@ -991,7 +1010,8 @@ Each spec has (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY)."
   "Read FILENAME into forms after include policy checks.
 When FOLD-CASE is non-nil, read as if the file began with
 `#!fold-case'.  The return value is (FORMS . DIRECTORY)."
-  (let* ((path (agent-scheme--resolve-include-file filename context))
+  (let* ((path (agent-scheme--resolve-include-file
+                filename context (if fold-case "include-ci" "include")))
          (source
           (with-temp-buffer
             (insert-file-contents path)
@@ -1022,8 +1042,15 @@ When FOLD-CASE is non-nil, read as if the file began with
    (mapcar
     (lambda (filename)
       (let* ((read-result
-              (agent-scheme--read-include-file-forms
-               filename context nil))
+              (let ((path
+                     (agent-scheme--resolve-include-file
+                      filename context "include-library-declarations")))
+                (let ((source
+                       (with-temp-buffer
+                         (insert-file-contents path)
+                         (buffer-string))))
+                  (cons (agent-scheme-read-all source)
+                        (file-name-directory path)))))
              (forms (car read-result))
              (directory (cdr read-result)))
         (agent-scheme--with-include-directory
