@@ -14,6 +14,7 @@
 (require 'agent-scheme-reader)
 (require 'agent-scheme-runtime)
 (require 'agent-scheme-result)
+(require 'agent-scheme-policy)
 
 (cl-defstruct (agent-scheme--handle-entry
                (:constructor agent-scheme--make-handle-entry (kind object))
@@ -208,6 +209,26 @@
       (equal (plist-get spec :library) library))
     agent-scheme--emacs-capability-manifest-specs)))
 
+(defun agent-scheme--emacs-capability-manifest-spec (name)
+  "Return manifest metadata for Emacs capability NAME."
+  (seq-find
+   (lambda (spec)
+     (equal (plist-get spec :name) name))
+   agent-scheme--emacs-capability-manifest-specs))
+
+(defun agent-scheme--authorize-emacs-capability
+    (name arguments context)
+  "Authorize read-only Emacs capability NAME with ARGUMENTS in CONTEXT."
+  (let ((spec (agent-scheme--emacs-capability-manifest-spec name)))
+    (agent-scheme-policy-authorize
+     'emacs-read-only
+     name
+     `((library . ,(and spec (plist-get spec :library)))
+       (capability . ,name)
+       (arguments . ,arguments))
+     context
+     'capability-call)))
+
 (defun agent-scheme--register-handle (kind object)
   "Register live host OBJECT of KIND and return an opaque Scheme handle."
   (let ((id (format "h-%d" (cl-incf agent-scheme--next-handle-number))))
@@ -342,40 +363,51 @@
   "Return an opaque handle for PROCESS."
   (agent-scheme--register-handle 'process process))
 
-(defun agent-scheme--primitive-emacs-current-buffer (_arguments _context)
+(defun agent-scheme--primitive-emacs-current-buffer (arguments context)
   "Primitive emacs-current-buffer."
+  (agent-scheme--authorize-emacs-capability
+   "emacs-current-buffer" arguments context)
   (agent-scheme--buffer-handle (current-buffer)))
 
-(defun agent-scheme--primitive-buffer-name (arguments _context)
+(defun agent-scheme--primitive-buffer-name (arguments context)
   "Primitive buffer-name over ARGUMENTS."
+  (agent-scheme--authorize-emacs-capability "buffer-name" arguments context)
   (buffer-name
    (agent-scheme--live-buffer-for-handle (car arguments) "buffer-name")))
 
-(defun agent-scheme--primitive-buffer-file-name (arguments _context)
+(defun agent-scheme--primitive-buffer-file-name (arguments context)
   "Primitive buffer-file-name over ARGUMENTS."
+  (agent-scheme--authorize-emacs-capability
+   "buffer-file-name" arguments context)
   (agent-scheme--maybe-string
    (buffer-local-value
     'buffer-file-name
     (agent-scheme--live-buffer-for-handle
      (car arguments) "buffer-file-name"))))
 
-(defun agent-scheme--primitive-buffer-major-mode (arguments _context)
+(defun agent-scheme--primitive-buffer-major-mode (arguments context)
   "Primitive buffer-major-mode over ARGUMENTS."
+  (agent-scheme--authorize-emacs-capability
+   "buffer-major-mode" arguments context)
   (agent-scheme--scheme-symbol
    (buffer-local-value
     'major-mode
     (agent-scheme--live-buffer-for-handle
      (car arguments) "buffer-major-mode"))))
 
-(defun agent-scheme--primitive-buffer-point (arguments _context)
+(defun agent-scheme--primitive-buffer-point (arguments context)
   "Primitive buffer-point over ARGUMENTS."
+  (agent-scheme--authorize-emacs-capability
+   "buffer-point" arguments context)
   (agent-scheme--scheme-integer
    (with-current-buffer
        (agent-scheme--live-buffer-for-handle (car arguments) "buffer-point")
      (point))))
 
-(defun agent-scheme--primitive-buffer-text (arguments _context)
+(defun agent-scheme--primitive-buffer-text (arguments context)
   "Primitive buffer-text over ARGUMENTS."
+  (agent-scheme--authorize-emacs-capability
+   "buffer-text" arguments context)
   (let* ((buffer (agent-scheme--live-buffer-for-handle
                   (car arguments) "buffer-text"))
          (start (agent-scheme--capability-exact-integer
@@ -390,44 +422,57 @@
          "buffer-text range outside buffer: %d..%d" start end))
       (buffer-substring-no-properties start end))))
 
-(defun agent-scheme--primitive-emacs-buffer-list (_arguments _context)
+(defun agent-scheme--primitive-emacs-buffer-list (arguments context)
   "Primitive emacs-buffer-list."
+  (agent-scheme--authorize-emacs-capability
+   "emacs-buffer-list" arguments context)
   (mapcar #'agent-scheme--buffer-handle (buffer-list)))
 
-(defun agent-scheme--primitive-emacs-window-list (_arguments _context)
+(defun agent-scheme--primitive-emacs-window-list (arguments context)
   "Primitive emacs-window-list."
+  (agent-scheme--authorize-emacs-capability
+   "emacs-window-list" arguments context)
   (mapcar #'agent-scheme--window-handle (window-list nil 'no-minibuf)))
 
-(defun agent-scheme--primitive-window-frame (arguments _context)
+(defun agent-scheme--primitive-window-frame (arguments context)
   "Primitive window-frame over ARGUMENTS."
+  (agent-scheme--authorize-emacs-capability "window-frame" arguments context)
   (agent-scheme--frame-handle
    (window-frame
     (agent-scheme--live-window-for-handle (car arguments) "window-frame"))))
 
-(defun agent-scheme--primitive-emacs-current-frame (_arguments _context)
+(defun agent-scheme--primitive-emacs-current-frame (arguments context)
   "Primitive emacs-current-frame."
+  (agent-scheme--authorize-emacs-capability
+   "emacs-current-frame" arguments context)
   (agent-scheme--frame-handle (selected-frame)))
 
-(defun agent-scheme--primitive-emacs-frame-list (_arguments _context)
+(defun agent-scheme--primitive-emacs-frame-list (arguments context)
   "Primitive emacs-frame-list."
+  (agent-scheme--authorize-emacs-capability
+   "emacs-frame-list" arguments context)
   (mapcar #'agent-scheme--frame-handle (frame-list)))
 
-(defun agent-scheme--primitive-frame-name (arguments _context)
+(defun agent-scheme--primitive-frame-name (arguments context)
   "Primitive frame-name over ARGUMENTS."
+  (agent-scheme--authorize-emacs-capability "frame-name" arguments context)
   (agent-scheme--maybe-string
    (frame-parameter
     (agent-scheme--live-frame-for-handle (car arguments) "frame-name")
     'name)))
 
-(defun agent-scheme--primitive-emacs-current-project (_arguments _context)
+(defun agent-scheme--primitive-emacs-current-project (arguments context)
   "Primitive emacs-current-project."
+  (agent-scheme--authorize-emacs-capability
+   "emacs-current-project" arguments context)
   (let ((project (project-current nil)))
     (if project
         (agent-scheme--project-handle project)
       agent-scheme-false)))
 
-(defun agent-scheme--primitive-project-root (arguments _context)
+(defun agent-scheme--primitive-project-root (arguments context)
   "Primitive project-root over optional project handle ARGUMENTS."
+  (agent-scheme--authorize-emacs-capability "project-root" arguments context)
   (let ((project
          (if arguments
              (agent-scheme--project-for-handle
@@ -437,25 +482,30 @@
         (file-name-as-directory (expand-file-name (project-root project)))
       agent-scheme-false)))
 
-(defun agent-scheme--primitive-emacs-process-list (_arguments _context)
+(defun agent-scheme--primitive-emacs-process-list (arguments context)
   "Primitive emacs-process-list."
+  (agent-scheme--authorize-emacs-capability
+   "emacs-process-list" arguments context)
   (mapcar #'agent-scheme--process-handle
           (seq-filter #'process-live-p (process-list))))
 
-(defun agent-scheme--primitive-process-name (arguments _context)
+(defun agent-scheme--primitive-process-name (arguments context)
   "Primitive process-name over ARGUMENTS."
+  (agent-scheme--authorize-emacs-capability "process-name" arguments context)
   (process-name
    (agent-scheme--live-process-for-handle (car arguments) "process-name")))
 
-(defun agent-scheme--primitive-process-status (arguments _context)
+(defun agent-scheme--primitive-process-status (arguments context)
   "Primitive process-status over ARGUMENTS."
+  (agent-scheme--authorize-emacs-capability "process-status" arguments context)
   (agent-scheme--scheme-symbol
    (process-status
     (agent-scheme--live-process-for-handle
      (car arguments) "process-status"))))
 
-(defun agent-scheme--primitive-process-buffer (arguments _context)
+(defun agent-scheme--primitive-process-buffer (arguments context)
   "Primitive process-buffer over ARGUMENTS."
+  (agent-scheme--authorize-emacs-capability "process-buffer" arguments context)
   (let ((buffer
          (process-buffer
           (agent-scheme--live-process-for-handle
@@ -472,20 +522,23 @@ When COMMANDP is non-nil, SYMBOL must name an interactive command."
       (agent-scheme--maybe-string (documentation symbol t))
     agent-scheme-false))
 
-(defun agent-scheme--primitive-command-doc (arguments _context)
+(defun agent-scheme--primitive-command-doc (arguments context)
   "Primitive command-doc over ARGUMENTS."
+  (agent-scheme--authorize-emacs-capability "command-doc" arguments context)
   (agent-scheme--documentation-string
    (agent-scheme--capability-name-symbol (car arguments) "command-doc")
    t))
 
-(defun agent-scheme--primitive-function-doc (arguments _context)
+(defun agent-scheme--primitive-function-doc (arguments context)
   "Primitive function-doc over ARGUMENTS."
+  (agent-scheme--authorize-emacs-capability "function-doc" arguments context)
   (agent-scheme--documentation-string
    (agent-scheme--capability-name-symbol (car arguments) "function-doc")
    nil))
 
-(defun agent-scheme--primitive-variable-info (arguments _context)
+(defun agent-scheme--primitive-variable-info (arguments context)
   "Primitive variable-info over ARGUMENTS without exposing variable values."
+  (agent-scheme--authorize-emacs-capability "variable-info" arguments context)
   (let* ((argument (car arguments))
          (name
           (cond

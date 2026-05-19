@@ -216,6 +216,8 @@ base syntax prelude has already been installed."
   include-paths
   include-directory
   file-paths
+  policy-actions
+  policy-confirmation-function
   interaction-environment
   base-syntax-installed
   exception-handlers
@@ -292,6 +294,10 @@ MESSAGE and ARGS are passed to `format'."
      (agent-scheme--normalize-include-paths
       (agent-scheme--eval-option options :file-paths nil)
       include-directory)
+     :policy-actions
+     (agent-scheme--eval-option options :policy-actions nil)
+     :policy-confirmation-function
+     (agent-scheme--eval-option options :policy-confirmation-function nil)
      :base-syntax-installed nil
      :exception-handlers nil
      :dynamic-winds nil)))
