@@ -185,6 +185,7 @@
           normalize-include-paths
           new-eval-context
           record-audit-event!
+          record-agent-event!
           note-step!
           note-host-callback!
           value-node-count
@@ -227,6 +228,10 @@
     (define agent-scheme-default-maximum-value-nodes 100000)
     ;; Default maximum primitive callback count allowed during evaluation.
     (define agent-scheme-default-maximum-host-callbacks 10000)
+    ;; Default maximum event-channel records allowed during evaluation.
+    (define agent-scheme-default-maximum-events 1000)
+    ;; Default maximum reachable value graph size for one event record.
+    (define agent-scheme-default-maximum-event-nodes 100000)
 
     ;; Record type for the singleton unspecified value returned by effect-only
     ;; forms.
@@ -429,6 +434,7 @@
                          maximum-host-callbacks syntax-environment libraries
                          include-paths include-directory file-paths
                          policy-actions policy-confirmation-function
+                         event-count maximum-events maximum-event-nodes
                          audit-events
                          interaction-environment
                          base-syntax-installed next-syntax-id
@@ -439,6 +445,9 @@
       (maximum-value-nodes context-maximum-value-nodes)
       (host-callbacks context-host-callbacks set-context-host-callbacks!)
       (maximum-host-callbacks context-maximum-host-callbacks)
+      (event-count context-event-count set-context-event-count!)
+      (maximum-events context-maximum-events)
+      (maximum-event-nodes context-maximum-event-nodes)
       (syntax-environment context-syntax-environment
                           set-context-syntax-environment!)
       (libraries context-libraries set-context-libraries!)
@@ -588,6 +597,13 @@
         include-directory)
        (option-ref options 'policy-actions '())
        (option-ref options 'policy-confirmation-function #f)
+       0
+       (option-ref options
+                   'max-events
+                   agent-scheme-default-maximum-events)
+       (option-ref options
+                   'max-event-nodes
+                   agent-scheme-default-maximum-event-nodes)
        '()
        #f
        #f
@@ -603,6 +619,26 @@
          context
          (cons entry (context-audit-events context)))
         entry))
+
+    ;; Record an ordered event-channel EVENT after enforcing event budgets.
+    (define (record-agent-event! context event)
+      (let ((node-count (value-node-count event '())))
+        (if (> node-count (context-maximum-event-nodes context))
+            (budget-error "event node budget exceeded"
+                          node-count
+                          (context-maximum-event-nodes context))))
+      (if (>= (context-event-count context)
+              (context-maximum-events context))
+          (budget-error "event count budget exceeded"
+                        (+ (context-event-count context) 1)
+                        (context-maximum-events context)))
+      (set-context-event-count!
+       context
+       (+ (context-event-count context) 1))
+      (set-context-audit-events!
+       context
+       (cons event (context-audit-events context)))
+      event)
 
     ;; Charge one evaluator step against the active step budget.
     (define (note-step! context)

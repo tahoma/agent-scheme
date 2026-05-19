@@ -4904,7 +4904,9 @@ objects so result records can be rendered by `agent-scheme-datum->external'."
              "values"
              (mapcar #'agent-scheme--value->result-datum
                      (agent-scheme--multiple-values-values value)))
-            (agent-scheme--result-field "events" nil)
+            (agent-scheme--result-field
+             "events"
+             (agent-scheme--context-events context))
             (agent-scheme--budget-result-field context))
     (list (agent-scheme--result-symbol "evaluation-result")
           (agent-scheme--result-field "status"
@@ -4912,7 +4914,9 @@ objects so result records can be rendered by `agent-scheme-datum->external'."
           (agent-scheme--result-field
            "value"
            (agent-scheme--value->result-datum value))
-          (agent-scheme--result-field "events" nil)
+          (agent-scheme--result-field
+           "events"
+           (agent-scheme--context-events context))
           (agent-scheme--budget-result-field context))))
 
 (defun agent-scheme--condition-result-datum (condition context)
@@ -4929,7 +4933,9 @@ objects so result records can be rendered by `agent-scheme-datum->external'."
            (agent-scheme--result-field
             "message"
             (error-message-string condition)))
-          (agent-scheme--result-field "events" nil)
+          (agent-scheme--result-field
+           "events"
+           (agent-scheme--context-events context))
           (agent-scheme--budget-result-field context))))
 
 

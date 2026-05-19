@@ -60,7 +60,8 @@
   "Evaluate one Agent Scheme EXPRESSION datum.
 ENVIRONMENT defaults to a fresh base environment.  OPTIONS is a
 plist supporting `:max-steps', `:max-non-tail-steps',
-`:max-value-nodes', and `:max-host-callbacks'."
+`:max-value-nodes', `:max-host-callbacks', `:max-events',
+and `:max-event-nodes'."
   (let ((context (agent-scheme--new-eval-context options))
         (eval-environment (or environment
                               (agent-scheme-make-base-environment)))
