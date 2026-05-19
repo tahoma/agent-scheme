@@ -3745,30 +3745,69 @@
     (define (primitive-features arguments context)
       '(r7rs ratios exact-complex ieee-float agent-scheme))
 
+    ;; Record a portable policy decision into the context audit event list.
+    (define (record-policy-decision! context category operation decision fields)
+      (record-audit-event!
+       context
+       'policy-decision
+       (append
+        (list (result-field 'category category)
+              (result-field 'operation operation)
+              (result-field 'decision decision))
+        fields)))
+
     ;; Raise a policy-gated host-access denial for DESCRIPTION.
-    (define (policy-denied description)
+    (define (policy-denied description context fields)
+      (record-policy-decision!
+       context
+       'standard-host-effect
+       description
+       'denied
+       fields)
       (eval-error
        (string-append description " requires policy-gated host access")))
 
     ;; Return a primitive callback that always raises a policy denial.
     (define (policy-denied-primitive description)
       (lambda (arguments context)
-        (policy-denied description)))
+        (policy-denied description context '())))
 
     ;; Resolve FILENAME and enforce the file-operation allow-list policy.
     (define (resolve-file-policy-path filename context description)
       (let ((path (path-join (context-include-directory context) filename)))
         (cond
          ((null? (context-file-paths context))
+          (record-policy-decision!
+           context
+           'standard-host-effect
+           description
+           'denied
+           (list (result-field 'filename filename)
+                 (result-field 'path path)))
           (eval-error
            (string-append description
                           " requires policy-gated host file access")
            filename))
          ((not (path-policy-allows-file? path (context-file-paths context)))
+          (record-policy-decision!
+           context
+           'standard-host-effect
+           description
+           'denied
+           (list (result-field 'filename filename)
+                 (result-field 'path path)))
           (eval-error
            (string-append description " file is not allowed by policy")
            filename))
-         (else path))))
+         (else
+          (record-policy-decision!
+           context
+           'standard-host-effect
+           description
+           'allowed
+           (list (result-field 'filename filename)
+                 (result-field 'path path)))
+          path))))
 
     ;; Implement the `file-exists?` primitive with argument validation and
     ;; Agent Scheme values.
@@ -3784,7 +3823,10 @@
     ;; Scheme values.
     (define (primitive-delete-file arguments context)
       (expect-string (car arguments) "delete-file")
-      (policy-denied "delete-file"))
+      (policy-denied
+       "delete-file"
+       context
+       (list (result-field 'filename (car arguments)))))
 
     ;; Implement the `call-with-port` primitive with argument validation and
     ;; Agent Scheme values.

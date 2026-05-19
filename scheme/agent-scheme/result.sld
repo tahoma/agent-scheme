@@ -128,6 +128,10 @@
         (agent-scheme-make-canonical-integer
          (context-host-callbacks context)))))
 
+    ;; Return audit events in the order they were recorded.
+    (define (context-events context)
+      (reverse (context-audit-events context)))
+
     ;; Build a successful evaluation-result datum for VALUE.
     (define (ok-result-datum value context)
       (if (multiple-values? value)
@@ -137,12 +141,12 @@
                  'values
                  (map value->result-datum
                       (multiple-values-values value)))
-                (result-field 'events '())
+                (result-field 'events (context-events context))
                 (budget-result-field context))
           (list 'evaluation-result
                 (result-field 'status 'ok)
                 (result-field 'value (value->result-datum value))
-                (result-field 'events '())
+                (result-field 'events (context-events context))
                 (budget-result-field context))))
 
     ;; Return a printable message for a caught Scheme condition.
@@ -159,7 +163,7 @@
              'error
              (result-field 'condition 'error)
              (result-field 'message (condition-message condition)))
-            (result-field 'events '())
+            (result-field 'events (context-events context))
             (budget-result-field context)))
 
     ;; Render an evaluation-result datum using the reader/writer external form.

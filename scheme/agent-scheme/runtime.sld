@@ -132,6 +132,8 @@
           context-file-paths
           context-policy-actions
           context-policy-confirmation-function
+          context-audit-events
+          set-context-audit-events!
           context-interaction-environment
           set-context-interaction-environment!
           context-base-syntax-installed
@@ -182,6 +184,7 @@
           path-join
           normalize-include-paths
           new-eval-context
+          record-audit-event!
           note-step!
           note-host-callback!
           value-node-count
@@ -426,6 +429,7 @@
                          maximum-host-callbacks syntax-environment libraries
                          include-paths include-directory file-paths
                          policy-actions policy-confirmation-function
+                         audit-events
                          interaction-environment
                          base-syntax-installed next-syntax-id
                          exception-handlers dynamic-winds)
@@ -444,6 +448,7 @@
       (file-paths context-file-paths)
       (policy-actions context-policy-actions)
       (policy-confirmation-function context-policy-confirmation-function)
+      (audit-events context-audit-events set-context-audit-events!)
       (interaction-environment context-interaction-environment
                                set-context-interaction-environment!)
       (base-syntax-installed context-base-syntax-installed
@@ -583,11 +588,21 @@
         include-directory)
        (option-ref options 'policy-actions '())
        (option-ref options 'policy-confirmation-function #f)
+       '()
        #f
        #f
        0
        '()
        '())))
+
+    ;; Record a Scheme-readable audit EVENT with FIELDS in CONTEXT.
+    (define (record-audit-event! context event fields)
+      (let ((entry (cons 'audit-entry
+                         (cons (list 'event event) fields))))
+        (set-context-audit-events!
+         context
+         (cons entry (context-audit-events context)))
+        entry))
 
     ;; Charge one evaluator step against the active step budget.
     (define (note-step! context)

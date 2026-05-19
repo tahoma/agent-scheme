@@ -50,6 +50,11 @@
           (agent-scheme-eval-source-result source))
          expected))
 
+;; Return FIELD from a Scheme-readable result or audit datum.
+(define (field-value datum field)
+  (let ((entry (assq field (cdr datum))))
+    (if entry (cadr entry) #f)))
+
 ;; Find the primitive binding metadata record named NAME in SPECS.
 (define (find-primitive-spec name specs)
   (cond
@@ -961,12 +966,48 @@
             (file-exists? \"fixtures/r7rs/conformance-cases.scm\")")))
        #t)
 
+(let* ((result
+        (agent-scheme-eval-source-result
+         "(import (scheme base) (scheme file))
+          (file-exists? \"fixtures/r7rs/conformance-cases.scm\")"))
+       (events (field-value result 'events))
+       (event (and (pair? events) (car events))))
+  (check 'standard-file-default-denial-audits
+         (and event
+              (equal? (field-value event 'event) 'policy-decision)
+              (equal? (field-value event 'category) 'standard-host-effect)
+              (equal? (field-value event 'operation) "file-exists?")
+              (equal? (field-value event 'decision) 'denied)
+              (equal? (field-value event 'filename)
+                      "fixtures/r7rs/conformance-cases.scm")
+              #t)
+         #t))
+
 (check-external/options 'standard-file-import-policy-allowed
                         "(import (scheme base) (scheme file))
                          (file-exists?
                           \"fixtures/r7rs/conformance-cases.scm\")"
                         include-policy-options
                         "#t")
+
+(let* ((result
+        (agent-scheme-eval-source-result
+         "(import (scheme base) (scheme file))
+          (file-exists? \"fixtures/r7rs/conformance-cases.scm\")"
+         #f
+         include-policy-options))
+       (events (field-value result 'events))
+       (event (and (pair? events) (car events))))
+  (check 'standard-file-policy-allowed-audits
+         (and event
+              (equal? (field-value event 'event) 'policy-decision)
+              (equal? (field-value event 'category) 'standard-host-effect)
+              (equal? (field-value event 'operation) "file-exists?")
+              (equal? (field-value event 'decision) 'allowed)
+              (equal? (field-value event 'filename)
+                      "fixtures/r7rs/conformance-cases.scm")
+              #t)
+         #t))
 
 (check 'standard-host-libraries-import-and-default-deny
        (and

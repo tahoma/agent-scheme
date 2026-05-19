@@ -448,9 +448,10 @@ current audit implementation records evaluations, read-only and buffer-edit
 capability calls and outcomes, standard host-effect denials or grants, skill
 activation decisions, trust decisions, resource/script/export policy stubs, and
 confirmation outcomes.
-Portable Scheme still carries its path allow-list policy for host-file tests;
-the Scheme-native policy/audit module remains follow-up work before policy
-records are fully portable across hosts.
+Portable Scheme now records standard host-file policy decisions in
+`evaluation-result` event lists for its path allow-list gates.  Remaining
+portable parity covers host-adapter-only surfaces such as Emacs capabilities,
+Agent Skills interop, and `(agent io)` session storage.
 
 ## Threat Model
 
