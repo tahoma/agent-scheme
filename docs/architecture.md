@@ -368,6 +368,9 @@ An agent and a user should be able to share a named REPL session. The user can
 inspect imported libraries, definitions, recent yields, policy decisions,
 memory, and pending approvals as Scheme data.
 
+The concrete lifecycle, snapshot, fork, and cleanup contract is recorded in
+[Session Lifecycle and Snapshots](session-lifecycle.md).
+
 ## Library Namespaces
 
 R7RS standard libraries use R7RS names:

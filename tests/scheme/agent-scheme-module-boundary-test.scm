@@ -9,6 +9,7 @@
         (prefix (agent-scheme base) base:)
         (prefix (agent-scheme library) library:)
         (prefix (agent-scheme macro) macro:)
+        (prefix (agent-scheme session) session:)
         (prefix (agent-scheme interpreter) interpreter:))
 
 ;; Record one failed portable module-boundary check.
@@ -45,6 +46,26 @@
 (check 'macro-boundary
        (procedure? macro:agent-scheme-expand-source)
        #t)
+
+;; Store for exercising the portable session lifecycle boundary.
+(define session-store (session:agent-scheme-make-session-store))
+
+;; Session datum created through the portable session module.
+(define portable-session
+  (session:session-create! session-store
+                           'named
+                           '((id portable-main))))
+
+(check 'session-boundary-create-ref
+       (session:session-datum-id
+        (session:session-ref session-store 'portable-main))
+       'portable-main)
+
+(check 'session-boundary-snapshot
+       (car (session:session-snapshot! session-store
+                                       'portable-main
+                                       '((id portable-snap))))
+       'session-snapshot)
 
 (check 'interpreter-boundary
        (interpreter:agent-scheme-value->external
