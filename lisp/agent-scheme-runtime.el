@@ -27,6 +27,16 @@
   :type 'integer
   :group 'agent-scheme)
 
+(defcustom agent-scheme-eval-maximum-events 1000
+  "Maximum Agent Scheme event records allowed in one evaluation."
+  :type 'integer
+  :group 'agent-scheme)
+
+(defcustom agent-scheme-eval-maximum-event-nodes 100000
+  "Maximum reachable value nodes allowed in one Agent Scheme event record."
+  :type 'integer
+  :group 'agent-scheme)
+
 (define-error 'agent-scheme-eval-error
   "Agent Scheme evaluation error")
 
@@ -211,6 +221,10 @@ base syntax prelude has already been installed."
   maximum-value-nodes
   host-callbacks
   maximum-host-callbacks
+  events
+  event-count
+  maximum-events
+  maximum-event-nodes
   syntax-environment
   libraries
   include-paths
@@ -280,6 +294,14 @@ MESSAGE and ARGS are passed to `format'."
      :maximum-host-callbacks
      (agent-scheme--eval-option options :max-host-callbacks
                                 agent-scheme-eval-maximum-host-callbacks)
+     :events nil
+     :event-count 0
+     :maximum-events
+     (agent-scheme--eval-option options :max-events
+                                agent-scheme-eval-maximum-events)
+     :maximum-event-nodes
+     (agent-scheme--eval-option options :max-event-nodes
+                                agent-scheme-eval-maximum-event-nodes)
      :syntax-environment
      (agent-scheme--make-syntax-environment
       (make-hash-table :test #'equal) nil
@@ -607,6 +629,36 @@ SEEN prevents infinite recursion over cyclic host structures."
        count
        (agent-scheme--eval-context-maximum-value-nodes context))))
   value)
+
+(defun agent-scheme--context-events (context)
+  "Return CONTEXT's event records in emission order."
+  (reverse (agent-scheme--eval-context-events context)))
+
+(defun agent-scheme--record-event! (context event)
+  "Record EVENT in CONTEXT after enforcing event budgets."
+  (let* ((node-count
+          (agent-scheme--value-node-count
+           event (make-hash-table :test #'eq)))
+         (maximum-nodes
+          (agent-scheme--eval-context-maximum-event-nodes context))
+         (maximum-events
+          (agent-scheme--eval-context-maximum-events context)))
+    (when (and (integerp maximum-nodes)
+               (> node-count maximum-nodes))
+      (agent-scheme--budget-error
+       "event node budget exceeded: %d > %d"
+       node-count
+       maximum-nodes))
+    (when (and (integerp maximum-events)
+               (>= (agent-scheme--eval-context-event-count context)
+                   maximum-events))
+      (agent-scheme--budget-error
+       "event count budget exceeded: %d > %d"
+       (1+ (agent-scheme--eval-context-event-count context))
+       maximum-events))
+    (cl-incf (agent-scheme--eval-context-event-count context))
+    (push event (agent-scheme--eval-context-events context))
+    event))
 
 (defun agent-scheme--values-list (value)
   "Return VALUE as the list delivered to a continuation."

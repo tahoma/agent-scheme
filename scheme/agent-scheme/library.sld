@@ -109,6 +109,10 @@
         (scheme time)
         (scheme write)))
 
+    ;; Agent interaction library keys recognized by the portable registry.
+    (define agent-library-keys
+      '((agent io)))
+
     ;; Checked-in standard libraries loaded as portable Scheme source files.
     (define standard-source-library-load-paths
       '(((scheme case-lambda)
@@ -684,11 +688,34 @@
        (else
         (eval-error "unknown standard library" key))))
 
+    ;; Register a supported Agent Scheme interaction library by KEY.
+    (define (register-agent-library! key context)
+      (cond
+       ((equal? key '(agent io))
+        (register-primitive-library!
+         key
+         (list
+          (library-primitive-spec 'agent-yield 'primitive-agent-yield 1 1)
+          (library-primitive-spec 'agent-log 'primitive-agent-log 2 #f)
+          (library-primitive-spec 'agent-progress
+                                  'primitive-agent-progress
+                                  2
+                                  2)
+          (library-primitive-spec 'agent-warn 'primitive-agent-warn 1 #f)
+          (library-primitive-spec 'agent-request
+                                  'primitive-agent-request
+                                  1
+                                  1))
+         context))
+       (else
+        (eval-error "unknown agent library" key))))
+
     ;; Report whether NAME is a known or already registered library.
     (define (library-available? name context environment)
       (let ((key (library-name-key name)))
         (or (equal? key scheme-base-library-key)
             (member key standard-library-keys)
+            (member key agent-library-keys)
             (member key empty-emacs-capability-library-keys)
             (and (library-registry-ref context key) #t))))
 
@@ -700,6 +727,8 @@
           (register-scheme-base-library! context environment))
          ((member key standard-library-keys)
           (register-standard-library! key context environment))
+         ((member key agent-library-keys)
+          (register-agent-library! key context))
          ((member key empty-emacs-capability-library-keys)
           (register-empty-emacs-capability-library! key context)))
         (or (library-registry-ref context key)

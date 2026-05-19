@@ -3745,6 +3745,44 @@
     (define (primitive-features arguments context)
       '(r7rs ratios exact-complex ieee-float agent-scheme))
 
+    ;; Emit a primary structured observation event into the current context.
+    (define (primitive-agent-yield arguments context)
+      (record-agent-event! context (list 'yield (car arguments)))
+      agent-scheme-unspecified)
+
+    ;; Emit a structured log event into the current context.
+    (define (primitive-agent-log arguments context)
+      (record-agent-event!
+       context
+       (list 'log
+             (result-field 'level (car arguments))
+             (result-field 'message (second arguments))
+             (result-field 'fields (cddr arguments))))
+      agent-scheme-unspecified)
+
+    ;; Emit a structured progress event into the current context.
+    (define (primitive-agent-progress arguments context)
+      (record-agent-event!
+       context
+       (list 'progress
+             (result-field 'phase (car arguments))
+             (result-field 'datum (second arguments))))
+      agent-scheme-unspecified)
+
+    ;; Emit a structured warning event into the current context.
+    (define (primitive-agent-warn arguments context)
+      (record-agent-event!
+       context
+       (list 'warn
+             (result-field 'message (car arguments))
+             (result-field 'fields (cdr arguments))))
+      agent-scheme-unspecified)
+
+    ;; Emit a structured request event into the current context.
+    (define (primitive-agent-request arguments context)
+      (record-agent-event! context (list 'request (car arguments)))
+      agent-scheme-unspecified)
+
     ;; Record a portable policy decision into the context audit event list.
     (define (record-policy-decision! context category operation decision fields)
       (record-audit-event!
@@ -4993,6 +5031,11 @@
        (cons 'primitive-write primitive-write)
        (cons 'primitive-write-shared primitive-write-shared)
        (cons 'primitive-write-simple primitive-write-simple)
+       (cons 'primitive-agent-yield primitive-agent-yield)
+       (cons 'primitive-agent-log primitive-agent-log)
+       (cons 'primitive-agent-progress primitive-agent-progress)
+       (cons 'primitive-agent-warn primitive-agent-warn)
+       (cons 'primitive-agent-request primitive-agent-request)
        (cons 'primitive-car primitive-car)
        (cons 'primitive-cdr primitive-cdr)))
 

@@ -1009,6 +1009,83 @@
               #t)
          #t))
 
+(let* ((result
+        (agent-scheme-eval-source-result
+         "(import (scheme base) (agent io))
+          (agent-yield '(first 1))
+          (agent-yield '(second 2))
+          42"))
+       (events (field-value result 'events)))
+  (check 'agent-io-yields-are-ordered-result-events
+         (and (equal? (field-value result 'status) 'ok)
+              (string=? (agent-scheme-value->external
+                         (field-value result 'value))
+                        "42")
+              (string=? (agent-scheme-result->external
+                         (list 'events events))
+                        "(events ((yield (first 1)) (yield (second 2))))")
+              #t)
+         #t))
+
+(let* ((result
+        (agent-scheme-eval-source-result
+         "(import (scheme base) (agent io))
+          (agent-log 'info \"starting\" '(scope test))
+          (agent-progress 'reader '(parsed 2))
+          (agent-warn \"careful\" '(kind stale-handle))
+          (agent-request '(approval (policy buffer-edit)))
+          'done"))
+       (events (field-value result 'events)))
+  (check 'agent-io-core-events-render-in-result
+         (and (equal? (field-value result 'status) 'ok)
+              (string=?
+               (agent-scheme-result->external (list 'events events))
+               (string-append
+                "(events ((log (level info) (message \"starting\") "
+                "(fields ((scope test)))) "
+                "(progress (phase reader) (datum (parsed 2))) "
+                "(warn (message \"careful\") "
+                "(fields ((kind stale-handle)))) "
+                "(request (approval (policy buffer-edit)))))"))
+              #t)
+         #t))
+
+(let* ((result
+        (agent-scheme-eval-source-result
+         "(import (scheme base) (agent io))
+          (agent-yield '(first))
+          (agent-yield '(second))
+          'unreachable"
+         #f
+         '((max-events . 1))))
+       (events (field-value result 'events))
+       (error-field (assq 'error (cdr result))))
+  (check 'agent-io-event-count-limit-fails-closed
+         (and (equal? (field-value result 'status) 'error)
+              (string=? (agent-scheme-result->external
+                         (list 'events events))
+                        "(events ((yield (first))))")
+              (string=? (field-value error-field 'message)
+                        "agent-scheme budget error: event count budget exceeded")
+              #t)
+         #t))
+
+(let* ((result
+        (agent-scheme-eval-source-result
+         "(import (scheme base) (agent io))
+          (agent-yield '(too many nodes))"
+         #f
+         '((max-event-nodes . 2))))
+       (events (field-value result 'events))
+       (error-field (assq 'error (cdr result))))
+  (check 'agent-io-event-node-limit-fails-closed
+         (and (equal? (field-value result 'status) 'error)
+              (null? events)
+              (string=? (field-value error-field 'message)
+                        "agent-scheme budget error: event node budget exceeded")
+              #t)
+         #t))
+
 (check 'standard-host-libraries-import-and-default-deny
        (and
         (not

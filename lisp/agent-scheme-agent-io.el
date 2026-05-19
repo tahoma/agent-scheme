@@ -3,58 +3,80 @@
 ;;; Commentary:
 
 ;; The `(agent io)' library records structured event-channel procedures as
-;; Scheme-readable audit entries.  Session-owned event storage can layer on top
-;; of these records later without changing the Scheme surface.
+;; per-evaluation result events and Scheme-readable audit entries.
 
 ;;; Code:
 
 (require 'agent-scheme-audit)
 (require 'agent-scheme-runtime)
 
-(defun agent-scheme-agent-io--record (operation fields)
-  "Record OPERATION with FIELDS as an agent event audit entry."
+(defun agent-scheme-agent-io--field (name &rest values)
+  "Return a Scheme-readable event field named NAME with VALUES."
+  (cons (agent-scheme--syntax-symbol name) values))
+
+(defun agent-scheme-agent-io--record (operation event fields context)
+  "Record OPERATION EVENT with FIELDS in CONTEXT and the audit log."
+  (agent-scheme--record-event! context event)
   (agent-scheme-audit-record
    'agent-event
    (append
     `((category . agent-io)
       (operation . ,operation)
       (decision . recorded))
+    `((record . ,event))
     fields))
   agent-scheme-unspecified)
 
-(defun agent-scheme-agent-io--primitive-yield (arguments _context)
+(defun agent-scheme-agent-io--primitive-yield (arguments context)
   "Primitive agent-yield over ARGUMENTS."
   (agent-scheme-agent-io--record
    "agent-yield"
-   `((datum . ,(car arguments)))))
+   (list (agent-scheme--syntax-symbol "yield") (car arguments))
+   `((datum . ,(car arguments)))
+   context))
 
-(defun agent-scheme-agent-io--primitive-log (arguments _context)
+(defun agent-scheme-agent-io--primitive-log (arguments context)
   "Primitive agent-log over ARGUMENTS."
   (agent-scheme-agent-io--record
    "agent-log"
+   (list (agent-scheme--syntax-symbol "log")
+         (agent-scheme-agent-io--field "level" (car arguments))
+         (agent-scheme-agent-io--field "message" (cadr arguments))
+         (agent-scheme-agent-io--field "fields" (cddr arguments)))
    `((level . ,(car arguments))
      (message . ,(cadr arguments))
-     (fields . ,(cddr arguments)))))
+     (fields . ,(cddr arguments)))
+   context))
 
-(defun agent-scheme-agent-io--primitive-progress (arguments _context)
+(defun agent-scheme-agent-io--primitive-progress (arguments context)
   "Primitive agent-progress over ARGUMENTS."
   (agent-scheme-agent-io--record
    "agent-progress"
+   (list (agent-scheme--syntax-symbol "progress")
+         (agent-scheme-agent-io--field "phase" (car arguments))
+         (agent-scheme-agent-io--field "datum" (cadr arguments)))
    `((phase . ,(car arguments))
-     (datum . ,(cadr arguments)))))
+     (datum . ,(cadr arguments)))
+   context))
 
-(defun agent-scheme-agent-io--primitive-warn (arguments _context)
+(defun agent-scheme-agent-io--primitive-warn (arguments context)
   "Primitive agent-warn over ARGUMENTS."
   (agent-scheme-agent-io--record
    "agent-warn"
+   (list (agent-scheme--syntax-symbol "warn")
+         (agent-scheme-agent-io--field "message" (car arguments))
+         (agent-scheme-agent-io--field "fields" (cdr arguments)))
    `((message . ,(car arguments))
-     (fields . ,(cdr arguments)))))
+     (fields . ,(cdr arguments)))
+   context))
 
-(defun agent-scheme-agent-io--primitive-request (arguments _context)
+(defun agent-scheme-agent-io--primitive-request (arguments context)
   "Primitive agent-request over ARGUMENTS."
   (agent-scheme-agent-io--record
    "agent-request"
-   `((request . ,(car arguments)))))
+   (list (agent-scheme--syntax-symbol "request") (car arguments))
+   `((request . ,(car arguments)))
+   context))
 
 ;;;###autoload
 (defun agent-scheme-agent-io-primitive-specs ()
