@@ -71,6 +71,43 @@ Current compiler-backend issues:
 - [tahoma/agent-scheme#129](https://github.com/tahoma/agent-scheme/issues/129)
   adds byte-code backend caching and invalidation.
 
+Future host-adapter expansion issues, in proposed order:
+
+- [tahoma/agent-scheme#135](https://github.com/tahoma/agent-scheme/issues/135)
+  tracks the native CLI and daemon host adapter.
+- [tahoma/agent-scheme#136](https://github.com/tahoma/agent-scheme/issues/136)
+  defines the native CLI daemon adapter contract.
+- [tahoma/agent-scheme#137](https://github.com/tahoma/agent-scheme/issues/137)
+  tracks the Neovim host adapter.
+- [tahoma/agent-scheme#138](https://github.com/tahoma/agent-scheme/issues/138)
+  defines the Neovim RPC adapter contract.
+- [tahoma/agent-scheme#139](https://github.com/tahoma/agent-scheme/issues/139)
+  tracks the VS Code extension host adapter.
+- [tahoma/agent-scheme#140](https://github.com/tahoma/agent-scheme/issues/140)
+  defines the VS Code extension adapter contract.
+- [tahoma/agent-scheme#141](https://github.com/tahoma/agent-scheme/issues/141)
+  tracks the browser WebExtension host adapter.
+- [tahoma/agent-scheme#142](https://github.com/tahoma/agent-scheme/issues/142)
+  defines the browser WebExtension adapter contract.
+- [tahoma/agent-scheme#143](https://github.com/tahoma/agent-scheme/issues/143)
+  defines Wasm backend requirements for browser host adapters.
+- [tahoma/agent-scheme#144](https://github.com/tahoma/agent-scheme/issues/144)
+  tracks the Jupyter notebook host adapter.
+- [tahoma/agent-scheme#145](https://github.com/tahoma/agent-scheme/issues/145)
+  defines the Jupyter kernel and notebook adapter contract.
+- [tahoma/agent-scheme#146](https://github.com/tahoma/agent-scheme/issues/146)
+  tracks the LSP and DAP protocol adapter surface.
+- [tahoma/agent-scheme#147](https://github.com/tahoma/agent-scheme/issues/147)
+  defines the LSP and DAP capability and transport contract.
+- [tahoma/agent-scheme#148](https://github.com/tahoma/agent-scheme/issues/148)
+  tracks the WASI and component-model host contract.
+- [tahoma/agent-scheme#149](https://github.com/tahoma/agent-scheme/issues/149)
+  defines WASI component imports for host capabilities.
+- [tahoma/agent-scheme#150](https://github.com/tahoma/agent-scheme/issues/150)
+  tracks the JetBrains platform host adapter.
+- [tahoma/agent-scheme#151](https://github.com/tahoma/agent-scheme/issues/151)
+  defines the JVM IDE platform adapter contract.
+
 This document can summarize the current milestone while the issue remains the
 source of truth for ordering.
 
