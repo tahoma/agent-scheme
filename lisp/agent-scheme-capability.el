@@ -392,6 +392,58 @@
        kind (agent-scheme-handle-id value)))
     entry))
 
+;;;###autoload
+(defun agent-scheme-capability-handle-known-p (handle)
+  "Return non-nil when HANDLE is present in the private registry."
+  (and (agent-scheme-handle-p handle)
+       (gethash (agent-scheme-handle-id handle)
+                agent-scheme--handle-registry)
+       t))
+
+(defun agent-scheme-capability--entry-live-p (entry)
+  "Return non-nil when ENTRY still points at a live host object."
+  (pcase (agent-scheme--handle-entry-kind entry)
+    ('buffer
+     (buffer-live-p (agent-scheme--handle-entry-object entry)))
+    ('window
+     (window-live-p (agent-scheme--handle-entry-object entry)))
+    ('frame
+     (frame-live-p (agent-scheme--handle-entry-object entry)))
+    ('process
+     (process-live-p (agent-scheme--handle-entry-object entry)))
+    ('project
+     t)
+    (_
+     t)))
+
+;;;###autoload
+(defun agent-scheme-capability-handle-live-p (handle)
+  "Return non-nil when HANDLE names a currently live host object."
+  (and (agent-scheme-handle-p handle)
+       (let ((entry (gethash (agent-scheme-handle-id handle)
+                             agent-scheme--handle-registry)))
+         (and entry
+              (agent-scheme-capability--entry-live-p entry)))))
+
+;;;###autoload
+(defun agent-scheme-capability-release-handle (handle)
+  "Release HANDLE from the private registry.
+Return non-nil when a registry entry was removed."
+  (when (agent-scheme-handle-p handle)
+    (let* ((id (agent-scheme-handle-id handle))
+           (present (gethash id agent-scheme--handle-registry)))
+      (when present
+        (remhash id agent-scheme--handle-registry)
+        t))))
+
+;;;###autoload
+(defun agent-scheme-capability-release-handles (handles)
+  "Release every handle in HANDLES and return the removed count."
+  (let ((count 0))
+    (dolist (handle handles count)
+      (when (agent-scheme-capability-release-handle handle)
+        (cl-incf count)))))
+
 (defun agent-scheme--live-buffer-for-handle (value description)
   "Return live Emacs buffer for handle VALUE."
   (let ((buffer
