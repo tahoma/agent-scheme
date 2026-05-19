@@ -11,6 +11,7 @@
 (require 'cl-lib)
 (require 'project)
 (require 'seq)
+(require 'agent-scheme-audit)
 (require 'agent-scheme-reader)
 (require 'agent-scheme-runtime)
 (require 'agent-scheme-result)
@@ -27,6 +28,9 @@
 
 (defvar agent-scheme--next-handle-number 0
   "Next numeric suffix for generated opaque handle ids.")
+
+(defvar agent-scheme--emacs-capability-preauthorized nil
+  "Non-nil while a wrapped Emacs capability has already passed policy.")
 
 (defconst agent-scheme--emacs-capability-manifest-specs
   '((:name "emacs-current-buffer" :library "(emacs buffer)"
@@ -200,10 +204,13 @@
   "Return primitive registration specs for Emacs capability LIBRARY."
   (mapcar
    (lambda (spec)
-     (list (plist-get spec :name)
-           (plist-get spec :emacs-hook)
-           (plist-get spec :minimum-arity)
-           (plist-get spec :maximum-arity)))
+     (let ((name (plist-get spec :name)))
+       (list name
+             (agent-scheme--wrap-emacs-capability
+              name
+              (plist-get spec :emacs-hook))
+             (plist-get spec :minimum-arity)
+             (plist-get spec :maximum-arity))))
    (seq-filter
     (lambda (spec)
       (equal (plist-get spec :library) library))
@@ -219,15 +226,64 @@
 (defun agent-scheme--authorize-emacs-capability
     (name arguments context)
   "Authorize read-only Emacs capability NAME with ARGUMENTS in CONTEXT."
+  (unless agent-scheme--emacs-capability-preauthorized
+    (let ((spec (agent-scheme--emacs-capability-manifest-spec name)))
+      (agent-scheme-policy-authorize
+       'emacs-read-only
+       name
+       `((library . ,(and spec (plist-get spec :library)))
+         (capability . ,name)
+         (arguments . ,arguments))
+       context
+       'capability-call))))
+
+(defun agent-scheme--capability-result-string (result)
+  "Return a printable audit string for capability RESULT."
+  (condition-case _
+      (agent-scheme-value->external result)
+    (error "#<unprintable>")))
+
+(defun agent-scheme--audit-emacs-capability-result
+    (name arguments outcome fields)
+  "Audit Emacs capability NAME with ARGUMENTS producing OUTCOME."
   (let ((spec (agent-scheme--emacs-capability-manifest-spec name)))
-    (agent-scheme-policy-authorize
-     'emacs-read-only
-     name
-     `((library . ,(and spec (plist-get spec :library)))
-       (capability . ,name)
-       (arguments . ,arguments))
-     context
-     'capability-call)))
+    (agent-scheme-audit-record
+     'capability-result
+     (append
+      `((category . emacs-read-only)
+        (operation . ,name)
+        (library . ,(and spec (plist-get spec :library)))
+        (capability . ,name)
+        (arguments . ,arguments)
+        (outcome . ,outcome)
+        (decision . ,(if (eq outcome 'success) 'completed 'errored)))
+      fields))))
+
+(defun agent-scheme--call-emacs-capability
+    (name function arguments context)
+  "Call Emacs capability FUNCTION and audit its outcome."
+  (agent-scheme--authorize-emacs-capability name arguments context)
+  (condition-case condition
+      (let ((result (let ((agent-scheme--emacs-capability-preauthorized t))
+                      (funcall function arguments context))))
+        (agent-scheme--audit-emacs-capability-result
+         name
+         arguments
+         'success
+         `((result . ,(agent-scheme--capability-result-string result))))
+        result)
+    (error
+     (agent-scheme--audit-emacs-capability-result
+      name
+      arguments
+      'error
+      `((error . ,(error-message-string condition))))
+     (signal (car condition) (cdr condition)))))
+
+(defun agent-scheme--wrap-emacs-capability (name function)
+  "Return a policy and outcome-auditing wrapper for capability FUNCTION."
+  (lambda (arguments context)
+    (agent-scheme--call-emacs-capability name function arguments context)))
 
 (defun agent-scheme--register-handle (kind object)
   "Register live host OBJECT of KIND and return an opaque Scheme handle."
