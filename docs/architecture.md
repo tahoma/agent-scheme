@@ -429,11 +429,11 @@ batch mode unless tests or callers install an explicit confirmation function.
 | --- | --- | --- |
 | `pure-r7rs` | `allow` | Ordinary Scheme evaluation remains available under resource budgets. |
 | `emacs-read-only` | `allow` | Current buffer, buffer text, project root, documentation, and other observation capabilities are still audited. |
-| `buffer-edit` | `confirm` | Future buffer mutation must pass an explicit approval path. |
-| `window-session` | `confirm` | Future window, frame, and session mutation must be approval-gated. |
-| `command-process` | `confirm` | Future command and process execution requires approval and audit records. |
+| `buffer-edit` | `confirm` | `(emacs buffer edit)` exposes `buffer-insert!`, `buffer-delete!`, and `buffer-replace!`; each requires approval by default. |
+| `window-session` | `confirm` | Reserved for future window, frame, and session mutation; no mutating window/session library is registered yet. |
+| `command-process` | `confirm` | Reserved for future command and process execution; current command/process capabilities remain read-only observations. |
 | `standard-host-effect` | `allow` | Host-effecting standard Scheme procedures still require their narrower path or session policy, such as `:file-paths`; without that grant they deny and audit. |
-| `raw-emacs-lisp` | `deny` | Raw host evaluation stays unavailable unless explicitly enabled later. |
+| `raw-emacs-lisp` | `deny` | Raw host evaluation stays unavailable; no raw Emacs Lisp evaluation surface is registered. |
 | `skill-discovery-activation` | `confirm` | Skill discovery and activation require an approval callback by default. |
 | `project-skill-trust` | `deny` | Project-level skill trust starts denied for untrusted projects. |
 | `skill-resource-read` | `confirm` | Skill resource reads require approval unless policy is relaxed. |
@@ -444,9 +444,10 @@ Audit entries live in memory as Scheme-readable datums and can be inspected
 through `agent-scheme-audit-recent-entries` or `agent-scheme-audit-display`.
 `agent-scheme-audit-clear` clears the current log, and
 `agent-scheme-audit-rotate` trims it to a chosen number of newest entries.  The
-current audit implementation records evaluations, read-only capability calls,
-standard host-effect denials or grants, skill activation decisions, trust
-decisions, resource/script/export policy stubs, and confirmation outcomes.
+current audit implementation records evaluations, read-only and buffer-edit
+capability calls and outcomes, standard host-effect denials or grants, skill
+activation decisions, trust decisions, resource/script/export policy stubs, and
+confirmation outcomes.
 Portable Scheme still carries its path allow-list policy for host-file tests;
 the Scheme-native policy/audit module remains follow-up work before policy
 records are fully portable across hosts.

@@ -68,6 +68,30 @@
      :emacs-hook agent-scheme--primitive-buffer-text
      :portable-hook nil :emitter-hook capability-emacs
      :policy allow :test-categories (emacs buffer text))
+    (:name "buffer-insert!" :library "(emacs buffer edit)"
+     :minimum-arity 3 :maximum-arity 3
+     :source host-capability :effect host-mutation
+     :required-capability emacs-buffer
+     :emacs-hook agent-scheme--primitive-buffer-insert!
+     :portable-hook nil :emitter-hook capability-emacs
+     :policy confirm :policy-category buffer-edit
+     :test-categories (emacs buffer edit mutation))
+    (:name "buffer-delete!" :library "(emacs buffer edit)"
+     :minimum-arity 3 :maximum-arity 3
+     :source host-capability :effect host-mutation
+     :required-capability emacs-buffer
+     :emacs-hook agent-scheme--primitive-buffer-delete!
+     :portable-hook nil :emitter-hook capability-emacs
+     :policy confirm :policy-category buffer-edit
+     :test-categories (emacs buffer edit mutation))
+    (:name "buffer-replace!" :library "(emacs buffer edit)"
+     :minimum-arity 4 :maximum-arity 4
+     :source host-capability :effect host-mutation
+     :required-capability emacs-buffer
+     :emacs-hook agent-scheme--primitive-buffer-replace!
+     :portable-hook nil :emitter-hook capability-emacs
+     :policy confirm :policy-category buffer-edit
+     :test-categories (emacs buffer edit mutation))
     (:name "buffer-point" :library "(emacs buffer)"
      :minimum-arity 1 :maximum-arity 1
      :source host-capability :effect host-observation
@@ -223,13 +247,18 @@
      (equal (plist-get spec :name) name))
    agent-scheme--emacs-capability-manifest-specs))
 
+(defun agent-scheme--emacs-capability-policy-category (spec)
+  "Return the policy category for Emacs capability SPEC."
+  (or (and spec (plist-get spec :policy-category))
+      'emacs-read-only))
+
 (defun agent-scheme--authorize-emacs-capability
     (name arguments context)
   "Authorize read-only Emacs capability NAME with ARGUMENTS in CONTEXT."
   (unless agent-scheme--emacs-capability-preauthorized
     (let ((spec (agent-scheme--emacs-capability-manifest-spec name)))
       (agent-scheme-policy-authorize
-       'emacs-read-only
+       (agent-scheme--emacs-capability-policy-category spec)
        name
        `((library . ,(and spec (plist-get spec :library)))
          (capability . ,name)
@@ -250,7 +279,7 @@
     (agent-scheme-audit-record
      'capability-result
      (append
-      `((category . emacs-read-only)
+      `((category . ,(agent-scheme--emacs-capability-policy-category spec))
         (operation . ,name)
         (library . ,(and spec (plist-get spec :library)))
         (capability . ,name)
@@ -320,6 +349,15 @@
      description
      (agent-scheme-value->external datum)))
   (agent-scheme-number-value datum))
+
+(defun agent-scheme--capability-string (datum description)
+  "Return DATUM as a host string for DESCRIPTION."
+  (unless (stringp datum)
+    (agent-scheme--eval-error
+     "%s expected a string, got %s"
+     description
+     (agent-scheme-value->external datum)))
+  (substring-no-properties datum))
 
 (defun agent-scheme--capability-name-symbol (datum description)
   "Return DATUM as an existing Emacs symbol for DESCRIPTION, or nil."
@@ -477,6 +515,74 @@
         (agent-scheme--eval-error
          "buffer-text range outside buffer: %d..%d" start end))
       (buffer-substring-no-properties start end))))
+
+(defun agent-scheme--check-buffer-range (buffer start end description)
+  "Signal unless START and END are a valid range in BUFFER for DESCRIPTION."
+  (with-current-buffer buffer
+    (unless (and (<= (point-min) start)
+                 (<= start end)
+                 (<= end (point-max)))
+      (agent-scheme--eval-error
+       "%s range outside buffer: %d..%d" description start end))))
+
+(defun agent-scheme--check-buffer-position (buffer position description)
+  "Signal unless POSITION is valid in BUFFER for DESCRIPTION."
+  (with-current-buffer buffer
+    (unless (and (<= (point-min) position)
+                 (<= position (point-max)))
+      (agent-scheme--eval-error
+       "%s position outside buffer: %d" description position))))
+
+(defun agent-scheme--primitive-buffer-insert! (arguments context)
+  "Primitive buffer-insert! over ARGUMENTS."
+  (agent-scheme--authorize-emacs-capability "buffer-insert!" arguments context)
+  (let* ((buffer (agent-scheme--live-buffer-for-handle
+                  (car arguments) "buffer-insert!"))
+         (position (agent-scheme--capability-exact-integer
+                    (cadr arguments) "buffer-insert! position"))
+         (text (agent-scheme--capability-string
+                (caddr arguments) "buffer-insert! text")))
+    (agent-scheme--check-buffer-position buffer position "buffer-insert!")
+    (with-current-buffer buffer
+      (atomic-change-group
+        (save-excursion
+          (goto-char position)
+          (insert text))))
+    agent-scheme-unspecified))
+
+(defun agent-scheme--primitive-buffer-delete! (arguments context)
+  "Primitive buffer-delete! over ARGUMENTS."
+  (agent-scheme--authorize-emacs-capability "buffer-delete!" arguments context)
+  (let* ((buffer (agent-scheme--live-buffer-for-handle
+                  (car arguments) "buffer-delete!"))
+         (start (agent-scheme--capability-exact-integer
+                 (cadr arguments) "buffer-delete! start"))
+         (end (agent-scheme--capability-exact-integer
+               (caddr arguments) "buffer-delete! end")))
+    (agent-scheme--check-buffer-range buffer start end "buffer-delete!")
+    (with-current-buffer buffer
+      (atomic-change-group
+        (delete-region start end)))
+    agent-scheme-unspecified))
+
+(defun agent-scheme--primitive-buffer-replace! (arguments context)
+  "Primitive buffer-replace! over ARGUMENTS."
+  (agent-scheme--authorize-emacs-capability "buffer-replace!" arguments context)
+  (let* ((buffer (agent-scheme--live-buffer-for-handle
+                  (car arguments) "buffer-replace!"))
+         (start (agent-scheme--capability-exact-integer
+                 (cadr arguments) "buffer-replace! start"))
+         (end (agent-scheme--capability-exact-integer
+               (caddr arguments) "buffer-replace! end"))
+         (text (agent-scheme--capability-string
+                (cadddr arguments) "buffer-replace! text")))
+    (agent-scheme--check-buffer-range buffer start end "buffer-replace!")
+    (with-current-buffer buffer
+      (atomic-change-group
+        (delete-region start end)
+        (goto-char start)
+        (insert text)))
+    agent-scheme-unspecified))
 
 (defun agent-scheme--primitive-emacs-buffer-list (arguments context)
   "Primitive emacs-buffer-list."
