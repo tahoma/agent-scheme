@@ -128,7 +128,7 @@
         (agent-scheme-make-canonical-integer
          (context-host-callbacks context)))))
 
-    ;; Return audit events in the order they were recorded.
+    ;; Return policy and agent-channel events in the order they were recorded.
     (define (context-events context)
       (reverse (context-audit-events context)))
 
