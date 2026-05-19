@@ -1,0 +1,128 @@
+;;; agent-scheme-repl-test.el --- Native REPL session UX tests  -*- lexical-binding: t; -*-
+
+;;; Commentary:
+
+;; Focused coverage for the Emacs-native Agent Scheme REPL/session UX over the
+;; existing session runtime.
+
+;;; Code:
+
+(require 'ert)
+(require 'seq)
+(require 'agent-scheme-audit)
+(require 'agent-scheme-eval)
+(require 'agent-scheme-repl)
+(require 'agent-scheme-result)
+(require 'agent-scheme-session)
+
+(defun agent-scheme-repl-test--reset ()
+  "Reset session, audit, and current REPL UI state."
+  (agent-scheme-session-clear!)
+  (agent-scheme-audit-clear)
+  (setq agent-scheme-current-session-id nil))
+
+(defun agent-scheme-repl-test--buffer-string (buffer)
+  "Return BUFFER contents without text properties."
+  (with-current-buffer buffer
+    (buffer-substring-no-properties (point-min) (point-max))))
+
+(ert-deftest agent-scheme-repl-test-starts-project-session-and-buffers ()
+  "Start a project session and create the native special buffers."
+  (agent-scheme-repl-test--reset)
+  (let* ((default-directory
+           (file-name-as-directory
+            (expand-file-name ".." (file-name-directory
+                                    (or load-file-name buffer-file-name)))))
+         (project-label (agent-scheme-repl-project-label))
+         (expected-id (concat "project-" project-label))
+         (status-buffer
+          (agent-scheme-start-repl 'project)))
+    (should (equal agent-scheme-current-session-id expected-id))
+    (should (agent-scheme-session-ref expected-id))
+    (should (get-buffer (format "*Agent: %s*" project-label)))
+    (should (get-buffer (format "*Agent Scheme: %s*" project-label)))
+    (should (get-buffer (format "*Agent Events: %s*" project-label)))
+    (should (get-buffer (format "*Agent Audit: %s*" project-label)))
+    (should (get-buffer (format "*Agent Approvals: %s*" project-label)))
+    (should (eq (lookup-key global-map (kbd "C-c a"))
+                #'agent-scheme-dispatch))
+    (should (string-match-p
+             (regexp-quote (format "Agent[%s:new]" expected-id))
+             agent-scheme-mode-line-string))
+    (should (string-match-p
+             (regexp-quote "(session")
+             (agent-scheme-repl-test--buffer-string status-buffer)))))
+
+(ert-deftest agent-scheme-repl-test-session-scope-persists-and-fresh-isolates ()
+  "Persistent REPL sessions retain definitions, imports, macros, and events."
+  (agent-scheme-repl-test--reset)
+  (let* ((default-directory
+           (file-name-as-directory
+            (expand-file-name ".." (file-name-directory
+                                    (or load-file-name buffer-file-name)))))
+         (_status-buffer (agent-scheme-start-repl 'project))
+         (session-id agent-scheme-current-session-id)
+         (project-label (agent-scheme-repl-project-label)))
+    (should
+     (equal
+      (agent-scheme-value->external
+       (agent-scheme-repl-eval-source
+        "(import (agent io))
+         (define saved-answer 21)
+         (define-syntax double
+           (syntax-rules ()
+             ((_ value) (+ value value))))
+         (agent-yield '(ready))
+         saved-answer"))
+      "21"))
+    (should
+     (equal
+      (agent-scheme-value->external
+       (agent-scheme-repl-eval-source
+        "(agent-yield '(persisted))
+         (double saved-answer)"))
+      "42"))
+    (should-error
+     (agent-scheme-eval-source "(double saved-answer)")
+     :type 'agent-scheme-eval-error)
+    (let ((transcript
+           (agent-scheme-repl-test--buffer-string
+            (get-buffer (format "*Agent Scheme: %s*" project-label))))
+          (events
+           (agent-scheme-repl-test--buffer-string
+            (get-buffer (format "*Agent Events: %s*" project-label))))
+          (audit
+           (agent-scheme-repl-test--buffer-string
+            (get-buffer (format "*Agent Audit: %s*" project-label)))))
+      (should (string-match-p "(transcript-entry" transcript))
+      (should (string-match-p "(source \"(agent-yield '(persisted))" transcript))
+      (should (string-match-p "(result \"42\")" transcript))
+      (should (string-match-p "(record (yield (persisted)))" events))
+      (should (string-match-p "(event session-evaluation)" audit))
+      (should (string-match-p
+               (regexp-quote (format "(session %s)" session-id))
+               audit)))))
+
+(ert-deftest agent-scheme-repl-test-approvals-switch-inspect-and-stop ()
+  "Show request events as approvals and support session switching/teardown."
+  (agent-scheme-repl-test--reset)
+  (let* ((first-status (agent-scheme-start-repl 'named "alpha"))
+         (_second-status (agent-scheme-start-repl 'named "beta"))
+         (_switched (agent-scheme-switch-session "alpha")))
+    (should (equal agent-scheme-current-session-id "alpha"))
+    (should (eq (agent-scheme-inspect-session "alpha") first-status))
+    (agent-scheme-repl-eval-source
+     "(import (agent io))
+      (agent-request '(approval (policy buffer-edit)))")
+    (let ((approvals
+           (agent-scheme-repl-test--buffer-string
+            (get-buffer "*Agent Approvals: alpha*"))))
+      (should (string-match-p
+               "(request (approval (policy buffer-edit)))"
+               approvals)))
+    (let ((retired (agent-scheme-stop-session "alpha")))
+      (should (string-match-p
+               "(status retired)"
+               (agent-scheme-result->external retired))))))
+
+;;; agent-scheme-repl-test.el ends here

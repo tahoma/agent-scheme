@@ -880,6 +880,16 @@ Return the stale handles that were removed."
     (setf (agent-scheme-session-transcript session)
           (append (agent-scheme-session-transcript session) (list entry)))
     (setf (agent-scheme-session-failure session) nil)
+    (agent-scheme-audit-record
+     'session-evaluation
+     `((category . pure-r7rs)
+       (operation . "session-evaluate")
+       (session . ,(agent-scheme-session--symbol
+                    (agent-scheme-session-id session)))
+       (input-form . ,source)
+       (events . ,events)
+       (decision . allowed)
+       (result . ,(agent-scheme-value->external value))))
     (agent-scheme-session--transition! session 'idle "session-eval-finish!"))
   value)
 
@@ -901,6 +911,16 @@ Return the stale handles that were removed."
     (setf (agent-scheme-session-transcript session)
           (append (agent-scheme-session-transcript session) (list entry)))
     (setf (agent-scheme-session-failure session) message)
+    (agent-scheme-audit-record
+     'session-evaluation
+     `((category . pure-r7rs)
+       (operation . "session-evaluate")
+       (session . ,(agent-scheme-session--symbol
+                    (agent-scheme-session-id session)))
+       (input-form . ,source)
+       (events . ,events)
+       (decision . error)
+       (error . ,message)))
     (agent-scheme-session--transition! session 'failed "session-eval-failed!"))
   condition)
 
