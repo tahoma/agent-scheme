@@ -17,6 +17,7 @@
 (require 'agent-scheme-library)
 (require 'agent-scheme-macro)
 (require 'agent-scheme-interpreter)
+(require 'agent-scheme-session)
 
 (defun agent-scheme--eval-context-library-keys (context)
   "Return sorted library keys imported or registered in CONTEXT."
@@ -117,6 +118,62 @@ is the result of the last command or definition."
 This alias is kept for callers that describe string input
 explicitly; it has the same calling convention as
 `agent-scheme-eval-source'.")
+
+;;;###autoload
+(defun agent-scheme-session-eval-source (id source &optional options)
+  "Evaluate SOURCE inside persistent session ID.
+OPTIONS may override the session context budgets for this evaluation.  The
+session preserves definitions, imports, macros, transcript entries, recent
+agent events, and handle references across calls."
+  (let* ((session (agent-scheme-session--require id))
+         (context (agent-scheme-session-context session))
+         (environment (agent-scheme-session-environment session))
+         (input-form source)
+         (base-syntax-installed
+          (agent-scheme--eval-context-base-syntax-installed context)))
+    (when options
+      (when (plist-member options :max-steps)
+        (setf (agent-scheme--eval-context-maximum-steps context)
+              (plist-get options :max-steps)))
+      (when (plist-member options :max-non-tail-steps)
+        (setf (agent-scheme--eval-context-maximum-steps context)
+              (plist-get options :max-non-tail-steps)))
+      (when (plist-member options :max-value-nodes)
+        (setf (agent-scheme--eval-context-maximum-value-nodes context)
+              (plist-get options :max-value-nodes)))
+      (when (plist-member options :max-host-callbacks)
+        (setf (agent-scheme--eval-context-maximum-host-callbacks context)
+              (plist-get options :max-host-callbacks))))
+    (agent-scheme-session--prepare-eval! session)
+    (let ((start-count (agent-scheme-session--audit-start-count)))
+      (condition-case condition
+          (progn
+            (agent-scheme-policy-authorize
+             'pure-r7rs "evaluate" `((input-form . ,input-form)) context)
+            (let* ((forms (agent-scheme-read-all source))
+                   (sequence (agent-scheme--make-sequence forms t)))
+              (agent-scheme--ensure-base-syntax context environment)
+              (unless base-syntax-installed
+                (setf (agent-scheme-session-baseline-syntax session)
+                      (agent-scheme-session--syntax-current-names
+                       (agent-scheme--eval-context-syntax-environment
+                        context))))
+              (let ((value
+                     (agent-scheme--trampoline
+                      sequence environment context)))
+                (agent-scheme--audit-evaluation-success
+                 input-form value context)
+                (agent-scheme-session--record-eval-success!
+                 session source value start-count))))
+        (error
+         (agent-scheme--audit-evaluation-error input-form condition context)
+         (agent-scheme-session--record-eval-error!
+          session source condition start-count)
+         (agent-scheme--resignal condition))))))
+
+;;;###autoload
+(defalias 'agent-scheme-session-eval-string #'agent-scheme-session-eval-source
+  "Read and evaluate SOURCE inside a persistent Agent Scheme session.")
 
 ;;;###autoload
 (defun agent-scheme-eval-result (expression &optional environment options)

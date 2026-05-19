@@ -16,6 +16,7 @@
 (require 'agent-scheme-base)
 (require 'agent-scheme-capability)
 (require 'agent-scheme-agent-io)
+(require 'agent-scheme-session)
 (require 'agent-scheme-policy)
 
 (defconst agent-scheme--library-source-directory
@@ -62,7 +63,8 @@
   "Standard R7RS library keys with focused bootstrap support.")
 
 (defconst agent-scheme--agent-library-keys
-  '("(agent io)")
+  '("(agent io)"
+    "(agent session)")
   "Agent interaction library keys with focused bootstrap support.")
 
 ;; Bootstrap libraries are registered lazily into the current evaluation
@@ -289,6 +291,11 @@
      (agent-scheme--register-primitive-library
       key
       (agent-scheme-agent-io-primitive-specs)
+      context))
+    ("(agent session)"
+     (agent-scheme--register-primitive-library
+      key
+      (agent-scheme-session-primitive-specs)
       context))
     (_
      (agent-scheme--eval-error "unknown agent library: %s" key))))
