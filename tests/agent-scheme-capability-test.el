@@ -11,6 +11,7 @@
 (require 'seq)
 (require 'agent-scheme-audit)
 (require 'agent-scheme-eval)
+(require 'agent-scheme-policy)
 (require 'agent-scheme-result)
 
 (defvar agent-scheme-capability-test--secret "secret-value"
@@ -44,6 +45,14 @@
         (string-match-p (regexp-quote snippet) entry))
       snippets))
    (agent-scheme-capability-test--audit-strings)))
+
+(defun agent-scheme-capability-test--actions (overrides)
+  "Return policy category actions with OVERRIDES applied."
+  (append overrides
+          (seq-remove
+           (lambda (entry)
+             (assq (car entry) overrides))
+           agent-scheme-policy-category-actions)))
 
 (ert-deftest agent-scheme-capability-test-buffer-capabilities-use-handles ()
   "Inspect the current buffer through an opaque handle."
@@ -157,6 +166,54 @@
       "(outcome error)"
       "(decision errored)"
       "stale buffer handle"))))
+
+(ert-deftest agent-scheme-capability-test-buffer-edit-denial-audits ()
+  "Deny buffer edits through the buffer-edit policy gate."
+  (let ((agent-scheme-policy-category-actions
+         (agent-scheme-capability-test--actions
+          '((buffer-edit . deny)))))
+    (agent-scheme-audit-clear)
+    (with-temp-buffer
+      (insert "unchanged")
+      (should-error
+       (agent-scheme-eval-source
+        "(import (scheme base) (emacs buffer) (emacs buffer edit))
+         (buffer-insert! (emacs-current-buffer) 1 \"x\")")
+       :type 'agent-scheme-policy-error)
+      (should (equal (buffer-string) "unchanged")))
+    (should
+     (agent-scheme-capability-test--audit-entry-matching
+      "(event capability-call)"
+      "(category buffer-edit)"
+      "(operation \"buffer-insert!\")"
+      "(decision denied)"))))
+
+(ert-deftest agent-scheme-capability-test-buffer-edit-confirmed-outcome-audits ()
+  "Confirm and audit successful buffer edit outcomes."
+  (let ((agent-scheme-policy-category-actions
+         (agent-scheme-capability-test--actions
+          '((buffer-edit . confirm))))
+        (agent-scheme-policy-confirmation-function (lambda (_request) t)))
+    (agent-scheme-audit-clear)
+    (with-temp-buffer
+      (insert "abcdef")
+      (agent-scheme-eval-source
+       "(import (scheme base) (emacs buffer) (emacs buffer edit))
+        (buffer-replace! (emacs-current-buffer) 2 5 \"XYZ\")")
+      (should (equal (buffer-string) "aXYZef")))
+    (should
+     (agent-scheme-capability-test--audit-entry-matching
+      "(event capability-call)"
+      "(category buffer-edit)"
+      "(operation \"buffer-replace!\")"
+      "(decision confirmed)"))
+    (should
+     (agent-scheme-capability-test--audit-entry-matching
+      "(event capability-result)"
+      "(category buffer-edit)"
+      "(operation \"buffer-replace!\")"
+      "(outcome success)"
+      "(decision completed)"))))
 
 (ert-deftest agent-scheme-capability-test-window-and-project-queries ()
   "Expose current window handles and project root through capability libraries."
@@ -327,6 +384,8 @@
                          "(emacs buffer)" "emacs-current-buffer"))
         (buffer-text (agent-scheme-capability-test--manifest-spec
                       "(emacs buffer)" "buffer-text"))
+        (buffer-replace (agent-scheme-capability-test--manifest-spec
+                         "(emacs buffer edit)" "buffer-replace!"))
         (current-frame (agent-scheme-capability-test--manifest-spec
                         "(emacs frame)" "emacs-current-frame"))
         (current-project (agent-scheme-capability-test--manifest-spec
@@ -343,6 +402,9 @@
     (should (eq (plist-get current-buffer :policy) 'allow))
     (should (equal (plist-get buffer-text :minimum-arity) 3))
     (should (eq (plist-get buffer-text :required-capability) 'emacs-buffer))
+    (should (eq (plist-get buffer-replace :effect) 'host-mutation))
+    (should (eq (plist-get buffer-replace :policy-category) 'buffer-edit))
+    (should (eq (plist-get buffer-replace :policy) 'confirm))
     (should (eq (plist-get current-frame :required-capability) 'emacs-frame))
     (should (eq (plist-get current-project :required-capability)
                 'emacs-project))
