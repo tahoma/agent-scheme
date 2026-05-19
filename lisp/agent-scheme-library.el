@@ -15,6 +15,7 @@
 (require 'agent-scheme-result)
 (require 'agent-scheme-base)
 (require 'agent-scheme-capability)
+(require 'agent-scheme-agent-io)
 (require 'agent-scheme-policy)
 
 (defconst agent-scheme--library-source-directory
@@ -59,6 +60,10 @@
     "(scheme time)"
     "(scheme write)")
   "Standard R7RS library keys with focused bootstrap support.")
+
+(defconst agent-scheme--agent-library-keys
+  '("(agent io)")
+  "Agent interaction library keys with focused bootstrap support.")
 
 ;; Bootstrap libraries are registered lazily into the current evaluation
 ;; context.  The required `(scheme base)' library snapshots the active base
@@ -275,6 +280,18 @@
    key
    (agent-scheme-emacs-capability-primitive-specs key)
    context))
+
+(defun agent-scheme--register-agent-library
+    (key context)
+  "Register Agent interaction library KEY in CONTEXT."
+  (pcase key
+    ("(agent io)"
+     (agent-scheme--register-primitive-library
+      key
+      (agent-scheme-agent-io-primitive-specs)
+      context))
+    (_
+     (agent-scheme--eval-error "unknown agent library: %s" key))))
 
 (defun agent-scheme--register-source-library
     (source context environment)
@@ -567,6 +584,8 @@ Each spec has (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY)."
       t)
      ((member key agent-scheme--standard-library-keys)
       t)
+     ((member key agent-scheme--agent-library-keys)
+      t)
      ((member key (agent-scheme-emacs-capability-library-keys))
       t)
      (t
@@ -581,6 +600,8 @@ Each spec has (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY)."
       (agent-scheme--register-scheme-base-library context environment))
      ((member key agent-scheme--standard-library-keys)
       (agent-scheme--register-standard-library key context environment))
+     ((member key agent-scheme--agent-library-keys)
+      (agent-scheme--register-agent-library key context))
      ((member key (agent-scheme-emacs-capability-library-keys))
       (agent-scheme--register-emacs-capability-library key context)))
     (or (gethash key (agent-scheme--eval-context-libraries context))

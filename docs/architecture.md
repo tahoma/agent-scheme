@@ -523,7 +523,9 @@ Example events:
 ```
 
 The outer agent loop, native REPL buffers, audit buffers, and MCP responses
-should preserve event records as Scheme-readable data.
+should preserve event records as Scheme-readable data.  The current Emacs
+bootstrap registers `(agent io)` and records emitted events as `agent-event`
+audit datums; named session event storage can layer on top of those records.
 
 ## Policy for Standard Libraries
 
@@ -693,6 +695,7 @@ Likely Emacs Lisp bootstrap and adapter modules:
 - `lisp/agent-scheme-bytecode.el`
 - `lisp/agent-scheme-policy.el`
 - `lisp/agent-scheme-audit.el`
+- `lisp/agent-scheme-agent-io.el`
 - `lisp/agent-scheme-handle.el`
 - `lisp/agent-scheme-capability.el`
 - `lisp/agent-scheme-repl.el`
