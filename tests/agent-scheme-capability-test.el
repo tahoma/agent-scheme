@@ -9,7 +9,9 @@
 
 (require 'ert)
 (require 'seq)
+(require 'agent-scheme-audit)
 (require 'agent-scheme-eval)
+(require 'agent-scheme-result)
 
 (defvar agent-scheme-capability-test--secret "secret-value"
   "Private test value whose contents must not be exposed through variable-info.")
@@ -27,6 +29,21 @@
      (and (equal (plist-get spec :library) library)
           (equal (plist-get spec :name) name)))
    (agent-scheme-emacs-capability-binding-specs)))
+
+(defun agent-scheme-capability-test--audit-strings ()
+  "Return recent audit entries as external Scheme-readable strings."
+  (mapcar #'agent-scheme-result->external
+          (agent-scheme-audit-recent-entries)))
+
+(defun agent-scheme-capability-test--audit-entry-matching (&rest snippets)
+  "Return the first audit entry string containing all SNIPPETS."
+  (seq-find
+   (lambda (entry)
+     (seq-every-p
+      (lambda (snippet)
+        (string-match-p (regexp-quote snippet) entry))
+      snippets))
+   (agent-scheme-capability-test--audit-strings)))
 
 (ert-deftest agent-scheme-capability-test-buffer-capabilities-use-handles ()
   "Inspect the current buffer through an opaque handle."
@@ -96,6 +113,50 @@
             :type 'agent-scheme-eval-error)))
       (should
        (string-match-p "stale buffer handle" (cadr condition))))))
+
+(ert-deftest agent-scheme-capability-test-success-outcomes-are-audited ()
+  "Audit successful capability outcomes separately from policy decisions."
+  (agent-scheme-audit-clear)
+  (with-temp-buffer
+    (rename-buffer "agent-scheme-capability-outcome" t)
+    (agent-scheme-eval-source
+     "(import (scheme base) (emacs buffer))
+      (buffer-name (emacs-current-buffer))"))
+  (should
+   (agent-scheme-capability-test--audit-entry-matching
+    "(event capability-result)"
+    "(category emacs-read-only)"
+    "(operation \"buffer-name\")"
+    "(capability \"buffer-name\")"
+    "(outcome success)"
+    "(decision completed)")))
+
+(ert-deftest agent-scheme-capability-test-error-outcomes-are-audited ()
+  "Audit capability errors separately from policy decisions."
+  (let ((environment (agent-scheme-make-base-environment))
+        (buffer (generate-new-buffer "agent-scheme-capability-error-outcome"))
+        handle)
+    (with-current-buffer buffer
+      (setq handle
+            (agent-scheme-eval-source
+             "(import (emacs buffer))
+              (emacs-current-buffer)"
+             environment)))
+    (kill-buffer buffer)
+    (agent-scheme--environment-define environment "stale" handle)
+    (agent-scheme-audit-clear)
+    (should-error
+     (agent-scheme-eval-source "(buffer-name stale)" environment)
+     :type 'agent-scheme-eval-error)
+    (should
+     (agent-scheme-capability-test--audit-entry-matching
+      "(event capability-result)"
+      "(category emacs-read-only)"
+      "(operation \"buffer-name\")"
+      "(capability \"buffer-name\")"
+      "(outcome error)"
+      "(decision errored)"
+      "stale buffer handle"))))
 
 (ert-deftest agent-scheme-capability-test-window-and-project-queries ()
   "Expose current window handles and project root through capability libraries."
