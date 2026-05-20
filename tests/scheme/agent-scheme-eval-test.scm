@@ -1088,6 +1088,71 @@
 
 (let* ((result
         (agent-scheme-eval-source-result
+         "(import (scheme base) (agent approval))
+          (define id
+            (approval-request!
+             '(approval-request
+                (policy buffer-edit)
+                (effect (buffer-replace! h-1 1 2 \"x\"))
+                (reason \"Replace text?\"))))
+          (list id (approval-status id))"))
+       (value (field-value result 'value)))
+  (check 'agent-approval-request-status
+         (and (equal? (field-value result 'status) 'ok)
+              (string=? (agent-scheme-value->external value)
+                        "(a-1 pending)")
+              #t)
+         #t))
+
+(let* ((result
+        (agent-scheme-eval-source-result
+         "(import (scheme base) (agent approval))
+          (approval-request!
+           '(approval-request
+              (policy buffer-edit)
+              (effect (buffer-delete! h-1 1 2))
+              (reason \"Delete text?\")))
+          (approval-yield-pending)
+          'done"))
+       (events (field-value result 'events)))
+  (check 'agent-approval-yield-pending
+         (and (equal? (field-value result 'status) 'ok)
+              (string=?
+               (agent-scheme-result->external (list 'events events))
+               (string-append
+                "(events ((yield (approval-request (id a-1) "
+                "(policy buffer-edit) "
+                "(effect (buffer-replace! h-1 1 2 \"x\")) "
+                "(reason \"Replace text?\") "
+                "(status pending))) "
+                "(yield (approval-request (id a-2) "
+                "(policy buffer-edit) "
+                "(effect (buffer-delete! h-1 1 2)) "
+                "(reason \"Delete text?\") "
+                "(status pending)))))"))
+              #t)
+         #t))
+
+(let* ((result
+        (agent-scheme-eval-source-result
+         "(import (scheme base) (agent approval))
+          (define id
+            (approval-request!
+             '(approval-request
+                (policy buffer-edit)
+                (effect (buffer-insert! h-1 1 \"x\"))
+                (reason \"Insert text?\"))))
+          (approval-resolve! id 'approved)"))
+       (error-field (assq 'error (cdr result))))
+  (check 'agent-approval-self-approval-denied
+         (and (equal? (field-value result 'status) 'error)
+              (string=? (field-value error-field 'message)
+                        "agent-scheme eval error: approval resolution is host-side only")
+              #t)
+         #t))
+
+(let* ((result
+        (agent-scheme-eval-source-result
          "(import (scheme base) (agent memory))
           (memory-put! 'instance
                        'portable-alpha

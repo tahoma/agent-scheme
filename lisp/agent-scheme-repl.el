@@ -14,6 +14,7 @@
 (require 'seq)
 (require 'subr-x)
 (require 'transient)
+(require 'agent-scheme-approval)
 (require 'agent-scheme-audit)
 (require 'agent-scheme-eval)
 (require 'agent-scheme-result)
@@ -197,12 +198,8 @@
          (agent-scheme-repl--symbol-named-p (car record) "request"))))
 
 (defun agent-scheme-repl--approval-entries-for-session (id)
-  "Return request event entries for session ID."
-  (seq-filter
-   #'agent-scheme-repl--request-event-p
-   (agent-scheme-repl--field-value
-    (agent-scheme-repl--session-datum id)
-    "recent-events")))
+  "Return approval records for session ID."
+  (agent-scheme-approval-records id))
 
 (defun agent-scheme-repl--update-mode-line (id)
   "Update `agent-scheme-mode-line-string' for session ID."
