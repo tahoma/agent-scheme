@@ -194,13 +194,17 @@
   (let ((agent-scheme-policy-category-actions
          (agent-scheme-approval-test--actions
           '((buffer-edit . confirm))))
-        (agent-scheme-policy-confirmation-function (lambda (_request) t)))
-    (with-temp-buffer
-      (insert "abcdef")
-      (agent-scheme-eval-source
-       "(import (scheme base) (emacs buffer) (emacs buffer edit))
-        (buffer-replace! (emacs-current-buffer) 2 5 \"XYZ\")")
-      (should (equal (buffer-string) "aXYZef"))))
+        (agent-scheme-policy-confirmation-function (lambda (_request) t))
+        (buffer (generate-new-buffer "agent-scheme-approval-confirmation")))
+    (unwind-protect
+        (with-current-buffer buffer
+          (insert "abcdef")
+          (agent-scheme-eval-source
+           "(import (scheme base) (emacs buffer) (emacs buffer edit))
+            (buffer-replace! (emacs-current-buffer) 2 5 \"XYZ\")")
+          (should (equal (buffer-string) "aXYZef")))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer))))
   (should (equal (agent-scheme-approval-status 'a-1) 'approved))
   (should
    (agent-scheme-approval-test--audit-entry-matching

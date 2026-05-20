@@ -2,9 +2,9 @@
 
 ;;; Commentary:
 
-;; Host adapter primitives for read-only Emacs capability libraries.  Scheme
-;; programs receive opaque handles; live Emacs objects stay in a private side
-;; table owned by this module.
+;; Host adapter primitives for Emacs capability libraries.  Scheme programs
+;; receive opaque handles; live Emacs objects stay in a private side table
+;; owned by this module.
 
 ;;; Code:
 
@@ -31,6 +31,9 @@
 
 (defvar agent-scheme--emacs-capability-preauthorized nil
   "Non-nil while a wrapped Emacs capability has already passed policy.")
+
+(defvar agent-scheme--emacs-capability-result-fields nil
+  "Additional Scheme-readable audit fields for the active capability call.")
 
 (defconst agent-scheme--emacs-capability-manifest-specs
   '((:name "emacs-current-buffer" :library "(emacs buffer)"
@@ -92,6 +95,14 @@
      :portable-hook nil :emitter-hook capability-emacs
      :policy confirm :policy-category buffer-edit
      :test-categories (emacs buffer edit mutation))
+    (:name "buffer-save!" :library "(emacs buffer edit)"
+     :minimum-arity 1 :maximum-arity 1
+     :source host-capability :effect host-mutation
+     :required-capability emacs-buffer
+     :emacs-hook agent-scheme--primitive-buffer-save!
+     :portable-hook nil :emitter-hook capability-emacs
+     :policy confirm :policy-category buffer-edit
+     :test-categories (emacs buffer edit mutation file))
     (:name "buffer-point" :library "(emacs buffer)"
      :minimum-arity 1 :maximum-arity 1
      :source host-capability :effect host-observation
@@ -204,7 +215,7 @@
      :emacs-hook agent-scheme--primitive-variable-info
      :portable-hook nil :emitter-hook capability-emacs
      :policy allow :test-categories (emacs documentation variable)))
-  "Manifest metadata for read-only Emacs capability primitives.")
+  "Manifest metadata for Emacs capability primitives.")
 
 (defconst agent-scheme--emacs-capability-library-keys
   '("(emacs buffer)"
@@ -254,7 +265,7 @@
 
 (defun agent-scheme--authorize-emacs-capability
     (name arguments context)
-  "Authorize read-only Emacs capability NAME with ARGUMENTS in CONTEXT."
+  "Authorize Emacs capability NAME with ARGUMENTS in CONTEXT."
   (unless agent-scheme--emacs-capability-preauthorized
     (let ((spec (agent-scheme--emacs-capability-manifest-spec name)))
       (agent-scheme-policy-authorize
@@ -288,26 +299,37 @@
         (decision . ,(if (eq outcome 'success) 'completed 'errored)))
       fields))))
 
+(defun agent-scheme--add-emacs-capability-result-fields (fields)
+  "Add FIELDS to the active Emacs capability result audit entry."
+  (setq agent-scheme--emacs-capability-result-fields
+        (append agent-scheme--emacs-capability-result-fields fields)))
+
 (defun agent-scheme--call-emacs-capability
     (name function arguments context)
   "Call Emacs capability FUNCTION and audit its outcome."
   (agent-scheme--authorize-emacs-capability name arguments context)
-  (condition-case condition
-      (let ((result (let ((agent-scheme--emacs-capability-preauthorized t))
-                      (funcall function arguments context))))
-        (agent-scheme--audit-emacs-capability-result
-         name
-         arguments
-         'success
-         `((result . ,(agent-scheme--capability-result-string result))))
-        result)
-    (error
-     (agent-scheme--audit-emacs-capability-result
-      name
-      arguments
-      'error
-      `((error . ,(error-message-string condition))))
-     (signal (car condition) (cdr condition)))))
+  (let ((agent-scheme--emacs-capability-result-fields nil))
+    (condition-case condition
+        (let ((result
+               (let ((agent-scheme--emacs-capability-preauthorized t))
+                 (funcall function arguments context))))
+          (agent-scheme--audit-emacs-capability-result
+           name
+           arguments
+           'success
+           (append
+            agent-scheme--emacs-capability-result-fields
+            `((result . ,(agent-scheme--capability-result-string result)))))
+          result)
+      (error
+       (agent-scheme--audit-emacs-capability-result
+        name
+        arguments
+        'error
+        (append
+         agent-scheme--emacs-capability-result-fields
+         `((error . ,(error-message-string condition)))))
+       (signal (car condition) (cdr condition))))))
 
 (defun agent-scheme--wrap-emacs-capability (name function)
   "Return a policy and outcome-auditing wrapper for capability FUNCTION."
@@ -585,6 +607,73 @@ Return non-nil when a registry entry was removed."
       (agent-scheme--eval-error
        "%s position outside buffer: %d" description position))))
 
+(defun agent-scheme--buffer-target-file (buffer)
+  "Return BUFFER's file name, or nil when BUFFER is not file-backed."
+  (buffer-local-value 'buffer-file-name buffer))
+
+(defun agent-scheme--buffer-target-fields (buffer)
+  "Return Scheme-readable audit fields describing BUFFER."
+  `((target-buffer . ,(buffer-name buffer))
+    (target-file . ,(or (agent-scheme--buffer-target-file buffer)
+                        agent-scheme-false))))
+
+(defun agent-scheme--internal-buffer-p (buffer)
+  "Return non-nil when BUFFER is an internal or special Emacs buffer."
+  (let ((name (buffer-name buffer)))
+    (or (string-prefix-p " " name)
+        (and (> (length name) 1)
+             (eq (aref name 0) ?*)
+             (eq (aref name (1- (length name))) ?*)))))
+
+(defun agent-scheme--remote-buffer-p (buffer)
+  "Return non-nil when BUFFER is backed by a remote file or directory."
+  (with-current-buffer buffer
+    (or (and buffer-file-name (file-remote-p buffer-file-name))
+        (and default-directory (file-remote-p default-directory)))))
+
+(defun agent-scheme--check-buffer-edit-target (buffer operation)
+  "Signal unless BUFFER is an ordinary local target for OPERATION."
+  (cond
+   ((minibufferp buffer)
+    (agent-scheme--eval-error
+     "%s cannot edit minibuffer: %s" operation (buffer-name buffer)))
+   ((agent-scheme--internal-buffer-p buffer)
+    (agent-scheme--eval-error
+     "%s cannot edit internal buffer: %s" operation (buffer-name buffer)))
+   ((agent-scheme--remote-buffer-p buffer)
+    (agent-scheme--eval-error
+     "%s cannot edit remote buffer: %s" operation (buffer-name buffer)))))
+
+(defun agent-scheme--record-buffer-edit-fields
+    (buffer start end before-text after-text)
+  "Record audit fields for an edit to BUFFER from START to END."
+  (agent-scheme--add-emacs-capability-result-fields
+   (append
+    (agent-scheme--buffer-target-fields buffer)
+    `((region . (,start ,end))
+      (before-text . ,before-text)
+      (after-text . ,after-text)))))
+
+(defun agent-scheme--apply-buffer-edit
+    (buffer start end replacement operation)
+  "Apply one transactional BUFFER edit for OPERATION.
+The edit replaces START..END with REPLACEMENT, records metadata, and
+creates undo boundaries around the atomic change group."
+  (agent-scheme--check-buffer-edit-target buffer operation)
+  (agent-scheme--check-buffer-range buffer start end operation)
+  (let ((before-text
+         (with-current-buffer buffer
+           (buffer-substring-no-properties start end))))
+    (agent-scheme--record-buffer-edit-fields
+     buffer start end before-text replacement)
+    (with-current-buffer buffer
+      (undo-boundary)
+      (atomic-change-group
+        (delete-region start end)
+        (goto-char start)
+        (insert replacement))
+      (undo-boundary))))
+
 (defun agent-scheme--primitive-buffer-insert! (arguments context)
   "Primitive buffer-insert! over ARGUMENTS."
   (agent-scheme--authorize-emacs-capability "buffer-insert!" arguments context)
@@ -595,11 +684,8 @@ Return non-nil when a registry entry was removed."
          (text (agent-scheme--capability-string
                 (caddr arguments) "buffer-insert! text")))
     (agent-scheme--check-buffer-position buffer position "buffer-insert!")
-    (with-current-buffer buffer
-      (atomic-change-group
-        (save-excursion
-          (goto-char position)
-          (insert text))))
+    (agent-scheme--apply-buffer-edit
+     buffer position position text "buffer-insert!")
     agent-scheme-unspecified))
 
 (defun agent-scheme--primitive-buffer-delete! (arguments context)
@@ -611,10 +697,8 @@ Return non-nil when a registry entry was removed."
                  (cadr arguments) "buffer-delete! start"))
          (end (agent-scheme--capability-exact-integer
                (caddr arguments) "buffer-delete! end")))
-    (agent-scheme--check-buffer-range buffer start end "buffer-delete!")
-    (with-current-buffer buffer
-      (atomic-change-group
-        (delete-region start end)))
+    (agent-scheme--apply-buffer-edit
+     buffer start end "" "buffer-delete!")
     agent-scheme-unspecified))
 
 (defun agent-scheme--primitive-buffer-replace! (arguments context)
@@ -628,12 +712,28 @@ Return non-nil when a registry entry was removed."
                (caddr arguments) "buffer-replace! end"))
          (text (agent-scheme--capability-string
                 (cadddr arguments) "buffer-replace! text")))
-    (agent-scheme--check-buffer-range buffer start end "buffer-replace!")
+    (agent-scheme--apply-buffer-edit
+     buffer start end text "buffer-replace!")
+    agent-scheme-unspecified))
+
+(defun agent-scheme--primitive-buffer-save! (arguments context)
+  "Primitive buffer-save! over ARGUMENTS."
+  (agent-scheme--authorize-emacs-capability "buffer-save!" arguments context)
+  (let* ((buffer (agent-scheme--live-buffer-for-handle
+                  (car arguments) "buffer-save!"))
+         (file (agent-scheme--buffer-target-file buffer)))
+    (agent-scheme--check-buffer-edit-target buffer "buffer-save!")
+    (unless file
+      (agent-scheme--eval-error
+       "buffer-save! requires a file-backed buffer: %s"
+       (buffer-name buffer)))
+    (agent-scheme--add-emacs-capability-result-fields
+     (append
+      (agent-scheme--buffer-target-fields buffer)
+      `((modified-before-save . ,(with-current-buffer buffer
+                                   (buffer-modified-p))))))
     (with-current-buffer buffer
-      (atomic-change-group
-        (delete-region start end)
-        (goto-char start)
-        (insert text)))
+      (save-buffer))
     agent-scheme-unspecified))
 
 (defun agent-scheme--primitive-emacs-buffer-list (arguments context)
