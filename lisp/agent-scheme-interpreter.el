@@ -3824,6 +3824,7 @@ Advance when ADVANCEP is non-nil.  Signal errors using DESCRIPTION."
    context
    (pcase description
      ("file-exists?" 'metadata)
+     ("delete-file" 'delete)
      ("load" 'load)
      (_ 'read))
    description
@@ -3841,13 +3842,24 @@ Advance when ADVANCEP is non-nil.  Signal errors using DESCRIPTION."
 
 (defun agent-scheme--primitive-delete-file (arguments context)
   "Primitive delete-file over ARGUMENTS."
-  (let ((filename (agent-scheme--expect-string (car arguments) "delete-file")))
-    (agent-scheme-policy-deny
-     'standard-host-effect
-     "delete-file"
-     `((filename . ,filename))
-     context
-     "delete-file requires policy-gated host file mutation")))
+  (let* ((filename (agent-scheme--expect-string
+                    (car arguments) "delete-file"))
+         (authorization
+          (agent-scheme--resolve-file-policy-path
+           filename context "delete-file"))
+         (path (plist-get authorization :path)))
+    (condition-case condition
+        (progn
+          (delete-file path)
+          (agent-scheme-capability-audit-file-result
+           authorization 'deleted)
+          agent-scheme-unspecified)
+      (file-error
+       (agent-scheme-capability-audit-file-result
+        authorization
+        (error-message-string condition)
+        t)
+       (signal (car condition) (cdr condition))))))
 
 (defun agent-scheme--primitive-call-with-port (arguments context)
   "Primitive call-with-port over ARGUMENTS."
