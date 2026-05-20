@@ -4,6 +4,7 @@
 ;;; evaluator library without loading the Emacs host adapter.
 
 (import (scheme base)
+        (scheme file)
         (scheme write)
         (agent-scheme eval))
 
@@ -49,6 +50,14 @@
          (agent-scheme-result->external
           (agent-scheme-eval-source-result source))
          expected))
+
+;; Replace PATH with CONTENTS using the host Scheme runtime.
+(define (write-host-test-file path contents)
+  (if (file-exists? path)
+      (delete-file path))
+  (call-with-output-file path
+    (lambda (port)
+      (display contents port))))
 
 ;; Return FIELD from a Scheme-readable result or audit datum.
 (define (field-value datum field)
@@ -804,6 +813,21 @@
              (symlinks resolve-within-root))
       (expires never)))))
 
+(define delete-test-path "/private/tmp/agent-scheme-delete-capability.scm")
+
+(define delete-file-grant-options
+  '((include-directory . "/private/tmp")
+    (capability-grants
+     (capability-grant
+      (id portable-delete-grant)
+      (domain file)
+      (operations metadata delete)
+      (scope (file-root "/private/tmp")
+             (paths ("agent-scheme-delete-capability.scm"))
+             (remote denied)
+             (symlinks resolve-within-root))
+      (expires never)))))
+
 (check-external/options 'include-reads-policy-allowed-body
                         "(define-library (agent-scheme fixture include-body)
                            (export answer)
@@ -1078,6 +1102,37 @@
                           \"fixtures/r7rs/conformance-cases.scm\")"
                         file-grant-options
                         "#t")
+
+(write-host-test-file delete-test-path "(define old 1)")
+
+(let* ((result
+        (agent-scheme-eval-source-result
+         "(import (scheme base) (scheme file))
+          (delete-file \"agent-scheme-delete-capability.scm\")
+          (file-exists? \"agent-scheme-delete-capability.scm\")"
+         #f
+         delete-file-grant-options))
+       (events (field-value result 'events))
+       (request (find-event-with-field
+                 events 'capability-request 'operation 'delete))
+       (decision (find-event-with-field
+                  events 'capability-decision 'grant 'portable-delete-grant))
+       (audit (find-event-with-field
+               events 'capability-audit 'operation 'delete)))
+  (check 'standard-delete-file-grant-allowed
+         (and (equal? (field-value result 'status) 'ok)
+              (string=?
+               (agent-scheme-value->external (field-value result 'value))
+               "#f")
+              (not (file-exists? delete-test-path))
+              request
+              decision
+              audit
+              (equal? (field-value request 'domain) 'file)
+              (equal? (field-value decision 'status) 'approved)
+              (equal? (field-value audit 'result) '(ok deleted))
+              #t)
+         #t))
 
 (check 'standard-file-grant-denies-path-traversal
        (raises?
