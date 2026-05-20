@@ -2,8 +2,8 @@
 
 ;;; Commentary:
 
-;; Focused coverage for opaque Emacs handles and read-only capability
-;; libraries imported by Agent Scheme programs.
+;; Focused coverage for opaque Emacs handles and capability libraries imported
+;; by Agent Scheme programs.
 
 ;;; Code:
 
@@ -193,27 +193,198 @@
   (let ((agent-scheme-policy-category-actions
          (agent-scheme-capability-test--actions
           '((buffer-edit . confirm))))
-        (agent-scheme-policy-confirmation-function (lambda (_request) t)))
-    (agent-scheme-audit-clear)
-    (with-temp-buffer
-      (insert "abcdef")
-      (agent-scheme-eval-source
-       "(import (scheme base) (emacs buffer) (emacs buffer edit))
-        (buffer-replace! (emacs-current-buffer) 2 5 \"XYZ\")")
-      (should (equal (buffer-string) "aXYZef")))
-    (should
-     (agent-scheme-capability-test--audit-entry-matching
-      "(event capability-call)"
-      "(category buffer-edit)"
-      "(operation \"buffer-replace!\")"
-      "(decision confirmed)"))
-    (should
-     (agent-scheme-capability-test--audit-entry-matching
-      "(event capability-result)"
-      "(category buffer-edit)"
-      "(operation \"buffer-replace!\")"
-      "(outcome success)"
-      "(decision completed)"))))
+        (agent-scheme-policy-confirmation-function (lambda (_request) t))
+        (buffer (generate-new-buffer "agent-scheme-capability-confirmed-edit")))
+    (unwind-protect
+        (progn
+          (agent-scheme-audit-clear)
+          (with-current-buffer buffer
+            (insert "abcdef")
+            (agent-scheme-eval-source
+             "(import (scheme base) (emacs buffer) (emacs buffer edit))
+              (buffer-replace! (emacs-current-buffer) 2 5 \"XYZ\")")
+            (should (equal (buffer-string) "aXYZef")))
+          (should
+           (agent-scheme-capability-test--audit-entry-matching
+            "(event capability-call)"
+            "(category buffer-edit)"
+            "(operation \"buffer-replace!\")"
+            "(decision confirmed)"))
+          (should
+           (agent-scheme-capability-test--audit-entry-matching
+            "(event capability-result)"
+            "(category buffer-edit)"
+            "(operation \"buffer-replace!\")"
+            "(outcome success)"
+            "(decision completed)")))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer)))))
+
+(ert-deftest agent-scheme-capability-test-buffer-edits-record-transaction-metadata ()
+  "Insert, delete, and replace edit audits record touched text and region."
+  (let ((agent-scheme-policy-category-actions
+         (agent-scheme-capability-test--actions '((buffer-edit . allow))))
+        (buffer (generate-new-buffer "agent-scheme-capability-edit")))
+    (unwind-protect
+        (progn
+          (agent-scheme-audit-clear)
+          (with-current-buffer buffer
+            (insert "abcdef")
+            (should
+             (equal
+              (agent-scheme-capability-test--external
+               "(import (scheme base) (emacs buffer) (emacs buffer edit))
+                (define handle (emacs-current-buffer))
+                (buffer-insert! handle 4 \"XX\")
+                (buffer-delete! handle 2 3)
+                (buffer-replace! handle 5 7 \"YZ\")
+                (buffer-text handle 1 8)")
+              "\"acXXYZf\""))
+            (should (equal (buffer-string) "acXXYZf")))
+          (should
+           (agent-scheme-capability-test--audit-entry-matching
+            "(event capability-result)"
+            "(operation \"buffer-insert!\")"
+            "(target-buffer \"agent-scheme-capability-edit\")"
+            "(region (4 4))"
+            "(before-text \"\")"
+            "(after-text \"XX\")"))
+          (should
+           (agent-scheme-capability-test--audit-entry-matching
+            "(event capability-result)"
+            "(operation \"buffer-delete!\")"
+            "(target-buffer \"agent-scheme-capability-edit\")"
+            "(region (2 3))"
+            "(before-text \"b\")"
+            "(after-text \"\")"))
+          (should
+           (agent-scheme-capability-test--audit-entry-matching
+            "(event capability-result)"
+            "(operation \"buffer-replace!\")"
+            "(target-buffer \"agent-scheme-capability-edit\")"
+            "(region (5 7))"
+            "(before-text \"de\")"
+            "(after-text \"YZ\")")))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer)))))
+
+(ert-deftest agent-scheme-capability-test-buffer-edit-rolls-back-on-error ()
+  "Rollback a partially applied edit when a buffer change hook errors."
+  (let ((agent-scheme-policy-category-actions
+         (agent-scheme-capability-test--actions '((buffer-edit . allow))))
+        (buffer (generate-new-buffer "agent-scheme-capability-rollback")))
+    (unwind-protect
+        (with-current-buffer buffer
+          (insert "abcdef")
+          (let ((triggered nil)
+                (after-change-functions
+                 (list
+                  (lambda (&rest _)
+                    (unless triggered
+                      (setq triggered t)
+                      (error "forced buffer edit failure"))))))
+            (should-error
+             (agent-scheme-eval-source
+              "(import (emacs buffer) (emacs buffer edit))
+               (buffer-insert! (emacs-current-buffer) 4 \"XX\")")))
+          (should (equal (buffer-string) "abcdef")))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer)))))
+
+(ert-deftest agent-scheme-capability-test-buffer-edits-create-undo-boundaries ()
+  "Each buffer edit leaves undo boundaries for ordinary Emacs undo."
+  (let ((agent-scheme-policy-category-actions
+         (agent-scheme-capability-test--actions '((buffer-edit . allow))))
+        (buffer (generate-new-buffer "agent-scheme-capability-undo")))
+    (unwind-protect
+        (with-current-buffer buffer
+          (buffer-enable-undo)
+          (setq buffer-undo-list nil)
+          (insert "abc")
+          (setq buffer-undo-list nil)
+          (agent-scheme-eval-source
+           "(import (emacs buffer) (emacs buffer edit))
+            (define handle (emacs-current-buffer))
+            (buffer-insert! handle 4 \"X\")
+            (buffer-insert! handle 5 \"Y\")")
+          (should (equal (buffer-string) "abcXY"))
+          (should (>= (cl-count nil buffer-undo-list) 2)))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer)))))
+
+(ert-deftest agent-scheme-capability-test-buffer-save-writes-file-backed-buffer ()
+  "Save a file-backed buffer through the buffer-edit policy gate."
+  (let ((agent-scheme-policy-category-actions
+         (agent-scheme-capability-test--actions '((buffer-edit . allow))))
+        (path (make-temp-file "agent-scheme-buffer-save-" nil ".txt"))
+        buffer)
+    (unwind-protect
+        (progn
+          (setq buffer (find-file-noselect path))
+          (agent-scheme-audit-clear)
+          (with-current-buffer buffer
+            (setq-local require-final-newline nil)
+            (erase-buffer)
+            (insert "saved through capability")
+            (set-buffer-modified-p t)
+            (agent-scheme-eval-source
+             "(import (emacs buffer) (emacs buffer edit))
+              (buffer-save! (emacs-current-buffer))")
+            (should-not (buffer-modified-p)))
+          (with-temp-buffer
+            (insert-file-contents path)
+            (should (equal (buffer-string) "saved through capability")))
+          (should
+           (agent-scheme-capability-test--audit-entry-matching
+            "(event capability-result)"
+            "(operation \"buffer-save!\")"
+            "(target-file"
+            "(outcome success)")))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer))
+      (when (file-exists-p path)
+        (delete-file path)))))
+
+(ert-deftest agent-scheme-capability-test-buffer-edit-denies-internal-buffers ()
+  "Reject edits to hidden/internal buffers even when buffer-edit is allowed."
+  (let ((agent-scheme-policy-category-actions
+         (agent-scheme-capability-test--actions '((buffer-edit . allow))))
+        (buffer (generate-new-buffer " *agent-scheme-capability-internal*")))
+    (unwind-protect
+        (with-current-buffer buffer
+          (insert "unchanged")
+          (let ((condition
+                 (should-error
+                  (agent-scheme-eval-source
+                   "(import (emacs buffer) (emacs buffer edit))
+                    (buffer-insert! (emacs-current-buffer) 1 \"x\")")
+                  :type 'agent-scheme-eval-error)))
+            (should
+             (string-match-p "internal buffer" (cadr condition))))
+          (should (equal (buffer-string) "unchanged")))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer)))))
+
+(ert-deftest agent-scheme-capability-test-buffer-edit-denies-remote-buffers ()
+  "Reject edits to remote file buffers even when buffer-edit is allowed."
+  (let ((agent-scheme-policy-category-actions
+         (agent-scheme-capability-test--actions '((buffer-edit . allow))))
+        (buffer (generate-new-buffer "agent-scheme-capability-remote")))
+    (unwind-protect
+        (with-current-buffer buffer
+          (insert "unchanged")
+          (setq buffer-file-name "/ssh:agent-scheme.invalid:/tmp/file.txt")
+          (let ((condition
+                 (should-error
+                  (agent-scheme-eval-source
+                   "(import (emacs buffer) (emacs buffer edit))
+                    (buffer-insert! (emacs-current-buffer) 1 \"x\")")
+                  :type 'agent-scheme-eval-error)))
+            (should
+             (string-match-p "remote buffer" (cadr condition))))
+          (should (equal (buffer-string) "unchanged")))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer)))))
 
 (ert-deftest agent-scheme-capability-test-window-and-project-queries ()
   "Expose current window handles and project root through capability libraries."
@@ -379,13 +550,15 @@
      (string-match-p "secret-value" external))))
 
 (ert-deftest agent-scheme-capability-test-manifest-describes-emacs-bindings ()
-  "Expose metadata for read-only Emacs capability bindings."
+  "Expose metadata for Emacs capability bindings."
   (let ((current-buffer (agent-scheme-capability-test--manifest-spec
                          "(emacs buffer)" "emacs-current-buffer"))
         (buffer-text (agent-scheme-capability-test--manifest-spec
                       "(emacs buffer)" "buffer-text"))
         (buffer-replace (agent-scheme-capability-test--manifest-spec
                          "(emacs buffer edit)" "buffer-replace!"))
+        (buffer-save (agent-scheme-capability-test--manifest-spec
+                      "(emacs buffer edit)" "buffer-save!"))
         (current-frame (agent-scheme-capability-test--manifest-spec
                         "(emacs frame)" "emacs-current-frame"))
         (current-project (agent-scheme-capability-test--manifest-spec
@@ -405,6 +578,8 @@
     (should (eq (plist-get buffer-replace :effect) 'host-mutation))
     (should (eq (plist-get buffer-replace :policy-category) 'buffer-edit))
     (should (eq (plist-get buffer-replace :policy) 'confirm))
+    (should (eq (plist-get buffer-save :effect) 'host-mutation))
+    (should (eq (plist-get buffer-save :policy-category) 'buffer-edit))
     (should (eq (plist-get current-frame :required-capability) 'emacs-frame))
     (should (eq (plist-get current-project :required-capability)
                 'emacs-project))
