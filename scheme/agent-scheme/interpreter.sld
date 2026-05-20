@@ -36,9 +36,14 @@
           (agent-scheme result)
           (agent-scheme base)
           (agent-scheme library)
+          (prefix (agent-scheme approval) approval-model:)
           (prefix (agent-scheme memory) memory-model:)
           (agent-scheme macro))
   (begin
+    ;; Process-local portable approvals used by `(agent approval)' primitives.
+    (define interpreter-approval-store
+      (approval-model:agent-scheme-make-approval-store))
+
     ;; Process-local portable memory used by `(agent memory)' primitives.
     (define interpreter-memory-store
       (memory-model:agent-scheme-make-memory-store))
@@ -3788,6 +3793,45 @@
       (record-agent-event! context (list 'request (car arguments)))
       agent-scheme-unspecified)
 
+    ;; Create a portable approval request and return its id.
+    (define (primitive-approval-request! arguments context)
+      (approval-model:approval-request! interpreter-approval-store
+                                        (car arguments)))
+
+    ;; Return a portable approval request status, or #f when unknown.
+    (define (primitive-approval-status arguments context)
+      (approval-model:approval-status interpreter-approval-store
+                                      (car arguments)))
+
+    ;; Cancel a portable approval request.
+    (define (primitive-approval-cancel! arguments context)
+      (approval-model:approval-cancel! interpreter-approval-store
+                                       (car arguments)))
+
+    ;; Yield all pending portable approval requests.
+    (define (primitive-approval-yield-pending arguments context)
+      (let ((records
+             (approval-model:approval-pending interpreter-approval-store)))
+        (for-each
+         (lambda (record)
+           (record-agent-event! context (list 'yield record)))
+         records)
+        records))
+
+    ;; Report whether CONTEXT allows Scheme-side approval resolution.
+    (define (approval-resolution-allowed? context)
+      (let ((entry (assq 'approval-resolution
+                         (context-policy-actions context))))
+        (and entry (eq? (cdr entry) 'allow))))
+
+    ;; Resolve a portable approval only when policy explicitly allows it.
+    (define (primitive-approval-resolve! arguments context)
+      (if (not (approval-resolution-allowed? context))
+          (eval-error "approval resolution is host-side only"))
+      (approval-model:approval-resolve! interpreter-approval-store
+                                        (car arguments)
+                                        (second arguments)))
+
     ;; Store a keyed memory record in the portable interpreter memory store.
     (define (primitive-memory-put! arguments context)
       (memory-model:memory-put! interpreter-memory-store
@@ -5097,6 +5141,12 @@
        (cons 'primitive-agent-progress primitive-agent-progress)
        (cons 'primitive-agent-warn primitive-agent-warn)
        (cons 'primitive-agent-request primitive-agent-request)
+       (cons 'primitive-approval-request! primitive-approval-request!)
+       (cons 'primitive-approval-status primitive-approval-status)
+       (cons 'primitive-approval-cancel! primitive-approval-cancel!)
+       (cons 'primitive-approval-yield-pending
+             primitive-approval-yield-pending)
+       (cons 'primitive-approval-resolve! primitive-approval-resolve!)
        (cons 'primitive-memory-put! primitive-memory-put!)
        (cons 'primitive-memory-ref primitive-memory-ref)
        (cons 'primitive-memory-delete! primitive-memory-delete!)

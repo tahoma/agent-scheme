@@ -16,6 +16,7 @@
 (require 'agent-scheme-base)
 (require 'agent-scheme-capability)
 (require 'agent-scheme-agent-io)
+(require 'agent-scheme-approval)
 (require 'agent-scheme-memory)
 (require 'agent-scheme-session)
 (require 'agent-scheme-policy)
@@ -65,6 +66,7 @@
 
 (defconst agent-scheme--agent-library-keys
   '("(agent io)"
+    "(agent approval)"
     "(agent memory)"
     "(agent session)")
   "Agent interaction library keys with focused bootstrap support.")
@@ -293,6 +295,11 @@
      (agent-scheme--register-primitive-library
       key
       (agent-scheme-agent-io-primitive-specs)
+      context))
+    ("(agent approval)"
+     (agent-scheme--register-primitive-library
+      key
+      (agent-scheme-approval-primitive-specs)
       context))
     ("(agent memory)"
      (agent-scheme--register-primitive-library

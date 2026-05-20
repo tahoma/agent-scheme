@@ -9,6 +9,7 @@
         (prefix (agent-scheme base) base:)
         (prefix (agent-scheme library) library:)
         (prefix (agent-scheme macro) macro:)
+        (prefix (agent-scheme approval) approval:)
         (prefix (agent-scheme memory) memory:)
         (prefix (agent-scheme session) session:)
         (prefix (agent-scheme interpreter) interpreter:))
@@ -32,6 +33,13 @@
   (if (not (equal? actual expected))
       (record-failure name expected actual)))
 
+;; Report whether THUNK raises a Scheme condition.
+(define (raises? thunk)
+  (guard (condition
+          (else #t))
+    (thunk)
+    #f))
+
 (check 'runtime-boundary
        (procedure? runtime:agent-scheme-make-empty-environment)
        #t)
@@ -46,6 +54,38 @@
 
 (check 'macro-boundary
        (procedure? macro:agent-scheme-expand-source)
+       #t)
+
+;; Store for exercising the portable approval boundary.
+(define approval-store (approval:agent-scheme-make-approval-store))
+
+;; Approval records are canonical Scheme-readable datums.
+(define portable-approval-id
+  (approval:approval-request!
+   approval-store
+   '(approval-request
+      (policy buffer-edit)
+      (effect (buffer-replace! h-1 1 2 "x"))
+      (reason "Replace text?"))))
+
+(check 'approval-boundary-request-status
+       (approval:approval-status approval-store portable-approval-id)
+       'pending)
+
+(check 'approval-boundary-pending
+       (length (approval:approval-pending approval-store))
+       1)
+
+(approval:approval-resolve! approval-store portable-approval-id 'denied)
+
+(check 'approval-boundary-resolved-status
+       (approval:approval-status approval-store portable-approval-id)
+       'denied)
+
+(check 'approval-boundary-cancel-resolved-denied
+       (raises?
+        (lambda ()
+          (approval:approval-cancel! approval-store portable-approval-id)))
        #t)
 
 ;; Store for exercising the portable memory boundary.

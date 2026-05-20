@@ -10,6 +10,7 @@
 (require 'cl-lib)
 (require 'agent-scheme-runtime)
 (require 'agent-scheme-audit)
+(require 'agent-scheme-approval)
 
 (defgroup agent-scheme-policy nil
   "Policy gates for Agent Scheme capabilities."
@@ -27,6 +28,7 @@
     command-process
     standard-host-effect
     raw-emacs-lisp
+    approval-resolution
     skill-discovery-activation
     project-skill-trust
     skill-resource-read
@@ -49,6 +51,7 @@
     (command-process . confirm)
     (standard-host-effect . allow)
     (raw-emacs-lisp . deny)
+    (approval-resolution . deny)
     (skill-discovery-activation . confirm)
     (project-skill-trust . deny)
     (skill-resource-read . confirm)
@@ -150,12 +153,18 @@ to `policy-decision'."
                 'policy-request
                 (agent-scheme-policy--decision-fields
                  category operation action 'requested fields nil)))
+              (approval-id
+               (agent-scheme-approval-request-from-policy!
+                category operation fields request context))
               (confirmed (and confirmation (funcall confirmation request))))
          (if confirmed
-             (agent-scheme-audit-record
-              audit-event
-              (agent-scheme-policy--decision-fields
-               category operation action 'confirmed fields nil))
+             (progn
+               (agent-scheme-approval-resolve! approval-id 'approved)
+               (agent-scheme-audit-record
+                audit-event
+                (agent-scheme-policy--decision-fields
+                 category operation action 'confirmed fields nil)))
+           (agent-scheme-approval-resolve! approval-id 'denied)
            (agent-scheme-policy--deny
             category
             operation

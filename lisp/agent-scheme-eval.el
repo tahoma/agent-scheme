@@ -14,6 +14,7 @@
 (require 'agent-scheme-audit)
 (require 'agent-scheme-policy)
 (require 'agent-scheme-base)
+(require 'agent-scheme-approval)
 (require 'agent-scheme-memory)
 (require 'agent-scheme-library)
 (require 'agent-scheme-macro)
@@ -151,7 +152,9 @@ agent events, and handle references across calls."
           (progn
             (agent-scheme-policy-authorize
              'pure-r7rs "evaluate" `((input-form . ,input-form)) context)
-            (let ((agent-scheme--memory-current-session session))
+            (let ((agent-scheme--memory-current-session session)
+                  (agent-scheme--approval-current-session
+                   (agent-scheme-session-id session)))
               (let* ((forms (agent-scheme-read-all source))
                      (sequence (agent-scheme--make-sequence forms t)))
                 (agent-scheme--ensure-base-syntax context environment)

@@ -112,6 +112,7 @@
     ;; Agent interaction library keys recognized by the portable registry.
     (define agent-library-keys
       '((agent io)
+        (agent approval)
         (agent memory)))
 
     ;; Checked-in standard libraries loaded as portable Scheme source files.
@@ -707,6 +708,31 @@
                                   'primitive-agent-request
                                   1
                                   1))
+         context))
+       ((equal? key '(agent approval))
+        (register-primitive-library!
+         key
+         (list
+          (library-primitive-spec 'approval-request!
+                                  'primitive-approval-request!
+                                  1
+                                  1)
+          (library-primitive-spec 'approval-status
+                                  'primitive-approval-status
+                                  1
+                                  1)
+          (library-primitive-spec 'approval-cancel!
+                                  'primitive-approval-cancel!
+                                  1
+                                  1)
+          (library-primitive-spec 'approval-yield-pending
+                                  'primitive-approval-yield-pending
+                                  0
+                                  0)
+          (library-primitive-spec 'approval-resolve!
+                                  'primitive-approval-resolve!
+                                  2
+                                  2))
          context))
        ((equal? key '(agent memory))
         (register-primitive-library!

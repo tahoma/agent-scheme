@@ -9,6 +9,7 @@
 
 (require 'ert)
 (require 'seq)
+(require 'agent-scheme-approval)
 (require 'agent-scheme-audit)
 (require 'agent-scheme-eval)
 (require 'agent-scheme-repl)
@@ -17,6 +18,7 @@
 
 (defun agent-scheme-repl-test--reset ()
   "Reset session, audit, and current REPL UI state."
+  (agent-scheme-approval-clear!)
   (agent-scheme-session-clear!)
   (agent-scheme-audit-clear)
   (setq agent-scheme-current-session-id nil))
@@ -112,13 +114,17 @@
     (should (equal agent-scheme-current-session-id "alpha"))
     (should (eq (agent-scheme-inspect-session "alpha") first-status))
     (agent-scheme-repl-eval-source
-     "(import (agent io))
-      (agent-request '(approval (policy buffer-edit)))")
+     "(import (scheme base) (agent approval))
+      (approval-request!
+       '(approval-request
+          (policy buffer-edit)
+          (effect (buffer-replace! h-1 1 2 \"x\"))
+          (reason \"Replace text?\")))")
     (let ((approvals
            (agent-scheme-repl-test--buffer-string
             (get-buffer "*Agent Approvals: alpha*"))))
       (should (string-match-p
-               "(request (approval (policy buffer-edit)))"
+               "(approval-request (id a-1) (policy buffer-edit)"
                approvals)))
     (let ((retired (agent-scheme-stop-session "alpha")))
       (should (string-match-p
