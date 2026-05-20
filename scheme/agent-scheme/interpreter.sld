@@ -36,8 +36,13 @@
           (agent-scheme result)
           (agent-scheme base)
           (agent-scheme library)
+          (prefix (agent-scheme memory) memory-model:)
           (agent-scheme macro))
   (begin
+    ;; Process-local portable memory used by `(agent memory)' primitives.
+    (define interpreter-memory-store
+      (memory-model:agent-scheme-make-memory-store))
+
     ;; Return the stack prefix before FRAME in dynamic-wind order.
     (define (dynamic-wind-prefix-before frame stack)
       (let loop ((cursor stack) (prefix '()))
@@ -3783,6 +3788,62 @@
       (record-agent-event! context (list 'request (car arguments)))
       agent-scheme-unspecified)
 
+    ;; Store a keyed memory record in the portable interpreter memory store.
+    (define (primitive-memory-put! arguments context)
+      (memory-model:memory-put! interpreter-memory-store
+                                (car arguments)
+                                (second arguments)
+                                (third arguments)))
+
+    ;; Return a keyed memory record or #f from the portable memory store.
+    (define (primitive-memory-ref arguments context)
+      (memory-model:memory-ref interpreter-memory-store
+                               (car arguments)
+                               (second arguments)))
+
+    ;; Delete a keyed memory record from the portable memory store.
+    (define (primitive-memory-delete! arguments context)
+      (memory-model:memory-delete! interpreter-memory-store
+                                   (car arguments)
+                                   (second arguments)))
+
+    ;; Add a generated memory record to the portable memory store.
+    (define (primitive-memory-add! arguments context)
+      (memory-model:memory-add! interpreter-memory-store
+                                (car arguments)
+                                (second arguments)
+                                (third arguments)))
+
+    ;; Find matching memory records in the portable memory store.
+    (define (primitive-memory-find arguments context)
+      (memory-model:memory-find interpreter-memory-store
+                                (car arguments)
+                                (second arguments)))
+
+    ;; Find tagged memory records in the portable memory store.
+    (define (primitive-memory-by-tag arguments context)
+      (memory-model:memory-by-tag interpreter-memory-store
+                                  (car arguments)
+                                  (second arguments)))
+
+    ;; Return recent memory records from the portable memory store.
+    (define (primitive-memory-recent arguments context)
+      (memory-model:memory-recent interpreter-memory-store
+                                  (car arguments)
+                                  (second arguments)))
+
+    ;; Yield matching memory records through the event channel.
+    (define (primitive-memory-yield arguments context)
+      (let ((records
+             (memory-model:memory-find interpreter-memory-store
+                                       (car arguments)
+                                       (second arguments))))
+        (for-each
+         (lambda (record)
+           (record-agent-event! context (list 'yield record)))
+         records)
+        records))
+
     ;; Record a portable policy decision into the context audit event list.
     (define (record-policy-decision! context category operation decision fields)
       (record-audit-event!
@@ -5036,6 +5097,14 @@
        (cons 'primitive-agent-progress primitive-agent-progress)
        (cons 'primitive-agent-warn primitive-agent-warn)
        (cons 'primitive-agent-request primitive-agent-request)
+       (cons 'primitive-memory-put! primitive-memory-put!)
+       (cons 'primitive-memory-ref primitive-memory-ref)
+       (cons 'primitive-memory-delete! primitive-memory-delete!)
+       (cons 'primitive-memory-add! primitive-memory-add!)
+       (cons 'primitive-memory-find primitive-memory-find)
+       (cons 'primitive-memory-by-tag primitive-memory-by-tag)
+       (cons 'primitive-memory-recent primitive-memory-recent)
+       (cons 'primitive-memory-yield primitive-memory-yield)
        (cons 'primitive-car primitive-car)
        (cons 'primitive-cdr primitive-cdr)))
 

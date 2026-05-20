@@ -9,6 +9,7 @@
         (prefix (agent-scheme base) base:)
         (prefix (agent-scheme library) library:)
         (prefix (agent-scheme macro) macro:)
+        (prefix (agent-scheme memory) memory:)
         (prefix (agent-scheme session) session:)
         (prefix (agent-scheme interpreter) interpreter:))
 
@@ -46,6 +47,31 @@
 (check 'macro-boundary
        (procedure? macro:agent-scheme-expand-source)
        #t)
+
+;; Store for exercising the portable memory boundary.
+(define memory-store (memory:agent-scheme-make-memory-store))
+
+;; Memory records are canonical Scheme-readable datums.
+(define portable-memory
+  (memory:memory-put! memory-store
+                      'instance
+                      'portable-key
+                      '((tags (portable fact))
+                        (value "portable memory")
+                        (confidence high))))
+
+(check 'memory-boundary-put-ref
+       (memory:memory-record-id
+        (memory:memory-ref memory-store 'instance 'portable-key))
+       'portable-key)
+
+(check 'memory-boundary-by-tag
+       (length (memory:memory-by-tag memory-store 'instance 'portable))
+       1)
+
+(check 'memory-boundary-find
+       (length (memory:memory-find memory-store 'instance "portable memory"))
+       1)
 
 ;; Store for exercising the portable session lifecycle boundary.
 (define session-store (session:agent-scheme-make-session-store))
