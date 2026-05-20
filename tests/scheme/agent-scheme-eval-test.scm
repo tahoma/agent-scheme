@@ -1083,6 +1083,68 @@
               (null? events)
               (string=? (field-value error-field 'message)
                         "agent-scheme budget error: event node budget exceeded")
+         #t)
+         #t))
+
+(let* ((result
+        (agent-scheme-eval-source-result
+         "(import (scheme base) (agent memory))
+          (memory-put! 'instance
+                       'portable-alpha
+                       '((tags (portable fact))
+                         (value \"portable alpha\")
+                         (confidence high)))
+          (memory-add! 'project
+                       'fact
+                       '((tags (project portable))
+                         (value \"project portable\")))
+          (list (memory-ref 'instance 'portable-alpha)
+                (memory-by-tag 'project 'project)
+                (memory-find 'instance \"portable alpha\"))"))
+       (value (field-value result 'value)))
+  (check 'agent-memory-crud-search-tags
+         (and (equal? (field-value result 'status) 'ok)
+              (string=?
+               (agent-scheme-value->external value)
+               (string-append
+                "((memory (id portable-alpha) (scope instance) "
+                "(key portable-alpha) (kind datum) "
+                "(tags (portable fact)) (value \"portable alpha\") "
+                "(source ()) (confidence high) (created-at 1) "
+                "(updated-at 1)) "
+                "((memory (id m-2) (scope project) (key m-2) "
+                "(kind fact) (tags (project portable)) "
+                "(value \"project portable\") (source ()) "
+                "(confidence unknown) (created-at 2) (updated-at 2))) "
+                "((memory (id portable-alpha) (scope instance) "
+                "(key portable-alpha) (kind datum) "
+                "(tags (portable fact)) (value \"portable alpha\") "
+                "(source ()) (confidence high) (created-at 1) "
+                "(updated-at 1))))"))
+              #t)
+         #t))
+
+(let* ((result
+        (agent-scheme-eval-source-result
+         "(import (scheme base) (agent memory))
+          (memory-put! 'instance
+                       'portable-yield
+                       '((tags (portable))
+                         (value \"yield portable\")))
+          (memory-yield 'instance \"yield portable\")
+          'done"))
+       (events (field-value result 'events)))
+  (check 'agent-memory-yield-emits-agent-event
+         (and (equal? (field-value result 'status) 'ok)
+              (string=?
+               (agent-scheme-result->external (list 'events events))
+               (string-append
+                "(events ((yield (memory (id portable-yield) "
+                "(scope instance) (key portable-yield) "
+                "(kind datum) (tags (portable)) "
+                "(value \"yield portable\") (source ()) "
+                "(confidence unknown) (created-at 3) "
+                "(updated-at 3)))))"))
               #t)
          #t))
 

@@ -14,6 +14,7 @@
 (require 'agent-scheme-audit)
 (require 'agent-scheme-policy)
 (require 'agent-scheme-base)
+(require 'agent-scheme-memory)
 (require 'agent-scheme-library)
 (require 'agent-scheme-macro)
 (require 'agent-scheme-interpreter)
@@ -150,21 +151,22 @@ agent events, and handle references across calls."
           (progn
             (agent-scheme-policy-authorize
              'pure-r7rs "evaluate" `((input-form . ,input-form)) context)
-            (let* ((forms (agent-scheme-read-all source))
-                   (sequence (agent-scheme--make-sequence forms t)))
-              (agent-scheme--ensure-base-syntax context environment)
-              (unless base-syntax-installed
-                (setf (agent-scheme-session-baseline-syntax session)
-                      (agent-scheme-session--syntax-current-names
-                       (agent-scheme--eval-context-syntax-environment
-                        context))))
-              (let ((value
-                     (agent-scheme--trampoline
-                      sequence environment context)))
-                (agent-scheme--audit-evaluation-success
-                 input-form value context)
-                (agent-scheme-session--record-eval-success!
-                 session source value start-count))))
+            (let ((agent-scheme--memory-current-session session))
+              (let* ((forms (agent-scheme-read-all source))
+                     (sequence (agent-scheme--make-sequence forms t)))
+                (agent-scheme--ensure-base-syntax context environment)
+                (unless base-syntax-installed
+                  (setf (agent-scheme-session-baseline-syntax session)
+                        (agent-scheme-session--syntax-current-names
+                         (agent-scheme--eval-context-syntax-environment
+                          context))))
+                (let ((value
+                       (agent-scheme--trampoline
+                        sequence environment context)))
+                  (agent-scheme--audit-evaluation-success
+                   input-form value context)
+                  (agent-scheme-session--record-eval-success!
+                   session source value start-count)))))
         (error
          (agent-scheme--audit-evaluation-error input-form condition context)
          (agent-scheme-session--record-eval-error!

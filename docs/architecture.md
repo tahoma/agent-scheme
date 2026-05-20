@@ -127,6 +127,13 @@ Required scopes:
 - `project`: memory tied to a `project.el` root, with safe defaults for public
   repositories
 
+Project memory defaults to private local storage owned by the host adapter,
+not to a tracked repository file. A project may opt in to tracked memory later,
+but tracked storage must be explicit and visibly separate from private local
+storage so public repositories do not accidentally capture personal memory.
+Any tracked or indexed form remains a rebuildable view over canonical
+Scheme-readable memory records.
+
 ## Runtime Shape
 
 The runtime has three layers.
