@@ -111,7 +111,8 @@
 
     ;; Agent interaction library keys recognized by the portable registry.
     (define agent-library-keys
-      '((agent io)))
+      '((agent io)
+        (agent memory)))
 
     ;; Checked-in standard libraries loaded as portable Scheme source files.
     (define standard-source-library-load-paths
@@ -706,6 +707,31 @@
                                   'primitive-agent-request
                                   1
                                   1))
+         context))
+       ((equal? key '(agent memory))
+        (register-primitive-library!
+         key
+         (list
+          (library-primitive-spec 'memory-put! 'primitive-memory-put! 3 3)
+          (library-primitive-spec 'memory-ref 'primitive-memory-ref 2 2)
+          (library-primitive-spec 'memory-delete!
+                                  'primitive-memory-delete!
+                                  2
+                                  2)
+          (library-primitive-spec 'memory-add! 'primitive-memory-add! 3 3)
+          (library-primitive-spec 'memory-find 'primitive-memory-find 2 2)
+          (library-primitive-spec 'memory-by-tag
+                                  'primitive-memory-by-tag
+                                  2
+                                  2)
+          (library-primitive-spec 'memory-recent
+                                  'primitive-memory-recent
+                                  2
+                                  2)
+          (library-primitive-spec 'memory-yield
+                                  'primitive-memory-yield
+                                  2
+                                  2))
          context))
        (else
         (eval-error "unknown agent library" key))))
