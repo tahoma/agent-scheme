@@ -745,6 +745,12 @@
     (define (remote-file-path? filename)
       (string-contains? filename "://"))
 
+    ;; Return the effect class for a file capability operation.
+    (define (file-capability-effect operation)
+      (if (memq operation '(write create delete))
+          'host-file-mutation
+          'read-only-observation))
+
     ;; Report whether PATH is equal to or nested inside ROOT.
     (define (path-contained? path root)
       (let* ((normalized-path (path-normalize path))
@@ -808,7 +814,7 @@
             (list 'resource
                   (list 'path filename)
                   (list 'normalized-path path))
-            (list 'effect 'read-only-observation)))
+            (list 'effect (file-capability-effect operation))))
 
     ;; Record DENIAL for REQUEST and raise a portable evaluator error.
     (define (deny-file-capability! context request operation grant reason)

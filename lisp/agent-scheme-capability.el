@@ -626,6 +626,14 @@
   "Return OPERATION as an Agent Scheme symbol datum."
   (agent-scheme--capability-grant-symbol operation))
 
+(defun agent-scheme--file-capability-effect-symbol (operation)
+  "Return the effect class for file OPERATION."
+  (agent-scheme--capability-grant-symbol
+   (if (member (agent-scheme--file-capability-symbol-name operation)
+               '("write" "create" "delete"))
+       "host-file-mutation"
+     "read-only-observation")))
+
 (defun agent-scheme--file-capability-request-id ()
   "Return a fresh file capability request id."
   (agent-scheme--capability-grant-symbol
@@ -662,7 +670,7 @@
   "Return PATH with symlinks resolved when the target exists."
   (if (file-exists-p path)
       (file-truename path)
-    (expand-file-name path)))
+    (agent-scheme--file-capability-parent-truename path)))
 
 (defun agent-scheme--file-capability-parent-truename (path)
   "Return PATH with existing parent directories canonicalized.
@@ -834,7 +842,7 @@ the separate resolved-target check runs."
      (,(agent-scheme--capability-grant-symbol "path") ,filename)
      (,(agent-scheme--capability-grant-symbol "normalized-path") ,path))
     (,(agent-scheme--capability-grant-symbol "effect")
-     ,(agent-scheme--capability-grant-symbol "read-only-observation"))))
+     ,(agent-scheme--file-capability-effect-symbol operation))))
 
 (defun agent-scheme--file-capability-record-request
     (request operation filename path)

@@ -4125,6 +4125,7 @@
        context
        (cond
         ((string=? description "file-exists?") 'metadata)
+        ((string=? description "delete-file") 'delete)
         ((string=? description "load") 'load)
         (else 'read))
        description
@@ -4145,11 +4146,27 @@
     ;; Implement the `delete-file` primitive with argument validation and Agent
     ;; Scheme values.
     (define (primitive-delete-file arguments context)
-      (expect-string (car arguments) "delete-file")
-      (policy-denied
-       "delete-file"
-       context
-       (list (result-field 'filename (car arguments)))))
+      (let* ((authorization
+              (resolve-file-policy-path
+               (expect-string (car arguments) "delete-file")
+               context
+               "delete-file"))
+             (path (file-authorization-path authorization)))
+        (if (not (file-exists? path))
+            (begin
+              (audit-file-capability-result!
+               context
+               authorization
+               "delete-file target does not exist"
+               #t)
+              (eval-error "delete-file target does not exist" path)))
+        (delete-file path)
+        (audit-file-capability-result!
+         context
+         authorization
+         'deleted
+         #f)
+        agent-scheme-unspecified))
 
     ;; Implement the `call-with-port` primitive with argument validation and
     ;; Agent Scheme values.

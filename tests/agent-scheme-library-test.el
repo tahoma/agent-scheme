@@ -641,6 +641,48 @@
     "(status denied)"
     "remote file paths")))
 
+(ert-deftest agent-scheme-library-test-file-grant-authorizes-delete-file ()
+  "Authorize `(scheme file)' deletion through a file capability grant."
+  (let* ((root (make-temp-file "agent-scheme-file-delete-" t))
+         (allowed (expand-file-name "allowed" root))
+         (target (expand-file-name "remove.scm" allowed))
+         (options
+          (agent-scheme-library-test--file-grant-options
+           root
+           '("allowed")
+           '(metadata delete))))
+    (unwind-protect
+        (progn
+          (agent-scheme-library-test--write-file target "(define old 1)")
+          (agent-scheme-audit-clear)
+          (should
+           (equal
+            (agent-scheme-library-test--external/options
+             "(import (scheme base) (scheme file))
+              (delete-file \"allowed/remove.scm\")
+              (file-exists? \"allowed/remove.scm\")"
+             options)
+            "#f"))
+          (should-not (file-exists-p target))
+          (should
+           (agent-scheme-library-test--audit-entry-matching
+            "(event capability-request)"
+            "(domain file)"
+            "(operation delete)"
+            "(path \"allowed/remove.scm\")"))
+          (should
+           (agent-scheme-library-test--audit-entry-matching
+            "(event capability-decision)"
+            "(status approved)"
+            "(grant fixture-file-grant)"))
+          (should
+           (agent-scheme-library-test--audit-entry-matching
+            "(event capability-audit)"
+            "(operation delete)"
+            "(result (ok deleted))")))
+      (when (file-exists-p root)
+        (delete-directory root t)))))
+
 (ert-deftest agent-scheme-library-test-standard-host-libraries-are-policy-gated ()
   "Import host-effecting standard libraries while denying effects by default."
   (should
