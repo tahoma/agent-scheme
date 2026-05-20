@@ -14,6 +14,7 @@
 (require 'subr-x)
 (require 'agent-scheme-audit)
 (require 'agent-scheme-reader)
+(require 'agent-scheme-redaction)
 (require 'agent-scheme-result)
 (require 'agent-scheme-runtime)
 (require 'agent-scheme-session)
@@ -308,8 +309,13 @@ When EXISTING is non-nil, preserve its id and creation sequence."
          (normalized-scope (agent-scheme--memory-scope scope))
          (records (agent-scheme--memory-records normalized-scope subject))
          (existing (agent-scheme--memory-find-by-key records normalized-key))
+         (redacted-datum (agent-scheme-redact datum 'memory))
          (record (agent-scheme--memory-make-record
-                  normalized-scope normalized-key 'datum datum existing)))
+                  normalized-scope
+                  normalized-key
+                  'datum
+                  redacted-datum
+                  existing)))
     (agent-scheme--memory-set-records!
      normalized-scope
      (agent-scheme--memory-replace-record records record)
@@ -353,8 +359,9 @@ When EXISTING is non-nil, preserve its id and creation sequence."
   (let* ((normalized-scope (agent-scheme--memory-scope scope))
          (sequence (1+ agent-scheme--memory-next-id))
          (id (agent-scheme--memory-generated-id sequence))
+         (redacted-datum (agent-scheme-redact datum 'memory))
          (record (agent-scheme--memory-make-record
-                  normalized-scope id kind datum)))
+                  normalized-scope id kind redacted-datum)))
     (agent-scheme--memory-set-records!
      normalized-scope
      (cons record (agent-scheme--memory-records normalized-scope subject))

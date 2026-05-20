@@ -9,6 +9,7 @@
 
 (require 'cl-lib)
 (require 'agent-scheme-reader)
+(require 'agent-scheme-redaction)
 (require 'agent-scheme-result)
 
 (defgroup agent-scheme-audit nil
@@ -111,7 +112,9 @@
 ;;;###autoload
 (defun agent-scheme-audit-record (event fields)
   "Record EVENT with FIELDS and return the Scheme-readable audit entry."
-  (let ((entry (agent-scheme-audit-entry-datum event fields)))
+  (let ((entry (agent-scheme-redact
+                (agent-scheme-audit-entry-datum event fields)
+                'audit-log)))
     (push entry agent-scheme--audit-log)
     (agent-scheme-audit--trim-log)
     entry))

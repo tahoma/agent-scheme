@@ -11,6 +11,7 @@
 (require 'agent-scheme-runtime)
 (require 'agent-scheme-audit)
 (require 'agent-scheme-approval)
+(require 'agent-scheme-redaction)
 
 (defgroup agent-scheme-policy nil
   "Policy gates for Agent Scheme capabilities."
@@ -33,7 +34,8 @@
     project-skill-trust
     skill-resource-read
     skill-script-execution
-    skill-export-write)
+    skill-export-write
+    remote-provider-routing)
   "Policy categories recognized by Agent Scheme.")
 
 (defun agent-scheme-policy-default-confirmation-function (request)
@@ -56,7 +58,8 @@
     (project-skill-trust . deny)
     (skill-resource-read . confirm)
     (skill-script-execution . confirm)
-    (skill-export-write . confirm))
+    (skill-export-write . confirm)
+    (remote-provider-routing . allow))
   "Alist mapping policy categories to `allow', `deny', or `confirm'."
   :type `(alist :key-type (choice ,@(mapcar (lambda (category)
                                               `(const ,category))
@@ -243,6 +246,41 @@ to `policy-decision'."
      (export-path . ,export-path))
    context
    'skill-export))
+
+;;;###autoload
+(defun agent-scheme-policy-authorize-provider-routing
+    (datum provider &optional options context)
+  "Authorize routing DATUM to remote PROVIDER and return redacted DATUM.
+Local-only context is denied unless OPTIONS contains
+`:allow-local-only' with a non-nil value.  Secret-bearing context is
+redacted before authorization data is audited or returned."
+  (let* ((redacted (agent-scheme-redact datum 'remote-provider))
+         (local-only (agent-scheme-redaction-local-only-p datum))
+         (allow-local-only (plist-get options :allow-local-only))
+         (fields `((provider . ,provider)
+                   (payload . ,redacted)
+                   (local-only . ,(if local-only
+                                      agent-scheme-true
+                                    agent-scheme-false)))))
+    (if (and local-only (not allow-local-only))
+        (agent-scheme-policy-deny
+         'remote-provider-routing
+         "provider-route"
+         fields
+         context
+         "local-only context requires explicit approval"
+         'provider-routing)
+      (agent-scheme-policy-authorize
+       'remote-provider-routing
+       "provider-route"
+       (append
+        fields
+        `((policy . ,(if allow-local-only
+                         'local-only-override
+                       'remote-provider-redaction))))
+       context
+       'provider-routing)
+      redacted)))
 
 (provide 'agent-scheme-policy)
 

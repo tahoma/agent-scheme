@@ -8,6 +8,7 @@
 ;;; Code:
 
 (require 'agent-scheme-audit)
+(require 'agent-scheme-redaction)
 (require 'agent-scheme-runtime)
 
 (defun agent-scheme-agent-io--field (name &rest values)
@@ -16,15 +17,17 @@
 
 (defun agent-scheme-agent-io--record (operation event fields context)
   "Record OPERATION EVENT with FIELDS in CONTEXT and the audit log."
-  (agent-scheme--record-event! context event)
-  (agent-scheme-audit-record
-   'agent-event
-   (append
-    `((category . agent-io)
-      (operation . ,operation)
-      (decision . recorded))
-    `((record . ,event))
-    fields))
+  (let ((redacted-event (agent-scheme-redact event 'agent-event))
+        (redacted-fields (agent-scheme-redact fields 'agent-event)))
+    (agent-scheme--record-event! context redacted-event)
+    (agent-scheme-audit-record
+     'agent-event
+     (append
+      `((category . agent-io)
+        (operation . ,operation)
+        (decision . recorded))
+      `((record . ,redacted-event))
+      redacted-fields)))
   agent-scheme-unspecified)
 
 (defun agent-scheme-agent-io--primitive-yield (arguments context)

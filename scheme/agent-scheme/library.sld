@@ -115,7 +115,8 @@
         (agent approval)
         (agent capability)
         (agent capability primitive)
-        (agent memory)))
+        (agent memory)
+        (agent redaction)))
 
     ;; Checked-in Agent Scheme source libraries loaded by the portable
     ;; evaluator when a public agent library needs syntax definitions.
@@ -838,6 +839,31 @@
                                   2)
           (library-primitive-spec 'memory-yield
                                   'primitive-memory-yield
+                                  2
+                                  2))
+         context))
+       ((equal? key '(agent redaction))
+        (register-primitive-library!
+         key
+         (list
+          (library-primitive-spec 'secret-source?
+                                  'primitive-secret-source?
+                                  1
+                                  1)
+          (library-primitive-spec 'redact
+                                  'primitive-redact
+                                  2
+                                  2)
+          (library-primitive-spec 'context-local-only!
+                                  'primitive-context-local-only!
+                                  2
+                                  2)
+          (library-primitive-spec 'redaction-log
+                                  'primitive-redaction-log
+                                  0
+                                  1)
+          (library-primitive-spec 'safe-for-provider?
+                                  'primitive-safe-for-provider?
                                   2
                                   2))
          context))
