@@ -11,6 +11,7 @@
         (prefix (agent-scheme macro) macro:)
         (prefix (agent-scheme approval) approval:)
         (prefix (agent-scheme memory) memory:)
+        (prefix (agent-scheme redaction) redaction:)
         (prefix (agent-scheme session) session:)
         (prefix (agent-scheme interpreter) interpreter:))
 
@@ -112,6 +113,36 @@
 (check 'memory-boundary-find
        (length (memory:memory-find memory-store 'instance "portable memory"))
        1)
+
+;; Portable redaction records never reveal the original secret.
+(define portable-secret
+  '((source env)
+    (field "OPENAI_API_KEY")
+    (value "sk-portablesecret1234567890")))
+
+;; Redacted portable secret datum used for boundary checks.
+(define redacted-secret
+  (redaction:redact portable-secret 'remote-provider))
+
+(check 'redaction-boundary-secret-source
+       (redaction:secret-source? portable-secret)
+       #t)
+
+(check 'redaction-boundary-redact-record
+       (car redacted-secret)
+       'redaction)
+
+(check 'redaction-boundary-provider-safe
+       (redaction:safe-for-provider? portable-secret 'openai)
+       #f)
+
+(check 'redaction-boundary-local-only-provider-safe
+       (redaction:safe-for-provider?
+        (redaction:context-local-only!
+         '((buffer "private-notes") (text "do not send"))
+         "private buffer")
+        'openai)
+       #f)
 
 ;; Store for exercising the portable session lifecycle boundary.
 (define session-store (session:agent-scheme-make-session-store))

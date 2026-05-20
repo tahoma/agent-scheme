@@ -1148,6 +1148,28 @@
          (and (equal? (field-value result 'status) 'error)
               (string=? (field-value error-field 'message)
                         "agent-scheme eval error: approval resolution is host-side only")
+         #t)
+         #t))
+
+(let* ((result
+        (agent-scheme-eval-source-result
+         "(import (scheme base) (agent redaction))
+          (let ((secret '((source env)
+                          (field \"OPENAI_API_KEY\")
+                          (value \"sk-portableagent1234567890\"))))
+            (list (secret-source? secret)
+                  (redact secret 'remote-provider)
+                  (safe-for-provider? secret 'openai)))"))
+       (value (field-value result 'value)))
+  (check 'agent-redaction-secret-source-redact-provider
+         (and (equal? (field-value result 'status) 'ok)
+              (string=?
+               (agent-scheme-value->external value)
+               (string-append
+                "(#t (redaction (kind secret) (source env) "
+                "(field \"OPENAI_API_KEY\") "
+                "(replacement \"[redacted]\") "
+                "(policy local-only)) #f)"))
               #t)
          #t))
 
