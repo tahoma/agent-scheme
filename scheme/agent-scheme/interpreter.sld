@@ -38,6 +38,7 @@
           (agent-scheme library)
           (prefix (agent-scheme approval) approval-model:)
           (prefix (agent-scheme memory) memory-model:)
+          (prefix (agent-scheme redaction) redaction-model:)
           (agent-scheme macro))
   (begin
     ;; Process-local portable approvals used by `(agent approval)' primitives.
@@ -4064,6 +4065,32 @@
          records)
         records))
 
+    ;; Report whether a datum contains secret-prone source data.
+    (define (primitive-secret-source? arguments context)
+      (if (redaction-model:secret-source? (car arguments)) #t #f))
+
+    ;; Return a datum with secrets and local-only context redacted.
+    (define (primitive-redact arguments context)
+      (redaction-model:redact (car arguments) (second arguments)))
+
+    ;; Mark a datum as local-only context.
+    (define (primitive-context-local-only! arguments context)
+      (redaction-model:context-local-only! (car arguments)
+                                           (second arguments)))
+
+    ;; Return the portable redaction decision log.
+    (define (primitive-redaction-log arguments context)
+      (if (null? arguments)
+          (redaction-model:redaction-log)
+          (redaction-model:redaction-log (car arguments))))
+
+    ;; Report whether a datum can be routed to a provider without redaction.
+    (define (primitive-safe-for-provider? arguments context)
+      (if (redaction-model:safe-for-provider? (car arguments)
+                                              (second arguments))
+          #t
+          #f))
+
     ;; Record a portable policy decision into the context audit event list.
     (define (record-policy-decision! context category operation decision fields)
       (record-audit-event!
@@ -5338,6 +5365,11 @@
        (cons 'primitive-memory-by-tag primitive-memory-by-tag)
        (cons 'primitive-memory-recent primitive-memory-recent)
        (cons 'primitive-memory-yield primitive-memory-yield)
+       (cons 'primitive-secret-source? primitive-secret-source?)
+       (cons 'primitive-redact primitive-redact)
+       (cons 'primitive-context-local-only! primitive-context-local-only!)
+       (cons 'primitive-redaction-log primitive-redaction-log)
+       (cons 'primitive-safe-for-provider? primitive-safe-for-provider?)
        (cons 'primitive-car primitive-car)
        (cons 'primitive-cdr primitive-cdr)))
 

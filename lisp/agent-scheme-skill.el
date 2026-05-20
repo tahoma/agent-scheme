@@ -14,6 +14,7 @@
 (require 'agent-scheme-reader)
 (require 'agent-scheme-runtime)
 (require 'agent-scheme-policy)
+(require 'agent-scheme-redaction)
 
 (define-error 'agent-scheme-skill-error
   "Agent Scheme skill error"
@@ -184,7 +185,9 @@ OPTIONS may include `:skill-name' and `:context'."
                             resource-path))))
     (agent-scheme-policy-authorize-skill-resource-read
      skill-name path context)
-    (agent-scheme-skill--read-file path)))
+    (agent-scheme-redact
+     (agent-scheme-skill--read-file path)
+     'skill-resource)))
 
 ;;;###autoload
 (defun agent-scheme-skill-import (directory &optional options)
@@ -263,6 +266,8 @@ OPTIONS may include `:name', `:instructions-text', and `:context'."
               (agent-scheme-skill--string-field
                skill-datum "instructions-text")
               ""))
+         (redacted-instructions-text
+          (agent-scheme-redact instructions-text 'skill-export))
          (context (agent-scheme-skill--option options :context nil))
          (target-directory
           (file-name-as-directory (expand-file-name export-directory)))
@@ -278,7 +283,7 @@ OPTIONS may include `:name', `:instructions-text', and `:context'."
               (list (format "skill export target is a directory: %s"
                             target-file))))
     (with-temp-file target-file
-      (insert instructions-text))
+      (insert redacted-instructions-text))
     (list (agent-scheme-skill--symbol "skill-export")
           (list (agent-scheme-skill--symbol "skill-name") name)
           (list (agent-scheme-skill--symbol "export-path") target-file)

@@ -18,6 +18,7 @@
 (require 'agent-scheme-agent-io)
 (require 'agent-scheme-approval)
 (require 'agent-scheme-memory)
+(require 'agent-scheme-redaction)
 (require 'agent-scheme-session)
 (require 'agent-scheme-policy)
 
@@ -70,6 +71,7 @@
     "(agent capability)"
     "(agent capability primitive)"
     "(agent memory)"
+    "(agent redaction)"
     "(agent session)")
   "Agent interaction library keys with focused bootstrap support.")
 
@@ -340,6 +342,11 @@
      (agent-scheme--register-primitive-library
       key
       (agent-scheme-memory-primitive-specs)
+      context))
+    ("(agent redaction)"
+     (agent-scheme--register-primitive-library
+      key
+      (agent-scheme-redaction-primitive-specs)
       context))
     ("(agent session)"
      (agent-scheme--register-primitive-library

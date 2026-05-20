@@ -16,6 +16,7 @@
 (require 'agent-scheme-base)
 (require 'agent-scheme-capability)
 (require 'agent-scheme-reader)
+(require 'agent-scheme-redaction)
 (require 'agent-scheme-result)
 (require 'agent-scheme-runtime)
 
@@ -886,16 +887,21 @@ Return the stale handles that were removed."
   "Record successful SESSION evaluation of SOURCE producing VALUE."
   (agent-scheme-session--refresh-handles session value)
   (let* ((new-entries (agent-scheme-session--new-audit-entries start-count))
-         (events (seq-filter #'agent-scheme-session--agent-event-p
-                             new-entries))
+         (events (agent-scheme-redact
+                  (seq-filter #'agent-scheme-session--agent-event-p
+                              new-entries)
+                  'transcript))
          (entry
           (list
            (agent-scheme-session--symbol "transcript-entry")
-           (agent-scheme-session--field "source" source)
+           (agent-scheme-session--field
+            "source" (agent-scheme-redact source 'transcript))
            (agent-scheme-session--field
             "status" (agent-scheme-session--symbol "ok"))
            (agent-scheme-session--field
-            "result" (agent-scheme-value->external value)))))
+            "result" (agent-scheme-redact
+                      (agent-scheme-value->external value)
+                      'transcript)))))
     (setf (agent-scheme-session-recent-events session) events)
     (setf (agent-scheme-session-transcript session)
           (append (agent-scheme-session-transcript session) (list entry)))
@@ -917,16 +923,20 @@ Return the stale handles that were removed."
     (session source condition start-count)
   "Record failed SESSION evaluation of SOURCE with CONDITION."
   (let* ((new-entries (agent-scheme-session--new-audit-entries start-count))
-         (events (seq-filter #'agent-scheme-session--agent-event-p
-                             new-entries))
+         (events (agent-scheme-redact
+                  (seq-filter #'agent-scheme-session--agent-event-p
+                              new-entries)
+                  'transcript))
          (message (error-message-string condition))
          (entry
           (list
            (agent-scheme-session--symbol "transcript-entry")
-           (agent-scheme-session--field "source" source)
+           (agent-scheme-session--field
+            "source" (agent-scheme-redact source 'transcript))
            (agent-scheme-session--field
             "status" (agent-scheme-session--symbol "error"))
-           (agent-scheme-session--field "error" message))))
+           (agent-scheme-session--field
+            "error" (agent-scheme-redact message 'transcript)))))
     (setf (agent-scheme-session-recent-events session) events)
     (setf (agent-scheme-session-transcript session)
           (append (agent-scheme-session-transcript session) (list entry)))

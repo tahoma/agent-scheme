@@ -65,6 +65,7 @@ Before implementing a ticket, read:
 - [Repository agent instructions](../AGENTS.md), for agentic or tool-assisted work
 - [Architecture and threat model](architecture.md)
 - [Multi-host adapter and bootstrap strategy](multi-host-bootstrap.md)
+- [Secrets, local-only context, and redaction](privacy.md)
 - [Naming convention](naming.md)
 - [Scheme references](references.md)
 - [R7RS-small report reference](r7rs-small-report.md)
