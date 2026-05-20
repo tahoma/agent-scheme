@@ -9,7 +9,9 @@
 
 (require 'cl-lib)
 (require 'ert)
+(require 'agent-scheme-audit)
 (require 'agent-scheme-eval)
+(require 'agent-scheme-result)
 
 (defun agent-scheme-library-test--external (source &optional environment)
   "Evaluate SOURCE and return its stable external value representation."
@@ -32,10 +34,54 @@
                                 agent-scheme-library-test--root)))
   "Policy options that allow R7RS fixture includes.")
 
+(defun agent-scheme-library-test--file-grant-options
+    (&optional root paths operations)
+  "Return OPTIONS with a first-class file capability grant."
+  (let ((root-directory
+         (file-name-as-directory
+          (expand-file-name (or root agent-scheme-library-test--root)))))
+    (list
+     :include-directory root-directory
+     :capability-grants
+     (list
+      `(capability-grant
+        (id fixture-file-grant)
+        (domain file)
+        (operations ,@(or operations
+                          '(metadata read include include-ci load
+                                     library-source)))
+        (scope (project-root ,root-directory)
+               (paths ,(or paths '("fixtures/r7rs")))
+               (remote denied)
+               (symlinks resolve-within-root))
+        (expires never)
+        (reason "Allow fixture file capability tests."))))))
+
 (defun agent-scheme-library-test--external/options (source options)
   "Evaluate SOURCE with OPTIONS and return its stable external value."
   (agent-scheme-value->external
    (agent-scheme-eval-source source nil options)))
+
+(defun agent-scheme-library-test--audit-strings ()
+  "Return recent audit entries as external Scheme-readable strings."
+  (mapcar #'agent-scheme-result->external
+          (agent-scheme-audit-recent-entries)))
+
+(defun agent-scheme-library-test--audit-entry-matching (&rest snippets)
+  "Return the first audit entry string containing all SNIPPETS."
+  (cl-find-if
+   (lambda (entry)
+     (cl-every
+      (lambda (snippet)
+        (string-match-p (regexp-quote snippet) entry))
+      snippets))
+   (agent-scheme-library-test--audit-strings)))
+
+(defun agent-scheme-library-test--write-file (path contents)
+  "Write CONTENTS to PATH, creating parent directories as needed."
+  (make-directory (file-name-directory path) t)
+  (with-temp-file path
+    (insert contents)))
 
 (defun agent-scheme-library-test--standard-source-spec (name specs)
   "Return the source library spec named NAME from SPECS."
@@ -450,6 +496,133 @@
       (file-exists? \"fixtures/r7rs/conformance-cases.scm\")"
      agent-scheme-library-test--include-options)
     "#t")))
+
+(ert-deftest agent-scheme-library-test-file-grant-authorizes-metadata-and-audits ()
+  "Authorize `(scheme file)' metadata through a file capability grant."
+  (agent-scheme-audit-clear)
+  (should
+   (equal
+    (agent-scheme-library-test--external/options
+     "(import (scheme base) (scheme file))
+      (file-exists? \"fixtures/r7rs/conformance-cases.scm\")"
+     (agent-scheme-library-test--file-grant-options))
+    "#t"))
+  (should
+   (agent-scheme-library-test--audit-entry-matching
+    "(event capability-request)"
+    "(domain file)"
+    "(operation metadata)"
+    "(path \"fixtures/r7rs/conformance-cases.scm\")"))
+  (should
+   (agent-scheme-library-test--audit-entry-matching
+    "(event capability-decision)"
+    "(status approved)"
+    "(grant fixture-file-grant)"))
+  (should
+   (agent-scheme-library-test--audit-entry-matching
+    "(event capability-audit)"
+    "(result (ok #t))")))
+
+(ert-deftest agent-scheme-library-test-file-grant-authorizes-include-and-load ()
+  "Authorize include and load reads through the same file grant vocabulary."
+  (let ((options (agent-scheme-library-test--file-grant-options)))
+    (should
+     (equal
+      (agent-scheme-library-test--external/options
+       "(define-library (agent-scheme fixture include-body)
+          (export answer)
+          (import (scheme base))
+          (include \"fixtures/r7rs/include-body.scm\"))
+        (import (agent-scheme fixture include-body))
+        answer"
+       options)
+      "42"))
+    (should
+     (equal
+      (agent-scheme-library-test--external/options
+       "(define-library (agent-scheme fixture include-ci-body)
+          (export mixedanswer)
+          (import (scheme base))
+          (include-ci \"fixtures/r7rs/include-ci-body.scm\"))
+        (import (agent-scheme fixture include-ci-body))
+        mixedanswer"
+       options)
+      "42"))
+    (should
+     (equal
+      (agent-scheme-library-test--external/options
+       "(import (scheme base) (scheme load))
+        (load \"fixtures/r7rs/include-body.scm\")
+        answer"
+       options)
+      "42"))))
+
+(ert-deftest agent-scheme-library-test-file-grant-denies-path-traversal ()
+  "Deny normalized paths that escape the approved file grant path."
+  (let ((condition
+         (should-error
+          (agent-scheme-eval-source
+           "(import (scheme base) (scheme file))
+            (file-exists? \"fixtures/r7rs/../../AGENTS.md\")"
+           nil
+           (agent-scheme-library-test--file-grant-options))
+          :type 'agent-scheme-eval-error)))
+    (should
+     (string-match-p "file capability denied" (cadr condition)))))
+
+(ert-deftest agent-scheme-library-test-file-grant-denies-symlink-escape ()
+  "Resolve symlinks and deny targets outside the approved file grant path."
+  (let* ((root (make-temp-file "agent-scheme-file-capability-" t))
+         (allowed (expand-file-name "allowed" root))
+         (outside (expand-file-name "outside.scm" root))
+         (link (expand-file-name "escape.scm" allowed)))
+    (unwind-protect
+        (progn
+          (agent-scheme-library-test--write-file outside "(define escaped 1)")
+          (make-directory allowed t)
+          (condition-case nil
+              (make-symbolic-link outside link)
+            (file-error
+             (ert-skip "symlink creation is unavailable on this host")))
+          (agent-scheme-audit-clear)
+          (let ((condition
+                 (should-error
+                  (agent-scheme-eval-source
+                   "(import (scheme base) (scheme file))
+                    (file-exists? \"allowed/escape.scm\")"
+                   nil
+                   (agent-scheme-library-test--file-grant-options
+                    root '("allowed") '(metadata)))
+                  :type 'agent-scheme-eval-error)))
+            (should
+             (string-match-p "file capability denied" (cadr condition))))
+          (should
+           (agent-scheme-library-test--audit-entry-matching
+            "(event capability-decision)"
+            "(status denied)"
+            "symlink")))
+      (when (file-exists-p root)
+        (delete-directory root t)))))
+
+(ert-deftest agent-scheme-library-test-file-grant-denies-url-paths ()
+  "Keep URLs outside ordinary file-domain grants."
+  (agent-scheme-audit-clear)
+  (let ((condition
+         (should-error
+          (agent-scheme-eval-source
+           "(import (scheme base) (scheme file))
+            (file-exists? \"https://example.invalid/source.scm\")"
+           nil
+           (agent-scheme-library-test--file-grant-options
+            "/" '("/") '(metadata)))
+          :type 'agent-scheme-eval-error)))
+    (should
+     (string-match-p "file capability denied" (cadr condition))))
+  (should
+   (agent-scheme-library-test--audit-entry-matching
+    "(event capability-decision)"
+    "(status denied)"
+    "remote file paths")))
 
 (ert-deftest agent-scheme-library-test-standard-host-libraries-are-policy-gated ()
   "Import host-effecting standard libraries while denying effects by default."

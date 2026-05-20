@@ -1042,40 +1042,28 @@ Each spec has (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY)."
 
 (defun agent-scheme--resolve-include-file (filename context operation)
   "Return policy-checked absolute include path for FILENAME."
-  (let ((path
-         (expand-file-name
-          filename
-          (agent-scheme--eval-context-include-directory context))))
-    (unless (agent-scheme--eval-context-include-paths context)
-      ;; Includes are the first host-file read path in the evaluator, so they
-      ;; require an explicit allow-list even though the surrounding language is
-      ;; otherwise portable R7RS Scheme.
-      (agent-scheme-policy-deny
-       'standard-host-effect
-       operation
-       `((filename . ,filename)
-         (path . ,path))
-       context
-       (format "%s requires policy-gated host file access: %s"
-               operation filename)))
-    (unless (agent-scheme--include-policy-allows-file-p path context)
-      (agent-scheme-policy-deny
-       'standard-host-effect
-       operation
-       `((filename . ,filename)
-         (path . ,path))
-       context
-       (format "%s file is not allowed by policy: %s"
-               operation filename)))
-    (agent-scheme-policy-authorize
-     'standard-host-effect
-     operation
-     `((filename . ,filename)
-       (path . ,path))
-     context)
+  (let* ((operation-symbol
+          (pcase operation
+            ("include" 'include)
+            ("include-ci" 'include-ci)
+            ("include-library-declarations" 'library-source)
+            (_ (intern operation))))
+         (authorization
+          (agent-scheme-capability-authorize-file
+           filename
+           context
+           operation-symbol
+           operation
+           (agent-scheme--eval-context-include-paths context)))
+         (path (plist-get authorization :path)))
     (unless (file-readable-p path)
+      (agent-scheme-capability-audit-file-result
+       authorization
+       "include file is not readable"
+       t)
       (agent-scheme--eval-error
        "include file is not readable: %s" filename))
+    (agent-scheme-capability-audit-file-result authorization 'read)
     path))
 
 (defun agent-scheme--with-include-directory (context directory thunk)

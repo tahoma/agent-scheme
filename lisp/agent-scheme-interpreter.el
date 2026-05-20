@@ -3818,46 +3818,26 @@ Advance when ADVANCEP is non-nil.  Signal errors using DESCRIPTION."
    (format "%s requires policy-gated host access" description)))
 
 (defun agent-scheme--resolve-file-policy-path (filename context description)
-  "Return absolute path for FILENAME after CONTEXT file policy checks."
-  (let ((path
-         (expand-file-name
-          filename
-          (agent-scheme--eval-context-include-directory context))))
-    (unless (agent-scheme--eval-context-file-paths context)
-      (agent-scheme-policy-deny
-       'standard-host-effect
-       description
-       `((filename . ,filename)
-         (path . ,path))
-       context
-       (format "%s requires policy-gated host file access: %s"
-               description filename)))
-    (unless (agent-scheme--path-policy-allows-file-p
-             path
-             (agent-scheme--eval-context-file-paths context))
-      (agent-scheme-policy-deny
-       'standard-host-effect
-       description
-       `((filename . ,filename)
-         (path . ,path))
-       context
-       (format "%s file is not allowed by policy: %s"
-               description filename)))
-    (agent-scheme-policy-authorize
-     'standard-host-effect
-     description
-     `((filename . ,filename)
-       (path . ,path))
-     context)
-    path))
+  "Return a file authorization for FILENAME and DESCRIPTION."
+  (agent-scheme-capability-authorize-file
+   filename
+   context
+   (pcase description
+     ("file-exists?" 'metadata)
+     ("load" 'load)
+     (_ 'read))
+   description
+   (agent-scheme--eval-context-file-paths context)))
 
 (defun agent-scheme--primitive-file-exists? (arguments context)
   "Primitive file-exists? over ARGUMENTS."
   (let* ((filename (agent-scheme--expect-string
                     (car arguments) "file-exists?"))
          (path (agent-scheme--resolve-file-policy-path
-                filename context "file-exists?")))
-    (agent-scheme--scheme-boolean (file-exists-p path))))
+                filename context "file-exists?"))
+         (exists (file-exists-p (plist-get path :path))))
+    (agent-scheme-capability-audit-file-result path exists)
+    (agent-scheme--scheme-boolean exists)))
 
 (defun agent-scheme--primitive-delete-file (arguments context)
   "Primitive delete-file over ARGUMENTS."
@@ -3954,15 +3934,22 @@ Advance when ADVANCEP is non-nil.  Signal errors using DESCRIPTION."
 (defun agent-scheme--read-policy-file-forms (filename context description)
   "Read FILENAME under CONTEXT file policy for DESCRIPTION.
 Return (FORMS . DIRECTORY)."
-  (let* ((path (agent-scheme--resolve-file-policy-path
-                filename context description)))
+  (let* ((authorization
+          (agent-scheme--resolve-file-policy-path
+           filename context description))
+         (path (plist-get authorization :path)))
     (unless (file-readable-p path)
+      (agent-scheme-capability-audit-file-result
+       authorization
+       (format "%s file is not readable" description)
+       t)
       (agent-scheme--eval-error
        "%s file is not readable: %s" description filename))
     (let ((source
            (with-temp-buffer
              (insert-file-contents path)
              (buffer-string))))
+      (agent-scheme-capability-audit-file-result authorization 'read)
       (cons (agent-scheme-read-all source)
             (file-name-directory path)))))
 

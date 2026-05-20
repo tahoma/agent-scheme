@@ -55,6 +55,13 @@
   (let ((entry (assq field (cdr datum))))
     (if entry (cadr entry) #f)))
 
+;; Return the first audit/event datum whose event field is EVENT.
+(define (find-event events event)
+  (cond
+   ((null? events) #f)
+   ((equal? (field-value (car events) 'event) event) (car events))
+   (else (find-event (cdr events) event))))
+
 ;; Find the primitive binding metadata record named NAME in SPECS.
 (define (find-primitive-spec name specs)
   (cond
@@ -773,6 +780,21 @@
     (include-paths . ("fixtures/r7rs"))
     (file-paths . ("fixtures/r7rs"))))
 
+;; First-class file grants are the portable capability vocabulary for the same
+;; fixture reads that legacy path allow-lists covered while bootstrapping.
+(define file-grant-options
+  '((include-directory . ".")
+    (capability-grants
+     (capability-grant
+      (id portable-file-grant)
+      (domain file)
+      (operations metadata read include include-ci load library-source)
+      (scope (project-root ".")
+             (paths ("fixtures/r7rs"))
+             (remote denied)
+             (symlinks resolve-within-root))
+      (expires never)))))
+
 (check-external/options 'include-reads-policy-allowed-body
                         "(define-library (agent-scheme fixture include-body)
                            (export answer)
@@ -802,6 +824,26 @@
                           (agent-scheme fixture included-declarations))
                          answer"
                         include-policy-options
+                        "42")
+
+(check-external/options 'include-file-grant-allowed-body
+                        "(define-library (agent-scheme fixture include-body)
+                           (export answer)
+                           (import (scheme base))
+                           (include \"fixtures/r7rs/include-body.scm\"))
+                         (import (agent-scheme fixture include-body))
+                         answer"
+                        file-grant-options
+                        "42")
+
+(check-external/options 'include-ci-file-grant-allowed-body
+                        "(define-library (agent-scheme fixture include-ci-body)
+                           (export mixedanswer)
+                           (import (scheme base))
+                           (include-ci \"fixtures/r7rs/include-ci-body.scm\"))
+                         (import (agent-scheme fixture include-ci-body))
+                         mixedanswer"
+                        file-grant-options
                         "42")
 
 (check-external 'standard-case-lambda-import
@@ -958,6 +1000,13 @@
                         include-policy-options
                         "42")
 
+(check-external/options 'standard-load-file-grant-allowed
+                        "(import (scheme base) (scheme load))
+                         (load \"fixtures/r7rs/include-body.scm\")
+                         answer"
+                        file-grant-options
+                        "42")
+
 (check 'standard-file-import-default-denied
        (raises?
         (lambda ()
@@ -967,11 +1016,11 @@
        #t)
 
 (let* ((result
-        (agent-scheme-eval-source-result
+       (agent-scheme-eval-source-result
          "(import (scheme base) (scheme file))
           (file-exists? \"fixtures/r7rs/conformance-cases.scm\")"))
        (events (field-value result 'events))
-       (event (and (pair? events) (car events))))
+       (event (find-event events 'policy-decision)))
   (check 'standard-file-default-denial-audits
          (and event
               (equal? (field-value event 'event) 'policy-decision)
@@ -990,14 +1039,63 @@
                         include-policy-options
                         "#t")
 
+(check-external/options 'standard-file-import-file-grant-allowed
+                        "(import (scheme base) (scheme file))
+                         (file-exists?
+                          \"fixtures/r7rs/conformance-cases.scm\")"
+                        file-grant-options
+                        "#t")
+
+(check 'standard-file-grant-denies-path-traversal
+       (raises?
+        (lambda ()
+          (agent-scheme-eval-source
+           "(import (scheme base) (scheme file))
+            (file-exists? \"fixtures/r7rs/../../AGENTS.md\")"
+           #f
+           file-grant-options)))
+       #t)
+
+(check 'standard-file-grant-denies-url-paths
+       (raises?
+        (lambda ()
+          (agent-scheme-eval-source
+           "(import (scheme base) (scheme file))
+            (file-exists? \"https://example.invalid/source.scm\")"
+           #f
+           file-grant-options)))
+       #t)
+
 (let* ((result
         (agent-scheme-eval-source-result
          "(import (scheme base) (scheme file))
           (file-exists? \"fixtures/r7rs/conformance-cases.scm\")"
          #f
+         file-grant-options))
+       (events (field-value result 'events))
+       (request (find-event events 'capability-request))
+       (decision (find-event events 'capability-decision))
+       (audit (find-event events 'capability-audit)))
+  (check 'standard-file-grant-audits-request-decision-result
+         (and request
+              decision
+              audit
+              (equal? (field-value request 'domain) 'file)
+              (equal? (field-value request 'operation) 'metadata)
+              (equal? (field-value decision 'status) 'approved)
+              (equal? (field-value decision 'grant) 'portable-file-grant)
+              (equal? (field-value audit 'result) '(ok #t))
+              #t)
+         #t))
+
+(let* ((result
+       (agent-scheme-eval-source-result
+         "(import (scheme base) (scheme file))
+          (file-exists? \"fixtures/r7rs/conformance-cases.scm\")"
+         #f
          include-policy-options))
        (events (field-value result 'events))
-       (event (and (pair? events) (car events))))
+       (event (find-event events 'policy-decision)))
   (check 'standard-file-policy-allowed-audits
          (and event
               (equal? (field-value event 'event) 'policy-decision)

@@ -4118,52 +4118,29 @@
       (lambda (arguments context)
         (policy-denied description context '())))
 
-    ;; Resolve FILENAME and enforce the file-operation allow-list policy.
+    ;; Resolve FILENAME and enforce the file-operation capability policy.
     (define (resolve-file-policy-path filename context description)
-      (let ((path (path-join (context-include-directory context) filename)))
-        (cond
-         ((null? (context-file-paths context))
-          (record-policy-decision!
-           context
-           'standard-host-effect
-           description
-           'denied
-           (list (result-field 'filename filename)
-                 (result-field 'path path)))
-          (eval-error
-           (string-append description
-                          " requires policy-gated host file access")
-           filename))
-         ((not (path-policy-allows-file? path (context-file-paths context)))
-          (record-policy-decision!
-           context
-           'standard-host-effect
-           description
-           'denied
-           (list (result-field 'filename filename)
-                 (result-field 'path path)))
-          (eval-error
-           (string-append description " file is not allowed by policy")
-           filename))
-         (else
-          (record-policy-decision!
-           context
-           'standard-host-effect
-           description
-           'allowed
-           (list (result-field 'filename filename)
-                 (result-field 'path path)))
-          path))))
+      (authorize-file-capability
+       filename
+       context
+       (cond
+        ((string=? description "file-exists?") 'metadata)
+        ((string=? description "load") 'load)
+        (else 'read))
+       description
+       (context-file-paths context)))
 
     ;; Implement the `file-exists?` primitive with argument validation and
     ;; Agent Scheme values.
     (define (primitive-file-exists? arguments context)
-      (let ((path
+      (let* ((authorization
              (resolve-file-policy-path
               (expect-string (car arguments) "file-exists?")
               context
-              "file-exists?")))
-        (file-exists? path)))
+              "file-exists?"))
+             (exists? (file-exists? (file-authorization-path authorization))))
+        (audit-file-capability-result! context authorization exists? #f)
+        exists?))
 
     ;; Implement the `delete-file` primitive with argument validation and Agent
     ;; Scheme values.
@@ -4257,11 +4234,20 @@
 
     ;; Read policy-approved source file forms and return forms plus directory.
     (define (read-policy-file-forms filename context description)
-      (let ((path (resolve-file-policy-path filename context description)))
+      (let* ((authorization
+              (resolve-file-policy-path filename context description))
+             (path (file-authorization-path authorization)))
         (if (not (file-exists? path))
-            (eval-error
-             (string-append description " file is not readable")
-             filename))
+            (begin
+              (audit-file-capability-result!
+               context
+               authorization
+               (string-append description " file is not readable")
+               #t)
+              (eval-error
+               (string-append description " file is not readable")
+               filename)))
+        (audit-file-capability-result! context authorization 'read #f)
         (cons (agent-scheme-read-all (read-file-string path))
               (path-directory path))))
 
