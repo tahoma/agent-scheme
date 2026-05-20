@@ -1263,19 +1263,25 @@
       (path-policy-allows-file? path (context-include-paths context)))
 
     ;; Resolve FILENAME against the include directory and enforce file policy.
-    (define (resolve-include-file filename context)
-      (let ((path (path-join (context-include-directory context) filename)))
-        (cond
-         ((null? (context-include-paths context))
-          ;; Includes are host file reads, so even portable Scheme evaluation
-          ;; requires an explicit allow-list before opening a file.
-          (eval-error "include requires policy-gated host file access"
-                      filename))
-         ((not (include-policy-allows-file? path context))
-          (eval-error "include file is not allowed by policy" filename))
-         ((not (file-exists? path))
-          (eval-error "include file is not readable" filename))
-         (else path))))
+    (define (resolve-include-file filename context operation binding)
+      (let* ((authorization
+              (authorize-file-capability
+               filename
+               context
+               operation
+               binding
+               (context-include-paths context)))
+             (path (file-authorization-path authorization)))
+        (if (not (file-exists? path))
+            (begin
+              (audit-file-capability-result!
+               context
+               authorization
+               "include file is not readable"
+               #t)
+              (eval-error "include file is not readable" filename)))
+        (audit-file-capability-result! context authorization 'read #f)
+        path))
 
     ;; Return PATH's directory component without the trailing slash.
     (define (path-directory path)
@@ -1313,8 +1319,16 @@
 
     ;; Read and parse all forms from an include file, returning forms and
     ;; directory.
-    (define (read-include-file-forms filename context fold-case?)
-      (let* ((path (resolve-include-file filename context))
+    (define (read-include-file-forms filename context fold-case? operation)
+      (let* ((path (resolve-include-file
+                    filename
+                    context
+                    operation
+                    (if (eq? operation 'include-ci)
+                        "include-ci"
+                        (if (eq? operation 'library-source)
+                            "include-library-declarations"
+                            "include"))))
              (source (read-file-string path)))
         (cons
          (agent-scheme-read-all
@@ -1330,7 +1344,8 @@
                     (car (read-include-file-forms
                           filename
                           context
-                          fold-case?)))
+                          fold-case?
+                          (if fold-case? 'include-ci 'include))))
                   (include-filenames declaration))))
 
     ;; Read include-library-declarations files and expand their declarations.
@@ -1341,7 +1356,11 @@
        (map
         (lambda (filename)
           (let* ((read-result
-                  (read-include-file-forms filename context #f))
+                  (read-include-file-forms
+                   filename
+                   context
+                   #f
+                   'library-source))
                  (forms (car read-result))
                  (directory (cdr read-result)))
             (with-include-directory
