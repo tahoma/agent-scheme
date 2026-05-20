@@ -299,6 +299,13 @@ REPL, provider, UI, and future Emacs capability operations must lower to
 capability requests that consult policy and produce audit records; a compiler
 must not bypass the manifest by directly calling host APIs.
 
+The detailed per-user, per-project, per-session, and per-task authority model is
+defined in [Capability Environment and Effect Lowering](capability-environment.md).
+That document records the Scheme-readable `capability-environment`,
+`capability-request`, `capability-decision`, `capability-revocation`, and
+`capability-audit` datums used to keep interpreter and compiler effect lowering
+on the same policy path.
+
 ### Current Bootstrap Placement
 
 The Emacs Lisp and portable Scheme evaluators use matching pass-boundary
