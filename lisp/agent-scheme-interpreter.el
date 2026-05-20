@@ -3836,7 +3836,10 @@ Advance when ADVANCEP is non-nil.  Signal errors using DESCRIPTION."
                     (car arguments) "file-exists?"))
          (path (agent-scheme--resolve-file-policy-path
                 filename context "file-exists?"))
-         (exists (file-exists-p (plist-get path :path))))
+         (exists (progn
+                   (agent-scheme-capability-revalidate-file-authorization
+                    path)
+                   (file-exists-p (plist-get path :path)))))
     (agent-scheme-capability-audit-file-result path exists)
     (agent-scheme--scheme-boolean exists)))
 
@@ -3850,6 +3853,8 @@ Advance when ADVANCEP is non-nil.  Signal errors using DESCRIPTION."
          (path (plist-get authorization :path)))
     (condition-case condition
         (progn
+          (agent-scheme-capability-revalidate-file-authorization
+           authorization)
           (delete-file path)
           (agent-scheme-capability-audit-file-result
            authorization 'deleted)
@@ -3950,6 +3955,7 @@ Return (FORMS DIRECTORY AUTHORIZATION)."
           (agent-scheme--resolve-file-policy-path
            filename context description))
          (path (plist-get authorization :path)))
+    (agent-scheme-capability-revalidate-file-authorization authorization)
     (unless (file-readable-p path)
       (agent-scheme-capability-audit-file-result
        authorization

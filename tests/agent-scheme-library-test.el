@@ -520,6 +520,13 @@
     "(grant fixture-file-grant)"))
   (should
    (agent-scheme-library-test--audit-entry-matching
+    "(event capability-handle)"
+    "(domain file)"
+    "(kind file)"
+    "(grant fixture-file-grant)"
+    "(status live)"))
+  (should
+   (agent-scheme-library-test--audit-entry-matching
     "(event capability-audit)"
     "(result (ok #t))")))
 
@@ -682,6 +689,45 @@
             "(result (ok deleted))")))
       (when (file-exists-p root)
         (delete-directory root t)))))
+
+(ert-deftest agent-scheme-library-test-file-grant-revocation-denies-and-audits ()
+  "Represent file grant revocation and deny later file access."
+  (agent-scheme-audit-clear)
+  (let* ((root (file-name-as-directory agent-scheme-library-test--root))
+         (condition
+          (should-error
+           (agent-scheme-eval-source
+            (format
+             "(import (scheme base) (scheme file) (agent capability))
+              (grant-capability!
+               '(capability-grant
+                 (id revoked-file-grant)
+                 (domain file)
+                 (operations metadata)
+                 (scope (project-root %S)
+                        (paths (\"fixtures/r7rs\"))
+                        (remote denied)
+                        (symlinks resolve-within-root))
+                 (expires never)))
+              (grant-revoke! 'revoked-file-grant)
+              (file-exists? \"fixtures/r7rs/conformance-cases.scm\")"
+             root)
+            nil
+            (list :include-directory root))
+           :type 'agent-scheme-capability-grant-error)))
+    (should
+     (string-match-p "revoked file capability grant" (cadr condition))))
+  (should
+   (agent-scheme-library-test--audit-entry-matching
+    "(event capability-revocation)"
+    "(target (grant revoked-file-grant))"
+    "(status revoked)"))
+  (should
+   (agent-scheme-library-test--audit-entry-matching
+    "(event capability-decision)"
+    "(status denied)"
+    "(grant revoked-file-grant)"
+    "revoked file capability grant")))
 
 (ert-deftest agent-scheme-library-test-standard-host-libraries-are-policy-gated ()
   "Import host-effecting standard libraries while denying effects by default."
