@@ -422,6 +422,8 @@ Return the stale handles that were removed."
                (agent-scheme-session--generated-id normalized-scope)))
          (environment (agent-scheme-make-base-environment))
          (context (agent-scheme--new-eval-context options))
+         (capability-grants
+          (agent-scheme-session--option options :capability-grants nil))
          (timestamp (agent-scheme-session--timestamp))
          (project-root
           (when (eq normalized-scope 'project)
@@ -430,6 +432,9 @@ Return the stale handles that were removed."
          (status (if (eq normalized-scope 'fresh) 'collectable 'new)))
     (setf (agent-scheme--eval-context-interaction-environment context)
           environment)
+    (setf (agent-scheme--eval-context-capability-grants context)
+          capability-grants)
+    (setf (agent-scheme--eval-context-session-id context) id)
     (agent-scheme--make-session
      :id id
      :scope normalized-scope
@@ -447,8 +452,7 @@ Return the stale handles that were removed."
      :transcript nil
      :recent-events nil
      :snapshots nil
-     :capability-grants
-     (agent-scheme-session--option options :capability-grants nil)
+     :capability-grants capability-grants
      :skill-activations
      (agent-scheme-session--option options :skill-activations nil)
      :parent-id (agent-scheme-session--option options :parent-id nil)
@@ -731,12 +735,23 @@ Return the stale handles that were removed."
            (agent-scheme--eval-context-policy-actions context))
           :policy-confirmation-function
           (agent-scheme--eval-context-policy-confirmation-function context)
+          :capability-grants
+          (copy-tree (agent-scheme--eval-context-capability-grants context))
+          :active-capability-grants nil
+          :session-id
+          (agent-scheme--eval-context-session-id context)
           :interaction-environment environment
           :base-syntax-installed
           (agent-scheme--eval-context-base-syntax-installed context)
           :exception-handlers nil
           :dynamic-winds nil)))
     copy))
+
+(defun agent-scheme-session--sync-capability-grants! (session)
+  "Copy SESSION context grants back to the session record."
+  (setf (agent-scheme-session-capability-grants session)
+        (agent-scheme--eval-context-capability-grants
+         (agent-scheme-session-context session))))
 
 ;;;###autoload
 (defun agent-scheme-session-fork! (id &optional options)
@@ -857,6 +872,11 @@ Return the stale handles that were removed."
   (let ((context (agent-scheme-session-context session)))
     (setf (agent-scheme--eval-context-steps context) 0)
     (setf (agent-scheme--eval-context-host-callbacks context) 0)
+    (setf (agent-scheme--eval-context-capability-grants context)
+          (agent-scheme-session-capability-grants session))
+    (setf (agent-scheme--eval-context-active-capability-grants context) nil)
+    (setf (agent-scheme--eval-context-session-id context)
+          (agent-scheme-session-id session))
     (setf (agent-scheme--eval-context-interaction-environment context)
           (agent-scheme-session-environment session)))
   (agent-scheme-session--transition! session 'active "session-eval-start!"))

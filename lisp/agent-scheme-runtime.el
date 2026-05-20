@@ -232,6 +232,9 @@ base syntax prelude has already been installed."
   file-paths
   policy-actions
   policy-confirmation-function
+  capability-grants
+  active-capability-grants
+  session-id
   interaction-environment
   base-syntax-installed
   exception-handlers
@@ -320,6 +323,11 @@ MESSAGE and ARGS are passed to `format'."
      (agent-scheme--eval-option options :policy-actions nil)
      :policy-confirmation-function
      (agent-scheme--eval-option options :policy-confirmation-function nil)
+     :capability-grants
+     (agent-scheme--eval-option options :capability-grants nil)
+     :active-capability-grants nil
+     :session-id
+     (agent-scheme--eval-option options :session-id nil)
      :base-syntax-installed nil
      :exception-handlers nil
      :dynamic-winds nil)))

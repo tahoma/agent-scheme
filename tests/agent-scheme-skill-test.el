@@ -11,6 +11,7 @@
 (require 'ert)
 (require 'seq)
 (require 'agent-scheme-audit)
+(require 'agent-scheme-eval)
 (require 'agent-scheme-policy)
 (require 'agent-scheme-result)
 (require 'agent-scheme-skill nil t)
@@ -56,6 +57,20 @@
     (set-file-modes (expand-file-name "scripts/run.sh" directory) #o755)
     directory))
 
+(defun agent-scheme-skill-test--make-grant-skill-directory ()
+  "Create a temporary skill directory that declares requested grants."
+  (let* ((root (make-temp-file "agent-scheme-skill-grant-test-" t))
+         (directory (expand-file-name "grant-skill" root)))
+    (make-directory directory)
+    (with-temp-file (expand-file-name "SKILL.md" directory)
+      (insert "---\n")
+      (insert "name: grant-skill\n")
+      (insert "description: Grant requesting skill\n")
+      (insert "requested-grants: ((capability-grant (library (emacs buffer edit)) (effect buffer-replace!) (scope (skill grant-skill) (range 1 2)) (expires after-eval)))\n")
+      (insert "---\n")
+      (insert "# Grant Skill\n\nUse this skill for grant declaration tests.\n"))
+    directory))
+
 (defmacro agent-scheme-skill-test--with-temp-skill (directory-var &rest body)
   "Bind DIRECTORY-VAR to a temporary skill directory while running BODY."
   (declare (indent 1))
@@ -92,6 +107,34 @@
           "(category skill-resource-read)"
           "(skill-name \"example-skill\")"
           "(decision allowed)"))))))
+
+(ert-deftest agent-scheme-skill-test-import-declares-requested-grants-only ()
+  "Imported skills can request grants without receiving them automatically."
+  (should (featurep 'agent-scheme-skill))
+  (let ((agent-scheme-policy-category-actions
+         (agent-scheme-skill-test--actions
+          '((skill-resource-read . allow)))))
+    (agent-scheme-audit-clear)
+    (let ((directory (agent-scheme-skill-test--make-grant-skill-directory)))
+      (unwind-protect
+          (let ((external
+                 (agent-scheme-result->external
+                  (agent-scheme-skill-import directory))))
+            (should (string-match-p "(agent-skill" external))
+            (should (string-match-p "(name \"grant-skill\")" external))
+            (should (string-match-p "(requested-grants ((capability-grant" external))
+            (should (string-match-p "(scope (skill grant-skill) (range 1 2))"
+                                    external))
+            (should
+             (equal
+              (agent-scheme-value->external
+               (agent-scheme-eval-source
+                "(import (agent capability))
+                 (current-grants)"))
+              "()")))
+        (delete-directory (file-name-directory
+                           (directory-file-name directory))
+                          t)))))
 
 (ert-deftest agent-scheme-skill-test-trust-and-activate-audit-decisions ()
   "Authorize project trust and activate a concrete skill directory."
