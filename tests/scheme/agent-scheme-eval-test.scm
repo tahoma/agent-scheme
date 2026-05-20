@@ -813,8 +813,11 @@
              (symlinks resolve-within-root))
       (expires never)))))
 
+;; Host-side temporary file path used for portable delete-file coverage.
 (define delete-test-path "/private/tmp/agent-scheme-delete-capability.scm")
 
+;; First-class file grant that allows the portable evaluator to delete only
+;; the host-side temporary file above, plus metadata checks after deletion.
 (define delete-file-grant-options
   '((include-directory . "/private/tmp")
     (capability-grants
@@ -1163,16 +1166,44 @@
        (events (field-value result 'events))
        (request (find-event events 'capability-request))
        (decision (find-event events 'capability-decision))
+       (handle (find-event-with-field
+                events 'capability-handle 'domain 'file))
        (audit (find-event events 'capability-audit)))
   (check 'standard-file-grant-audits-request-decision-result
          (and request
               decision
+              handle
               audit
               (equal? (field-value request 'domain) 'file)
               (equal? (field-value request 'operation) 'metadata)
               (equal? (field-value decision 'status) 'approved)
               (equal? (field-value decision 'grant) 'portable-file-grant)
+              (equal? (field-value handle 'kind) 'file)
+              (equal? (field-value handle 'grant) 'portable-file-grant)
+              (equal? (field-value handle 'status) 'live)
               (equal? (field-value audit 'result) '(ok #t))
+              #t)
+         #t))
+
+(let* ((result
+        (agent-scheme-eval-source-result
+         "(import (scheme base) (scheme file) (agent capability))
+          (grant-revoke! 'portable-file-grant)
+          (file-exists? \"fixtures/r7rs/conformance-cases.scm\")"
+         #f
+         file-grant-options))
+       (events (field-value result 'events))
+       (revocation (find-event events 'capability-revocation))
+       (decision (find-event-with-field
+                  events 'capability-decision 'status 'denied)))
+  (check 'standard-file-grant-revocation-audits
+         (and (equal? (field-value result 'status) 'error)
+              revocation
+              decision
+              (equal? (field-value revocation 'target)
+                      '(grant portable-file-grant))
+              (equal? (field-value revocation 'status) 'revoked)
+              (equal? (field-value decision 'grant) 'portable-file-grant)
               #t)
          #t))
 

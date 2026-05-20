@@ -3994,7 +3994,21 @@
                   (eval-error "unknown capability grant")))
              (revoked
               (capability-grant-replace-field grant 'status '(revoked))))
-        (capability-grant-store! context revoked)))
+        (capability-grant-store! context revoked)
+        (record-audit-event!
+         context
+         'capability-revocation
+         (list (list 'revocation
+                     (list 'capability-revocation
+                           (list 'target
+                                 (list 'grant
+                                       (capability-grant-id grant)))
+                           (list 'status 'revoked)
+                           (list 'reason "grant-revoke!")))
+               (list 'target
+                     (list 'grant (capability-grant-id grant)))
+               (list 'status 'revoked)
+               (list 'reason "grant-revoke!")))))
 
     ;; Call THUNK with GRANT present in the portable context.
     (define (primitive-call-with-capability-grant arguments context)
