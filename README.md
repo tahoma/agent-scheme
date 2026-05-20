@@ -5,7 +5,8 @@ Agent Scheme is an R7RS-small guest language and agentic REPL design whose first
 The project goal is to give agents and users a Lisp-native scripting environment with:
 
 - R7RS-small compliance from the start, including macros and `define-library`
-- Scheme-readable datums for memory, plans, transcripts, skills, rules, and audit records
+- Scheme-readable datums for memory, plans, transcripts, approvals, skills,
+  rules, and audit records
 - explicit host capabilities instead of unrestricted host access
 - Emacs as the first host adapter, not the semantic center
 - a first-class portable Scheme implementation that can grow into a native
@@ -117,6 +118,27 @@ ordinary Scheme code when the host enables them:
          (write (buffer-name (current-buffer)) out)
          (get-output-string out)))))))
 ```
+
+Approval requests are also Scheme data.  Scheme code can request, inspect, and
+yield approvals, while host-side resolution remains denied by default unless
+policy explicitly permits automation:
+
+```scheme
+(import (scheme base)
+        (agent approval))
+
+(define edit-approval
+  (approval-request!
+   '(approval-request
+      (policy buffer-edit)
+      (effect (buffer-replace! h-12 120 140 "new text"))
+      (reason "Replace deprecated helper name?"))))
+
+(approval-status edit-approval)
+```
+
+In Emacs project sessions, pending and resolved records appear in
+`*Agent Approvals: PROJECT*` as Scheme-readable approval datums.
 
 ## Project Docs
 

@@ -50,6 +50,7 @@ Implementation files under `lisp/` should follow the package namespace:
 - `lisp/agent-scheme-macro.el` provides `agent-scheme-macro`
 - `lisp/agent-scheme-interpreter.el` provides `agent-scheme-interpreter`
 - `lisp/agent-scheme-eval.el` provides `agent-scheme-eval`
+- `lisp/agent-scheme-approval.el` provides `agent-scheme-approval`
 - `lisp/agent-scheme-mcp.el` provides `agent-scheme-mcp`
 
 Tests should mirror the module names, such as
@@ -65,6 +66,7 @@ their library names:
 - `scheme/agent-scheme/macro.sld` defines `(agent-scheme macro)`
 - `scheme/agent-scheme/interpreter.sld` defines `(agent-scheme interpreter)`
 - `scheme/agent-scheme/eval.sld` defines `(agent-scheme eval)`
+- `scheme/agent-scheme/approval.sld` defines `(agent-scheme approval)`
 
 Here "mirror" means naming and pass-ownership parity, not subordination. Core
 semantic changes should update the corresponding Emacs Lisp and portable R7RS

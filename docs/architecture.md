@@ -444,6 +444,7 @@ batch mode unless tests or callers install an explicit confirmation function.
 | `command-process` | `confirm` | Reserved for future command and process execution; current command/process capabilities remain read-only observations. |
 | `standard-host-effect` | `allow` | Host-effecting standard Scheme procedures still require their narrower path or session policy, such as `:file-paths`; without that grant they deny and audit. |
 | `raw-emacs-lisp` | `deny` | Raw host evaluation stays unavailable; no raw Emacs Lisp evaluation surface is registered. |
+| `approval-resolution` | `deny` | Scheme code can create and observe approval records, but resolving approvals is host-side by default unless automation policy explicitly allows it. |
 | `skill-discovery-activation` | `confirm` | Skill discovery and activation require an approval callback by default. |
 | `project-skill-trust` | `deny` | Project-level skill trust starts denied for untrusted projects. |
 | `skill-resource-read` | `confirm` | Skill resource reads require approval unless policy is relaxed. |
@@ -457,11 +458,41 @@ through `agent-scheme-audit-recent-entries` or `agent-scheme-audit-display`.
 current audit implementation records evaluations, read-only and buffer-edit
 capability calls and outcomes, standard host-effect denials or grants, skill
 activation decisions, trust decisions, resource/script/export policy stubs, and
-confirmation outcomes.
+confirmation outcomes.  Approval requests and user decisions are recorded as
+`approval-request` and `approval-decision` audit events.
 Portable Scheme now records standard host-file policy decisions in
 `evaluation-result` event lists for its path allow-list gates.  Remaining
 portable parity covers host-adapter-only surfaces such as Emacs capabilities,
 Agent Skills interop, and `(agent io)` session storage.
+
+## Approval Records
+
+The `(agent approval)` library lets Scheme programs ask the host or user to
+approve a proposed effect without performing that effect directly.  Requests are
+ordinary Scheme-readable datums:
+
+```scheme
+(approval-request
+  (id a-17)
+  (policy buffer-edit)
+  (effect (buffer-replace! h-12 120 140 "new text"))
+  (reason "Replace deprecated helper name?")
+  (status pending))
+```
+
+User code creates records with `approval-request!`, observes the current
+decision with `approval-status`, cancels its own pending requests with
+`approval-cancel!`, and can yield pending records with
+`approval-yield-pending`.  The host-side `approval-resolve!` path is denied to
+Scheme code by default through the `approval-resolution` policy category, so an
+agent cannot approve its own restricted buffer, file, process, or UI mutation
+unless the host explicitly grants an automation policy.
+
+The Emacs adapter renders session approval records in
+`*Agent Approvals: PROJECT*` as the same datums.  Confirmation-gated policy
+calls, such as buffer edits, create approval records automatically before the
+confirmation function runs, then resolve those records to `approved` or
+`denied` and write the decision to the audit log.
 
 ## Threat Model
 
@@ -688,6 +719,7 @@ Likely portable R7RS modules:
 - `scheme/agent-scheme/interpreter.sld`
 - `scheme/agent-scheme/eval.sld`
 - `scheme/agent-scheme/write.sld`
+- `scheme/agent-scheme/approval.sld`
 
 Likely Emacs Lisp bootstrap and adapter modules:
 
@@ -706,6 +738,7 @@ Likely Emacs Lisp bootstrap and adapter modules:
 - `lisp/agent-scheme-compile.el`
 - `lisp/agent-scheme-bytecode.el`
 - `lisp/agent-scheme-policy.el`
+- `lisp/agent-scheme-approval.el`
 - `lisp/agent-scheme-audit.el`
 - `lisp/agent-scheme-agent-io.el`
 - `lisp/agent-scheme-handle.el`
@@ -734,6 +767,7 @@ Focused test files should mirror the modules:
 - `tests/agent-scheme-interpreter-module-test.el`
 - `tests/agent-scheme-compile-test.el`
 - `tests/agent-scheme-policy-test.el`
+- `tests/agent-scheme-approval-test.el`
 - `tests/agent-scheme-capability-test.el`
 - `tests/agent-scheme-repl-test.el`
 - `tests/agent-scheme-mcp-test.el`
