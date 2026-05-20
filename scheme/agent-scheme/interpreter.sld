@@ -4232,7 +4232,8 @@
                (eval-expression
                 expression environment context #t continuation))))))
 
-    ;; Read policy-approved source file forms and return forms plus directory.
+    ;; Read policy-approved source file forms and return forms, directory, and
+    ;; authorization data.
     (define (read-policy-file-forms filename context description)
       (let* ((authorization
               (resolve-file-policy-path filename context description))
@@ -4248,8 +4249,9 @@
                (string-append description " file is not readable")
                filename)))
         (audit-file-capability-result! context authorization 'read #f)
-        (cons (agent-scheme-read-all (read-file-string path))
-              (path-directory path))))
+        (list (agent-scheme-read-all (read-file-string path))
+              (path-directory path)
+              authorization)))
 
     ;; Return the value and syntax environments targeted by load.
     (define (load-target arguments context)
@@ -4278,10 +4280,12 @@
       (let* ((filename (expect-string (car arguments) "load"))
              (read-result
               (read-policy-file-forms filename context "load"))
-             (target (load-target arguments context)))
+             (target (load-target arguments context))
+             (code-loading
+              (authorize-code-loading (third read-result) context "load")))
         (with-include-directory
          context
-         (cdr read-result)
+         (second read-result)
          (lambda ()
            (with-syntax-environment
             context
@@ -4294,6 +4298,11 @@
                #t
                #t
                (lambda (value)
+                 (audit-code-loading-result!
+                  context
+                  code-loading
+                  'evaluated
+                  #f)
                  (continue continuation agent-scheme-unspecified)))))))))
 
     ;; Implement the `string?` primitive with argument validation and Agent

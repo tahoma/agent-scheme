@@ -62,6 +62,15 @@
    ((equal? (field-value (car events) 'event) event) (car events))
    (else (find-event (cdr events) event))))
 
+;; Return the first audit/event datum whose event and field match.
+(define (find-event-with-field events event field value)
+  (cond
+   ((null? events) #f)
+   ((and (equal? (field-value (car events) 'event) event)
+         (equal? (field-value (car events) field) value))
+    (car events))
+   (else (find-event-with-field (cdr events) event field value))))
+
 ;; Find the primitive binding metadata record named NAME in SPECS.
 (define (find-primitive-spec name specs)
   (cond
@@ -1006,6 +1015,30 @@
                          answer"
                         file-grant-options
                         "42")
+
+(let* ((result
+        (agent-scheme-eval-source-result
+         "(import (scheme base) (scheme load))
+          (load \"fixtures/r7rs/include-body.scm\")
+          answer"
+         #f
+         file-grant-options))
+       (events (field-value result 'events))
+       (request (find-event-with-field
+                 events 'capability-request 'domain 'code-loading))
+       (decision (find-event-with-field
+                  events 'capability-decision 'domain 'code-loading))
+       (audit (find-event-with-field
+               events 'capability-audit 'domain 'code-loading)))
+  (check 'standard-load-audits-code-loading-request
+         (and request
+              decision
+              audit
+              (equal? (field-value request 'operation) 'load)
+              (equal? (field-value decision 'status) 'approved)
+              (equal? (field-value audit 'result) '(ok evaluated))
+              #t)
+         #t))
 
 (check 'standard-file-import-default-denied
        (raises?

@@ -3933,7 +3933,7 @@ Advance when ADVANCEP is non-nil.  Signal errors using DESCRIPTION."
 
 (defun agent-scheme--read-policy-file-forms (filename context description)
   "Read FILENAME under CONTEXT file policy for DESCRIPTION.
-Return (FORMS . DIRECTORY)."
+Return (FORMS DIRECTORY AUTHORIZATION)."
   (let* ((authorization
           (agent-scheme--resolve-file-policy-path
            filename context description))
@@ -3950,8 +3950,9 @@ Return (FORMS . DIRECTORY)."
              (insert-file-contents path)
              (buffer-string))))
       (agent-scheme-capability-audit-file-result authorization 'read)
-      (cons (agent-scheme-read-all source)
-            (file-name-directory path)))))
+      (list (agent-scheme-read-all source)
+            (file-name-directory path)
+            authorization))))
 
 (defun agent-scheme--load-target (arguments context)
   "Return (ENVIRONMENT . SYNTAX-ENVIRONMENT) for load ARGUMENTS."
@@ -3979,10 +3980,13 @@ Return (FORMS . DIRECTORY)."
   (let* ((filename (agent-scheme--expect-string (car arguments) "load"))
          (read-result
           (agent-scheme--read-policy-file-forms filename context "load"))
-         (target (agent-scheme--load-target arguments context)))
+         (target (agent-scheme--load-target arguments context))
+         (code-loading
+          (agent-scheme-capability-authorize-code-loading
+           (caddr read-result) context "load")))
     (agent-scheme--with-include-directory
      context
-     (cdr read-result)
+     (cadr read-result)
      (lambda ()
        (agent-scheme--with-syntax-environment
         context
@@ -3995,6 +3999,8 @@ Return (FORMS . DIRECTORY)."
            t
            t
            (lambda (_value)
+             (agent-scheme-capability-audit-code-loading-result
+              code-loading 'evaluated)
              (agent-scheme--continue
               continuation agent-scheme-unspecified)))))))))
 

@@ -525,6 +525,7 @@
 
 (ert-deftest agent-scheme-library-test-file-grant-authorizes-include-and-load ()
   "Authorize include and load reads through the same file grant vocabulary."
+  (agent-scheme-audit-clear)
   (let ((options (agent-scheme-library-test--file-grant-options)))
     (should
      (equal
@@ -555,7 +556,23 @@
         (load \"fixtures/r7rs/include-body.scm\")
         answer"
        options)
-      "42"))))
+      "42"))
+    (should
+     (agent-scheme-library-test--audit-entry-matching
+      "(event capability-request)"
+      "(domain code-loading)"
+      "(operation load)"
+      "(binding \"load\")"))
+    (should
+     (agent-scheme-library-test--audit-entry-matching
+      "(event capability-decision)"
+      "(domain code-loading)"
+      "(status approved)"))
+    (should
+     (agent-scheme-library-test--audit-entry-matching
+      "(event capability-audit)"
+      "(domain code-loading)"
+      "(result (ok evaluated))"))))
 
 (ert-deftest agent-scheme-library-test-file-grant-denies-path-traversal ()
   "Deny normalized paths that escape the approved file grant path."

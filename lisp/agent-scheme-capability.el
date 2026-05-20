@@ -55,6 +55,12 @@
 (defvar agent-scheme--next-file-capability-decision-number 0
   "Next numeric suffix for generated file capability decision ids.")
 
+(defvar agent-scheme--next-code-loading-request-number 0
+  "Next numeric suffix for generated code-loading request ids.")
+
+(defvar agent-scheme--next-code-loading-decision-number 0
+  "Next numeric suffix for generated code-loading decision ids.")
+
 (defconst agent-scheme--emacs-capability-manifest-specs
   '((:name "emacs-current-buffer" :library "(emacs buffer)"
      :minimum-arity 0 :maximum-arity 0
@@ -632,6 +638,18 @@
    (format "dec-file-%d"
            (cl-incf agent-scheme--next-file-capability-decision-number))))
 
+(defun agent-scheme--code-loading-request-id ()
+  "Return a fresh code-loading capability request id."
+  (agent-scheme--capability-grant-symbol
+   (format "req-code-loading-%d"
+           (cl-incf agent-scheme--next-code-loading-request-number))))
+
+(defun agent-scheme--code-loading-decision-id ()
+  "Return a fresh code-loading capability decision id."
+  (agent-scheme--capability-grant-symbol
+   (format "dec-code-loading-%d"
+           (cl-incf agent-scheme--next-code-loading-decision-number))))
+
 (defun agent-scheme--file-capability-remote-path-p (filename path)
   "Return non-nil when FILENAME or PATH names non-local file authority."
   (or (and (stringp filename)
@@ -868,8 +886,120 @@ When ERRORED is non-nil, RESULT is recorded as an error payload."
        (domain . file)
        (operation . ,operation)
        (result . ,(if errored
+                    (list 'error result)
+                  (list 'ok result)))))))
+
+(defun agent-scheme--code-loading-request-datum
+    (request-id file-authorization binding)
+  "Return a Scheme-readable code-loading request datum."
+  (let ((path (plist-get file-authorization :path))
+        (file-request (plist-get file-authorization :request)))
+    `(,(agent-scheme--capability-grant-symbol "capability-request")
+      (,(agent-scheme--capability-grant-symbol "id") ,request-id)
+      (,(agent-scheme--capability-grant-symbol "library")
+       (,(agent-scheme--capability-grant-symbol "scheme")
+        ,(agent-scheme--capability-grant-symbol "load")))
+      (,(agent-scheme--capability-grant-symbol "binding") ,binding)
+      (,(agent-scheme--capability-grant-symbol "domain")
+       ,(agent-scheme--capability-grant-symbol "code-loading"))
+      (,(agent-scheme--capability-grant-symbol "operation")
+       ,(agent-scheme--capability-grant-symbol "load"))
+      (,(agent-scheme--capability-grant-symbol "resource")
+       (,(agent-scheme--capability-grant-symbol "path") ,path)
+       (,(agent-scheme--capability-grant-symbol "file-request")
+        ,file-request))
+      (,(agent-scheme--capability-grant-symbol "effect")
+       ,(agent-scheme--capability-grant-symbol "environment-mutation")))))
+
+(defun agent-scheme--code-loading-record-request
+    (request binding path)
+  "Audit code-loading capability REQUEST."
+  (agent-scheme-audit-record
+   'capability-request
+   `((request . ,request)
+     (domain . code-loading)
+     (operation . load)
+     (binding . ,binding)
+     (path . ,path))))
+
+(defun agent-scheme--code-loading-record-decision
+    (request request-id status reason &optional fields)
+  "Audit and return a code-loading capability decision datum."
+  (let* ((decision-id (agent-scheme--code-loading-decision-id))
+         (decision
+          `(,(agent-scheme--capability-grant-symbol "capability-decision")
+            (,(agent-scheme--capability-grant-symbol "id") ,decision-id)
+            (,(agent-scheme--capability-grant-symbol "request") ,request-id)
+            (,(agent-scheme--capability-grant-symbol "status")
+             ,(agent-scheme--capability-grant-symbol status))
+            (,(agent-scheme--capability-grant-symbol "domain")
+             ,(agent-scheme--capability-grant-symbol "code-loading"))
+            (,(agent-scheme--capability-grant-symbol "reason") ,reason))))
+    (agent-scheme-audit-record
+     'capability-decision
+     (append
+      `((request . ,request)
+        (decision . ,decision)
+        (domain . code-loading)
+        (operation . load)
+        (status . ,status)
+        (reason . ,reason))
+      fields))
+    decision))
+
+(defun agent-scheme-capability-audit-code-loading-result
+    (authorization result &optional errored)
+  "Audit code-loading AUTHORIZATION with RESULT."
+  (let ((request (plist-get authorization :request))
+        (decision (plist-get authorization :decision)))
+    (agent-scheme-audit-record
+     'capability-audit
+     `((request . ,request)
+       (decision . ,decision)
+       (domain . code-loading)
+       (operation . load)
+       (result . ,(if errored
                       (list 'error result)
                     (list 'ok result)))))))
+
+(defun agent-scheme-capability-authorize-code-loading
+    (file-authorization context binding)
+  "Authorize loading code read by FILE-AUTHORIZATION."
+  (let* ((path (plist-get file-authorization :path))
+         (request-id (agent-scheme--code-loading-request-id))
+         (request
+          (agent-scheme--code-loading-request-datum
+           request-id file-authorization binding)))
+    (agent-scheme--code-loading-record-request request binding path)
+    (condition-case condition
+        (progn
+          (agent-scheme-policy-authorize
+           'standard-host-effect
+           binding
+           `((domain . code-loading)
+             (operation . load)
+             (path . ,path)
+             (file-request . ,(plist-get file-authorization :request)))
+           context)
+          (list :path path
+                :operation 'load
+                :request request
+                :decision
+                (agent-scheme--code-loading-record-decision
+                 request request-id 'approved
+                 "load target is authorized under current evaluation context"
+                 `((path . ,path)))))
+      (agent-scheme-policy-error
+       (let ((decision
+              (agent-scheme--code-loading-record-decision
+               request request-id 'denied
+               (error-message-string condition)
+               `((path . ,path)))))
+         (agent-scheme-capability-audit-code-loading-result
+          (list :request request :decision decision)
+          (error-message-string condition)
+          t)
+         (signal (car condition) (cdr condition)))))))
 
 (defun agent-scheme--file-capability-deny
     (request request-id operation filename path grant reason

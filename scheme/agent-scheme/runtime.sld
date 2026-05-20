@@ -191,6 +191,8 @@
           authorize-file-capability
           file-authorization-path
           audit-file-capability-result!
+          authorize-code-loading
+          audit-code-loading-result!
           new-eval-context
           record-audit-event!
           record-agent-event!
@@ -941,6 +943,76 @@
              (list 'decision (cadr (assq 'decision authorization)))
              (list 'domain 'file)
              (list 'operation (cadr (assq 'operation authorization)))
+             (list 'result
+                   (if error?
+                       (list 'error result)
+                       (list 'ok result))))))
+
+    ;; Return a portable code-loading request datum.
+    (define (code-loading-request authorization binding)
+      (let ((path (file-authorization-path authorization)))
+        (list 'capability-request
+              (list 'library '(scheme load))
+              (list 'binding binding)
+              (list 'domain 'code-loading)
+              (list 'operation 'load)
+              (list 'resource
+                    (list 'path path)
+                    (list 'file-request
+                          (cadr (assq 'request authorization))))
+              (list 'effect 'environment-mutation))))
+
+    ;; Authorize evaluation of source forms read by a file capability request.
+    (define (authorize-code-loading authorization context binding)
+      (let* ((path (file-authorization-path authorization))
+             (request (code-loading-request authorization binding))
+             (decision
+              (list 'capability-decision
+                    (list 'request request)
+                    (list 'status 'approved)
+                    (list 'domain 'code-loading)
+                    (list 'reason
+                          "load target is authorized under current evaluation context"))))
+        (record-audit-event!
+         context
+         'capability-request
+         (list (list 'request request)
+               (list 'domain 'code-loading)
+               (list 'operation 'load)
+               (list 'binding binding)
+               (list 'path path)))
+        (record-audit-event!
+         context
+         'policy-decision
+         (list (list 'category 'standard-host-effect)
+               (list 'operation binding)
+               (list 'decision 'allowed)
+               (list 'domain 'code-loading)
+               (list 'path path)))
+        (record-audit-event!
+         context
+         'capability-decision
+         (list (list 'request request)
+               (list 'decision decision)
+               (list 'domain 'code-loading)
+               (list 'operation 'load)
+               (list 'status 'approved)
+               (list 'path path)))
+        (list (list 'path path)
+              (list 'request request)
+              (list 'decision decision)
+              (list 'operation 'load))))
+
+    ;; Record the result of a code-loading capability operation.
+    (define (audit-code-loading-result!
+             context authorization result error?)
+      (record-audit-event!
+       context
+       'capability-audit
+       (list (list 'request (cadr (assq 'request authorization)))
+             (list 'decision (cadr (assq 'decision authorization)))
+             (list 'domain 'code-loading)
+             (list 'operation 'load)
              (list 'result
                    (if error?
                        (list 'error result)
