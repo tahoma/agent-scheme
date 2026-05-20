@@ -186,7 +186,11 @@
           normalize-include-directory
           path-absolute?
           path-join
+          path-normalize
           normalize-include-paths
+          authorize-file-capability
+          file-authorization-path
+          audit-file-capability-result!
           new-eval-context
           record-audit-event!
           record-agent-event!
@@ -570,10 +574,382 @@
        (else
         (string-append directory "/" path))))
 
+    ;; Split PATH on slash characters, preserving empty components for absolute
+    ;; path detection while letting normalization discard redundant separators.
+    (define (path-split path)
+      (let ((length (string-length path)))
+        (let loop ((index 0) (start 0) (parts '()))
+          (cond
+           ((= index length)
+            (reverse (cons (substring path start index) parts)))
+           ((char=? (string-ref path index) #\/)
+            (loop (+ index 1)
+                  (+ index 1)
+                  (cons (substring path start index) parts)))
+           (else
+            (loop (+ index 1) start parts))))))
+
+    ;; Join path PARTS with slash separators.
+    (define (path-join-parts parts)
+      (cond
+       ((null? parts) "")
+       ((null? (cdr parts)) (car parts))
+       (else
+        (string-append (car parts) "/" (path-join-parts (cdr parts))))))
+
+    ;; Resolve . and .. path components without consulting the host filesystem.
+    (define (path-normalize path)
+      (let ((absolute? (path-absolute? path)))
+        (let loop ((parts (path-split path)) (stack '()))
+          (cond
+           ((null? parts)
+            (let ((joined (path-join-parts (reverse stack))))
+              (cond
+               ((and absolute? (string=? joined "")) "/")
+               (absolute? (string-append "/" joined))
+               (else joined))))
+           ((or (string=? (car parts) "")
+                (string=? (car parts) "."))
+            (loop (cdr parts) stack))
+           ((string=? (car parts) "..")
+            (cond
+             ((and (pair? stack) (not (string=? (car stack) "..")))
+              (loop (cdr parts) (cdr stack)))
+             (absolute?
+              (loop (cdr parts) stack))
+             (else
+              (loop (cdr parts) (cons ".." stack)))))
+           (else
+            (loop (cdr parts) (cons (car parts) stack)))))))
+
+    ;; Return FIELD from DATUM, or #f when it is absent.
+    (define (capability-field datum field)
+      (let ((entry (and (pair? datum) (assq field (cdr datum)))))
+        (if entry entry #f)))
+
+    ;; Return the first value for FIELD from DATUM, or #f.
+    (define (capability-field-value datum field)
+      (let ((entry (capability-field datum field)))
+        (if (and entry (pair? (cdr entry))) (cadr entry) #f)))
+
+    ;; Return every value for FIELD from DATUM.
+    (define (capability-field-values datum field)
+      (let ((entry (capability-field datum field)))
+        (if entry (cdr entry) '())))
+
+    ;; Flatten a Scheme field that may store its values as one nested list.
+    (define (capability-flatten-values values)
+      (if (and (pair? values)
+               (null? (cdr values))
+               (list? (car values))
+               (not (null? (car values))))
+          (car values)
+          values))
+
+    ;; Return the scope clause named NAME from GRANT.
+    (define (capability-scope-clause grant name)
+      (let ((scope (capability-field-values grant 'scope)))
+        (let loop ((rest scope))
+          (cond
+           ((null? rest) #f)
+           ((and (pair? (car rest)) (eq? (caar rest) name)) (car rest))
+           (else (loop (cdr rest)))))))
+
+    ;; Return the first scope value named NAME from GRANT.
+    (define (capability-scope-value grant name)
+      (let ((clause (capability-scope-clause grant name)))
+        (if (and clause (pair? (cdr clause))) (cadr clause) #f)))
+
+    ;; Return flattened scope values named NAME from GRANT.
+    (define (capability-scope-values grant name)
+      (let ((clause (capability-scope-clause grant name)))
+        (if clause (capability-flatten-values (cdr clause)) '())))
+
+    ;; Report whether GRANT is an active file-domain grant.
+    (define (file-capability-grant? grant)
+      (and (pair? grant)
+           (eq? (car grant) 'capability-grant)
+           (eq? (capability-field-value grant 'domain) 'file)))
+
+    ;; Report whether GRANT currently has active status.
+    (define (capability-grant-active? grant)
+      (let ((status (capability-field-value grant 'status)))
+        (or (not status) (eq? status 'active))))
+
+    ;; Report whether GRANT authorizes OPERATION.
+    (define (file-capability-operation? grant operation)
+      (let loop ((operations (capability-field-values grant 'operations)))
+        (and (pair? operations)
+             (or (eq? (car operations) operation)
+                 (loop (cdr operations))))))
+
+    ;; Return file-domain grants from CONTEXT.
+    (define (file-capability-grants context)
+      (let loop ((grants (context-capability-grants context)) (kept '()))
+        (cond
+         ((null? grants) (reverse kept))
+         ((file-capability-grant? (car grants))
+          (loop (cdr grants) (cons (car grants) kept)))
+         (else
+          (loop (cdr grants) kept)))))
+
+    ;; Return a synthetic file grant for legacy allow-list PATHS.
+    (define (legacy-file-capability-grants paths operation)
+      (if (null? paths)
+          '()
+          (list
+           (list 'capability-grant
+                 (list 'id 'legacy-file-path-policy)
+                 (list 'domain 'file)
+                 (list 'operations operation)
+                 (list 'scope
+                       (list 'file-root "")
+                       (cons 'paths paths)
+                       (list 'remote 'denied)
+                       (list 'symlinks 'portable-unresolved))
+                 (list 'expires 'after-eval)
+                 (list 'status 'active)))))
+
+    ;; Test whether TEXT begins with PREFIX.
+    (define (string-prefix? prefix text)
+      (let ((prefix-length (string-length prefix))
+            (text-length (string-length text)))
+        (and (<= prefix-length text-length)
+             (let loop ((index 0))
+               (or (= index prefix-length)
+                   (and (char=? (string-ref prefix index)
+                                (string-ref text index))
+                        (loop (+ index 1))))))))
+
+    ;; Remove a single trailing slash from PATH for prefix checks.
+    (define (strip-trailing-slash path)
+      (if (and (> (string-length path) 0)
+               (char=? (string-ref path (- (string-length path) 1)) #\/))
+          (substring path 0 (- (string-length path) 1))
+          path))
+
+    ;; Report whether TEXT contains NEEDLE.
+    (define (string-contains? text needle)
+      (let ((text-length (string-length text))
+            (needle-length (string-length needle)))
+        (let loop ((index 0))
+          (and (<= (+ index needle-length) text-length)
+               (or (string-prefix?
+                    needle
+                    (substring text index text-length))
+                   (loop (+ index 1)))))))
+
+    ;; Report whether FILENAME names a non-local resource outside file grants.
+    (define (remote-file-path? filename)
+      (string-contains? filename "://"))
+
+    ;; Report whether PATH is equal to or nested inside ROOT.
+    (define (path-contained? path root)
+      (let* ((normalized-path (path-normalize path))
+             (normalized-root (strip-trailing-slash (path-normalize root)))
+             (root-directory (string-append normalized-root "/")))
+        (or (string=? normalized-path normalized-root)
+            (string-prefix? root-directory normalized-path))))
+
+    ;; Return normalized allowed roots described by GRANT.
+    (define (file-capability-roots grant context)
+      (let* ((project-root (capability-scope-value grant 'project-root))
+             (file-root (capability-scope-value grant 'file-root))
+             (base-root
+              (or project-root file-root (context-include-directory context)))
+             (paths (let ((values (capability-scope-values grant 'paths)))
+                      (if (null? values) '(".") values))))
+        (map (lambda (path)
+               (path-normalize
+                (if (path-absolute? path)
+                    path
+                    (path-join base-root path))))
+             paths)))
+
+    ;; Return a matching grant for PATH and OPERATION, or a denial reason.
+    (define (file-capability-match grants path operation context)
+      (let loop ((rest grants) (denied #f))
+        (cond
+         ((null? rest) denied)
+         ((not (file-capability-operation? (car rest) operation))
+          (loop (cdr rest) denied))
+         ((not (capability-grant-active? (car rest)))
+          (loop (cdr rest)
+                (list 'denied (car rest) "expired file capability grant")))
+         (else
+          (let root-loop ((roots (file-capability-roots
+                                  (car rest)
+                                  context)))
+            (cond
+             ((null? roots)
+              (loop (cdr rest)
+                    (list 'denied
+                          (car rest)
+                          "path is outside approved file grant root")))
+             ((path-contained? path (car roots))
+              (list 'approved (car rest) (car roots)))
+             (else
+              (root-loop (cdr roots)))))))))
+
+    ;; Return a portable file capability request datum.
+    (define (file-capability-request filename path operation binding)
+      (list 'capability-request
+            (list 'library
+                  (cond
+                   ((memq operation '(include include-ci library-source))
+                    '(scheme base))
+                   ((eq? operation 'load) '(scheme load))
+                   (else '(scheme file))))
+            (list 'binding binding)
+            (list 'domain 'file)
+            (list 'operation operation)
+            (list 'resource
+                  (list 'path filename)
+                  (list 'normalized-path path))
+            (list 'effect 'read-only-observation)))
+
+    ;; Record DENIAL for REQUEST and raise a portable evaluator error.
+    (define (deny-file-capability! context request operation grant reason)
+      (let* ((grant-id (if grant
+                           (capability-field-value grant 'id)
+                           'none))
+             (decision
+              (list 'capability-decision
+                    (list 'request request)
+                    (list 'status 'denied)
+                    (list 'grant grant-id)
+                    (list 'reason reason))))
+        (record-audit-event!
+         context
+         'capability-decision
+         (list (list 'request request)
+               (list 'decision decision)
+               (list 'status 'denied)
+               (list 'grant grant-id)
+               (list 'reason reason)))
+        (record-audit-event!
+         context
+         'capability-audit
+         (list (list 'request request)
+               (list 'decision decision)
+               (list 'domain 'file)
+               (list 'operation operation)
+               (list 'result (list 'error reason))))
+        (eval-error (string-append "file capability denied: " reason))))
+
+    ;; Authorize FILENAME for file OPERATION and return authorization data.
+    (define (authorize-file-capability
+             filename context operation binding legacy-paths)
+      (let* ((path (path-normalize
+                    (path-join (context-include-directory context)
+                               filename)))
+             (request
+              (file-capability-request filename path operation binding))
+             (grants
+              (append (file-capability-grants context)
+                      (legacy-file-capability-grants
+                       legacy-paths
+                       operation))))
+        (record-audit-event!
+         context
+         'capability-request
+         (list (list 'request request)
+               (list 'domain 'file)
+               (list 'operation operation)
+               (list 'path filename)
+               (list 'normalized-path path)))
+        (if (remote-file-path? filename)
+            (deny-file-capability!
+             context
+             request
+             operation
+             #f
+             "remote file paths require a non-file capability domain"))
+        (if (null? grants)
+            (begin
+              (record-audit-event!
+               context
+               'policy-decision
+               (list (list 'category 'standard-host-effect)
+                     (list 'operation binding)
+                     (list 'decision 'denied)
+                     (list 'filename filename)
+                     (list 'path path)))
+              (deny-file-capability!
+               context
+               request
+               operation
+               #f
+               (string-append binding
+                              " requires policy-gated host file access"))))
+        (let ((match (file-capability-match grants path operation context)))
+          (if (or (not match) (eq? (car match) 'denied))
+              (deny-file-capability!
+               context
+               request
+               operation
+               (and match (cadr match))
+               (if match
+                   (third match)
+                   "no active file grant covers path")))
+          (let* ((grant (cadr match))
+                 (root (third match))
+                 (decision
+                  (list 'capability-decision
+                        (list 'request request)
+                        (list 'status 'approved)
+                        (list 'grant (capability-field-value grant 'id))
+                        (list 'attenuation
+                              (list 'root root)
+                              (list 'path path))
+                        (list 'reason
+                              "path is inside approved file grant root"))))
+            (record-audit-event!
+             context
+             'policy-decision
+             (list (list 'category 'standard-host-effect)
+                   (list 'operation binding)
+                   (list 'decision 'allowed)
+                   (list 'filename filename)
+                   (list 'path path)))
+            (record-audit-event!
+             context
+             'capability-decision
+             (list (list 'request request)
+                   (list 'decision decision)
+                   (list 'status 'approved)
+                   (list 'grant (capability-field-value grant 'id))
+                   (list 'path path)
+                   (list 'approved-root root)))
+            (list (list 'path path)
+                  (list 'request request)
+                  (list 'decision decision)
+                  (list 'operation operation)
+                  (list 'grant grant))))))
+
+    ;; Return the authorized normalized host path from AUTHORIZATION.
+    (define (file-authorization-path authorization)
+      (cadr (assq 'path authorization)))
+
+    ;; Record the result of an authorized file capability operation.
+    (define (audit-file-capability-result!
+             context authorization result error?)
+      (record-audit-event!
+       context
+       'capability-audit
+       (list (list 'request (cadr (assq 'request authorization)))
+             (list 'decision (cadr (assq 'decision authorization)))
+             (list 'domain 'file)
+             (list 'operation (cadr (assq 'operation authorization)))
+             (list 'result
+                   (if error?
+                       (list 'error result)
+                       (list 'ok result))))))
+
     ;; Resolve relative include paths against the active include directory.
     (define (normalize-include-paths paths directory)
       (map (lambda (path)
-             (path-join directory path))
+             (path-normalize (path-join directory path)))
            paths))
 
     ;; Create a fresh evaluation context from user option overrides.

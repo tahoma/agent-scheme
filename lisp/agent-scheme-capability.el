@@ -49,6 +49,12 @@
 (defvar agent-scheme--next-capability-grant-number 0
   "Next numeric suffix for generated capability grant ids.")
 
+(defvar agent-scheme--next-file-capability-request-number 0
+  "Next numeric suffix for generated file capability request ids.")
+
+(defvar agent-scheme--next-file-capability-decision-number 0
+  "Next numeric suffix for generated file capability decision ids.")
+
 (defconst agent-scheme--emacs-capability-manifest-specs
   '((:name "emacs-current-buffer" :library "(emacs buffer)"
      :minimum-arity 0 :maximum-arity 0
@@ -380,10 +386,12 @@
 
 (defun agent-scheme--capability-grant-status (grant)
   "Return GRANT status as an Emacs symbol."
-  (intern
-   (or (agent-scheme--capability-grant-symbol-name
-        (agent-scheme--capability-grant-field-value grant "status"))
-       "active")))
+  (let ((field (agent-scheme--capability-grant-field grant "status")))
+    (intern
+     (or (and field
+              (agent-scheme--capability-grant-symbol-name
+               (cadr field)))
+         "active"))))
 
 (defun agent-scheme--capability-grant-normalize (datum)
   "Return DATUM as a normalized capability-grant record."
@@ -392,6 +400,9 @@
             (list "grant-capability! expects a capability-grant datum")))
   (let* ((id (or (agent-scheme--capability-grant-field-value datum "id")
                  (agent-scheme--capability-generated-grant-id)))
+         (domain (agent-scheme--capability-grant-field-value datum "domain"))
+         (operations (agent-scheme--capability-grant-field-values
+                      datum "operations"))
          (library (agent-scheme--capability-grant-field-value datum "library"))
          (effect (agent-scheme--capability-grant-field-value datum "effect"))
          (expires (or (agent-scheme--capability-grant-field-value
@@ -401,12 +412,10 @@
          (normalized
           (agent-scheme--capability-grant-remove-fields
            datum '("id" "status" "uses-remaining"))))
-    (unless library
+    (unless (or (and library effect)
+                (and domain operations))
       (signal 'agent-scheme-capability-grant-error
-              (list "capability grant requires a library field")))
-    (unless effect
-      (signal 'agent-scheme-capability-grant-error
-              (list "capability grant requires an effect field")))
+              (list "capability grant requires either library/effect or domain/operations fields")))
     (setq normalized
           (agent-scheme--capability-grant-replace-field
            normalized "id" (list (agent-scheme--capability-grant-symbol id))))
@@ -496,7 +505,11 @@
      `((library . ,(agent-scheme--capability-grant-field-value
                     grant "library"))
        (effect . ,(agent-scheme--capability-grant-field-value
-                   grant "effect"))))
+                   grant "effect"))
+       (domain . ,(agent-scheme--capability-grant-field-value
+                   grant "domain"))
+       (operations . ,(agent-scheme--capability-grant-field-values
+                       grant "operations"))))
    fields))
 
 (defun agent-scheme--capability-audit-grant
@@ -598,6 +611,364 @@
        (file-in-directory-p
         (expand-file-name file)
         (file-name-as-directory (expand-file-name root)))))
+
+(defun agent-scheme--file-capability-symbol-name (value)
+  "Return VALUE as a file capability symbol name, or nil."
+  (agent-scheme--capability-grant-symbol-name value))
+
+(defun agent-scheme--file-capability-operation-symbol (operation)
+  "Return OPERATION as an Agent Scheme symbol datum."
+  (agent-scheme--capability-grant-symbol operation))
+
+(defun agent-scheme--file-capability-request-id ()
+  "Return a fresh file capability request id."
+  (agent-scheme--capability-grant-symbol
+   (format "req-file-%d"
+           (cl-incf agent-scheme--next-file-capability-request-number))))
+
+(defun agent-scheme--file-capability-decision-id ()
+  "Return a fresh file capability decision id."
+  (agent-scheme--capability-grant-symbol
+   (format "dec-file-%d"
+           (cl-incf agent-scheme--next-file-capability-decision-number))))
+
+(defun agent-scheme--file-capability-remote-path-p (filename path)
+  "Return non-nil when FILENAME or PATH names non-local file authority."
+  (or (and (stringp filename)
+           (or (file-remote-p filename)
+               (string-match-p "\\`[[:alpha:]][[:alnum:].+-]*://" filename)))
+      (and (stringp path)
+           (file-remote-p path))))
+
+(defun agent-scheme--file-capability-existing-truename (path)
+  "Return PATH with symlinks resolved when the target exists."
+  (if (file-exists-p path)
+      (file-truename path)
+    (expand-file-name path)))
+
+(defun agent-scheme--file-capability-parent-truename (path)
+  "Return PATH with existing parent directories canonicalized.
+The final path component is not resolved, so a symlink inside an
+approved root still counts as syntactically inside that root before
+the separate resolved-target check runs."
+  (let ((directory (file-name-directory path))
+        (leaf (file-name-nondirectory path)))
+    (if (and directory (file-directory-p directory))
+        (expand-file-name leaf (file-truename directory))
+      (expand-file-name path))))
+
+(defun agent-scheme--file-capability-directory-root-p (path)
+  "Return non-nil when PATH should be treated as an allowed directory root."
+  (or (file-directory-p path)
+      (string-suffix-p "/" path)))
+
+(defun agent-scheme--file-capability-contained-p (path allowed)
+  "Return non-nil when PATH is exactly ALLOWED or inside ALLOWED."
+  (let ((path* (directory-file-name (expand-file-name path)))
+        (allowed* (directory-file-name (expand-file-name allowed))))
+    (or (equal path* allowed*)
+        (and (agent-scheme--file-capability-directory-root-p allowed)
+             (string-prefix-p
+              (file-name-as-directory allowed*)
+              path*)))))
+
+(defun agent-scheme--file-capability-field-values-list (values)
+  "Return VALUES as a flattened Scheme field value list."
+  (if (and (= (length values) 1)
+           (listp (car values))
+           (not (agent-scheme-symbol-p (car values))))
+      (car values)
+    values))
+
+(defun agent-scheme--file-capability-scope-values (grant name)
+  "Return flattened scope values named NAME from GRANT."
+  (agent-scheme--file-capability-field-values-list
+   (cdr (agent-scheme--capability-scope-clause grant name))))
+
+(defun agent-scheme--file-capability-grant-domain-p (grant)
+  "Return non-nil when GRANT is a file-domain grant."
+  (equal (agent-scheme--file-capability-symbol-name
+          (agent-scheme--capability-grant-field-value grant "domain"))
+         "file"))
+
+(defun agent-scheme--file-capability-operation-p (grant operation)
+  "Return non-nil when GRANT allows OPERATION."
+  (let ((operation-name
+         (agent-scheme--file-capability-symbol-name operation)))
+    (cl-some
+     (lambda (candidate)
+       (equal (agent-scheme--file-capability-symbol-name candidate)
+              operation-name))
+     (agent-scheme--capability-grant-field-values grant "operations"))))
+
+(defun agent-scheme--file-capability-grants (context)
+  "Return file-domain grants carried by CONTEXT."
+  (seq-filter
+   #'agent-scheme--file-capability-grant-domain-p
+   (agent-scheme--capability-context-grants context)))
+
+(defun agent-scheme--file-capability-legacy-grants
+    (allowed-paths operation)
+  "Return synthetic file grants for legacy ALLOWED-PATHS and OPERATION."
+  (when allowed-paths
+    (list
+     `(capability-grant
+       (id legacy-file-path-policy)
+       (domain file)
+       (operations ,operation)
+       (scope (file-root "/")
+              (paths ,allowed-paths)
+              (remote denied)
+              (symlinks resolve-within-root))
+       (expires after-eval)
+       (status active)))))
+
+(defun agent-scheme--file-capability-path-roots (grant context)
+  "Return absolute allowed roots described by GRANT."
+  (let* ((project-root
+          (agent-scheme--capability-scope-value grant "project-root"))
+         (file-root
+          (agent-scheme--capability-scope-value grant "file-root"))
+         (base-root
+          (or project-root
+              file-root
+              (and context
+                   (agent-scheme--eval-context-p context)
+                   (agent-scheme--eval-context-include-directory context))
+              default-directory))
+         (base-directory
+          (file-name-as-directory (expand-file-name base-root)))
+         (paths
+          (or (agent-scheme--file-capability-scope-values grant "paths")
+              '("."))))
+    (mapcar
+     (lambda (path)
+       (if (file-name-absolute-p path)
+           (expand-file-name path)
+         (expand-file-name path base-directory)))
+     paths)))
+
+(defun agent-scheme--file-capability-grant-match
+    (grant path resolved-path operation context)
+  "Return a match plist when GRANT authorizes PATH for OPERATION."
+  (cond
+   ((not (agent-scheme--file-capability-operation-p grant operation))
+    nil)
+   ((eq (agent-scheme--capability-grant-status grant) 'revoked)
+    (list :denied grant :reason "revoked file capability grant"))
+   ((not (agent-scheme--capability-grant-active-p grant))
+    (list :denied grant :reason "expired file capability grant"))
+   (t
+    (let ((outside-reason "path is outside approved file grant root")
+          symlink-denial)
+      (catch 'matched
+        (dolist (allowed (agent-scheme--file-capability-path-roots grant context))
+          (let* ((syntactic-path
+                  (agent-scheme--file-capability-parent-truename path))
+                 (resolved-allowed
+                  (agent-scheme--file-capability-existing-truename allowed))
+                 (syntactic-allowed resolved-allowed)
+                 (syntactic-match
+                  (agent-scheme--file-capability-contained-p
+                   syntactic-path syntactic-allowed))
+                 (resolved-match
+                  (agent-scheme--file-capability-contained-p
+                   resolved-path resolved-allowed)))
+            (cond
+             ((and syntactic-match resolved-match)
+              (throw 'matched
+                     (list :grant grant
+                           :allowed-root allowed
+                           :resolved-root resolved-allowed)))
+             ((and syntactic-match (not resolved-match))
+              (setq symlink-denial
+                    (list :denied grant
+                          :reason
+                          "symlink target escapes approved file grant root"
+                          :allowed-root allowed
+                          :resolved-root resolved-allowed))))))
+        (or symlink-denial
+            (list :denied grant :reason outside-reason)))))))
+
+(defun agent-scheme--file-capability-request-datum
+    (request-id filename path operation binding)
+  "Return a Scheme-readable file capability request datum."
+  `(,(agent-scheme--capability-grant-symbol "capability-request")
+    (,(agent-scheme--capability-grant-symbol "id") ,request-id)
+    (,(agent-scheme--capability-grant-symbol "session")
+     ,(or nil agent-scheme-false))
+    (,(agent-scheme--capability-grant-symbol "library")
+     (,(agent-scheme--capability-grant-symbol "scheme")
+      ,(agent-scheme--capability-grant-symbol
+        (if (member (agent-scheme--file-capability-symbol-name operation)
+                    '("include" "include-ci" "library-source"))
+            "base"
+          (if (equal (agent-scheme--file-capability-symbol-name operation)
+                     "load")
+              "load"
+            "file")))))
+    (,(agent-scheme--capability-grant-symbol "binding") ,binding)
+    (,(agent-scheme--capability-grant-symbol "domain")
+     ,(agent-scheme--capability-grant-symbol "file"))
+    (,(agent-scheme--capability-grant-symbol "operation")
+     ,(agent-scheme--file-capability-operation-symbol operation))
+    (,(agent-scheme--capability-grant-symbol "resource")
+     (,(agent-scheme--capability-grant-symbol "path") ,filename)
+     (,(agent-scheme--capability-grant-symbol "normalized-path") ,path))
+    (,(agent-scheme--capability-grant-symbol "effect")
+     ,(agent-scheme--capability-grant-symbol "read-only-observation"))))
+
+(defun agent-scheme--file-capability-record-request
+    (request operation filename path)
+  "Audit file capability REQUEST."
+  (agent-scheme-audit-record
+   'capability-request
+   `((request . ,request)
+     (domain . file)
+     (operation . ,operation)
+     (path . ,filename)
+     (normalized-path . ,path))))
+
+(defun agent-scheme--file-capability-record-decision
+    (request request-id status grant reason &optional fields)
+  "Audit and return a file capability decision datum."
+  (let* ((decision-id (agent-scheme--file-capability-decision-id))
+         (grant-id (or (and grant (agent-scheme--capability-grant-id grant))
+                       (agent-scheme--capability-grant-symbol "none")))
+         (decision
+          `(,(agent-scheme--capability-grant-symbol "capability-decision")
+            (,(agent-scheme--capability-grant-symbol "id") ,decision-id)
+            (,(agent-scheme--capability-grant-symbol "request") ,request-id)
+            (,(agent-scheme--capability-grant-symbol "status")
+             ,(agent-scheme--capability-grant-symbol status))
+            (,(agent-scheme--capability-grant-symbol "grant") ,grant-id)
+            (,(agent-scheme--capability-grant-symbol "reason") ,reason))))
+    (agent-scheme-audit-record
+     'capability-decision
+     (append
+      `((request . ,request)
+        (decision . ,decision)
+        (status . ,status)
+        (grant . ,grant-id)
+        (reason . ,reason))
+      fields))
+    decision))
+
+(defun agent-scheme-capability-audit-file-result
+    (authorization result &optional errored)
+  "Audit file capability AUTHORIZATION with RESULT.
+When ERRORED is non-nil, RESULT is recorded as an error payload."
+  (let ((request (plist-get authorization :request))
+        (decision (plist-get authorization :decision))
+        (operation (plist-get authorization :operation)))
+    (agent-scheme-audit-record
+     'capability-audit
+     `((request . ,request)
+       (decision . ,decision)
+       (domain . file)
+       (operation . ,operation)
+       (result . ,(if errored
+                      (list 'error result)
+                    (list 'ok result)))))))
+
+(defun agent-scheme--file-capability-deny
+    (request request-id operation filename path grant reason
+             &optional policy-denial context policy-operation)
+  "Record a denied file capability request and signal REASON."
+  (let ((decision
+         (agent-scheme--file-capability-record-decision
+          request request-id 'denied grant reason)))
+    (agent-scheme-capability-audit-file-result
+     (list :request request :decision decision :operation operation)
+     reason
+     t)
+    (if policy-denial
+        (agent-scheme-policy-deny
+         'standard-host-effect
+         (or policy-operation (format "%s" operation))
+         `((filename . ,filename)
+           (path . ,path))
+         context
+         reason)
+      (signal 'agent-scheme-capability-grant-error
+              (list (format "file capability denied: %s" reason))))))
+
+(defun agent-scheme-capability-authorize-file
+    (filename context operation binding &optional legacy-allowed-paths)
+  "Authorize FILENAME for file OPERATION and return an authorization plist.
+LEGACY-ALLOWED-PATHS converts the old path allow-list options into a
+synthetic file grant so existing callers share the capability vocabulary."
+  (let* ((path (expand-file-name
+                filename
+                (agent-scheme--eval-context-include-directory context)))
+         (resolved-path
+          (agent-scheme--file-capability-existing-truename path))
+         (request-id (agent-scheme--file-capability-request-id))
+         (request
+          (agent-scheme--file-capability-request-datum
+           request-id filename path operation binding))
+         (file-grants
+          (append
+           (agent-scheme--file-capability-grants context)
+           (agent-scheme--file-capability-legacy-grants
+            legacy-allowed-paths operation)))
+         match
+         denied)
+    (agent-scheme--file-capability-record-request
+     request operation filename path)
+    (when (agent-scheme--file-capability-remote-path-p filename path)
+      (agent-scheme--file-capability-deny
+       request request-id operation filename path nil
+       "remote file paths require a non-file capability domain"
+       nil
+       context
+       binding))
+    (unless file-grants
+      (agent-scheme--file-capability-deny
+       request request-id operation filename path nil
+       (format "%s requires policy-gated host file access: %s"
+               binding filename)
+       t
+       context
+       binding))
+    (dolist (grant file-grants)
+      (let ((candidate
+             (agent-scheme--file-capability-grant-match
+              grant path resolved-path operation context)))
+        (when candidate
+          (if (plist-get candidate :grant)
+              (setq match candidate)
+            (setq denied candidate)))))
+    (unless match
+      (agent-scheme--file-capability-deny
+       request request-id operation filename path
+       (plist-get denied :denied)
+       (or (plist-get denied :reason)
+           "no active file grant covers path")))
+    (let ((grant (plist-get match :grant)))
+      (agent-scheme-policy-authorize
+       'standard-host-effect
+       binding
+       `((filename . ,filename)
+         (path . ,path)
+         (resolved-path . ,resolved-path)
+         (grant . ,(agent-scheme--capability-grant-id grant)))
+       context)
+      (agent-scheme--capability-grant-use! grant context)
+      (let ((decision
+             (agent-scheme--file-capability-record-decision
+              request request-id 'approved grant
+              "path is inside approved file grant root"
+              `((path . ,path)
+                (resolved-path . ,resolved-path)
+                (approved-root . ,(plist-get match :allowed-root))
+                (resolved-root . ,(plist-get match :resolved-root))))))
+        (list :path path
+              :resolved-path resolved-path
+              :operation operation
+              :request request
+              :decision decision
+              :grant grant)))))
 
 (defun agent-scheme--capability-grant-scope-match-p
     (grant name arguments context)
@@ -735,18 +1106,28 @@
 
 (defun agent-scheme--authorize-capability-grant-datum (grant context)
   "Authorize creation of GRANT in CONTEXT."
-  (let* ((library (agent-scheme--capability-grant-library-key grant))
-         (effect (agent-scheme--capability-grant-effect-name grant))
-         (spec (agent-scheme--emacs-capability-manifest-spec effect))
-         (category (agent-scheme--emacs-capability-policy-category spec)))
-    (agent-scheme-policy-authorize
-     category
-     "grant-capability!"
-     `((library . ,library)
-       (capability . ,effect)
-       (grant . ,grant))
-     context
-     'capability-grant)))
+  (if (agent-scheme--file-capability-grant-domain-p grant)
+      (agent-scheme-policy-authorize
+       'standard-host-effect
+       "grant-capability!"
+       `((domain . file)
+         (operations . ,(agent-scheme--capability-grant-field-values
+                         grant "operations"))
+         (grant . ,grant))
+       context
+       'capability-grant)
+    (let* ((library (agent-scheme--capability-grant-library-key grant))
+           (effect (agent-scheme--capability-grant-effect-name grant))
+           (spec (agent-scheme--emacs-capability-manifest-spec effect))
+           (category (agent-scheme--emacs-capability-policy-category spec)))
+      (agent-scheme-policy-authorize
+       category
+       "grant-capability!"
+       `((library . ,library)
+         (capability . ,effect)
+         (grant . ,grant))
+       context
+       'capability-grant))))
 
 (defun agent-scheme-capability-grant! (datum &optional context)
   "Create a capability grant from DATUM in CONTEXT."
