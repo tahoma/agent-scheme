@@ -1054,8 +1054,9 @@ Each spec has (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY)."
            context
            operation-symbol
            operation
-           (agent-scheme--eval-context-include-paths context)))
+         (agent-scheme--eval-context-include-paths context)))
          (path (plist-get authorization :path)))
+    (agent-scheme-capability-revalidate-file-authorization authorization)
     (unless (file-readable-p path)
       (agent-scheme-capability-audit-file-result
        authorization

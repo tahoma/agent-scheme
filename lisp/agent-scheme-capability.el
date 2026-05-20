@@ -49,6 +49,9 @@
 (defvar agent-scheme--next-capability-grant-number 0
   "Next numeric suffix for generated capability grant ids.")
 
+(defvar agent-scheme--next-capability-revocation-number 0
+  "Next numeric suffix for generated capability revocation ids.")
+
 (defvar agent-scheme--next-file-capability-request-number 0
   "Next numeric suffix for generated file capability request ids.")
 
@@ -646,6 +649,12 @@
    (format "dec-file-%d"
            (cl-incf agent-scheme--next-file-capability-decision-number))))
 
+(defun agent-scheme--capability-revocation-id ()
+  "Return a fresh capability revocation id."
+  (agent-scheme--capability-grant-symbol
+   (format "rev-%d"
+           (cl-incf agent-scheme--next-capability-revocation-number))))
+
 (defun agent-scheme--code-loading-request-id ()
   "Return a fresh code-loading capability request id."
   (agent-scheme--capability-grant-symbol
@@ -897,6 +906,64 @@ When ERRORED is non-nil, RESULT is recorded as an error payload."
                     (list 'error result)
                   (list 'ok result)))))))
 
+(defun agent-scheme--file-capability-handle-datum
+    (handle path resolved-path grant-id status)
+  "Return a Scheme-readable file HANDLE datum."
+  `(,(agent-scheme--capability-grant-symbol "handle")
+    (,(agent-scheme--capability-grant-symbol "id")
+     ,(agent-scheme-handle-id handle))
+    (,(agent-scheme--capability-grant-symbol "kind")
+     ,(agent-scheme--capability-grant-symbol "file"))
+    (,(agent-scheme--capability-grant-symbol "domain")
+     ,(agent-scheme--capability-grant-symbol "file"))
+    (,(agent-scheme--capability-grant-symbol "path") ,path)
+    (,(agent-scheme--capability-grant-symbol "resolved-path")
+     ,resolved-path)
+    (,(agent-scheme--capability-grant-symbol "grant") ,grant-id)
+    (,(agent-scheme--capability-grant-symbol "status")
+     ,(agent-scheme--capability-grant-symbol status))))
+
+(defun agent-scheme--file-capability-register-handle
+    (path resolved-path grant operation)
+  "Register and audit a file handle for an approved file request."
+  (let* ((grant-id (agent-scheme--capability-grant-id grant))
+         (handle
+          (agent-scheme--register-handle
+           'file
+           (list :path path
+                 :resolved-path resolved-path
+                 :grant grant-id
+                 :operation operation
+                 :status 'live)))
+         (handle-datum
+          (agent-scheme--file-capability-handle-datum
+           handle path resolved-path grant-id 'live)))
+    (agent-scheme-audit-record
+     'capability-handle
+     `((handle . ,handle-datum)
+       (domain . file)
+       (kind . file)
+       (path . ,path)
+       (resolved-path . ,resolved-path)
+       (grant . ,grant-id)
+       (status . live)))
+    handle))
+
+(defun agent-scheme-capability-revalidate-file-authorization
+    (authorization)
+  "Fail closed unless AUTHORIZATION still has a live file handle and grant."
+  (let ((handle (plist-get authorization :handle))
+        (grant (plist-get authorization :grant)))
+    (unless (and handle
+                 (agent-scheme-capability-handle-live-p handle))
+      (signal 'agent-scheme-capability-grant-error
+              (list "stale file capability handle")))
+    (unless (and grant
+                 (agent-scheme--capability-grant-active-p grant))
+      (signal 'agent-scheme-capability-grant-error
+              (list "inactive file capability grant")))
+    authorization))
+
 (defun agent-scheme--code-loading-request-datum
     (request-id file-authorization binding)
   "Return a Scheme-readable code-loading request datum."
@@ -1100,12 +1167,16 @@ synthetic file grant so existing callers share the capability vocabulary."
               `((path . ,path)
                 (resolved-path . ,resolved-path)
                 (approved-root . ,(plist-get match :allowed-root))
-                (resolved-root . ,(plist-get match :resolved-root))))))
+                (resolved-root . ,(plist-get match :resolved-root)))))
+            (handle
+             (agent-scheme--file-capability-register-handle
+              path resolved-path grant operation)))
         (list :path path
               :resolved-path resolved-path
               :operation operation
               :request request
               :decision decision
+              :handle handle
               :grant grant)))))
 
 (defun agent-scheme--capability-grant-scope-match-p
@@ -1179,7 +1250,36 @@ synthetic file grant so existing callers share the capability vocabulary."
           (list (agent-scheme--capability-grant-symbol "expired")))))
     (agent-scheme--capability-store-grant! expired context)
     (agent-scheme--capability-audit-grant operation expired 'expired)
+    (agent-scheme--capability-audit-revocation
+     expired 'expired "capability grant expired")
     expired))
+
+(defun agent-scheme--capability-revocation-datum
+    (grant status reason)
+  "Return a Scheme-readable revocation datum for GRANT."
+  (let ((grant-id (agent-scheme--capability-grant-id grant)))
+    `(,(agent-scheme--capability-grant-symbol "capability-revocation")
+      (,(agent-scheme--capability-grant-symbol "id")
+       ,(agent-scheme--capability-revocation-id))
+      (,(agent-scheme--capability-grant-symbol "target")
+       (,(agent-scheme--capability-grant-symbol "grant") ,grant-id))
+      (,(agent-scheme--capability-grant-symbol "status")
+       ,(agent-scheme--capability-grant-symbol status))
+      (,(agent-scheme--capability-grant-symbol "reason") ,reason))))
+
+(defun agent-scheme--capability-audit-revocation
+    (grant status reason)
+  "Audit a capability revocation for GRANT."
+  (let* ((grant-id (agent-scheme--capability-grant-id grant))
+         (revocation
+          (agent-scheme--capability-revocation-datum
+           grant status reason)))
+    (agent-scheme-audit-record
+     'capability-revocation
+     `((revocation . ,revocation)
+       (target . (grant ,grant-id))
+       (status . ,status)
+       (reason . ,reason)))))
 
 (defun agent-scheme--capability-grant-use! (grant context)
   "Record one successful use of GRANT in CONTEXT."
@@ -1458,6 +1558,8 @@ synthetic file grant so existing callers share the capability vocabulary."
     (agent-scheme--capability-store-grant! revoked context)
     (agent-scheme--capability-audit-grant
      "grant-revoke!" revoked 'revoked)
+    (agent-scheme--capability-audit-revocation
+     revoked 'revoked "grant-revoke!")
     revoked))
 
 (defun agent-scheme-capability-expire-after-eval! (context)

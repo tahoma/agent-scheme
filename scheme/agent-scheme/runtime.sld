@@ -816,6 +816,16 @@
                   (list 'normalized-path path))
             (list 'effect (file-capability-effect operation))))
 
+    ;; Return a portable Scheme-readable file handle datum.
+    (define (file-capability-handle path grant)
+      (list 'handle
+            (list 'id (string-append "file:" path))
+            (list 'kind 'file)
+            (list 'domain 'file)
+            (list 'path path)
+            (list 'grant (capability-field-value grant 'id))
+            (list 'status 'live)))
+
     ;; Record DENIAL for REQUEST and raise a portable evaluator error.
     (define (deny-file-capability! context request operation grant reason)
       (let* ((grant-id (if grant
@@ -929,11 +939,21 @@
                    (list 'grant (capability-field-value grant 'id))
                    (list 'path path)
                    (list 'approved-root root)))
+            (record-audit-event!
+             context
+             'capability-handle
+             (list (list 'handle (file-capability-handle path grant))
+                   (list 'domain 'file)
+                   (list 'kind 'file)
+                   (list 'path path)
+                   (list 'grant (capability-field-value grant 'id))
+                   (list 'status 'live)))
             (list (list 'path path)
                   (list 'request request)
                   (list 'decision decision)
                   (list 'operation operation)
-                  (list 'grant grant))))))
+                  (list 'grant grant)
+                  (list 'handle (file-capability-handle path grant)))))))
 
     ;; Return the authorized normalized host path from AUTHORIZATION.
     (define (file-authorization-path authorization)
