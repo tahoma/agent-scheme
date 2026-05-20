@@ -200,8 +200,19 @@
         (with-current-buffer buffer
           (insert "abcdef")
           (agent-scheme-eval-source
-           "(import (scheme base) (emacs buffer) (emacs buffer edit))
-            (buffer-replace! (emacs-current-buffer) 2 5 \"XYZ\")")
+           "(import (scheme base)
+                    (agent capability)
+                    (emacs buffer)
+                    (emacs buffer edit))
+            (define handle (emacs-current-buffer))
+            (grant-capability!
+             `(capability-grant
+               (id approval-buffer-grant)
+               (library (emacs buffer edit))
+               (effect buffer-replace!)
+               (scope (buffer ,handle) (range 2 5))
+               (expires (uses 1))))
+            (buffer-replace! handle 2 5 \"XYZ\")")
           (should (equal (buffer-string) "aXYZef")))
       (when (buffer-live-p buffer)
         (kill-buffer buffer))))

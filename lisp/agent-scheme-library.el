@@ -67,9 +67,16 @@
 (defconst agent-scheme--agent-library-keys
   '("(agent io)"
     "(agent approval)"
+    "(agent capability)"
+    "(agent capability primitive)"
     "(agent memory)"
     "(agent session)")
   "Agent interaction library keys with focused bootstrap support.")
+
+(defconst agent-scheme--agent-source-library-files
+  '(("(agent capability)"
+     . "../scheme/agent/capability.sld"))
+  "Checked-in portable Agent Scheme libraries loaded as Scheme source.")
 
 ;; Bootstrap libraries are registered lazily into the current evaluation
 ;; context.  The required `(scheme base)' library snapshots the active base
@@ -98,6 +105,25 @@
     (unless (file-readable-p source-file)
       (agent-scheme--eval-error
        "standard source library file is not readable: %s" source-file))
+    (with-temp-buffer
+      (insert-file-contents source-file)
+      (buffer-string))))
+
+(defun agent-scheme--agent-source-library-file (key)
+  "Return the bundled source file path for Agent library KEY."
+  (let ((relative-file
+         (cdr (assoc key agent-scheme--agent-source-library-files))))
+    (unless relative-file
+      (agent-scheme--eval-error
+       "agent source library is not available: %s" key))
+    (expand-file-name relative-file agent-scheme--library-source-directory)))
+
+(defun agent-scheme--agent-source-library-source (key)
+  "Return the checked-in source for Agent library KEY."
+  (let ((source-file (agent-scheme--agent-source-library-file key)))
+    (unless (file-readable-p source-file)
+      (agent-scheme--eval-error
+       "agent source library file is not readable: %s" source-file))
     (with-temp-buffer
       (insert-file-contents source-file)
       (buffer-string))))
@@ -288,7 +314,7 @@
    context))
 
 (defun agent-scheme--register-agent-library
-    (key context)
+    (key context environment)
   "Register Agent interaction library KEY in CONTEXT."
   (pcase key
     ("(agent io)"
@@ -300,6 +326,15 @@
      (agent-scheme--register-primitive-library
       key
       (agent-scheme-approval-primitive-specs)
+      context))
+    ("(agent capability)"
+     (unless (gethash key (agent-scheme--eval-context-libraries context))
+       (agent-scheme--register-source-library
+        (agent-scheme--agent-source-library-source key) context environment)))
+    ("(agent capability primitive)"
+     (agent-scheme--register-primitive-library
+      key
+      (agent-scheme-capability-primitive-specs)
       context))
     ("(agent memory)"
      (agent-scheme--register-primitive-library
@@ -622,7 +657,7 @@ Each spec has (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY)."
      ((member key agent-scheme--standard-library-keys)
       (agent-scheme--register-standard-library key context environment))
      ((member key agent-scheme--agent-library-keys)
-      (agent-scheme--register-agent-library key context))
+      (agent-scheme--register-agent-library key context environment))
      ((member key (agent-scheme-emacs-capability-library-keys))
       (agent-scheme--register-emacs-capability-library key context)))
     (or (gethash key (agent-scheme--eval-context-libraries context))

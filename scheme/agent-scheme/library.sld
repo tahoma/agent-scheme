@@ -113,7 +113,16 @@
     (define agent-library-keys
       '((agent io)
         (agent approval)
+        (agent capability)
+        (agent capability primitive)
         (agent memory)))
+
+    ;; Checked-in Agent Scheme source libraries loaded by the portable
+    ;; evaluator when a public agent library needs syntax definitions.
+    (define agent-source-library-load-paths
+      '(((agent capability)
+         "scheme/agent/capability.sld"
+         "agent/capability.sld")))
 
     ;; Checked-in standard libraries loaded as portable Scheme source files.
     (define standard-source-library-load-paths
@@ -126,6 +135,9 @@
 
     ;; Cache selected source path and contents by standard library key.
     (define standard-source-library-source-cache '())
+
+    ;; Cache selected source path and contents by Agent library key.
+    (define agent-source-library-source-cache '())
 
     ;; Return DATUM's list elements, or #f when DATUM is not a proper list.
     (define (proper-list-elements/maybe datum)
@@ -202,6 +214,41 @@
     ;; Return KEY's portable source text.
     (define (standard-source-library-source key)
       (cdr (standard-source-library-source-entry key)))
+
+    ;; Return configured source path candidates for Agent library KEY.
+    (define (agent-source-library-paths key)
+      (let ((entry (assoc/equal key agent-source-library-load-paths)))
+        (if entry
+            (cdr entry)
+            (eval-error "agent source library is not available" key))))
+
+    ;; Read Agent library KEY's source from the first usable path.
+    (define (load-agent-source-library-source key)
+      (let try ((paths (agent-source-library-paths key)))
+        (if (null? paths)
+            (eval-error "unable to load agent source library" key)
+            (guard (condition
+                    (else (try (cdr paths))))
+              (let ((source
+                     (call-with-input-file
+                         (car paths)
+                       read-port-string)))
+                (cons (car paths) source))))))
+
+    ;; Return cached source-file/source pair for Agent library KEY.
+    (define (agent-source-library-source-entry key)
+      (let ((cached (assoc/equal key agent-source-library-source-cache)))
+        (if cached
+            (cdr cached)
+            (let ((loaded (load-agent-source-library-source key)))
+              (set! agent-source-library-source-cache
+                    (cons (cons key loaded)
+                          agent-source-library-source-cache))
+              loaded))))
+
+    ;; Return KEY's Agent library source text.
+    (define (agent-source-library-source key)
+      (cdr (agent-source-library-source-entry key)))
 
     ;; Return the single define-library form read from KEY's source file.
     (define (standard-source-library-form key)
@@ -691,7 +738,7 @@
         (eval-error "unknown standard library" key))))
 
     ;; Register a supported Agent Scheme interaction library by KEY.
-    (define (register-agent-library! key context)
+    (define (register-agent-library! key context environment)
       (cond
        ((equal? key '(agent io))
         (register-primitive-library!
@@ -731,6 +778,41 @@
                                   0)
           (library-primitive-spec 'approval-resolve!
                                   'primitive-approval-resolve!
+                                  2
+                                  2))
+         context))
+       ((equal? key '(agent capability))
+        (if (not (library-registry-ref context key))
+            (register-source-library!
+             (agent-source-library-source key)
+             context
+             environment)))
+       ((equal? key '(agent capability primitive))
+        (register-primitive-library!
+         key
+         (list
+          (library-primitive-spec 'grant-capability!
+                                  'primitive-grant-capability!
+                                  1
+                                  1)
+          (library-primitive-spec 'current-grants
+                                  'primitive-current-grants
+                                  0
+                                  0)
+          (library-primitive-spec 'grant-ref
+                                  'primitive-grant-ref
+                                  1
+                                  1)
+          (library-primitive-spec 'grant-attenuate
+                                  'primitive-grant-attenuate
+                                  2
+                                  2)
+          (library-primitive-spec 'grant-revoke!
+                                  'primitive-grant-revoke!
+                                  1
+                                  1)
+          (library-primitive-spec 'call-with-capability-grant
+                                  'primitive-call-with-capability-grant
                                   2
                                   2))
          context))
@@ -780,7 +862,7 @@
          ((member key standard-library-keys)
           (register-standard-library! key context environment))
          ((member key agent-library-keys)
-          (register-agent-library! key context))
+          (register-agent-library! key context environment))
          ((member key empty-emacs-capability-library-keys)
           (register-empty-emacs-capability-library! key context)))
         (or (library-registry-ref context key)

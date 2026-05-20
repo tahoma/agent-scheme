@@ -94,8 +94,14 @@ The `(agent session)` library exposes lifecycle procedures:
 ((id project-main)
  (project-root "/path/to/project/")
  (memory ())
- (capability-grants ()))
+(capability-grants ()))
 ```
+
+Capability grants stored in a session remain Scheme-readable data. Grants with
+`(expires after-eval)` are removed from the active grant set after the current
+session evaluation; grants with use-count lifetimes expire after their allowed
+uses. Snapshot and fork paths preserve grant datums but revalidate associated
+handles before a host capability can use them.
 
 The Emacs bootstrap also exposes matching `agent-scheme-session-*` functions
 and `agent-scheme-session-eval-source` for evaluating source inside a durable

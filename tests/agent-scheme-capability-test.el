@@ -13,6 +13,7 @@
 (require 'agent-scheme-eval)
 (require 'agent-scheme-policy)
 (require 'agent-scheme-result)
+(require 'agent-scheme-session)
 
 (defvar agent-scheme-capability-test--secret "secret-value"
   "Private test value whose contents must not be exposed through variable-info.")
@@ -22,6 +23,10 @@
   "Evaluate SOURCE and return its stable external value representation."
   (agent-scheme-value->external
    (agent-scheme-eval-source source environment options)))
+
+(defun agent-scheme-capability-test--value-external (value)
+  "Return VALUE as its stable external value representation."
+  (agent-scheme-value->external value))
 
 (defun agent-scheme-capability-test--manifest-spec (library name)
   "Return Emacs capability metadata for binding NAME in LIBRARY."
@@ -201,8 +206,19 @@
           (with-current-buffer buffer
             (insert "abcdef")
             (agent-scheme-eval-source
-             "(import (scheme base) (emacs buffer) (emacs buffer edit))
-              (buffer-replace! (emacs-current-buffer) 2 5 \"XYZ\")")
+             "(import (scheme base)
+                      (agent capability)
+                      (emacs buffer)
+                      (emacs buffer edit))
+              (define handle (emacs-current-buffer))
+              (grant-capability!
+               `(capability-grant
+                 (id confirmed-edit-grant)
+                 (library (emacs buffer edit))
+                 (effect buffer-replace!)
+                 (scope (buffer ,handle) (range 2 5))
+                 (expires (uses 1))))
+              (buffer-replace! handle 2 5 \"XYZ\")")
             (should (equal (buffer-string) "aXYZef")))
           (should
            (agent-scheme-capability-test--audit-entry-matching
@@ -233,8 +249,32 @@
             (should
              (equal
               (agent-scheme-capability-test--external
-               "(import (scheme base) (emacs buffer) (emacs buffer edit))
+               "(import (scheme base)
+                        (agent capability)
+                        (emacs buffer)
+                        (emacs buffer edit))
                 (define handle (emacs-current-buffer))
+                (grant-capability!
+                 `(capability-grant
+                   (id insert-metadata-grant)
+                   (library (emacs buffer edit))
+                   (effect buffer-insert!)
+                   (scope (buffer ,handle) (range 4 4))
+                   (expires (uses 1))))
+                (grant-capability!
+                 `(capability-grant
+                   (id delete-metadata-grant)
+                   (library (emacs buffer edit))
+                   (effect buffer-delete!)
+                   (scope (buffer ,handle) (range 2 3))
+                   (expires (uses 1))))
+                (grant-capability!
+                 `(capability-grant
+                   (id replace-metadata-grant)
+                   (library (emacs buffer edit))
+                   (effect buffer-replace!)
+                   (scope (buffer ,handle) (range 5 7))
+                   (expires (uses 1))))
                 (buffer-insert! handle 4 \"XX\")
                 (buffer-delete! handle 2 3)
                 (buffer-replace! handle 5 7 \"YZ\")
@@ -285,8 +325,19 @@
                       (error "forced buffer edit failure"))))))
             (should-error
              (agent-scheme-eval-source
-              "(import (emacs buffer) (emacs buffer edit))
-               (buffer-insert! (emacs-current-buffer) 4 \"XX\")")))
+              "(import (scheme base)
+                       (agent capability)
+                       (emacs buffer)
+                       (emacs buffer edit))
+               (define handle (emacs-current-buffer))
+               (grant-capability!
+                `(capability-grant
+                  (id rollback-edit-grant)
+                  (library (emacs buffer edit))
+                  (effect buffer-insert!)
+                  (scope (buffer ,handle) (range 4 4))
+                  (expires (uses 1))))
+               (buffer-insert! handle 4 \"XX\")")))
           (should (equal (buffer-string) "abcdef")))
       (when (buffer-live-p buffer)
         (kill-buffer buffer)))))
@@ -303,14 +354,294 @@
           (insert "abc")
           (setq buffer-undo-list nil)
           (agent-scheme-eval-source
-           "(import (emacs buffer) (emacs buffer edit))
+           "(import (scheme base)
+                    (agent capability)
+                    (emacs buffer)
+                    (emacs buffer edit))
             (define handle (emacs-current-buffer))
+            (grant-capability!
+             `(capability-grant
+               (id undo-insert-grant)
+               (library (emacs buffer edit))
+               (effect buffer-insert!)
+               (scope (buffer ,handle) (range 4 5))
+               (expires (uses 2))))
             (buffer-insert! handle 4 \"X\")
             (buffer-insert! handle 5 \"Y\")")
           (should (equal (buffer-string) "abcXY"))
           (should (>= (cl-count nil buffer-undo-list) 2)))
       (when (buffer-live-p buffer)
         (kill-buffer buffer)))))
+
+(ert-deftest agent-scheme-capability-test-region-grant-allows-buffer-edit ()
+  "A matching region grant authorizes a mutating buffer capability."
+  (let ((agent-scheme-policy-category-actions
+         (agent-scheme-capability-test--actions '((buffer-edit . allow))))
+        (buffer (generate-new-buffer "agent-scheme-capability-grant-region")))
+    (unwind-protect
+        (progn
+          (agent-scheme-audit-clear)
+          (with-current-buffer buffer
+            (insert "abcdef")
+            (should
+             (equal
+              (agent-scheme-capability-test--external
+               "(import (scheme base)
+                        (agent capability)
+                        (emacs buffer)
+                        (emacs buffer edit))
+                (define handle (emacs-current-buffer))
+                (grant-capability!
+                 `(capability-grant
+                   (id test-region-grant)
+                   (library (emacs buffer edit))
+                   (effect buffer-replace!)
+                   (scope (buffer ,handle) (range 2 5))
+                   (expires (uses 1))
+                   (reason \"Apply approved region edit.\")))
+                (buffer-replace! handle 2 5 \"XYZ\")
+                (current-grants)")
+              "()"))
+            (should (equal (buffer-string) "aXYZef")))
+          (should
+           (agent-scheme-capability-test--audit-entry-matching
+            "(event capability-grant)"
+            "(operation \"grant-capability!\")"
+            "(id test-region-grant)"
+            "(decision created)"))
+          (should
+           (agent-scheme-capability-test--audit-entry-matching
+            "(event capability-grant)"
+            "(operation \"capability-grant-use\")"
+            "(id test-region-grant)"
+            "(effect buffer-replace!)"
+            "(decision allowed)"))
+          (should
+           (agent-scheme-capability-test--audit-entry-matching
+            "(event capability-grant)"
+            "(operation \"capability-grant-expire!\")"
+            "(id test-region-grant)"
+            "(decision expired)")))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer)))))
+
+(ert-deftest agent-scheme-capability-test-region-grant-denies-outside-scope ()
+  "A grant for one range does not authorize edits outside that range."
+  (let ((agent-scheme-policy-category-actions
+         (agent-scheme-capability-test--actions '((buffer-edit . allow))))
+        (buffer (generate-new-buffer "agent-scheme-capability-grant-deny")))
+    (unwind-protect
+        (progn
+          (agent-scheme-audit-clear)
+          (with-current-buffer buffer
+            (insert "abcdef")
+            (let ((condition
+                   (should-error
+                    (agent-scheme-eval-source
+                     "(import (scheme base)
+                              (agent capability)
+                              (emacs buffer)
+                              (emacs buffer edit))
+                      (define handle (emacs-current-buffer))
+                      (grant-capability!
+                       `(capability-grant
+                         (id test-range-grant)
+                         (library (emacs buffer edit))
+                         (effect buffer-replace!)
+                         (scope (buffer ,handle) (range 3 5))
+                         (expires never)))
+                      (buffer-replace! handle 1 2 \"X\")")
+                    :type 'agent-scheme-capability-grant-error)))
+              (should
+               (string-match-p "outside capability grant scope"
+                               (cadr condition))))
+            (should (equal (buffer-string) "abcdef")))
+          (should
+           (agent-scheme-capability-test--audit-entry-matching
+            "(event capability-grant)"
+            "(operation \"capability-grant-use\")"
+            "(id test-range-grant)"
+            "(decision denied)")))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer)))))
+
+(ert-deftest agent-scheme-capability-test-attenuated-grant-narrows-scope ()
+  "Attenuating a grant creates a narrower usable child grant."
+  (let ((agent-scheme-policy-category-actions
+         (agent-scheme-capability-test--actions '((buffer-edit . allow))))
+        (buffer (generate-new-buffer "agent-scheme-capability-grant-attenuate")))
+    (unwind-protect
+        (progn
+          (agent-scheme-audit-clear)
+          (with-current-buffer buffer
+            (insert "abcdef")
+            (should
+             (equal
+              (agent-scheme-capability-test--external
+               "(import (scheme base)
+                        (agent capability)
+                        (emacs buffer)
+                        (emacs buffer edit))
+                (define handle (emacs-current-buffer))
+                (grant-capability!
+                 `(capability-grant
+                   (id test-parent-grant)
+                   (library (emacs buffer edit))
+                   (effect buffer-replace!)
+                   (scope (buffer ,handle) (range 1 7))
+                   (expires (uses 2))))
+                (define child
+                  (grant-attenuate
+                   'test-parent-grant
+                   '((id test-child-grant)
+                     (scope (range 2 5))
+                     (expires (uses 1)))))
+                (with-capability-grant child
+                  (buffer-replace! handle 2 5 \"XYZ\"))
+                (buffer-text handle 1 7)")
+              "\"aXYZef\""))
+            (should (equal (buffer-string) "aXYZef")))
+          (should
+           (agent-scheme-capability-test--audit-entry-matching
+            "(event capability-grant)"
+            "(operation \"grant-attenuate\")"
+            "(id test-child-grant)"
+            "(parent test-parent-grant)"
+            "(decision attenuated)")))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer)))))
+
+(ert-deftest agent-scheme-capability-test-revoked-grant-fails-closed ()
+  "Revoked grants no longer authorize capability use."
+  (let ((agent-scheme-policy-category-actions
+         (agent-scheme-capability-test--actions '((buffer-edit . allow))))
+        (buffer (generate-new-buffer "agent-scheme-capability-grant-revoke")))
+    (unwind-protect
+        (progn
+          (agent-scheme-audit-clear)
+          (with-current-buffer buffer
+            (insert "abcdef")
+            (let ((condition
+                   (should-error
+                    (agent-scheme-eval-source
+                     "(import (scheme base)
+                              (agent capability)
+                              (emacs buffer)
+                              (emacs buffer edit))
+                      (define handle (emacs-current-buffer))
+                      (grant-capability!
+                       `(capability-grant
+                         (id test-revoked-grant)
+                         (library (emacs buffer edit))
+                         (effect buffer-insert!)
+                         (scope (buffer ,handle) (range 1 7))
+                         (expires never)))
+                      (grant-revoke! 'test-revoked-grant)
+                      (buffer-insert! handle 2 \"X\")")
+                    :type 'agent-scheme-capability-grant-error)))
+              (should
+               (string-match-p "revoked capability grant" (cadr condition))))
+            (should (equal (buffer-string) "abcdef")))
+          (should
+           (agent-scheme-capability-test--audit-entry-matching
+            "(event capability-grant)"
+            "(operation \"grant-revoke!\")"
+            "(id test-revoked-grant)"
+            "(decision revoked)")))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer)))))
+
+(ert-deftest agent-scheme-capability-test-after-eval-grants-expire-in-session ()
+  "Session grants with after-eval lifetime are removed after that evaluation."
+  (agent-scheme-session-clear!)
+  (agent-scheme-audit-clear)
+  (let ((agent-scheme-policy-category-actions
+         (agent-scheme-capability-test--actions '((buffer-edit . allow))))
+        (buffer (generate-new-buffer "agent-scheme-capability-grant-eval")))
+    (unwind-protect
+        (progn
+          (agent-scheme-session-create! 'named '(:id "grant-session"))
+          (with-current-buffer buffer
+            (insert "abcdef")
+            (should
+             (equal
+              (agent-scheme-capability-test--value-external
+               (agent-scheme-session-eval-source
+                "grant-session"
+                "(import (scheme base)
+                         (agent capability)
+                         (emacs buffer)
+                         (emacs buffer edit))
+                 (define handle (emacs-current-buffer))
+                 (grant-capability!
+                  `(capability-grant
+                    (id test-after-eval-grant)
+                    (library (emacs buffer edit))
+                    (effect buffer-replace!)
+                    (scope (buffer ,handle) (range 2 5))
+                    (expires after-eval)))
+                 (buffer-replace! handle 2 5 \"XYZ\")
+                 (pair? (current-grants))"))
+              "#t"))
+            (should (equal (buffer-string) "aXYZef")))
+          (should
+           (equal
+            (agent-scheme-capability-test--value-external
+             (agent-scheme-session-eval-source
+              "grant-session"
+              "(import (agent capability))
+               (current-grants)"))
+            "()"))
+          (should
+           (agent-scheme-capability-test--audit-entry-matching
+            "(event capability-grant)"
+            "(operation \"capability-grant-expire!\")"
+            "(id test-after-eval-grant)"
+            "(decision expired)")))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer))
+      (agent-scheme-session-clear!))))
+
+(ert-deftest agent-scheme-capability-test-stale-grant-handle-fails-closed ()
+  "A grant scoped to a stale handle fails before a host mutation."
+  (agent-scheme-session-clear!)
+  (agent-scheme-audit-clear)
+  (let ((agent-scheme-policy-category-actions
+         (agent-scheme-capability-test--actions '((buffer-edit . allow))))
+        (buffer (generate-new-buffer "agent-scheme-capability-grant-stale")))
+    (unwind-protect
+        (progn
+          (agent-scheme-session-create! 'named '(:id "stale-grant-session"))
+          (with-current-buffer buffer
+            (insert "abcdef")
+            (agent-scheme-session-eval-source
+             "stale-grant-session"
+             "(import (scheme base)
+                      (agent capability)
+                      (emacs buffer))
+              (define saved (emacs-current-buffer))
+              (grant-capability!
+               `(capability-grant
+                 (id test-stale-grant)
+                 (library (emacs buffer edit))
+                 (effect buffer-insert!)
+                 (scope (buffer ,saved) (range 1 7))
+                 (expires never)))"))
+          (kill-buffer buffer)
+          (setq buffer nil)
+          (let ((condition
+                 (should-error
+                  (agent-scheme-session-eval-source
+                   "stale-grant-session"
+                   "(import (emacs buffer edit))
+                    (buffer-insert! saved 2 \"X\")")
+                  :type 'agent-scheme-capability-grant-error)))
+            (should
+             (string-match-p "stale capability grant handle"
+                             (cadr condition)))))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer))
+      (agent-scheme-session-clear!))))
 
 (ert-deftest agent-scheme-capability-test-buffer-save-writes-file-backed-buffer ()
   "Save a file-backed buffer through the buffer-edit policy gate."
@@ -328,8 +659,19 @@
             (insert "saved through capability")
             (set-buffer-modified-p t)
             (agent-scheme-eval-source
-             "(import (emacs buffer) (emacs buffer edit))
-              (buffer-save! (emacs-current-buffer))")
+             "(import (scheme base)
+                      (agent capability)
+                      (emacs buffer)
+                      (emacs buffer edit))
+              (define handle (emacs-current-buffer))
+              (grant-capability!
+               `(capability-grant
+                 (id save-buffer-grant)
+                 (library (emacs buffer edit))
+                 (effect buffer-save!)
+                 (scope (buffer ,handle))
+                 (expires (uses 1))))
+              (buffer-save! handle)")
             (should-not (buffer-modified-p)))
           (with-temp-buffer
             (insert-file-contents path)
@@ -356,8 +698,19 @@
           (let ((condition
                  (should-error
                   (agent-scheme-eval-source
-                   "(import (emacs buffer) (emacs buffer edit))
-                    (buffer-insert! (emacs-current-buffer) 1 \"x\")")
+                   "(import (scheme base)
+                            (agent capability)
+                            (emacs buffer)
+                            (emacs buffer edit))
+                    (define handle (emacs-current-buffer))
+                    (grant-capability!
+                     `(capability-grant
+                       (id internal-buffer-grant)
+                       (library (emacs buffer edit))
+                       (effect buffer-insert!)
+                       (scope (buffer ,handle) (range 1 10))
+                       (expires (uses 1))))
+                    (buffer-insert! handle 1 \"x\")")
                   :type 'agent-scheme-eval-error)))
             (should
              (string-match-p "internal buffer" (cadr condition))))
@@ -377,8 +730,19 @@
           (let ((condition
                  (should-error
                   (agent-scheme-eval-source
-                   "(import (emacs buffer) (emacs buffer edit))
-                    (buffer-insert! (emacs-current-buffer) 1 \"x\")")
+                   "(import (scheme base)
+                            (agent capability)
+                            (emacs buffer)
+                            (emacs buffer edit))
+                    (define handle (emacs-current-buffer))
+                    (grant-capability!
+                     `(capability-grant
+                       (id remote-buffer-grant)
+                       (library (emacs buffer edit))
+                       (effect buffer-insert!)
+                       (scope (buffer ,handle) (range 1 10))
+                       (expires (uses 1))))
+                    (buffer-insert! handle 1 \"x\")")
                   :type 'agent-scheme-eval-error)))
             (should
              (string-match-p "remote buffer" (cadr condition))))
@@ -578,8 +942,10 @@
     (should (eq (plist-get buffer-replace :effect) 'host-mutation))
     (should (eq (plist-get buffer-replace :policy-category) 'buffer-edit))
     (should (eq (plist-get buffer-replace :policy) 'confirm))
+    (should (plist-get buffer-replace :requires-grant))
     (should (eq (plist-get buffer-save :effect) 'host-mutation))
     (should (eq (plist-get buffer-save :policy-category) 'buffer-edit))
+    (should (plist-get buffer-save :requires-grant))
     (should (eq (plist-get current-frame :required-capability) 'emacs-frame))
     (should (eq (plist-get current-project :required-capability)
                 'emacs-project))

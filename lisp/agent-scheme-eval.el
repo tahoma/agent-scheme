@@ -79,10 +79,12 @@ and `:max-event-nodes'."
           (let ((value
                  (agent-scheme--trampoline
                   expression eval-environment context)))
+            (agent-scheme-capability-expire-after-eval! context)
             (agent-scheme--audit-evaluation-success
              input-form value context)
             value))
       (error
+       (agent-scheme-capability-expire-after-eval! context)
        (agent-scheme--audit-evaluation-error input-form condition context)
        (agent-scheme--resignal condition)))))
 
@@ -107,10 +109,12 @@ is the result of the last command or definition."
             (let ((value
                    (agent-scheme--trampoline
                     sequence eval-environment context)))
+              (agent-scheme-capability-expire-after-eval! context)
               (agent-scheme--audit-evaluation-success
                input-form value context)
               value)))
       (error
+       (agent-scheme-capability-expire-after-eval! context)
        (agent-scheme--audit-evaluation-error input-form condition context)
        (agent-scheme--resignal condition)))))
 
@@ -166,11 +170,15 @@ agent events, and handle references across calls."
                 (let ((value
                        (agent-scheme--trampoline
                         sequence environment context)))
+                  (agent-scheme-capability-expire-after-eval! context)
+                  (agent-scheme-session--sync-capability-grants! session)
                   (agent-scheme--audit-evaluation-success
                    input-form value context)
                   (agent-scheme-session--record-eval-success!
                    session source value start-count)))))
         (error
+         (agent-scheme-capability-expire-after-eval! context)
+         (agent-scheme-session--sync-capability-grants! session)
          (agent-scheme--audit-evaluation-error input-form condition context)
          (agent-scheme-session--record-eval-error!
           session source condition start-count)
@@ -197,10 +205,12 @@ agent events, and handle references across calls."
           (let ((value
                  (agent-scheme--trampoline
                   expression eval-environment context)))
+            (agent-scheme-capability-expire-after-eval! context)
             (agent-scheme--audit-evaluation-success
              input-form value context)
             (agent-scheme--ok-result-datum value context)))
       (error
+       (agent-scheme-capability-expire-after-eval! context)
        (agent-scheme--audit-evaluation-error input-form condition context)
        (agent-scheme--condition-result-datum condition context)))))
 
@@ -223,10 +233,12 @@ agent events, and handle references across calls."
             (let ((value
                    (agent-scheme--trampoline
                     sequence eval-environment context)))
+              (agent-scheme-capability-expire-after-eval! context)
               (agent-scheme--audit-evaluation-success
                input-form value context)
               (agent-scheme--ok-result-datum value context))))
       (error
+       (agent-scheme-capability-expire-after-eval! context)
        (agent-scheme--audit-evaluation-error input-form condition context)
        (agent-scheme--condition-result-datum condition context)))))
 

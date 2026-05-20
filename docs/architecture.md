@@ -421,7 +421,7 @@ Capabilities are grouped by authority. Defaults should be conservative.
 | --- | --- | --- |
 | Pure R7RS evaluation | literals, variables, lambdas, macros, pure `(scheme base)` procedures | allowed with resource budgets |
 | Read-only Emacs observation | current buffer handle, buffer name, buffer text range, project root, command docs | allowed or confirmation-gated by project trust |
-| Transactional buffer/window mutation | insert, delete, replace, save, select window, split window | confirmation-gated or denied by default |
+| Transactional buffer/window mutation | insert, delete, replace, save, select window, split window | confirmation-gated or denied by default, and grant-scoped for registered mutating capabilities |
 | Command/process capabilities | whitelisted commands, compile, recompile, process jobs | confirmation-gated and audited |
 | Policy-gated standard host effects | `(scheme file)`, `(scheme load)`, `(scheme eval)`, process context | denied or confirmation-gated by default |
 | Raw Emacs Lisp escape hatch | confirmed host eval | denied unless explicitly enabled and confirmed |
@@ -439,7 +439,7 @@ batch mode unless tests or callers install an explicit confirmation function.
 | --- | --- | --- |
 | `pure-r7rs` | `allow` | Ordinary Scheme evaluation remains available under resource budgets. |
 | `emacs-read-only` | `allow` | Current buffer, buffer text, project root, documentation, and other observation capabilities are still audited. |
-| `buffer-edit` | `confirm` | `(emacs buffer edit)` exposes `buffer-insert!`, `buffer-delete!`, and `buffer-replace!`; each requires approval by default. |
+| `buffer-edit` | `confirm` | `(emacs buffer edit)` exposes `buffer-insert!`, `buffer-delete!`, `buffer-replace!`, and `buffer-save!`; each requires a matching capability grant and approval by default. |
 | `window-session` | `confirm` | Reserved for future window, frame, and session mutation; no mutating window/session library is registered yet. |
 | `command-process` | `confirm` | Reserved for future command and process execution; current command/process capabilities remain read-only observations. |
 | `standard-host-effect` | `allow` | Host-effecting standard Scheme procedures still require their narrower path or session policy, such as `:file-paths`; without that grant they deny and audit. |
@@ -456,14 +456,52 @@ through `agent-scheme-audit-recent-entries` or `agent-scheme-audit-display`.
 `agent-scheme-audit-clear` clears the current log, and
 `agent-scheme-audit-rotate` trims it to a chosen number of newest entries.  The
 current audit implementation records evaluations, read-only and buffer-edit
-capability calls and outcomes, standard host-effect denials or grants, skill
-activation decisions, trust decisions, resource/script/export policy stubs, and
+capability calls and outcomes, capability grant creation/use/attenuation/
+expiration/revocation, standard host-effect denials or grants, skill activation
+decisions, trust decisions, resource/script/export policy stubs, and
 confirmation outcomes.  Approval requests and user decisions are recorded as
 `approval-request` and `approval-decision` audit events.
 Portable Scheme now records standard host-file policy decisions in
 `evaluation-result` event lists for its path allow-list gates.  Remaining
 portable parity covers host-adapter-only surfaces such as Emacs capabilities,
 Agent Skills interop, and `(agent io)` session storage.
+
+## Capability Grants
+
+The `(agent capability)` library represents authority as Scheme-readable grant
+datums. Policy still decides whether authority may exist; a grant describes how
+little of that approved authority is usable by one capability call.
+
+Region-limited edit grant:
+
+```scheme
+(capability-grant
+  (id region-edit)
+  (library (emacs buffer edit))
+  (effect buffer-replace!)
+  (scope (buffer (handle buffer h-12)) (range 120 140))
+  (expires after-eval)
+  (reason "Apply approved region edit."))
+```
+
+Skill-limited grant request, as declared by an imported skill without receiving
+authority automatically:
+
+```scheme
+(requested-grants
+  ((capability-grant
+     (library (emacs buffer edit))
+     (effect buffer-replace!)
+     (scope (skill refactor-helper) (range 120 140))
+     (expires after-eval))))
+```
+
+Grant operations include `grant-capability!`, `current-grants`, `grant-ref`,
+`grant-attenuate`, `grant-revoke!`, and `with-capability-grant`. Grants can be
+attenuated by operation, resource, range, session lifetime, use count, and skill
+identity. Stale handles, revoked grants, expired grants, or mismatched scopes
+fail closed with an Agent Scheme capability grant condition before the host
+mutation runs.
 
 ## Approval Records
 

@@ -3832,6 +3832,182 @@
                                         (car arguments)
                                         (second arguments)))
 
+    ;; Return FIELD from Scheme-readable grant DATUM, or #f when absent.
+    (define (capability-grant-field datum field)
+      (let loop ((fields (if (pair? datum) (cdr datum) '())))
+        (cond
+         ((null? fields) #f)
+         ((and (pair? (car fields)) (eq? (caar fields) field))
+          (car fields))
+         (else (loop (cdr fields))))))
+
+    ;; Return GRANT's id or raise a portable evaluator error.
+    (define (capability-grant-id grant)
+      (let ((field (capability-grant-field grant 'id)))
+        (if field
+            (second field)
+            (eval-error "capability grant requires an id field"))))
+
+    ;; Return GRANT status, defaulting to active.
+    (define (capability-grant-status grant)
+      (let ((field (capability-grant-field grant 'status)))
+        (if field (second field) 'active)))
+
+    ;; Remove fields named by NAMES from GRANT.
+    (define (capability-grant-remove-fields grant names)
+      (cons
+       (car grant)
+       (let loop ((fields (cdr grant)))
+         (cond
+          ((null? fields) '())
+          ((memq (caar fields) names) (loop (cdr fields)))
+          (else (cons (car fields) (loop (cdr fields))))))))
+
+    ;; Return GRANT with one field replaced by VALUES.
+    (define (capability-grant-replace-field grant name values)
+      (let loop ((fields (cdr grant)) (seen? #f))
+        (cond
+         ((null? fields)
+          (if seen?
+              (list (car grant))
+              (list (car grant) (cons name values))))
+         ((eq? (caar fields) name)
+          (cons (car grant)
+                (cons (cons name values)
+                      (cdr fields))))
+         (else
+          (let ((rest (loop (cdr fields) seen?)))
+            (cons (car rest)
+                  (cons (car fields) (cdr rest))))))))
+
+    ;; Return a normalized portable capability grant datum.
+    (define (normalize-capability-grant datum)
+      (if (not (and (pair? datum) (eq? (car datum) 'capability-grant)))
+          (eval-error "grant-capability! expects a capability-grant datum"))
+      (let ((without-status
+             (capability-grant-remove-fields datum '(status))))
+        (capability-grant-replace-field
+         without-status
+         'status
+         '(active))))
+
+    ;; Return GRANT if it has ID.
+    (define (capability-grant-has-id? grant id)
+      (equal? (capability-grant-id grant) id))
+
+    ;; Return grant ID from GRANTS or #f.
+    (define (capability-grant-find grants id)
+      (cond
+       ((null? grants) #f)
+       ((capability-grant-has-id? (car grants) id) (car grants))
+       (else (capability-grant-find (cdr grants) id))))
+
+    ;; Store GRANT in CONTEXT, replacing any existing grant with the same id.
+    (define (capability-grant-store! context grant)
+      (let ((id (capability-grant-id grant)))
+        (let loop ((grants (context-capability-grants context))
+                   (kept '()))
+          (cond
+           ((null? grants)
+            (set-context-capability-grants!
+             context
+             (append (reverse kept) (list grant)))
+            grant)
+           ((capability-grant-has-id? (car grants) id)
+            (loop (cdr grants) kept))
+           (else
+            (loop (cdr grants) (cons (car grants) kept)))))))
+
+    ;; Create a portable capability grant in the current context.
+    (define (primitive-grant-capability! arguments context)
+      (capability-grant-store!
+       context
+       (normalize-capability-grant (car arguments))))
+
+    ;; Return active portable capability grants in the current context.
+    (define (primitive-current-grants arguments context)
+      (let loop ((grants (context-capability-grants context)))
+        (cond
+         ((null? grants) '())
+         ((eq? (capability-grant-status (car grants)) 'active)
+          (cons (car grants) (loop (cdr grants))))
+         (else (loop (cdr grants))))))
+
+    ;; Return a portable capability grant by id, or #f when unknown.
+    (define (primitive-grant-ref arguments context)
+      (let ((grant
+             (capability-grant-find
+              (context-capability-grants context)
+              (car arguments))))
+        (if grant grant #f)))
+
+    ;; Create a portable attenuated child grant by replacing declared fields.
+    (define (primitive-grant-attenuate arguments context)
+      (let* ((parent
+              (or (capability-grant-find
+                   (context-capability-grants context)
+                   (car arguments))
+                  (eval-error "unknown parent capability grant")))
+             (restrictions (second arguments))
+             (id-field (assq 'id restrictions))
+             (child
+              (capability-grant-remove-fields
+               parent
+               '(id status parent))))
+        (if (not (eq? (capability-grant-status parent) 'active))
+            (eval-error "cannot attenuate inactive capability grant"))
+        (for-each
+         (lambda (field)
+           (if (and (memq (car field) '(library effect))
+                    (not (equal? (capability-grant-field parent (car field))
+                                 field)))
+               (eval-error
+                "attenuated grant cannot broaden parent authority"))
+           (if (not (eq? (car field) 'id))
+               (set! child
+                     (capability-grant-replace-field
+                      child
+                      (car field)
+                      (cdr field)))))
+         restrictions)
+        (set! child
+              (capability-grant-replace-field
+               child
+               'id
+               (list (if id-field (second id-field) 'attenuated-grant))))
+        (set! child
+              (capability-grant-replace-field
+               child
+               'parent
+               (list (capability-grant-id parent))))
+        (capability-grant-store!
+         context
+         (normalize-capability-grant child))))
+
+    ;; Revoke a portable capability grant in the current context.
+    (define (primitive-grant-revoke! arguments context)
+      (let* ((grant
+              (or (capability-grant-find
+                   (context-capability-grants context)
+                   (car arguments))
+                  (eval-error "unknown capability grant")))
+             (revoked
+              (capability-grant-replace-field grant 'status '(revoked))))
+        (capability-grant-store! context revoked)))
+
+    ;; Call THUNK with GRANT present in the portable context.
+    (define (primitive-call-with-capability-grant arguments context)
+      (let ((grant-or-id (car arguments))
+            (thunk (second arguments)))
+        (if (and (pair? grant-or-id)
+                 (eq? (car grant-or-id) 'capability-grant))
+            (primitive-grant-capability! (list grant-or-id) context)
+            (if (not (capability-grant-find
+                      (context-capability-grants context)
+                      grant-or-id))
+                (eval-error "unknown capability grant")))
+        (apply-procedure thunk '() context #f)))
+
     ;; Store a keyed memory record in the portable interpreter memory store.
     (define (primitive-memory-put! arguments context)
       (memory-model:memory-put! interpreter-memory-store
@@ -5147,6 +5323,13 @@
        (cons 'primitive-approval-yield-pending
              primitive-approval-yield-pending)
        (cons 'primitive-approval-resolve! primitive-approval-resolve!)
+       (cons 'primitive-grant-capability! primitive-grant-capability!)
+       (cons 'primitive-current-grants primitive-current-grants)
+       (cons 'primitive-grant-ref primitive-grant-ref)
+       (cons 'primitive-grant-attenuate primitive-grant-attenuate)
+       (cons 'primitive-grant-revoke! primitive-grant-revoke!)
+       (cons 'primitive-call-with-capability-grant
+             primitive-call-with-capability-grant)
        (cons 'primitive-memory-put! primitive-memory-put!)
        (cons 'primitive-memory-ref primitive-memory-ref)
        (cons 'primitive-memory-delete! primitive-memory-delete!)
