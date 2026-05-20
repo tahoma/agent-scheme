@@ -17,6 +17,17 @@
 (require 'agent-scheme-result)
 (require 'agent-scheme-policy)
 
+(declare-function agent-scheme--apply-procedure "agent-scheme-interpreter")
+
+(define-error 'agent-scheme-capability-grant-error
+  "Agent Scheme capability grant denied"
+  'agent-scheme-eval-error)
+
+(defcustom agent-scheme-capability-require-grants-for-mutations t
+  "Non-nil means host mutation capabilities require matching grants."
+  :type 'boolean
+  :group 'agent-scheme)
+
 (cl-defstruct (agent-scheme--handle-entry
                (:constructor agent-scheme--make-handle-entry (kind object))
                (:copier nil))
@@ -34,6 +45,9 @@
 
 (defvar agent-scheme--emacs-capability-result-fields nil
   "Additional Scheme-readable audit fields for the active capability call.")
+
+(defvar agent-scheme--next-capability-grant-number 0
+  "Next numeric suffix for generated capability grant ids.")
 
 (defconst agent-scheme--emacs-capability-manifest-specs
   '((:name "emacs-current-buffer" :library "(emacs buffer)"
@@ -78,6 +92,7 @@
      :emacs-hook agent-scheme--primitive-buffer-insert!
      :portable-hook nil :emitter-hook capability-emacs
      :policy confirm :policy-category buffer-edit
+     :requires-grant t
      :test-categories (emacs buffer edit mutation))
     (:name "buffer-delete!" :library "(emacs buffer edit)"
      :minimum-arity 3 :maximum-arity 3
@@ -86,6 +101,7 @@
      :emacs-hook agent-scheme--primitive-buffer-delete!
      :portable-hook nil :emitter-hook capability-emacs
      :policy confirm :policy-category buffer-edit
+     :requires-grant t
      :test-categories (emacs buffer edit mutation))
     (:name "buffer-replace!" :library "(emacs buffer edit)"
      :minimum-arity 4 :maximum-arity 4
@@ -94,6 +110,7 @@
      :emacs-hook agent-scheme--primitive-buffer-replace!
      :portable-hook nil :emitter-hook capability-emacs
      :policy confirm :policy-category buffer-edit
+     :requires-grant t
      :test-categories (emacs buffer edit mutation))
     (:name "buffer-save!" :library "(emacs buffer edit)"
      :minimum-arity 1 :maximum-arity 1
@@ -102,6 +119,7 @@
      :emacs-hook agent-scheme--primitive-buffer-save!
      :portable-hook nil :emitter-hook capability-emacs
      :policy confirm :policy-category buffer-edit
+     :requires-grant t
      :test-categories (emacs buffer edit mutation file))
     (:name "buffer-point" :library "(emacs buffer)"
      :minimum-arity 1 :maximum-arity 1
@@ -263,6 +281,733 @@
   (or (and spec (plist-get spec :policy-category))
       'emacs-read-only))
 
+(defun agent-scheme--capability-grant-symbol (name)
+  "Return NAME as an Agent Scheme symbol datum."
+  (agent-scheme--intern-symbol
+   (cond
+    ((agent-scheme-symbol-p name)
+     (agent-scheme-symbol-name name))
+    ((symbolp name)
+     (symbol-name name))
+    ((stringp name)
+     name)
+    (t
+     (format "%S" name)))))
+
+(defun agent-scheme--capability-grant-symbol-name (value)
+  "Return VALUE as a stable grant field name."
+  (cond
+   ((agent-scheme-symbol-p value)
+    (agent-scheme-symbol-name value))
+   ((symbolp value)
+    (symbol-name value))
+   ((stringp value)
+    value)
+   (t nil)))
+
+(defun agent-scheme--capability-grant-field-named-p (field name)
+  "Return non-nil when FIELD is named NAME."
+  (and (consp field)
+       (equal (agent-scheme--capability-grant-symbol-name (car field))
+              name)))
+
+(defun agent-scheme--capability-grant-field (grant name)
+  "Return the first field named NAME in GRANT, or nil."
+  (seq-find
+   (lambda (field)
+     (agent-scheme--capability-grant-field-named-p field name))
+   (cdr-safe grant)))
+
+(defun agent-scheme--capability-grant-field-value (grant name)
+  "Return the single value of field NAME in GRANT, or nil."
+  (cadr (agent-scheme--capability-grant-field grant name)))
+
+(defun agent-scheme--capability-grant-field-values (grant name)
+  "Return all values from field NAME in GRANT."
+  (cdr (agent-scheme--capability-grant-field grant name)))
+
+(defun agent-scheme--capability-grant-replace-field (grant name values)
+  "Return GRANT with field NAME replaced by VALUES."
+  (let ((seen nil)
+        (name-symbol (agent-scheme--capability-grant-symbol name)))
+    (append
+     (list (car grant))
+     (mapcar
+      (lambda (field)
+        (if (agent-scheme--capability-grant-field-named-p field name)
+            (progn
+              (setq seen t)
+              (cons name-symbol values))
+          field))
+      (cdr grant))
+     (unless seen
+       (list (cons name-symbol values))))))
+
+(defun agent-scheme--capability-grant-remove-fields (grant names)
+  "Return GRANT without fields named by NAMES."
+  (cons
+   (car grant)
+   (seq-remove
+    (lambda (field)
+      (member (agent-scheme--capability-grant-symbol-name (car-safe field))
+              names))
+    (cdr grant))))
+
+(defun agent-scheme--capability-grant-datum-p (datum)
+  "Return non-nil when DATUM is a capability-grant record."
+  (and (consp datum)
+       (equal (agent-scheme--capability-grant-symbol-name (car datum))
+              "capability-grant")))
+
+(defun agent-scheme--capability-grant-id-name (id)
+  "Return ID as a stable capability grant id string."
+  (or (agent-scheme--capability-grant-symbol-name id)
+      (agent-scheme--eval-error
+       "capability grant id must be a symbol or string")))
+
+(defun agent-scheme--capability-generated-grant-id ()
+  "Return a fresh generated capability grant id."
+  (agent-scheme--capability-grant-symbol
+   (format "g-%d" (cl-incf agent-scheme--next-capability-grant-number))))
+
+(defun agent-scheme--capability-grant-expires-uses (expires)
+  "Return the use count from EXPIRES, or nil."
+  (when (and (consp expires)
+             (equal (agent-scheme--capability-grant-symbol-name (car expires))
+                    "uses"))
+    (agent-scheme--capability-exact-integer
+     (cadr expires) "capability grant uses")))
+
+(defun agent-scheme--capability-grant-status (grant)
+  "Return GRANT status as an Emacs symbol."
+  (intern
+   (or (agent-scheme--capability-grant-symbol-name
+        (agent-scheme--capability-grant-field-value grant "status"))
+       "active")))
+
+(defun agent-scheme--capability-grant-normalize (datum)
+  "Return DATUM as a normalized capability-grant record."
+  (unless (agent-scheme--capability-grant-datum-p datum)
+    (signal 'agent-scheme-capability-grant-error
+            (list "grant-capability! expects a capability-grant datum")))
+  (let* ((id (or (agent-scheme--capability-grant-field-value datum "id")
+                 (agent-scheme--capability-generated-grant-id)))
+         (library (agent-scheme--capability-grant-field-value datum "library"))
+         (effect (agent-scheme--capability-grant-field-value datum "effect"))
+         (expires (or (agent-scheme--capability-grant-field-value
+                       datum "expires")
+                      (agent-scheme--capability-grant-symbol "never")))
+         (uses (agent-scheme--capability-grant-expires-uses expires))
+         (normalized
+          (agent-scheme--capability-grant-remove-fields
+           datum '("id" "status" "uses-remaining"))))
+    (unless library
+      (signal 'agent-scheme-capability-grant-error
+              (list "capability grant requires a library field")))
+    (unless effect
+      (signal 'agent-scheme-capability-grant-error
+              (list "capability grant requires an effect field")))
+    (setq normalized
+          (agent-scheme--capability-grant-replace-field
+           normalized "id" (list (agent-scheme--capability-grant-symbol id))))
+    (setq normalized
+          (agent-scheme--capability-grant-replace-field
+           normalized "expires" (list expires)))
+    (setq normalized
+          (agent-scheme--capability-grant-replace-field
+           normalized "status"
+           (list (agent-scheme--capability-grant-symbol "active"))))
+    (when uses
+      (setq normalized
+            (agent-scheme--capability-grant-replace-field
+             normalized
+             "uses-remaining"
+             (list (agent-scheme--scheme-integer uses)))))
+    normalized))
+
+(defun agent-scheme--capability-context-grants (context)
+  "Return capability grants carried by CONTEXT."
+  (and context
+       (agent-scheme--eval-context-p context)
+       (agent-scheme--eval-context-capability-grants context)))
+
+(defun agent-scheme--capability-set-context-grants (context grants)
+  "Store GRANTS in CONTEXT."
+  (when (and context (agent-scheme--eval-context-p context))
+    (setf (agent-scheme--eval-context-capability-grants context) grants))
+  grants)
+
+(defun agent-scheme--capability-grant-id (grant)
+  "Return GRANT's id datum."
+  (agent-scheme--capability-grant-field-value grant "id"))
+
+(defun agent-scheme--capability-grant-same-id-p (grant id)
+  "Return non-nil when GRANT has ID."
+  (equal (agent-scheme--capability-grant-id-name
+          (agent-scheme--capability-grant-id grant))
+         (agent-scheme--capability-grant-id-name id)))
+
+(defun agent-scheme--capability-store-grant! (grant context)
+  "Store GRANT in CONTEXT and return it."
+  (let* ((id (agent-scheme--capability-grant-id grant))
+         (grants
+          (seq-remove
+           (lambda (candidate)
+             (agent-scheme--capability-grant-same-id-p candidate id))
+           (agent-scheme--capability-context-grants context))))
+    (agent-scheme--capability-set-context-grants
+     context (append grants (list grant)))
+    grant))
+
+(defun agent-scheme--capability-grant-by-id (id context)
+  "Return grant ID from CONTEXT, or nil."
+  (seq-find
+   (lambda (grant)
+     (agent-scheme--capability-grant-same-id-p grant id))
+   (agent-scheme--capability-context-grants context)))
+
+(defun agent-scheme--capability-grant-active-p (grant)
+  "Return non-nil when GRANT is currently active."
+  (and grant
+       (eq (agent-scheme--capability-grant-status grant) 'active)
+       (let ((uses (agent-scheme--capability-grant-field-value
+                    grant "uses-remaining")))
+         (or (null uses)
+             (> (agent-scheme--capability-exact-integer
+                 uses "capability grant uses-remaining")
+                0)))))
+
+(defun agent-scheme--capability-current-grants (context)
+  "Return active grants in CONTEXT."
+  (seq-filter
+   #'agent-scheme--capability-grant-active-p
+   (agent-scheme--capability-context-grants context)))
+
+(defun agent-scheme--capability-grant-audit-fields
+    (operation grant decision &optional fields)
+  "Return audit fields for OPERATION on GRANT with DECISION."
+  (append
+   `((category . capability-grant)
+     (operation . ,operation)
+     (id . ,(or (and grant (agent-scheme--capability-grant-id grant))
+                agent-scheme-false))
+     (decision . ,decision))
+   (when grant
+     `((library . ,(agent-scheme--capability-grant-field-value
+                    grant "library"))
+       (effect . ,(agent-scheme--capability-grant-field-value
+                   grant "effect"))))
+   fields))
+
+(defun agent-scheme--capability-audit-grant
+    (operation grant decision &optional fields)
+  "Audit OPERATION on GRANT with DECISION."
+  (agent-scheme-audit-record
+   'capability-grant
+   (agent-scheme--capability-grant-audit-fields
+    operation grant decision fields)))
+
+(defun agent-scheme--capability-grant-error
+    (message grant &optional fields)
+  "Audit a denied GRANT use and signal MESSAGE."
+  (agent-scheme--capability-audit-grant
+   "capability-grant-use" grant 'denied fields)
+  (signal 'agent-scheme-capability-grant-error (list message)))
+
+(defun agent-scheme--capability-grant-library-key (grant)
+  "Return GRANT library key as external text."
+  (when-let ((library (agent-scheme--capability-grant-field-value
+                       grant "library")))
+    (agent-scheme-datum->external library)))
+
+(defun agent-scheme--capability-grant-effect-name (grant)
+  "Return GRANT effect name."
+  (agent-scheme--capability-grant-symbol-name
+   (agent-scheme--capability-grant-field-value grant "effect")))
+
+(defun agent-scheme--capability-grant-scope-clauses (grant)
+  "Return scope clauses from GRANT."
+  (agent-scheme--capability-grant-field-values grant "scope"))
+
+(defun agent-scheme--capability-scope-clause (grant name)
+  "Return GRANT scope clause named NAME, or nil."
+  (seq-find
+   (lambda (clause)
+     (agent-scheme--capability-grant-field-named-p clause name))
+   (agent-scheme--capability-grant-scope-clauses grant)))
+
+(defun agent-scheme--capability-scope-value (grant name)
+  "Return first value from GRANT scope clause NAME, or nil."
+  (cadr (agent-scheme--capability-scope-clause grant name)))
+
+(defun agent-scheme--capability-range-values (grant)
+  "Return GRANT's range or region values as a two-element list."
+  (let ((clause (or (agent-scheme--capability-scope-clause grant "range")
+                    (agent-scheme--capability-scope-clause grant "region"))))
+    (when clause
+      (list
+       (agent-scheme--capability-exact-integer
+        (cadr clause) "capability grant range start")
+       (agent-scheme--capability-exact-integer
+        (caddr clause) "capability grant range end")))))
+
+(defun agent-scheme--capability-operation-region (name arguments)
+  "Return the buffer region touched by capability NAME with ARGUMENTS."
+  (pcase name
+    ("buffer-insert!"
+     (let ((position (agent-scheme--capability-exact-integer
+                      (cadr arguments) "buffer-insert! position")))
+       (list position position)))
+    ((or "buffer-delete!" "buffer-replace!")
+     (list
+      (agent-scheme--capability-exact-integer
+       (cadr arguments) (format "%s start" name))
+      (agent-scheme--capability-exact-integer
+       (caddr arguments) (format "%s end" name))))
+    (_ nil)))
+
+(defun agent-scheme--capability-operation-buffer-handle (name arguments)
+  "Return the buffer handle argument for capability NAME."
+  (when (member name '("buffer-insert!" "buffer-delete!"
+                      "buffer-replace!" "buffer-save!"))
+    (car arguments)))
+
+(defun agent-scheme--capability-same-handle-p (left right)
+  "Return non-nil when LEFT and RIGHT name the same opaque handle."
+  (and (agent-scheme-handle-p left)
+       (agent-scheme-handle-p right)
+       (eq (agent-scheme-handle-kind left)
+           (agent-scheme-handle-kind right))
+       (equal (agent-scheme-handle-id left)
+              (agent-scheme-handle-id right))))
+
+(defun agent-scheme--capability-check-grant-handle-live (grant handle)
+  "Signal if GRANT is scoped to stale HANDLE."
+  (when (and (agent-scheme-handle-p handle)
+             (not (agent-scheme-capability-handle-live-p handle)))
+    (agent-scheme--capability-grant-error
+     (format "stale capability grant handle: %s"
+             (agent-scheme-handle-id handle))
+     grant
+     `((grant-handle . ,handle)))))
+
+(defun agent-scheme--capability-file-in-project-p (file root)
+  "Return non-nil when FILE is under project ROOT."
+  (and file
+       root
+       (file-in-directory-p
+        (expand-file-name file)
+        (file-name-as-directory (expand-file-name root)))))
+
+(defun agent-scheme--capability-grant-scope-match-p
+    (grant name arguments context)
+  "Return non-nil when GRANT scope matches NAME with ARGUMENTS."
+  (let* ((target-handle
+          (agent-scheme--capability-operation-buffer-handle name arguments))
+         (grant-handle
+          (agent-scheme--capability-scope-value grant "buffer"))
+         (operation-region
+          (agent-scheme--capability-operation-region name arguments))
+         (grant-range
+          (agent-scheme--capability-range-values grant))
+         (session
+          (agent-scheme--capability-scope-value grant "session"))
+         (file
+          (or (agent-scheme--capability-scope-value grant "file")
+              (agent-scheme--capability-scope-value grant "path")))
+         (project-root
+          (agent-scheme--capability-scope-value grant "project-root"))
+         (skill
+          (agent-scheme--capability-scope-value grant "skill")))
+    (agent-scheme--capability-check-grant-handle-live grant grant-handle)
+    (and
+     (or (null grant-handle)
+         (agent-scheme--capability-same-handle-p grant-handle target-handle))
+     (or (null grant-range)
+         (and operation-region
+              (<= (car grant-range) (car operation-region))
+              (<= (cadr operation-region) (cadr grant-range))))
+     (or (null session)
+         (equal (agent-scheme--capability-grant-id-name session)
+                (and context
+                     (agent-scheme--eval-context-p context)
+                     (agent-scheme--eval-context-session-id context))))
+     (or (null skill)
+         ;; No skill execution identity exists yet, so skill-scoped grants are
+         ;; declarative until a host activates a matching skill context.
+         nil)
+     (or (and (null file) (null project-root))
+         (let* ((buffer
+                 (and target-handle
+                      (agent-scheme-handle-p target-handle)
+                      (agent-scheme-capability-handle-live-p target-handle)
+                      (agent-scheme--live-buffer-for-handle
+                       target-handle name)))
+                (target-file
+                 (and buffer (agent-scheme--buffer-target-file buffer))))
+           (and
+            (or (null file)
+                (and target-file
+                     (equal (expand-file-name file)
+                            (expand-file-name target-file))))
+            (or (null project-root)
+                (agent-scheme--capability-file-in-project-p
+                 target-file project-root))))))))
+
+(defun agent-scheme--capability-grant-candidate-p (grant spec name)
+  "Return non-nil when GRANT targets SPEC and NAME."
+  (and (equal (agent-scheme--capability-grant-library-key grant)
+              (plist-get spec :library))
+       (equal (agent-scheme--capability-grant-effect-name grant)
+              name)))
+
+(defun agent-scheme--capability-grant-mark-expired!
+    (grant context operation)
+  "Mark GRANT expired in CONTEXT and audit OPERATION."
+  (let ((expired
+         (agent-scheme--capability-grant-replace-field
+          grant "status"
+          (list (agent-scheme--capability-grant-symbol "expired")))))
+    (agent-scheme--capability-store-grant! expired context)
+    (agent-scheme--capability-audit-grant operation expired 'expired)
+    expired))
+
+(defun agent-scheme--capability-grant-use! (grant context)
+  "Record one successful use of GRANT in CONTEXT."
+  (agent-scheme--capability-audit-grant
+   "capability-grant-use" grant 'allowed)
+  (when-let ((uses (agent-scheme--capability-grant-field-value
+                    grant "uses-remaining")))
+    (let* ((remaining (1- (agent-scheme--capability-exact-integer
+                           uses "capability grant uses-remaining")))
+           (updated
+            (agent-scheme--capability-grant-replace-field
+             grant "uses-remaining"
+             (list (agent-scheme--scheme-integer remaining)))))
+      (agent-scheme--capability-store-grant! updated context)
+      (when (<= remaining 0)
+        (agent-scheme--capability-grant-mark-expired!
+         updated context "capability-grant-expire!")))))
+
+(defun agent-scheme--require-capability-grant (name arguments context spec)
+  "Require a matching capability grant for NAME with ARGUMENTS."
+  (let ((candidate nil)
+        (denied nil))
+    (dolist (grant (agent-scheme--capability-context-grants context))
+      (when (agent-scheme--capability-grant-candidate-p grant spec name)
+        (unless candidate
+          (setq candidate grant))
+        (cond
+         ((eq (agent-scheme--capability-grant-status grant) 'revoked)
+          (setq denied
+                (list grant "revoked capability grant")))
+         ((not (agent-scheme--capability-grant-active-p grant))
+          (setq denied
+                (list grant "expired capability grant")))
+         ((agent-scheme--capability-grant-scope-match-p
+           grant name arguments context)
+          (agent-scheme--capability-grant-use! grant context)
+          (setq candidate :authorized))
+         ((not denied)
+          (setq denied
+                (list grant "outside capability grant scope"))))))
+    (cond
+     ((eq candidate :authorized)
+      t)
+     (denied
+      (agent-scheme--capability-grant-error
+       (cadr denied)
+       (car denied)
+       `((capability . ,name)
+         (arguments . ,arguments))))
+     (candidate
+      (agent-scheme--capability-grant-error
+       "outside capability grant scope"
+       candidate
+       `((capability . ,name)
+         (arguments . ,arguments))))
+     (t
+      (agent-scheme--capability-grant-error
+       (format "missing capability grant for %s" name)
+       nil
+       `((capability . ,name)
+         (arguments . ,arguments)))))))
+
+(defun agent-scheme--authorize-capability-grant-datum (grant context)
+  "Authorize creation of GRANT in CONTEXT."
+  (let* ((library (agent-scheme--capability-grant-library-key grant))
+         (effect (agent-scheme--capability-grant-effect-name grant))
+         (spec (agent-scheme--emacs-capability-manifest-spec effect))
+         (category (agent-scheme--emacs-capability-policy-category spec)))
+    (agent-scheme-policy-authorize
+     category
+     "grant-capability!"
+     `((library . ,library)
+       (capability . ,effect)
+       (grant . ,grant))
+     context
+     'capability-grant)))
+
+(defun agent-scheme-capability-grant! (datum &optional context)
+  "Create a capability grant from DATUM in CONTEXT."
+  (let ((grant (agent-scheme--capability-grant-normalize datum)))
+    (agent-scheme--authorize-capability-grant-datum grant context)
+    (agent-scheme--capability-store-grant! grant context)
+    (agent-scheme--capability-audit-grant
+     "grant-capability!" grant 'created)
+    grant))
+
+(defun agent-scheme-capability-current-grants (&optional context)
+  "Return current active capability grants in CONTEXT."
+  (agent-scheme--capability-current-grants context))
+
+(defun agent-scheme-capability-grant-ref (id &optional context)
+  "Return capability grant ID from CONTEXT, or nil."
+  (agent-scheme--capability-grant-by-id id context))
+
+(defun agent-scheme--capability-restriction-field (restrictions name)
+  "Return field NAME from RESTRICTIONS."
+  (seq-find
+   (lambda (field)
+     (agent-scheme--capability-grant-field-named-p field name))
+   restrictions))
+
+(defun agent-scheme--capability-scope-range-values (scope)
+  "Return SCOPE range values, or nil."
+  (when-let ((clause
+              (seq-find
+               (lambda (entry)
+                 (or (agent-scheme--capability-grant-field-named-p
+                      entry "range")
+                     (agent-scheme--capability-grant-field-named-p
+                      entry "region")))
+               scope)))
+    (list
+     (agent-scheme--capability-exact-integer
+      (cadr clause) "attenuated grant range start")
+     (agent-scheme--capability-exact-integer
+      (caddr clause) "attenuated grant range end"))))
+
+(defun agent-scheme--capability-range-contained-p (inner outer)
+  "Return non-nil when INNER range is contained by OUTER range."
+  (or (null outer)
+      (and inner
+           (<= (car outer) (car inner))
+           (<= (cadr inner) (cadr outer)))))
+
+(defun agent-scheme--capability-scope-clause-named (scope name)
+  "Return clause NAME from SCOPE."
+  (seq-find
+   (lambda (clause)
+     (agent-scheme--capability-grant-field-named-p clause name))
+   scope))
+
+(defun agent-scheme--capability-merge-scope (parent restriction)
+  "Return parent scope attenuated by RESTRICTION scope."
+  (let* ((parent-scope parent)
+         (child-scope (cdr restriction))
+         (parent-range
+          (agent-scheme--capability-scope-range-values parent-scope))
+         (child-range
+          (agent-scheme--capability-scope-range-values child-scope))
+         (merged (copy-tree parent-scope)))
+    (unless (agent-scheme--capability-range-contained-p
+             child-range parent-range)
+      (signal 'agent-scheme-capability-grant-error
+              (list "attenuated grant range must stay within parent grant")))
+    (dolist (clause child-scope)
+      (let ((name (agent-scheme--capability-grant-symbol-name (car clause))))
+        (when-let ((parent-clause
+                    (and (not (member name '("range" "region")))
+                         (agent-scheme--capability-scope-clause-named
+                          parent-scope name))))
+          (unless (equal parent-clause clause)
+            (signal 'agent-scheme-capability-grant-error
+                    (list "attenuated grant cannot broaden parent scope"))))
+        (setq merged
+              (cons clause
+                    (seq-remove
+                     (lambda (candidate)
+                       (member
+                        (agent-scheme--capability-grant-symbol-name
+                         (car candidate))
+                        (if (member name '("range" "region"))
+                            '("range" "region")
+                          (list name))))
+                     merged)))))
+    (nreverse merged)))
+
+(defun agent-scheme--capability-merge-expires (parent-expires child-expires)
+  "Return CHILD-EXPIRES when it does not broaden PARENT-EXPIRES."
+  (let ((parent-uses (agent-scheme--capability-grant-expires-uses
+                      parent-expires))
+        (child-uses (agent-scheme--capability-grant-expires-uses
+                     child-expires))
+        (parent-name (agent-scheme--capability-grant-symbol-name
+                      parent-expires))
+        (child-name (agent-scheme--capability-grant-symbol-name
+                     child-expires)))
+    (cond
+     ((equal child-name "after-eval")
+      child-expires)
+     ((and parent-uses child-uses (<= child-uses parent-uses))
+      child-expires)
+     ((and (equal parent-name "never")
+           (or child-uses (equal child-name "never")))
+      child-expires)
+     ((equal parent-name child-name)
+      child-expires)
+     (t
+      (signal 'agent-scheme-capability-grant-error
+              (list "attenuated grant cannot broaden parent lifetime"))))))
+
+(defun agent-scheme-capability-grant-attenuate
+    (grant-id restrictions &optional context)
+  "Create an attenuated child grant from GRANT-ID using RESTRICTIONS."
+  (let* ((parent
+          (or (agent-scheme--capability-grant-by-id grant-id context)
+              (signal 'agent-scheme-capability-grant-error
+                      (list "unknown parent capability grant"))))
+         (parent-scope
+          (agent-scheme--capability-grant-scope-clauses parent))
+         (child
+          (agent-scheme--capability-grant-remove-fields
+           (copy-tree parent)
+           '("id" "status" "uses-remaining" "parent")))
+         (id-field
+          (agent-scheme--capability-restriction-field restrictions "id"))
+         (scope-field
+          (agent-scheme--capability-restriction-field restrictions "scope"))
+         (expires-field
+          (agent-scheme--capability-restriction-field restrictions "expires"))
+         (child-id
+          (or (cadr id-field)
+              (agent-scheme--capability-generated-grant-id))))
+    (unless (agent-scheme--capability-grant-active-p parent)
+      (signal 'agent-scheme-capability-grant-error
+              (list "cannot attenuate inactive capability grant")))
+    (dolist (field restrictions)
+      (let ((name (agent-scheme--capability-grant-symbol-name (car field))))
+        (unless (member name '("id" "scope" "expires"))
+          (when (and (member name '("library" "effect"))
+                     (not (equal
+                           (cdr field)
+                           (cdr (agent-scheme--capability-grant-field
+                                 parent name)))))
+            (signal 'agent-scheme-capability-grant-error
+                    (list "attenuated grant cannot broaden parent authority")))
+          (setq child
+                (agent-scheme--capability-grant-replace-field
+                 child name (cdr field))))))
+    (when scope-field
+      (setq child
+            (agent-scheme--capability-grant-replace-field
+             child "scope"
+             (agent-scheme--capability-merge-scope parent-scope scope-field))))
+    (when expires-field
+      (setq child
+            (agent-scheme--capability-grant-replace-field
+             child "expires"
+             (list
+               (agent-scheme--capability-merge-expires
+                (agent-scheme--capability-grant-field-value parent "expires")
+               (cadr expires-field))))))
+    (setq child
+          (agent-scheme--capability-grant-replace-field
+           child "id" (list (agent-scheme--capability-grant-symbol child-id))))
+    (setq child
+          (agent-scheme--capability-grant-replace-field
+           child "parent"
+           (list (agent-scheme--capability-grant-id parent))))
+    (setq child (agent-scheme--capability-grant-normalize child))
+    (agent-scheme--capability-store-grant! child context)
+    (agent-scheme--capability-audit-grant
+     "grant-attenuate" child 'attenuated
+     `((parent . ,(agent-scheme--capability-grant-id parent))))
+    child))
+
+(defun agent-scheme-capability-grant-revoke! (grant-id &optional context)
+  "Revoke capability grant GRANT-ID in CONTEXT and return it."
+  (let* ((grant
+          (or (agent-scheme--capability-grant-by-id grant-id context)
+              (signal 'agent-scheme-capability-grant-error
+                      (list "unknown capability grant"))))
+         (revoked
+          (agent-scheme--capability-grant-replace-field
+           grant "status"
+           (list (agent-scheme--capability-grant-symbol "revoked")))))
+    (agent-scheme--capability-store-grant! revoked context)
+    (agent-scheme--capability-audit-grant
+     "grant-revoke!" revoked 'revoked)
+    revoked))
+
+(defun agent-scheme-capability-expire-after-eval! (context)
+  "Expire all active after-eval grants in CONTEXT."
+  (dolist (grant (agent-scheme--capability-context-grants context))
+    (when (and (agent-scheme--capability-grant-active-p grant)
+               (equal
+                (agent-scheme--capability-grant-symbol-name
+                 (agent-scheme--capability-grant-field-value
+                  grant "expires"))
+                "after-eval"))
+      (agent-scheme--capability-grant-mark-expired!
+       grant context "capability-grant-expire!"))))
+
+(defun agent-scheme--primitive-grant-capability (arguments context)
+  "Primitive grant-capability! over ARGUMENTS."
+  (agent-scheme-capability-grant! (car arguments) context))
+
+(defun agent-scheme--primitive-current-grants (_arguments context)
+  "Primitive current-grants."
+  (agent-scheme-capability-current-grants context))
+
+(defun agent-scheme--primitive-grant-ref (arguments context)
+  "Primitive grant-ref over ARGUMENTS."
+  (or (agent-scheme-capability-grant-ref (car arguments) context)
+      agent-scheme-false))
+
+(defun agent-scheme--primitive-grant-attenuate (arguments context)
+  "Primitive grant-attenuate over ARGUMENTS."
+  (agent-scheme-capability-grant-attenuate
+   (car arguments) (cadr arguments) context))
+
+(defun agent-scheme--primitive-grant-revoke (arguments context)
+  "Primitive grant-revoke! over ARGUMENTS."
+  (agent-scheme-capability-grant-revoke! (car arguments) context))
+
+(defun agent-scheme--primitive-call-with-capability-grant
+    (arguments context)
+  "Primitive call-with-capability-grant over ARGUMENTS."
+  (let* ((grant-or-id (car arguments))
+         (thunk (cadr arguments))
+         (grant
+          (if (agent-scheme--capability-grant-datum-p grant-or-id)
+              (agent-scheme-capability-grant! grant-or-id context)
+            (or (agent-scheme-capability-grant-ref grant-or-id context)
+                (signal 'agent-scheme-capability-grant-error
+                        (list "unknown capability grant")))))
+         (active (agent-scheme--eval-context-active-capability-grants
+                  context)))
+    (unwind-protect
+        (progn
+          (push (agent-scheme--capability-grant-id grant)
+                (agent-scheme--eval-context-active-capability-grants
+                 context))
+          (agent-scheme--apply-procedure
+           thunk nil context nil))
+      (setf (agent-scheme--eval-context-active-capability-grants context)
+            active))))
+
+(defun agent-scheme-capability-primitive-specs ()
+  "Return primitive specs for the private `(agent capability primitive)' library."
+  `(("grant-capability!" ,#'agent-scheme--primitive-grant-capability 1 1)
+    ("current-grants" ,#'agent-scheme--primitive-current-grants 0 0)
+    ("grant-ref" ,#'agent-scheme--primitive-grant-ref 1 1)
+    ("grant-attenuate" ,#'agent-scheme--primitive-grant-attenuate 2 2)
+    ("grant-revoke!" ,#'agent-scheme--primitive-grant-revoke 1 1)
+    ("call-with-capability-grant"
+     ,#'agent-scheme--primitive-call-with-capability-grant 2 2)))
+
 (defun agent-scheme--authorize-emacs-capability
     (name arguments context)
   "Authorize Emacs capability NAME with ARGUMENTS in CONTEXT."
@@ -275,7 +1020,11 @@
          (capability . ,name)
          (arguments . ,arguments))
        context
-       'capability-call))))
+       'capability-call)
+      (when (and agent-scheme-capability-require-grants-for-mutations
+                 (plist-get spec :requires-grant))
+        (agent-scheme--require-capability-grant
+         name arguments context spec)))))
 
 (defun agent-scheme--capability-result-string (result)
   "Return a printable audit string for capability RESULT."

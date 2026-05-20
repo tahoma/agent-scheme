@@ -132,6 +132,10 @@
           context-file-paths
           context-policy-actions
           context-policy-confirmation-function
+          context-capability-grants
+          set-context-capability-grants!
+          context-active-capability-grants
+          set-context-active-capability-grants!
           context-audit-events
           set-context-audit-events!
           context-interaction-environment
@@ -434,6 +438,7 @@
                          maximum-host-callbacks syntax-environment libraries
                          include-paths include-directory file-paths
                          policy-actions policy-confirmation-function
+                         capability-grants active-capability-grants
                          event-count maximum-events maximum-event-nodes
                          audit-events
                          interaction-environment
@@ -457,6 +462,10 @@
       (file-paths context-file-paths)
       (policy-actions context-policy-actions)
       (policy-confirmation-function context-policy-confirmation-function)
+      (capability-grants context-capability-grants
+                         set-context-capability-grants!)
+      (active-capability-grants context-active-capability-grants
+                                set-context-active-capability-grants!)
       (audit-events context-audit-events set-context-audit-events!)
       (interaction-environment context-interaction-environment
                                set-context-interaction-environment!)
@@ -597,6 +606,8 @@
         include-directory)
        (option-ref options 'policy-actions '())
        (option-ref options 'policy-confirmation-function #f)
+       (option-ref options 'capability-grants '())
+       '()
        0
        (option-ref options
                    'max-events

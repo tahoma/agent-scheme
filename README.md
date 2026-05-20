@@ -140,6 +140,36 @@ policy explicitly permits automation:
 In Emacs project sessions, pending and resolved records appear in
 `*Agent Approvals: PROJECT*` as Scheme-readable approval datums.
 
+Capability grants narrow approved authority before a mutating host capability
+can use it:
+
+```scheme
+(import (scheme base)
+        (agent capability)
+        (emacs buffer)
+        (emacs buffer edit))
+
+(define handle (emacs-current-buffer))
+
+(grant-capability!
+ `(capability-grant
+   (id region-edit)
+   (library (emacs buffer edit))
+   (effect buffer-replace!)
+   (scope (buffer ,handle) (range 120 140))
+   (expires after-eval)
+   (reason "Apply approved region edit.")))
+
+(buffer-replace! handle 120 140 "new text")
+```
+
+Skills can declare requested grants as data without receiving them
+automatically:
+
+```yaml
+requested-grants: ((capability-grant (library (emacs buffer edit)) (effect buffer-replace!) (scope (skill refactor-helper) (range 120 140)) (expires after-eval)))
+```
+
 ## Project Docs
 
 - [Repository agent instructions](AGENTS.md)

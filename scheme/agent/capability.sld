@@ -1,0 +1,22 @@
+;;; capability.sld --- Agent capability grant library
+;;;
+;;; This host-neutral library exposes Scheme-visible grant helpers while the
+;;; host adapter owns real capability enforcement.
+
+(define-library (agent capability)
+  (export grant-capability!
+          current-grants
+          grant-ref
+          grant-attenuate
+          grant-revoke!
+          call-with-capability-grant
+          with-capability-grant)
+  (import (scheme base)
+          (agent capability primitive))
+  (begin
+    ;; Run BODY while GRANT is established for hosts that track dynamic grant
+    ;; use; the primitive owns validation and host-side cleanup.
+    (define-syntax with-capability-grant
+      (syntax-rules ()
+        ((_ grant body ...)
+         (call-with-capability-grant grant (lambda () body ...)))))))

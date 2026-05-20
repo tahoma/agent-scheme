@@ -1153,6 +1153,67 @@
 
 (let* ((result
         (agent-scheme-eval-source-result
+         "(import (scheme base) (agent capability))
+          (grant-capability!
+           '(capability-grant
+              (id portable-grant)
+              (library (emacs buffer edit))
+              (effect buffer-replace!)
+              (scope (range 1 2))
+              (expires after-eval)))
+          (list (grant-ref 'portable-grant)
+                (current-grants))"))
+       (value (field-value result 'value)))
+  (check 'agent-capability-grant-datums
+         (and (equal? (field-value result 'status) 'ok)
+              (string=?
+               (agent-scheme-value->external value)
+               (string-append
+                "((capability-grant (id portable-grant) "
+                "(library (emacs buffer edit)) "
+                "(effect buffer-replace!) (scope (range 1 2)) "
+                "(expires after-eval) (status active)) "
+                "((capability-grant (id portable-grant) "
+                "(library (emacs buffer edit)) "
+                "(effect buffer-replace!) (scope (range 1 2)) "
+                "(expires after-eval) (status active))))"))
+              #t)
+         #t))
+
+(let* ((result
+        (agent-scheme-eval-source-result
+         "(import (scheme base) (agent capability))
+          (grant-capability!
+           '(capability-grant
+              (id portable-parent-grant)
+              (library (emacs buffer edit))
+              (effect buffer-replace!)
+              (scope (range 1 9))
+              (expires never)))
+          (define child
+            (grant-attenuate
+             'portable-parent-grant
+             '((id portable-child-grant)
+               (scope (range 2 4))
+               (expires after-eval))))
+          (grant-revoke! 'portable-parent-grant)
+          (with-capability-grant child
+            (grant-ref 'portable-child-grant))"))
+       (value (field-value result 'value)))
+  (check 'agent-capability-attenuate-revoke-with-grant
+         (and (equal? (field-value result 'status) 'ok)
+              (string=?
+               (agent-scheme-value->external value)
+               (string-append
+                "(capability-grant (library (emacs buffer edit)) "
+                "(effect buffer-replace!) (scope (range 2 4)) "
+                "(expires after-eval) (id portable-child-grant) "
+                "(parent portable-parent-grant) (status active))"))
+              #t)
+         #t))
+
+(let* ((result
+        (agent-scheme-eval-source-result
          "(import (scheme base) (agent memory))
           (memory-put! 'instance
                        'portable-alpha

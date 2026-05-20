@@ -11,6 +11,7 @@
 
 (require 'cl-lib)
 (require 'subr-x)
+(require 'agent-scheme-reader)
 (require 'agent-scheme-runtime)
 (require 'agent-scheme-policy)
 
@@ -117,21 +118,28 @@
 (defun agent-scheme-skill--normalized-datum
     (name directory trust instructions-text description)
   "Return a normalized Scheme-readable Agent Skill datum."
-  (append
-   (list (agent-scheme-skill--symbol "agent-skill")
-         (list (agent-scheme-skill--symbol "name") name)
-         (list (agent-scheme-skill--symbol "source")
-               (list (agent-scheme-skill--symbol "directory") directory))
-         (list (agent-scheme-skill--symbol "trust")
-               (agent-scheme-skill--symbol-value trust))
-         (list (agent-scheme-skill--symbol "instructions")
-               (list (agent-scheme-skill--symbol "markdown-resource")
-                     "SKILL.md")))
-   (when description
-     (list (list (agent-scheme-skill--symbol "description")
-                 description)))
-   (list (list (agent-scheme-skill--symbol "instructions-text")
-               instructions-text))))
+  (let ((requested-grants
+         (agent-scheme-skill--frontmatter-value
+          instructions-text "requested-grants")))
+    (append
+     (list (agent-scheme-skill--symbol "agent-skill")
+           (list (agent-scheme-skill--symbol "name") name)
+           (list (agent-scheme-skill--symbol "source")
+                 (list (agent-scheme-skill--symbol "directory") directory))
+           (list (agent-scheme-skill--symbol "trust")
+                 (agent-scheme-skill--symbol-value trust))
+           (list (agent-scheme-skill--symbol "instructions")
+                 (list (agent-scheme-skill--symbol "markdown-resource")
+                       "SKILL.md")))
+     (when description
+       (list (list (agent-scheme-skill--symbol "description")
+                   description)))
+     (when requested-grants
+       (list
+        (list (agent-scheme-skill--symbol "requested-grants")
+              (agent-scheme-read requested-grants))))
+     (list (list (agent-scheme-skill--symbol "instructions-text")
+                 instructions-text)))))
 
 (defun agent-scheme-skill--import-data (directory options)
   "Import DIRECTORY and return internal skill data using OPTIONS."
