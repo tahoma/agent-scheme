@@ -557,24 +557,22 @@ Each spec has (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY)."
     ("(scheme file)"
      (agent-scheme--register-primitive-library
       key
-      `(("call-with-input-file" ,(cadr (agent-scheme--policy-denied-spec
-                                        "call-with-input-file")) 2 2)
-        ("call-with-output-file" ,(cadr (agent-scheme--policy-denied-spec
-                                         "call-with-output-file")) 2 2)
+      `(("call-with-input-file" ,#'agent-scheme--primitive-call-with-input-file
+         2 2)
+        ("call-with-output-file" ,#'agent-scheme--primitive-call-with-output-file
+         2 2)
         ("delete-file" ,#'agent-scheme--primitive-delete-file 1 1)
         ("file-exists?" ,#'agent-scheme--primitive-file-exists? 1 1)
-        ("open-binary-input-file" ,(cadr (agent-scheme--policy-denied-spec
-                                          "open-binary-input-file")) 1 1)
-        ("open-binary-output-file" ,(cadr (agent-scheme--policy-denied-spec
-                                           "open-binary-output-file")) 1 1)
-        ("open-input-file" ,(cadr (agent-scheme--policy-denied-spec
-                                   "open-input-file")) 1 1)
-        ("open-output-file" ,(cadr (agent-scheme--policy-denied-spec
-                                    "open-output-file")) 1 1)
-        ("with-input-from-file" ,(cadr (agent-scheme--policy-denied-spec
-                                        "with-input-from-file")) 2 2)
-        ("with-output-to-file" ,(cadr (agent-scheme--policy-denied-spec
-                                       "with-output-to-file")) 2 2))
+        ("open-binary-input-file" ,#'agent-scheme--primitive-open-binary-input-file
+         1 1)
+        ("open-binary-output-file" ,#'agent-scheme--primitive-open-binary-output-file
+         1 1)
+        ("open-input-file" ,#'agent-scheme--primitive-open-input-file 1 1)
+        ("open-output-file" ,#'agent-scheme--primitive-open-output-file 1 1)
+        ("with-input-from-file" ,#'agent-scheme--primitive-with-input-from-file
+         2 2)
+        ("with-output-to-file" ,#'agent-scheme--primitive-with-output-to-file
+         2 2))
       context))
     ("(scheme inexact)"
      (agent-scheme--register-primitive-library

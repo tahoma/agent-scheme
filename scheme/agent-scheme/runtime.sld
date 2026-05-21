@@ -94,6 +94,16 @@
           set-agent-scheme-port-position!
           agent-scheme-port-contents
           set-agent-scheme-port-contents!
+          agent-scheme-port-backing-domain
+          agent-scheme-port-operations
+          agent-scheme-port-grant
+          agent-scheme-port-limits
+          agent-scheme-port-handle
+          agent-scheme-port-status
+          set-agent-scheme-port-status!
+          agent-scheme-port-path
+          agent-scheme-port-counters
+          set-agent-scheme-port-counters!
           make-environment-specifier
           environment-specifier?
           environment-specifier-environment
@@ -138,6 +148,12 @@
           set-context-active-capability-grants!
           context-audit-events
           set-context-audit-events!
+          context-current-input-port
+          set-context-current-input-port!
+          context-current-output-port
+          set-context-current-output-port!
+          context-current-error-port
+          set-context-current-error-port!
           context-interaction-environment
           set-context-interaction-environment!
           context-base-syntax-installed
@@ -389,7 +405,9 @@
       ;; MEDIUM separates string, bytevector, host-file, and virtual ports.
       ;; SOURCE/POSITION back input ports; CONTENTS backs output ports.
       (make-agent-scheme-port medium input? output? textual? binary?
-                              open? source position contents)
+                              open? source position contents
+                              backing-domain operations grant limits handle
+                              status path counters)
       agent-scheme-port?
       (medium agent-scheme-port-medium)
       (input? agent-scheme-port-input?)
@@ -400,7 +418,16 @@
       (source agent-scheme-port-source)
       (position agent-scheme-port-position set-agent-scheme-port-position!)
       (contents agent-scheme-port-contents
-                set-agent-scheme-port-contents!))
+                set-agent-scheme-port-contents!)
+      (backing-domain agent-scheme-port-backing-domain)
+      (operations agent-scheme-port-operations)
+      (grant agent-scheme-port-grant)
+      (limits agent-scheme-port-limits)
+      (handle agent-scheme-port-handle)
+      (status agent-scheme-port-status set-agent-scheme-port-status!)
+      (path agent-scheme-port-path)
+      (counters agent-scheme-port-counters
+                set-agent-scheme-port-counters!))
 
     ;; Record type for eval environment specifiers and their mutability policy.
     (define-record-type <environment-specifier>
@@ -447,6 +474,8 @@
                          capability-grants active-capability-grants
                          event-count maximum-events maximum-event-nodes
                          audit-events
+                         current-input-port current-output-port
+                         current-error-port
                          interaction-environment
                          base-syntax-installed next-syntax-id
                          exception-handlers dynamic-winds)
@@ -473,6 +502,12 @@
       (active-capability-grants context-active-capability-grants
                                 set-context-active-capability-grants!)
       (audit-events context-audit-events set-context-audit-events!)
+      (current-input-port context-current-input-port
+                          set-context-current-input-port!)
+      (current-output-port context-current-output-port
+                           set-context-current-output-port!)
+      (current-error-port context-current-error-port
+                          set-context-current-error-port!)
       (interaction-environment context-interaction-environment
                                set-context-interaction-environment!)
       (base-syntax-installed context-base-syntax-installed
@@ -1090,6 +1125,9 @@
                    'max-event-nodes
                    agent-scheme-default-maximum-event-nodes)
        '()
+       #f
+       #f
+       #f
        #f
        #f
        0
