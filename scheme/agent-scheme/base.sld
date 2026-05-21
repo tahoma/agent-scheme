@@ -275,6 +275,18 @@
        ((eq? effect 'eval) 'runtime-eval)
        (else 'inline-or-call)))
 
+    ;; Return the shared backend execution path for EFFECT.
+    (define (primitive-backend-effect-path-for-effect effect)
+      (cond
+       ((eq? effect 'pure) 'direct-runtime)
+       ((eq? effect 'mutation) 'runtime-mutation)
+       ((eq? effect 'port-io) 'runtime-port-check)
+       ((eq? effect 'control) 'runtime-control)
+       ((eq? effect 'dynamic-state) 'runtime-parameter)
+       ((memq effect '(host-file host-process host-time host-repl))
+        'shared-capability-request)
+       (else 'direct-runtime)))
+
     ;; Return test category tags for NAME and EFFECT.
     (define (primitive-test-categories-for-name name effect)
       (cond
@@ -308,8 +320,11 @@
               (list 'required-capability #f)
               (list 'emacs-hook #f)
               (list 'portable-hook #f)
+              (list 'backend-effect-path
+                    (primitive-backend-effect-path-for-effect effect))
               (list 'emitter-hook
                     (primitive-emitter-hook-for-effect effect))
+              (list 'policy-category 'pure-r7rs)
               (list 'policy 'allow)
               (list 'test-categories
                     (primitive-test-categories-for-name name effect)))))
@@ -706,6 +721,16 @@
              (list 'policy 'deny)
              (list 'test-categories '(time policy)))))
 
+    ;; Add shared backend policy-path metadata to host-effecting standard specs.
+    (define (standard-primitive-manifest-spec spec)
+      (append spec
+              (list (list 'backend-effect-path 'shared-capability-request)
+                    (list 'policy-category 'standard-host-effect))))
+
+    ;; Return manifest metadata for standard-library primitive bindings.
+    (define (standard-primitive-binding-specs)
+      (map standard-primitive-manifest-spec standard-primitive-manifest-specs))
+
     ;; Return manifest metadata for portable prelude SPEC.
     (define (prelude-manifest-spec spec)
       (let* ((name (second (assq 'name spec)))
@@ -716,7 +741,9 @@
                       (list 'required-capability #f)
                       (list 'emacs-hook #f)
                       (list 'portable-hook #f)
+                      (list 'backend-effect-path 'direct-runtime)
                       (list 'emitter-hook 'inline-or-call)
+                      (list 'policy-category 'pure-r7rs)
                       (list 'policy 'allow)
                       (list 'test-categories
                             (primitive-test-categories-for-name
@@ -728,7 +755,7 @@
       (append (map base-primitive-manifest-spec base-primitive-registry)
               (map prelude-manifest-spec
                    (agent-scheme-base-prelude-binding-specs))
-              standard-primitive-manifest-specs))
+              (standard-primitive-binding-specs)))
 
     ;; Install a primitive procedure binding into ENVIRONMENT.
     (define (define-primitive! environment

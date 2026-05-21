@@ -260,6 +260,18 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
     ('eval 'runtime-eval)
     (_ 'inline-or-call)))
 
+(defun agent-scheme--primitive-backend-effect-path-for-effect (effect)
+  "Return the shared backend execution path for EFFECT."
+  (pcase effect
+    ('pure 'direct-runtime)
+    ('mutation 'runtime-mutation)
+    ('port-io 'runtime-port-check)
+    ('control 'runtime-control)
+    ('dynamic-state 'runtime-parameter)
+    ((or 'host-file 'host-process 'host-time 'host-repl)
+     'shared-capability-request)
+    (_ 'direct-runtime)))
+
 (defun agent-scheme--primitive-test-categories-for-name (name effect)
   "Return manifest test category symbols for primitive NAME and EFFECT."
   (let (categories)
@@ -310,8 +322,11 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
           :portable-hook
           (intern (replace-regexp-in-string
                    "\\`agent-scheme--" "" (symbol-name hook)))
+          :backend-effect-path
+          (agent-scheme--primitive-backend-effect-path-for-effect effect)
           :emitter-hook
           (agent-scheme--primitive-emitter-hook-for-effect effect)
+          :policy-category 'pure-r7rs
           :policy 'allow
           :test-categories
           (agent-scheme--primitive-test-categories-for-name name effect))))
@@ -540,7 +555,12 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
 
 (defun agent-scheme-standard-primitive-binding-specs ()
   "Return manifest metadata for standard-library primitive bindings."
-  agent-scheme--standard-primitive-manifest-specs)
+  (mapcar
+   (lambda (spec)
+     (append spec
+             (list :backend-effect-path 'shared-capability-request
+                   :policy-category 'standard-host-effect)))
+   agent-scheme--standard-primitive-manifest-specs))
 
 (defun agent-scheme--prelude-manifest-spec (spec)
   "Return manifest metadata for portable prelude SPEC."
@@ -552,7 +572,9 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
                   :required-capability nil
                   :emacs-hook nil
                   :portable-hook nil
+                  :backend-effect-path 'direct-runtime
                   :emitter-hook 'inline-or-call
+                  :policy-category 'pure-r7rs
                   :policy 'allow
                   :test-categories
                   (agent-scheme--primitive-test-categories-for-name

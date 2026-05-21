@@ -265,7 +265,12 @@
 
 (defun agent-scheme-emacs-capability-binding-specs ()
   "Return manifest metadata for Emacs capability primitive bindings."
-  agent-scheme--emacs-capability-manifest-specs)
+  (mapcar
+   (lambda (spec)
+     (append spec
+             (list :backend-effect-path 'shared-capability-request
+                   :policy-category 'emacs-read-only)))
+   agent-scheme--emacs-capability-manifest-specs))
 
 (defun agent-scheme-emacs-capability-library-keys ()
   "Return importable Emacs capability library keys."
