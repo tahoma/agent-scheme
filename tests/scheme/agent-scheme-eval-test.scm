@@ -814,18 +814,18 @@
       (expires never)))))
 
 ;; Host-side temporary file path used for portable delete-file coverage.
-(define delete-test-path "/private/tmp/agent-scheme-delete-capability.scm")
+(define delete-test-path "/tmp/agent-scheme-delete-capability.scm")
 
 ;; First-class file grant that allows the portable evaluator to delete only
 ;; the host-side temporary file above, plus metadata checks after deletion.
 (define delete-file-grant-options
-  '((include-directory . "/private/tmp")
+  '((include-directory . "/tmp")
     (capability-grants
      (capability-grant
       (id portable-delete-grant)
       (domain file)
       (operations metadata delete)
-      (scope (file-root "/private/tmp")
+      (scope (file-root "/tmp")
              (paths ("agent-scheme-delete-capability.scm"))
              (remote denied)
              (symlinks resolve-within-root))
