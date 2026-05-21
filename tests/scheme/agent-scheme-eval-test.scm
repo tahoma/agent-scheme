@@ -232,32 +232,50 @@
               (cadr (assq 'maximum-arity vector-ref))
               (cadr (assq 'source vector-ref))
               (cadr (assq 'effect vector-ref))
+              (eq? (cadr (assq 'backend-effect-path vector-ref))
+                   'direct-runtime)
               (cadr (assq 'policy vector-ref))
               (memq 'vector (cadr (assq 'test-categories vector-ref)))
               #t)
          #t)
   (check 'primitive-manifest-vector-set-effect
-         (and vector-set (cadr (assq 'effect vector-set)))
-         'mutation)
+         (and vector-set
+              (list (cadr (assq 'effect vector-set))
+                    (cadr (assq 'backend-effect-path vector-set))))
+         '(mutation runtime-mutation))
   (check 'primitive-manifest-file-effect
          (and delete-file
               (list (cadr (assq 'source delete-file))
                     (cadr (assq 'effect delete-file))
                     (cadr (assq 'required-capability delete-file))
+                    (cadr (assq 'backend-effect-path delete-file))
+                    (cadr (assq 'policy-category delete-file))
                     (cadr (assq 'policy delete-file))))
-         '(host-capability host-file file-system deny))
+         '(host-capability host-file file-system
+           shared-capability-request standard-host-effect deny))
   (check 'primitive-manifest-file-stub-effect
          (and open-input-file
               (list (cadr (assq 'minimum-arity open-input-file))
                     (cadr (assq 'effect open-input-file))
+                    (cadr (assq 'backend-effect-path open-input-file))
                     (cadr (assq 'policy open-input-file))))
-         '(1 host-file deny))
+         '(1 host-file shared-capability-request deny))
   (check 'primitive-manifest-time-effect
          (and current-second
               (list (cadr (assq 'effect current-second))
                     (cadr (assq 'required-capability current-second))
+                    (cadr (assq 'backend-effect-path current-second))
+                    (cadr (assq 'policy-category current-second))
                     (cadr (assq 'policy current-second))))
-         '(host-time clock deny))
+         '(host-time clock shared-capability-request
+           standard-host-effect deny))
+  (let ((read-char
+         (find-manifest-spec '(scheme base) 'read-char manifest-specs)))
+    (check 'primitive-manifest-port-runtime-path
+           (and read-char
+                (list (cadr (assq 'effect read-char))
+                      (cadr (assq 'backend-effect-path read-char))))
+           '(port-io runtime-port-check)))
   (let loop ((rest (agent-scheme-base-primitive-specs)))
     (if (not (null? rest))
         (let* ((spec (car rest))

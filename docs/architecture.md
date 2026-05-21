@@ -295,9 +295,12 @@ authorization decision. Pure bindings can be inlined or emitted as ordinary
 runtime calls when the backend knows their representation. Mutation, control,
 port, and dynamic-state effects must lower through runtime helpers that preserve
 Agent Scheme semantics. Host-capability effects such as file, process, time,
-REPL, provider, UI, and future Emacs capability operations must lower to
-capability requests that consult policy and produce audit records; a compiler
-must not bypass the manifest by directly calling host APIs.
+REPL, provider, UI, memory, and future Emacs capability operations must carry
+the `backend-effect-path` value `shared-capability-request`, lower to
+capability requests that consult policy, and produce audit records. No backend
+may bypass policy by directly calling host APIs; unsupported compiled effects
+must remain explicit unsupported-effect nodes or fail closed before touching
+host state.
 
 The detailed per-user, per-project, per-session, and per-task authority model is
 defined in [Capability Environment and Effect Lowering](capability-environment.md).

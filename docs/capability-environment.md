@@ -419,6 +419,29 @@ Compiler lowering:
 This boundary lets interpreter and compiler backends differ in execution
 strategy without drifting around policy or grant semantics.
 
+## Backend Effect Contract
+
+Primitive manifest records name the backend path that each binding may use.
+Pure bindings use `backend-effect-path` value `direct-runtime`; runtime-only
+effects such as Scheme mutation, control, parameters, and in-memory ports use
+their matching runtime paths. Host-effecting bindings use
+`shared-capability-request`, which means no backend may bypass policy by
+dispatching directly to a host file, process, network, provider, UI, memory, or
+adapter API.
+
+For `shared-capability-request` bindings, interpreter dispatch and compiler
+emission both construct the same capability request shape, consult the same
+policy category, validate grants and handles, and write comparable audit
+records. Compiler emitter hints remain optimization hints only; they do not
+authorize effects. If a compiled backend cannot route an effect through this
+shared path, it must leave the operation as an explicit unsupported-effect
+node or signal a backend capability condition before touching host state.
+
+Backend parity tests should compare interpreter and compiled-backend behavior
+for allowed, denied, revoked, and stale capability cases. The shared expectation
+is that the value, condition, event list, and audit datums remain comparable
+even when the execution strategy differs.
+
 ## Session Lifecycle Integration
 
 Fresh, named, and project sessions carry different capability lifetimes:

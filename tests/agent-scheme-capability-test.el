@@ -59,6 +59,24 @@
              (assq (car entry) overrides))
            agent-scheme-policy-category-actions)))
 
+(ert-deftest agent-scheme-capability-test-manifest-names-backend-policy-path ()
+  "Emacs capabilities expose the shared policy-gated backend path."
+  (dolist (binding '(("(emacs buffer)" "buffer-name" host-observation
+                      emacs-buffer emacs-read-only allow)
+                     ("(emacs buffer edit)" "buffer-replace!" host-mutation
+                      emacs-buffer buffer-edit confirm)))
+    (let ((spec (agent-scheme-capability-test--manifest-spec
+                 (nth 0 binding)
+                 (nth 1 binding))))
+      (should spec)
+      (should (eq (plist-get spec :source) 'host-capability))
+      (should (eq (plist-get spec :effect) (nth 2 binding)))
+      (should (eq (plist-get spec :required-capability) (nth 3 binding)))
+      (should (eq (plist-get spec :backend-effect-path)
+                  'shared-capability-request))
+      (should (eq (plist-get spec :policy-category) (nth 4 binding)))
+      (should (eq (plist-get spec :policy) (nth 5 binding))))))
+
 (ert-deftest agent-scheme-capability-test-buffer-capabilities-use-handles ()
   "Inspect the current buffer through an opaque handle."
   (let ((buffer (generate-new-buffer "agent-scheme-capability-buffer")))
