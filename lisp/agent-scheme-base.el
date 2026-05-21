@@ -87,6 +87,9 @@
     ("error-object-irritants" agent-scheme--primitive-error-object-irritants 1 1)
     ("error-object-message" agent-scheme--primitive-error-object-message 1 1)
     ("error-object?" agent-scheme--primitive-error-object? 1 1)
+    ("current-error-port" agent-scheme--primitive-current-error-port 0 0)
+    ("current-input-port" agent-scheme--primitive-current-input-port 0 0)
+    ("current-output-port" agent-scheme--primitive-current-output-port 0 0)
     ("denominator" agent-scheme--primitive-denominator 1 1)
     ("exact" agent-scheme--primitive-exact 1 1)
     ("exact-integer-sqrt" agent-scheme--primitive-exact-integer-sqrt 1 1)
@@ -443,43 +446,43 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
      :policy deny :test-categories (file policy))
     (:name "call-with-input-file" :library "(scheme file)" :minimum-arity 2
      :maximum-arity 2 :source host-capability :effect host-file
-     :required-capability file-system :emacs-hook agent-scheme--policy-denied-primitive
-     :portable-hook policy-denied-primitive :emitter-hook capability-file
+     :required-capability file-system :emacs-hook agent-scheme--primitive-call-with-input-file
+     :portable-hook primitive-call-with-input-file :emitter-hook capability-file
      :policy deny :test-categories (file policy))
     (:name "call-with-output-file" :library "(scheme file)" :minimum-arity 2
      :maximum-arity 2 :source host-capability :effect host-file
-     :required-capability file-system :emacs-hook agent-scheme--policy-denied-primitive
-     :portable-hook policy-denied-primitive :emitter-hook capability-file
+     :required-capability file-system :emacs-hook agent-scheme--primitive-call-with-output-file
+     :portable-hook primitive-call-with-output-file :emitter-hook capability-file
      :policy deny :test-categories (file policy))
     (:name "open-binary-input-file" :library "(scheme file)" :minimum-arity 1
      :maximum-arity 1 :source host-capability :effect host-file
-     :required-capability file-system :emacs-hook agent-scheme--policy-denied-primitive
-     :portable-hook policy-denied-primitive :emitter-hook capability-file
+     :required-capability file-system :emacs-hook agent-scheme--primitive-open-binary-input-file
+     :portable-hook primitive-open-binary-input-file :emitter-hook capability-file
      :policy deny :test-categories (file policy))
     (:name "open-binary-output-file" :library "(scheme file)" :minimum-arity 1
      :maximum-arity 1 :source host-capability :effect host-file
-     :required-capability file-system :emacs-hook agent-scheme--policy-denied-primitive
-     :portable-hook policy-denied-primitive :emitter-hook capability-file
+     :required-capability file-system :emacs-hook agent-scheme--primitive-open-binary-output-file
+     :portable-hook primitive-open-binary-output-file :emitter-hook capability-file
      :policy deny :test-categories (file policy))
     (:name "open-input-file" :library "(scheme file)" :minimum-arity 1
      :maximum-arity 1 :source host-capability :effect host-file
-     :required-capability file-system :emacs-hook agent-scheme--policy-denied-primitive
-     :portable-hook policy-denied-primitive :emitter-hook capability-file
+     :required-capability file-system :emacs-hook agent-scheme--primitive-open-input-file
+     :portable-hook primitive-open-input-file :emitter-hook capability-file
      :policy deny :test-categories (file policy))
     (:name "open-output-file" :library "(scheme file)" :minimum-arity 1
      :maximum-arity 1 :source host-capability :effect host-file
-     :required-capability file-system :emacs-hook agent-scheme--policy-denied-primitive
-     :portable-hook policy-denied-primitive :emitter-hook capability-file
+     :required-capability file-system :emacs-hook agent-scheme--primitive-open-output-file
+     :portable-hook primitive-open-output-file :emitter-hook capability-file
      :policy deny :test-categories (file policy))
     (:name "with-input-from-file" :library "(scheme file)" :minimum-arity 2
      :maximum-arity 2 :source host-capability :effect host-file
-     :required-capability file-system :emacs-hook agent-scheme--policy-denied-primitive
-     :portable-hook policy-denied-primitive :emitter-hook capability-file
+     :required-capability file-system :emacs-hook agent-scheme--primitive-with-input-from-file
+     :portable-hook primitive-with-input-from-file :emitter-hook capability-file
      :policy deny :test-categories (file policy))
     (:name "with-output-to-file" :library "(scheme file)" :minimum-arity 2
      :maximum-arity 2 :source host-capability :effect host-file
-     :required-capability file-system :emacs-hook agent-scheme--policy-denied-primitive
-     :portable-hook policy-denied-primitive :emitter-hook capability-file
+     :required-capability file-system :emacs-hook agent-scheme--primitive-with-output-to-file
+     :portable-hook primitive-with-output-to-file :emitter-hook capability-file
      :policy deny :test-categories (file policy))
     (:name "load" :library "(scheme load)" :minimum-arity 1
      :maximum-arity 2 :source host-capability :effect host-file

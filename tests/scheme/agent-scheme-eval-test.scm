@@ -59,6 +59,25 @@
     (lambda (port)
       (display contents port))))
 
+;; Replace PATH with binary BYTES using the host Scheme runtime.
+(define (write-host-binary-file path bytes)
+  (if (file-exists? path)
+      (delete-file path))
+  (let ((port (open-binary-output-file path)))
+    (for-each (lambda (byte) (write-u8 byte port)) bytes)
+    (close-port port)))
+
+;; Return PATH contents as a list of byte values using the host runtime.
+(define (read-host-binary-file path)
+  (let ((port (open-binary-input-file path)))
+    (let loop ((bytes '()))
+      (let ((byte (read-u8 port)))
+        (if (eof-object? byte)
+            (begin
+              (close-port port)
+              (reverse bytes))
+            (loop (cons byte bytes)))))))
+
 ;; Return FIELD from a Scheme-readable result or audit datum.
 (define (field-value datum field)
   (let ((entry (assq field (cdr datum))))
@@ -816,6 +835,21 @@
 ;; Host-side temporary file path used for portable delete-file coverage.
 (define delete-test-path "/tmp/agent-scheme-delete-capability.scm")
 
+;; Host-side temporary paths used for portable file port capability coverage.
+(define port-test-input-path "/tmp/agent-scheme-port-input.scm")
+;; Host-side temporary file path used for portable open-output-file coverage.
+(define port-test-output-path "/tmp/agent-scheme-port-output.scm")
+;; Host-side temporary file path used for portable call-with-output-file coverage.
+(define port-test-call-output-path "/tmp/agent-scheme-port-call-output.scm")
+;; Host-side temporary file path used for portable with-output-to-file coverage.
+(define port-test-with-output-path "/tmp/agent-scheme-port-with-output.scm")
+;; Host-side temporary file path used for portable close-limit coverage.
+(define port-test-close-output-path "/tmp/agent-scheme-port-close-output.scm")
+;; Host-side temporary input file path used for portable binary port coverage.
+(define port-test-binary-input-path "/tmp/agent-scheme-port-input.bin")
+;; Host-side temporary output file path used for portable binary port coverage.
+(define port-test-binary-output-path "/tmp/agent-scheme-port-output.bin")
+
 ;; First-class file grant that allows the portable evaluator to delete only
 ;; the host-side temporary file above, plus metadata checks after deletion.
 (define delete-file-grant-options
@@ -829,6 +863,25 @@
              (paths ("agent-scheme-delete-capability.scm"))
              (remote denied)
              (symlinks resolve-within-root))
+      (expires never)))))
+
+;; First-class file grants for host-backed file port reads and creations.
+(define file-port-grant-options
+  '((include-directory . "/tmp")
+    (capability-grants
+     (capability-grant
+      (id portable-port-grant)
+      (domain file)
+      (operations read create)
+      (scope (file-root "/tmp")
+             (paths ("agent-scheme-port-input.scm"
+                     "agent-scheme-port-output.scm"
+                     "agent-scheme-port-call-output.scm"
+                     "agent-scheme-port-with-output.scm"
+                     "agent-scheme-port-input.bin"
+                     "agent-scheme-port-output.bin"))
+             (remote denied)
+             (symlinks portable-unresolved))
       (expires never)))))
 
 (check-external/options 'include-reads-policy-allowed-body
@@ -1136,6 +1189,193 @@
               (equal? (field-value audit 'result) '(ok deleted))
               #t)
          #t))
+
+(write-host-test-file port-test-input-path "abc")
+(if (file-exists? port-test-output-path)
+    (delete-file port-test-output-path))
+(if (file-exists? port-test-call-output-path)
+    (delete-file port-test-call-output-path))
+(if (file-exists? port-test-with-output-path)
+    (delete-file port-test-with-output-path))
+(if (file-exists? port-test-close-output-path)
+    (delete-file port-test-close-output-path))
+(write-host-binary-file port-test-binary-input-path '(1 2 3 4 255))
+(if (file-exists? port-test-binary-output-path)
+    (delete-file port-test-binary-output-path))
+
+(check-external/options 'standard-open-input-file-port-grant-allowed
+                        "(import (scheme base) (scheme file))
+                         (let ((port (open-input-file
+                                      \"agent-scheme-port-input.scm\")))
+                           (list (input-port? port)
+                                 (textual-port? port)
+                                 (read-string 2 port)
+                                 (read-string 2 port)
+                                 (eof-object? (read-char port))))"
+                        file-port-grant-options
+                        "(#t #t \"ab\" \"c\" #t)")
+
+(check-external/options 'standard-open-output-file-port-grant-allowed
+                        "(import (scheme base) (scheme file))
+                         (let ((port (open-output-file
+                                      \"agent-scheme-port-output.scm\")))
+                           (write-string \"created\" port)
+                           (close-port port)
+                           (output-port-open? port))"
+                        file-port-grant-options
+                        "#f")
+
+(check 'standard-open-output-file-writes-host-file
+       (call-with-input-file port-test-output-path
+         (lambda (port) (read-string 7 port)))
+       "created")
+
+(check-external/options 'standard-file-port-wrappers-use-capabilities
+                        "(import (scheme base) (scheme file))
+                         (list
+                          (call-with-input-file
+                           \"agent-scheme-port-input.scm\"
+                           (lambda (port) (read-string 3 port)))
+                          (with-input-from-file
+                           \"agent-scheme-port-input.scm\"
+                           (lambda () (read-string 3)))
+                          (begin
+                            (call-with-output-file
+                             \"agent-scheme-port-call-output.scm\"
+                             (lambda (port) (write-string \"call\" port)))
+                            'call-done)
+                          (begin
+                            (with-output-to-file
+                             \"agent-scheme-port-with-output.scm\"
+                             (lambda () (write-string \"with\")))
+                            'with-done))"
+                        file-port-grant-options
+                        "(\"abc\" \"abc\" call-done with-done)")
+
+(check 'standard-call-output-file-writes-host-file
+       (call-with-input-file port-test-call-output-path
+         (lambda (port) (read-string 4 port)))
+       "call")
+
+(check 'standard-with-output-file-writes-host-file
+       (call-with-input-file port-test-with-output-path
+         (lambda (port) (read-string 4 port)))
+       "with")
+
+(check 'standard-current-output-port-default-denied
+       (raises?
+        (lambda ()
+          (agent-scheme-eval-source
+           "(import (scheme base))
+            (current-output-port)")))
+       #t)
+
+(check 'standard-file-port-close-invalidates-handle
+       (raises?
+        (lambda ()
+          (agent-scheme-eval-source
+           "(import (scheme base) (scheme file))
+            (let ((port (open-input-file
+                         \"agent-scheme-port-input.scm\")))
+              (close-port port)
+              (read-char port))"
+           #f
+           file-port-grant-options)))
+       #t)
+
+(check 'standard-file-port-revoked-grant-is-stale
+       (raises?
+        (lambda ()
+          (agent-scheme-eval-source
+           "(import (scheme base) (scheme file) (agent capability))
+            (grant-capability!
+             '(capability-grant
+               (id portable-revoked-port-grant)
+               (domain file)
+               (operations read)
+               (scope (file-root \"/tmp\")
+                      (paths (\"agent-scheme-port-input.scm\"))
+                      (remote denied)
+                      (symlinks portable-unresolved))
+               (expires never)))
+            (let ((port (open-input-file
+                         \"agent-scheme-port-input.scm\")))
+              (grant-revoke! 'portable-revoked-port-grant)
+              (read-char port))"
+           #f
+           '((include-directory . "/tmp")))))
+       #t)
+
+(check 'standard-file-port-read-limit-is-enforced
+       (raises?
+        (lambda ()
+          (agent-scheme-eval-source
+           "(import (scheme base) (scheme file) (agent capability))
+            (grant-capability!
+             '(capability-grant
+               (id portable-limited-port-grant)
+               (domain file)
+               (operations read)
+               (scope (file-root \"/tmp\")
+                      (paths (\"agent-scheme-port-input.scm\"))
+                      (remote denied)
+                      (symlinks portable-unresolved))
+               (limits (reads 1))
+               (expires never)))
+            (let ((port (open-input-file
+                         \"agent-scheme-port-input.scm\")))
+              (read-char port)
+              (read-char port))"
+           #f
+           '((include-directory . "/tmp")))))
+       #t)
+
+(check-external/options 'standard-file-port-close-limit-allows-close
+                        "(import (scheme base) (scheme file)
+                                 (agent capability))
+                         (grant-capability!
+                          '(capability-grant
+                            (id portable-close-limited-port-grant)
+                            (domain file)
+                            (operations create)
+                            (scope (file-root \"/tmp\")
+                                   (paths
+                                    (\"agent-scheme-port-close-output.scm\"))
+                                   (remote denied)
+                                   (symlinks portable-unresolved))
+                            (limits (closes 1))
+                            (expires never)))
+                         (let ((port (open-output-file
+                                      \"agent-scheme-port-close-output.scm\")))
+                           (write-string \"x\" port)
+                           (close-port port)
+                           (output-port-open? port))"
+                        '((include-directory . "/tmp"))
+                        "#f")
+
+(check 'standard-file-port-close-limit-writes-host-file
+       (call-with-input-file port-test-close-output-path
+         (lambda (port) (read-string 1 port)))
+       "x")
+
+(check-external/options 'standard-open-binary-file-port-grant-allowed
+                        "(import (scheme base) (scheme file))
+                         (let ((in (open-binary-input-file
+                                    \"agent-scheme-port-input.bin\"))
+                               (out (open-binary-output-file
+                                     \"agent-scheme-port-output.bin\")))
+                           (write-u8 (read-u8 in) out)
+                           (write-bytevector (read-bytevector 4 in) out)
+                           (close-port out)
+                           (list (binary-port? in)
+                                 (eof-object? (read-u8 in))
+                                 (output-port-open? out)))"
+                        file-port-grant-options
+                        "(#t #t #f)")
+
+(check 'standard-open-binary-output-file-writes-host-file
+       (read-host-binary-file port-test-binary-output-path)
+       '(1 2 3 4 255))
 
 (check 'standard-file-grant-denies-path-traversal
        (raises?

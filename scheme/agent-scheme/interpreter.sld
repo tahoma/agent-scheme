@@ -31,6 +31,7 @@
           (scheme char)
           (scheme file)
           (scheme inexact)
+          (scheme write)
           (agent-scheme reader)
           (agent-scheme runtime)
           (agent-scheme result)
@@ -48,6 +49,9 @@
     ;; Process-local portable memory used by `(agent memory)' primitives.
     (define interpreter-memory-store
       (memory-model:agent-scheme-make-memory-store))
+
+    ;; Process-local ids for portable host-backed port capability handles.
+    (define next-port-capability-handle-number 0)
 
     ;; Return the stack prefix before FRAME in dynamic-wind order.
     (define (dynamic-wind-prefix-before frame stack)
@@ -635,6 +639,18 @@
                (primitive-call-with-values/k arguments context continuation))
               ((eq? name 'call-with-port)
                (primitive-call-with-port/k arguments context continuation))
+              ((eq? name 'call-with-input-file)
+               (primitive-call-with-input-file/k
+                arguments context continuation))
+              ((eq? name 'call-with-output-file)
+               (primitive-call-with-output-file/k
+                arguments context continuation))
+              ((eq? name 'with-input-from-file)
+               (primitive-with-input-from-file/k
+                arguments context continuation))
+              ((eq? name 'with-output-to-file)
+               (primitive-with-output-to-file/k
+                arguments context continuation))
               ((or (eq? name 'call-with-current-continuation)
                    (eq? name 'call/cc))
                (primitive-call/cc/k arguments context continuation))
@@ -3133,9 +3149,11 @@
     (define (expect-open-port value description)
       (let ((port (expect-port value description)))
         (if (not (agent-scheme-port-open? port))
-            (eval-error
-             (string-append description " expected an open port")
-             value))
+            (if (agent-scheme-port-backing-domain port)
+                (eval-error "stale port capability handle: closed port")
+                (eval-error
+                 (string-append description " expected an open port")
+                 value)))
         port))
 
     ;; Validate input port input and raise an evaluator error on mismatch.
@@ -3217,28 +3235,237 @@
              value))
         port))
 
+    ;; Return FIELD values from a capability grant datum.
+    (define (capability-grant-field-values grant field)
+      (let ((entry (capability-grant-field grant field)))
+        (if entry (cdr entry) '())))
+
+    ;; Return FIELD's first value from a capability grant datum.
+    (define (capability-grant-field-value grant field)
+      (let ((values (capability-grant-field-values grant field)))
+        (if (null? values) #f (car values))))
+
+    ;; Return FIELD from an authorization alist.
+    (define (authorization-field authorization field)
+      (let ((entry (assq field authorization)))
+        (if entry (second entry) #f)))
+
+    ;; Allocate a fresh Scheme-readable port capability handle id.
+    (define (port-capability-handle-id)
+      (set! next-port-capability-handle-number
+            (+ next-port-capability-handle-number 1))
+      (string->symbol
+       (string-append
+        "p-file-"
+        (number->string next-port-capability-handle-number))))
+
+    ;; Return a Scheme-readable host-backed port capability handle datum.
+    (define (port-capability-datum
+             handle kind backing operations grant limits status path)
+      (list 'port-capability
+            (list 'id handle)
+            (list 'kind kind)
+            (list 'backing backing)
+            (cons 'operations operations)
+            (list 'grant grant)
+            (cons 'limits limits)
+            (list 'path path)
+            (list 'status status)))
+
+    ;; Record the creation of host-backed PORT's capability handle.
+    (define (register-file-port! context port kind)
+      (record-audit-event!
+       context
+       'capability-handle
+       (list
+        (list 'handle
+              (port-capability-datum
+               (agent-scheme-port-handle port)
+               kind
+               'file
+               (agent-scheme-port-operations port)
+               (agent-scheme-port-grant port)
+               (agent-scheme-port-limits port)
+               (agent-scheme-port-status port)
+               (agent-scheme-port-path port)))
+        (list 'domain 'port)
+        (list 'kind kind)
+        (list 'backing 'file)
+        (cons 'operations (agent-scheme-port-operations port))
+        (list 'grant (agent-scheme-port-grant port))
+        (cons 'limits (agent-scheme-port-limits port))
+        (list 'path (agent-scheme-port-path port))
+        (list 'status 'open)))
+      port)
+
+    ;; Record the result of a host-backed port capability operation.
+    (define (audit-port-capability-result!
+             context port operation result error?)
+      (if (and context (agent-scheme-port-backing-domain port))
+          (record-audit-event!
+           context
+           'capability-audit
+           (list (list 'domain 'port)
+                 (list 'operation operation)
+                 (list 'handle (agent-scheme-port-handle port))
+                 (list 'backing (agent-scheme-port-backing-domain port))
+                 (list 'grant (agent-scheme-port-grant port))
+                 (list 'path (agent-scheme-port-path port))
+                 (list 'result
+                       (if error?
+                           (list 'error result)
+                           (list 'ok result)))))))
+
+    ;; Return the named operation counter limit for OPERATION.
+    (define (port-capability-limit-name operation)
+      (cond
+       ((eq? operation 'read) 'reads)
+       ((eq? operation 'write) 'writes)
+       ((eq? operation 'flush) 'flushes)
+       ((eq? operation 'close) 'closes)
+       (else #f)))
+
+    ;; Return PORT limit NAME as a host integer, or #f when unlimited.
+    (define (port-capability-limit-value port name)
+      (let ((field (and name (assq name (agent-scheme-port-limits port)))))
+        (if field
+            (exact-integer->host
+             (second field)
+             (string-append
+              "port capability limit "
+              (symbol->string name)))
+            #f)))
+
+    ;; Return PORT's consumed counter for NAME.
+    (define (port-capability-counter port name)
+      (let ((entry (assq name (agent-scheme-port-counters port))))
+        (if entry (cdr entry) 0)))
+
+    ;; Store PORT's consumed counter for NAME.
+    (define (set-port-capability-counter! port name value)
+      (let loop ((counters (agent-scheme-port-counters port)) (kept '()))
+        (cond
+         ((null? counters)
+          (set-agent-scheme-port-counters!
+           port
+           (cons (cons name value) (reverse kept))))
+         ((eq? (caar counters) name)
+          (set-agent-scheme-port-counters!
+           port
+           (append (reverse kept)
+                   (cons (cons name value) (cdr counters)))))
+         (else
+          (loop (cdr counters) (cons (car counters) kept))))))
+
+    ;; Consume one PORT operation limit unit for OPERATION.
+    (define (check-port-capability-limit! context port operation)
+      (let* ((name (port-capability-limit-name operation))
+             (limit (port-capability-limit-value port name)))
+        (if limit
+            (let ((used (port-capability-counter port name)))
+              (if (>= used limit)
+                  (begin
+                    (audit-port-capability-result!
+                     context
+                     port
+                     operation
+                     (string-append
+                      "port capability limit exceeded: "
+                      (symbol->string name))
+                     #t)
+                    (eval-error
+                     (string-append
+                      "port capability limit exceeded: "
+                      (symbol->string name)))))
+              (set-port-capability-counter! port name (+ used 1))))))
+
+    ;; Fail closed unless host-backed PORT can perform OPERATION in CONTEXT.
+    (define (revalidate-port-operation! port context operation)
+      (if (agent-scheme-port-backing-domain port)
+          (cond
+           ((not (agent-scheme-port-open? port))
+            (audit-port-capability-result!
+             context port operation "closed port capability handle" #t)
+            (eval-error "stale port capability handle: closed port"))
+           ((not (memq operation (agent-scheme-port-operations port)))
+            (audit-port-capability-result!
+             context port operation "operation outside port capability" #t)
+            (eval-error "operation outside port capability"))
+           (else
+            (let ((grant
+                   (and context
+                        (capability-grant-find
+                         (context-capability-grants context)
+                         (agent-scheme-port-grant port)))))
+              (if (not (and grant
+                            (eq? (capability-grant-status grant) 'active)))
+                  (begin
+                    (audit-port-capability-result!
+                     context
+                     port
+                     operation
+                     "inactive port capability grant"
+                     #t)
+                    (eval-error
+                     "stale port capability handle: inactive grant")))
+              (check-port-capability-limit! context port operation)))))
+      port)
+
+    ;; Return CONTEXT's current input port or deny host default access.
+    (define (current-input-port-or-deny context description)
+      (or (and context (context-current-input-port context))
+          (policy-denied description context '())))
+
+    ;; Return CONTEXT's current output port or deny host default access.
+    (define (current-output-port-or-deny context description)
+      (or (and context (context-current-output-port context))
+          (policy-denied description context '())))
+
+    ;; Implement the `current-input-port` primitive.
+    (define (primitive-current-input-port arguments context)
+      (current-input-port-or-deny context "current-input-port"))
+
+    ;; Implement the `current-output-port` primitive.
+    (define (primitive-current-output-port arguments context)
+      (current-output-port-or-deny context "current-output-port"))
+
+    ;; Implement the `current-error-port` primitive.
+    (define (primitive-current-error-port arguments context)
+      (policy-denied "current-error-port" context '()))
+
     ;; Write text to port data through the Agent Scheme port or datum renderer.
-    (define (write-text-to-port text port description)
+    (define (write-text-to-port text port description . maybe-context)
       (let ((output (expect-textual-output-port port description)))
-        (if (not (eq? (agent-scheme-port-medium output) 'string))
+        (if (not (memq (agent-scheme-port-medium output) '(string file)))
             (eval-error
              (string-append description
                             " host textual output ports are not available")
              port))
+        (revalidate-port-operation!
+         output
+         (if (null? maybe-context) #f (car maybe-context))
+         'write)
         (set-agent-scheme-port-contents!
          output
          (string-append (agent-scheme-port-contents output) text))
+        (audit-port-capability-result!
+         (if (null? maybe-context) #f (car maybe-context))
+         output
+         'write
+         (string-length text)
+         #f)
         agent-scheme-unspecified))
 
     ;; Write to output port data through the Agent Scheme port or datum
     ;; renderer.
-    (define (write-to-output-port value port mode display?)
+    (define (write-to-output-port value port mode display? . maybe-context)
       (write-text-to-port
        (if display?
            (display-string value)
            (agent-scheme-datum->external value mode))
        port
-       (if display? "display" "write")))
+       (if display? "display" "write")
+       (if (null? maybe-context) #f (car maybe-context))))
 
     ;; Implement the `eof-object?` primitive with argument validation and Agent
     ;; Scheme values.
@@ -3293,32 +3520,88 @@
         (and (agent-scheme-port-output? port)
              (agent-scheme-port-open? port))))
 
+    ;; Write CONTENTS to PATH using the host Scheme file API.
+    (define (write-host-file-string path contents)
+      (if (file-exists? path)
+          (delete-file path))
+      (call-with-output-file
+       path
+       (lambda (host-port)
+         (display contents host-port))))
+
+    ;; Write BYTES to PATH using the host Scheme binary file API.
+    (define (write-host-file-bytes path bytes)
+      (if (file-exists? path)
+          (delete-file path))
+      (let ((host-port (open-binary-output-file path)))
+        (let loop ((rest bytes))
+          (if (null? rest)
+              (close-port host-port)
+              (begin
+                (write-u8 (car rest) host-port)
+                (loop (cdr rest)))))))
+
+    ;; Write host-backed output PORT contents to its file path.
+    (define (write-host-file-port-contents port)
+      (if (agent-scheme-port-binary? port)
+          (write-host-file-bytes
+           (agent-scheme-port-path port)
+           (or (agent-scheme-port-contents port) '()))
+          (write-host-file-string
+           (agent-scheme-port-path port)
+           (or (agent-scheme-port-contents port) ""))))
+
+    ;; Flush host-backed output PORT to its file path for OPERATION.
+    (define (flush-file-output-port port context operation)
+      (if (and (eq? (agent-scheme-port-backing-domain port) 'file)
+               (agent-scheme-port-output? port))
+          (begin
+            (revalidate-port-operation! port context operation)
+            (write-host-file-port-contents port)
+            (audit-port-capability-result!
+             context port operation 'flushed #f))))
+
     ;; Mark PORT closed and return the unspecified value.
-    (define (close-port-value port)
-      (set-agent-scheme-port-open?! port #f)
+    (define (close-port-value port . maybe-context)
+      (let ((context (if (null? maybe-context) #f (car maybe-context))))
+        (if (agent-scheme-port-open? port)
+            (begin
+              (if (agent-scheme-port-backing-domain port)
+                  (revalidate-port-operation! port context 'close))
+              (if (and (eq? (agent-scheme-port-backing-domain port) 'file)
+                       (agent-scheme-port-output? port))
+                  (write-host-file-port-contents port))
+              (set-agent-scheme-port-open?! port #f)
+              (set-agent-scheme-port-status! port 'closed)
+              (audit-port-capability-result!
+               context port 'close 'closed #f))))
       agent-scheme-unspecified)
 
     ;; Implement the `close-port` primitive with argument validation and Agent
     ;; Scheme values.
     (define (primitive-close-port arguments context)
-      (close-port-value (expect-port (car arguments) "close-port")))
+      (close-port-value (expect-port (car arguments) "close-port") context))
 
     ;; Implement the `close-input-port` primitive with argument validation and
     ;; Agent Scheme values.
     (define (primitive-close-input-port arguments context)
       (close-port-value
-       (expect-input-port (car arguments) "close-input-port")))
+       (expect-input-port (car arguments) "close-input-port")
+       context))
 
     ;; Implement the `close-output-port` primitive with argument validation and
     ;; Agent Scheme values.
     (define (primitive-close-output-port arguments context)
       (close-port-value
-       (expect-output-port (car arguments) "close-output-port")))
+       (expect-output-port (car arguments) "close-output-port")
+       context))
 
     ;; Implement the `open-output-string` primitive with argument validation
     ;; and Agent Scheme values.
     (define (primitive-open-output-string arguments context)
-      (make-agent-scheme-port 'string #f #t #t #f #t #f 0 ""))
+      (make-agent-scheme-port
+       'string #f #t #t #f #t #f 0 ""
+       #f '() #f '() #f #f #f '()))
 
     ;; Implement the `open-input-string` primitive with argument validation and
     ;; Agent Scheme values.
@@ -3326,7 +3609,8 @@
       (make-agent-scheme-port
        'string #t #f #t #f #t
        (expect-string (car arguments) "open-input-string")
-       0 #f))
+       0 #f
+       #f '() #f '() #f #f #f '()))
 
     ;; Implement the `get-output-string` primitive with argument validation and
     ;; Agent Scheme values.
@@ -3339,7 +3623,9 @@
     ;; Implement the `open-output-bytevector` primitive with argument
     ;; validation and Agent Scheme values.
     (define (primitive-open-output-bytevector arguments context)
-      (make-agent-scheme-port 'bytevector #f #t #f #t #t #f 0 '()))
+      (make-agent-scheme-port
+       'bytevector #f #t #f #t #t #f 0 '()
+       #f '() #f '() #f #f #f '()))
 
     ;; Return a fresh bytevector with the same bytes as BYTES.
     (define (copy-bytevector bytes)
@@ -3359,7 +3645,8 @@
        'bytevector #t #f #f #t #t
        (copy-bytevector
         (expect-bytevector (car arguments) "open-input-bytevector"))
-       0 #f))
+       0 #f
+       #f '() #f '() #f #f #f '()))
 
     ;; Convert a list of exact byte values into a bytevector.
     (define (list->bytevector bytes)
@@ -3383,48 +3670,78 @@
     ;; Implement the `read` primitive with argument validation and Agent Scheme
     ;; values.
     (define (primitive-read arguments context)
-      (if (null? arguments)
-          agent-scheme-eof-object
-          (let* ((port (expect-textual-input-port (car arguments) "read"))
-                 (result
-                  (agent-scheme-read-from-string-at
-                   (agent-scheme-port-source port)
-                   (agent-scheme-port-position port))))
-            (set-agent-scheme-port-position! port (cdr result))
-            (if (agent-scheme-read-eof? (car result))
-                agent-scheme-eof-object
-                (car result)))))
+      (let* ((port
+              (expect-textual-input-port
+               (if (null? arguments)
+                   (current-input-port-or-deny context "read")
+                   (car arguments))
+               "read"))
+             (result
+              (agent-scheme-read-from-string-at
+               (agent-scheme-port-source port)
+               (agent-scheme-port-position port))))
+        (revalidate-port-operation! port context 'read)
+        (set-agent-scheme-port-position! port (cdr result))
+        (audit-port-capability-result! context port 'read 'datum #f)
+        (if (agent-scheme-read-eof? (car result))
+            agent-scheme-eof-object
+            (car result))))
 
     ;; Return the next character from PORT, optionally advancing its cursor.
-    (define (text-port-next-char port advance? description)
+    (define (text-port-next-char port advance? description . maybe-context)
       (let ((input (expect-textual-input-port port description)))
-        (if (not (eq? (agent-scheme-port-medium input) 'string))
+        (if (not (memq (agent-scheme-port-medium input) '(string file)))
             (eval-error
              (string-append description
                             " host textual input ports are not available")
              port))
+        (revalidate-port-operation!
+         input
+         (if (null? maybe-context) #f (car maybe-context))
+         'read)
         (let ((position (agent-scheme-port-position input))
               (source (agent-scheme-port-source input)))
           (if (>= position (string-length source))
-              agent-scheme-eof-object
+              (begin
+                (audit-port-capability-result!
+                 (if (null? maybe-context) #f (car maybe-context))
+                 input
+                 'read
+                 'eof
+                 #f)
+                agent-scheme-eof-object)
               (let ((char (string-ref source position)))
                 (if advance?
                     (set-agent-scheme-port-position! input (+ position 1)))
+                (audit-port-capability-result!
+                 (if (null? maybe-context) #f (car maybe-context))
+                 input
+                 'read
+                 1
+                 #f)
                 char)))))
 
     ;; Implement the `read-char` primitive with argument validation and Agent
     ;; Scheme values.
     (define (primitive-read-char arguments context)
       (if (null? arguments)
-          agent-scheme-eof-object
-          (text-port-next-char (car arguments) #t "read-char")))
+          (text-port-next-char
+           (current-input-port-or-deny context "read-char")
+           #t
+           "read-char"
+           context)
+          (text-port-next-char (car arguments) #t "read-char" context)))
 
     ;; Implement the `peek-char` primitive with argument validation and Agent
     ;; Scheme values.
     (define (primitive-peek-char arguments context)
       (if (null? arguments)
-          agent-scheme-eof-object
-          (text-port-next-char (car arguments) #f "peek-char")))
+          (text-port-next-char
+           (current-input-port-or-deny context "peek-char")
+           #f
+           "peek-char"
+           context)
+          (text-port-next-char (car arguments) #f "peek-char" context)))
 
     ;; Implement the `char-ready?` primitive with argument validation and Agent
     ;; Scheme values.
@@ -3438,7 +3755,7 @@
     (define (primitive-read-string arguments context)
       (let ((count (exact-integer->host (car arguments) "read-string"))
             (port (if (null? (cdr arguments))
-                      #f
+                      (current-input-port-or-deny context "read-string")
                       (expect-textual-input-port
                        (second arguments)
                        "read-string"))))
@@ -3446,9 +3763,10 @@
             (eval-error "read-string count must be non-negative"))
         (cond
          ((not port) (if (= count 0) "" agent-scheme-eof-object))
-         ((not (eq? (agent-scheme-port-medium port) 'string))
+         ((not (memq (agent-scheme-port-medium port) '(string file)))
           (eval-error "read-string host textual input ports are not available"))
          (else
+          (revalidate-port-operation! port context 'read)
           (let* ((source (agent-scheme-port-source port))
                  (position (agent-scheme-port-position port))
                  (remaining (- (string-length source) position))
@@ -3458,57 +3776,80 @@
              ((= amount 0) agent-scheme-eof-object)
              (else
               (set-agent-scheme-port-position! port (+ position amount))
+              (audit-port-capability-result!
+               context port 'read amount #f)
               (substring source position (+ position amount)))))))))
 
     ;; Implement the `read-line` primitive with argument validation and Agent
     ;; Scheme values.
     (define (primitive-read-line arguments context)
-      (if (null? arguments)
-          agent-scheme-eof-object
-          (let ((port (expect-textual-input-port
-                       (car arguments)
-                       "read-line")))
-            (if (not (eq? (agent-scheme-port-medium port) 'string))
-                (eval-error
-                 "read-line host textual input ports are not available"))
-            (let* ((source (agent-scheme-port-source port))
-                   (start (agent-scheme-port-position port))
-                   (length (string-length source)))
-              (let loop ((position start))
-                (if (and (< position length)
-                         (not (or (char=? (string-ref source position)
-                                           #\newline)
-                                  (char=? (string-ref source position)
-                                           #\return))))
-                    (loop (+ position 1))
-                    (if (and (= start position) (>= position length))
-                        agent-scheme-eof-object
-                        (let ((line (substring source start position)))
-                          (if (< position length)
-                              (if (and (char=? (string-ref source position)
-                                                #\return)
-                                       (< (+ position 1) length)
-                                       (char=? (string-ref
-                                                source
-                                                (+ position 1))
-                                               #\newline))
-                                  (set! position (+ position 2))
-                                  (set! position (+ position 1))))
-                          (set-agent-scheme-port-position! port position)
-                          line))))))))
+      (let ((port (expect-textual-input-port
+                   (if (null? arguments)
+                       (current-input-port-or-deny context "read-line")
+                       (car arguments))
+                   "read-line")))
+        (if (not (memq (agent-scheme-port-medium port) '(string file)))
+            (eval-error
+             "read-line host textual input ports are not available"))
+        (revalidate-port-operation! port context 'read)
+        (let* ((source (agent-scheme-port-source port))
+               (start (agent-scheme-port-position port))
+               (length (string-length source)))
+          (let loop ((position start))
+            (if (and (< position length)
+                     (not (or (char=? (string-ref source position)
+                                       #\newline)
+                              (char=? (string-ref source position)
+                                       #\return))))
+                (loop (+ position 1))
+                (if (and (= start position) (>= position length))
+                    agent-scheme-eof-object
+                    (let ((line (substring source start position)))
+                      (if (< position length)
+                          (if (and (char=? (string-ref source position)
+                                            #\return)
+                                   (< (+ position 1) length)
+                                   (char=? (string-ref
+                                            source
+                                            (+ position 1))
+                                           #\newline))
+                              (set! position (+ position 2))
+                              (set! position (+ position 1))))
+                      (set-agent-scheme-port-position! port position)
+                      (audit-port-capability-result!
+                       context port 'read (string-length line) #f)
+                      line)))))))
 
-    ;; Write byte to port data through the Agent Scheme port or datum renderer.
-    (define (write-byte-to-port byte port description)
+    ;; Append BYTES to binary output PORT.
+    (define (append-bytes-to-port bytes port description . maybe-context)
       (let ((output (expect-binary-output-port port description)))
-        (if (not (eq? (agent-scheme-port-medium output) 'bytevector))
+        (if (not (memq (agent-scheme-port-medium output) '(bytevector file)))
             (eval-error
              (string-append description
                             " host binary output ports are not available")
              port))
+        (revalidate-port-operation!
+         output
+         (if (null? maybe-context) #f (car maybe-context))
+         'write)
         (set-agent-scheme-port-contents!
          output
-         (append (agent-scheme-port-contents output) (list byte)))
+         (append (agent-scheme-port-contents output) bytes))
+        (audit-port-capability-result!
+         (if (null? maybe-context) #f (car maybe-context))
+         output
+         'write
+         (length bytes)
+         #f)
         agent-scheme-unspecified))
+
+    ;; Write byte to port data through the Agent Scheme port or datum renderer.
+    (define (write-byte-to-port byte port description . maybe-context)
+      (append-bytes-to-port
+       (list byte)
+       port
+       description
+       (if (null? maybe-context) #f (car maybe-context))))
 
     ;; Implement the `read-u8` primitive with argument validation and Agent
     ;; Scheme values.
@@ -3518,13 +3859,17 @@
           (let* ((port (expect-binary-input-port (car arguments) "read-u8"))
                  (source (agent-scheme-port-source port))
                  (position (agent-scheme-port-position port)))
-            (if (not (eq? (agent-scheme-port-medium port) 'bytevector))
+            (if (not (memq (agent-scheme-port-medium port) '(bytevector file)))
                 (eval-error
                  "read-u8 host binary input ports are not available"))
+            (revalidate-port-operation! port context 'read)
             (if (>= position (bytevector-length source))
-                agent-scheme-eof-object
+                (begin
+                  (audit-port-capability-result! context port 'read 'eof #f)
+                  agent-scheme-eof-object)
                 (begin
                   (set-agent-scheme-port-position! port (+ position 1))
+                  (audit-port-capability-result! context port 'read 1 #f)
                   (host-number->agent-number
                    (bytevector-u8-ref source position)))))))
 
@@ -3536,13 +3881,18 @@
           (let* ((port (expect-binary-input-port (car arguments) "peek-u8"))
                  (source (agent-scheme-port-source port))
                  (position (agent-scheme-port-position port)))
-            (if (not (eq? (agent-scheme-port-medium port) 'bytevector))
+            (if (not (memq (agent-scheme-port-medium port) '(bytevector file)))
                 (eval-error
                  "peek-u8 host binary input ports are not available"))
+            (revalidate-port-operation! port context 'read)
             (if (>= position (bytevector-length source))
-                agent-scheme-eof-object
+                (begin
+                  (audit-port-capability-result! context port 'read 'eof #f)
+                  agent-scheme-eof-object)
+                (begin
+                  (audit-port-capability-result! context port 'read 1 #f)
                 (host-number->agent-number
-                 (bytevector-u8-ref source position))))))
+                 (bytevector-u8-ref source position)))))))
 
     ;; Implement the `u8-ready?` primitive with argument validation and Agent
     ;; Scheme values.
@@ -3580,9 +3930,10 @@
         (cond
          ((not port)
           (if (= count 0) (make-bytevector 0 0) agent-scheme-eof-object))
-         ((not (eq? (agent-scheme-port-medium port) 'bytevector))
+         ((not (memq (agent-scheme-port-medium port) '(bytevector file)))
           (eval-error "read-bytevector host binary input ports are not available"))
          (else
+          (revalidate-port-operation! port context 'read)
           (let* ((source (agent-scheme-port-source port))
                  (position (agent-scheme-port-position port))
                  (remaining (- (bytevector-length source) position))
@@ -3592,6 +3943,7 @@
              ((= amount 0) agent-scheme-eof-object)
              (else
               (set-agent-scheme-port-position! port (+ position amount))
+              (audit-port-capability-result! context port 'read amount #f)
               (subbytevector source position (+ position amount)))))))))
 
     ;; Implement the `read-bytevector!` primitive with argument validation and
@@ -3629,6 +3981,10 @@
                    (capacity (- end start))
                    (remaining (- (bytevector-length source) position))
                    (amount (if (< capacity remaining) capacity remaining)))
+              (if (not (memq (agent-scheme-port-medium port) '(bytevector file)))
+                  (eval-error
+                   "read-bytevector! host binary input ports are not available"))
+              (revalidate-port-operation! port context 'read)
               (if (= amount 0)
                   agent-scheme-eof-object
                   (begin
@@ -3641,6 +3997,8 @@
                              (bytevector-u8-ref source (+ position offset)))
                             (loop (+ offset 1)))))
                     (set-agent-scheme-port-position! port (+ position amount))
+                    (audit-port-capability-result!
+                     context port 'read amount #f)
                     (host-number->agent-number amount)))))))
 
     ;; Implement the `write-u8` primitive with argument validation and Agent
@@ -3650,7 +4008,8 @@
           (write-byte-to-port
            (expect-byte (car arguments) "write-u8")
            (second arguments)
-           "write-u8"))
+           "write-u8"
+           context))
       agent-scheme-unspecified)
 
     ;; Implement the `write-bytevector` primitive with argument validation and
@@ -3664,81 +4023,115 @@
                                         2
                                         (bytevector-length bytes)
                                         "write-bytevector")))
-            (let loop ((index (car range)))
+            (let loop ((index (car range)) (payload '()))
               (if (< index (cdr range))
-                  (begin
-                    (write-byte-to-port
-                     (bytevector-u8-ref bytes index)
-                     (second arguments)
-                     "write-bytevector")
-                    (loop (+ index 1)))))))
+                  (loop (+ index 1)
+                        (cons (bytevector-u8-ref bytes index) payload))
+                  (append-bytes-to-port
+                   (reverse payload)
+                   (second arguments)
+                   "write-bytevector"
+                   context)))))
       agent-scheme-unspecified)
 
     ;; Implement the `write-char` primitive with argument validation and Agent
     ;; Scheme values.
     (define (primitive-write-char arguments context)
-      (if (not (null? (cdr arguments)))
-          (write-text-to-port
-           (string (expect-character (car arguments) "write-char"))
-           (second arguments)
-           "write-char"))
+      (write-text-to-port
+       (string (expect-character (car arguments) "write-char"))
+       (if (null? (cdr arguments))
+           (current-output-port-or-deny context "write-char")
+           (second arguments))
+       "write-char"
+       context)
       agent-scheme-unspecified)
 
     ;; Implement the `write-string` primitive with argument validation and
     ;; Agent Scheme values.
     (define (primitive-write-string arguments context)
-      (if (not (null? (cdr arguments)))
-          (let* ((string (expect-string (car arguments) "write-string"))
-                 (range (optional-range arguments
-                                        2
-                                        (string-length string)
-                                        "write-string")))
-            (write-text-to-port
-             (substring string (car range) (cdr range))
-             (second arguments)
-             "write-string")))
+      (let* ((string (expect-string (car arguments) "write-string"))
+             (port (if (null? (cdr arguments))
+                       (current-output-port-or-deny context "write-string")
+                       (second arguments)))
+             (range (optional-range arguments
+                                    (if (null? (cdr arguments)) 1 2)
+                                    (string-length string)
+                                    "write-string")))
+        (write-text-to-port
+         (substring string (car range) (cdr range))
+         port
+         "write-string"
+         context))
       agent-scheme-unspecified)
 
     ;; Implement the `newline` primitive with argument validation and Agent
     ;; Scheme values.
     (define (primitive-newline arguments context)
-      (if (not (null? arguments))
-          (write-text-to-port "\n" (car arguments) "newline"))
+      (write-text-to-port
+       "\n"
+       (if (null? arguments)
+           (current-output-port-or-deny context "newline")
+           (car arguments))
+       "newline"
+       context)
       agent-scheme-unspecified)
 
     ;; Implement the `display` primitive with argument validation and Agent
     ;; Scheme values.
     (define (primitive-display arguments context)
-      (if (null? (cdr arguments))
-          agent-scheme-unspecified
-          (write-to-output-port (car arguments) (second arguments) 'write #t)))
+      (write-to-output-port
+       (car arguments)
+       (if (null? (cdr arguments))
+           (current-output-port-or-deny context "display")
+           (second arguments))
+       'write
+       #t
+       context))
 
     ;; Implement the `write` primitive with argument validation and Agent
     ;; Scheme values.
     (define (primitive-write arguments context)
-      (if (null? (cdr arguments))
-          agent-scheme-unspecified
-          (write-to-output-port (car arguments) (second arguments) 'write #f)))
+      (write-to-output-port
+       (car arguments)
+       (if (null? (cdr arguments))
+           (current-output-port-or-deny context "write")
+           (second arguments))
+       'write
+       #f
+       context))
 
     ;; Implement the `write-shared` primitive with argument validation and
     ;; Agent Scheme values.
     (define (primitive-write-shared arguments context)
-      (if (null? (cdr arguments))
-          agent-scheme-unspecified
-          (write-to-output-port (car arguments) (second arguments) 'shared #f)))
+      (write-to-output-port
+       (car arguments)
+       (if (null? (cdr arguments))
+           (current-output-port-or-deny context "write-shared")
+           (second arguments))
+       'shared
+       #f
+       context))
 
     ;; Implement the `write-simple` primitive with argument validation and
     ;; Agent Scheme values.
     (define (primitive-write-simple arguments context)
-      (if (null? (cdr arguments))
-          agent-scheme-unspecified
-          (write-to-output-port (car arguments) (second arguments) 'simple #f)))
+      (write-to-output-port
+       (car arguments)
+       (if (null? (cdr arguments))
+           (current-output-port-or-deny context "write-simple")
+           (second arguments))
+       'simple
+       #f
+       context))
 
     ;; Implement the `flush-output-port` primitive with argument validation and
     ;; Agent Scheme values.
     (define (primitive-flush-output-port arguments context)
       (if (not (null? arguments))
-          (expect-output-port (car arguments) "flush-output-port"))
+          (flush-file-output-port
+           (expect-output-port (car arguments) "flush-output-port")
+           context
+           'flush))
       agent-scheme-unspecified)
 
     ;; Implement the `read-error?` primitive with argument validation and Agent
@@ -4145,6 +4538,215 @@
        description
        (context-file-paths context)))
 
+    ;; Resolve FILENAME and enforce output file creation/write policy.
+    (define (resolve-output-file-policy-path filename context description)
+      (let* ((path
+              (path-normalize
+               (path-join (context-include-directory context) filename)))
+             (operation (if (file-exists? path) 'write 'create)))
+        (authorize-file-capability
+         filename
+         context
+         operation
+         description
+         (context-file-paths context))))
+
+    ;; Return file contents for an approved input port authorization.
+    (define (read-file-port-source context authorization description filename)
+      (let ((path (file-authorization-path authorization)))
+        (if (not (file-exists? path))
+            (begin
+              (audit-file-capability-result!
+               context
+               authorization
+               (string-append description " file is not readable")
+               #t)
+              (eval-error
+               (string-append description " file is not readable")
+               filename)))
+        (let ((source (read-file-string path)))
+          (audit-file-capability-result! context authorization 'opened #f)
+          source)))
+
+    ;; Read PATH into a bytevector using the host Scheme binary file API.
+    (define (read-file-bytevector path)
+      (let ((host-port (open-binary-input-file path)))
+        (let loop ((bytes '()))
+          (let ((byte (read-u8 host-port)))
+            (if (eof-object? byte)
+                (begin
+                  (close-port host-port)
+                  (list->bytevector (reverse bytes)))
+                (loop (cons byte bytes)))))))
+
+    ;; Return file bytes for an approved binary input port authorization.
+    (define (read-binary-file-port-source
+             context authorization description filename)
+      (let ((path (file-authorization-path authorization)))
+        (if (not (file-exists? path))
+            (begin
+              (audit-file-capability-result!
+               context
+               authorization
+               (string-append description " file is not readable")
+               #t)
+              (eval-error
+               (string-append description " file is not readable")
+               filename)))
+        (let ((source (read-file-bytevector path)))
+          (audit-file-capability-result! context authorization 'opened #f)
+          source)))
+
+    ;; Return host-backed textual input port for approved AUTHORIZATION.
+    (define (make-file-input-port context authorization source)
+      (let* ((grant (authorization-field authorization 'grant))
+             (limits (capability-grant-field-values grant 'limits))
+             (port
+              (make-agent-scheme-port
+               'file #t #f #t #f #t source 0 #f
+               'file
+               '(read close)
+               (capability-grant-id grant)
+               limits
+               (port-capability-handle-id)
+               'open
+               (file-authorization-path authorization)
+               '())))
+        (register-file-port! context port 'textual-input)))
+
+    ;; Implement the `open-input-file` primitive with capability checks.
+    (define (primitive-open-input-file arguments context)
+      (let* ((filename (expect-string (car arguments) "open-input-file"))
+             (authorization
+              (resolve-file-policy-path
+               filename
+               context
+               "open-input-file"))
+             (source
+              (read-file-port-source
+               context
+               authorization
+               "open-input-file"
+               filename)))
+        (make-file-input-port context authorization source)))
+
+    ;; Return host-backed binary input port for approved AUTHORIZATION.
+    (define (make-binary-file-input-port context authorization source)
+      (let* ((grant (authorization-field authorization 'grant))
+             (limits (capability-grant-field-values grant 'limits))
+             (port
+              (make-agent-scheme-port
+               'file #t #f #f #t #t source 0 #f
+               'file
+               '(read close)
+               (capability-grant-id grant)
+               limits
+               (port-capability-handle-id)
+               'open
+               (file-authorization-path authorization)
+               '())))
+        (register-file-port! context port 'binary-input)))
+
+    ;; Implement the `open-binary-input-file` primitive with capability checks.
+    (define (primitive-open-binary-input-file arguments context)
+      (let* ((filename
+              (expect-string (car arguments) "open-binary-input-file"))
+             (authorization
+              (resolve-file-policy-path
+               filename
+               context
+               "open-binary-input-file"))
+             (source
+              (read-binary-file-port-source
+               context
+               authorization
+               "open-binary-input-file"
+               filename)))
+        (make-binary-file-input-port context authorization source)))
+
+    ;; Return host-backed textual output port for approved AUTHORIZATION.
+    (define (make-file-output-port context authorization)
+      (let* ((grant (authorization-field authorization 'grant))
+             (limits (capability-grant-field-values grant 'limits))
+             (port
+              (make-agent-scheme-port
+               'file #f #t #t #f #t #f 0 ""
+               'file
+               '(write flush close)
+               (capability-grant-id grant)
+               limits
+               (port-capability-handle-id)
+               'open
+               (file-authorization-path authorization)
+               '())))
+        (register-file-port! context port 'textual-output)))
+
+    ;; Implement the `open-output-file` primitive with capability checks.
+    (define (primitive-open-output-file arguments context)
+      (let* ((filename (expect-string (car arguments) "open-output-file"))
+             (authorization
+              (resolve-output-file-policy-path
+               filename
+               context
+               "open-output-file"))
+             (path (file-authorization-path authorization))
+             (directory (path-directory path)))
+        (if (and (not (string=? directory ""))
+                 (not (file-exists? directory)))
+            (begin
+              (audit-file-capability-result!
+               context
+               authorization
+               "open-output-file parent directory is not writable"
+               #t)
+              (eval-error
+               "open-output-file parent directory is not writable"
+               filename)))
+        (audit-file-capability-result! context authorization 'opened #f)
+        (make-file-output-port context authorization)))
+
+    ;; Return host-backed binary output port for approved AUTHORIZATION.
+    (define (make-binary-file-output-port context authorization)
+      (let* ((grant (authorization-field authorization 'grant))
+             (limits (capability-grant-field-values grant 'limits))
+             (port
+              (make-agent-scheme-port
+               'file #f #t #f #t #t #f 0 '()
+               'file
+               '(write flush close)
+               (capability-grant-id grant)
+               limits
+               (port-capability-handle-id)
+               'open
+               (file-authorization-path authorization)
+               '())))
+        (register-file-port! context port 'binary-output)))
+
+    ;; Implement `open-binary-output-file` with capability checks.
+    (define (primitive-open-binary-output-file arguments context)
+      (let* ((filename
+              (expect-string (car arguments) "open-binary-output-file"))
+             (authorization
+              (resolve-output-file-policy-path
+               filename
+               context
+               "open-binary-output-file"))
+             (path (file-authorization-path authorization))
+             (directory (path-directory path)))
+        (if (and (not (string=? directory ""))
+                 (not (file-exists? directory)))
+            (begin
+              (audit-file-capability-result!
+               context
+               authorization
+               "open-binary-output-file parent directory is not writable"
+               #t)
+              (eval-error
+               "open-binary-output-file parent directory is not writable"
+               filename)))
+        (audit-file-capability-result! context authorization 'opened #f)
+        (make-binary-file-output-port context authorization)))
+
     ;; Implement the `file-exists?` primitive with argument validation and
     ;; Agent Scheme values.
     (define (primitive-file-exists? arguments context)
@@ -4202,7 +4804,105 @@
          context
          #t
          (lambda (value)
-           (close-port-value port)
+           (close-port-value port context)
+           (continue continuation value)))))
+
+    ;; Implement the `call-with-input-file` primitive.
+    (define (primitive-call-with-input-file arguments context)
+      (drain-state
+       (primitive-call-with-input-file/k
+        arguments context identity-continuation)
+       context))
+
+    ;; Continuation-aware implementation of `call-with-input-file`.
+    (define (primitive-call-with-input-file/k arguments context continuation)
+      (let ((port (primitive-open-input-file (list (car arguments)) context))
+            (procedure
+             (expect-procedure
+              (second arguments)
+              "call-with-input-file procedure")))
+        (apply-procedure
+         procedure
+         (list port)
+         context
+         #t
+         (lambda (value)
+           (close-port-value port context)
+           (continue continuation value)))))
+
+    ;; Implement the `call-with-output-file` primitive.
+    (define (primitive-call-with-output-file arguments context)
+      (drain-state
+       (primitive-call-with-output-file/k
+        arguments context identity-continuation)
+       context))
+
+    ;; Continuation-aware implementation of `call-with-output-file`.
+    (define (primitive-call-with-output-file/k arguments context continuation)
+      (let ((port (primitive-open-output-file (list (car arguments)) context))
+            (procedure
+             (expect-procedure
+              (second arguments)
+              "call-with-output-file procedure")))
+        (apply-procedure
+         procedure
+         (list port)
+         context
+         #t
+         (lambda (value)
+           (close-port-value port context)
+           (continue continuation value)))))
+
+    ;; Implement the `with-input-from-file` primitive.
+    (define (primitive-with-input-from-file arguments context)
+      (drain-state
+       (primitive-with-input-from-file/k
+        arguments context identity-continuation)
+       context))
+
+    ;; Continuation-aware implementation of `with-input-from-file`.
+    (define (primitive-with-input-from-file/k arguments context continuation)
+      (let ((port (primitive-open-input-file (list (car arguments)) context))
+            (procedure
+             (expect-procedure
+              (second arguments)
+              "with-input-from-file thunk"))
+            (previous (context-current-input-port context)))
+        (set-context-current-input-port! context port)
+        (apply-procedure
+         procedure
+         '()
+         context
+         #t
+         (lambda (value)
+           (set-context-current-input-port! context previous)
+           (close-port-value port context)
+           (continue continuation value)))))
+
+    ;; Implement the `with-output-to-file` primitive.
+    (define (primitive-with-output-to-file arguments context)
+      (drain-state
+       (primitive-with-output-to-file/k
+        arguments context identity-continuation)
+       context))
+
+    ;; Continuation-aware implementation of `with-output-to-file`.
+    (define (primitive-with-output-to-file/k arguments context continuation)
+      (let ((port (primitive-open-output-file (list (car arguments)) context))
+            (procedure
+             (expect-procedure
+              (second arguments)
+              "with-output-to-file thunk"))
+            (previous (context-current-output-port context)))
+        (set-context-current-output-port! context port)
+        (apply-procedure
+         procedure
+         '()
+         context
+         #t
+         (lambda (value)
+           (set-context-current-output-port! context previous)
+           (close-port-value port context)
            (continue continuation value)))))
 
     ;; Implement the `environment` primitive with argument validation and Agent
@@ -5357,8 +6057,21 @@
        (cons 'primitive-real-part primitive-real-part)
        (cons 'primitive-environment primitive-environment)
        (cons 'primitive-eval primitive-eval)
+       (cons 'primitive-current-error-port primitive-current-error-port)
+       (cons 'primitive-current-input-port primitive-current-input-port)
+       (cons 'primitive-current-output-port primitive-current-output-port)
+       (cons 'primitive-call-with-input-file primitive-call-with-input-file)
+       (cons 'primitive-call-with-output-file primitive-call-with-output-file)
        (cons 'primitive-delete-file primitive-delete-file)
        (cons 'primitive-file-exists? primitive-file-exists?)
+       (cons 'primitive-open-binary-input-file
+             primitive-open-binary-input-file)
+       (cons 'primitive-open-binary-output-file
+             primitive-open-binary-output-file)
+       (cons 'primitive-open-input-file primitive-open-input-file)
+       (cons 'primitive-open-output-file primitive-open-output-file)
+       (cons 'primitive-with-input-from-file primitive-with-input-from-file)
+       (cons 'primitive-with-output-to-file primitive-with-output-to-file)
        (cons 'primitive-load primitive-load)
        (cons 'primitive-read primitive-read)
        (cons 'primitive-display primitive-display)
@@ -5458,6 +6171,9 @@
        (cons 'primitive-close-port primitive-close-port)
        (cons 'primitive-complex? primitive-complex?)
        (cons 'primitive-cons primitive-cons)
+       (cons 'primitive-current-error-port primitive-current-error-port)
+       (cons 'primitive-current-input-port primitive-current-input-port)
+       (cons 'primitive-current-output-port primitive-current-output-port)
        (cons 'primitive-dynamic-wind primitive-dynamic-wind)
        (cons 'primitive-eq? primitive-eq?)
        (cons 'primitive-equal? primitive-equal?)

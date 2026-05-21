@@ -680,8 +680,24 @@
         (register-primitive-library!
          key
          (list
+          (library-primitive-spec 'call-with-input-file
+                                  'primitive-call-with-input-file 2 2)
+          (library-primitive-spec 'call-with-output-file
+                                  'primitive-call-with-output-file 2 2)
           (library-primitive-spec 'delete-file 'primitive-delete-file 1 1)
-          (library-primitive-spec 'file-exists? 'primitive-file-exists? 1 1))
+          (library-primitive-spec 'file-exists? 'primitive-file-exists? 1 1)
+          (library-primitive-spec 'open-binary-input-file
+                                  'primitive-open-binary-input-file 1 1)
+          (library-primitive-spec 'open-binary-output-file
+                                  'primitive-open-binary-output-file 1 1)
+          (library-primitive-spec 'open-input-file
+                                  'primitive-open-input-file 1 1)
+          (library-primitive-spec 'open-output-file
+                                  'primitive-open-output-file 1 1)
+          (library-primitive-spec 'with-input-from-file
+                                  'primitive-with-input-from-file 2 2)
+          (library-primitive-spec 'with-output-to-file
+                                  'primitive-with-output-to-file 2 2))
          context))
        ((equal? key '(scheme inexact))
         (register-primitive-library!
