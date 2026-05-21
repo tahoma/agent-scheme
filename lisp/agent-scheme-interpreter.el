@@ -638,6 +638,18 @@ any resulting bounce to preserve existing direct-call helper behavior."
              (agent-scheme--primitive-call-with-values/k arguments context next))
             ((eq function #'agent-scheme--primitive-call-with-port)
              (agent-scheme--primitive-call-with-port/k arguments context next))
+            ((eq function #'agent-scheme--primitive-call-with-input-file)
+             (agent-scheme--primitive-call-with-input-file/k
+              arguments context next))
+            ((eq function #'agent-scheme--primitive-call-with-output-file)
+             (agent-scheme--primitive-call-with-output-file/k
+              arguments context next))
+            ((eq function #'agent-scheme--primitive-with-input-from-file)
+             (agent-scheme--primitive-with-input-from-file/k
+              arguments context next))
+            ((eq function #'agent-scheme--primitive-with-output-to-file)
+             (agent-scheme--primitive-with-output-to-file/k
+              arguments context next))
             ((eq function #'agent-scheme--primitive-call/cc)
              (agent-scheme--primitive-call/cc/k arguments context next))
             ((eq function #'agent-scheme--primitive-dynamic-wind)
@@ -3264,7 +3276,13 @@ DESCRIPTION names the primitive for errors."
   "Return VALUE as an open port for DESCRIPTION."
   (let ((port (agent-scheme--expect-port value description)))
     (unless (agent-scheme--port-openp port)
-      (agent-scheme--eval-error "%s expected an open port" description))
+      (if (agent-scheme--port-backing-domain port)
+          (progn
+            (agent-scheme-capability-audit-port-result
+             port 'use "closed port capability handle" t)
+            (signal 'agent-scheme-capability-grant-error
+                    (list "stale port capability handle: closed port")))
+        (agent-scheme--eval-error "%s expected an open port" description)))
     port))
 
 (defun agent-scheme--expect-input-port (value description)
@@ -3324,24 +3342,57 @@ DESCRIPTION names the primitive for errors."
        "%s expected an output bytevector port" description))
     port))
 
-(defun agent-scheme--write-text-to-port (text port description)
+(defun agent-scheme--port-capability-check
+    (port context operation)
+  "Revalidate PORT for host-backed OPERATION in CONTEXT."
+  (agent-scheme-capability-revalidate-port-operation
+   port context operation))
+
+(defun agent-scheme--current-input-port-or-deny (context description)
+  "Return CONTEXT's current input port or deny host default access."
+  (or (and context (agent-scheme--eval-context-current-input-port context))
+      (agent-scheme--policy-denied description context)))
+
+(defun agent-scheme--current-output-port-or-deny (context description)
+  "Return CONTEXT's current output port or deny host default access."
+  (or (and context (agent-scheme--eval-context-current-output-port context))
+      (agent-scheme--policy-denied description context)))
+
+(defun agent-scheme--primitive-current-input-port (_arguments context)
+  "Primitive current-input-port."
+  (agent-scheme--current-input-port-or-deny context "current-input-port"))
+
+(defun agent-scheme--primitive-current-output-port (_arguments context)
+  "Primitive current-output-port."
+  (agent-scheme--current-output-port-or-deny context "current-output-port"))
+
+(defun agent-scheme--primitive-current-error-port (_arguments context)
+  "Primitive current-error-port."
+  (agent-scheme--policy-denied "current-error-port" context))
+
+(defun agent-scheme--write-text-to-port (text port description &optional context)
   "Append TEXT to textual output PORT for DESCRIPTION."
   (let ((output (agent-scheme--expect-textual-output-port port description)))
-    (unless (eq (agent-scheme--port-medium output) 'string)
+    (unless (memq (agent-scheme--port-medium output) '(string file))
       (agent-scheme--eval-error
        "%s host textual output ports are not available" description))
+    (agent-scheme--port-capability-check output context 'write)
     (setf (agent-scheme--port-contents output)
-          (concat (agent-scheme--port-contents output) text)))
+          (concat (agent-scheme--port-contents output) text))
+    (agent-scheme-capability-audit-port-result
+     output 'write (length text)))
   agent-scheme-unspecified)
 
-(defun agent-scheme--write-to-output-port (value port mode displayp)
+(defun agent-scheme--write-to-output-port
+    (value port mode displayp &optional context)
   "Write VALUE to PORT using MODE and display rendering when DISPLAYP is non-nil."
   (agent-scheme--write-text-to-port
    (if displayp
        (agent-scheme--display-string value)
      (agent-scheme-datum->external value mode))
    port
-   (if displayp "display" "write")))
+   (if displayp "display" "write")
+   context))
 
 (defun agent-scheme--primitive-eof-object? (arguments _context)
   "Primitive eof-object? over ARGUMENTS."
@@ -3393,25 +3444,80 @@ DESCRIPTION names the primitive for errors."
      (and (agent-scheme--port-outputp port)
           (agent-scheme--port-openp port)))))
 
-(defun agent-scheme--close-port-value (port)
+(defun agent-scheme--byte-list->unibyte-string (bytes)
+  "Return BYTES as an unibyte string for binary host file output."
+  (with-temp-buffer
+    (set-buffer-multibyte nil)
+    (dolist (byte bytes)
+      (insert (unibyte-string byte)))
+    (buffer-string)))
+
+(defun agent-scheme--host-file-output-contents (port)
+  "Return PORT contents in the host representation for file output."
+  (if (agent-scheme--port-binaryp port)
+      (agent-scheme--byte-list->unibyte-string
+       (or (agent-scheme--port-contents port) nil))
+    (or (agent-scheme--port-contents port) "")))
+
+(defun agent-scheme--flush-file-output-port (port context operation)
+  "Write host-backed output PORT contents to its file path for OPERATION."
+  (when (and (eq (agent-scheme--port-backing-domain port) 'file)
+             (agent-scheme--port-outputp port))
+    (agent-scheme--port-capability-check port context operation)
+    (condition-case condition
+        (progn
+          (write-region
+           (agent-scheme--host-file-output-contents port)
+           nil
+           (agent-scheme--port-path port)
+           nil
+           'silent)
+          (agent-scheme-capability-audit-port-result port operation 'flushed))
+      (file-error
+       (agent-scheme-capability-audit-port-result
+        port operation (error-message-string condition) t)
+       (signal (car condition) (cdr condition))))))
+
+(defun agent-scheme--close-port-value (port &optional context)
   "Close PORT and return the unspecified value."
-  (setf (agent-scheme--port-openp port) nil)
+  (when (agent-scheme--port-openp port)
+    (when (agent-scheme--port-backing-domain port)
+      (agent-scheme--port-capability-check port context 'close))
+    (when (and (eq (agent-scheme--port-backing-domain port) 'file)
+               (agent-scheme--port-outputp port))
+      (condition-case condition
+          (write-region
+           (agent-scheme--host-file-output-contents port)
+           nil
+           (agent-scheme--port-path port)
+           nil
+           'silent)
+        (file-error
+         (agent-scheme-capability-audit-port-result
+          port 'close (error-message-string condition) t)
+         (signal (car condition) (cdr condition)))))
+    (setf (agent-scheme--port-openp port) nil)
+    (setf (agent-scheme--port-status port) 'closed)
+    (agent-scheme-capability-audit-port-result port 'close 'closed))
   agent-scheme-unspecified)
 
-(defun agent-scheme--primitive-close-port (arguments _context)
+(defun agent-scheme--primitive-close-port (arguments context)
   "Primitive close-port over ARGUMENTS."
   (agent-scheme--close-port-value
-   (agent-scheme--expect-port (car arguments) "close-port")))
+   (agent-scheme--expect-port (car arguments) "close-port")
+   context))
 
-(defun agent-scheme--primitive-close-input-port (arguments _context)
+(defun agent-scheme--primitive-close-input-port (arguments context)
   "Primitive close-input-port over ARGUMENTS."
   (agent-scheme--close-port-value
-   (agent-scheme--expect-input-port (car arguments) "close-input-port")))
+   (agent-scheme--expect-input-port (car arguments) "close-input-port")
+   context))
 
-(defun agent-scheme--primitive-close-output-port (arguments _context)
+(defun agent-scheme--primitive-close-output-port (arguments context)
   "Primitive close-output-port over ARGUMENTS."
   (agent-scheme--close-port-value
-   (agent-scheme--expect-output-port (car arguments) "close-output-port")))
+   (agent-scheme--expect-output-port (car arguments) "close-output-port")
+   context))
 
 (defun agent-scheme--primitive-open-output-string (_arguments _context)
   "Primitive open-output-string."
@@ -3468,50 +3574,61 @@ DESCRIPTION names the primitive for errors."
 
 (defun agent-scheme--primitive-read (arguments _context)
   "Primitive read over ARGUMENTS."
-  (if (null arguments)
-      agent-scheme-eof-object
-    (let* ((port (agent-scheme--expect-textual-input-port
-                  (car arguments) "read"))
-           (result
-            (agent-scheme--read-one-from-string-at
-             (agent-scheme--port-source port)
-             (agent-scheme--port-position port))))
-      (setf (agent-scheme--port-position port) (cdr result))
-      (if (eq (car result) agent-scheme--read-eof)
-          agent-scheme-eof-object
-        (car result)))))
+  (let* ((port (agent-scheme--expect-textual-input-port
+                (if arguments
+                    (car arguments)
+                  (agent-scheme--current-input-port-or-deny _context "read"))
+                "read"))
+         (result
+          (agent-scheme--read-one-from-string-at
+           (agent-scheme--port-source port)
+           (agent-scheme--port-position port))))
+    (agent-scheme--port-capability-check port _context 'read)
+    (setf (agent-scheme--port-position port) (cdr result))
+    (agent-scheme-capability-audit-port-result port 'read 'datum)
+    (if (eq (car result) agent-scheme--read-eof)
+        agent-scheme-eof-object
+      (car result))))
 
-(defun agent-scheme--text-port-next-code (port advancep description)
+(defun agent-scheme--text-port-next-code
+    (port advancep description context)
   "Return next character code from textual input PORT.
 Advance when ADVANCEP is non-nil.  Signal errors using DESCRIPTION."
   (let ((input (agent-scheme--expect-textual-input-port port description)))
-    (unless (eq (agent-scheme--port-medium input) 'string)
+    (unless (memq (agent-scheme--port-medium input) '(string file))
       (agent-scheme--eval-error
        "%s host textual input ports are not available" description))
+    (agent-scheme--port-capability-check input context 'read)
     (let ((position (agent-scheme--port-position input))
           (source (agent-scheme--port-source input)))
       (if (>= position (length source))
-          agent-scheme-eof-object
+          (prog1 agent-scheme-eof-object
+            (agent-scheme-capability-audit-port-result input 'read 'eof))
         (prog1 (aref source position)
           (when advancep
-            (setf (agent-scheme--port-position input) (1+ position))))))))
+            (setf (agent-scheme--port-position input) (1+ position)))
+          (agent-scheme-capability-audit-port-result input 'read 1))))))
 
-(defun agent-scheme--primitive-read-char (arguments _context)
+(defun agent-scheme--primitive-read-char (arguments context)
   "Primitive read-char over ARGUMENTS."
   (let ((value (if arguments
                    (agent-scheme--text-port-next-code
-                    (car arguments) t "read-char")
-                 agent-scheme-eof-object)))
+                    (car arguments) t "read-char" context)
+                 (agent-scheme--text-port-next-code
+                  (agent-scheme--current-input-port-or-deny context "read-char")
+                  t "read-char" context))))
     (if (agent-scheme-eof-object-p value)
         value
       (agent-scheme--make-character value))))
 
-(defun agent-scheme--primitive-peek-char (arguments _context)
+(defun agent-scheme--primitive-peek-char (arguments context)
   "Primitive peek-char over ARGUMENTS."
   (let ((value (if arguments
                    (agent-scheme--text-port-next-code
-                    (car arguments) nil "peek-char")
-                 agent-scheme-eof-object)))
+                    (car arguments) nil "peek-char" context)
+                 (agent-scheme--text-port-next-code
+                  (agent-scheme--current-input-port-or-deny context "peek-char")
+                  nil "peek-char" context))))
     (if (agent-scheme-eof-object-p value)
         value
       (agent-scheme--make-character value))))
@@ -3522,23 +3639,25 @@ Advance when ADVANCEP is non-nil.  Signal errors using DESCRIPTION."
     (agent-scheme--expect-textual-input-port (car arguments) "char-ready?"))
   agent-scheme-true)
 
-(defun agent-scheme--primitive-read-string (arguments _context)
+(defun agent-scheme--primitive-read-string (arguments context)
   "Primitive read-string over ARGUMENTS."
   (let* ((count (agent-scheme--exact-integer->host
                  (car arguments) "read-string"))
-         (port (if (cdr arguments)
+           (port (if (cdr arguments)
                    (agent-scheme--expect-textual-input-port
                     (cadr arguments) "read-string")
-                 nil)))
+                 (agent-scheme--current-input-port-or-deny
+                  context "read-string"))))
     (when (< count 0)
       (agent-scheme--eval-error "read-string count must be non-negative"))
     (cond
      ((null port)
       (if (zerop count) "" agent-scheme-eof-object))
-     ((not (eq (agent-scheme--port-medium port) 'string))
+     ((not (memq (agent-scheme--port-medium port) '(string file)))
       (agent-scheme--eval-error
        "read-string host textual input ports are not available"))
      (t
+      (agent-scheme--port-capability-check port context 'read)
       (let* ((source (agent-scheme--port-source port))
              (position (agent-scheme--port-position port))
              (remaining (- (length source) position))
@@ -3548,17 +3667,21 @@ Advance when ADVANCEP is non-nil.  Signal errors using DESCRIPTION."
          ((zerop amount) agent-scheme-eof-object)
          (t
           (setf (agent-scheme--port-position port) (+ position amount))
+          (agent-scheme-capability-audit-port-result port 'read amount)
           (substring source position (+ position amount)))))))))
 
-(defun agent-scheme--primitive-read-line (arguments _context)
+(defun agent-scheme--primitive-read-line (arguments context)
   "Primitive read-line over ARGUMENTS."
-  (if (null arguments)
-      agent-scheme-eof-object
-    (let ((port (agent-scheme--expect-textual-input-port
-                 (car arguments) "read-line")))
-      (unless (eq (agent-scheme--port-medium port) 'string)
+  (let ((port (agent-scheme--expect-textual-input-port
+               (if arguments
+                   (car arguments)
+                 (agent-scheme--current-input-port-or-deny
+                  context "read-line"))
+               "read-line")))
+      (unless (memq (agent-scheme--port-medium port) '(string file))
         (agent-scheme--eval-error
          "read-line host textual input ports are not available"))
+      (agent-scheme--port-capability-check port context 'read)
       (let* ((source (agent-scheme--port-source port))
              (start (agent-scheme--port-position port))
              (length (length source))
@@ -3578,19 +3701,31 @@ Advance when ADVANCEP is non-nil.  Signal errors using DESCRIPTION."
                   (setq position (+ position 2))
                 (setq position (1+ position))))
             (setf (agent-scheme--port-position port) position)
-            line)))))))
+            (agent-scheme-capability-audit-port-result
+             port 'read (length line))
+            line))))))
 
-(defun agent-scheme--write-byte-to-port (byte port description)
-  "Append BYTE to binary output PORT for DESCRIPTION."
+(defun agent-scheme--append-bytes-to-port
+    (bytes port description &optional context)
+  "Append BYTES to binary output PORT for DESCRIPTION."
   (let ((output (agent-scheme--expect-binary-output-port port description)))
-    (unless (eq (agent-scheme--port-medium output) 'bytevector)
+    (unless (memq (agent-scheme--port-medium output) '(bytevector file))
       (agent-scheme--eval-error
        "%s host binary output ports are not available" description))
+    (agent-scheme--port-capability-check output context 'write)
     (setf (agent-scheme--port-contents output)
-          (append (agent-scheme--port-contents output) (list byte))))
+          (append (agent-scheme--port-contents output) bytes))
+    (agent-scheme-capability-audit-port-result
+     output 'write (length bytes)))
   agent-scheme-unspecified)
 
-(defun agent-scheme--primitive-read-u8 (arguments _context)
+(defun agent-scheme--write-byte-to-port
+    (byte port description &optional context)
+  "Append BYTE to binary output PORT for DESCRIPTION."
+  (agent-scheme--append-bytes-to-port
+   (list byte) port description context))
+
+(defun agent-scheme--primitive-read-u8 (arguments context)
   "Primitive read-u8 over ARGUMENTS."
   (if (null arguments)
       agent-scheme-eof-object
@@ -3598,15 +3733,18 @@ Advance when ADVANCEP is non-nil.  Signal errors using DESCRIPTION."
                   (car arguments) "read-u8"))
            (source (agent-scheme--port-source port))
            (position (agent-scheme--port-position port)))
-      (unless (eq (agent-scheme--port-medium port) 'bytevector)
+      (unless (memq (agent-scheme--port-medium port) '(bytevector file))
         (agent-scheme--eval-error
          "read-u8 host binary input ports are not available"))
+      (agent-scheme--port-capability-check port context 'read)
       (if (>= position (length source))
-          agent-scheme-eof-object
+          (prog1 agent-scheme-eof-object
+            (agent-scheme-capability-audit-port-result port 'read 'eof))
         (setf (agent-scheme--port-position port) (1+ position))
+        (agent-scheme-capability-audit-port-result port 'read 1)
         (agent-scheme--number-from-host (aref source position))))))
 
-(defun agent-scheme--primitive-peek-u8 (arguments _context)
+(defun agent-scheme--primitive-peek-u8 (arguments context)
   "Primitive peek-u8 over ARGUMENTS."
   (if (null arguments)
       agent-scheme-eof-object
@@ -3614,11 +3752,14 @@ Advance when ADVANCEP is non-nil.  Signal errors using DESCRIPTION."
                   (car arguments) "peek-u8"))
            (source (agent-scheme--port-source port))
            (position (agent-scheme--port-position port)))
-      (unless (eq (agent-scheme--port-medium port) 'bytevector)
+      (unless (memq (agent-scheme--port-medium port) '(bytevector file))
         (agent-scheme--eval-error
          "peek-u8 host binary input ports are not available"))
+      (agent-scheme--port-capability-check port context 'read)
       (if (>= position (length source))
-          agent-scheme-eof-object
+          (prog1 agent-scheme-eof-object
+            (agent-scheme-capability-audit-port-result port 'read 'eof))
+        (agent-scheme-capability-audit-port-result port 'read 1)
         (agent-scheme--number-from-host (aref source position))))))
 
 (defun agent-scheme--primitive-u8-ready? (arguments _context)
@@ -3627,7 +3768,7 @@ Advance when ADVANCEP is non-nil.  Signal errors using DESCRIPTION."
     (agent-scheme--expect-binary-input-port (car arguments) "u8-ready?"))
   agent-scheme-true)
 
-(defun agent-scheme--primitive-read-bytevector (arguments _context)
+(defun agent-scheme--primitive-read-bytevector (arguments context)
   "Primitive read-bytevector over ARGUMENTS."
   (let* ((count (agent-scheme--exact-integer->host
                  (car arguments) "read-bytevector"))
@@ -3642,10 +3783,11 @@ Advance when ADVANCEP is non-nil.  Signal errors using DESCRIPTION."
       (if (zerop count)
           (agent-scheme--make-bytevector [])
         agent-scheme-eof-object))
-     ((not (eq (agent-scheme--port-medium port) 'bytevector))
+     ((not (memq (agent-scheme--port-medium port) '(bytevector file)))
       (agent-scheme--eval-error
        "read-bytevector host binary input ports are not available"))
      (t
+      (agent-scheme--port-capability-check port context 'read)
       (let* ((source (agent-scheme--port-source port))
              (position (agent-scheme--port-position port))
              (remaining (- (length source) position))
@@ -3657,10 +3799,11 @@ Advance when ADVANCEP is non-nil.  Signal errors using DESCRIPTION."
           agent-scheme-eof-object)
          (t
           (setf (agent-scheme--port-position port) (+ position amount))
+          (agent-scheme-capability-audit-port-result port 'read amount)
           (agent-scheme--make-bytevector
            (cl-subseq source position (+ position amount))))))))))
 
-(defun agent-scheme--primitive-read-bytevector! (arguments _context)
+(defun agent-scheme--primitive-read-bytevector! (arguments context)
   "Primitive read-bytevector! over ARGUMENTS."
   (let* ((target (agent-scheme--expect-bytevector
                   (car arguments) "read-bytevector! target"))
@@ -3684,114 +3827,146 @@ Advance when ADVANCEP is non-nil.  Signal errors using DESCRIPTION."
       (let* ((source (agent-scheme--port-source port))
              (position (agent-scheme--port-position port))
              (amount (min (- end start) (- (length source) position))))
+        (unless (memq (agent-scheme--port-medium port) '(bytevector file))
+          (agent-scheme--eval-error
+           "read-bytevector! host binary input ports are not available"))
+        (agent-scheme--port-capability-check port context 'read)
         (if (zerop amount)
             agent-scheme-eof-object
           (dotimes (offset amount)
             (aset bytes (+ start offset) (aref source (+ position offset))))
           (setf (agent-scheme--port-position port) (+ position amount))
+          (agent-scheme-capability-audit-port-result port 'read amount)
           (agent-scheme--number-from-host amount))))))
 
-(defun agent-scheme--primitive-write-u8 (arguments _context)
+(defun agent-scheme--primitive-write-u8 (arguments context)
   "Primitive write-u8 over ARGUMENTS."
   (when (cdr arguments)
     (agent-scheme--write-byte-to-port
      (agent-scheme--expect-byte (car arguments) "write-u8")
      (cadr arguments)
-     "write-u8"))
+     "write-u8"
+     context))
   agent-scheme-unspecified)
 
-(defun agent-scheme--primitive-write-bytevector (arguments _context)
+(defun agent-scheme--primitive-write-bytevector (arguments context)
   "Primitive write-bytevector over ARGUMENTS."
   (when (cdr arguments)
     (let* ((bytevector (agent-scheme--expect-bytevector
                         (car arguments) "write-bytevector"))
            (bytes (agent-scheme-bytevector-bytes bytevector))
            (range (agent-scheme--optional-range
-                   arguments 2 (length bytes) "write-bytevector")))
+                   arguments 2 (length bytes) "write-bytevector"))
+           (payload nil))
       (cl-loop for index from (car range) below (cdr range)
-               do (agent-scheme--write-byte-to-port
-                   (aref bytes index)
-                   (cadr arguments)
-                   "write-bytevector"))))
+               do (push (aref bytes index) payload))
+      (agent-scheme--append-bytes-to-port
+       (nreverse payload)
+       (cadr arguments)
+       "write-bytevector"
+       context)))
   agent-scheme-unspecified)
 
-(defun agent-scheme--primitive-write-char (arguments _context)
+(defun agent-scheme--primitive-write-char (arguments context)
   "Primitive write-char over ARGUMENTS."
   (when (cdr arguments)
     (agent-scheme--write-text-to-port
      (char-to-string
       (agent-scheme--expect-character (car arguments) "write-char"))
      (cadr arguments)
-     "write-char"))
+     "write-char"
+     context))
   agent-scheme-unspecified)
 
-(defun agent-scheme--primitive-write-string (arguments _context)
+(defun agent-scheme--primitive-write-string (arguments context)
   "Primitive write-string over ARGUMENTS."
-  (when (cdr arguments)
-    (let* ((string (agent-scheme--expect-string
-                    (car arguments) "write-string"))
-           (range (agent-scheme--optional-range
-                   arguments 2 (length string) "write-string")))
-      (agent-scheme--write-text-to-port
-       (substring string (car range) (cdr range))
-       (cadr arguments)
-       "write-string")))
+  (let* ((string (agent-scheme--expect-string
+                  (car arguments) "write-string"))
+         (port (if (cdr arguments)
+                   (cadr arguments)
+                 (agent-scheme--current-output-port-or-deny
+                  context "write-string")))
+         (range (agent-scheme--optional-range
+                 arguments
+                 (if (cdr arguments) 2 1)
+                 (length string)
+                 "write-string")))
+    (agent-scheme--write-text-to-port
+     (substring string (car range) (cdr range))
+     port
+     "write-string"
+     context))
   agent-scheme-unspecified)
 
-(defun agent-scheme--primitive-newline (arguments _context)
+(defun agent-scheme--primitive-newline (arguments context)
   "Primitive newline over ARGUMENTS."
-  (when arguments
-    (agent-scheme--write-text-to-port "\n" (car arguments) "newline"))
+  (agent-scheme--write-text-to-port
+   "\n"
+   (if arguments
+       (car arguments)
+     (agent-scheme--current-output-port-or-deny context "newline"))
+   "newline"
+   context)
   agent-scheme-unspecified)
 
-(defun agent-scheme--primitive-display (arguments _context)
+(defun agent-scheme--primitive-display (arguments context)
   "Primitive display over ARGUMENTS."
-  (if (cdr arguments)
-      (agent-scheme--write-to-output-port
-       (car arguments)
-       (agent-scheme--expect-string-output-port
-        (cadr arguments) "display")
-       'write
-       t)
-    agent-scheme-unspecified))
+  (agent-scheme--write-to-output-port
+   (car arguments)
+   (agent-scheme--expect-textual-output-port
+    (if (cdr arguments)
+        (cadr arguments)
+      (agent-scheme--current-output-port-or-deny context "display"))
+    "display")
+   'write
+   t
+   context))
 
-(defun agent-scheme--primitive-write (arguments _context)
+(defun agent-scheme--primitive-write (arguments context)
   "Primitive write over ARGUMENTS."
-  (if (cdr arguments)
-      (agent-scheme--write-to-output-port
-       (car arguments)
-       (agent-scheme--expect-string-output-port
-        (cadr arguments) "write")
-       'write
-       nil)
-    agent-scheme-unspecified))
+  (agent-scheme--write-to-output-port
+   (car arguments)
+   (agent-scheme--expect-textual-output-port
+    (if (cdr arguments)
+        (cadr arguments)
+      (agent-scheme--current-output-port-or-deny context "write"))
+    "write")
+   'write
+   nil
+   context))
 
-(defun agent-scheme--primitive-write-shared (arguments _context)
+(defun agent-scheme--primitive-write-shared (arguments context)
   "Primitive write-shared over ARGUMENTS."
-  (if (cdr arguments)
-      (agent-scheme--write-to-output-port
-       (car arguments)
-       (agent-scheme--expect-string-output-port
-        (cadr arguments) "write-shared")
-       'shared
-       nil)
-    agent-scheme-unspecified))
+  (agent-scheme--write-to-output-port
+   (car arguments)
+   (agent-scheme--expect-textual-output-port
+    (if (cdr arguments)
+        (cadr arguments)
+      (agent-scheme--current-output-port-or-deny context "write-shared"))
+    "write-shared")
+   'shared
+   nil
+   context))
 
-(defun agent-scheme--primitive-write-simple (arguments _context)
+(defun agent-scheme--primitive-write-simple (arguments context)
   "Primitive write-simple over ARGUMENTS."
-  (if (cdr arguments)
-      (agent-scheme--write-to-output-port
-       (car arguments)
-       (agent-scheme--expect-string-output-port
-        (cadr arguments) "write-simple")
-        'simple
-       nil)
-    agent-scheme-unspecified))
+  (agent-scheme--write-to-output-port
+   (car arguments)
+   (agent-scheme--expect-textual-output-port
+    (if (cdr arguments)
+        (cadr arguments)
+      (agent-scheme--current-output-port-or-deny context "write-simple"))
+    "write-simple")
+   'simple
+   nil
+   context))
 
-(defun agent-scheme--primitive-flush-output-port (arguments _context)
+(defun agent-scheme--primitive-flush-output-port (arguments context)
   "Primitive flush-output-port over ARGUMENTS."
   (when arguments
-    (agent-scheme--expect-output-port (car arguments) "flush-output-port"))
+    (let ((port (agent-scheme--expect-output-port
+                 (car arguments) "flush-output-port")))
+      (agent-scheme--flush-file-output-port port context 'flush)))
   agent-scheme-unspecified)
 
 (defun agent-scheme--primitive-read-error? (arguments _context)
@@ -3829,6 +4004,151 @@ Advance when ADVANCEP is non-nil.  Signal errors using DESCRIPTION."
      (_ 'read))
    description
    (agent-scheme--eval-context-file-paths context)))
+
+(defun agent-scheme--read-file-port-source (authorization description filename)
+  "Return file contents for AUTHORIZATION or signal for DESCRIPTION."
+  (let ((path (plist-get authorization :path)))
+    (agent-scheme-capability-revalidate-file-authorization authorization)
+    (unless (file-readable-p path)
+      (agent-scheme-capability-audit-file-result
+       authorization
+       (format "%s file is not readable" description)
+       t)
+      (agent-scheme--eval-error
+       "%s file is not readable: %s" description filename))
+    (prog1
+        (with-temp-buffer
+          (insert-file-contents path)
+          (buffer-string))
+      (agent-scheme-capability-audit-file-result authorization 'opened))))
+
+(defun agent-scheme--read-binary-file-port-source
+    (authorization description filename)
+  "Return file bytes for AUTHORIZATION or signal for DESCRIPTION."
+  (let ((path (plist-get authorization :path)))
+    (agent-scheme-capability-revalidate-file-authorization authorization)
+    (unless (file-readable-p path)
+      (agent-scheme-capability-audit-file-result
+       authorization
+       (format "%s file is not readable" description)
+       t)
+      (agent-scheme--eval-error
+       "%s file is not readable: %s" description filename))
+    (prog1
+        (with-temp-buffer
+          (set-buffer-multibyte nil)
+          (insert-file-contents-literally path)
+          (let ((bytes (make-vector (buffer-size) 0)))
+            (dotimes (index (buffer-size) bytes)
+              (aset bytes index (char-after (1+ index))))))
+      (agent-scheme-capability-audit-file-result authorization 'opened))))
+
+(defun agent-scheme--primitive-open-input-file (arguments context)
+  "Primitive open-input-file over ARGUMENTS."
+  (let* ((filename (agent-scheme--expect-string
+                    (car arguments) "open-input-file"))
+         (authorization
+          (agent-scheme--resolve-file-policy-path
+           filename context "open-input-file"))
+         (source
+          (agent-scheme--read-file-port-source
+           authorization "open-input-file" filename))
+         (port
+          (agent-scheme--make-port
+           :medium 'file
+           :inputp t
+           :textualp t
+           :source source
+           :position 0)))
+    (agent-scheme-capability-register-file-port
+     port 'textual-input authorization '(read close))))
+
+(defun agent-scheme--primitive-open-binary-input-file (arguments context)
+  "Primitive open-binary-input-file over ARGUMENTS."
+  (let* ((filename (agent-scheme--expect-string
+                    (car arguments) "open-binary-input-file"))
+         (authorization
+          (agent-scheme--resolve-file-policy-path
+           filename context "open-binary-input-file"))
+         (source
+          (agent-scheme--read-binary-file-port-source
+           authorization "open-binary-input-file" filename))
+         (port
+          (agent-scheme--make-port
+           :medium 'file
+           :inputp t
+           :binaryp t
+           :source source
+           :position 0)))
+    (agent-scheme-capability-register-file-port
+     port 'binary-input authorization '(read close))))
+
+(defun agent-scheme--resolve-output-file-policy-path
+    (filename context description)
+  "Return file authorization for output FILENAME and DESCRIPTION."
+  (let* ((path (expand-file-name
+                filename
+                (agent-scheme--eval-context-include-directory context)))
+         (operation (if (file-exists-p path) 'write 'create)))
+    (agent-scheme-capability-authorize-file
+     filename
+     context
+     operation
+     description
+     (agent-scheme--eval-context-file-paths context))))
+
+(defun agent-scheme--primitive-open-output-file (arguments context)
+  "Primitive open-output-file over ARGUMENTS."
+  (let* ((filename (agent-scheme--expect-string
+                    (car arguments) "open-output-file"))
+         (authorization
+          (agent-scheme--resolve-output-file-policy-path
+           filename context "open-output-file"))
+         (path (plist-get authorization :path))
+         (port
+          (agent-scheme--make-port
+           :medium 'file
+           :outputp t
+           :textualp t
+           :contents "")))
+    (agent-scheme-capability-revalidate-file-authorization authorization)
+    (unless (file-directory-p (file-name-directory path))
+      (agent-scheme-capability-audit-file-result
+       authorization
+       "open-output-file parent directory is not writable"
+       t)
+      (agent-scheme--eval-error
+       "open-output-file parent directory is not writable: %s" filename))
+    (agent-scheme-capability-audit-file-result authorization 'opened)
+    (agent-scheme-capability-register-file-port
+     port 'textual-output authorization '(write flush close))))
+
+(defun agent-scheme--primitive-open-binary-output-file (arguments context)
+  "Primitive open-binary-output-file over ARGUMENTS."
+  (let* ((filename (agent-scheme--expect-string
+                    (car arguments) "open-binary-output-file"))
+         (authorization
+          (agent-scheme--resolve-output-file-policy-path
+           filename context "open-binary-output-file"))
+         (path (plist-get authorization :path))
+         (port
+          (agent-scheme--make-port
+           :medium 'file
+           :outputp t
+           :binaryp t
+           :contents nil)))
+    (agent-scheme-capability-revalidate-file-authorization authorization)
+    (unless (file-directory-p (file-name-directory path))
+      (agent-scheme-capability-audit-file-result
+       authorization
+       "open-binary-output-file parent directory is not writable"
+       t)
+      (agent-scheme--eval-error
+       "open-binary-output-file parent directory is not writable: %s"
+       filename))
+    (agent-scheme-capability-audit-file-result authorization 'opened)
+    (agent-scheme-capability-register-file-port
+     port 'binary-output authorization '(write flush close))))
 
 (defun agent-scheme--primitive-file-exists? (arguments context)
   "Primitive file-exists? over ARGUMENTS."
@@ -3885,7 +4205,105 @@ Advance when ADVANCEP is non-nil.  Signal errors using DESCRIPTION."
      context
      t
      (lambda (value)
-       (agent-scheme--close-port-value port)
+       (agent-scheme--close-port-value port context)
+       (agent-scheme--continue continuation value)))))
+
+(defun agent-scheme--primitive-call-with-input-file (arguments context)
+  "Primitive call-with-input-file over ARGUMENTS."
+  (agent-scheme--drain-state
+   (agent-scheme--primitive-call-with-input-file/k
+    arguments context #'agent-scheme--identity-continuation)
+   context))
+
+(defun agent-scheme--primitive-call-with-input-file/k
+    (arguments context continuation)
+  "CPS primitive call-with-input-file over ARGUMENTS."
+  (let ((port (agent-scheme--primitive-open-input-file
+               (list (car arguments)) context))
+        (procedure (agent-scheme--expect-procedure
+                    (cadr arguments) "call-with-input-file procedure")))
+    (agent-scheme--apply-procedure
+     procedure
+     (list port)
+     context
+     t
+     (lambda (value)
+       (agent-scheme--close-port-value port context)
+       (agent-scheme--continue continuation value)))))
+
+(defun agent-scheme--primitive-call-with-output-file (arguments context)
+  "Primitive call-with-output-file over ARGUMENTS."
+  (agent-scheme--drain-state
+   (agent-scheme--primitive-call-with-output-file/k
+    arguments context #'agent-scheme--identity-continuation)
+   context))
+
+(defun agent-scheme--primitive-call-with-output-file/k
+    (arguments context continuation)
+  "CPS primitive call-with-output-file over ARGUMENTS."
+  (let ((port (agent-scheme--primitive-open-output-file
+               (list (car arguments)) context))
+        (procedure (agent-scheme--expect-procedure
+                    (cadr arguments) "call-with-output-file procedure")))
+    (agent-scheme--apply-procedure
+     procedure
+     (list port)
+     context
+     t
+     (lambda (value)
+       (agent-scheme--close-port-value port context)
+       (agent-scheme--continue continuation value)))))
+
+(defun agent-scheme--primitive-with-input-from-file (arguments context)
+  "Primitive with-input-from-file over ARGUMENTS."
+  (agent-scheme--drain-state
+   (agent-scheme--primitive-with-input-from-file/k
+    arguments context #'agent-scheme--identity-continuation)
+   context))
+
+(defun agent-scheme--primitive-with-input-from-file/k
+    (arguments context continuation)
+  "CPS primitive with-input-from-file over ARGUMENTS."
+  (let ((port (agent-scheme--primitive-open-input-file
+               (list (car arguments)) context))
+        (procedure (agent-scheme--expect-procedure
+                    (cadr arguments) "with-input-from-file thunk"))
+        (previous (agent-scheme--eval-context-current-input-port context)))
+    (setf (agent-scheme--eval-context-current-input-port context) port)
+    (agent-scheme--apply-procedure
+     procedure
+     nil
+     context
+     t
+     (lambda (value)
+       (setf (agent-scheme--eval-context-current-input-port context) previous)
+       (agent-scheme--close-port-value port context)
+       (agent-scheme--continue continuation value)))))
+
+(defun agent-scheme--primitive-with-output-to-file (arguments context)
+  "Primitive with-output-to-file over ARGUMENTS."
+  (agent-scheme--drain-state
+   (agent-scheme--primitive-with-output-to-file/k
+    arguments context #'agent-scheme--identity-continuation)
+   context))
+
+(defun agent-scheme--primitive-with-output-to-file/k
+    (arguments context continuation)
+  "CPS primitive with-output-to-file over ARGUMENTS."
+  (let ((port (agent-scheme--primitive-open-output-file
+               (list (car arguments)) context))
+        (procedure (agent-scheme--expect-procedure
+                    (cadr arguments) "with-output-to-file thunk"))
+        (previous (agent-scheme--eval-context-current-output-port context)))
+    (setf (agent-scheme--eval-context-current-output-port context) port)
+    (agent-scheme--apply-procedure
+     procedure
+     nil
+     context
+     t
+     (lambda (value)
+       (setf (agent-scheme--eval-context-current-output-port context) previous)
+       (agent-scheme--close-port-value port context)
        (agent-scheme--continue continuation value)))))
 
 (defun agent-scheme--primitive-environment (arguments context)

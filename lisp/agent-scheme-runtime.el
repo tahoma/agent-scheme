@@ -177,8 +177,11 @@ MEDIUM separates string, bytevector, host-file, and virtual ports.
 INPUTP and OUTPUTP record direction; TEXTUALP and BINARYP record
 the datum layer; OPENP tracks whether operations are still valid.
 SOURCE and POSITION back input ports, while CONTENTS backs output
-ports."
-  medium inputp outputp textualp binaryp (openp t) source (position 0) contents)
+ports.  Host-backed ports additionally carry BACKING-DOMAIN,
+OPERATIONS, GRANT, LIMITS, HANDLE, STATUS, and PATH as printable
+capability metadata; raw host objects stay outside Scheme values."
+  medium inputp outputp textualp binaryp (openp t) source (position 0) contents
+  backing-domain operations grant limits handle status path counters)
 
 (cl-defstruct (agent-scheme--environment-specifier
                (:constructor agent-scheme--make-environment-specifier
@@ -234,6 +237,9 @@ base syntax prelude has already been installed."
   policy-confirmation-function
   capability-grants
   active-capability-grants
+  current-input-port
+  current-output-port
+  current-error-port
   session-id
   interaction-environment
   base-syntax-installed

@@ -58,6 +58,9 @@
 (defvar agent-scheme--next-file-capability-decision-number 0
   "Next numeric suffix for generated file capability decision ids.")
 
+(defvar agent-scheme--next-port-capability-handle-number 0
+  "Next numeric suffix for generated port capability handle ids.")
+
 (defvar agent-scheme--next-code-loading-request-number 0
   "Next numeric suffix for generated code-loading request ids.")
 
@@ -963,6 +966,160 @@ When ERRORED is non-nil, RESULT is recorded as an error payload."
       (signal 'agent-scheme-capability-grant-error
               (list "inactive file capability grant")))
     authorization))
+
+(defun agent-scheme--port-capability-handle-id ()
+  "Return a fresh port capability handle id."
+  (agent-scheme--capability-grant-symbol
+   (format "p-file-%d"
+           (cl-incf agent-scheme--next-port-capability-handle-number))))
+
+(defun agent-scheme--port-capability-datum
+    (handle-id kind backing operations grant limits status path)
+  "Return a Scheme-readable port capability datum."
+  `(,(agent-scheme--capability-grant-symbol "port-capability")
+    (,(agent-scheme--capability-grant-symbol "id") ,handle-id)
+    (,(agent-scheme--capability-grant-symbol "kind")
+     ,(agent-scheme--capability-grant-symbol kind))
+    (,(agent-scheme--capability-grant-symbol "backing")
+     ,(agent-scheme--capability-grant-symbol backing))
+    (,(agent-scheme--capability-grant-symbol "operations")
+     ,@operations)
+    (,(agent-scheme--capability-grant-symbol "grant") ,grant)
+    (,(agent-scheme--capability-grant-symbol "limits") ,@limits)
+    (,(agent-scheme--capability-grant-symbol "path") ,path)
+    (,(agent-scheme--capability-grant-symbol "status")
+     ,(agent-scheme--capability-grant-symbol status))))
+
+(defun agent-scheme--port-capability-limits (grant)
+  "Return port limits inherited from GRANT, or nil."
+  (agent-scheme--capability-grant-field-values grant "limits"))
+
+(defun agent-scheme-capability-register-file-port
+    (port kind authorization operations)
+  "Attach a port capability handle to PORT and audit its creation.
+AUTHORIZATION is the approved file authorization that created PORT."
+  (let* ((grant (plist-get authorization :grant))
+         (grant-id (agent-scheme--capability-grant-id grant))
+         (path (plist-get authorization :path))
+         (limits (agent-scheme--port-capability-limits grant))
+         (handle-id (agent-scheme--port-capability-handle-id))
+         (handle
+          (agent-scheme--port-capability-datum
+           handle-id kind 'file operations grant-id limits 'open path)))
+    (setf (agent-scheme--port-backing-domain port) 'file)
+    (setf (agent-scheme--port-operations port) operations)
+    (setf (agent-scheme--port-grant port) grant-id)
+    (setf (agent-scheme--port-limits port) limits)
+    (setf (agent-scheme--port-handle port) handle-id)
+    (setf (agent-scheme--port-status port) 'open)
+    (setf (agent-scheme--port-path port) path)
+    (setf (agent-scheme--port-counters port) nil)
+    (agent-scheme-audit-record
+     'capability-handle
+     `((handle . ,handle)
+       (domain . port)
+       (kind . ,kind)
+       (backing . file)
+       (operations . ,operations)
+       (grant . ,grant-id)
+       (limits . ,limits)
+       (path . ,path)
+       (status . open)))
+    port))
+
+(defun agent-scheme-capability-audit-port-result
+    (port operation result &optional errored)
+  "Audit host-backed PORT capability OPERATION with RESULT."
+  (when (and port (agent-scheme--port-backing-domain port))
+    (agent-scheme-audit-record
+     'capability-audit
+     `((domain . port)
+       (operation . ,operation)
+       (handle . ,(agent-scheme--port-handle port))
+       (backing . ,(agent-scheme--port-backing-domain port))
+       (grant . ,(agent-scheme--port-grant port))
+       (path . ,(agent-scheme--port-path port))
+       (result . ,(if errored
+                      (list 'error result)
+                    (list 'ok result)))))))
+
+(defun agent-scheme--port-capability-limit-name (operation)
+  "Return the limit field name for port OPERATION, or nil."
+  (pcase operation
+    ('read "reads")
+    ('write "writes")
+    ('flush "flushes")
+    ('close "closes")
+    (_ nil)))
+
+(defun agent-scheme--port-capability-limit-value (port name)
+  "Return PORT limit NAME as a host integer, or nil."
+  (when name
+    (when-let ((field
+                (seq-find
+                 (lambda (entry)
+                   (and (consp entry)
+                        (equal
+                         (agent-scheme--capability-grant-symbol-name
+                          (car entry))
+                         name)))
+                 (agent-scheme--port-limits port))))
+      (agent-scheme--capability-exact-integer
+       (cadr field)
+       (format "port capability limit %s" name)))))
+
+(defun agent-scheme--port-capability-counter (port name)
+  "Return PORT operation counter NAME."
+  (or (cdr (assoc name (agent-scheme--port-counters port))) 0))
+
+(defun agent-scheme--port-capability-set-counter! (port name value)
+  "Set PORT operation counter NAME to VALUE."
+  (let ((counters (assq-delete-all name (agent-scheme--port-counters port))))
+    (setf (agent-scheme--port-counters port)
+          (cons (cons name value) counters))))
+
+(defun agent-scheme--port-capability-check-limit! (port operation)
+  "Consume one PORT operation limit unit for OPERATION."
+  (let* ((name (agent-scheme--port-capability-limit-name operation))
+         (limit (agent-scheme--port-capability-limit-value port name)))
+    (when limit
+      (let ((used (agent-scheme--port-capability-counter port name)))
+        (when (>= used limit)
+          (let ((reason (format "port capability limit exceeded: %s" name)))
+            (agent-scheme-capability-audit-port-result
+             port operation reason t)
+            (signal 'agent-scheme-capability-grant-error (list reason))))
+        (agent-scheme--port-capability-set-counter! port name (1+ used))))))
+
+(defun agent-scheme-capability-revalidate-port-operation
+    (port context operation)
+  "Fail closed unless PORT can perform OPERATION in CONTEXT."
+  (when (agent-scheme--port-backing-domain port)
+    (cond
+     ((not (agent-scheme--port-openp port))
+      (agent-scheme-capability-audit-port-result
+       port operation "closed port capability handle" t)
+      (signal 'agent-scheme-capability-grant-error
+              (list "stale port capability handle: closed port")))
+     ((not (member operation (agent-scheme--port-operations port)))
+      (agent-scheme-capability-audit-port-result
+       port operation "operation outside port capability" t)
+      (signal 'agent-scheme-capability-grant-error
+              (list "operation outside port capability")))
+     (t
+      (let* ((grant-id (agent-scheme--port-grant port))
+             (grant
+              (and grant-id
+                   (agent-scheme--capability-grant-by-id
+                    grant-id context))))
+          (unless (and grant
+                     (agent-scheme--capability-grant-active-p grant))
+          (agent-scheme-capability-audit-port-result
+           port operation "inactive port capability grant" t)
+          (signal 'agent-scheme-capability-grant-error
+                  (list "stale port capability handle: inactive grant")))
+        (agent-scheme--port-capability-check-limit! port operation)))))
+  port)
 
 (defun agent-scheme--code-loading-request-datum
     (request-id file-authorization binding)

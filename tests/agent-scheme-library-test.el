@@ -83,6 +83,24 @@
   (with-temp-file path
     (insert contents)))
 
+(defun agent-scheme-library-test--write-binary-file (path bytes)
+  "Write byte sequence BYTES to PATH, creating parent directories as needed."
+  (make-directory (file-name-directory path) t)
+  (with-temp-buffer
+    (set-buffer-multibyte nil)
+    (dolist (byte bytes)
+      (insert (unibyte-string byte)))
+    (write-region (point-min) (point-max) path nil 'silent)))
+
+(defun agent-scheme-library-test--read-binary-file (path)
+  "Return PATH contents as a list of byte values."
+  (with-temp-buffer
+    (set-buffer-multibyte nil)
+    (insert-file-contents-literally path)
+    (let (bytes)
+      (dotimes (index (buffer-size) (nreverse bytes))
+        (push (char-after (1+ index)) bytes)))))
+
 (defun agent-scheme-library-test--standard-source-spec (name specs)
   "Return the source library spec named NAME from SPECS."
   (cl-find name specs
@@ -687,6 +705,385 @@
             "(event capability-audit)"
             "(operation delete)"
             "(result (ok deleted))")))
+      (when (file-exists-p root)
+        (delete-directory root t)))))
+
+(ert-deftest agent-scheme-library-test-file-grant-authorizes-input-file-port ()
+  "Authorize host-backed input file ports through file and port capabilities."
+  (let* ((root (make-temp-file "agent-scheme-file-port-input-" t))
+         (target (expand-file-name "allowed/input.scm" root))
+         (options
+          (agent-scheme-library-test--file-grant-options
+           root
+           '("allowed")
+           '(read))))
+    (unwind-protect
+        (progn
+          (agent-scheme-library-test--write-file target "abc")
+          (agent-scheme-audit-clear)
+          (should
+           (equal
+            (agent-scheme-library-test--external/options
+             "(import (scheme base) (scheme file))
+              (let ((port (open-input-file \"allowed/input.scm\")))
+                (list (input-port? port)
+                      (textual-port? port)
+                      (read-string 2 port)
+                      (read-string 2 port)
+                      (eof-object? (read-char port))))"
+             options)
+            "(#t #t \"ab\" \"c\" #t)"))
+          (should
+           (agent-scheme-library-test--audit-entry-matching
+            "(event capability-handle)"
+            "(domain port)"
+            "(backing file)"
+            "(operations (read close))"
+            "(grant fixture-file-grant)"
+            "(status open)"))
+          (should
+           (agent-scheme-library-test--audit-entry-matching
+            "(event capability-audit)"
+            "(domain port)"
+            "(operation read)"
+            "(result (ok 2))")))
+      (when (file-exists-p root)
+        (delete-directory root t)))))
+
+(ert-deftest agent-scheme-library-test-file-grant-authorizes-output-file-port ()
+  "Authorize host-backed output file ports before creating host files."
+  (let* ((root (make-temp-file "agent-scheme-file-port-output-" t))
+         (target (expand-file-name "allowed/output.scm" root))
+         (options
+          (agent-scheme-library-test--file-grant-options
+           root
+           '("allowed")
+           '(create))))
+    (unwind-protect
+        (progn
+          (make-directory (file-name-directory target) t)
+          (agent-scheme-audit-clear)
+          (should
+           (equal
+            (agent-scheme-library-test--external/options
+             "(import (scheme base) (scheme file))
+              (let ((port (open-output-file \"allowed/output.scm\")))
+                (write-string \"created\" port)
+                (close-port port)
+                (output-port-open? port))"
+             options)
+            "#f"))
+          (with-temp-buffer
+            (insert-file-contents target)
+            (should (equal (buffer-string) "created")))
+          (should
+           (agent-scheme-library-test--audit-entry-matching
+            "(event capability-request)"
+            "(domain file)"
+            "(operation create)"
+            "(path \"allowed/output.scm\")"))
+          (should
+           (agent-scheme-library-test--audit-entry-matching
+            "(event capability-handle)"
+            "(domain port)"
+            "(backing file)"
+            "(operations (write flush close))"
+            "(grant fixture-file-grant)"
+            "(status open)"))
+          (should
+           (agent-scheme-library-test--audit-entry-matching
+            "(event capability-audit)"
+            "(domain port)"
+            "(operation write)"
+            "(result (ok 7))"))
+          (should
+           (agent-scheme-library-test--audit-entry-matching
+            "(event capability-audit)"
+            "(domain port)"
+            "(operation close)"
+            "(result (ok closed))")))
+      (when (file-exists-p root)
+        (delete-directory root t)))))
+
+(ert-deftest agent-scheme-library-test-file-grant-authorizes-binary-file-ports ()
+  "Authorize host-backed binary file ports through file and port capabilities."
+  (let* ((root (make-temp-file "agent-scheme-binary-file-port-" t))
+         (input (expand-file-name "allowed/input.bin" root))
+         (output (expand-file-name "allowed/output.bin" root))
+         (options
+          (agent-scheme-library-test--file-grant-options
+           root
+           '("allowed")
+           '(read create))))
+    (unwind-protect
+        (progn
+          (agent-scheme-library-test--write-binary-file
+           input
+           '(1 2 3 4 255))
+          (agent-scheme-audit-clear)
+          (should
+           (equal
+            (agent-scheme-library-test--external/options
+             "(import (scheme base) (scheme file))
+              (let ((in (open-binary-input-file \"allowed/input.bin\"))
+                    (out (open-binary-output-file \"allowed/output.bin\")))
+                (write-u8 (read-u8 in) out)
+                (write-bytevector (read-bytevector 4 in) out)
+                (close-port out)
+                (list (binary-port? in)
+                      (eof-object? (read-u8 in))
+                      (output-port-open? out)))"
+             options)
+            "(#t #t #f)"))
+          (should
+           (equal
+            (agent-scheme-library-test--read-binary-file output)
+            '(1 2 3 4 255)))
+          (should
+           (agent-scheme-library-test--audit-entry-matching
+            "(event capability-handle)"
+            "(domain port)"
+            "(kind binary-input)"
+            "(backing file)"
+            "(operations (read close))"))
+          (should
+           (agent-scheme-library-test--audit-entry-matching
+            "(event capability-handle)"
+            "(domain port)"
+            "(kind binary-output)"
+            "(backing file)"
+            "(operations (write flush close))")))
+      (when (file-exists-p root)
+        (delete-directory root t)))))
+
+(ert-deftest agent-scheme-library-test-file-port-wrappers-use-capabilities ()
+  "Authorize file port wrapper procedures before host port creation."
+  (let* ((root (make-temp-file "agent-scheme-file-port-wrappers-" t))
+         (input (expand-file-name "allowed/input.scm" root))
+         (call-output (expand-file-name "allowed/call-output.scm" root))
+         (with-output (expand-file-name "allowed/with-output.scm" root))
+         (options
+          (agent-scheme-library-test--file-grant-options
+           root
+           '("allowed")
+           '(read create))))
+    (unwind-protect
+        (progn
+          (agent-scheme-library-test--write-file input "input")
+          (agent-scheme-audit-clear)
+          (should
+           (equal
+            (agent-scheme-library-test--external/options
+             "(import (scheme base) (scheme file))
+              (list
+               (call-with-input-file
+                \"allowed/input.scm\"
+                (lambda (port) (read-string 5 port)))
+               (with-input-from-file
+                \"allowed/input.scm\"
+                (lambda () (read-string 5)))
+               (begin
+                 (call-with-output-file
+                  \"allowed/call-output.scm\"
+                  (lambda (port) (write-string \"call\" port)))
+                 'call-done)
+               (begin
+                 (with-output-to-file
+                  \"allowed/with-output.scm\"
+                  (lambda () (write-string \"with\")))
+                 'with-done))"
+             options)
+            "(\"input\" \"input\" call-done with-done)"))
+          (with-temp-buffer
+            (insert-file-contents call-output)
+            (should (equal (buffer-string) "call")))
+          (with-temp-buffer
+            (insert-file-contents with-output)
+            (should (equal (buffer-string) "with")))
+          (should
+           (agent-scheme-library-test--audit-entry-matching
+            "(event capability-request)"
+            "(domain file)"
+            "(operation create)"
+            "(path \"allowed/call-output.scm\")"))
+          (should
+           (agent-scheme-library-test--audit-entry-matching
+            "(event capability-request)"
+            "(domain file)"
+            "(operation create)"
+            "(path \"allowed/with-output.scm\")")))
+      (when (file-exists-p root)
+        (delete-directory root t)))))
+
+(ert-deftest agent-scheme-library-test-default-current-ports-are-policy-gated ()
+  "Deny default current ports unless a dynamic file wrapper binds them."
+  (agent-scheme-audit-clear)
+  (let ((input-condition
+         (should-error
+          (agent-scheme-eval-source
+           "(import (scheme base))
+            (current-input-port)")
+          :type 'agent-scheme-policy-error))
+        (output-condition
+         (should-error
+          (agent-scheme-eval-source
+           "(import (scheme base))
+            (current-output-port)")
+          :type 'agent-scheme-policy-error)))
+    (should
+     (string-match-p "current-input-port requires policy-gated host access"
+                     (cadr input-condition)))
+    (should
+     (string-match-p "current-output-port requires policy-gated host access"
+                     (cadr output-condition))))
+  (should
+   (agent-scheme-library-test--audit-entry-matching
+    "(event policy-decision)"
+    "(operation \"current-input-port\")"
+    "(decision denied)"))
+  (should
+   (agent-scheme-library-test--audit-entry-matching
+    "(event policy-decision)"
+    "(operation \"current-output-port\")"
+    "(decision denied)")))
+
+(ert-deftest agent-scheme-library-test-file-port-close-invalidates-handle ()
+  "Reject reads through a closed host-backed file port as stale handles."
+  (let* ((root (make-temp-file "agent-scheme-file-port-close-" t))
+         (target (expand-file-name "allowed/input.scm" root))
+         (options
+          (agent-scheme-library-test--file-grant-options
+           root
+           '("allowed")
+           '(read))))
+    (unwind-protect
+        (progn
+          (agent-scheme-library-test--write-file target "abc")
+          (agent-scheme-audit-clear)
+          (let ((condition
+                 (should-error
+                  (agent-scheme-eval-source
+                   "(import (scheme base) (scheme file))
+                    (let ((port (open-input-file \"allowed/input.scm\")))
+                      (close-port port)
+                      (read-char port))"
+                   nil
+                   options)
+                  :type 'agent-scheme-capability-grant-error)))
+            (should
+             (string-match-p "stale port capability handle"
+                             (cadr condition)))))
+      (when (file-exists-p root)
+        (delete-directory root t)))))
+
+(ert-deftest agent-scheme-library-test-file-port-revoked-grant-is-stale ()
+  "Reject host-backed file ports after their backing file grant is revoked."
+  (let* ((root (make-temp-file "agent-scheme-file-port-revoked-" t))
+         (target (expand-file-name "allowed/input.scm" root)))
+    (unwind-protect
+        (progn
+          (agent-scheme-library-test--write-file target "abc")
+          (agent-scheme-audit-clear)
+          (let ((condition
+                 (should-error
+                  (agent-scheme-eval-source
+                   (format
+                    "(import (scheme base) (scheme file) (agent capability))
+                     (grant-capability!
+                      '(capability-grant
+                        (id revoked-port-grant)
+                        (domain file)
+                        (operations read)
+                        (scope (project-root %S)
+                               (paths (\"allowed\"))
+                               (remote denied)
+                               (symlinks resolve-within-root))
+                        (expires never)))
+                     (let ((port (open-input-file \"allowed/input.scm\")))
+                       (grant-revoke! 'revoked-port-grant)
+                       (read-char port))"
+                    (file-name-as-directory (expand-file-name root)))
+                   nil
+                   (list :include-directory root))
+                  :type 'agent-scheme-capability-grant-error)))
+            (should
+             (string-match-p "stale port capability handle"
+                             (cadr condition)))))
+      (when (file-exists-p root)
+        (delete-directory root t)))))
+
+(ert-deftest agent-scheme-library-test-file-port-read-limit-is-enforced ()
+  "Deny host-backed file port reads after the declared port limit is spent."
+  (let* ((root (make-temp-file "agent-scheme-file-port-limit-" t))
+         (target (expand-file-name "allowed/input.scm" root)))
+    (unwind-protect
+        (progn
+          (agent-scheme-library-test--write-file target "abc")
+          (agent-scheme-audit-clear)
+          (let ((condition
+                 (should-error
+                  (agent-scheme-eval-source
+                   (format
+                    "(import (scheme base) (scheme file) (agent capability))
+                     (grant-capability!
+                      '(capability-grant
+                        (id limited-port-grant)
+                        (domain file)
+                        (operations read)
+                        (scope (project-root %S)
+                               (paths (\"allowed\"))
+                               (remote denied)
+                               (symlinks resolve-within-root))
+                        (limits (reads 1))
+                        (expires never)))
+                     (let ((port (open-input-file \"allowed/input.scm\")))
+                       (read-char port)
+                       (read-char port))"
+                    (file-name-as-directory (expand-file-name root)))
+                   nil
+                   (list :include-directory root))
+                  :type 'agent-scheme-capability-grant-error)))
+            (should
+             (string-match-p "port capability limit exceeded: reads"
+                             (cadr condition)))))
+      (when (file-exists-p root)
+        (delete-directory root t)))))
+
+(ert-deftest agent-scheme-library-test-file-port-close-limit-allows-close ()
+  "Spend one close limit unit for one host-backed output port close."
+  (let* ((root (make-temp-file "agent-scheme-file-port-close-limit-" t))
+         (target (expand-file-name "allowed/output.scm" root)))
+    (unwind-protect
+        (progn
+          (make-directory (file-name-directory target) t)
+          (should
+           (equal
+            (agent-scheme-value->external
+             (agent-scheme-eval-source
+              (format
+               "(import (scheme base) (scheme file) (agent capability))
+                (grant-capability!
+                 '(capability-grant
+                   (id close-limited-port-grant)
+                   (domain file)
+                   (operations create)
+                   (scope (project-root %S)
+                          (paths (\"allowed\"))
+                          (remote denied)
+                          (symlinks resolve-within-root))
+                   (limits (closes 1))
+                   (expires never)))
+                (let ((port (open-output-file \"allowed/output.scm\")))
+                  (write-string \"x\" port)
+                  (close-port port)
+                  (output-port-open? port))"
+               (file-name-as-directory (expand-file-name root)))
+              nil
+              (list :include-directory root)))
+            "#f"))
+          (with-temp-buffer
+            (insert-file-contents target)
+            (should (equal (buffer-string) "x"))))
       (when (file-exists-p root)
         (delete-directory root t)))))
 
