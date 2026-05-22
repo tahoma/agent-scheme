@@ -83,6 +83,11 @@ The detailed multi-host adapter and bootstrap stance is recorded in
 or backend work should preserve that document's R7RS-small contract, portable
 test path, and Scheme-readable adapter boundary.
 
+The first planned non-Emacs host is the native CLI and daemon adapter. Its
+Scheme-readable declaration, capability libraries, handle model, prompt
+behavior, and process-boundary test strategy are recorded in
+[Native CLI and Daemon Adapter Contract](native-cli-daemon-adapter.md).
+
 ### First-Class Portable Scheme
 
 The portable R7RS implementation under `scheme/agent-scheme/` is not a sample,
