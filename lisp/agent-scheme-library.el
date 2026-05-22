@@ -17,6 +17,7 @@
 (require 'agent-scheme-capability)
 (require 'agent-scheme-agent-io)
 (require 'agent-scheme-approval)
+(require 'agent-scheme-debugger)
 (require 'agent-scheme-memory)
 (require 'agent-scheme-redaction)
 (require 'agent-scheme-session)
@@ -68,6 +69,7 @@
 (defconst agent-scheme--agent-library-keys
   '("(agent io)"
     "(agent approval)"
+    "(agent debugger)"
     "(agent capability)"
     "(agent capability primitive)"
     "(agent memory)"
@@ -328,6 +330,11 @@
      (agent-scheme--register-primitive-library
       key
       (agent-scheme-approval-primitive-specs)
+      context))
+    ("(agent debugger)"
+     (agent-scheme--register-primitive-library
+      key
+      (agent-scheme-debugger-primitive-specs)
       context))
     ("(agent capability)"
      (unless (gethash key (agent-scheme--eval-context-libraries context))

@@ -113,6 +113,7 @@
     (define agent-library-keys
       '((agent io)
         (agent approval)
+        (agent debugger)
         (agent capability)
         (agent capability primitive)
         (agent memory)
@@ -797,6 +798,32 @@
                                   'primitive-approval-resolve!
                                   2
                                   2))
+         context))
+       ((equal? key '(agent debugger))
+        (register-primitive-library!
+         key
+         (list
+          (library-primitive-spec 'current-error 'primitive-current-error 0 0)
+          (library-primitive-spec 'condition-stack
+                                  'primitive-condition-stack
+                                  1
+                                  1)
+          (library-primitive-spec 'condition-environment
+                                  'primitive-condition-environment
+                                  2
+                                  2)
+          (library-primitive-spec 'condition-restarts
+                                  'primitive-condition-restarts
+                                  1
+                                  1)
+          (library-primitive-spec 'restart-invoke!
+                                  'primitive-restart-invoke!
+                                  2
+                                  2)
+          (library-primitive-spec 'debugger-yield
+                                  'primitive-debugger-yield
+                                  1
+                                  1))
          context))
        ((equal? key '(agent capability))
         (if (not (library-registry-ref context key))

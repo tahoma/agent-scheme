@@ -51,6 +51,38 @@
           (agent-scheme-eval-source-result source))
          expected))
 
+;; Report whether TEXT starts with PREFIX.
+(define (string-prefix? prefix text)
+  (let ((prefix-length (string-length prefix))
+        (text-length (string-length text)))
+    (and (<= prefix-length text-length)
+         (let loop ((index 0))
+           (or (= index prefix-length)
+               (and (char=? (string-ref prefix index)
+                            (string-ref text index))
+                    (loop (+ index 1))))))))
+
+;; Report whether TEXT contains NEEDLE.
+(define (string-contains? text needle)
+  (let ((text-length (string-length text))
+        (needle-length (string-length needle)))
+    (let loop ((index 0))
+      (and (<= (+ index needle-length) text-length)
+           (or (string-prefix? needle (substring text index text-length))
+               (loop (+ index 1)))))))
+
+;; Evaluate SOURCE as a result datum and require each substring.
+(define (check-result-contains name source needles)
+  (let ((actual
+         (agent-scheme-result->external
+          (agent-scheme-eval-source-result source))))
+    (let loop ((rest needles))
+      (if (not (null? rest))
+          (begin
+            (if (not (string-contains? actual (car rest)))
+                (record-failure name (car rest) actual))
+            (loop (cdr rest)))))))
+
 ;; Replace PATH with CONTENTS using the host Scheme runtime.
 (define (write-host-test-file path contents)
   (if (file-exists? path)
@@ -415,6 +447,38 @@
 (check-result-external 'multiple-values-result
                        "(values 1 2)"
                        "(evaluation-result (status values) (values (1 2)) (events ()) (budget (steps-used 5) (host-calls 1)))")
+
+(check-result-contains 'debugger-unbound-variable-result
+                       "missing"
+                       '("(status error)"
+                         "(condition (type unbound-variable)"
+                         "(symbol missing)"
+                         "(phase evaluation)"
+                         "(stack ((frame (id f-0)"
+                         "(environment ((frame f-0)"
+                         "(restarts ((restart (id abort)"))
+
+(check-result-contains 'debugger-current-error-restarts
+                       "(import (scheme base) (agent debugger))
+                        (with-exception-handler
+                         (lambda (condition)
+                           (condition-restarts (current-error)))
+                         (lambda ()
+                           (raise-continuable 'boom)))"
+                       '("(status ok)"
+                         "(restart (id abort)"
+                         "(restart (id continue-with-warning)"))
+
+(check-result-contains 'debugger-yield-event
+                       "(import (scheme base) (agent debugger))
+                        (debugger-yield
+                         '(condition
+                           (type synthetic)
+                           (message \"example\")))
+                        'done"
+                       '("(status ok)"
+                         "(value done)"
+                         "(events ((debugger (condition (type synthetic) (message \"example\")))))"))
 
 (check-external 'multiple-values-binding-forms
                 "(let ((a 'a) (b 'b) (x 'x) (y 'y))
