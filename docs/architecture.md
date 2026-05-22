@@ -193,6 +193,13 @@ The agent layer provides self-scripting facilities as Scheme-readable data:
 This layer should be usable from a shared REPL by both the user and the outer
 agent loop.
 
+Scheme programs that need to adapt to optional libraries or host adapters
+should use the reflection ladder documented in
+[Feature and Host Reflection](feature-reflection.md): R7RS `cond-expand` with
+`(library ...)` for static library selection, `(features)` for
+implementation-level language features, and structured `host-adapter` and
+`host-capability` datums for runtime host inspection.
+
 ## Pass-Oriented Frontend and Backends
 
 Agent Scheme should have one shared frontend for reading, resolving libraries,

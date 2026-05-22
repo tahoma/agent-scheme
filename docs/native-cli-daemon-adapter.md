@@ -74,6 +74,10 @@ to the same capability environment when they observe or mutate host state.
 Importing one of these libraries only installs bindings; authority still comes
 from policy decisions, grants, and live handle checks.
 
+General guidance for choosing between R7RS `cond-expand`, `(features)`, and
+runtime `host-adapter` reflection is documented in
+[Feature and Host Reflection](feature-reflection.md).
+
 ## Initial Capability Libraries
 
 Adapter-specific libraries use the `(cli ...)` prefix. They describe terminal
