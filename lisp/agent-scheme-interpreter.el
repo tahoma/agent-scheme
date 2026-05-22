@@ -17,6 +17,7 @@
 (require 'agent-scheme-library)
 (require 'agent-scheme-macro)
 (require 'agent-scheme-policy)
+(require 'agent-scheme-debugger)
 
 (defun agent-scheme--dynamic-wind-prefix-before (frame stack)
   "Return the prefix of STACK before FRAME, comparing frames with `eq'."
@@ -4863,13 +4864,16 @@ When KEEP-RESULTS is non-nil, return the collected values."
 (defun agent-scheme--invoke-exception-handler (condition context)
   "Invoke the current exception handler for CONDITION."
   (let* ((handlers (agent-scheme--eval-context-exception-handlers context))
-         (handler (car handlers)))
+         (handler (car handlers))
+         (old-error (agent-scheme--eval-context-current-error context)))
     (unless handler
       (agent-scheme--eval-error
        "unhandled exception: %s"
        (agent-scheme-value->external condition)))
     (unwind-protect
         (progn
+          (setf (agent-scheme--eval-context-current-error context)
+                (agent-scheme-debugger-exception-datum condition context))
           (setf (agent-scheme--eval-context-exception-handlers context)
                 (cdr handlers))
           (agent-scheme--apply-procedure
@@ -4878,17 +4882,22 @@ When KEEP-RESULTS is non-nil, return the collected values."
            context
            nil))
       (setf (agent-scheme--eval-context-exception-handlers context)
-            handlers))))
+            handlers)
+      (setf (agent-scheme--eval-context-current-error context)
+            old-error))))
 
 (defun agent-scheme--invoke-exception-handler/k
     (condition context continuation)
   "Invoke the current exception handler for CONDITION, then CONTINUATION."
   (let* ((handlers (agent-scheme--eval-context-exception-handlers context))
-         (handler (car handlers)))
+         (handler (car handlers))
+         (old-error (agent-scheme--eval-context-current-error context)))
     (unless handler
       (agent-scheme--eval-error
        "unhandled exception: %s"
        (agent-scheme-value->external condition)))
+    (setf (agent-scheme--eval-context-current-error context)
+          (agent-scheme-debugger-exception-datum condition context))
     (setf (agent-scheme--eval-context-exception-handlers context)
           (cdr handlers))
     (agent-scheme--apply-procedure
@@ -4899,6 +4908,8 @@ When KEEP-RESULTS is non-nil, return the collected values."
      (lambda (value)
        (setf (agent-scheme--eval-context-exception-handlers context)
              handlers)
+       (setf (agent-scheme--eval-context-current-error context)
+             old-error)
        (agent-scheme--continue continuation value)))))
 
 (defun agent-scheme--primitive-with-exception-handler (arguments context)
@@ -5350,7 +5361,11 @@ objects so result records can be rendered by `agent-scheme-datum->external'."
 
 (defun agent-scheme--condition-result-datum (condition context)
   "Return a stable Scheme-readable error result for CONDITION."
-  (let ((condition-name (symbol-name (car condition))))
+  (let ((condition-name (symbol-name (car condition)))
+        (debugger-condition
+         (agent-scheme-debugger-condition-datum condition context)))
+    (setf (agent-scheme--eval-context-current-error context)
+          debugger-condition)
     (list (agent-scheme--result-symbol "evaluation-result")
           (agent-scheme--result-field "status"
                                       (agent-scheme--result-symbol "error"))
@@ -5358,6 +5373,9 @@ objects so result records can be rendered by `agent-scheme-datum->external'."
            "error"
            (agent-scheme--result-field
             "condition"
+            debugger-condition)
+           (agent-scheme--result-field
+            "host-condition"
             (agent-scheme--syntax-symbol condition-name))
            (agent-scheme--result-field
             "message"

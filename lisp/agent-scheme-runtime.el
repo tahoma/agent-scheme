@@ -240,6 +240,7 @@ base syntax prelude has already been installed."
   current-input-port
   current-output-port
   current-error-port
+  current-error
   session-id
   interaction-environment
   base-syntax-installed
@@ -332,6 +333,7 @@ MESSAGE and ARGS are passed to `format'."
      :capability-grants
      (agent-scheme--eval-option options :capability-grants nil)
      :active-capability-grants nil
+     :current-error nil
      :session-id
      (agent-scheme--eval-option options :session-id nil)
      :base-syntax-installed nil

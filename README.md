@@ -175,6 +175,7 @@ requested-grants: ((capability-grant (library (emacs buffer edit)) (effect buffe
 - [Repository agent instructions](AGENTS.md)
 - [Project skill bundle](skills/README.md)
 - [Architecture and threat model](docs/architecture.md)
+- [Debugger workflow](docs/debugger.md)
 - [Multi-host adapter and bootstrap strategy](docs/multi-host-bootstrap.md)
 - [Scheme references](docs/references.md)
 - [R7RS-small report reference](docs/r7rs-small-report.md)

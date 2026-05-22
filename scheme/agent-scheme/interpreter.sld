@@ -4187,6 +4187,63 @@
       (record-agent-event! context (list 'request (car arguments)))
       agent-scheme-unspecified)
 
+    ;; Return the active debugger condition, or #f outside error handling.
+    (define (primitive-current-error arguments context)
+      (let ((current (context-current-error context)))
+        (if current current #f)))
+
+    ;; Return a debugger condition's stack frames.
+    (define (primitive-condition-stack arguments context)
+      (debugger-field-value
+       (debugger-expect-condition (car arguments) "condition-stack")
+       'stack))
+
+    ;; Return debugger environment frames, or one frame by id.
+    (define (primitive-condition-environment arguments context)
+      (let* ((condition
+              (debugger-expect-condition
+               (car arguments)
+               "condition-environment"))
+             (frames (debugger-field-values condition 'environment))
+             (frame-id (second arguments)))
+        (if (not frame-id)
+            frames
+            (let ((name (debugger-restart-id-name frame-id)))
+              (let loop ((rest frames))
+                (cond
+                 ((null? rest) #f)
+                 ((eq? (debugger-field-value (car rest) 'frame) name)
+                  (car rest))
+                 (else (loop (cdr rest)))))))))
+
+    ;; Return a debugger condition's restart records.
+    (define (primitive-condition-restarts arguments context)
+      (debugger-field-value
+       (debugger-expect-condition (car arguments) "condition-restarts")
+       'restarts))
+
+    ;; Invoke a debugger restart that can be modeled in portable Scheme.
+    (define (primitive-restart-invoke! arguments context)
+      (let ((id (debugger-restart-id-name (car arguments)))
+            (options (second arguments)))
+        (cond
+         ((eq? id 'continue-with-warning)
+          (list 'restart-result
+                (result-field 'id id)
+                (result-field 'status 'continued)
+                (result-field 'options options)))
+         ((eq? id 'abort)
+          (eval-error "debugger abort restart invoked"))
+         (else
+          (eval-error "restart requires host debugger policy" id)))))
+
+    ;; Emit a structured debugger event into the current result stream.
+    (define (primitive-debugger-yield arguments context)
+      (let* ((condition (redaction-model:redact (car arguments) 'debugger))
+             (event (list 'debugger condition)))
+        (record-agent-event! context event)
+        agent-scheme-unspecified))
+
     ;; Create a portable approval request and return its id.
     (define (primitive-approval-request! arguments context)
       (approval-model:approval-request! interpreter-approval-store
@@ -5489,11 +5546,15 @@
     ;; Invoke the current exception handler in continuation-passing form.
     (define (invoke-exception-handler/k
              condition context continuation)
-      (let ((handlers (context-exception-handlers context)))
+      (let ((handlers (context-exception-handlers context))
+            (old-error (context-current-error context)))
         (if (null? handlers)
             (eval-error
              "unhandled exception"
              (agent-scheme-value->external condition)))
+        (set-context-current-error!
+         context
+         (debugger-exception-datum condition context))
         (set-context-exception-handlers! context (cdr handlers))
         (apply-procedure
          (car handlers)
@@ -5502,6 +5563,7 @@
          #t
          (lambda (value)
            (set-context-exception-handlers! context handlers)
+           (set-context-current-error! context old-error)
            (continue continuation value)))))
 
     ;; Implement the `with-exception-handler` primitive with argument
@@ -6083,6 +6145,13 @@
        (cons 'primitive-agent-progress primitive-agent-progress)
        (cons 'primitive-agent-warn primitive-agent-warn)
        (cons 'primitive-agent-request primitive-agent-request)
+       (cons 'primitive-current-error primitive-current-error)
+       (cons 'primitive-condition-stack primitive-condition-stack)
+       (cons 'primitive-condition-environment
+             primitive-condition-environment)
+       (cons 'primitive-condition-restarts primitive-condition-restarts)
+       (cons 'primitive-restart-invoke! primitive-restart-invoke!)
+       (cons 'primitive-debugger-yield primitive-debugger-yield)
        (cons 'primitive-approval-request! primitive-approval-request!)
        (cons 'primitive-approval-status primitive-approval-status)
        (cons 'primitive-approval-cancel! primitive-approval-cancel!)

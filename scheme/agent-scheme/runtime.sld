@@ -154,6 +154,8 @@
           set-context-current-output-port!
           context-current-error-port
           set-context-current-error-port!
+          context-current-error
+          set-context-current-error!
           context-interaction-environment
           set-context-interaction-environment!
           context-base-syntax-installed
@@ -476,6 +478,7 @@
                          audit-events
                          current-input-port current-output-port
                          current-error-port
+                         current-error
                          interaction-environment
                          base-syntax-installed next-syntax-id
                          exception-handlers dynamic-winds)
@@ -508,6 +511,7 @@
                            set-context-current-output-port!)
       (current-error-port context-current-error-port
                           set-context-current-error-port!)
+      (current-error context-current-error set-context-current-error!)
       (interaction-environment context-interaction-environment
                                set-context-interaction-environment!)
       (base-syntax-installed context-base-syntax-installed
@@ -1125,6 +1129,7 @@
                    'max-event-nodes
                    agent-scheme-default-maximum-event-nodes)
        '()
+       #f
        #f
        #f
        #f
