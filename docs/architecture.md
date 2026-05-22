@@ -177,6 +177,7 @@ The agent layer provides self-scripting facilities as Scheme-readable data:
 - `(agent memory)` scoped memory
 - `(agent plan)` plans
 - `(agent approval)` approval requests
+- `(agent debugger)` condition, stack, environment, and restart datums
 - `(agent reflect)` runtime reflection
 - `(agent context)` request and project context
 - `(agent rules)` behavior rules
@@ -416,6 +417,7 @@ Agent interaction libraries live under `agent`:
 (agent memory)
 (agent plan)
 (agent approval)
+(agent debugger)
 (agent reflect)
 (agent context)
 ```
@@ -768,6 +770,7 @@ Likely portable R7RS modules:
 - `scheme/agent-scheme/eval.sld`
 - `scheme/agent-scheme/write.sld`
 - `scheme/agent-scheme/approval.sld`
+- `scheme/agent-scheme/result.sld`
 
 Likely Emacs Lisp bootstrap and adapter modules:
 
@@ -787,6 +790,7 @@ Likely Emacs Lisp bootstrap and adapter modules:
 - `lisp/agent-scheme-bytecode.el`
 - `lisp/agent-scheme-policy.el`
 - `lisp/agent-scheme-approval.el`
+- `lisp/agent-scheme-debugger.el`
 - `lisp/agent-scheme-audit.el`
 - `lisp/agent-scheme-agent-io.el`
 - `lisp/agent-scheme-handle.el`

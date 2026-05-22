@@ -739,6 +739,7 @@ Return the stale handles that were removed."
           :capability-grants
           (copy-tree (agent-scheme--eval-context-capability-grants context))
           :active-capability-grants nil
+          :current-error nil
           :session-id
           (agent-scheme--eval-context-session-id context)
           :interaction-environment environment
@@ -876,6 +877,7 @@ Return the stale handles that were removed."
     (setf (agent-scheme--eval-context-capability-grants context)
           (agent-scheme-session-capability-grants session))
     (setf (agent-scheme--eval-context-active-capability-grants context) nil)
+    (setf (agent-scheme--eval-context-current-error context) nil)
     (setf (agent-scheme--eval-context-session-id context)
           (agent-scheme-session-id session))
     (setf (agent-scheme--eval-context-interaction-environment context)

@@ -424,11 +424,21 @@
    (equal (agent-scheme-result->external
            (agent-scheme-eval-source-result "(+ 1 2)"))
           "(evaluation-result (status ok) (value 3) (events ()) (budget (steps-used 5) (host-calls 1)))"))
-  (should
-   (string-match-p
-    (regexp-quote
-     "(evaluation-result (status error) (error (condition agent-scheme-eval-error)")
-    (agent-scheme-result->external
-     (agent-scheme-eval-source-result "(car '())")))))
+  (let ((error-result
+         (agent-scheme-result->external
+          (agent-scheme-eval-source-result "(car '())"))))
+    (should
+     (string-match-p
+      (regexp-quote
+       "(evaluation-result (status error) (error (condition (condition (type type-error)")
+      error-result))
+    (should
+     (string-match-p
+      (regexp-quote "(message \"car expected pair, got ()\")")
+      error-result))
+    (should
+     (string-match-p
+      (regexp-quote "(restarts ((restart (id abort)")
+      error-result))))
 
 ;;; agent-scheme-base-test.el ends here
