@@ -211,6 +211,12 @@ bridge them into `make test` through ERT so a minimal checkout still has one
 verification command. If an external Scheme is unavailable, the bridge may skip
 the external run, but the fixture shape should still be validated.
 
+Feature and host discovery expectations are documented in
+[Feature and Host Reflection](feature-reflection.md). Host adapters should
+support static discovery through library availability and runtime discovery
+through Scheme-readable `host-adapter` and `host-capability` datums, while
+keeping authorization behind the capability environment.
+
 The native CLI and daemon adapter contract in
 [Native CLI and Daemon Adapter Contract](native-cli-daemon-adapter.md) is the
 first concrete non-Emacs host contract. It keeps terminal prompts, daemon
