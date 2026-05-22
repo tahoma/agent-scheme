@@ -211,6 +211,12 @@ bridge them into `make test` through ERT so a minimal checkout still has one
 verification command. If an external Scheme is unavailable, the bridge may skip
 the external run, but the fixture shape should still be validated.
 
+The native CLI and daemon adapter contract in
+[Native CLI and Daemon Adapter Contract](native-cli-daemon-adapter.md) is the
+first concrete non-Emacs host contract. It keeps terminal prompts, daemon
+control, process jobs, standard streams, audit sinks, and stale native handles
+behind the same Scheme-readable capability boundary described here.
+
 ## Contributor Placement Rules
 
 - Put host-neutral R7RS libraries in `scheme/agent-scheme/`.

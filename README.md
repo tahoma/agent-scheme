@@ -177,6 +177,7 @@ requested-grants: ((capability-grant (library (emacs buffer edit)) (effect buffe
 - [Architecture and threat model](docs/architecture.md)
 - [Debugger workflow](docs/debugger.md)
 - [Multi-host adapter and bootstrap strategy](docs/multi-host-bootstrap.md)
+- [Native CLI and daemon adapter contract](docs/native-cli-daemon-adapter.md)
 - [Scheme references](docs/references.md)
 - [R7RS-small report reference](docs/r7rs-small-report.md)
 - [R7RS-small conformance matrix](docs/r7rs-conformance.md)
