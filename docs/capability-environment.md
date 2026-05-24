@@ -188,7 +188,7 @@ cases.
 | `pure` | ordinary `(scheme base)` computation, macros, string and bytevector ports | resource budgets |
 | `file` | `(scheme file)`, `(scheme load)`, `include`, `include-ci`, project-local library loading | path-scoped file grants plus policy |
 | `port` | host file ports, process ports, transcript ports, provider streams, virtual ports | backing-resource grant and port operation grant |
-| `process` | commands, jobs, process environment, process-backed ports | command/process policy and command-scoped grants |
+| `process` | whitelisted commands, compile jobs, process environment, process-backed ports | command/process policy, command whitelists, and future command-scoped grants |
 | `network` | HTTP, remote files, external APIs, remote resources | network policy, destination grants, redaction |
 | `provider` | model providers, model streams, embedding or completion calls | provider routing policy, secret redaction, disclosure checks |
 | `memory` | instance, project, and session memory reads or writes | memory-scope policy and redaction |

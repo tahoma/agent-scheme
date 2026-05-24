@@ -9,6 +9,7 @@
 ;;; Code:
 
 (require 'cl-lib)
+(require 'compile)
 (require 'project)
 (require 'seq)
 (require 'agent-scheme-audit)
@@ -26,6 +27,26 @@
 (defcustom agent-scheme-capability-require-grants-for-mutations t
   "Non-nil means host mutation capabilities require matching grants."
   :type 'boolean
+  :group 'agent-scheme)
+
+(defcustom agent-scheme-command-whitelist
+  '((save-buffer :allow-interactive nil)
+    (revert-buffer :allow-interactive nil :default-arguments (nil t))
+    (compile :allow-interactive nil)
+    (recompile :allow-interactive nil))
+  "Commands that `command-call!' may invoke from Agent Scheme.
+Each entry has the form (COMMAND . PLIST).  COMMAND must name an
+interactive Emacs command.  `:allow-interactive' permits
+`command-call!' to collect interactive arguments with
+`call-interactively' when the supplied Scheme arguments are
+insufficient.  Keep this disabled unless a command's prompts are
+known to be bounded and safe.  `:default-arguments' supplies Emacs
+Lisp arguments when Scheme does not pass any arguments."
+  :type '(alist :key-type symbol
+                :value-type
+                (plist :options
+                       ((:allow-interactive boolean)
+                        (:default-arguments sexp))))
   :group 'agent-scheme)
 
 (cl-defstruct (agent-scheme--handle-entry
@@ -139,6 +160,15 @@
      :policy confirm :policy-category buffer-edit
      :requires-grant t
      :test-categories (emacs buffer edit mutation file))
+    (:name "buffer-switch!" :library "(emacs buffer)"
+     :minimum-arity 1 :maximum-arity 1
+     :source host-capability :effect host-mutation
+     :required-capability emacs-buffer
+     :emacs-hook agent-scheme--primitive-buffer-switch!
+     :portable-hook nil :emitter-hook capability-emacs
+     :policy confirm :policy-category window-session
+     :requires-grant t
+     :test-categories (emacs buffer window session mutation))
     (:name "buffer-point" :library "(emacs buffer)"
      :minimum-arity 1 :maximum-arity 1
      :source host-capability :effect host-observation
@@ -167,6 +197,33 @@
      :emacs-hook agent-scheme--primitive-window-frame
      :portable-hook nil :emitter-hook capability-emacs
      :policy allow :test-categories (emacs window frame handle))
+    (:name "window-select!" :library "(emacs window)"
+     :minimum-arity 1 :maximum-arity 1
+     :source host-capability :effect host-mutation
+     :required-capability emacs-window
+     :emacs-hook agent-scheme--primitive-window-select!
+     :portable-hook nil :emitter-hook capability-emacs
+     :policy confirm :policy-category window-session
+     :requires-grant t
+     :test-categories (emacs window session mutation))
+    (:name "window-split!" :library "(emacs window)"
+     :minimum-arity 1 :maximum-arity 1
+     :source host-capability :effect host-mutation
+     :required-capability emacs-window
+     :emacs-hook agent-scheme--primitive-window-split!
+     :portable-hook nil :emitter-hook capability-emacs
+     :policy confirm :policy-category window-session
+     :requires-grant t
+     :test-categories (emacs window session mutation))
+    (:name "window-delete!" :library "(emacs window)"
+     :minimum-arity 1 :maximum-arity 1
+     :source host-capability :effect host-mutation
+     :required-capability emacs-window
+     :emacs-hook agent-scheme--primitive-window-delete!
+     :portable-hook nil :emitter-hook capability-emacs
+     :policy confirm :policy-category window-session
+     :requires-grant t
+     :test-categories (emacs window session mutation))
     (:name "emacs-current-frame" :library "(emacs frame)"
      :minimum-arity 0 :maximum-arity 0
      :source host-capability :effect host-observation
@@ -202,6 +259,22 @@
      :emacs-hook agent-scheme--primitive-project-root
      :portable-hook nil :emitter-hook capability-emacs
      :policy allow :test-categories (emacs project))
+    (:name "project-compile!" :library "(emacs project)"
+     :minimum-arity 1 :maximum-arity 1
+     :source host-capability :effect host-mutation
+     :required-capability emacs-project
+     :emacs-hook agent-scheme--primitive-project-compile!
+     :portable-hook nil :emitter-hook capability-emacs
+     :policy confirm :policy-category command-process
+     :test-categories (emacs project command process mutation))
+    (:name "project-recompile!" :library "(emacs project)"
+     :minimum-arity 0 :maximum-arity 0
+     :source host-capability :effect host-mutation
+     :required-capability emacs-project
+     :emacs-hook agent-scheme--primitive-project-recompile!
+     :portable-hook nil :emitter-hook capability-emacs
+     :policy confirm :policy-category command-process
+     :test-categories (emacs project command process mutation))
     (:name "emacs-process-list" :library "(emacs process)"
      :minimum-arity 0 :maximum-arity 0
      :source host-capability :effect host-observation
@@ -237,6 +310,14 @@
      :emacs-hook agent-scheme--primitive-command-doc
      :portable-hook nil :emitter-hook capability-emacs
      :policy allow :test-categories (emacs documentation))
+    (:name "command-call!" :library "(emacs command)"
+     :minimum-arity 1 :maximum-arity nil
+     :source host-capability :effect host-mutation
+     :required-capability emacs-command
+     :emacs-hook agent-scheme--primitive-command-call!
+     :portable-hook nil :emitter-hook capability-emacs
+     :policy confirm :policy-category command-process
+     :test-categories (emacs command process mutation whitelist))
     (:name "function-doc" :library "(emacs command)"
      :minimum-arity 1 :maximum-arity 1
      :source host-capability :effect host-observation
@@ -599,8 +680,20 @@
 (defun agent-scheme--capability-operation-buffer-handle (name arguments)
   "Return the buffer handle argument for capability NAME."
   (when (member name '("buffer-insert!" "buffer-delete!"
-                      "buffer-replace!" "buffer-save!"))
+                      "buffer-replace!" "buffer-save!"
+                      "buffer-switch!"))
     (car arguments)))
+
+(defun agent-scheme--capability-operation-window-handle (name arguments)
+  "Return the window handle argument for capability NAME."
+  (when (member name '("window-select!" "window-delete!"))
+    (car arguments)))
+
+(defun agent-scheme--capability-operation-direction (name arguments)
+  "Return the direction argument for capability NAME, or nil."
+  (when (equal name "window-split!")
+    (agent-scheme--capability-direction-name
+     (car arguments) "window-split! direction")))
 
 (defun agent-scheme--capability-same-handle-p (left right)
   "Return non-nil when LEFT and RIGHT name the same opaque handle."
@@ -1348,10 +1441,18 @@ synthetic file grant so existing callers share the capability vocabulary."
           (agent-scheme--capability-operation-buffer-handle name arguments))
          (grant-handle
           (agent-scheme--capability-scope-value grant "buffer"))
+         (target-window-handle
+          (agent-scheme--capability-operation-window-handle name arguments))
+         (grant-window-handle
+          (agent-scheme--capability-scope-value grant "window"))
          (operation-region
           (agent-scheme--capability-operation-region name arguments))
          (grant-range
           (agent-scheme--capability-range-values grant))
+         (operation-direction
+          (agent-scheme--capability-operation-direction name arguments))
+         (grant-direction
+          (agent-scheme--capability-scope-value grant "direction"))
          (session
           (agent-scheme--capability-scope-value grant "session"))
          (file
@@ -1362,13 +1463,22 @@ synthetic file grant so existing callers share the capability vocabulary."
          (skill
           (agent-scheme--capability-scope-value grant "skill")))
     (agent-scheme--capability-check-grant-handle-live grant grant-handle)
+    (agent-scheme--capability-check-grant-handle-live grant grant-window-handle)
     (and
      (or (null grant-handle)
          (agent-scheme--capability-same-handle-p grant-handle target-handle))
+     (or (null grant-window-handle)
+         (agent-scheme--capability-same-handle-p
+          grant-window-handle target-window-handle))
      (or (null grant-range)
          (and operation-region
               (<= (car grant-range) (car operation-region))
               (<= (cadr operation-region) (cadr grant-range))))
+     (or (null grant-direction)
+         (and operation-direction
+              (equal
+               (agent-scheme--capability-grant-symbol-name grant-direction)
+               operation-direction)))
      (or (null session)
          (equal (agent-scheme--capability-grant-id-name session)
                 (and context
@@ -1928,6 +2038,95 @@ synthetic file grant so existing callers share the capability vocabulary."
             (agent-scheme-value->external datum))))))
     (intern-soft name)))
 
+(defun agent-scheme--capability-symbol-name (datum description)
+  "Return DATUM as a Scheme or Emacs symbol name for DESCRIPTION."
+  (cond
+   ((agent-scheme-symbol-p datum)
+    (agent-scheme-symbol-name datum))
+   ((symbolp datum)
+    (symbol-name datum))
+   ((stringp datum)
+    datum)
+   (t
+    (agent-scheme--eval-error
+     "%s expected a symbol or string, got %s"
+     description
+     (agent-scheme-value->external datum)))))
+
+(defun agent-scheme--capability-direction-name (datum description)
+  "Return a supported window split direction name for DATUM."
+  (let ((name (agent-scheme--capability-symbol-name datum description)))
+    (unless (member name '("below" "right"))
+      (agent-scheme--eval-error
+       "%s expected 'below or 'right, got %s"
+       description
+       (agent-scheme-value->external datum)))
+    name))
+
+(defun agent-scheme--command-whitelist-entry (command)
+  "Return the whitelist entry for COMMAND, or nil."
+  (seq-find
+   (lambda (entry)
+     (eq (if (consp entry) (car entry) entry)
+         command))
+   agent-scheme-command-whitelist))
+
+(defun agent-scheme--command-whitelist-plist (entry)
+  "Return the property list carried by whitelist ENTRY."
+  (if (consp entry)
+      (cdr entry)
+    nil))
+
+(defun agent-scheme--command-name (datum)
+  "Return command name DATUM as a string."
+  (agent-scheme--capability-symbol-name datum "command-call! name"))
+
+(defun agent-scheme--command-symbol (datum)
+  "Return command DATUM as an interned Emacs symbol, or nil."
+  (intern-soft (agent-scheme--command-name datum)))
+
+(defun agent-scheme--command-call-deny (command reason context)
+  "Deny COMMAND for REASON through the command-process policy path."
+  (agent-scheme-policy-deny
+   'command-process
+   "command-call!"
+   `((library . "(emacs command)")
+     (capability . "command-call!")
+     (command . ,command))
+   context
+   reason
+   'capability-call))
+
+(defun agent-scheme--command-argument-value (datum)
+  "Convert a Scheme DATUM into a conservative Emacs command argument."
+  (cond
+   ((eq datum agent-scheme-true) t)
+   ((eq datum agent-scheme-false) nil)
+   ((stringp datum) (substring-no-properties datum))
+   ((and (agent-scheme-number-p datum)
+         (eq (agent-scheme-number-kind datum) 'integer)
+         (eq (agent-scheme-number-exactness datum) 'exact))
+    (agent-scheme-number-value datum))
+   ((agent-scheme-symbol-p datum)
+    (intern (agent-scheme-symbol-name datum)))
+   ((null datum) nil)
+   ((consp datum)
+    (mapcar #'agent-scheme--command-argument-value datum))
+   (t
+    (agent-scheme--eval-error
+     "command-call! unsupported argument: %s"
+     (agent-scheme-value->external datum)))))
+
+(defun agent-scheme--command-minimum-arity (command)
+  "Return COMMAND's minimum noninteractive arity, or 0 if unknown."
+  (condition-case nil
+      (let ((arity (func-arity command)))
+        (cond
+         ((consp arity) (car arity))
+         ((integerp arity) arity)
+         (t 0)))
+    (error 0)))
+
 (defun agent-scheme--handle-entry-for (value kind description)
   "Return private registry entry for handle VALUE of KIND."
   (unless (agent-scheme-handle-p value)
@@ -2268,6 +2467,24 @@ creates undo boundaries around the atomic change group."
       (save-buffer))
     agent-scheme-unspecified))
 
+(defun agent-scheme--primitive-buffer-switch! (arguments context)
+  "Primitive buffer-switch! over ARGUMENTS."
+  (agent-scheme--authorize-emacs-capability "buffer-switch!" arguments context)
+  (let* ((buffer (agent-scheme--live-buffer-for-handle
+                  (car arguments) "buffer-switch!"))
+         (window (selected-window)))
+    (when (minibufferp buffer)
+      (agent-scheme--eval-error
+       "buffer-switch! cannot switch to minibuffer: %s"
+       (buffer-name buffer)))
+    (agent-scheme--add-emacs-capability-result-fields
+     (append
+      (agent-scheme--buffer-target-fields buffer)
+      `((target-window . ,(agent-scheme--window-handle window))
+        (previous-buffer . ,(buffer-name (window-buffer window))))))
+    (set-window-buffer window buffer)
+    agent-scheme-unspecified))
+
 (defun agent-scheme--primitive-emacs-buffer-list (arguments context)
   "Primitive emacs-buffer-list."
   (agent-scheme--authorize-emacs-capability
@@ -2286,6 +2503,62 @@ creates undo boundaries around the atomic change group."
   (agent-scheme--frame-handle
    (window-frame
     (agent-scheme--live-window-for-handle (car arguments) "window-frame"))))
+
+(defun agent-scheme--window-target-fields (window)
+  "Return Scheme-readable audit fields describing WINDOW."
+  `((target-window . ,(agent-scheme--window-handle window))
+    (target-buffer . ,(buffer-name (window-buffer window)))
+    (target-frame . ,(agent-scheme--frame-handle (window-frame window)))))
+
+(defun agent-scheme--check-window-session-target (window operation)
+  "Signal unless WINDOW can be used for OPERATION."
+  (when (window-minibuffer-p window)
+    (agent-scheme--eval-error
+     "%s cannot target minibuffer window" operation)))
+
+(defun agent-scheme--primitive-window-select! (arguments context)
+  "Primitive window-select! over ARGUMENTS."
+  (agent-scheme--authorize-emacs-capability "window-select!" arguments context)
+  (let ((window (agent-scheme--live-window-for-handle
+                 (car arguments) "window-select!")))
+    (agent-scheme--check-window-session-target window "window-select!")
+    (agent-scheme--add-emacs-capability-result-fields
+     (append
+      (agent-scheme--window-target-fields window)
+      `((previous-window . ,(agent-scheme--window-handle
+                             (selected-window))))))
+    (select-window window)
+    agent-scheme-unspecified))
+
+(defun agent-scheme--primitive-window-split! (arguments context)
+  "Primitive window-split! over ARGUMENTS."
+  (agent-scheme--authorize-emacs-capability "window-split!" arguments context)
+  (let* ((direction
+          (agent-scheme--capability-direction-name
+           (car arguments) "window-split! direction"))
+         (side (intern direction))
+         (source-window (selected-window)))
+    (agent-scheme--check-window-session-target source-window "window-split!")
+    (let ((new-window (split-window source-window nil side)))
+      (agent-scheme--add-emacs-capability-result-fields
+       `((source-window . ,(agent-scheme--window-handle source-window))
+         (target-window . ,(agent-scheme--window-handle new-window))
+         (direction . ,(intern direction))))
+      (agent-scheme--window-handle new-window))))
+
+(defun agent-scheme--primitive-window-delete! (arguments context)
+  "Primitive window-delete! over ARGUMENTS."
+  (agent-scheme--authorize-emacs-capability "window-delete!" arguments context)
+  (let ((window (agent-scheme--live-window-for-handle
+                 (car arguments) "window-delete!")))
+    (agent-scheme--check-window-session-target window "window-delete!")
+    (when (<= (length (window-list (window-frame window) 'no-minibuf)) 1)
+      (agent-scheme--eval-error
+       "window-delete! cannot delete the sole ordinary window"))
+    (agent-scheme--add-emacs-capability-result-fields
+     (agent-scheme--window-target-fields window))
+    (delete-window window)
+    agent-scheme-unspecified))
 
 (defun agent-scheme--primitive-emacs-current-frame (arguments context)
   "Primitive emacs-current-frame."
@@ -2327,6 +2600,42 @@ creates undo boundaries around the atomic change group."
     (if project
         (file-name-as-directory (expand-file-name (project-root project)))
       agent-scheme-false)))
+
+(defun agent-scheme--current-project-root-or-error (operation)
+  "Return the current project root, or signal for OPERATION."
+  (let ((project (project-current nil)))
+    (unless project
+      (agent-scheme--eval-error
+       "%s requires a current project" operation))
+    (file-name-as-directory (expand-file-name (project-root project)))))
+
+(defun agent-scheme--primitive-project-compile! (arguments context)
+  "Primitive project-compile! over ARGUMENTS."
+  (agent-scheme--authorize-emacs-capability "project-compile!" arguments context)
+  (let ((command (agent-scheme--capability-string
+                  (car arguments) "project-compile! command"))
+        (root (agent-scheme--current-project-root-or-error
+               "project-compile!")))
+    (agent-scheme--add-emacs-capability-result-fields
+     `((project-root . ,root)
+       (command . compile)
+       (command-arguments . (,command))))
+    (let ((default-directory root))
+      (compile command))
+    agent-scheme-unspecified))
+
+(defun agent-scheme--primitive-project-recompile! (arguments context)
+  "Primitive project-recompile!."
+  (agent-scheme--authorize-emacs-capability
+   "project-recompile!" arguments context)
+  (let ((root (agent-scheme--current-project-root-or-error
+               "project-recompile!")))
+    (agent-scheme--add-emacs-capability-result-fields
+     `((project-root . ,root)
+       (command . recompile)))
+    (let ((default-directory root))
+      (recompile))
+    agent-scheme-unspecified))
 
 (defun agent-scheme--primitive-emacs-process-list (arguments context)
   "Primitive emacs-process-list."
@@ -2374,6 +2683,44 @@ When COMMANDP is non-nil, SYMBOL must name an interactive command."
   (agent-scheme--documentation-string
    (agent-scheme--capability-name-symbol (car arguments) "command-doc")
    t))
+
+(defun agent-scheme--primitive-command-call! (arguments context)
+  "Primitive command-call! over ARGUMENTS."
+  (agent-scheme--authorize-emacs-capability "command-call!" arguments context)
+  (let* ((command (agent-scheme--command-symbol (car arguments)))
+         (command-name (agent-scheme--command-name (car arguments)))
+         (entry (and command
+                     (agent-scheme--command-whitelist-entry command)))
+         (plist (agent-scheme--command-whitelist-plist entry))
+         (scheme-arguments (cdr arguments))
+         (emacs-arguments
+          (if scheme-arguments
+              (mapcar #'agent-scheme--command-argument-value scheme-arguments)
+            (copy-sequence (plist-get plist :default-arguments))))
+         (allow-interactive (plist-get plist :allow-interactive)))
+    (unless entry
+      (agent-scheme--command-call-deny
+       command-name "command is not whitelisted" context))
+    (unless (and command (commandp command))
+      (agent-scheme--command-call-deny
+       command-name "command is not an interactive command" context))
+    (when (and (< (length emacs-arguments)
+                  (agent-scheme--command-minimum-arity command))
+               (not allow-interactive))
+      (agent-scheme--eval-error
+       "interactive prompt is not allowed for command: %s"
+       command-name))
+    (agent-scheme--add-emacs-capability-result-fields
+     `((command . ,command)
+       (command-arguments . ,emacs-arguments)
+       (interactive . ,(if allow-interactive
+                           agent-scheme-true
+                         agent-scheme-false))))
+    (if (< (length emacs-arguments)
+           (agent-scheme--command-minimum-arity command))
+        (call-interactively command)
+      (apply command emacs-arguments))
+    agent-scheme-unspecified))
 
 (defun agent-scheme--primitive-function-doc (arguments context)
   "Primitive function-doc over ARGUMENTS."

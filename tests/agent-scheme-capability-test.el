@@ -18,6 +18,22 @@
 (defvar agent-scheme-capability-test--secret "secret-value"
   "Private test value whose contents must not be exposed through variable-info.")
 
+(defvar agent-scheme-capability-test--command-log nil
+  "Arguments received by command capability test commands.")
+
+(defun agent-scheme-capability-test-command (value &optional flag)
+  "Record VALUE and FLAG for command-call! tests."
+  (interactive "sValue: ")
+  (setq agent-scheme-capability-test--command-log
+        (list value flag))
+  'agent-scheme-capability-test-command-result)
+
+(defun agent-scheme-capability-test-prompt-command (value)
+  "Interactive-only command used to prove prompt rejection."
+  (interactive "sValue: ")
+  (setq agent-scheme-capability-test--command-log
+        (list value)))
+
 (defun agent-scheme-capability-test--external
     (source &optional environment options)
   "Evaluate SOURCE and return its stable external value representation."
@@ -786,6 +802,146 @@
               (file-name-as-directory
                (expand-file-name agent-scheme--test-root)))))))
 
+(ert-deftest agent-scheme-capability-test-window-session-manifest-metadata ()
+  "Expose mutating window/session capabilities through policy metadata."
+  (dolist (binding '(("(emacs buffer)" "buffer-switch!" emacs-buffer)
+                     ("(emacs window)" "window-select!" emacs-window)
+                     ("(emacs window)" "window-split!" emacs-window)
+                     ("(emacs window)" "window-delete!" emacs-window)
+                     ("(emacs command)" "command-call!" emacs-command)
+                     ("(emacs project)" "project-compile!" emacs-project)
+                     ("(emacs project)" "project-recompile!" emacs-project)))
+    (let ((spec (agent-scheme-capability-test--manifest-spec
+                 (nth 0 binding)
+                 (nth 1 binding))))
+      (should spec)
+      (should (eq (plist-get spec :source) 'host-capability))
+      (should (eq (plist-get spec :effect) 'host-mutation))
+      (should (eq (plist-get spec :required-capability) (nth 2 binding)))
+      (should (eq (plist-get spec :backend-effect-path)
+                  'shared-capability-request))
+      (should (eq (plist-get spec :policy) 'confirm))
+      (should
+       (eq (plist-get spec :policy-category)
+           (if (member (nth 1 binding)
+                       '("command-call!"
+                         "project-compile!"
+                         "project-recompile!"))
+               'command-process
+             'window-session))))))
+
+(ert-deftest agent-scheme-capability-test-buffer-switch-and-window-select ()
+  "Switch buffers and select windows through controlled session capabilities."
+  (let ((agent-scheme-policy-category-actions
+         (agent-scheme-capability-test--actions '((window-session . allow))))
+        (environment (agent-scheme-make-base-environment))
+        (original-window (selected-window))
+        (left-buffer (generate-new-buffer "agent-scheme-window-left"))
+        (right-buffer (generate-new-buffer "agent-scheme-window-right"))
+        right-window)
+    (unwind-protect
+        (progn
+          (switch-to-buffer left-buffer)
+          (setq right-window (split-window original-window nil 'right))
+          (set-window-buffer right-window right-buffer)
+          (select-window original-window)
+          (agent-scheme--environment-define
+           environment "target-buffer"
+           (agent-scheme--buffer-handle right-buffer))
+          (agent-scheme--environment-define
+           environment "target-window"
+           (agent-scheme--window-handle right-window))
+          (agent-scheme-audit-clear)
+          (agent-scheme-eval-source
+           "(import (scheme base)
+                    (agent capability)
+                    (emacs buffer)
+                    (emacs window))
+            (grant-capability!
+             `(capability-grant
+               (id switch-buffer-grant)
+               (library (emacs buffer))
+               (effect buffer-switch!)
+               (scope (buffer ,target-buffer))
+               (expires (uses 1))))
+            (grant-capability!
+             `(capability-grant
+               (id select-window-grant)
+               (library (emacs window))
+               (effect window-select!)
+               (scope (window ,target-window))
+               (expires (uses 1))))
+            (buffer-switch! target-buffer)
+            (window-select! target-window)"
+           environment)
+          (should (eq (window-buffer original-window) right-buffer))
+          (should (eq (selected-window) right-window))
+          (should
+           (agent-scheme-capability-test--audit-entry-matching
+            "(event capability-result)"
+            "(category window-session)"
+            "(operation \"buffer-switch!\")"
+            "(target-buffer \"agent-scheme-window-right\")"))
+          (should
+           (agent-scheme-capability-test--audit-entry-matching
+            "(event capability-result)"
+            "(category window-session)"
+            "(operation \"window-select!\")"
+            "(outcome success)")))
+      (when (window-live-p right-window)
+        (delete-window right-window))
+      (when (window-live-p original-window)
+        (select-window original-window))
+      (when (buffer-live-p left-buffer)
+        (kill-buffer left-buffer))
+      (when (buffer-live-p right-buffer)
+        (kill-buffer right-buffer)))))
+
+(ert-deftest agent-scheme-capability-test-window-split-and-delete ()
+  "Split and delete windows through controlled session capabilities."
+  (let ((agent-scheme-policy-category-actions
+         (agent-scheme-capability-test--actions '((window-session . allow))))
+        (original-window (selected-window)))
+    (unwind-protect
+        (progn
+          (delete-other-windows original-window)
+          (agent-scheme-audit-clear)
+          (agent-scheme-eval-source
+           "(import (scheme base)
+                    (agent capability)
+                    (emacs window))
+            (grant-capability!
+             '(capability-grant
+               (id split-window-grant)
+               (library (emacs window))
+               (effect window-split!)
+               (scope (direction right))
+               (expires (uses 1))))
+            (define created (window-split! 'right))
+            (grant-capability!
+             `(capability-grant
+               (id delete-window-grant)
+               (library (emacs window))
+               (effect window-delete!)
+               (scope (window ,created))
+               (expires (uses 1))))
+            (window-delete! created)")
+          (should (= (length (window-list nil 'no-minibuf)) 1))
+          (should
+           (agent-scheme-capability-test--audit-entry-matching
+            "(event capability-result)"
+            "(operation \"window-split!\")"
+            "(direction right)"
+            "(outcome success)"))
+          (should
+           (agent-scheme-capability-test--audit-entry-matching
+            "(event capability-result)"
+            "(operation \"window-delete!\")"
+            "(outcome success)")))
+      (when (window-live-p original-window)
+        (select-window original-window)
+        (delete-other-windows original-window)))))
+
 (ert-deftest agent-scheme-capability-test-stale-window-handles-fail-clearly ()
   "Reject window handles after the live Emacs window disappears."
   (let ((environment (agent-scheme-make-base-environment))
@@ -930,6 +1086,68 @@
      (string-match-p "documentation" external))
     (should-not
      (string-match-p "secret-value" external))))
+
+(ert-deftest agent-scheme-capability-test-command-call-whitelist-allows-command ()
+  "Run whitelisted commands through command-call!."
+  (let ((agent-scheme-policy-category-actions
+         (agent-scheme-capability-test--actions '((command-process . allow))))
+        (agent-scheme-command-whitelist
+         '((agent-scheme-capability-test-command :allow-interactive nil))))
+    (setq agent-scheme-capability-test--command-log nil)
+    (agent-scheme-audit-clear)
+    (agent-scheme-eval-source
+     "(import (emacs command))
+      (command-call! 'agent-scheme-capability-test-command \"value\" #t)")
+    (should
+     (equal agent-scheme-capability-test--command-log
+            '("value" t)))
+    (should
+     (agent-scheme-capability-test--audit-entry-matching
+      "(event capability-result)"
+      "(category command-process)"
+      "(operation \"command-call!\")"
+      "(command agent-scheme-capability-test-command)"
+      "(outcome success)"))))
+
+(ert-deftest agent-scheme-capability-test-command-call-denies-unlisted-command ()
+  "Reject commands that are not present in the command whitelist."
+  (let ((agent-scheme-policy-category-actions
+         (agent-scheme-capability-test--actions '((command-process . allow))))
+        (agent-scheme-command-whitelist nil))
+    (setq agent-scheme-capability-test--command-log nil)
+    (agent-scheme-audit-clear)
+    (should-error
+     (agent-scheme-eval-source
+      "(import (emacs command))
+       (command-call! 'agent-scheme-capability-test-command \"value\")")
+     :type 'agent-scheme-policy-error)
+    (should-not agent-scheme-capability-test--command-log)
+    (should
+     (agent-scheme-capability-test--audit-entry-matching
+      "(event capability-call)"
+      "(category command-process)"
+      "(operation \"command-call!\")"
+      "(decision denied)"
+      "command is not whitelisted"))))
+
+(ert-deftest agent-scheme-capability-test-command-call-rejects-prompts-by-default ()
+  "Reject interactive prompt collection unless a whitelist entry allows it."
+  (let ((agent-scheme-policy-category-actions
+         (agent-scheme-capability-test--actions '((command-process . allow))))
+        (agent-scheme-command-whitelist
+         '((agent-scheme-capability-test-prompt-command
+            :allow-interactive nil))))
+    (setq agent-scheme-capability-test--command-log nil)
+    (let ((condition
+           (should-error
+            (agent-scheme-eval-source
+             "(import (emacs command))
+              (command-call! 'agent-scheme-capability-test-prompt-command)")
+            :type 'agent-scheme-eval-error)))
+      (should
+       (string-match-p "interactive prompt is not allowed"
+                       (cadr condition))))
+    (should-not agent-scheme-capability-test--command-log)))
 
 (ert-deftest agent-scheme-capability-test-manifest-describes-emacs-bindings ()
   "Expose metadata for Emacs capability bindings."
