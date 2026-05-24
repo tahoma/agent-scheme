@@ -211,6 +211,13 @@
           audit-file-capability-result!
           authorize-code-loading
           audit-code-loading-result!
+          process-capability-effect
+          process-capability-policy-category
+          process-capability-request
+          process-capability-handle
+          process-port-capability-handle
+          authorize-process-capability
+          audit-process-capability-result!
           new-eval-context
           record-audit-event!
           record-agent-event!
@@ -248,7 +255,8 @@
           parse-formals)
   (import (scheme base)
           (scheme char)
-          (agent-scheme reader))
+          (agent-scheme reader)
+          (agent-scheme redaction))
   (begin
     ;; Default evaluator step budget for one expansion or evaluation run.
     (define agent-scheme-default-maximum-steps 100000)
@@ -1083,8 +1091,414 @@
                        (list 'error result)
                        (list 'ok result))))))
 
-    ;; Resolve relative include paths against the active include directory.
-    (define (normalize-include-paths paths directory)
+    ;; Return VALUE as a string name when it names a host process resource.
+    (define (process-name-string value)
+      (cond
+       ((symbol? value) (symbol->string value))
+       ((string? value) value)
+       (else #f)))
+
+    ;; Return #t when VALUE is in VALUES using equal?.
+    (define (process-member-equal? value values)
+      (cond
+       ((null? values) #f)
+       ((equal? value (car values)) #t)
+       (else (process-member-equal? value (cdr values)))))
+
+    ;; Return RESOURCE's field alist, accepting either a plain field list or a
+    ;; `(resource ...)` datum.
+    (define (process-resource-fields resource)
+      (if (and (pair? resource) (eq? (car resource) 'resource))
+          (cdr resource)
+          resource))
+
+    ;; Return all values for RESOURCE FIELD.
+    (define (process-resource-field-values resource field)
+      (let ((entry (assq field (process-resource-fields resource))))
+        (if entry (cdr entry) '())))
+
+    ;; Return RESOURCE FIELD's first value, or #f.
+    (define (process-resource-value resource field)
+      (let ((values (process-resource-field-values resource field)))
+        (if (pair? values) (car values) #f)))
+
+    ;; Return RESOURCE FIELD's values, flattening single nested list fields.
+    (define (process-resource-values resource field)
+      (capability-flatten-values
+       (process-resource-field-values resource field)))
+
+    ;; Return the effect class for a process capability operation.
+    (define (process-capability-effect operation)
+      (if (memq operation '(spawn input interrupt terminate))
+          'process-control
+          'read-only-observation))
+
+    ;; Return the policy category for a process capability operation.
+    (define (process-capability-policy-category operation)
+      (if (eq? (process-capability-effect operation) 'process-control)
+          'command-process
+          'emacs-read-only))
+
+    ;; Report whether GRANT is a process-domain grant.
+    (define (process-capability-grant? grant)
+      (and (pair? grant)
+           (eq? (car grant) 'capability-grant)
+           (eq? (capability-field-value grant 'domain) 'process)))
+
+    ;; Report whether GRANT authorizes process OPERATION.
+    (define (process-capability-operation? grant operation)
+      (let loop ((operations (capability-field-values grant 'operations)))
+        (and (pair? operations)
+             (or (eq? (car operations) operation)
+                 (loop (cdr operations))))))
+
+    ;; Return process-domain grants from CONTEXT.
+    (define (process-capability-grants context)
+      (let loop ((grants (context-capability-grants context)) (kept '()))
+        (cond
+         ((null? grants) (reverse kept))
+         ((process-capability-grant? (car grants))
+          (loop (cdr grants) (cons (car grants) kept)))
+         (else
+          (loop (cdr grants) kept)))))
+
+    ;; Return process ENVIRONMENT entry's variable name.
+    (define (process-environment-entry-name entry)
+      (process-name-string
+       (if (pair? entry) (car entry) entry)))
+
+    ;; Return process ENVIRONMENT variable names.
+    (define (process-environment-names environment)
+      (let loop ((rest environment) (names '()))
+        (if (null? rest)
+            (reverse names)
+            (loop (cdr rest)
+                  (cons (process-environment-entry-name (car rest))
+                        names)))))
+
+    ;; Return #t when every LEFT value is a member of RIGHT.
+    (define (process-subset? left right)
+      (cond
+       ((null? left) #t)
+       ((process-member-equal? (car left) right)
+        (process-subset? (cdr left) right))
+       (else #f)))
+
+    ;; Return GRANT's process command scope as a string, or #f.
+    (define (process-scope-command grant)
+      (let ((command (capability-scope-value grant 'command)))
+        (and command (process-name-string command))))
+
+    ;; Return GRANT's process working directory scope, or #f.
+    (define (process-scope-cwd grant)
+      (or (capability-scope-value grant 'working-directory)
+          (capability-scope-value grant 'cwd)))
+
+    ;; Return GRANT's process environment variable scope, or #f.
+    (define (process-scope-environment grant)
+      (let ((values (capability-scope-values grant 'environment)))
+        (and (pair? values)
+             (process-environment-names values))))
+
+    ;; Return GRANT's process handle scope, or #f.
+    (define (process-scope-handle grant)
+      (or (capability-scope-value grant 'handle)
+          (capability-scope-value grant 'process)))
+
+    ;; Return a process scope denial reason, or #f when RESOURCE is in scope.
+    (define (process-scope-denial grant resource)
+      (let ((scope-command (process-scope-command grant))
+            (scope-arguments (capability-scope-values grant 'arguments))
+            (scope-cwd (process-scope-cwd grant))
+            (scope-environment (process-scope-environment grant))
+            (scope-handle (process-scope-handle grant))
+            (command (process-resource-value resource 'command))
+            (arguments (process-resource-values resource 'arguments))
+            (cwd (process-resource-value resource 'cwd))
+            (environment (process-resource-values resource 'environment))
+            (handle (process-resource-value resource 'handle)))
+        (cond
+         ((and scope-command
+               command
+               (not (equal? scope-command command)))
+          "command is outside approved process grant scope")
+         ((and (pair? scope-arguments)
+               (pair? arguments)
+               (not (equal? scope-arguments arguments)))
+          "arguments are outside approved process grant scope")
+         ((and scope-cwd cwd (not (equal? scope-cwd cwd)))
+          "working directory is outside approved process grant scope")
+         ((and (pair? environment) (not scope-environment))
+          "environment is outside approved process grant scope")
+         ((and (pair? environment)
+               (not (process-subset?
+                     (process-environment-names environment)
+                     scope-environment)))
+          "environment is outside approved process grant scope")
+         ((and scope-handle handle (not (equal? scope-handle handle)))
+          "handle is outside approved process grant scope")
+         (else #f))))
+
+    ;; Return a matching process grant for RESOURCE and OPERATION, or a
+    ;; denial tuple.
+    (define (process-capability-match grants operation resource)
+      (let loop ((rest grants) (denied #f))
+        (cond
+         ((null? rest) denied)
+         ((not (process-capability-operation? (car rest) operation))
+          (loop (cdr rest) denied))
+         ((eq? (capability-field-value (car rest) 'status) 'revoked)
+          (loop (cdr rest)
+                (list 'denied
+                      (car rest)
+                      "revoked process capability grant")))
+         ((not (capability-grant-active? (car rest)))
+          (loop (cdr rest)
+                (list 'denied
+                      (car rest)
+                      "expired process capability grant")))
+         (else
+          (let ((reason (process-scope-denial (car rest) resource)))
+            (if reason
+                (loop (cdr rest) (list 'denied (car rest) reason))
+                (list 'approved (car rest))))))))
+
+    ;; Return #t when COMMAND is in ALLOW-LIST.
+    (define (process-command-allowed? command allow-list)
+      (let loop ((rest allow-list))
+        (and (pair? rest)
+             (or (equal? command (process-name-string (car rest)))
+                 (loop (cdr rest))))))
+
+    ;; Return a host-neutral process capability request datum.
+    (define (process-capability-request library binding operation resource)
+      (list 'capability-request
+            (list 'library library)
+            (list 'binding binding)
+            (list 'domain 'process)
+            (list 'operation operation)
+            (cons 'resource
+                  (redact (process-resource-fields resource) 'local-only))
+            (list 'effect (process-capability-effect operation))))
+
+    ;; Return a process capability decision datum.
+    (define (process-capability-decision request status grant reason)
+      (list 'capability-decision
+            (list 'request request)
+            (list 'status status)
+            (list 'domain 'process)
+            (list 'grant (if grant (capability-field-value grant 'id) 'none))
+            (list 'reason reason)))
+
+    ;; Record DENIAL for process REQUEST and raise a portable evaluator error.
+    (define (deny-process-capability!
+             context request operation grant reason)
+      (let ((decision
+             (process-capability-decision request 'denied grant reason)))
+        (record-audit-event!
+         context
+         'capability-decision
+         (list (list 'request request)
+               (list 'decision decision)
+               (list 'domain 'process)
+               (list 'operation operation)
+               (list 'status 'denied)
+               (list 'grant
+                     (if grant (capability-field-value grant 'id) 'none))
+               (list 'reason reason)))
+        (record-audit-event!
+         context
+         'capability-audit
+         (list (list 'request request)
+               (list 'decision decision)
+               (list 'domain 'process)
+               (list 'operation operation)
+               (list 'result (list 'error reason))))
+        (eval-error
+         (string-append "process capability denied: " reason))))
+
+    ;; Return CONTEXT's configured policy action for CATEGORY.
+    (define (process-policy-action context category)
+      (let ((entry (assq category (context-policy-actions context))))
+        (cond
+         (entry (cdr entry))
+         ((eq? category 'emacs-read-only) 'allow)
+         (else 'deny))))
+
+    ;; Require host policy approval for a process capability request.
+    (define (authorize-process-policy!
+             context request binding operation resource grant)
+      (let* ((category (process-capability-policy-category operation))
+             (action (process-policy-action context category))
+             (grant-id (capability-field-value grant 'id)))
+        (if (eq? action 'allow)
+            (record-audit-event!
+             context
+             'policy-decision
+             (list (list 'category category)
+                   (list 'operation binding)
+                   (list 'decision 'allowed)
+                   (list 'domain 'process)
+                   (list 'resource
+                         (redact (process-resource-fields resource)
+                                 'local-only))
+                   (list 'grant grant-id)))
+            (begin
+              (record-audit-event!
+               context
+               'policy-decision
+               (list (list 'category category)
+                     (list 'operation binding)
+                     (list 'decision 'denied)
+                     (list 'domain 'process)
+                     (list 'resource
+                           (redact (process-resource-fields resource)
+                                   'local-only))
+                     (list 'grant grant-id)))
+              (deny-process-capability!
+               context
+               request
+               operation
+               grant
+               "process request denied by policy")))))
+
+    ;; Authorize a host adapter process request against the shared process
+    ;; capability vocabulary.  This does not start or observe a real process;
+    ;; adapters call it before touching host process APIs.
+    (define (authorize-process-capability
+             library binding context operation resource command-allow-list)
+      (let* ((request
+              (process-capability-request
+               library
+               binding
+               operation
+               resource))
+             (command (process-resource-value resource 'command))
+             (grants (process-capability-grants context)))
+        (record-audit-event!
+         context
+         'capability-request
+         (list (list 'request request)
+               (list 'domain 'process)
+               (list 'operation operation)
+               (list 'binding binding)
+               (list 'command (redact command 'local-only))
+               (list 'arguments
+                     (redact
+                      (process-resource-values resource 'arguments)
+                      'local-only))
+               (list 'environment
+                     (redact
+                      (process-resource-values resource 'environment)
+                      'local-only))
+               (list 'cwd
+                     (redact (process-resource-value resource 'cwd)
+                             'local-only))))
+        (if (and (eq? operation 'spawn)
+                 command
+                 (not (process-command-allowed?
+                       command
+                       command-allow-list)))
+            (deny-process-capability!
+             context
+             request
+             operation
+             #f
+             "command is not in process allow-list"))
+        (if (null? grants)
+            (deny-process-capability!
+             context
+             request
+             operation
+             #f
+             "no active process grant covers request"))
+        (let ((match
+               (process-capability-match grants operation resource)))
+          (if (or (not match) (eq? (car match) 'denied))
+              (deny-process-capability!
+               context
+               request
+               operation
+               (and match (second match))
+               (if match
+                   (third match)
+                   "no active process grant covers request")))
+          (let* ((grant (second match))
+                 (decision
+                  (process-capability-decision
+                   request
+                   'approved
+                   grant
+                   "process request is covered by active grant")))
+            (authorize-process-policy!
+             context
+             request
+             binding
+             operation
+             resource
+             grant)
+            (record-audit-event!
+             context
+             'capability-decision
+             (list (list 'request request)
+                   (list 'decision decision)
+                   (list 'domain 'process)
+                   (list 'operation operation)
+                   (list 'status 'approved)
+                   (list 'grant (capability-field-value grant 'id))
+                   (list 'reason
+                         "process request is covered by active grant")))
+            (list (list 'request request)
+                  (list 'decision decision)
+                  (list 'operation operation)
+                  (list 'grant grant))))))
+
+    ;; Return a Scheme-readable process job handle datum.
+    (define (process-capability-handle id resource grant status)
+      (list 'handle
+            (list 'id id)
+            (list 'kind 'process-job)
+            (list 'domain 'process)
+            (list 'command
+                  (redact (process-resource-value resource 'command)
+                          'local-only))
+            (list 'arguments
+                  (redact
+                   (process-resource-values resource 'arguments)
+                   'local-only))
+            (list 'grant grant)
+            (list 'status status)))
+
+    ;; Return a Scheme-readable process-backed port capability datum.
+    (define (process-port-capability-handle
+             id kind process-handle operations grant limits status)
+      (list 'port-capability
+            (list 'id id)
+            (list 'kind kind)
+            (list 'backing 'process)
+            (cons 'operations operations)
+            (list 'grant grant)
+            (cons 'limits limits)
+            (list 'path process-handle)
+            (list 'status status)))
+
+    ;; Record the result of an authorized process capability operation.
+    (define (audit-process-capability-result!
+             context authorization result error?)
+      (record-audit-event!
+       context
+       'capability-audit
+       (list (list 'request (cadr (assq 'request authorization)))
+             (list 'decision (cadr (assq 'decision authorization)))
+             (list 'domain 'process)
+             (list 'operation (cadr (assq 'operation authorization)))
+             (list 'result
+                   (if error?
+                       (list 'error (redact result 'local-only))
+                       (list 'ok (redact result 'local-only)))))))
+
+        ;; Resolve relative include paths against the active include directory.
+        (define (normalize-include-paths paths directory)
       (map (lambda (path)
              (path-normalize (path-join directory path)))
            paths))
