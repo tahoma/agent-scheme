@@ -5122,7 +5122,8 @@
     ;; Implement the `string-length` primitive with argument validation and
     ;; Agent Scheme values.
     (define (primitive-string-length arguments context)
-      (string-length (expect-string (car arguments) "string-length")))
+      (agent-scheme-make-canonical-integer
+       (string-length (expect-string (car arguments) "string-length"))))
 
     ;; Implement the `string-ref` primitive with argument validation and Agent
     ;; Scheme values.
@@ -5713,7 +5714,8 @@
     ;; Implement the `vector-length` primitive with argument validation and
     ;; Agent Scheme values.
     (define (primitive-vector-length arguments context)
-      (vector-length (expect-vector (car arguments) "vector-length")))
+      (agent-scheme-make-canonical-integer
+       (vector-length (expect-vector (car arguments) "vector-length"))))
 
     ;; Implement the `vector-ref` primitive with argument validation and Agent
     ;; Scheme values.
@@ -5845,8 +5847,9 @@
     ;; Implement the `bytevector-length` primitive with argument validation and
     ;; Agent Scheme values.
     (define (primitive-bytevector-length arguments context)
-      (bytevector-length
-       (expect-bytevector (car arguments) "bytevector-length")))
+      (agent-scheme-make-canonical-integer
+       (bytevector-length
+        (expect-bytevector (car arguments) "bytevector-length"))))
 
     ;; Implement the `bytevector-u8-ref` primitive with argument validation and
     ;; Agent Scheme values.

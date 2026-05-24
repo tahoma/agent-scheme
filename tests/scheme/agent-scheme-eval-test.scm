@@ -451,6 +451,13 @@
                        total)"
                 "(10 (4 9 16) 6)")
 
+(check-external 'sequence-length-primitives-return-agent-numbers
+                "(list
+                   (string-length \"abc\")
+                   (vector-length '#(a b c d))
+                   (bytevector-length #u8(1 2 3 4 5)))"
+                "(3 4 5)")
+
 (check-result-external 'multiple-values-result
                        "(values 1 2)"
                        "(evaluation-result (status values) (values (1 2)) (events ()) (budget (steps-used 5) (host-calls 1)))")
@@ -1832,6 +1839,45 @@
                          "(status no-change) (hunks ())))))"))
               #t)
          #t))
+
+(check-external 'agent-vcs-status-parser
+                "(import (scheme base) (agent vcs))
+                 (define nul (string #\\null))
+                 (define status
+                   (parse-git-status-porcelain-v2-z
+                    (string-append
+                     \"# branch.oid abc123\" nul
+                     \"# branch.head main\" nul
+                     \"# branch.upstream origin/main\" nul
+                     \"# branch.ab +2 -1\" nul
+                     \"1 M. N... 100644 100644 100644 aaaaaaa bbbbbbb src/main.scm\" nul
+                     \"? scratch.scm\" nul)))
+                 (define branch (vcs-status-branch status))
+                 (define entries (vcs-status-entries status))
+                 (list
+                  (vcs-field-value branch 'head #f)
+                  (vcs-field-value branch 'ahead 0)
+                  (vcs-field-value branch 'behind 0)
+                  (vcs-field-value (car entries) 'kind #f)
+                  (vcs-field-value (car entries) 'path #f)
+                  (vcs-field-value (cadr entries) 'kind #f))"
+                "(\"main\" 2 1 modified \"src/main.scm\" untracked)")
+
+(check-external 'agent-vcs-raw-diff-parser
+                "(import (scheme base) (agent vcs))
+                 (define nul (string #\\null))
+                 (define diff
+                   (parse-git-raw-diff-z
+                    (string-append
+                     \":100644 100644 abcdef1 1234567 M\" nul
+                     \"src/main.scm\" nul)))
+                 (let ((file (car (vcs-diff-summary-files diff))))
+                   (list
+                    (vcs-field-value file 'status #f)
+                    (vcs-field-value file 'path #f)
+                    (vcs-field-value file 'old-object #f)
+                    (vcs-field-value file 'new-object #f)))"
+                "(modified \"src/main.scm\" \"abcdef1\" \"1234567\")")
 
 (let* ((result
         (agent-scheme-eval-source-result

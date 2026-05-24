@@ -223,6 +223,12 @@ first concrete non-Emacs host contract. It keeps terminal prompts, daemon
 control, process jobs, standard streams, audit sinks, and stale native handles
 behind the same Scheme-readable capability boundary described here.
 
+The shared repository-state vocabulary in
+[Shared VCS Capability Contract](vcs-capability.md) follows the same boundary:
+`(agent vcs)` defines portable records and pure Git parser fixtures, while
+Emacs, CLI, and future hosts decide how to obtain repository observations
+without exposing raw host VCS objects or granting mutation by default.
+
 ## Contributor Placement Rules
 
 - Put host-neutral R7RS libraries in `scheme/agent-scheme/`.
