@@ -70,6 +70,7 @@
   '("(agent io)"
     "(agent approval)"
     "(agent debugger)"
+    "(agent diagnostics)"
     "(agent diff)"
     "(agent vcs)"
     "(agent capability)"
@@ -82,6 +83,8 @@
 (defconst agent-scheme--agent-source-library-files
   '(("(agent capability)"
      . "../scheme/agent/capability.sld")
+    ("(agent diagnostics)"
+     . "../scheme/agent/diagnostics.sld")
     ("(agent diff)"
      . "../scheme/agent/diff.sld")
     ("(agent vcs)"
@@ -343,6 +346,10 @@
       (agent-scheme-debugger-primitive-specs)
       context))
     ("(agent capability)"
+     (unless (gethash key (agent-scheme--eval-context-libraries context))
+       (agent-scheme--register-source-library
+        (agent-scheme--agent-source-library-source key) context environment)))
+    ("(agent diagnostics)"
      (unless (gethash key (agent-scheme--eval-context-libraries context))
        (agent-scheme--register-source-library
         (agent-scheme--agent-source-library-source key) context environment)))

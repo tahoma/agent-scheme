@@ -13,6 +13,7 @@
 (require 'project)
 (require 'seq)
 (require 'agent-scheme-audit)
+(require 'agent-scheme-diagnostics)
 (require 'agent-scheme-diff)
 (require 'agent-scheme-reader)
 (require 'agent-scheme-runtime)
@@ -406,6 +407,27 @@ grant, and policy checks succeed."
      :emacs-hook agent-scheme--primitive-project-diff
      :portable-hook nil :emitter-hook capability-emacs
      :policy allow :test-categories (emacs diff project))
+    (:name "buffer-diagnostics" :library "(emacs diagnostics)"
+     :minimum-arity 1 :maximum-arity 1
+     :source host-capability :effect host-observation
+     :required-capability emacs-diagnostics
+     :emacs-hook agent-scheme--primitive-buffer-diagnostics
+     :portable-hook nil :emitter-hook capability-emacs
+     :policy allow :test-categories (emacs diagnostics buffer))
+    (:name "project-diagnostics" :library "(emacs diagnostics)"
+     :minimum-arity 1 :maximum-arity 1
+     :source host-capability :effect host-observation
+     :required-capability emacs-diagnostics
+     :emacs-hook agent-scheme--primitive-project-diagnostics
+     :portable-hook nil :emitter-hook capability-emacs
+     :policy allow :test-categories (emacs diagnostics project))
+    (:name "diagnostic-at" :library "(emacs diagnostics)"
+     :minimum-arity 2 :maximum-arity 2
+     :source host-capability :effect host-observation
+     :required-capability emacs-diagnostics
+     :emacs-hook agent-scheme--primitive-diagnostic-at
+     :portable-hook nil :emitter-hook capability-emacs
+     :policy allow :test-categories (emacs diagnostics buffer))
     (:name "search-yield" :library "(emacs search)"
      :minimum-arity 1 :maximum-arity 1
      :source host-capability :effect host-observation
@@ -532,6 +554,7 @@ grant, and policy checks succeed."
   '("(emacs buffer)"
     "(emacs buffer edit)"
     "(emacs command)"
+    "(emacs diagnostics)"
     "(emacs diff)"
     "(emacs frame)"
     "(emacs process)"
@@ -3853,6 +3876,55 @@ creates undo boundaries around the atomic change group."
      `((project-root . ,root)
        (result-count . ,(length diffs))))
     diffs))
+
+(defun agent-scheme--diagnostics-result-count (snapshot)
+  "Return the number of diagnostics in SNAPSHOT."
+  (length (agent-scheme-diagnostics-snapshot-diagnostics snapshot)))
+
+(defun agent-scheme--primitive-buffer-diagnostics (arguments context)
+  "Primitive buffer-diagnostics over ARGUMENTS."
+  (agent-scheme--authorize-emacs-capability
+   "buffer-diagnostics" arguments context)
+  (let* ((buffer (agent-scheme--live-buffer-for-handle
+                  (car arguments) "buffer-diagnostics"))
+         (snapshot
+          (agent-scheme-diagnostics-buffer-snapshot buffer context)))
+    (agent-scheme--add-emacs-capability-result-fields
+     (append
+      (agent-scheme--buffer-target-fields buffer)
+      `((result-count . ,(agent-scheme--diagnostics-result-count
+                          snapshot)))))
+    snapshot))
+
+(defun agent-scheme--primitive-project-diagnostics (arguments context)
+  "Primitive project-diagnostics over ARGUMENTS."
+  (agent-scheme--authorize-emacs-capability
+   "project-diagnostics" arguments context)
+  (agent-scheme--proper-list-elements
+   (car arguments) "project-diagnostics options")
+  (let ((snapshot
+         (agent-scheme-diagnostics-project-snapshot
+          (car arguments) context)))
+    (agent-scheme--add-emacs-capability-result-fields
+     `((result-count . ,(agent-scheme--diagnostics-result-count snapshot))))
+    snapshot))
+
+(defun agent-scheme--primitive-diagnostic-at (arguments context)
+  "Primitive diagnostic-at over ARGUMENTS."
+  (agent-scheme--authorize-emacs-capability "diagnostic-at" arguments context)
+  (let* ((buffer (agent-scheme--live-buffer-for-handle
+                  (car arguments) "diagnostic-at"))
+         (position
+          (agent-scheme--capability-exact-integer
+           (cadr arguments) "diagnostic-at position"))
+         (diagnostic
+          (agent-scheme-diagnostics-at buffer position context)))
+    (agent-scheme--add-emacs-capability-result-fields
+     (append
+      (agent-scheme--buffer-target-fields buffer)
+      `((position . ,position)
+        (matched . ,(not (eq diagnostic agent-scheme-false))))))
+    diagnostic))
 
 (defun agent-scheme--primitive-project-compile! (arguments context)
   "Primitive project-compile! over ARGUMENTS."
