@@ -7,7 +7,10 @@
 
 ;;; Code:
 
+(require 'cl-lib)
 (require 'ert)
+(require 'seq)
+(require 'agent-scheme-audit)
 (require 'agent-scheme-eval)
 (require 'agent-scheme-result)
 
@@ -15,6 +18,80 @@
   "Evaluate SOURCE and return its stable external value representation."
   (agent-scheme-value->external
    (agent-scheme-eval-source source)))
+
+(defun agent-scheme-vcs-test--result-external (source)
+  "Evaluate SOURCE and return its stable evaluation-result text."
+  (agent-scheme-result->external
+   (agent-scheme-eval-source-result source)))
+
+(defun agent-scheme-vcs-test--contains-p (text needle)
+  "Return non-nil when TEXT contains NEEDLE."
+  (string-match-p (regexp-quote needle) text))
+
+(defun agent-scheme-vcs-test--audit-strings ()
+  "Return recent audit entries as stable external strings."
+  (mapcar #'agent-scheme-result->external
+          (agent-scheme-audit-recent-entries)))
+
+(defun agent-scheme-vcs-test--audit-entry-matching (&rest snippets)
+  "Return a recent audit entry containing all SNIPPETS."
+  (seq-find
+   (lambda (entry)
+     (seq-every-p
+      (lambda (snippet)
+        (agent-scheme-vcs-test--contains-p entry snippet))
+      snippets))
+   (agent-scheme-vcs-test--audit-strings)))
+
+(defun agent-scheme-vcs-test--write-file (path text)
+  "Write TEXT to PATH, creating parent directories."
+  (make-directory (file-name-directory path) t)
+  (with-temp-file path
+    (insert text)))
+
+(defun agent-scheme-vcs-test--git (root &rest arguments)
+  "Run Git in ROOT with ARGUMENTS and return stdout."
+  (let ((default-directory root))
+    (with-temp-buffer
+      (let ((status (apply #'process-file
+                           "git"
+                           nil
+                           (current-buffer)
+                           nil
+                           arguments)))
+        (unless (equal status 0)
+          (error "git %S failed with %S: %s"
+                 arguments status (buffer-string))))
+      (buffer-string))))
+
+(defun agent-scheme-vcs-test--make-git-repo ()
+  "Return a temporary Git repository with one modified tracked file."
+  (unless (executable-find "git")
+    (ert-skip "git executable is not available"))
+  (let* ((root (file-name-as-directory
+                (make-temp-file "agent-scheme-emacs-vcs-" t)))
+         (tracked (expand-file-name "src/main.scm" root))
+         (untracked (expand-file-name "scratch.scm" root)))
+    (agent-scheme-vcs-test--git root "init" "-q" "-b" "main")
+    (agent-scheme-vcs-test--write-file tracked "(define value 1)\n")
+    (agent-scheme-vcs-test--git root "add" "src/main.scm")
+    (agent-scheme-vcs-test--git
+     root
+     "-c" "user.name=Agent Scheme Tests"
+     "-c" "user.email=agent-scheme-tests@example.invalid"
+     "commit" "-q" "-m" "initial commit")
+    (agent-scheme-vcs-test--write-file tracked "(define value 2)\n")
+    (agent-scheme-vcs-test--write-file untracked "(define scratch #t)\n")
+    root))
+
+(defmacro agent-scheme-vcs-test--with-project-root (root &rest body)
+  "Run BODY with current Emacs project rooted at ROOT."
+  (declare (indent 1))
+  `(let ((default-directory ,root))
+     (cl-letf (((symbol-function 'project-current)
+                (lambda (&optional _maybe-prompt _directory)
+                  (cons 'transient ,root))))
+       ,@body)))
 
 (ert-deftest agent-scheme-vcs-test-status-parser-covers-clean-state ()
   "Parse a clean porcelain v2 branch header with no status entries."
@@ -266,5 +343,118 @@
        (vcs-known-outcome? 'remote-authentication-failed)
        (vcs-known-outcome? 'remote-unavailable))")
     "(#t remote-mutation denied approved approve-push #t #t remote-authentication-failed #t #t)")))
+
+(ert-deftest agent-scheme-vcs-test-emacs-vcs-imports-read-only-bindings ()
+  "The `(emacs vcs)' adapter exposes read-only VCS observation procedures."
+  (should
+   (equal
+    (agent-scheme-vcs-test--external
+     "(import (scheme base) (emacs vcs))
+      (list (procedure? vcs-root)
+            (procedure? vcs-branch)
+            (procedure? vcs-status)
+            (procedure? vcs-diff)
+            (procedure? vcs-recent-commits)
+            (procedure? vcs-yield))")
+    "(#t #t #t #t #t #t)"))
+  (let ((names
+         (mapcar
+          (lambda (spec) (plist-get spec :name))
+          (seq-filter
+           (lambda (spec)
+             (equal (plist-get spec :library) "(emacs vcs)"))
+           (agent-scheme-emacs-capability-binding-specs)))))
+    (should (equal names
+                   '("vcs-root"
+                     "vcs-branch"
+                     "vcs-status"
+                     "vcs-diff"
+                     "vcs-recent-commits"
+                     "vcs-yield")))))
+
+(ert-deftest agent-scheme-vcs-test-emacs-vcs-maps-git-status-diff-and-log ()
+  "The Emacs adapter maps Git observations into shared VCS datums."
+  (let ((root (agent-scheme-vcs-test--make-git-repo)))
+    (unwind-protect
+        (agent-scheme-vcs-test--with-project-root root
+          (let ((external
+                 (agent-scheme-vcs-test--external
+                  "(import (scheme base) (agent vcs) (emacs vcs))
+                   (define repository (vcs-root))
+                   (define branch (vcs-branch))
+                   (define status (vcs-status '()))
+                   (define entries (vcs-status-entries status))
+                   (define diff (vcs-diff '()))
+                   (define diff-file (car (vcs-diff-summary-files diff)))
+                   (define commit (car (vcs-recent-commits 1)))
+                   (list
+                    (vcs-field-value repository 'system #f)
+                    (vcs-field-value repository 'root #f)
+                    (vcs-field-value branch 'head #f)
+                    (vcs-field-value branch 'detached? #f)
+                    (map vcs-status-entry-kind entries)
+                    (map vcs-status-entry-path entries)
+                    (vcs-field-value diff-file 'status #f)
+                    (vcs-field-value diff-file 'path #f)
+                    (vcs-field-value commit 'subject #f))")))
+            (should
+             (agent-scheme-vcs-test--contains-p
+              external
+              (format "(git %S \"main\" #f (modified untracked)"
+                      (directory-file-name (file-truename root)))))
+            (should
+             (agent-scheme-vcs-test--contains-p
+              external
+              "(\"src/main.scm\" \"scratch.scm\") modified \"src/main.scm\" \"initial commit\")"))))
+      (delete-directory root t))))
+
+(ert-deftest agent-scheme-vcs-test-emacs-vcs-no-vc-is-explicit ()
+  "The Emacs VCS adapter returns explicit no-vcs outcomes outside repositories."
+  (let ((root (file-name-as-directory
+               (make-temp-file "agent-scheme-no-vcs-" t))))
+    (unwind-protect
+        (agent-scheme-vcs-test--with-project-root root
+          (should
+           (equal
+            (agent-scheme-vcs-test--external
+             "(import (scheme base) (agent vcs) (emacs vcs))
+              (define status (vcs-status '()))
+              (list
+               (vcs-outcome-status (vcs-root))
+               (vcs-outcome-status (vcs-branch))
+               (vcs-field-value status 'system #f)
+               (vcs-outcome-status
+                (vcs-field-value status 'outcome #f))
+               (vcs-status-entries status)
+               (vcs-diff-summary-files (vcs-diff '()))
+               (vcs-recent-commits 3))")
+            "(no-vcs no-vcs none no-vcs () () ())")))
+      (delete-directory root t))))
+
+(ert-deftest agent-scheme-vcs-test-emacs-vcs-yields-and-audits ()
+  "VCS adapter observations are yieldable and audited as read-only capability calls."
+  (let ((root (agent-scheme-vcs-test--make-git-repo)))
+    (unwind-protect
+        (agent-scheme-vcs-test--with-project-root root
+          (agent-scheme-audit-clear)
+          (let ((result
+                 (agent-scheme-vcs-test--result-external
+                  "(import (scheme base) (emacs vcs))
+                   (vcs-yield (vcs-status '()))
+                   'ok")))
+            (should (agent-scheme-vcs-test--contains-p result "(status ok)"))
+            (should
+             (agent-scheme-vcs-test--contains-p
+              result
+              "(events ((yield (vcs-status")))
+            (should
+             (agent-scheme-vcs-test--audit-entry-matching
+              "(event capability-result)"
+              "(category emacs-read-only)"
+              "(operation \"vcs-status\")"
+              "(library \"(emacs vcs)\")"
+              "(outcome success)"
+              "(decision completed)")))
+      (delete-directory root t))))
 
 ;;; agent-scheme-vcs-test.el ends here

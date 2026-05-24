@@ -100,6 +100,32 @@ rebase, cherry-pick, revert, and reset require a separate policy-gated
 capability family. The shared contract may describe their request and result
 shapes, but importing `(agent vcs)` does not grant repository mutation.
 
+## Emacs Adapter
+
+`(emacs vcs)` is the first host adapter over this shared contract. It observes
+the current Emacs project and maps Git state into the shared datums without
+exposing Emacs project records, VC objects, Magit state, process objects, or
+temporary buffers to Scheme code.
+
+The adapter exports read-only procedures:
+
+- `vcs-root`
+- `vcs-branch`
+- `vcs-status`
+- `vcs-diff`
+- `vcs-recent-commits`
+- `vcs-yield`
+
+`vcs-status` consumes `git status --porcelain=v2 -z --branch` output and returns
+a `vcs-status` datum. `vcs-diff` consumes `git diff --raw -z` output and returns
+a `vcs-diff-summary` datum. `vcs-recent-commits` returns
+`vcs-commit-summary` records. `vcs-yield` sends any VCS datum through the
+`(agent io)` event channel.
+
+No repository mutation is exported by `(emacs vcs)`. Stage, unstage, commit,
+branch creation/deletion, checkout, switch, fetch, pull, push, merge, rebase,
+cherry-pick, revert, and reset remain outside this read-only adapter surface.
+
 ## Mutation Authority
 
 `(agent vcs)` classifies local repository mutations as `repository-mutation`

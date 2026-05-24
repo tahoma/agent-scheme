@@ -68,4 +68,35 @@
                  "not an SRFI compatibility target"))
         (should (string-match-p (regexp-quote needle) doc))))))
 
+(ert-deftest agent-scheme-vcs-doc-test-covers-emacs-adapter ()
+  "Ensure the Emacs VCS adapter docs preserve the host/core boundary."
+  (let ((architecture
+         (agent-scheme-vcs-doc-test--read "docs/architecture.md"))
+        (readme
+         (agent-scheme-vcs-doc-test--read "README.md"))
+        (doc
+         (agent-scheme-vcs-doc-test--read "docs/vcs-capability.md")))
+    (dolist (needle
+             '("(emacs vcs)"
+               "vcs-root"
+               "vcs-branch"
+               "vcs-status"
+               "vcs-diff"
+               "vcs-recent-commits"
+               "vcs-yield"))
+      (should (string-match-p (regexp-quote needle) architecture))
+      (should (string-match-p (regexp-quote needle) readme))
+      (should (string-match-p (regexp-quote needle) doc)))
+    (dolist (needle
+             '("read-only adapter"
+               "No repository mutation is exported by `(emacs vcs)`"
+               "Stage, unstage, commit"
+               "fetch, pull, push"))
+      (should (string-match-p (regexp-quote needle) doc)))
+    (should
+     (string-match-p
+      (regexp-quote
+       "Repository mutation, including stage, commit, branch creation, fetch, pull, and")
+      readme))))
+
 ;;; agent-scheme-vcs-doc-test.el ends here
