@@ -177,6 +177,31 @@ projects:
 (diff-render-unified (buffer-diff handle))
 ```
 
+VCS records follow the same host/core split.  `(agent vcs)` owns repository,
+branch, status-entry, commit-summary, diff-summary, and outcome datums;
+`(emacs vcs)` observes the current Emacs project and maps Git state into those
+records with read-only procedures: `vcs-root`, `vcs-branch`, `vcs-status`,
+`vcs-diff`, `vcs-recent-commits`, and `vcs-yield`.
+
+```scheme
+(import (scheme base)
+        (agent vcs)
+        (emacs vcs))
+
+(define status (vcs-status '()))
+
+(vcs-yield status)
+
+(list
+ (vcs-field-value (vcs-root) 'root #f)
+ (vcs-field-value (vcs-branch) 'head #f)
+ (map vcs-status-entry-path (vcs-status-entries status))
+ (vcs-recent-commits 3))
+```
+
+Repository mutation, including stage, commit, branch creation, fetch, pull, and
+push, is not exported by `(emacs vcs)`.
+
 Capability grants narrow approved authority before a mutating host capability
 can use it:
 

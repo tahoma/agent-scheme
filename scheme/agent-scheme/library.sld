@@ -91,6 +91,7 @@
         (emacs network)
         (emacs process)
         (emacs project)
+        (emacs vcs)
         (emacs window)))
 
     ;; Standard library keys recognized by the portable library registry.
