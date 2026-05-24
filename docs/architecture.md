@@ -579,6 +579,15 @@ with procedures such as `buffer-diff`, `file-diff`, and `project-diff`.  Other
 hosts should produce the same portable record shape instead of inventing a
 host-specific diff model.
 
+Diagnostics follow the same layered shape. `(agent diagnostics)` owns
+canonical `diagnostic`, `diagnostic-range`, `diagnostics-snapshot`,
+request/result, outcome, and `diagnostics-yield` datums for any host adapter.
+`(emacs diagnostics)` is the first adapter library and maps Flymake, Flycheck,
+and Eglot-backed state into those records with read-only procedures such as
+`buffer-diagnostics`, `project-diagnostics`, and `diagnostic-at`. Code actions
+and fixes remain outside this read-only diagnostics contract and must use a
+separate mutating capability if they are exposed later.
+
 The shared VCS contract is recorded in
 [Shared VCS Capability Contract](vcs-capability.md). `(agent vcs)` owns
 repository, branch, status-entry, conflict, diff-summary, request/result, and
@@ -834,6 +843,7 @@ Likely Emacs Lisp bootstrap and adapter modules:
 - `lisp/agent-scheme-policy.el`
 - `lisp/agent-scheme-approval.el`
 - `lisp/agent-scheme-debugger.el`
+- `lisp/agent-scheme-diagnostics.el`
 - `lisp/agent-scheme-diff.el`
 - `lisp/agent-scheme-audit.el`
 - `lisp/agent-scheme-agent-io.el`
@@ -864,6 +874,7 @@ Focused test files should mirror the modules:
 - `tests/agent-scheme-compile-test.el`
 - `tests/agent-scheme-policy-test.el`
 - `tests/agent-scheme-approval-test.el`
+- `tests/agent-scheme-diagnostics-test.el`
 - `tests/agent-scheme-diff-test.el`
 - `tests/agent-scheme-capability-test.el`
 - `tests/agent-scheme-repl-test.el`
