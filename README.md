@@ -140,6 +140,43 @@ policy explicitly permits automation:
 In Emacs project sessions, pending and resolved records appear in
 `*Agent Approvals: PROJECT*` as Scheme-readable approval datums.
 
+Diff records are portable trust data.  `(agent diff)` owns the canonical datum
+shape, proposed-edit previews, unified rendering, and event-channel yield;
+`(emacs diff)` produces the same records from live Emacs buffers, files, and
+projects:
+
+```scheme
+(import (scheme base)
+        (agent approval)
+        (agent diff)
+        (emacs buffer)
+        (emacs diff))
+
+(define handle (emacs-current-buffer))
+
+(define preview
+  (proposed-edit-diff
+   '(proposed-edit
+     (source buffer)
+     (old-label "before")
+     (new-label "after")
+     (start 120)
+     (end 140)
+     (before "deprecated-helper")
+     (after "current-helper"))))
+
+(diff-yield preview)
+
+(approval-request!
+ `(approval-request
+   (policy buffer-edit)
+   (effect (buffer-replace! ,handle 120 140 "current-helper"))
+   (diff ,preview)
+   (reason "Replace deprecated helper name?")))
+
+(diff-render-unified (buffer-diff handle))
+```
+
 Capability grants narrow approved authority before a mutating host capability
 can use it:
 

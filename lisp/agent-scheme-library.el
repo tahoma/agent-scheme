@@ -70,6 +70,7 @@
   '("(agent io)"
     "(agent approval)"
     "(agent debugger)"
+    "(agent diff)"
     "(agent capability)"
     "(agent capability primitive)"
     "(agent memory)"
@@ -79,7 +80,9 @@
 
 (defconst agent-scheme--agent-source-library-files
   '(("(agent capability)"
-     . "../scheme/agent/capability.sld"))
+     . "../scheme/agent/capability.sld")
+    ("(agent diff)"
+     . "../scheme/agent/diff.sld"))
   "Checked-in portable Agent Scheme libraries loaded as Scheme source.")
 
 ;; Bootstrap libraries are registered lazily into the current evaluation
@@ -337,6 +340,10 @@
       (agent-scheme-debugger-primitive-specs)
       context))
     ("(agent capability)"
+     (unless (gethash key (agent-scheme--eval-context-libraries context))
+       (agent-scheme--register-source-library
+        (agent-scheme--agent-source-library-source key) context environment)))
+    ("(agent diff)"
      (unless (gethash key (agent-scheme--eval-context-libraries context))
        (agent-scheme--register-source-library
         (agent-scheme--agent-source-library-source key) context environment)))
