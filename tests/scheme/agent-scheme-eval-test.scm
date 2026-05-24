@@ -831,6 +831,7 @@
 
 (check-external 'emacs-capability-import-empty
                 "(import (emacs buffer)
+                         (emacs diff)
                          (emacs frame)
                          (emacs process))
                  'ok"
@@ -1623,6 +1624,39 @@
               (string=? (field-value error-field 'message)
                         "agent-scheme budget error: event node budget exceeded")
          #t)
+         #t))
+
+(check 'agent-diff-proposed-edit-renders
+       (agent-scheme-eval-source
+        "(import (agent diff))
+         (diff-render-unified
+          (proposed-edit-diff
+           '(proposed-edit
+             (source buffer)
+             (old-label \"before.scm\")
+             (new-label \"after.scm\")
+             (start 2)
+             (end 2)
+             (before \"old\")
+             (after \"new\"))))")
+       "--- before.scm\n+++ after.scm\n@@ -2,1 +2,1 @@\n-old\n+new\n")
+
+(let* ((result
+        (agent-scheme-eval-source-result
+         "(import (scheme base) (agent diff))
+          (diff-yield (no-change-diff 'buffer \"scratch\"))
+          'ok"))
+       (events (field-value result 'events)))
+  (check 'agent-diff-yield-records-event
+         (and (equal? (field-value result 'status) 'ok)
+              (string=? (agent-scheme-result->external
+                         (list 'events events))
+                        (string-append
+                         "(events ((yield (diff (source buffer) "
+                         "(old-label \"scratch\") "
+                         "(new-label \"scratch\") "
+                         "(status no-change) (hunks ())))))"))
+              #t)
          #t))
 
 (let* ((result
