@@ -116,6 +116,7 @@
         (agent approval)
         (agent debugger)
         (agent diff)
+        (agent vcs)
         (agent capability)
         (agent capability primitive)
         (agent memory)
@@ -129,7 +130,10 @@
          "agent/capability.sld")
         ((agent diff)
          "scheme/agent/diff.sld"
-         "agent/diff.sld")))
+         "agent/diff.sld")
+        ((agent vcs)
+         "scheme/agent/vcs.sld"
+         "agent/vcs.sld")))
 
     ;; Checked-in standard libraries loaded as portable Scheme source files.
     (define standard-source-library-load-paths
@@ -837,6 +841,12 @@
              context
              environment)))
        ((equal? key '(agent diff))
+        (if (not (library-registry-ref context key))
+            (register-source-library!
+             (agent-source-library-source key)
+             context
+             environment)))
+       ((equal? key '(agent vcs))
         (if (not (library-registry-ref context key))
             (register-source-library!
              (agent-source-library-source key)

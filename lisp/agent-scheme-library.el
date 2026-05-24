@@ -71,6 +71,7 @@
     "(agent approval)"
     "(agent debugger)"
     "(agent diff)"
+    "(agent vcs)"
     "(agent capability)"
     "(agent capability primitive)"
     "(agent memory)"
@@ -82,7 +83,9 @@
   '(("(agent capability)"
      . "../scheme/agent/capability.sld")
     ("(agent diff)"
-     . "../scheme/agent/diff.sld"))
+     . "../scheme/agent/diff.sld")
+    ("(agent vcs)"
+     . "../scheme/agent/vcs.sld"))
   "Checked-in portable Agent Scheme libraries loaded as Scheme source.")
 
 ;; Bootstrap libraries are registered lazily into the current evaluation
@@ -347,6 +350,10 @@
      (unless (gethash key (agent-scheme--eval-context-libraries context))
        (agent-scheme--register-source-library
         (agent-scheme--agent-source-library-source key) context environment)))
+    ("(agent vcs)"
+     (unless (gethash key (agent-scheme--eval-context-libraries context))
+       (agent-scheme--register-source-library
+        (agent-scheme--agent-source-library-source key) context environment)))
     ("(agent capability primitive)"
      (agent-scheme--register-primitive-library
       key
@@ -373,7 +380,8 @@
 (defun agent-scheme--register-source-library
     (source context environment)
   "Evaluate one define-library SOURCE into CONTEXT."
-  (let ((forms (agent-scheme-read-all source)))
+  (let ((max-lisp-eval-depth (max max-lisp-eval-depth 4096))
+        (forms (agent-scheme-read-all source)))
     (unless (= (length forms) 1)
       (agent-scheme--eval-error
        "source library must contain exactly one form"))

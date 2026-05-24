@@ -410,7 +410,14 @@
                   (list-set! result index (* index index)))
                 '#(0 1 2))
               result)")
-          "(0 1 4)")))
+          "(0 1 4)"))
+  (should
+   (equal (agent-scheme-base-test--external
+           "(list
+              (string-length \"abc\")
+              (vector-length '#(a b c d))
+              (bytevector-length #u8(1 2 3 4 5)))")
+          "(3 4 5)")))
 
 (ert-deftest agent-scheme-base-test-arity-type-errors-and-result-rendering ()
   "Cover primitive errors and stable Scheme-readable result records."
