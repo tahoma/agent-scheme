@@ -14,7 +14,7 @@ The architectural baseline for that graph is
 
 The pass-oriented frontend and backend architecture tracked in
 [tahoma/agent-scheme#97](https://github.com/tahoma/agent-scheme/issues/97)
-guides phase 1 runtime work. Major evaluator splitting should follow that
+guides the early runtime chunks. Major evaluator splitting should follow that
 architecture: reader, library resolution, macro expansion, and normalization
 are shared frontend passes; the current evaluator is the first interpreter
 backend over those passes; future compiler or byte-code backends plug in after
@@ -43,12 +43,13 @@ Current host-neutral agent capability issues:
   capabilities, starting from the Emacs search surface in
   [tahoma/agent-scheme#32](https://github.com/tahoma/agent-scheme/issues/32).
 
-The compiler-backend phase starts with Agent Scheme LLIR rather than LLVM
-directly.  LLIR is the backend-facing, Scheme-readable low-level intermediate
-representation that sits after normalized core forms and before concrete
-emitters.  LLVM textual IR is the first planned native emitter, but it consumes
-LLIR instead of becoming Agent Scheme's own compiler IR.  Emacs Lisp byte-code
-is the first planned host byte-code emitter and follows the same LLIR boundary.
+The compiler-backend chunk sequence starts with Agent Scheme LLIR rather than
+LLVM directly. LLIR is the backend-facing, Scheme-readable low-level
+intermediate representation that sits after normalized core forms and before
+concrete emitters. LLVM textual IR is the first planned native emitter, but it
+consumes LLIR instead of becoming Agent Scheme's own compiler IR. Emacs Lisp
+byte-code is the first planned host byte-code emitter and follows the same LLIR
+boundary.
 The first LLIR slice executes only pure R7RS forms while still representing
 effects as explicit unsupported nodes so compiled backends do not drift around
 policy.
@@ -127,6 +128,11 @@ source of truth for ordering.
 When adding or revising roadmap issues, keep the GitHub labels current:
 
 - one `surface:*` label
-- one `phase:*` label
 - risk, host, size, review, and documentation labels when they add useful
   selection or review context
+- current placement in the chunk map in
+  [tahoma/agent-scheme#53](https://github.com/tahoma/agent-scheme/issues/53)
+
+Do not add new `phase:*` labels. Existing `phase:*` labels are legacy metadata
+from the old roadmap model and should be retired through
+[tahoma/agent-scheme#295](https://github.com/tahoma/agent-scheme/issues/295).
