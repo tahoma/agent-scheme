@@ -240,6 +240,7 @@ requested-grants: ((capability-grant (library (emacs buffer edit)) (effect buffe
 
 - [Repository agent instructions](AGENTS.md)
 - [Project skill bundle](skills/README.md)
+- [Getting started](docs/getting-started.md)
 - [Architecture and threat model](docs/architecture.md)
 - [Feature and host reflection](docs/feature-reflection.md)
 - [Debugger workflow](docs/debugger.md)
