@@ -170,4 +170,101 @@
        (vcs-outcome-status (make-vcs-outcome 'timeout \"Git timed out.\")))")
     "(#t #t #t #t read-only-observation status ok no-vcs timeout)")))
 
+(ert-deftest agent-scheme-vcs-test-local-mutation-requires-policy-grant ()
+  "Local mutating VCS operations fail closed without mutation authority."
+  (should
+   (equal
+    (agent-scheme-vcs-test--external
+     "(import (scheme base) (agent vcs))
+      (define request
+        (make-vcs-capability-request
+         'req-stage
+         'stage
+         'repository-mutation
+         '((repository \"/repo\") (paths (\"src/main.scm\")))))
+      (define denied
+        (vcs-authorize-capability-request request '() '()))
+      (define grant
+        (make-vcs-capability-grant
+         'grant-local
+         'repository-mutation
+         '(stage commit)
+         \"/repo\"
+         #f))
+      (define allowed
+        (vcs-authorize-capability-request request (list grant) '()))
+      (define result
+        (make-vcs-capability-result
+         'req-stage
+         'ok
+         (make-vcs-outcome 'ok \"Staged selected paths.\")))
+      (define audit
+        (make-vcs-capability-audit request allowed result))
+      (list
+       (vcs-mutating-operation? 'stage)
+       (vcs-remote-operation? 'stage)
+       (vcs-operation-required-authority 'stage)
+       (vcs-capability-request? request)
+       (vcs-field-value request 'required-authority #f)
+       (vcs-capability-decision-status denied)
+       (vcs-field-value denied 'reason #f)
+       (vcs-capability-decision-status allowed)
+       (vcs-field-value allowed 'grant #f)
+       (vcs-field-value audit 'event #f)
+       (vcs-field-value audit 'decision #f)
+       (vcs-field-value audit 'result #f)
+       (vcs-field-value audit 'outcome #f))")
+    "(#t #f repository-mutation #t repository-mutation denied \"missing VCS mutation grant or approval\" approved grant-local vcs-capability-audit approved ok ok)")))
+
+(ert-deftest agent-scheme-vcs-test-remote-mutation-uses-separate-authority ()
+  "Remote VCS operations require explicit remote mutation authority or approval."
+  (should
+   (equal
+    (agent-scheme-vcs-test--external
+     "(import (scheme base) (agent vcs))
+      (define request
+        (make-vcs-capability-request
+         'req-push
+         'push
+         'remote-mutation
+         '((repository \"/repo\") (remote \"origin\") (branch \"main\"))))
+      (define local-grant
+        (make-vcs-capability-grant
+         'grant-local
+         'repository-mutation
+         '(stage commit)
+         \"/repo\"
+         #f))
+      (define denied
+        (vcs-authorize-capability-request request (list local-grant) '()))
+      (define approval
+        (make-vcs-approval-decision
+         'approve-push
+         'req-push
+         'approved
+         \"User approved push.\"))
+      (define allowed
+        (vcs-authorize-capability-request request '() (list approval)))
+      (define result
+        (make-vcs-capability-result
+         'req-push
+         'error
+         (make-vcs-outcome
+          'remote-authentication-failed
+          \"Remote rejected credentials.\")))
+      (define audit
+        (make-vcs-capability-audit request allowed result))
+      (list
+       (vcs-remote-operation? 'push)
+       (vcs-operation-required-authority 'push)
+       (vcs-capability-decision-status denied)
+       (vcs-capability-decision-status allowed)
+       (vcs-field-value allowed 'approval #f)
+       (vcs-field-value request 'remote? #f)
+       (vcs-field-value audit 'remote? #f)
+       (vcs-field-value audit 'outcome #f)
+       (vcs-known-outcome? 'remote-authentication-failed)
+       (vcs-known-outcome? 'remote-unavailable))")
+    "(#t remote-mutation denied approved approve-push #t #t remote-authentication-failed #t #t)")))
+
 ;;; agent-scheme-vcs-test.el ends here
