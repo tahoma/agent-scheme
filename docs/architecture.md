@@ -579,6 +579,14 @@ with procedures such as `buffer-diff`, `file-diff`, and `project-diff`.  Other
 hosts should produce the same portable record shape instead of inventing a
 host-specific diff model.
 
+The shared VCS contract is recorded in
+[Shared VCS Capability Contract](vcs-capability.md). `(agent vcs)` owns
+repository, branch, status-entry, conflict, diff-summary, request/result, and
+outcome datums plus pure Git machine-format parsers. Host adapters obtain VCS
+state through local tools, editor APIs, or native services, but Scheme-visible
+values remain host-neutral records and repository mutation remains a separate
+policy-gated capability family.
+
 ## Threat Model
 
 Agent Scheme should assume that evaluated code, imported skills, project files,
