@@ -464,8 +464,8 @@ batch mode unless tests or callers install an explicit confirmation function.
 | `pure-r7rs` | `allow` | Ordinary Scheme evaluation remains available under resource budgets. |
 | `emacs-read-only` | `allow` | Current buffer, buffer text, project root, documentation, and other observation capabilities are still audited. |
 | `buffer-edit` | `confirm` | `(emacs buffer edit)` exposes `buffer-insert!`, `buffer-delete!`, `buffer-replace!`, and `buffer-save!`; each requires a matching capability grant and approval by default. |
-| `window-session` | `confirm` | Reserved for future window, frame, and session mutation; no mutating window/session library is registered yet. |
-| `command-process` | `confirm` | Reserved for future command and process execution; current command/process capabilities remain read-only observations. |
+| `window-session` | `confirm` | `(emacs buffer)` and `(emacs window)` expose `buffer-switch!`, `window-select!`, `window-split!`, and safe `window-delete!`; mutating session capabilities require matching grants by default. |
+| `command-process` | `confirm` | `(emacs command)` exposes `command-call!` for user-customizable whitelisted commands, and `(emacs project)` exposes compile helpers; direct shell/process launch remains out of scope unless a whitelisted capability and policy decision allow it. |
 | `standard-host-effect` | `allow` | Host-effecting standard Scheme procedures still require their narrower path or session policy, such as `:file-paths`; without that grant they deny and audit. |
 | `raw-emacs-lisp` | `deny` | Raw host evaluation stays unavailable; no raw Emacs Lisp evaluation surface is registered. |
 | `approval-resolution` | `deny` | Scheme code can create and observe approval records, but resolving approvals is host-side by default unless automation policy explicitly allows it. |
