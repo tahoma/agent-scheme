@@ -2,137 +2,163 @@
 
 The active roadmap is tracked in GitHub issues, with
 [tahoma/agent-scheme#53](https://github.com/tahoma/agent-scheme/issues/53) as
-the living dependency graph.
+the living dependency graph and flat chunk map. This document is an onboarding
+summary, not a second source of truth for issue order. When this note and #53
+diverge, update #53 first and then refresh this summary.
 
 Issues also carry a label taxonomy documented in
 [GitHub issue taxonomy](issue-taxonomy.md). The roadmap says when work should
 happen; the taxonomy says where contributors can work and which host or review
 constraints apply.
 
-The architectural baseline for that graph is
-[Architecture and threat model](architecture.md).
+The architectural baseline for the graph is
+[Architecture and threat model](architecture.md). The multi-host and portable
+bootstrap stance is recorded in
+[Multi-Host Adapter and Bootstrap Strategy](multi-host-bootstrap.md).
 
-The pass-oriented frontend and backend architecture tracked in
-[tahoma/agent-scheme#97](https://github.com/tahoma/agent-scheme/issues/97)
-guides the early runtime chunks. Major evaluator splitting should follow that
-architecture: reader, library resolution, macro expansion, and normalization
-are shared frontend passes; the current evaluator is the first interpreter
-backend over those passes; future compiler or byte-code backends plug in after
-the normalized core form or IR rather than reimplementing reader, library, or
-macro behavior.
+## Roadmap Shape
 
-The project roadmap follows this design intent:
+#53 keeps a flat, time-ordered chunk map. Each chunk is a small planning cluster
+of related issues. Umbrella and sub-issue relationships are tracked in a
+separate index in #53 so broad topics do not nest inside the chunk map.
 
-1. R7RS-small language core
-2. safety and live runtime substrate
-3. Emacs host adapter and useful capabilities
-4. agentic self-scripting libraries
-5. model, protocol, persistence, and ecosystem integrations
-6. compiler backends over the shared frontend and runtime contracts
+The current chunk bands are:
 
-Current onboarding documentation issue:
+- Chunks 00-06 frame project process, conformance, the reader, evaluator,
+  `(scheme base)`, shared fixtures, macros, library/frontend boundaries, and
+  core R7RS-small completion.
+- Chunks 07-12 build the first host safety substrate: read-only Emacs handles,
+  policy, sessions, approvals, grants, redaction, file/port/process/network
+  effects, VCS records, basic Emacs capabilities, and host reflection.
+- Chunks 13-15 cover agent-facing workflow foundations: task lifecycle design,
+  planning, helper libraries, transcripts, debugger UX, package and skill
+  interop, rules, collaboration UX, and user-facing custom library docs.
+- Chunks 16-25 collect optional SRFI work, starting with import naming and
+  R7RS-overlap shims, then portable data, text, collection, test, pattern,
+  port, restart, and binary-block libraries.
+- Chunks 26-27 cover external evaluation and references, model/provider
+  capabilities, budgets, persistence, outward protocols, and task control-loop
+  proof fixtures.
+- Chunks 28-30 introduce compiler backends through Agent Scheme LLIR, native
+  emission and compiled effects, and the Emacs Lisp byte-code backend.
+- Chunks 31-37 plan native CLI and daemon contracts, host-compiled portable
+  executables, host adapter harnesses, host reflection and search, host adapter
+  conformance, CLI-compatible Emacs slices, and future editor, browser,
+  notebook, WASI, and JVM host contracts.
 
-- [tahoma/agent-scheme#264](https://github.com/tahoma/agent-scheme/issues/264)
-  adds a getting started guide for checkout setup, native Emacs REPL first use,
-  verification, and the current non-Emacs host status.
+## Roadmap Areas
 
-Current host-neutral agent capability issues:
+The roadmap currently emphasizes these durable work areas. Some have completed
+seed slices that later chunks depend on; #53 remains the authority for exact
+open or closed status and ordering.
 
-- [tahoma/agent-scheme#267](https://github.com/tahoma/agent-scheme/issues/267)
-  adds a host-neutral search interface over adapter-provided search
-  capabilities, starting from the Emacs search surface in
-  [tahoma/agent-scheme#32](https://github.com/tahoma/agent-scheme/issues/32).
+- Onboarding and planning hygiene:
+  [#264](https://github.com/tahoma/agent-scheme/issues/264) tracks getting
+  started documentation, [#294](https://github.com/tahoma/agent-scheme/issues/294)
+  tracks this roadmap summary, and
+  [#295](https://github.com/tahoma/agent-scheme/issues/295) tracks label,
+  sub-issue, dependency, and chunk-placement cleanup.
+- Shared effect domains:
+  [#220](https://github.com/tahoma/agent-scheme/issues/220) for files,
+  [#221](https://github.com/tahoma/agent-scheme/issues/221) for ports,
+  [#222](https://github.com/tahoma/agent-scheme/issues/222) for processes,
+  [#290](https://github.com/tahoma/agent-scheme/issues/290) for network
+  capabilities, and
+  [#103](https://github.com/tahoma/agent-scheme/issues/103) for the shared
+  policy-gated backend effect path.
+- VCS capabilities and mutation:
+  [#266](https://github.com/tahoma/agent-scheme/issues/266) defines the shared
+  VCS capability contract,
+  [#279](https://github.com/tahoma/agent-scheme/issues/279) tracks
+  policy-gated mutating VCS operations,
+  [#292](https://github.com/tahoma/agent-scheme/issues/292) tracks Emacs
+  mutating VCS adapter operations,
+  [#280](https://github.com/tahoma/agent-scheme/issues/280) tracks the native
+  CLI daemon VCS adapter library, and
+  [#293](https://github.com/tahoma/agent-scheme/issues/293) tracks native CLI
+  and daemon mutating VCS adapter operations.
+- Task lifecycle and control loop:
+  [#281](https://github.com/tahoma/agent-scheme/issues/281) is the umbrella for
+  task lifecycle and control-loop design, with concrete slices for task records
+  ([#285](https://github.com/tahoma/agent-scheme/issues/285)), the minimal task
+  runner ([#286](https://github.com/tahoma/agent-scheme/issues/286)), shared
+  control-loop fixtures
+  ([#287](https://github.com/tahoma/agent-scheme/issues/287)), persistence and
+  resume ([#288](https://github.com/tahoma/agent-scheme/issues/288)), and
+  remote/local provider proof fixtures
+  ([#289](https://github.com/tahoma/agent-scheme/issues/289)).
+- Providers, budgets, and persistence:
+  [#26](https://github.com/tahoma/agent-scheme/issues/26) covers model provider
+  routing, [#223](https://github.com/tahoma/agent-scheme/issues/223) covers the
+  provider capability domain,
+  [#291](https://github.com/tahoma/agent-scheme/issues/291) tracks budget
+  ledger and stop receipts, and
+  [#48](https://github.com/tahoma/agent-scheme/issues/48) covers persistence
+  formats and migrations.
+- Host adapter conformance:
+  [#237](https://github.com/tahoma/agent-scheme/issues/237) is the conformance
+  umbrella for host adapter declarations, library discovery, raw object
+  exclusion, capability mediation, policy posture, handle lifecycle, session
+  isolation, redaction, prompts, cancellation, filesystem, process, stdio, and
+  event durability.
+- CLI-compatible Emacs behavior:
+  [#254](https://github.com/tahoma/agent-scheme/issues/254) tracks the Emacs
+  CLI-compatible host affordance subset, with child slices for stdio and
+  transcripts, batch prompts, cwd/file/environment/audit records, approval
+  separation, process events and handles, cancellation and budget behavior, and
+  session/audit/handle liveness.
+- Native CLI, daemon, and host-compiled executables:
+  [#136](https://github.com/tahoma/agent-scheme/issues/136) defines the native
+  CLI daemon adapter contract,
+  [#270](https://github.com/tahoma/agent-scheme/issues/270) tracks
+  host-compiled portable executable packaging, and
+  [#272](https://github.com/tahoma/agent-scheme/issues/272) and
+  [#273](https://github.com/tahoma/agent-scheme/issues/273) track Racket CS and
+  Gambit executable slices.
+- Compiler backends:
+  [#115](https://github.com/tahoma/agent-scheme/issues/115) defines Agent
+  Scheme LLIR, [#116](https://github.com/tahoma/agent-scheme/issues/116)
+  lowers normalized core forms to LLIR,
+  [#119](https://github.com/tahoma/agent-scheme/issues/119) emits LLVM textual
+  IR for the pure LLIR subset, and
+  [#123](https://github.com/tahoma/agent-scheme/issues/123) through
+  [#129](https://github.com/tahoma/agent-scheme/issues/129) track the Emacs
+  Lisp byte-code backend contract, emission, execution, comparison, effects,
+  diagnostics, and caching.
+- User-facing library and reference documentation:
+  [#24](https://github.com/tahoma/agent-scheme/issues/24) tracks the R7RS
+  reference library,
+  [#37](https://github.com/tahoma/agent-scheme/issues/37) tracks the Emacs
+  documentation capability library, and
+  [#284](https://github.com/tahoma/agent-scheme/issues/284) tracks custom
+  Agent Scheme library reference docs.
+- Future host contracts:
+  [#138](https://github.com/tahoma/agent-scheme/issues/138) covers Neovim,
+  [#140](https://github.com/tahoma/agent-scheme/issues/140) covers VS Code,
+  [#147](https://github.com/tahoma/agent-scheme/issues/147) covers LSP and
+  DAP, [#142](https://github.com/tahoma/agent-scheme/issues/142) and
+  [#143](https://github.com/tahoma/agent-scheme/issues/143) cover browser and
+  Wasm requirements, [#145](https://github.com/tahoma/agent-scheme/issues/145)
+  covers Jupyter, [#149](https://github.com/tahoma/agent-scheme/issues/149)
+  covers WASI component imports, and
+  [#151](https://github.com/tahoma/agent-scheme/issues/151) covers JVM IDE
+  platforms.
 
-The compiler-backend chunk sequence starts with Agent Scheme LLIR rather than
-LLVM directly. LLIR is the backend-facing, Scheme-readable low-level
-intermediate representation that sits after normalized core forms and before
-concrete emitters. LLVM textual IR is the first planned native emitter, but it
-consumes LLIR instead of becoming Agent Scheme's own compiler IR. Emacs Lisp
-byte-code is the first planned host byte-code emitter and follows the same LLIR
-boundary.
-The first LLIR slice executes only pure R7RS forms while still representing
-effects as explicit unsupported nodes so compiled backends do not drift around
-policy.
+## Maintenance
 
-Current compiler-backend issues:
+When adding or revising roadmap issues:
 
-- [tahoma/agent-scheme#115](https://github.com/tahoma/agent-scheme/issues/115)
-  defines Agent Scheme LLIR for compiler backends.
-- [tahoma/agent-scheme#116](https://github.com/tahoma/agent-scheme/issues/116)
-  lowers normalized core forms to LLIR.
-- [tahoma/agent-scheme#117](https://github.com/tahoma/agent-scheme/issues/117)
-  adds the LLIR verifier and shared fixture phase.
-- [tahoma/agent-scheme#118](https://github.com/tahoma/agent-scheme/issues/118)
-  adds a debug LLIR execution harness before native emission.
-- [tahoma/agent-scheme#120](https://github.com/tahoma/agent-scheme/issues/120)
-  defines the compiled runtime ABI and value representation.
-- [tahoma/agent-scheme#119](https://github.com/tahoma/agent-scheme/issues/119)
-  emits LLVM textual IR for the pure LLIR subset.
-- [tahoma/agent-scheme#121](https://github.com/tahoma/agent-scheme/issues/121)
-  routes compiled effects through the shared policy path.
-- [tahoma/agent-scheme#123](https://github.com/tahoma/agent-scheme/issues/123)
-  defines the Emacs Lisp byte-code backend contract.
-- [tahoma/agent-scheme#124](https://github.com/tahoma/agent-scheme/issues/124)
-  emits Emacs Lisp forms for the pure LLIR subset.
-- [tahoma/agent-scheme#125](https://github.com/tahoma/agent-scheme/issues/125)
-  adds the Emacs byte-code compile and execution harness.
-- [tahoma/agent-scheme#126](https://github.com/tahoma/agent-scheme/issues/126)
-  compares interpreter, LLIR debug, and byte-code backend results.
-- [tahoma/agent-scheme#127](https://github.com/tahoma/agent-scheme/issues/127)
-  routes byte-code backend effects through the shared policy path.
-- [tahoma/agent-scheme#128](https://github.com/tahoma/agent-scheme/issues/128)
-  adds byte-code backend diagnostics and source mapping.
-- [tahoma/agent-scheme#129](https://github.com/tahoma/agent-scheme/issues/129)
-  adds byte-code backend caching and invalidation.
+- update #53 first, including explicit issue-number dependencies where the
+  target issue exists
+- keep `docs/roadmap.md` concise and summary-level
+- keep umbrella relationships in #53's Umbrella Issue Index, not nested in the
+  chunk map
+- keep GitHub labels aligned with [GitHub issue taxonomy](issue-taxonomy.md):
+  one `surface:*` label, useful risk/host/size/review/documentation labels, and
+  current placement in the chunk map
+- do not add new `phase:*` labels; existing `phase:*` labels are legacy metadata
+  from the old roadmap model and should be retired through
+  [#295](https://github.com/tahoma/agent-scheme/issues/295)
 
-Future host-adapter expansion issues, in proposed order:
-
-- [tahoma/agent-scheme#135](https://github.com/tahoma/agent-scheme/issues/135)
-  tracks the native CLI and daemon host adapter.
-- [tahoma/agent-scheme#136](https://github.com/tahoma/agent-scheme/issues/136)
-  defines the native CLI daemon adapter contract.
-- [tahoma/agent-scheme#137](https://github.com/tahoma/agent-scheme/issues/137)
-  tracks the Neovim host adapter.
-- [tahoma/agent-scheme#138](https://github.com/tahoma/agent-scheme/issues/138)
-  defines the Neovim RPC adapter contract.
-- [tahoma/agent-scheme#139](https://github.com/tahoma/agent-scheme/issues/139)
-  tracks the VS Code extension host adapter.
-- [tahoma/agent-scheme#140](https://github.com/tahoma/agent-scheme/issues/140)
-  defines the VS Code extension adapter contract.
-- [tahoma/agent-scheme#141](https://github.com/tahoma/agent-scheme/issues/141)
-  tracks the browser WebExtension host adapter.
-- [tahoma/agent-scheme#142](https://github.com/tahoma/agent-scheme/issues/142)
-  defines the browser WebExtension adapter contract.
-- [tahoma/agent-scheme#143](https://github.com/tahoma/agent-scheme/issues/143)
-  defines Wasm backend requirements for browser host adapters.
-- [tahoma/agent-scheme#144](https://github.com/tahoma/agent-scheme/issues/144)
-  tracks the Jupyter notebook host adapter.
-- [tahoma/agent-scheme#145](https://github.com/tahoma/agent-scheme/issues/145)
-  defines the Jupyter kernel and notebook adapter contract.
-- [tahoma/agent-scheme#146](https://github.com/tahoma/agent-scheme/issues/146)
-  tracks the LSP and DAP protocol adapter surface.
-- [tahoma/agent-scheme#147](https://github.com/tahoma/agent-scheme/issues/147)
-  defines the LSP and DAP capability and transport contract.
-- [tahoma/agent-scheme#148](https://github.com/tahoma/agent-scheme/issues/148)
-  tracks the WASI and component-model host contract.
-- [tahoma/agent-scheme#149](https://github.com/tahoma/agent-scheme/issues/149)
-  defines WASI component imports for host capabilities.
-- [tahoma/agent-scheme#150](https://github.com/tahoma/agent-scheme/issues/150)
-  tracks the JetBrains platform host adapter.
-- [tahoma/agent-scheme#151](https://github.com/tahoma/agent-scheme/issues/151)
-  defines the JVM IDE platform adapter contract.
-
-This document can summarize the current milestone while the issue remains the
-source of truth for ordering.
-
-When adding or revising roadmap issues, keep the GitHub labels current:
-
-- one `surface:*` label
-- risk, host, size, review, and documentation labels when they add useful
-  selection or review context
-- current placement in the chunk map in
-  [tahoma/agent-scheme#53](https://github.com/tahoma/agent-scheme/issues/53)
-
-Do not add new `phase:*` labels. Existing `phase:*` labels are legacy metadata
-from the old roadmap model and should be retired through
-[tahoma/agent-scheme#295](https://github.com/tahoma/agent-scheme/issues/295).
+Documentation-only roadmap changes should still run the verification command
+documented in [Development Setup](development.md) and report the result.
