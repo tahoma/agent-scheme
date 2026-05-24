@@ -10,6 +10,7 @@
         (prefix (agent-scheme library) library:)
         (prefix (agent-scheme macro) macro:)
         (prefix (agent-scheme approval) approval:)
+        (prefix (agent-scheme job) job:)
         (prefix (agent-scheme memory) memory:)
         (prefix (agent-scheme redaction) redaction:)
         (prefix (agent-scheme session) session:)
@@ -88,6 +89,43 @@
         (lambda ()
           (approval:approval-cancel! approval-store portable-approval-id)))
        #t)
+
+;; Store for exercising the portable job boundary.
+(define job-store (job:agent-scheme-make-job-store))
+
+;; Job records are canonical Scheme-readable datums even when a host adapter
+;; owns actual scheduling.
+(define portable-job
+  (job:job-start! job-store
+                  'portable-main
+                  '(begin (agent-yield '(phase ready)) 'done)
+                  '((max-steps . 100))))
+
+;; Id of the portable job record under test.
+(define portable-job-id (job:job-datum-id portable-job))
+
+(check 'job-boundary-start-status
+       (job:job-status job-store portable-job-id)
+       'queued)
+
+(job:job-mark-running! job-store portable-job-id)
+(job:job-record-yield! job-store portable-job-id '(yield (phase ready)))
+
+(check 'job-boundary-stream-yield
+       (job:job-yields job-store portable-job-id '())
+       '((yield (phase ready))))
+
+(job:job-cancel! job-store portable-job-id)
+
+(check 'job-boundary-cancel-requested
+       (job:job-status job-store portable-job-id)
+       'cancel-requested)
+
+(job:job-finish-cancelled! job-store portable-job-id "job cancelled: j-1")
+
+(check 'job-boundary-cancelled-status
+       (job:job-status job-store portable-job-id)
+       'cancelled)
 
 ;; Store for exercising the portable memory boundary.
 (define memory-store (memory:agent-scheme-make-memory-store))

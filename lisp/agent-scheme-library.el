@@ -18,6 +18,7 @@
 (require 'agent-scheme-agent-io)
 (require 'agent-scheme-approval)
 (require 'agent-scheme-debugger)
+(require 'agent-scheme-job)
 (require 'agent-scheme-memory)
 (require 'agent-scheme-redaction)
 (require 'agent-scheme-session)
@@ -70,6 +71,7 @@
   '("(agent io)"
     "(agent approval)"
     "(agent debugger)"
+    "(agent job)"
     "(agent diagnostics)"
     "(agent diff)"
     "(agent vcs)"
@@ -347,6 +349,11 @@
      (agent-scheme--register-primitive-library
       key
       (agent-scheme-debugger-primitive-specs)
+      context))
+    ("(agent job)"
+     (agent-scheme--register-primitive-library
+      key
+      (agent-scheme-job-primitive-specs)
       context))
     ("(agent capability)"
      (unless (gethash key (agent-scheme--eval-context-libraries context))

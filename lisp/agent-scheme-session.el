@@ -46,6 +46,7 @@ exposing this host structure."
   snapshots
   capability-grants
   skill-activations
+  locked-by-job
   parent-id
   forked-from
   created-at
@@ -83,6 +84,9 @@ exposing this host structure."
 
 (defvar agent-scheme--next-snapshot-number 0
   "Next numeric suffix used for generated snapshot ids.")
+
+(defvar agent-scheme--session-current-job-id nil
+  "Dynamically bound job id allowed to evaluate a locked session.")
 
 (defun agent-scheme-session--symbol (name)
   "Return NAME as an Agent Scheme symbol datum."
@@ -401,6 +405,33 @@ Return the stale handles that were removed."
   (let ((name (agent-scheme-session--name id "session id")))
     (gethash name agent-scheme--session-registry)))
 
+(defun agent-scheme-session--job-id-name (job-id)
+  "Return JOB-ID as a stable session-lock name."
+  (agent-scheme-session--name job-id "job id"))
+
+(defun agent-scheme-session--lock! (session job-id)
+  "Lock SESSION for JOB-ID or signal when another job owns it."
+  (let ((name (agent-scheme-session--job-id-name job-id))
+        (locked-by (agent-scheme-session-locked-by-job session)))
+    (when (and locked-by (not (equal locked-by name)))
+      (signal 'agent-scheme-session-error
+              (list (format "session is locked by job: %s" locked-by))))
+    (when (and (eq (agent-scheme-session-status session) 'active)
+               (not (equal locked-by name)))
+      (signal 'agent-scheme-session-error
+              (list "session is already active")))
+    (setf (agent-scheme-session-locked-by-job session) name)
+    (agent-scheme-session--set-updated! session)
+    session))
+
+(defun agent-scheme-session--unlock! (session job-id)
+  "Release SESSION's lock when JOB-ID owns it."
+  (let ((name (agent-scheme-session--job-id-name job-id)))
+    (when (equal (agent-scheme-session-locked-by-job session) name)
+      (setf (agent-scheme-session-locked-by-job session) nil)
+      (agent-scheme-session--set-updated! session)))
+  session)
+
 (defun agent-scheme-session--register! (session)
   "Register SESSION unless it is a fresh collectable session."
   (unless (eq (agent-scheme-session-scope session) 'fresh)
@@ -456,6 +487,7 @@ Return the stale handles that were removed."
      :capability-grants capability-grants
      :skill-activations
      (agent-scheme-session--option options :skill-activations nil)
+     :locked-by-job nil
      :parent-id (agent-scheme-session--option options :parent-id nil)
      :forked-from (agent-scheme-session--option options :forked-from nil)
      :created-at timestamp
@@ -474,6 +506,11 @@ Return the stale handles that were removed."
     (agent-scheme-session--field
      "status" (agent-scheme-session--symbol
                (agent-scheme-session-status session))))
+   (when (agent-scheme-session-locked-by-job session)
+     (list (agent-scheme-session--field
+            "locked-by-job"
+            (agent-scheme-session--symbol
+             (agent-scheme-session-locked-by-job session)))))
    (when (agent-scheme-session-project-root session)
      (list (agent-scheme-session--field
             "project-root" (agent-scheme-session-project-root session))))
@@ -717,6 +754,13 @@ Return the stale handles that were removed."
           :host-callbacks 0
           :maximum-host-callbacks
           (agent-scheme--eval-context-maximum-host-callbacks context)
+          :events nil
+          :event-count 0
+          :maximum-events
+          (agent-scheme--eval-context-maximum-events context)
+          :maximum-event-nodes
+          (agent-scheme--eval-context-maximum-event-nodes context)
+          :event-hook nil
           :syntax-environment
           (agent-scheme-session--copy-syntax-environment
            (agent-scheme--eval-context-syntax-environment context))
@@ -739,9 +783,18 @@ Return the stale handles that were removed."
           :capability-grants
           (copy-tree (agent-scheme--eval-context-capability-grants context))
           :active-capability-grants nil
+          :current-input-port
+          (agent-scheme--eval-context-current-input-port context)
+          :current-output-port
+          (agent-scheme--eval-context-current-output-port context)
+          :current-error-port
+          (agent-scheme--eval-context-current-error-port context)
           :current-error nil
           :session-id
           (agent-scheme--eval-context-session-id context)
+          :job-id nil
+          :cancel-requested nil
+          :interrupt-reason nil
           :interaction-environment environment
           :base-syntax-installed
           (agent-scheme--eval-context-base-syntax-installed context)
@@ -797,6 +850,7 @@ Return the stale handles that were removed."
            (copy-tree (agent-scheme-session-capability-grants source))
            :skill-activations
            (copy-tree (agent-scheme-session-skill-activations source))
+           :locked-by-job nil
            :parent-id (agent-scheme-session-id source)
            :forked-from (agent-scheme-session-id source)
            :created-at timestamp
@@ -839,6 +893,7 @@ Return the stale handles that were removed."
   (clrhash agent-scheme--session-registry)
   (setq agent-scheme--next-session-number 0)
   (setq agent-scheme--next-snapshot-number 0)
+  (setq agent-scheme--session-current-job-id nil)
   agent-scheme-unspecified)
 
 (defun agent-scheme-session--audit-start-count ()
@@ -871,15 +926,27 @@ Return the stale handles that were removed."
   (when (memq (agent-scheme-session-status session) '(retired collectable))
     (signal 'agent-scheme-session-error
             (list "retired sessions cannot be evaluated")))
+  (when-let ((locked-by (agent-scheme-session-locked-by-job session)))
+    (unless (equal locked-by agent-scheme--session-current-job-id)
+      (signal 'agent-scheme-session-error
+              (list (format "session is locked by job: %s" locked-by)))))
   (let ((context (agent-scheme-session-context session)))
     (setf (agent-scheme--eval-context-steps context) 0)
     (setf (agent-scheme--eval-context-host-callbacks context) 0)
+    (setf (agent-scheme--eval-context-events context) nil)
+    (setf (agent-scheme--eval-context-event-count context) 0)
     (setf (agent-scheme--eval-context-capability-grants context)
           (agent-scheme-session-capability-grants session))
     (setf (agent-scheme--eval-context-active-capability-grants context) nil)
     (setf (agent-scheme--eval-context-current-error context) nil)
     (setf (agent-scheme--eval-context-session-id context)
           (agent-scheme-session-id session))
+    (setf (agent-scheme--eval-context-job-id context)
+          agent-scheme--session-current-job-id)
+    (setf (agent-scheme--eval-context-cancel-requested context) nil)
+    (setf (agent-scheme--eval-context-interrupt-reason context) nil)
+    (unless agent-scheme--session-current-job-id
+      (setf (agent-scheme--eval-context-event-hook context) nil))
     (setf (agent-scheme--eval-context-interaction-environment context)
           (agent-scheme-session-environment session)))
   (agent-scheme-session--transition! session 'active "session-eval-start!"))
@@ -930,13 +997,32 @@ Return the stale handles that were removed."
                               new-entries)
                   'transcript))
          (message (error-message-string condition))
+         (transcript-status
+          (pcase (car-safe condition)
+            ('agent-scheme-cancelled-error "cancelled")
+            ('agent-scheme-interrupt-error "interrupted")
+            (_ "error")))
+         (audit-decision
+          (pcase (car-safe condition)
+            ('agent-scheme-cancelled-error 'cancelled)
+            ('agent-scheme-interrupt-error 'interrupted)
+            (_ 'error)))
+         (session-status
+          (if (eq (car-safe condition) 'agent-scheme-cancelled-error)
+              'idle
+            'failed))
+         (transition-operation
+          (pcase (car-safe condition)
+            ('agent-scheme-cancelled-error "session-eval-cancelled!")
+            ('agent-scheme-interrupt-error "session-eval-interrupted!")
+            (_ "session-eval-failed!")))
          (entry
           (list
            (agent-scheme-session--symbol "transcript-entry")
            (agent-scheme-session--field
             "source" (agent-scheme-redact source 'transcript))
            (agent-scheme-session--field
-            "status" (agent-scheme-session--symbol "error"))
+            "status" (agent-scheme-session--symbol transcript-status))
            (agent-scheme-session--field
             "error" (agent-scheme-redact message 'transcript)))))
     (setf (agent-scheme-session-recent-events session) events)
@@ -951,9 +1037,10 @@ Return the stale handles that were removed."
                     (agent-scheme-session-id session)))
        (input-form . ,source)
        (events . ,events)
-       (decision . error)
+       (decision . ,audit-decision)
        (error . ,message)))
-    (agent-scheme-session--transition! session 'failed "session-eval-failed!"))
+    (agent-scheme-session--transition!
+     session session-status transition-operation))
   condition)
 
 (defun agent-scheme-session--primitive-create (arguments _context)

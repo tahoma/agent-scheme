@@ -118,6 +118,7 @@
       '((agent io)
         (agent approval)
         (agent debugger)
+        (agent job)
         (agent diff)
         (agent vcs)
         (agent network)
@@ -840,6 +841,21 @@
                                   'primitive-debugger-yield
                                   1
                                   1))
+         context))
+       ((equal? key '(agent job))
+        (register-primitive-library!
+         key
+         (list
+          (library-primitive-spec 'job-start! 'primitive-job-start! 3 3)
+          (library-primitive-spec 'job-ref 'primitive-job-ref 1 1)
+          (library-primitive-spec 'job-list 'primitive-job-list 0 1)
+          (library-primitive-spec 'job-cancel! 'primitive-job-cancel! 1 1)
+          (library-primitive-spec 'job-interrupt!
+                                  'primitive-job-interrupt!
+                                  2
+                                  2)
+          (library-primitive-spec 'job-yields 'primitive-job-yields 1 2)
+          (library-primitive-spec 'job-status 'primitive-job-status 1 1))
          context))
        ((equal? key '(agent capability))
         (if (not (library-registry-ref context key))
