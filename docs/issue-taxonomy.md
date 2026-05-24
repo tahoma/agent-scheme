@@ -10,12 +10,14 @@ Use labels as the source of truth for now. A GitHub Project single-select field
 would enforce exclusive choices, but it adds another maintenance surface and is
 less visible from ordinary issue lists, searches, and pull requests.
 
-The `surface:*` and `phase:*` axes are still exclusive by convention: each issue
-should have exactly one label from each axis. If the project later needs
-stronger enforcement, mirror these labels into GitHub Project single-select
-fields instead of inventing a second vocabulary.
+The `surface:*` axis is exclusive by convention: each issue should have exactly
+one surface label. Roadmap timing is tracked by the chunk map in
+[tahoma/agent-scheme#53](https://github.com/tahoma/agent-scheme/issues/53),
+not by the old `phase:*` labels. If the project later needs stronger
+enforcement, mirror these labels or chunk placements into GitHub Project
+single-select fields instead of inventing a second vocabulary.
 
-## Required Axes
+## Required Labels
 
 ### Surface
 
@@ -28,21 +30,19 @@ The surface label answers where a contributor can work on the issue.
 | `surface:specialized-host` | Emacs, MCP, model/provider, CI, sidecar, or other host-specific integration work. |
 | `surface:design` | Architecture, policy, naming, roadmap, taxonomy, or process decisions. |
 
-### Phase
+## Roadmap Chunk Placement
 
-The phase label mirrors the roadmap issue's current implementation order.
+The chunk map in
+[tahoma/agent-scheme#53](https://github.com/tahoma/agent-scheme/issues/53)
+mirrors the roadmap's current implementation order. Each roadmap issue should
+appear in one current chunk unless it is deliberately outside the roadmap.
 
-| Label | Use for |
-| --- | --- |
-| `phase:0-foundation` | Architecture, conformance frame, process, naming, licensing, and setup. |
-| `phase:1-r7rs-core` | Reader, evaluator, macro, library, base, datum, writer, and standard-library work. |
-| `phase:2-runtime-safety` | Policy, audit, sessions, memory, approvals, grants, redaction, and live runtime substrate. |
-| `phase:3-emacs-capabilities` | Emacs-facing capability libraries, jobs, compile/test workflows, and budgets tied to live use. |
-| `phase:4-agent-libraries` | Agent-layer libraries, helper workflows, skill interop, package resolution, and collaboration UX. |
-| `phase:5-outward-interfaces` | References, model/provider integrations, persistence, MCP, protocol, and sidecar interfaces. |
-| `phase:6-compiler-backends` | LLIR, compiler backend ABI, compiled execution, and native or byte-code emitters. |
+Do not add new `phase:*` labels. Existing `phase:*` labels are legacy metadata
+from the old roadmap model and should be retired through
+[tahoma/agent-scheme#295](https://github.com/tahoma/agent-scheme/issues/295)
+rather than extended.
 
-## Optional Axes
+## Optional Labels
 
 Use optional labels when they clarify issue selection or review needs.
 
@@ -65,7 +65,7 @@ Use optional labels when they clarify issue selection or review needs.
 When creating or revising an issue:
 
 1. Add exactly one `surface:*` label.
-2. Add exactly one `phase:*` label.
+2. Confirm the issue appears in the correct chunk in the roadmap issue.
 3. Add one risk label when the risk is clear.
 4. Add host labels for the environments required to do the work.
 5. Add `size:weekend` or `size:umbrella` when it helps contributors choose
@@ -75,5 +75,6 @@ When creating or revising an issue:
 7. Add `documentation` when the main output is documentation rather than runtime
    behavior.
 
-Keep the taxonomy aligned with the roadmap issue. When an issue moves phases or
-is split into follow-ups, update stale labels in the same pass.
+Keep the taxonomy aligned with the roadmap issue. When an issue moves chunks or
+is split into follow-ups, update stale labels and roadmap placement in the same
+pass.
