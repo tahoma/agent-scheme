@@ -86,6 +86,7 @@
       '((emacs buffer)
         (emacs buffer edit)
         (emacs command)
+        (emacs diff)
         (emacs frame)
         (emacs process)
         (emacs project)
@@ -114,6 +115,7 @@
       '((agent io)
         (agent approval)
         (agent debugger)
+        (agent diff)
         (agent capability)
         (agent capability primitive)
         (agent memory)
@@ -124,7 +126,10 @@
     (define agent-source-library-load-paths
       '(((agent capability)
          "scheme/agent/capability.sld"
-         "agent/capability.sld")))
+         "agent/capability.sld")
+        ((agent diff)
+         "scheme/agent/diff.sld"
+         "agent/diff.sld")))
 
     ;; Checked-in standard libraries loaded as portable Scheme source files.
     (define standard-source-library-load-paths
@@ -826,6 +831,12 @@
                                   1))
          context))
        ((equal? key '(agent capability))
+        (if (not (library-registry-ref context key))
+            (register-source-library!
+             (agent-source-library-source key)
+             context
+             environment)))
+       ((equal? key '(agent diff))
         (if (not (library-registry-ref context key))
             (register-source-library!
              (agent-source-library-source key)

@@ -13,6 +13,7 @@
 (require 'project)
 (require 'seq)
 (require 'agent-scheme-audit)
+(require 'agent-scheme-diff)
 (require 'agent-scheme-reader)
 (require 'agent-scheme-runtime)
 (require 'agent-scheme-result)
@@ -333,6 +334,27 @@ Lisp arguments when Scheme does not pass any arguments."
      :emacs-hook agent-scheme--primitive-project-files
      :portable-hook nil :emitter-hook capability-emacs
      :policy allow :test-categories (emacs search project files))
+    (:name "buffer-diff" :library "(emacs diff)"
+     :minimum-arity 1 :maximum-arity 1
+     :source host-capability :effect host-observation
+     :required-capability emacs-diff
+     :emacs-hook agent-scheme--primitive-buffer-diff
+     :portable-hook nil :emitter-hook capability-emacs
+     :policy allow :test-categories (emacs diff buffer))
+    (:name "file-diff" :library "(emacs diff)"
+     :minimum-arity 1 :maximum-arity 1
+     :source host-capability :effect host-observation
+     :required-capability emacs-diff
+     :emacs-hook agent-scheme--primitive-file-diff
+     :portable-hook nil :emitter-hook capability-emacs
+     :policy allow :test-categories (emacs diff file))
+    (:name "project-diff" :library "(emacs diff)"
+     :minimum-arity 1 :maximum-arity 1
+     :source host-capability :effect host-observation
+     :required-capability emacs-diff
+     :emacs-hook agent-scheme--primitive-project-diff
+     :portable-hook nil :emitter-hook capability-emacs
+     :policy allow :test-categories (emacs diff project))
     (:name "search-yield" :library "(emacs search)"
      :minimum-arity 1 :maximum-arity 1
      :source host-capability :effect host-observation
@@ -403,6 +425,7 @@ Lisp arguments when Scheme does not pass any arguments."
   '("(emacs buffer)"
     "(emacs buffer edit)"
     "(emacs command)"
+    "(emacs diff)"
     "(emacs frame)"
     "(emacs process)"
     "(emacs project)"
@@ -2962,6 +2985,99 @@ creates undo boundaries around the atomic change group."
       (agent-scheme--eval-error
        "%s requires a current project" operation))
     (file-name-as-directory (expand-file-name (project-root project)))))
+
+(defun agent-scheme--diff-buffer-text (buffer)
+  "Return BUFFER contents without text properties."
+  (with-current-buffer buffer
+    (buffer-substring-no-properties (point-min) (point-max))))
+
+(defun agent-scheme--diff-file-text (path)
+  "Return local file PATH contents as plain text, or an empty string."
+  (if (file-exists-p path)
+      (with-temp-buffer
+        (insert-file-contents path)
+        (buffer-substring-no-properties (point-min) (point-max)))
+    ""))
+
+(defun agent-scheme--diff-buffer-datum (buffer)
+  "Return a canonical diff datum for live BUFFER."
+  (let ((file (agent-scheme--buffer-target-file buffer)))
+    (when (and file (file-remote-p file))
+      (agent-scheme--eval-error
+       "buffer-diff cannot inspect remote file: %s" file))
+    (let ((old-text (if file (agent-scheme--diff-file-text file)
+                      (agent-scheme--diff-buffer-text buffer)))
+          (new-text (agent-scheme--diff-buffer-text buffer))
+          (old-label (or file (format "buffer:%s" (buffer-name buffer))))
+          (new-label (format "buffer:%s" (buffer-name buffer))))
+      (agent-scheme-diff-from-strings
+       'buffer
+       old-label
+       new-label
+       old-text
+       new-text))))
+
+(defun agent-scheme--diff-file-datum (path)
+  "Return a canonical diff datum for local file PATH."
+  (let ((expanded (expand-file-name path)))
+    (when (file-remote-p expanded)
+      (agent-scheme--eval-error "file-diff cannot inspect remote file: %s"
+                                expanded))
+    (let* ((buffer (get-file-buffer expanded))
+           (old-text (agent-scheme--diff-file-text expanded))
+           (new-text (if (and buffer (buffer-live-p buffer))
+                         (agent-scheme--diff-buffer-text buffer)
+                       old-text))
+           (new-label (if (and buffer (buffer-live-p buffer))
+                          (format "buffer:%s" (buffer-name buffer))
+                        expanded)))
+      (agent-scheme-diff-from-strings
+       'file expanded new-label old-text new-text))))
+
+(defun agent-scheme--primitive-buffer-diff (arguments context)
+  "Primitive buffer-diff over ARGUMENTS."
+  (agent-scheme--authorize-emacs-capability "buffer-diff" arguments context)
+  (let* ((buffer (agent-scheme--live-buffer-for-handle
+                  (car arguments) "buffer-diff"))
+         (diff (agent-scheme--diff-buffer-datum buffer)))
+    (agent-scheme--add-emacs-capability-result-fields
+     (append
+      (agent-scheme--buffer-target-fields buffer)
+      `((changed . ,(if (agent-scheme-diff-changed-p diff) t nil)))))
+    diff))
+
+(defun agent-scheme--primitive-file-diff (arguments context)
+  "Primitive file-diff over ARGUMENTS."
+  (agent-scheme--authorize-emacs-capability "file-diff" arguments context)
+  (let* ((path (expand-file-name
+                (agent-scheme--capability-string
+                 (car arguments) "file-diff path")))
+         (diff (agent-scheme--diff-file-datum path)))
+    (agent-scheme--add-emacs-capability-result-fields
+     `((target-file . ,path)
+       (changed . ,(if (agent-scheme-diff-changed-p diff) t nil))))
+    diff))
+
+(defun agent-scheme--primitive-project-diff (arguments context)
+  "Primitive project-diff over ARGUMENTS."
+  (agent-scheme--authorize-emacs-capability "project-diff" arguments context)
+  (agent-scheme--proper-list-elements
+   (car arguments) "project-diff options")
+  (let ((root (agent-scheme--current-project-root-or-error "project-diff"))
+        diffs)
+    (dolist (buffer (buffer-list))
+      (when-let ((file (and (buffer-live-p buffer)
+                            (agent-scheme--buffer-target-file buffer))))
+        (when (and (file-in-directory-p (expand-file-name file) root)
+                   (with-current-buffer buffer (buffer-modified-p)))
+          (let ((diff (agent-scheme--diff-buffer-datum buffer)))
+            (when (agent-scheme-diff-changed-p diff)
+              (push diff diffs))))))
+    (setq diffs (nreverse diffs))
+    (agent-scheme--add-emacs-capability-result-fields
+     `((project-root . ,root)
+       (result-count . ,(length diffs))))
+    diffs))
 
 (defun agent-scheme--primitive-project-compile! (arguments context)
   "Primitive project-compile! over ARGUMENTS."

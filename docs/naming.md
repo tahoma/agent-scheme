@@ -51,6 +51,7 @@ Implementation files under `lisp/` should follow the package namespace:
 - `lisp/agent-scheme-interpreter.el` provides `agent-scheme-interpreter`
 - `lisp/agent-scheme-eval.el` provides `agent-scheme-eval`
 - `lisp/agent-scheme-approval.el` provides `agent-scheme-approval`
+- `lisp/agent-scheme-diff.el` provides `agent-scheme-diff`
 - `lisp/agent-scheme-redaction.el` provides `agent-scheme-redaction`
 - `lisp/agent-scheme-mcp.el` provides `agent-scheme-mcp`
 
@@ -77,6 +78,10 @@ modules and test bridges in the same slice when practical.
 Use `.sld` for portable R7RS `define-library` modules. Use `.scm` for Scheme
 programs, tests, fixtures, and ordinary source snippets that are loaded or run
 as code rather than imported as libraries.
+
+Public Agent Scheme libraries that are not implementation-pass modules may live
+under their public namespace, such as `scheme/agent/diff.sld` for `(agent
+diff)`.
 
 Scheme-side tests live under `tests/scheme/`; their ERT bridge files still use
 the normal `tests/agent-scheme-*-test.el` naming pattern.

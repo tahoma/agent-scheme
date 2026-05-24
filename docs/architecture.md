@@ -417,6 +417,7 @@ Emacs capabilities live under explicit Emacs libraries:
 ```scheme
 (emacs buffer)
 (emacs buffer edit)
+(emacs diff)
 (emacs window)
 (emacs command)
 (emacs project)
@@ -429,6 +430,7 @@ Agent interaction libraries live under `agent`:
 (agent memory)
 (agent plan)
 (agent approval)
+(agent diff)
 (agent debugger)
 (agent reflect)
 (agent context)
@@ -538,6 +540,19 @@ ordinary Scheme-readable datums:
   (id a-17)
   (policy buffer-edit)
   (effect (buffer-replace! h-12 120 140 "new text"))
+  (diff (diff
+          (source buffer)
+          (old-label "before")
+          (new-label "after")
+          (status changed)
+          (hunks
+           ((hunk
+             (old-start 120)
+             (old-count 1)
+             (new-start 120)
+             (new-count 1)
+             (lines ((line remove "old text")
+                     (line add "new text"))))))))
   (reason "Replace deprecated helper name?")
   (status pending))
 ```
@@ -555,6 +570,14 @@ The Emacs adapter renders session approval records in
 calls, such as buffer edits, create approval records automatically before the
 confirmation function runs, then resolve those records to `approved` or
 `denied` and write the decision to the audit log.
+
+Diffs deliberately straddle the portable/adapter boundary.  `(agent diff)`
+owns the canonical `diff`, `hunk`, and `line` datum shape, proposed-edit
+preview construction, `diff-render-unified`, and `diff-yield`.  `(emacs diff)`
+is the first adapter library that produces those datums from live editor state
+with procedures such as `buffer-diff`, `file-diff`, and `project-diff`.  Other
+hosts should produce the same portable record shape instead of inventing a
+host-specific diff model.
 
 ## Threat Model
 
@@ -803,6 +826,7 @@ Likely Emacs Lisp bootstrap and adapter modules:
 - `lisp/agent-scheme-policy.el`
 - `lisp/agent-scheme-approval.el`
 - `lisp/agent-scheme-debugger.el`
+- `lisp/agent-scheme-diff.el`
 - `lisp/agent-scheme-audit.el`
 - `lisp/agent-scheme-agent-io.el`
 - `lisp/agent-scheme-handle.el`
@@ -832,6 +856,7 @@ Focused test files should mirror the modules:
 - `tests/agent-scheme-compile-test.el`
 - `tests/agent-scheme-policy-test.el`
 - `tests/agent-scheme-approval-test.el`
+- `tests/agent-scheme-diff-test.el`
 - `tests/agent-scheme-capability-test.el`
 - `tests/agent-scheme-repl-test.el`
 - `tests/agent-scheme-mcp-test.el`
