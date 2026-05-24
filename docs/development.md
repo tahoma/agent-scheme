@@ -23,6 +23,8 @@ Optional but useful:
   install the package with `raco pkg install --auto r7rs`
 - CHICKEN Scheme, `csi`, plus its `r7rs` egg for developer oracle comparisons;
   install the egg with `chicken-install r7rs`
+- Gambit Scheme, `gsi` and `gsc`, for developer oracle comparisons and future
+  compile-path checks; Homebrew packages it as `gambit-scheme`
 - ShellCheck or other local lint tools for future scripts
 
 ## GitHub Access
@@ -186,15 +188,17 @@ make conformance-oracle
 ```
 
 The default reference adapters are Chibi Scheme and Sagittarius. Gauche, Guile,
-Racket, and CHICKEN remain opt-in comparison adapters so contributors can
-inspect a wider implementation matrix before changing defaults. The runner uses
-`AGENT_SCHEME_CHIBI`, `AGENT_SCHEME_GAUCHE`, `AGENT_SCHEME_GUILE`,
-`AGENT_SCHEME_SAGITTARIUS`, `AGENT_SCHEME_RACKET`, and
-`AGENT_SCHEME_CHICKEN` when set, otherwise it searches for `chibi-scheme`,
-`gosh`, `guile`, `sagittarius`, `racket`, and `csi` on `PATH`. The Racket
-adapter requires Racket's separate `r7rs` package and wraps generated fixture
-programs with `#lang r7rs`. The CHICKEN adapter requires the `r7rs` egg and
-invokes `csi` with `-q -R r7rs -s`. Each adapter writes eligible fixtures to a
+Racket, CHICKEN, and Gambit remain opt-in comparison adapters so contributors
+can inspect a wider implementation matrix before changing defaults. The runner
+uses `AGENT_SCHEME_CHIBI`, `AGENT_SCHEME_GAUCHE`, `AGENT_SCHEME_GUILE`,
+`AGENT_SCHEME_SAGITTARIUS`, `AGENT_SCHEME_RACKET`, `AGENT_SCHEME_CHICKEN`,
+and `AGENT_SCHEME_GAMBIT` when set, otherwise it searches for `chibi-scheme`,
+`gosh`, `guile`, `sagittarius`, `racket`, `csi`, and `gsi` on `PATH`. The
+Racket adapter requires Racket's separate `r7rs` package and wraps generated
+fixture programs with `#lang r7rs`. The CHICKEN adapter requires the `r7rs`
+egg and invokes `csi` with `-q -R r7rs -s`. The Gambit adapter invokes `gsi`
+with `-:r7rs,search=$REPO/scheme`, where `$REPO/scheme` is the repository's
+portable R7RS library directory. Each adapter writes eligible fixtures to a
 temporary R7RS program and invokes the reference implementation with that file
 as the command-line program argument. Missing reference implementations are
 reported as `unsupported-reference` in Scheme-readable oracle reports and do
@@ -208,6 +212,13 @@ not affect the default `make test` command.
 | Guile | opt-in comparison | `AGENT_SCHEME_GUILE` | `guile` | Runs with `--no-auto-compile --r7rs`. |
 | Racket | developer-only comparison | `AGENT_SCHEME_RACKET` | `racket` | Requires the Racket `r7rs` package; generated programs are wrapped with `#lang r7rs`. |
 | CHICKEN Scheme | developer-only comparison | `AGENT_SCHEME_CHICKEN` | `csi` | Requires the `r7rs` egg; runs with `-q -R r7rs -s`. |
+| Gambit Scheme | developer-only comparison | `AGENT_SCHEME_GAMBIT` | `gsi` | Homebrew formula `gambit-scheme`; runs with `-:r7rs,search=$REPO/scheme`. |
+
+The future Gambit compile path should use the same R7RS mode and library search
+directory. Set `AGENT_SCHEME_GAMBIT_COMPILER` to choose a specific `gsc`
+executable; otherwise compile checks should discover `gsc` on `PATH`. The
+current oracle runner does not invoke `gsc`, but documenting both tools keeps
+interpreter and compiler setup aligned.
 
 Oracle reports identify each fixture by case id and classify the comparison as
 `portable-agree`, `implementation-variant`, `agent-mismatch`,
@@ -248,7 +259,7 @@ To compare a chosen reference implementation set, pass a comma-separated
 reference filter:
 
 ```sh
-AGENT_SCHEME_ORACLE_REFERENCES='chibi,gauche,guile,sagittarius,racket,chicken' make conformance-oracle
+AGENT_SCHEME_ORACLE_REFERENCES='chibi,gauche,guile,sagittarius,racket,chicken,gambit' make conformance-oracle
 ```
 
 To print a compact status count before the report stream:
