@@ -30,6 +30,19 @@ The project roadmap follows this design intent:
 5. model, protocol, persistence, and ecosystem integrations
 6. compiler backends over the shared frontend and runtime contracts
 
+Current onboarding documentation issue:
+
+- [tahoma/agent-scheme#264](https://github.com/tahoma/agent-scheme/issues/264)
+  adds a getting started guide for checkout setup, native Emacs REPL first use,
+  verification, and the current non-Emacs host status.
+
+Current host-neutral agent capability issues:
+
+- [tahoma/agent-scheme#267](https://github.com/tahoma/agent-scheme/issues/267)
+  adds a host-neutral search interface over adapter-provided search
+  capabilities, starting from the Emacs search surface in
+  [tahoma/agent-scheme#32](https://github.com/tahoma/agent-scheme/issues/32).
+
 The compiler-backend phase starts with Agent Scheme LLIR rather than LLVM
 directly.  LLIR is the backend-facing, Scheme-readable low-level intermediate
 representation that sits after normalized core forms and before concrete
