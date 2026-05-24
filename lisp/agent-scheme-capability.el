@@ -12,6 +12,7 @@
 (require 'compile)
 (require 'project)
 (require 'seq)
+(require 'url-parse)
 (require 'agent-scheme-audit)
 (require 'agent-scheme-diagnostics)
 (require 'agent-scheme-diff)
@@ -19,6 +20,7 @@
 (require 'agent-scheme-runtime)
 (require 'agent-scheme-result)
 (require 'agent-scheme-policy)
+(require 'agent-scheme-redaction)
 
 (declare-function agent-scheme--apply-procedure "agent-scheme-interpreter")
 
@@ -90,6 +92,38 @@ CONTEXT, and returns either a host process object or a plist with
 Scheme-readable metadata such as `:name', `:status', `:stdout',
 and `:stderr'.  It is called only after command allow-list,
 grant, and policy checks succeed."
+  :type 'function
+  :group 'agent-scheme)
+
+(defun agent-scheme--default-network-request (resource _context)
+  "Default host adapter for network requests.
+RESOURCE is a redacted Scheme-readable request resource.  The
+default refuses live transport so tests and hosts must install an
+explicit adapter before bytes can leave the runtime."
+  (signal 'agent-scheme-capability-grant-error
+          (list "no network request adapter configured")))
+
+(defcustom agent-scheme-network-request-function
+  #'agent-scheme--default-network-request
+  "Function that performs authorized network request resources.
+The function receives a redacted Scheme-readable RESOURCE and
+CONTEXT after network grant, policy, and redaction checks have
+succeeded.  It must return a Scheme-readable response datum."
+  :type 'function
+  :group 'agent-scheme)
+
+(defun agent-scheme--default-network-stream (resource _context)
+  "Default host adapter for network stream requests."
+  (signal 'agent-scheme-capability-grant-error
+          (list "no network stream adapter configured")))
+
+(defcustom agent-scheme-network-stream-function
+  #'agent-scheme--default-network-stream
+  "Function that opens authorized network stream resources.
+The function receives a redacted Scheme-readable RESOURCE and
+CONTEXT after network grant, policy, and redaction checks have
+succeeded.  It must return textual stream contents for the
+network-backed port."
   :type 'function
   :group 'agent-scheme)
 
@@ -177,6 +211,18 @@ grant, and policy checks succeed."
 
 (defvar agent-scheme--next-process-port-capability-handle-number 0
   "Next numeric suffix for generated process-backed port capability ids.")
+
+(defvar agent-scheme--next-network-capability-request-number 0
+  "Next numeric suffix for generated network capability request ids.")
+
+(defvar agent-scheme--next-network-capability-decision-number 0
+  "Next numeric suffix for generated network capability decision ids.")
+
+(defvar agent-scheme--next-network-stream-handle-number 0
+  "Next numeric suffix for generated network stream handles.")
+
+(defvar agent-scheme--next-network-port-capability-handle-number 0
+  "Next numeric suffix for generated network-backed port capability ids.")
 
 (defconst agent-scheme--emacs-capability-manifest-specs
   '((:name "emacs-current-buffer" :library "(emacs buffer)"
@@ -519,6 +565,24 @@ grant, and policy checks succeed."
      :policy confirm :policy-category command-process
      :requires-process-grant t
      :test-categories (emacs process control mutation))
+    (:name "network-http-request" :library "(emacs network)"
+     :minimum-arity 5 :maximum-arity 5
+     :source host-capability :effect host-network
+     :required-capability network
+     :emacs-hook agent-scheme--primitive-network-http-request
+     :portable-hook nil :emitter-hook capability-network
+     :policy deny :policy-category network-access
+     :requires-network-grant t
+     :test-categories (emacs network http))
+    (:name "network-open-sse-stream" :library "(emacs network)"
+     :minimum-arity 3 :maximum-arity 3
+     :source host-capability :effect host-network
+     :required-capability network
+     :emacs-hook agent-scheme--primitive-network-open-sse-stream
+     :portable-hook nil :emitter-hook capability-network
+     :policy deny :policy-category network-access
+     :requires-network-grant t
+     :test-categories (emacs network sse port stream))
     (:name "command-doc" :library "(emacs command)"
      :minimum-arity 1 :maximum-arity 1
      :source host-capability :effect host-observation
@@ -557,6 +621,7 @@ grant, and policy checks succeed."
     "(emacs diagnostics)"
     "(emacs diff)"
     "(emacs frame)"
+    "(emacs network)"
     "(emacs process)"
     "(emacs project)"
     "(emacs search)"
@@ -1004,6 +1069,29 @@ grant, and policy checks succeed."
   (agent-scheme--capability-grant-symbol
    (format "p-process-%d"
            (cl-incf agent-scheme--next-process-port-capability-handle-number))))
+
+(defun agent-scheme--network-capability-request-id ()
+  "Return a fresh network capability request id."
+  (agent-scheme--capability-grant-symbol
+   (format "req-network-%d"
+           (cl-incf agent-scheme--next-network-capability-request-number))))
+
+(defun agent-scheme--network-capability-decision-id ()
+  "Return a fresh network capability decision id."
+  (agent-scheme--capability-grant-symbol
+   (format "dec-network-%d"
+           (cl-incf agent-scheme--next-network-capability-decision-number))))
+
+(defun agent-scheme--network-stream-handle-id ()
+  "Return a fresh network stream handle id."
+  (format "h-network-%d"
+          (cl-incf agent-scheme--next-network-stream-handle-number)))
+
+(defun agent-scheme--network-port-capability-handle-id ()
+  "Return a fresh network-backed port capability handle id."
+  (agent-scheme--capability-grant-symbol
+   (format "p-network-%d"
+           (cl-incf agent-scheme--next-network-port-capability-handle-number))))
 
 (defun agent-scheme--file-capability-remote-path-p (filename path)
   "Return non-nil when FILENAME or PATH names non-local file authority."
@@ -1456,6 +1544,16 @@ AUTHORIZATION is the approved file authorization that created PORT."
        port operation "stale process port handle" t)
       (signal 'agent-scheme-capability-grant-error
               (list "stale port capability handle: process is not live")))
+     ((and (eq (agent-scheme--port-backing-domain port) 'network)
+           (not (agent-scheme--network-stream-live-p
+                 (agent-scheme--port-path port))))
+      (agent-scheme-capability-audit-port-result
+       port operation "stale network stream handle" t)
+      (signal 'agent-scheme-capability-grant-error
+              (list "stale port capability handle: network stream is not live")))
+     ((and (eq (agent-scheme--port-backing-domain port) 'network)
+           (eq operation 'close))
+      (agent-scheme--port-capability-check-limit! port operation))
      (t
       (let* ((grant-id (agent-scheme--port-grant port))
              (grant
@@ -2204,6 +2302,662 @@ AUTHORIZATION is the approved file authorization that created PORT."
        (status . open)))
     port))
 
+(defun agent-scheme--network-capability-grant-domain-p (grant)
+  "Return non-nil when GRANT is a network-domain grant."
+  (equal (agent-scheme--capability-grant-symbol-name
+          (agent-scheme--capability-grant-field-value grant "domain"))
+         "network"))
+
+(defun agent-scheme--network-capability-operation-p (grant operation)
+  "Return non-nil when GRANT allows network OPERATION."
+  (let ((operation-name
+         (agent-scheme--capability-grant-symbol-name operation)))
+    (cl-some
+     (lambda (candidate)
+       (equal (agent-scheme--capability-grant-symbol-name candidate)
+              operation-name))
+     (agent-scheme--file-capability-field-values-list
+      (agent-scheme--capability-grant-field-values grant "operations")))))
+
+(defun agent-scheme--network-capability-grants (context)
+  "Return network-domain grants carried by CONTEXT."
+  (seq-filter
+   #'agent-scheme--network-capability-grant-domain-p
+   (agent-scheme--capability-context-grants context)))
+
+(defun agent-scheme--network-name (value description)
+  "Return VALUE as a network scope string for DESCRIPTION."
+  (or (agent-scheme--capability-grant-symbol-name value)
+      (agent-scheme--capability-string value description)))
+
+(defun agent-scheme--network-scope-values (grant name description)
+  "Return GRANT scope NAME values normalized as strings."
+  (mapcar
+   (lambda (value)
+     (agent-scheme--network-name value description))
+   (agent-scheme--file-capability-field-values-list
+    (cdr (agent-scheme--capability-scope-clause grant name)))))
+
+(defun agent-scheme--network-scope-integers (grant name description)
+  "Return GRANT scope NAME values normalized as integers."
+  (mapcar
+   (lambda (value)
+     (agent-scheme--capability-exact-integer value description))
+   (agent-scheme--file-capability-field-values-list
+    (cdr (agent-scheme--capability-scope-clause grant name)))))
+
+(defun agent-scheme--network-scope-integer (grant name description)
+  "Return GRANT scope NAME as one integer, or nil."
+  (when-let ((value (agent-scheme--capability-scope-value grant name)))
+    (agent-scheme--capability-exact-integer value description)))
+
+(defun agent-scheme--network-member-string-p (value allowed)
+  "Return non-nil when VALUE is allowed by ALLOWED strings."
+  (or (null allowed)
+      (member "all" allowed)
+      (member value allowed)))
+
+(defun agent-scheme--network-member-integer-p (value allowed)
+  "Return non-nil when VALUE is allowed by ALLOWED integers."
+  (or (null allowed)
+      (member value allowed)))
+
+(defun agent-scheme--network-subset-p (values allowed)
+  "Return non-nil when every value in VALUES is included in ALLOWED."
+  (or (null values)
+      (null allowed)
+      (member "all" allowed)
+      (cl-every
+       (lambda (value)
+         (member value allowed))
+       values)))
+
+(defun agent-scheme--network-option-field (options name)
+  "Return network OPTIONS field named NAME, or nil."
+  (seq-find
+   (lambda (field)
+     (agent-scheme--capability-grant-field-named-p field name))
+   (agent-scheme--proper-list-elements options "network options")))
+
+(defun agent-scheme--network-option-value (options name)
+  "Return network OPTIONS field NAME's first value, or nil."
+  (cadr (agent-scheme--network-option-field options name)))
+
+(defun agent-scheme--network-option-integer (options name description)
+  "Return network OPTIONS integer field NAME, or nil."
+  (when-let ((value (agent-scheme--network-option-value options name)))
+    (agent-scheme--capability-exact-integer value description)))
+
+(defun agent-scheme--network-option-boolean-p (options name)
+  "Return non-nil when network OPTIONS field NAME is true."
+  (let ((value (agent-scheme--network-option-value options name)))
+    (and value (not (eq value agent-scheme-false)))))
+
+(defun agent-scheme--network-header-entry (entry)
+  "Return ENTRY as a two-string network header."
+  (let ((elements (agent-scheme--proper-list-elements entry "network header")))
+    (unless (= (length elements) 2)
+      (agent-scheme--eval-error
+       "network header entries must have exactly two fields"))
+    (list (agent-scheme--capability-string
+           (car elements)
+           "network header name")
+          (agent-scheme--capability-string
+           (cadr elements)
+           "network header value"))))
+
+(defun agent-scheme--network-normalized-headers (headers)
+  "Return HEADERS as a list of string pairs."
+  (mapcar
+   #'agent-scheme--network-header-entry
+   (agent-scheme--proper-list-elements headers "network headers")))
+
+(defun agent-scheme--network-header-class (header)
+  "Return HEADER's disclosure class."
+  (let ((name (downcase (car header))))
+    (if (string-match-p
+         "\\(authorization\\|cookie\\|token\\|api[-_]?key\\|secret\\|credential\\)"
+         name)
+        "credential"
+      "metadata")))
+
+(defun agent-scheme--network-header-classes (headers)
+  "Return unique disclosure classes for HEADERS."
+  (let (classes)
+    (dolist (header headers (nreverse classes))
+      (let ((class (agent-scheme--network-header-class header)))
+        (unless (member class classes)
+          (push class classes))))))
+
+(defun agent-scheme--network-payload-class (payload options)
+  "Return PAYLOAD disclosure class from PAYLOAD and OPTIONS."
+  (cond
+   ((and (not (or (null payload) (eq payload agent-scheme-false)))
+         (agent-scheme-redaction-local-only-p payload))
+    "local-only")
+   ((and (not (or (null payload) (eq payload agent-scheme-false)))
+         (agent-scheme-secret-source-p payload))
+    "redacted")
+   ((agent-scheme--network-option-value options "payload-class")
+    (agent-scheme--network-name
+     (agent-scheme--network-option-value options "payload-class")
+     "network payload-class"))
+   ((or (null payload) (eq payload agent-scheme-false))
+    "none")
+   (t "public")))
+
+(defun agent-scheme--network-method-name (method)
+  "Return METHOD as an uppercase string."
+  (upcase (agent-scheme--network-name method "network method")))
+
+(defun agent-scheme--network-url-parts (url)
+  "Return parsed network URL parts as a plist."
+  (let* ((parsed (url-generic-parse-url url))
+         (scheme (url-type parsed))
+         (host (url-host parsed))
+         (port (or (url-port parsed)
+                   (pcase scheme
+                     ("https" 443)
+                     ("http" 80)
+                     (_ nil)))))
+    (unless (and scheme host port)
+      (agent-scheme--eval-error "network URL must include scheme and host"))
+    (list :scheme scheme :host host :port port)))
+
+(defun agent-scheme--network-resource-field (name value)
+  "Return a Scheme-readable network resource field."
+  (list (agent-scheme--capability-grant-symbol name) value))
+
+(defun agent-scheme--network-redacted-resource (resource)
+  "Return RESOURCE as redacted Scheme-readable fields."
+  (let ((payload (plist-get resource :payload))
+        (headers (plist-get resource :headers)))
+    (list
+     (agent-scheme--network-resource-field "url" (plist-get resource :url))
+     (agent-scheme--network-resource-field
+      "scheme" (plist-get resource :scheme))
+     (agent-scheme--network-resource-field "host" (plist-get resource :host))
+     (agent-scheme--network-resource-field "port"
+                                           (agent-scheme--scheme-integer
+                                            (plist-get resource :port)))
+     (agent-scheme--network-resource-field "method"
+                                           (agent-scheme--capability-grant-symbol
+                                            (plist-get resource :method)))
+     (agent-scheme--network-resource-field
+      "headers" (agent-scheme--network-redacted-headers headers))
+     (agent-scheme--network-resource-field
+      "header-classes"
+      (mapcar #'agent-scheme--capability-grant-symbol
+              (plist-get resource :header-classes)))
+     (agent-scheme--network-resource-field
+      "payload" (agent-scheme-redact payload 'network))
+     (agent-scheme--network-resource-field
+      "payload-class"
+      (agent-scheme--capability-grant-symbol
+       (plist-get resource :payload-class)))
+     (agent-scheme--network-resource-field
+      "response-size"
+      (agent-scheme--scheme-integer
+       (or (plist-get resource :response-size) 0)))
+     (agent-scheme--network-resource-field
+      "redirects"
+      (agent-scheme--scheme-integer (or (plist-get resource :redirects) 0)))
+     (agent-scheme--network-resource-field
+      "timeout-ms"
+      (if-let ((timeout (plist-get resource :timeout-ms)))
+          (agent-scheme--scheme-integer timeout)
+        agent-scheme-false))
+     (agent-scheme--network-resource-field
+      "stream-lifetime-ms"
+      (if-let ((lifetime (plist-get resource :stream-lifetime-ms)))
+          (agent-scheme--scheme-integer lifetime)
+        agent-scheme-false)))))
+
+(defun agent-scheme--network-redacted-headers (headers)
+  "Return HEADERS with credential-bearing values redacted."
+  (mapcar
+   (lambda (header)
+     (list (car header)
+           (if (equal (agent-scheme--network-header-class header)
+                      "credential")
+               agent-scheme-redaction-replacement
+             (agent-scheme-redact (cadr header) 'network))))
+   headers))
+
+(defun agent-scheme--network-resource
+    (method url headers payload options &optional stream)
+  "Return normalized network resource for METHOD URL HEADERS PAYLOAD OPTIONS."
+  (let* ((url-text (agent-scheme--capability-string url "network URL"))
+         (parts (agent-scheme--network-url-parts url-text))
+         (normalized-headers
+          (agent-scheme--network-normalized-headers headers))
+         (payload-class
+          (agent-scheme--network-payload-class payload options)))
+    (list :url url-text
+          :scheme (plist-get parts :scheme)
+          :host (plist-get parts :host)
+          :port (plist-get parts :port)
+          :method (agent-scheme--network-method-name method)
+          :headers normalized-headers
+          :header-classes
+          (agent-scheme--network-header-classes normalized-headers)
+          :payload payload
+          :payload-class payload-class
+          :response-size
+          (agent-scheme--network-option-integer
+           options "response-size" "network response-size")
+          :redirects
+          (or (agent-scheme--network-option-integer
+               options "redirects" "network redirects")
+              0)
+          :timeout-ms
+          (agent-scheme--network-option-integer
+           options "timeout-ms" "network timeout-ms")
+          :stream-lifetime-ms
+          (and stream
+               (agent-scheme--network-option-integer
+                options
+                "stream-lifetime-ms"
+                "network stream-lifetime-ms"))
+          :allow-local-only
+          (agent-scheme--network-option-boolean-p options "allow-local-only"))))
+
+(defun agent-scheme--network-capability-effect-symbol (operation)
+  "Return the effect class for a network operation."
+  (agent-scheme--capability-grant-symbol
+   (if (equal (agent-scheme--capability-grant-symbol-name operation) "stream")
+       "network-stream"
+     "network-egress")))
+
+(defun agent-scheme--network-capability-request-datum
+    (request-id library binding operation resource)
+  "Return a Scheme-readable network capability request datum."
+  `(,(agent-scheme--capability-grant-symbol "capability-request")
+    (,(agent-scheme--capability-grant-symbol "id") ,request-id)
+    (,(agent-scheme--capability-grant-symbol "session")
+     ,agent-scheme-false)
+    (,(agent-scheme--capability-grant-symbol "library") ,library)
+    (,(agent-scheme--capability-grant-symbol "binding") ,binding)
+    (,(agent-scheme--capability-grant-symbol "domain")
+     ,(agent-scheme--capability-grant-symbol "network"))
+    (,(agent-scheme--capability-grant-symbol "operation")
+     ,(agent-scheme--capability-grant-symbol operation))
+    (,(agent-scheme--capability-grant-symbol "resource")
+     ,@(agent-scheme--network-redacted-resource resource))
+    (,(agent-scheme--capability-grant-symbol "effect")
+     ,(agent-scheme--network-capability-effect-symbol operation))))
+
+(defun agent-scheme--network-capability-record-request
+    (request operation resource)
+  "Audit network capability REQUEST."
+  (agent-scheme-audit-record
+   'capability-request
+   `((request . ,request)
+     (domain . network)
+     (operation . ,operation)
+     (scheme . ,(plist-get resource :scheme))
+     (host . ,(plist-get resource :host))
+     (port . ,(plist-get resource :port))
+     (method . ,(plist-get resource :method))
+     (header-classes . ,(plist-get resource :header-classes))
+     (payload-class . ,(plist-get resource :payload-class))
+     (response-size . ,(or (plist-get resource :response-size) 0))
+     (redirects . ,(or (plist-get resource :redirects) 0)))))
+
+(defun agent-scheme--network-capability-record-decision
+    (request request-id status grant reason &optional fields)
+  "Audit and return a network capability decision datum."
+  (let* ((decision-id (agent-scheme--network-capability-decision-id))
+         (grant-id (or (and grant (agent-scheme--capability-grant-id grant))
+                       (agent-scheme--capability-grant-symbol "none")))
+         (decision
+          `(,(agent-scheme--capability-grant-symbol "capability-decision")
+            (,(agent-scheme--capability-grant-symbol "id") ,decision-id)
+            (,(agent-scheme--capability-grant-symbol "request") ,request-id)
+            (,(agent-scheme--capability-grant-symbol "status")
+             ,(agent-scheme--capability-grant-symbol status))
+            (,(agent-scheme--capability-grant-symbol "domain")
+             ,(agent-scheme--capability-grant-symbol "network"))
+            (,(agent-scheme--capability-grant-symbol "grant") ,grant-id)
+            (,(agent-scheme--capability-grant-symbol "reason") ,reason))))
+    (agent-scheme-audit-record
+     'capability-decision
+     (append
+      `((request . ,request)
+        (decision . ,decision)
+        (domain . network)
+        (status . ,status)
+        (grant . ,grant-id)
+        (reason . ,reason))
+      fields))
+    decision))
+
+(defun agent-scheme-capability-audit-network-result
+    (authorization result &optional errored)
+  "Audit network capability AUTHORIZATION with RESULT."
+  (let ((request (plist-get authorization :request))
+        (decision (plist-get authorization :decision))
+        (operation (plist-get authorization :operation)))
+    (agent-scheme-audit-record
+     'capability-audit
+     `((request . ,request)
+       (decision . ,decision)
+       (domain . network)
+       (operation . ,operation)
+       (result . ,(if errored
+                      (list 'error (agent-scheme-redact result 'network))
+                    (list 'ok (agent-scheme-redact result 'network))))))))
+
+(defun agent-scheme--network-capability-deny
+    (request request-id operation resource grant reason)
+  "Record denied network REQUEST and signal REASON."
+  (let ((decision
+         (agent-scheme--network-capability-record-decision
+          request request-id 'denied grant reason
+          `((operation . ,operation)
+            (host . ,(plist-get resource :host))
+            (method . ,(plist-get resource :method))))))
+    (agent-scheme-capability-audit-network-result
+     (list :request request :decision decision :operation operation)
+     reason
+     t)
+    (signal 'agent-scheme-capability-grant-error
+            (list (format "network capability denied: %s" reason)))))
+
+(defun agent-scheme--network-capability-grant-match
+    (grant operation resource)
+  "Return a match plist when GRANT authorizes network OPERATION."
+  (let ((schemes (agent-scheme--network-scope-values
+                  grant "schemes" "network grant scheme"))
+        (hosts (agent-scheme--network-scope-values
+                grant "hosts" "network grant host"))
+        (ports (agent-scheme--network-scope-integers
+                grant "ports" "network grant port"))
+        (methods (mapcar #'upcase
+                         (agent-scheme--network-scope-values
+                          grant "methods" "network grant method")))
+        (header-classes (agent-scheme--network-scope-values
+                         grant
+                         "header-classes"
+                         "network grant header-class"))
+        (payload-classes (agent-scheme--network-scope-values
+                          grant
+                          "payload-classes"
+                          "network grant payload-class"))
+        (max-response-bytes
+         (agent-scheme--network-scope-integer
+          grant "max-response-bytes" "network grant max-response-bytes"))
+        (max-redirects
+         (agent-scheme--network-scope-integer
+          grant "max-redirects" "network grant max-redirects"))
+        (max-timeout-ms
+         (agent-scheme--network-scope-integer
+          grant "max-timeout-ms" "network grant max-timeout-ms"))
+        (max-stream-lifetime-ms
+         (agent-scheme--network-scope-integer
+          grant "stream-lifetime-ms" "network grant stream-lifetime-ms")))
+    (cond
+     ((not (agent-scheme--network-capability-operation-p grant operation))
+      nil)
+     ((eq (agent-scheme--capability-grant-status grant) 'revoked)
+      (list :denied grant :reason "revoked network capability grant"))
+     ((not (agent-scheme--capability-grant-active-p grant))
+      (list :denied grant :reason "expired network capability grant"))
+     ((not (agent-scheme--network-member-string-p
+            (plist-get resource :scheme) schemes))
+      (list :denied grant
+            :reason "scheme is outside approved network grant scope"))
+     ((not (agent-scheme--network-member-string-p
+            (plist-get resource :host) hosts))
+      (list :denied grant
+            :reason "host is outside approved network grant scope"))
+     ((not (agent-scheme--network-member-integer-p
+            (plist-get resource :port) ports))
+      (list :denied grant
+            :reason "port is outside approved network grant scope"))
+     ((not (agent-scheme--network-member-string-p
+            (plist-get resource :method) methods))
+      (list :denied grant
+            :reason "method is outside approved network grant scope"))
+     ((not (agent-scheme--network-subset-p
+            (plist-get resource :header-classes) header-classes))
+      (list :denied grant
+            :reason "header class is outside approved network grant scope"))
+     ((not (agent-scheme--network-member-string-p
+            (plist-get resource :payload-class) payload-classes))
+      (list :denied grant
+            :reason "payload class is outside approved network grant scope"))
+     ((and max-response-bytes
+           (plist-get resource :response-size)
+           (> (plist-get resource :response-size) max-response-bytes))
+      (list :denied grant
+            :reason "response size is outside approved network grant scope"))
+     ((and max-redirects
+           (> (or (plist-get resource :redirects) 0) max-redirects))
+      (list :denied grant
+            :reason "redirect count is outside approved network grant scope"))
+     ((and max-timeout-ms
+           (plist-get resource :timeout-ms)
+           (> (plist-get resource :timeout-ms) max-timeout-ms))
+      (list :denied grant
+            :reason "timeout is outside approved network grant scope"))
+     ((and max-stream-lifetime-ms
+           (plist-get resource :stream-lifetime-ms)
+           (> (plist-get resource :stream-lifetime-ms)
+              max-stream-lifetime-ms))
+      (list :denied grant
+            :reason "stream lifetime is outside approved network grant scope"))
+     (t
+      (list :grant grant :max-response-bytes max-response-bytes)))))
+
+(defun agent-scheme-capability-authorize-network
+    (library binding context operation resource)
+  "Authorize network OPERATION for BINDING with RESOURCE."
+  (let* ((request-id (agent-scheme--network-capability-request-id))
+         (library-datum (agent-scheme-read library))
+         (binding-datum (agent-scheme--capability-grant-symbol binding))
+         (request
+          (agent-scheme--network-capability-request-datum
+           request-id library-datum binding-datum operation resource))
+         (grants (agent-scheme--network-capability-grants context))
+         match
+         denied)
+    (agent-scheme--network-capability-record-request
+     request operation resource)
+    (when (and (equal (plist-get resource :payload-class) "local-only")
+               (not (plist-get resource :allow-local-only)))
+      (agent-scheme--network-capability-deny
+       request request-id operation resource nil
+       "local-only payload requires explicit network disclosure approval"))
+    (unless grants
+      (agent-scheme--network-capability-deny
+       request request-id operation resource nil
+       "no active network grant covers request"))
+    (dolist (grant grants)
+      (let ((candidate
+             (agent-scheme--network-capability-grant-match
+              grant operation resource)))
+        (when candidate
+          (if (plist-get candidate :grant)
+              (setq match candidate)
+            (setq denied candidate)))))
+    (unless match
+      (agent-scheme--network-capability-deny
+       request request-id operation resource
+       (plist-get denied :denied)
+       (or (plist-get denied :reason)
+           "no active network grant covers request")))
+    (let ((grant (plist-get match :grant)))
+      (condition-case condition
+          (progn
+            (agent-scheme-policy-authorize
+             'network-access
+             binding
+             `((domain . network)
+               (operation . ,operation)
+               (scheme . ,(plist-get resource :scheme))
+               (host . ,(plist-get resource :host))
+               (port . ,(plist-get resource :port))
+               (method . ,(plist-get resource :method))
+               (header-classes . ,(plist-get resource :header-classes))
+               (payload-class . ,(plist-get resource :payload-class))
+               (grant . ,(agent-scheme--capability-grant-id grant)))
+             context)
+            (agent-scheme--capability-grant-use! grant context)
+            (list :operation operation
+                  :request request
+                  :decision
+                  (agent-scheme--network-capability-record-decision
+                   request request-id 'approved grant
+                   "network request is covered by active grant")
+                  :grant grant
+                  :max-response-bytes
+                  (plist-get match :max-response-bytes)
+                  :transport-resource
+                  (agent-scheme--network-redacted-resource resource)))
+        (agent-scheme-policy-error
+         (let ((decision
+                (agent-scheme--network-capability-record-decision
+                 request request-id 'denied grant
+                 (error-message-string condition))))
+           (agent-scheme-capability-audit-network-result
+            (list :request request
+                  :decision decision
+                  :operation operation)
+            (error-message-string condition)
+            t)
+           (signal (car condition) (cdr condition))))))))
+
+(defun agent-scheme--network-response-body-size (response)
+  "Return RESPONSE body size in characters when visible, or 0."
+  (let ((body
+         (and (consp response)
+              (cadr (seq-find
+                     (lambda (field)
+                       (agent-scheme--capability-grant-field-named-p
+                        field "body"))
+                     (cdr response))))))
+    (cond
+     ((stringp body) (length body))
+     ((null body) 0)
+     (t (length (agent-scheme-value->external body))))))
+
+(defun agent-scheme--network-check-response-limit! (authorization response)
+  "Fail if RESPONSE exceeds AUTHORIZATION's response limit."
+  (when-let ((limit (plist-get authorization :max-response-bytes)))
+    (let ((size (agent-scheme--network-response-body-size response)))
+      (when (> size limit)
+        (let ((reason "network response size exceeds grant limit"))
+          (agent-scheme-capability-audit-network-result
+           authorization reason t)
+          (signal 'agent-scheme-capability-grant-error (list reason)))))))
+
+(defun agent-scheme--network-normalize-response-datum (datum)
+  "Return DATUM using Agent Scheme symbols for host adapter symbols."
+  (cond
+   ((agent-scheme-symbol-p datum)
+    datum)
+   ((symbolp datum)
+    (agent-scheme--capability-grant-symbol datum))
+   ((consp datum)
+    (mapcar #'agent-scheme--network-normalize-response-datum datum))
+   ((vectorp datum)
+    (vconcat
+     (mapcar #'agent-scheme--network-normalize-response-datum
+             (append datum nil))))
+   (t datum)))
+
+(defun agent-scheme--network-stream-handle-datum
+    (handle request url grant-id status)
+  "Return a Scheme-readable network stream HANDLE datum."
+  `(,(agent-scheme--capability-grant-symbol "handle")
+    (,(agent-scheme--capability-grant-symbol "id")
+     ,(agent-scheme-handle-id handle))
+    (,(agent-scheme--capability-grant-symbol "kind")
+     ,(agent-scheme--capability-grant-symbol "network-stream"))
+    (,(agent-scheme--capability-grant-symbol "domain")
+     ,(agent-scheme--capability-grant-symbol "network"))
+    (,(agent-scheme--capability-grant-symbol "request") ,request)
+    (,(agent-scheme--capability-grant-symbol "url") ,url)
+    (,(agent-scheme--capability-grant-symbol "grant") ,grant-id)
+    (,(agent-scheme--capability-grant-symbol "status")
+     ,(agent-scheme--capability-grant-symbol status))))
+
+(defun agent-scheme--network-register-stream-handle
+    (url source authorization)
+  "Register and audit a network stream handle."
+  (let* ((grant (plist-get authorization :grant))
+         (grant-id (agent-scheme--capability-grant-id grant))
+         (id (agent-scheme--network-stream-handle-id))
+         (handle (agent-scheme--make-handle 'network-stream id))
+         (object (list :url url
+                       :source source
+                       :grant grant-id
+                       :status 'live)))
+    (puthash id
+             (agent-scheme--make-handle-entry 'network-stream object)
+             agent-scheme--handle-registry)
+    (agent-scheme-audit-record
+     'capability-handle
+     `((handle . ,(agent-scheme--network-stream-handle-datum
+                   handle
+                   (plist-get authorization :request)
+                   url
+                   grant-id
+                   'live))
+       (domain . network)
+       (kind . network-stream)
+       (url . ,url)
+       (grant . ,grant-id)
+       (status . live)))
+    handle))
+
+(defun agent-scheme--network-stream-object-live-p (object)
+  "Return non-nil when network stream OBJECT is live."
+  (not (memq (plist-get object :status)
+             '(closed cancelled stale expired revoked))))
+
+(defun agent-scheme--network-stream-live-p (id)
+  "Return non-nil when ID names a live network stream."
+  (and (stringp id)
+       (let ((entry (gethash id agent-scheme--handle-registry)))
+         (and entry
+              (eq (agent-scheme--handle-entry-kind entry) 'network-stream)
+              (agent-scheme--network-stream-object-live-p
+               (agent-scheme--handle-entry-object entry))))))
+
+(defun agent-scheme-capability-register-network-port
+    (port kind authorization stream-handle operations)
+  "Attach a network-backed port capability handle to PORT."
+  (let* ((grant (plist-get authorization :grant))
+         (grant-id (agent-scheme--capability-grant-id grant))
+         (handle-id (agent-scheme--network-port-capability-handle-id))
+         (limits (agent-scheme--port-capability-limits grant))
+         (path (agent-scheme-handle-id stream-handle))
+         (handle
+          (agent-scheme--port-capability-datum
+           handle-id kind 'network operations grant-id limits 'open path)))
+    (setf (agent-scheme--port-backing-domain port) 'network)
+    (setf (agent-scheme--port-operations port) operations)
+    (setf (agent-scheme--port-grant port) grant-id)
+    (setf (agent-scheme--port-limits port) limits)
+    (setf (agent-scheme--port-handle port) handle-id)
+    (setf (agent-scheme--port-status port) 'open)
+    (setf (agent-scheme--port-path port) path)
+    (setf (agent-scheme--port-counters port) nil)
+    (agent-scheme-audit-record
+     'capability-handle
+     `((handle . ,handle)
+       (domain . port)
+       (kind . ,kind)
+       (backing . network)
+       (stream . ,stream-handle)
+       (operations . ,operations)
+       (grant . ,grant-id)
+       (limits . ,limits)
+       (status . open)))
+    port))
+
 (defun agent-scheme--file-capability-deny
     (request request-id operation filename path grant reason
              &optional policy-denial context policy-operation)
@@ -2510,6 +3264,16 @@ synthetic file grant so existing callers share the capability vocabulary."
        (grant . ,grant))
      context
      'capability-grant))
+   ((agent-scheme--network-capability-grant-domain-p grant)
+    (agent-scheme-policy-authorize
+     'network-access
+     "grant-capability!"
+     `((domain . network)
+       (operations . ,(agent-scheme--capability-grant-field-values
+                       grant "operations"))
+       (grant . ,grant))
+     context
+     'capability-grant))
    (t
     (let* ((library (agent-scheme--capability-grant-library-key grant))
            (effect (agent-scheme--capability-grant-effect-name grant))
@@ -2791,7 +3555,8 @@ synthetic file grant so existing callers share the capability vocabulary."
   "Authorize Emacs capability NAME with ARGUMENTS in CONTEXT."
   (unless agent-scheme--emacs-capability-preauthorized
     (let ((spec (agent-scheme--emacs-capability-manifest-spec name)))
-      (unless (plist-get spec :requires-process-grant)
+      (unless (or (plist-get spec :requires-process-grant)
+                  (plist-get spec :requires-network-grant))
         (agent-scheme-policy-authorize
          (agent-scheme--emacs-capability-policy-category spec)
          name
@@ -3338,6 +4103,9 @@ synthetic file grant so existing callers share the capability vocabulary."
      (frame-live-p (agent-scheme--handle-entry-object entry)))
     ('process
      (agent-scheme--process-object-live-p
+      (agent-scheme--handle-entry-object entry)))
+    ('network-stream
+     (agent-scheme--network-stream-object-live-p
       (agent-scheme--handle-entry-object entry)))
     ('project
      t)
@@ -4230,6 +4998,89 @@ creates undo boundaries around the atomic change group."
   "Primitive process-kill! over ARGUMENTS."
   (agent-scheme--process-control!
    (car arguments) 'terminate "process-kill!" context))
+
+(defun agent-scheme--primitive-network-http-request (arguments context)
+  "Primitive network-http-request over ARGUMENTS."
+  (let* ((method (car arguments))
+         (url (cadr arguments))
+         (headers (caddr arguments))
+         (payload (cadddr arguments))
+         (options (nth 4 arguments))
+         (resource
+          (agent-scheme--network-resource
+           method url headers payload options))
+         (authorization
+          (agent-scheme-capability-authorize-network
+           "(emacs network)"
+           "network-http-request"
+           context
+           'request
+           resource))
+         (response
+          (agent-scheme--network-normalize-response-datum
+           (funcall agent-scheme-network-request-function
+                    (plist-get authorization :transport-resource)
+                    context))))
+    (agent-scheme--network-check-response-limit! authorization response)
+    (agent-scheme-capability-audit-network-result authorization response)
+    (agent-scheme--add-emacs-capability-result-fields
+     `((domain . network)
+       (operation . request)
+       (scheme . ,(plist-get resource :scheme))
+       (host . ,(plist-get resource :host))
+       (port . ,(plist-get resource :port))
+       (method . ,(plist-get resource :method))
+       (payload-class . ,(plist-get resource :payload-class))
+       (response-size . ,(agent-scheme--network-response-body-size response))))
+    response))
+
+(defun agent-scheme--primitive-network-open-sse-stream (arguments context)
+  "Primitive network-open-sse-stream over ARGUMENTS."
+  (let* ((url (car arguments))
+         (headers (cadr arguments))
+         (options (caddr arguments))
+         (resource
+          (agent-scheme--network-resource
+           'GET url headers "" options t))
+         (authorization
+          (agent-scheme-capability-authorize-network
+           "(emacs network)"
+           "network-open-sse-stream"
+           context
+           'stream
+           resource))
+         (source
+          (funcall agent-scheme-network-stream-function
+                   (plist-get authorization :transport-resource)
+                   context)))
+    (unless (stringp source)
+      (agent-scheme--eval-error
+       "network-open-sse-stream adapter must return textual stream contents"))
+    (let* ((stream-handle
+            (agent-scheme--network-register-stream-handle
+             (plist-get resource :url)
+             source
+             authorization))
+           (port
+            (agent-scheme--make-port
+             :medium 'network
+             :inputp t
+             :textualp t
+             :source source
+             :position 0)))
+      (agent-scheme-capability-audit-network-result
+       authorization
+       `(handle network-stream ,(agent-scheme-handle-id stream-handle)))
+      (agent-scheme--add-emacs-capability-result-fields
+       `((domain . network)
+         (operation . stream)
+         (scheme . ,(plist-get resource :scheme))
+         (host . ,(plist-get resource :host))
+         (port . ,(plist-get resource :port))
+         (method . ,(plist-get resource :method))
+         (handle . ,stream-handle)))
+      (agent-scheme-capability-register-network-port
+       port 'textual-input authorization stream-handle '(read close)))))
 
 (defun agent-scheme--documentation-string (symbol commandp)
   "Return raw documentation string for SYMBOL.

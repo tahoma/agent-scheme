@@ -24,6 +24,12 @@
 (defvar agent-scheme-capability-test--process-starts nil
   "Process start requests received by process capability test stubs.")
 
+(defvar agent-scheme-capability-test--network-requests nil
+  "Network requests received by network capability test stubs.")
+
+(defvar agent-scheme-capability-test--network-streams nil
+  "Network stream requests received by network capability test stubs.")
+
 (defun agent-scheme-capability-test-command (value &optional flag)
   "Record VALUE and FLAG for command-call! tests."
   (interactive "sValue: ")
@@ -49,6 +55,30 @@
         :status 'run
         :stdout "out-secret sk-processoutput1234567890\n"
         :stderr "err\n"))
+
+(defun agent-scheme-capability-test--network-request-stub
+    (resource _context)
+  "Return a fake Scheme-facing HTTP response for RESOURCE."
+  (push resource agent-scheme-capability-test--network-requests)
+  (list 'network-response
+        (list 'status (agent-scheme--scheme-integer 200))
+        (list 'headers '(("content-type" "text/plain")))
+        (list 'body "ok")))
+
+(defun agent-scheme-capability-test--large-network-request-stub
+    (resource _context)
+  "Return a fake HTTP response that exceeds small response budgets."
+  (push resource agent-scheme-capability-test--network-requests)
+  (list 'network-response
+        (list 'status (agent-scheme--scheme-integer 200))
+        (list 'headers '(("content-type" "text/plain")))
+        (list 'body "too-large")))
+
+(defun agent-scheme-capability-test--network-stream-stub
+    (resource _context)
+  "Return fake SSE bytes for RESOURCE."
+  (push resource agent-scheme-capability-test--network-streams)
+  "data: ok\n\n")
 
 (defun agent-scheme-capability-test--external
     (source &optional environment options)
@@ -1599,6 +1629,298 @@
       "(domain process)"
       "(status denied)"
       "(reason \"stale process handle\")"))))
+
+(ert-deftest agent-scheme-capability-test-network-manifest-and-import ()
+  "Expose the `(emacs network)' library as network capability bindings."
+  (dolist (binding '("network-http-request" "network-open-sse-stream"))
+    (let ((spec (agent-scheme-capability-test--manifest-spec
+                 "(emacs network)" binding)))
+      (should spec)
+      (should (eq (plist-get spec :source) 'host-capability))
+      (should (eq (plist-get spec :effect) 'host-network))
+      (should (eq (plist-get spec :required-capability) 'network))
+      (should (eq (plist-get spec :backend-effect-path)
+                  'shared-capability-request))
+      (should (eq (plist-get spec :policy-category) 'network-access))
+      (should (eq (plist-get spec :policy) 'deny))))
+  (should
+   (equal
+    (agent-scheme-capability-test--external
+     "(import (scheme base) (emacs network))
+      (list (procedure? network-http-request)
+            (procedure? network-open-sse-stream))")
+    "(#t #t)")))
+
+(ert-deftest agent-scheme-capability-test-network-denied-by-default ()
+  "Construct and deny network requests before any transport runs."
+  (let ((agent-scheme-policy-category-actions
+         (agent-scheme-capability-test--actions '((network-access . allow))))
+        (agent-scheme-network-request-function
+         #'agent-scheme-capability-test--network-request-stub))
+    (setq agent-scheme-capability-test--network-requests nil)
+    (agent-scheme-audit-clear)
+    (should-error
+     (agent-scheme-eval-source
+      "(import (scheme base) (emacs network))
+       (network-http-request
+        'GET
+        \"https://api.example.test/v1\"
+        '()
+        #f
+        '())")
+     :type 'agent-scheme-capability-grant-error)
+    (should-not agent-scheme-capability-test--network-requests)
+    (should
+     (agent-scheme-capability-test--audit-entry-matching
+      "(event capability-request)"
+      "(domain network)"
+      "(operation request)"
+      "(host \"api.example.test\")"))
+    (should
+     (agent-scheme-capability-test--audit-entry-matching
+      "(event capability-decision)"
+      "(status denied)"
+      "(reason \"no active network grant covers request\")"))))
+
+(ert-deftest agent-scheme-capability-test-network-fake-http-through-grant ()
+  "Authorize fake HTTP through a scoped network grant and redact audits."
+  (let ((agent-scheme-policy-category-actions
+         (agent-scheme-capability-test--actions '((network-access . allow))))
+        (agent-scheme-network-request-function
+         #'agent-scheme-capability-test--network-request-stub))
+    (setq agent-scheme-capability-test--network-requests nil)
+    (agent-scheme-audit-clear)
+    (let ((external
+           (agent-scheme-capability-test--external
+            "(import (scheme base)
+                     (agent capability)
+                     (emacs network))
+             (grant-capability!
+              '(capability-grant
+                (id network-grant)
+                (domain network)
+                (operations (request stream))
+                (scope (schemes (\"https\"))
+                       (hosts (\"api.example.test\"))
+                       (ports (443))
+                       (methods (GET POST))
+                       (header-classes (metadata))
+                       (payload-classes (public redacted))
+                       (max-response-bytes 64)
+                       (max-redirects 0)
+                       (max-timeout-ms 1000)
+                       (stream-lifetime-ms 5000))
+                (expires (uses 3))))
+             (network-http-request
+              'POST
+              \"https://api.example.test/v1\"
+              '((\"X-Trace\" \"ok\"))
+              \"token sk-networkpayload1234567890\"
+              '((payload-class public)
+                (response-size 64)
+                (redirects 0)
+                (timeout-ms 50)))")))
+      (should (equal external
+                     "(network-response (status 200) (headers ((\"content-type\" \"text/plain\"))) (body \"ok\"))"))
+      (should (= (length agent-scheme-capability-test--network-requests) 1))
+      (should-not
+       (string-match-p
+        "sk-networkpayload"
+        (format "%S" agent-scheme-capability-test--network-requests))))
+    (let ((audit (mapconcat #'identity
+                            (agent-scheme-capability-test--audit-strings)
+                            "\n")))
+      (should (string-match-p "\\[redacted\\]" audit))
+      (should-not (string-match-p "sk-networkpayload" audit)))
+    (should
+     (agent-scheme-capability-test--audit-entry-matching
+      "(event capability-audit)"
+      "(domain network)"
+      "(operation request)"
+      "(result (ok"))))
+
+(ert-deftest agent-scheme-capability-test-network-local-only-denied-before-transport ()
+  "Deny local-only payloads before fake transport is called."
+  (let ((agent-scheme-policy-category-actions
+         (agent-scheme-capability-test--actions '((network-access . allow))))
+        (agent-scheme-network-request-function
+         #'agent-scheme-capability-test--network-request-stub))
+    (setq agent-scheme-capability-test--network-requests nil)
+    (agent-scheme-audit-clear)
+    (should-error
+     (agent-scheme-eval-source
+      "(import (scheme base)
+               (agent capability)
+               (agent redaction)
+               (emacs network))
+       (grant-capability!
+        '(capability-grant
+          (id network-grant)
+          (domain network)
+          (operations (request))
+          (scope (schemes (\"https\"))
+                 (hosts (\"api.example.test\"))
+                 (ports (443))
+                 (methods (POST))
+                 (header-classes (metadata))
+                 (payload-classes (local-only))
+                 (max-response-bytes 64))
+          (expires never)))
+       (network-http-request
+        'POST
+        \"https://api.example.test/private\"
+        '()
+        (context-local-only! '((note \"private\")) \"private note\")
+        '((payload-class local-only) (response-size 64)))")
+     :type 'agent-scheme-capability-grant-error)
+    (should-not agent-scheme-capability-test--network-requests)
+    (should
+     (agent-scheme-capability-test--audit-entry-matching
+      "(event capability-decision)"
+      "(domain network)"
+      "(status denied)"
+      "local-only payload requires explicit network disclosure approval"))))
+
+(ert-deftest agent-scheme-capability-test-network-limits-and-redirects-deny ()
+  "Enforce redirect and response-size limits around fake HTTP."
+  (let ((agent-scheme-policy-category-actions
+         (agent-scheme-capability-test--actions '((network-access . allow))))
+        (agent-scheme-network-request-function
+         #'agent-scheme-capability-test--large-network-request-stub))
+    (setq agent-scheme-capability-test--network-requests nil)
+    (agent-scheme-audit-clear)
+    (should-error
+     (agent-scheme-eval-source
+      "(import (scheme base)
+               (agent capability)
+               (emacs network))
+       (grant-capability!
+        '(capability-grant
+          (id network-limit-grant)
+          (domain network)
+          (operations (request))
+          (scope (schemes (\"https\"))
+                 (hosts (\"api.example.test\"))
+                 (ports (443))
+                 (methods (GET))
+                 (header-classes (metadata))
+                 (payload-classes (public))
+                 (max-response-bytes 3)
+                 (max-redirects 0)
+                 (max-timeout-ms 1000))
+          (expires never)))
+       (network-http-request
+        'GET
+        \"https://api.example.test/v1\"
+        '()
+        #f
+        '((payload-class public)
+          (response-size 3)
+          (redirects 0)
+          (timeout-ms 50)))")
+     :type 'agent-scheme-capability-grant-error)
+    (should (= (length agent-scheme-capability-test--network-requests) 1))
+    (should
+     (agent-scheme-capability-test--audit-entry-matching
+      "(event capability-audit)"
+      "(domain network)"
+      "(operation request)"
+      "network response size exceeds grant limit"))
+    (setq agent-scheme-capability-test--network-requests nil)
+    (should-error
+     (agent-scheme-eval-source
+      "(import (scheme base)
+               (agent capability)
+               (emacs network))
+       (grant-capability!
+        '(capability-grant
+          (id network-redirect-grant)
+          (domain network)
+          (operations (request))
+          (scope (schemes (\"https\"))
+                 (hosts (\"api.example.test\"))
+                 (ports (443))
+                 (methods (GET))
+                 (header-classes (metadata))
+                 (payload-classes (public))
+                 (max-response-bytes 64)
+                 (max-redirects 0))
+          (expires never)))
+       (network-http-request
+        'GET
+        \"https://api.example.test/v1\"
+        '()
+        #f
+        '((payload-class public) (redirects 1)))")
+     :type 'agent-scheme-capability-grant-error)
+    (should-not agent-scheme-capability-test--network-requests)
+    (should
+     (agent-scheme-capability-test--audit-entry-matching
+      "(event capability-decision)"
+      "(domain network)"
+      "(status denied)"
+      "redirect count is outside approved network grant scope"))))
+
+(ert-deftest agent-scheme-capability-test-network-sse-streams-use-ports ()
+  "Represent fake SSE streams as network-backed port capabilities."
+  (let ((agent-scheme-policy-category-actions
+         (agent-scheme-capability-test--actions '((network-access . allow))))
+        (agent-scheme-network-stream-function
+         #'agent-scheme-capability-test--network-stream-stub)
+        (environment (agent-scheme-make-base-environment)))
+    (setq agent-scheme-capability-test--network-streams nil)
+    (agent-scheme-audit-clear)
+    (should
+     (equal
+      (agent-scheme-capability-test--value-external
+       (agent-scheme-eval-source
+        "(import (scheme base)
+                 (agent capability)
+                 (emacs network))
+         (grant-capability!
+          '(capability-grant
+            (id network-stream-grant)
+            (domain network)
+            (operations (stream))
+            (scope (schemes (\"https\"))
+                   (hosts (\"api.example.test\"))
+                   (ports (443))
+                   (methods (GET))
+                   (header-classes (metadata))
+                   (payload-classes (public))
+                   (stream-lifetime-ms 5000))
+            (expires never)))
+         (define stream
+           (network-open-sse-stream
+            \"https://api.example.test/events\"
+            '((\"Accept\" \"text/event-stream\"))
+            '((stream-lifetime-ms 1000))))
+         (list (input-port? stream)
+               (read-string 4 stream)
+               (input-port-open? stream))"
+        environment))
+      "(#t \"data\" #t)"))
+    (should (= (length agent-scheme-capability-test--network-streams) 1))
+    (should
+     (agent-scheme-capability-test--audit-entry-matching
+      "(event capability-handle)"
+      "(domain port)"
+      "(backing network)"
+      "(kind textual-input)"
+      "(grant network-stream-grant)"))
+    (agent-scheme-eval-source "(close-port stream)" environment)
+    (let ((condition
+           (should-error
+            (agent-scheme-eval-source "(read-string 1 stream)" environment)
+            :type 'agent-scheme-capability-grant-error)))
+      (should
+       (string-match-p "stale port capability handle" (cadr condition))))
+    (should
+     (agent-scheme-capability-test--audit-entry-matching
+      "(event capability-audit)"
+      "(domain port)"
+      "(operation use)"
+      "closed port capability handle"))))
 
 (ert-deftest agent-scheme-capability-test-documentation-capabilities ()
   "Expose documentation metadata without exposing variable values."
