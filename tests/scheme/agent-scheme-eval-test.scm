@@ -9,8 +9,12 @@
         (agent-scheme eval)
         (only (agent-scheme runtime)
               audit-process-capability-result!
+              audit-network-capability-result!
               authorize-process-capability
+              authorize-network-capability
               context-audit-events
+              network-capability-handle
+              network-port-capability-handle
               new-eval-context
               process-capability-handle
               process-port-capability-handle))
@@ -1008,6 +1012,72 @@
     (arguments ())
     (cwd "/tmp")))
 
+;; First-class network grants are host-neutral request/decision vocabulary.
+;; Host adapters decide whether to connect the authorization to real transport;
+;; the portable runtime owns the datum shape, grant matching, and audit records.
+(define network-grant-options
+  '((policy-actions
+     (network-access . allow))
+    (capability-grants
+     (capability-grant
+      (id portable-network-grant)
+      (domain network)
+      (operations request stream)
+      (scope (schemes ("https"))
+             (hosts ("api.example.test"))
+             (ports (443))
+             (methods (GET POST))
+             (header-classes (metadata))
+             (payload-classes (public redacted))
+             (max-response-bytes 64)
+             (max-redirects 0)
+             (max-timeout-ms 1000)
+             (stream-lifetime-ms 5000))
+      (expires never)))))
+
+;; Network grant without policy allow action proves policy still gates egress.
+(define network-grant-without-policy-options
+  '((capability-grants
+     (capability-grant
+      (id portable-network-grant)
+      (domain network)
+      (operations request)
+      (scope (schemes ("https"))
+             (hosts ("api.example.test"))
+             (ports (443))
+             (methods (GET))
+             (header-classes (metadata))
+             (payload-classes (public))
+             (max-response-bytes 64))
+      (expires never)))))
+
+;; Network request resource with secrets exercises redaction in audit events.
+(define portable-network-resource
+  '((url "https://api.example.test/v1")
+    (scheme "https")
+    (host "api.example.test")
+    (port 443)
+    (method POST)
+    (headers (("X-Trace" "ok")))
+    (header-classes (metadata))
+    (payload "token sk-portable-network1234567890")
+    (payload-class public)
+    (response-size 64)
+    (redirects 0)
+    (timeout-ms 50)))
+
+;; Network request resource whose host intentionally misses grant scope.
+(define portable-network-host-mismatch-resource
+  '((url "https://other.example.test/v1")
+    (scheme "https")
+    (host "other.example.test")
+    (port 443)
+    (method POST)
+    (header-classes (metadata))
+    (payload-class public)
+    (response-size 64)
+    (redirects 0)))
+
 ;; First-class file grants for host-backed file port reads and creations.
 (define file-port-grant-options
   '((include-directory . "/tmp")
@@ -1452,6 +1522,135 @@
           (grant portable-process-grant)
           (limits)
           (path h-portable-1)
+          (status open))))
+
+(let* ((context (new-eval-context network-grant-options))
+       (authorization
+        (authorize-network-capability
+         '(portable network)
+         "network-http-request"
+         context
+         'request
+         portable-network-resource))
+       (_audit
+        (audit-network-capability-result!
+         context
+         authorization
+         '(network-response (status 200) (body "ok"))
+         #f))
+       (events (context-audit-events context))
+       (request (find-event-with-field
+                 events 'capability-request 'domain 'network))
+       (decision (find-event-with-field
+                  events 'capability-decision 'domain 'network))
+       (policy (find-event-with-field
+                events 'policy-decision 'category 'network-access))
+       (audit (find-event-with-field
+               events 'capability-audit 'domain 'network))
+       (audit-result (and audit (field-value audit 'result)))
+       (external (agent-scheme-result->external (list 'events events))))
+  (check 'portable-network-capability-authorizes-and-audits
+         (and request
+              decision
+              policy
+              audit
+              audit-result
+              (equal? (field-value request 'operation) 'request)
+              (equal? (field-value decision 'status) 'approved)
+              (equal? (field-value decision 'grant) 'portable-network-grant)
+              (equal? (field-value policy 'decision) 'allowed)
+              (equal? (car audit-result) 'ok)
+              (equal? (field-value (cadr audit-result) 'body) "ok")
+              (string-contains? external "(status 200)")
+              (not (string-contains? external "sk-portable-network"))
+              #t)
+         #t))
+
+(let* ((context (new-eval-context network-grant-without-policy-options))
+       (raised
+        (raises?
+         (lambda ()
+           (authorize-network-capability
+            '(portable network)
+            "network-http-request"
+            context
+            'request
+            '((url "https://api.example.test/v1")
+              (scheme "https")
+              (host "api.example.test")
+              (port 443)
+              (method GET)
+              (header-classes (metadata))
+              (payload-class public)
+              (response-size 64)
+              (redirects 0))))))
+       (events (context-audit-events context))
+       (decision (find-event-with-field
+                  events 'capability-decision 'domain 'network))
+       (policy (find-event-with-field
+                events 'policy-decision 'category 'network-access)))
+  (check 'portable-network-capability-denies-without-policy
+         (and raised
+              decision
+              policy
+              (equal? (field-value decision 'status) 'denied)
+              (equal? (field-value policy 'decision) 'denied)
+              #t)
+         #t))
+
+(let* ((context (new-eval-context network-grant-options))
+       (raised
+        (raises?
+         (lambda ()
+           (authorize-network-capability
+            '(portable network)
+            "network-http-request"
+            context
+            'request
+            portable-network-host-mismatch-resource))))
+       (events (context-audit-events context))
+       (decision (find-event-with-field
+                  events 'capability-decision 'domain 'network)))
+  (check 'portable-network-capability-denies-host-mismatch
+         (and raised
+              decision
+              (equal? (field-value decision 'status) 'denied)
+              (equal? (field-value decision 'grant) 'portable-network-grant)
+              #t)
+         #t))
+
+(check 'portable-network-capability-handle-datums
+       (list
+        (network-capability-handle
+         'h-network-1
+         'req-network
+         "https://api.example.test/events"
+         'portable-network-grant
+         'live)
+        (network-port-capability-handle
+         'p-network-1
+         'textual-input
+         'h-network-1
+         '(read close)
+         'portable-network-grant
+         '((reads 2))
+         'open))
+       '((handle
+          (id h-network-1)
+          (kind network-stream)
+          (domain network)
+          (request req-network)
+          (url "https://api.example.test/events")
+          (grant portable-network-grant)
+          (status live))
+         (port-capability
+          (id p-network-1)
+          (kind textual-input)
+          (backing network)
+          (operations read close)
+          (grant portable-network-grant)
+          (limits (reads 2))
+          (path h-network-1)
           (status open))))
 
 (write-host-test-file port-test-input-path "abc")

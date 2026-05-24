@@ -3596,7 +3596,8 @@ DESCRIPTION names the primitive for errors."
   "Return next character code from textual input PORT.
 Advance when ADVANCEP is non-nil.  Signal errors using DESCRIPTION."
   (let ((input (agent-scheme--expect-textual-input-port port description)))
-    (unless (memq (agent-scheme--port-medium input) '(string file process))
+    (unless (memq (agent-scheme--port-medium input)
+                  '(string file process network))
       (agent-scheme--eval-error
        "%s host textual input ports are not available" description))
     (agent-scheme--port-capability-check input context 'read)
@@ -3654,7 +3655,8 @@ Advance when ADVANCEP is non-nil.  Signal errors using DESCRIPTION."
     (cond
      ((null port)
       (if (zerop count) "" agent-scheme-eof-object))
-     ((not (memq (agent-scheme--port-medium port) '(string file process)))
+     ((not (memq (agent-scheme--port-medium port)
+                 '(string file process network)))
       (agent-scheme--eval-error
        "read-string host textual input ports are not available"))
      (t
@@ -3679,7 +3681,8 @@ Advance when ADVANCEP is non-nil.  Signal errors using DESCRIPTION."
                  (agent-scheme--current-input-port-or-deny
                   context "read-line"))
                "read-line")))
-      (unless (memq (agent-scheme--port-medium port) '(string file process))
+      (unless (memq (agent-scheme--port-medium port)
+                    '(string file process network))
         (agent-scheme--eval-error
          "read-line host textual input ports are not available"))
       (agent-scheme--port-capability-check port context 'read)
