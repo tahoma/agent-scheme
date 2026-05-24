@@ -50,6 +50,48 @@ Lisp arguments when Scheme does not pass any arguments."
                         (:default-arguments sexp))))
   :group 'agent-scheme)
 
+(defcustom agent-scheme-process-command-allowlist nil
+  "Command names that `process-start!' may launch.
+Entries may be command strings or symbols.  Process grants still
+need to authorize the specific command, working directory, and
+operations requested by Scheme code."
+  :type '(repeat (choice string symbol))
+  :group 'agent-scheme)
+
+(defun agent-scheme--default-process-start
+    (name command arguments options _context)
+  "Default host adapter for `process-start!'."
+  (let* ((buffer (generate-new-buffer
+                  (format " *Agent Scheme process: %s*" name)))
+         (process-environment
+          (append
+           (mapcar
+            (lambda (entry)
+              (format "%s=%s" (car entry) (cadr entry)))
+            (agent-scheme--process-normalized-environment options))
+           process-environment))
+         (process (apply #'start-process name buffer command arguments)))
+    (set-process-query-on-exit-flag process nil)
+    (list :name name
+          :command command
+          :arguments arguments
+          :status (process-status process)
+          :process process
+          :buffer buffer
+          :stdout ""
+          :stderr "")))
+
+(defcustom agent-scheme-process-start-function
+  #'agent-scheme--default-process-start
+  "Function that starts host process jobs for `process-start!'.
+The function receives NAME, COMMAND, ARGUMENTS, OPTIONS, and
+CONTEXT, and returns either a host process object or a plist with
+Scheme-readable metadata such as `:name', `:status', `:stdout',
+and `:stderr'.  It is called only after command allow-list,
+grant, and policy checks succeed."
+  :type 'function
+  :group 'agent-scheme)
+
 (defcustom agent-scheme-search-default-limit 100
   "Default maximum number of results returned by one search capability call."
   :type 'integer
@@ -125,6 +167,15 @@ Lisp arguments when Scheme does not pass any arguments."
 
 (defvar agent-scheme--next-code-loading-decision-number 0
   "Next numeric suffix for generated code-loading decision ids.")
+
+(defvar agent-scheme--next-process-capability-request-number 0
+  "Next numeric suffix for generated process capability request ids.")
+
+(defvar agent-scheme--next-process-capability-decision-number 0
+  "Next numeric suffix for generated process capability decision ids.")
+
+(defvar agent-scheme--next-process-port-capability-handle-number 0
+  "Next numeric suffix for generated process-backed port capability ids.")
 
 (defconst agent-scheme--emacs-capability-manifest-specs
   '((:name "emacs-current-buffer" :library "(emacs buffer)"
@@ -362,34 +413,90 @@ Lisp arguments when Scheme does not pass any arguments."
      :emacs-hook agent-scheme--primitive-search-yield
      :portable-hook nil :emitter-hook capability-emacs
      :policy allow :test-categories (emacs search agent-io))
+    (:name "process-start!" :library "(emacs process)"
+     :minimum-arity 4 :maximum-arity 4
+     :source host-capability :effect host-mutation
+     :required-capability emacs-process
+     :emacs-hook agent-scheme--primitive-process-start!
+     :portable-hook nil :emitter-hook capability-emacs
+     :policy confirm :policy-category command-process
+     :requires-process-grant t
+     :test-categories (emacs process mutation handle))
     (:name "emacs-process-list" :library "(emacs process)"
      :minimum-arity 0 :maximum-arity 0
      :source host-capability :effect host-observation
      :required-capability emacs-process
      :emacs-hook agent-scheme--primitive-emacs-process-list
      :portable-hook nil :emitter-hook capability-emacs
-     :policy allow :test-categories (emacs process handle))
+     :policy allow :requires-process-grant t
+     :test-categories (emacs process handle))
     (:name "process-name" :library "(emacs process)"
      :minimum-arity 1 :maximum-arity 1
      :source host-capability :effect host-observation
      :required-capability emacs-process
      :emacs-hook agent-scheme--primitive-process-name
      :portable-hook nil :emitter-hook capability-emacs
-     :policy allow :test-categories (emacs process))
+     :policy allow :requires-process-grant t
+     :test-categories (emacs process))
     (:name "process-status" :library "(emacs process)"
      :minimum-arity 1 :maximum-arity 1
      :source host-capability :effect host-observation
      :required-capability emacs-process
      :emacs-hook agent-scheme--primitive-process-status
      :portable-hook nil :emitter-hook capability-emacs
-     :policy allow :test-categories (emacs process))
+     :policy allow :requires-process-grant t
+     :test-categories (emacs process))
     (:name "process-buffer" :library "(emacs process)"
      :minimum-arity 1 :maximum-arity 1
      :source host-capability :effect host-observation
      :required-capability emacs-process
      :emacs-hook agent-scheme--primitive-process-buffer
      :portable-hook nil :emitter-hook capability-emacs
-     :policy allow :test-categories (emacs process buffer handle))
+     :policy allow :requires-process-grant t
+     :test-categories (emacs process buffer handle))
+    (:name "process-output-port" :library "(emacs process)"
+     :minimum-arity 1 :maximum-arity 1
+     :source host-capability :effect host-observation
+     :required-capability emacs-process
+     :emacs-hook agent-scheme--primitive-process-output-port
+     :portable-hook nil :emitter-hook capability-emacs
+     :policy allow :requires-process-grant t
+     :test-categories (emacs process port output))
+    (:name "process-error-port" :library "(emacs process)"
+     :minimum-arity 1 :maximum-arity 1
+     :source host-capability :effect host-observation
+     :required-capability emacs-process
+     :emacs-hook agent-scheme--primitive-process-error-port
+     :portable-hook nil :emitter-hook capability-emacs
+     :policy allow :requires-process-grant t
+     :test-categories (emacs process port output))
+    (:name "process-input-port" :library "(emacs process)"
+     :minimum-arity 1 :maximum-arity 1
+     :source host-capability :effect host-mutation
+     :required-capability emacs-process
+     :emacs-hook agent-scheme--primitive-process-input-port
+     :portable-hook nil :emitter-hook capability-emacs
+     :policy confirm :policy-category command-process
+     :requires-process-grant t
+     :test-categories (emacs process port input mutation))
+    (:name "process-interrupt!" :library "(emacs process)"
+     :minimum-arity 1 :maximum-arity 1
+     :source host-capability :effect host-mutation
+     :required-capability emacs-process
+     :emacs-hook agent-scheme--primitive-process-interrupt!
+     :portable-hook nil :emitter-hook capability-emacs
+     :policy confirm :policy-category command-process
+     :requires-process-grant t
+     :test-categories (emacs process control mutation))
+    (:name "process-kill!" :library "(emacs process)"
+     :minimum-arity 1 :maximum-arity 1
+     :source host-capability :effect host-mutation
+     :required-capability emacs-process
+     :emacs-hook agent-scheme--primitive-process-kill!
+     :portable-hook nil :emitter-hook capability-emacs
+     :policy confirm :policy-category command-process
+     :requires-process-grant t
+     :test-categories (emacs process control mutation))
     (:name "command-doc" :library "(emacs command)"
      :minimum-arity 1 :maximum-arity 1
      :source host-capability :effect host-observation
@@ -857,6 +964,24 @@ Lisp arguments when Scheme does not pass any arguments."
    (format "dec-code-loading-%d"
            (cl-incf agent-scheme--next-code-loading-decision-number))))
 
+(defun agent-scheme--process-capability-request-id ()
+  "Return a fresh process capability request id."
+  (agent-scheme--capability-grant-symbol
+   (format "req-process-%d"
+           (cl-incf agent-scheme--next-process-capability-request-number))))
+
+(defun agent-scheme--process-capability-decision-id ()
+  "Return a fresh process capability decision id."
+  (agent-scheme--capability-grant-symbol
+   (format "dec-process-%d"
+           (cl-incf agent-scheme--next-process-capability-decision-number))))
+
+(defun agent-scheme--process-port-capability-handle-id ()
+  "Return a fresh process-backed port capability handle id."
+  (agent-scheme--capability-grant-symbol
+   (format "p-process-%d"
+           (cl-incf agent-scheme--next-process-port-capability-handle-number))))
+
 (defun agent-scheme--file-capability-remote-path-p (filename path)
   "Return non-nil when FILENAME or PATH names non-local file authority."
   (or (and (stringp filename)
@@ -1265,6 +1390,15 @@ AUTHORIZATION is the approved file authorization that created PORT."
     (setf (agent-scheme--port-counters port)
           (cons (cons name value) counters))))
 
+(defun agent-scheme--process-port-live-p (port)
+  "Return non-nil when PORT's owning process handle is still live."
+  (let ((id (agent-scheme--port-path port)))
+    (and (stringp id)
+         (let ((entry (gethash id agent-scheme--handle-registry)))
+           (and entry
+                (eq (agent-scheme--handle-entry-kind entry) 'process)
+                (agent-scheme-capability--entry-live-p entry))))))
+
 (defun agent-scheme--port-capability-check-limit! (port operation)
   "Consume one PORT operation limit unit for OPERATION."
   (let* ((name (agent-scheme--port-capability-limit-name operation))
@@ -1293,6 +1427,12 @@ AUTHORIZATION is the approved file authorization that created PORT."
        port operation "operation outside port capability" t)
       (signal 'agent-scheme-capability-grant-error
               (list "operation outside port capability")))
+     ((and (eq (agent-scheme--port-backing-domain port) 'process)
+           (not (agent-scheme--process-port-live-p port)))
+      (agent-scheme-capability-audit-port-result
+       port operation "stale process port handle" t)
+      (signal 'agent-scheme-capability-grant-error
+              (list "stale port capability handle: process is not live")))
      (t
       (let* ((grant-id (agent-scheme--port-grant port))
              (grant
@@ -1419,6 +1559,627 @@ AUTHORIZATION is the approved file authorization that created PORT."
           (error-message-string condition)
           t)
          (signal (car condition) (cdr condition)))))))
+
+(defun agent-scheme--process-capability-operation-symbol (operation)
+  "Return OPERATION as an Agent Scheme symbol datum."
+  (agent-scheme--capability-grant-symbol operation))
+
+(defun agent-scheme--process-capability-effect-symbol (operation)
+  "Return the effect class for process OPERATION."
+  (agent-scheme--capability-grant-symbol
+   (if (member (agent-scheme--capability-grant-symbol-name operation)
+               '("spawn" "input" "interrupt" "terminate"))
+       "process-control"
+     "read-only-observation")))
+
+(defun agent-scheme--process-capability-policy-category (operation)
+  "Return policy category for process OPERATION."
+  (if (member (agent-scheme--capability-grant-symbol-name operation)
+              '("spawn" "input" "interrupt" "terminate"))
+      'command-process
+    'emacs-read-only))
+
+(defun agent-scheme--process-capability-grant-domain-p (grant)
+  "Return non-nil when GRANT is a process-domain grant."
+  (equal (agent-scheme--capability-grant-symbol-name
+          (agent-scheme--capability-grant-field-value grant "domain"))
+         "process"))
+
+(defun agent-scheme--process-capability-operation-p (grant operation)
+  "Return non-nil when GRANT allows process OPERATION."
+  (let ((operation-name
+         (agent-scheme--capability-grant-symbol-name operation)))
+    (cl-some
+     (lambda (candidate)
+       (equal (agent-scheme--capability-grant-symbol-name candidate)
+              operation-name))
+     (agent-scheme--file-capability-field-values-list
+      (agent-scheme--capability-grant-field-values grant "operations")))))
+
+(defun agent-scheme--process-capability-grants (context)
+  "Return process-domain grants carried by CONTEXT."
+  (seq-filter
+   #'agent-scheme--process-capability-grant-domain-p
+   (agent-scheme--capability-context-grants context)))
+
+(defun agent-scheme--process-command-allowlist-entry (command)
+  "Return non-nil when COMMAND is allowed for process creation."
+  (seq-find
+   (lambda (entry)
+     (equal command (agent-scheme--capability-grant-symbol-name entry)))
+   agent-scheme-process-command-allowlist))
+
+(defun agent-scheme--process-option-field (options name)
+  "Return process OPTIONS field named NAME, or nil."
+  (seq-find
+   (lambda (field)
+     (agent-scheme--capability-grant-field-named-p field name))
+   (agent-scheme--proper-list-elements options "process options")))
+
+(defun agent-scheme--process-option-value (options name)
+  "Return process OPTIONS field NAME's first value, or nil."
+  (cadr (agent-scheme--process-option-field options name)))
+
+(defun agent-scheme--process-cwd (options)
+  "Return the process working directory described by OPTIONS."
+  (let ((cwd (agent-scheme--process-option-value options "cwd")))
+    (if cwd
+        (file-name-as-directory
+         (expand-file-name
+          (agent-scheme--capability-string cwd "process cwd")))
+      (file-name-as-directory (expand-file-name default-directory)))))
+
+(defun agent-scheme--process-string-list (datum description)
+  "Return DATUM as a proper list of strings for DESCRIPTION."
+  (mapcar
+   (lambda (entry)
+     (agent-scheme--capability-string entry description))
+   (agent-scheme--proper-list-elements datum description)))
+
+(defun agent-scheme--process-normalized-arguments (arguments)
+  "Return process ARGUMENTS as host strings."
+  (agent-scheme--process-string-list arguments "process arguments"))
+
+(defun agent-scheme--process-environment-name (datum description)
+  "Return DATUM as a process environment variable name."
+  (or (agent-scheme--capability-grant-symbol-name datum)
+      (agent-scheme--eval-error
+       "%s expected an environment variable name, got %s"
+       description
+       (agent-scheme-value->external datum))))
+
+(defun agent-scheme--process-environment-entry (entry description)
+  "Return process environment ENTRY as a two-string list."
+  (let ((elements (agent-scheme--proper-list-elements entry description)))
+    (unless (= (length elements) 2)
+      (agent-scheme--eval-error
+       "%s expected environment entries as (name value)" description))
+    (list (agent-scheme--process-environment-name (car elements) description)
+          (agent-scheme--capability-string (cadr elements) description))))
+
+(defun agent-scheme--process-normalized-environment (options)
+  "Return process OPTIONS environment entries as (NAME VALUE) lists."
+  (when-let ((environment
+              (agent-scheme--process-option-value options "environment")))
+    (mapcar
+     (lambda (entry)
+       (agent-scheme--process-environment-entry
+        entry "process environment"))
+     (agent-scheme--proper-list-elements
+      environment "process environment"))))
+
+(defun agent-scheme--process-environment-names (environment)
+  "Return variable names from normalized process ENVIRONMENT."
+  (mapcar #'car environment))
+
+(defun agent-scheme--process-scope-command (grant)
+  "Return GRANT's process command scope, or nil."
+  (when-let ((command (agent-scheme--capability-scope-value grant "command")))
+    (agent-scheme--capability-string command "process grant command")))
+
+(defun agent-scheme--process-scope-cwd (grant)
+  "Return GRANT's working-directory scope, or nil."
+  (when-let ((cwd (or (agent-scheme--capability-scope-value
+                      grant "working-directory")
+                     (agent-scheme--capability-scope-value grant "cwd"))))
+    (file-name-as-directory
+     (expand-file-name
+      (agent-scheme--capability-string cwd "process grant working directory")))))
+
+(defun agent-scheme--process-scope-arguments (grant)
+  "Return GRANT's argument scope, or nil."
+  (when-let ((clause (agent-scheme--capability-scope-clause grant "arguments")))
+    (agent-scheme--file-capability-field-values-list (cdr clause))))
+
+(defun agent-scheme--process-scope-environment-name (datum)
+  "Return DATUM's process environment variable name."
+  (if (and (consp datum) (not (agent-scheme-symbol-p datum)))
+      (agent-scheme--process-environment-name
+       (car datum) "process grant environment")
+    (agent-scheme--process-environment-name
+     datum "process grant environment")))
+
+(defun agent-scheme--process-scope-environment (grant)
+  "Return GRANT's allowed process environment names, or nil."
+  (when-let ((clause (agent-scheme--capability-scope-clause grant "environment")))
+    (mapcar
+     #'agent-scheme--process-scope-environment-name
+     (agent-scheme--file-capability-field-values-list (cdr clause)))))
+
+(defun agent-scheme--process-scope-handle (grant)
+  "Return GRANT's process handle scope, or nil."
+  (or (agent-scheme--capability-scope-value grant "handle")
+      (agent-scheme--capability-scope-value grant "process")))
+
+(defun agent-scheme--process-resource-handle (resource)
+  "Return process handle from RESOURCE plist, or nil."
+  (plist-get resource :handle))
+
+(defun agent-scheme--process-resource-command (resource)
+  "Return process command from RESOURCE plist, or nil."
+  (plist-get resource :command))
+
+(defun agent-scheme--process-resource-arguments (resource)
+  "Return process arguments from RESOURCE plist, or nil."
+  (plist-get resource :arguments))
+
+(defun agent-scheme--process-resource-cwd (resource)
+  "Return process cwd from RESOURCE plist, or nil."
+  (plist-get resource :cwd))
+
+(defun agent-scheme--process-resource-environment (resource)
+  "Return process environment from RESOURCE plist, or nil."
+  (plist-get resource :environment))
+
+(defun agent-scheme--process-capability-grant-match
+    (grant operation resource)
+  "Return a match plist when GRANT authorizes process OPERATION."
+  (cond
+   ((not (agent-scheme--process-capability-operation-p grant operation))
+    nil)
+   ((eq (agent-scheme--capability-grant-status grant) 'revoked)
+    (list :denied grant :reason "revoked process capability grant"))
+   ((not (agent-scheme--capability-grant-active-p grant))
+    (list :denied grant :reason "expired process capability grant"))
+   (t
+    (let ((scope-command (agent-scheme--process-scope-command grant))
+          (scope-arguments (agent-scheme--process-scope-arguments grant))
+          (scope-cwd (agent-scheme--process-scope-cwd grant))
+          (scope-environment
+           (agent-scheme--process-scope-environment grant))
+          (scope-handle (agent-scheme--process-scope-handle grant))
+          (command (agent-scheme--process-resource-command resource))
+          (arguments (agent-scheme--process-resource-arguments resource))
+          (cwd (agent-scheme--process-resource-cwd resource))
+          (environment (agent-scheme--process-resource-environment resource))
+          (handle (agent-scheme--process-resource-handle resource)))
+      (cond
+       ((and scope-command command (not (equal scope-command command)))
+        (list :denied grant
+              :reason "command is outside approved process grant scope"))
+       ((and scope-arguments arguments
+             (not (equal scope-arguments arguments)))
+        (list :denied grant
+              :reason "arguments are outside approved process grant scope"))
+       ((and scope-cwd cwd (not (equal scope-cwd cwd)))
+        (list :denied grant
+              :reason "working directory is outside approved process grant scope"))
+       ((and environment (not scope-environment))
+        (list :denied grant
+              :reason "environment is outside approved process grant scope"))
+       ((and environment
+             (cl-set-difference
+              (agent-scheme--process-environment-names environment)
+              scope-environment
+              :test #'equal))
+        (list :denied grant
+              :reason "environment is outside approved process grant scope"))
+       ((and scope-handle handle
+             (not (agent-scheme--capability-same-handle-p
+                   scope-handle handle)))
+        (list :denied grant
+              :reason "handle is outside approved process grant scope"))
+       (t
+        (list :grant grant)))))))
+
+(defun agent-scheme--process-capability-request-datum
+    (request-id binding operation resource)
+  "Return a Scheme-readable process capability request datum."
+  `(,(agent-scheme--capability-grant-symbol "capability-request")
+    (,(agent-scheme--capability-grant-symbol "id") ,request-id)
+    (,(agent-scheme--capability-grant-symbol "session")
+     ,(or nil agent-scheme-false))
+    (,(agent-scheme--capability-grant-symbol "library")
+     (,(agent-scheme--capability-grant-symbol "emacs")
+      ,(agent-scheme--capability-grant-symbol "process")))
+    (,(agent-scheme--capability-grant-symbol "binding")
+     ,(agent-scheme--capability-grant-symbol binding))
+    (,(agent-scheme--capability-grant-symbol "domain")
+     ,(agent-scheme--capability-grant-symbol "process"))
+    (,(agent-scheme--capability-grant-symbol "operation")
+     ,(agent-scheme--process-capability-operation-symbol operation))
+    (,(agent-scheme--capability-grant-symbol "resource")
+     ,@(when-let ((handle (agent-scheme--process-resource-handle resource)))
+         `((,(agent-scheme--capability-grant-symbol "handle") ,handle)))
+     ,@(when-let ((command (agent-scheme--process-resource-command resource)))
+         `((,(agent-scheme--capability-grant-symbol "command") ,command)))
+     ,@(when-let ((arguments
+                   (agent-scheme--process-resource-arguments resource)))
+         `((,(agent-scheme--capability-grant-symbol "arguments")
+            ,arguments)))
+     ,@(when-let ((cwd (agent-scheme--process-resource-cwd resource)))
+         `((,(agent-scheme--capability-grant-symbol "cwd") ,cwd)))
+     ,@(when-let ((environment
+                   (agent-scheme--process-resource-environment resource)))
+         `((,(agent-scheme--capability-grant-symbol "environment")
+            ,environment)))
+     ,@(when-let ((options (plist-get resource :options)))
+         `((,(agent-scheme--capability-grant-symbol "options") ,options))))
+    (,(agent-scheme--capability-grant-symbol "effect")
+     ,(agent-scheme--process-capability-effect-symbol operation))))
+
+(defun agent-scheme--process-capability-record-request
+    (request operation resource)
+  "Audit process capability REQUEST."
+  (agent-scheme-audit-record
+   'capability-request
+   `((request . ,request)
+     (domain . process)
+     (operation . ,operation)
+     (handle . ,(or (agent-scheme--process-resource-handle resource)
+                    agent-scheme-false))
+     (command . ,(or (agent-scheme--process-resource-command resource)
+                     agent-scheme-false))
+     (arguments . ,(or (agent-scheme--process-resource-arguments resource)
+                       nil))
+     (environment . ,(or (agent-scheme--process-resource-environment resource)
+                         nil))
+     (cwd . ,(or (agent-scheme--process-resource-cwd resource)
+                 agent-scheme-false))
+     (options . ,(or (plist-get resource :options) nil)))))
+
+(defun agent-scheme--process-capability-record-decision
+    (request request-id status grant reason &optional fields)
+  "Audit and return a process capability decision datum."
+  (let* ((decision-id (agent-scheme--process-capability-decision-id))
+         (grant-id (or (and grant (agent-scheme--capability-grant-id grant))
+                       (agent-scheme--capability-grant-symbol "none")))
+         (decision
+          `(,(agent-scheme--capability-grant-symbol "capability-decision")
+            (,(agent-scheme--capability-grant-symbol "id") ,decision-id)
+            (,(agent-scheme--capability-grant-symbol "request") ,request-id)
+            (,(agent-scheme--capability-grant-symbol "status")
+             ,(agent-scheme--capability-grant-symbol status))
+            (,(agent-scheme--capability-grant-symbol "domain")
+             ,(agent-scheme--capability-grant-symbol "process"))
+            (,(agent-scheme--capability-grant-symbol "grant") ,grant-id)
+            (,(agent-scheme--capability-grant-symbol "reason") ,reason))))
+    (agent-scheme-audit-record
+     'capability-decision
+     (append
+      `((request . ,request)
+        (decision . ,decision)
+        (domain . process)
+        (status . ,status)
+        (grant . ,grant-id)
+        (reason . ,reason))
+      fields))
+    decision))
+
+(defun agent-scheme-capability-audit-process-result
+    (authorization result &optional errored)
+  "Audit process capability AUTHORIZATION with RESULT."
+  (let ((request (plist-get authorization :request))
+        (decision (plist-get authorization :decision))
+        (operation (plist-get authorization :operation)))
+    (agent-scheme-audit-record
+     'capability-audit
+     `((request . ,request)
+       (decision . ,decision)
+       (domain . process)
+       (operation . ,operation)
+       (result . ,(if errored
+                      (list 'error result)
+                    (list 'ok result)))))))
+
+(defun agent-scheme--process-capability-deny
+    (request request-id operation resource grant reason)
+  "Record denied process REQUEST and signal REASON."
+  (let ((decision
+         (agent-scheme--process-capability-record-decision
+          request request-id 'denied grant reason
+          `((operation . ,operation)
+            (handle . ,(or (agent-scheme--process-resource-handle resource)
+                           agent-scheme-false))
+            (command . ,(or (agent-scheme--process-resource-command resource)
+                            agent-scheme-false))))))
+    (agent-scheme-capability-audit-process-result
+     (list :request request :decision decision :operation operation)
+     reason
+     t)
+    (signal 'agent-scheme-capability-grant-error
+            (list (format "process capability denied: %s" reason)))))
+
+(defun agent-scheme--process-handle-live-p (handle)
+  "Return non-nil when HANDLE names a live process registry entry."
+  (and (agent-scheme-handle-p handle)
+       (let ((entry (gethash (agent-scheme-handle-id handle)
+                             agent-scheme--handle-registry)))
+         (and entry
+              (eq (agent-scheme--handle-entry-kind entry) 'process)
+              (agent-scheme-capability--entry-live-p entry)))))
+
+(defun agent-scheme--process-handle-object (handle)
+  "Return the private object for process HANDLE, or nil."
+  (when (agent-scheme-handle-p handle)
+    (when-let ((entry (gethash (agent-scheme-handle-id handle)
+                               agent-scheme--handle-registry)))
+      (and (eq (agent-scheme--handle-entry-kind entry) 'process)
+           (agent-scheme--handle-entry-object entry)))))
+
+(defun agent-scheme--process-object-process (object)
+  "Return live Emacs process inside OBJECT, or nil."
+  (cond
+   ((processp object) object)
+   ((and (consp object) (plist-get object :process))
+    (plist-get object :process))
+   (t nil)))
+
+(defun agent-scheme--process-object-live-p (object)
+  "Return non-nil when process OBJECT is still live."
+  (cond
+   ((processp object)
+    (process-live-p object))
+   ((agent-scheme--process-object-process object)
+    (process-live-p (agent-scheme--process-object-process object)))
+   ((and (consp object) (plist-member object :status))
+    (not (memq (plist-get object :status)
+               '(closed deleted exit failed killed signal stale stopped))))
+   (t object)))
+
+(defun agent-scheme--process-object-status (object)
+  "Return Scheme-readable status symbol for process OBJECT."
+  (cond
+   ((agent-scheme--process-object-process object)
+    (process-status (agent-scheme--process-object-process object)))
+   ((and (consp object) (plist-get object :status))
+    (plist-get object :status))
+   (t 'run)))
+
+(defun agent-scheme--process-object-name (object)
+  "Return process OBJECT's public name."
+  (cond
+   ((processp object) (process-name object))
+   ((and (consp object) (plist-get object :name))
+    (plist-get object :name))
+   ((agent-scheme--process-object-process object)
+    (process-name (agent-scheme--process-object-process object)))
+   (t "process")))
+
+(defun agent-scheme--process-object-command (object)
+  "Return process OBJECT's command string, or nil."
+  (cond
+   ((and (consp object) (plist-get object :command))
+    (plist-get object :command))
+   ((agent-scheme--process-object-process object)
+    (car (process-command (agent-scheme--process-object-process object))))
+   (t nil)))
+
+(defun agent-scheme--process-object-arguments (object)
+  "Return process OBJECT's command arguments, or nil."
+  (cond
+   ((and (consp object) (plist-get object :arguments))
+    (plist-get object :arguments))
+   ((agent-scheme--process-object-process object)
+    (cdr (process-command (agent-scheme--process-object-process object))))
+   (t nil)))
+
+(defun agent-scheme--process-object-buffer (object)
+  "Return process OBJECT's live buffer, or nil."
+  (let ((buffer
+         (cond
+          ((and (consp object) (plist-get object :buffer))
+           (plist-get object :buffer))
+          ((agent-scheme--process-object-process object)
+           (process-buffer (agent-scheme--process-object-process object)))
+          (t nil))))
+    (and (buffer-live-p buffer) buffer)))
+
+(defun agent-scheme--process-object-output (object stream)
+  "Return text for process OBJECT STREAM."
+  (cond
+   ((and (eq stream 'stdout)
+         (consp object)
+         (plist-member object :stdout))
+    (or (plist-get object :stdout) ""))
+   ((and (eq stream 'stderr)
+         (consp object)
+         (plist-member object :stderr))
+    (or (plist-get object :stderr) ""))
+   ((and (eq stream 'stdout)
+         (agent-scheme--process-object-buffer object))
+    (with-current-buffer (agent-scheme--process-object-buffer object)
+      (buffer-substring-no-properties (point-min) (point-max))))
+   (t "")))
+
+(defun agent-scheme--process-job-object
+    (raw name command arguments options)
+  "Return a normalized private process object for RAW start result."
+  (cond
+   ((processp raw)
+    (list :name name
+          :command command
+          :arguments arguments
+          :options options
+          :status (process-status raw)
+          :process raw
+          :buffer (process-buffer raw)
+          :stdout ""
+          :stderr ""))
+   ((consp raw)
+    (append
+     (list :name (or (plist-get raw :name) name)
+           :command (or (plist-get raw :command) command)
+           :arguments (or (plist-get raw :arguments) arguments)
+           :options (or (plist-get raw :options) options)
+           :status (or (plist-get raw :status) 'run))
+     raw))
+   (t
+    (agent-scheme--eval-error
+     "process-start! adapter returned unsupported process object"))))
+
+(defun agent-scheme--process-handle-datum (handle object grant-id status)
+  "Return a Scheme-readable process HANDLE datum."
+  `(,(agent-scheme--capability-grant-symbol "handle")
+    (,(agent-scheme--capability-grant-symbol "id")
+     ,(agent-scheme-handle-id handle))
+    (,(agent-scheme--capability-grant-symbol "kind")
+     ,(agent-scheme--capability-grant-symbol "process-job"))
+    (,(agent-scheme--capability-grant-symbol "domain")
+     ,(agent-scheme--capability-grant-symbol "process"))
+    (,(agent-scheme--capability-grant-symbol "command")
+     ,(or (agent-scheme--process-object-command object) agent-scheme-false))
+    (,(agent-scheme--capability-grant-symbol "arguments")
+     ,(or (agent-scheme--process-object-arguments object) nil))
+    (,(agent-scheme--capability-grant-symbol "grant") ,grant-id)
+    (,(agent-scheme--capability-grant-symbol "status")
+     ,(agent-scheme--capability-grant-symbol status))))
+
+(defun agent-scheme--process-register-handle (object grant)
+  "Register and audit a process OBJECT handle."
+  (let* ((grant-id (agent-scheme--capability-grant-id grant))
+         (handle (agent-scheme--register-handle 'process object))
+         (handle-datum
+          (agent-scheme--process-handle-datum handle object grant-id 'live)))
+    (agent-scheme-audit-record
+     'capability-handle
+     `((handle . ,handle-datum)
+       (domain . process)
+       (kind . process-job)
+       (command . ,(or (agent-scheme--process-object-command object)
+                       agent-scheme-false))
+       (arguments . ,(or (agent-scheme--process-object-arguments object)
+                         nil))
+       (grant . ,grant-id)
+       (status . live)))
+    handle))
+
+(defun agent-scheme-capability-authorize-process
+    (binding operation context resource)
+  "Authorize process OPERATION for BINDING with RESOURCE."
+  (let* ((request-id (agent-scheme--process-capability-request-id))
+         (request
+          (agent-scheme--process-capability-request-datum
+           request-id binding operation resource))
+         (command (agent-scheme--process-resource-command resource))
+         (handle (agent-scheme--process-resource-handle resource))
+         (grants (agent-scheme--process-capability-grants context))
+         match
+         denied)
+    (agent-scheme--process-capability-record-request
+     request operation resource)
+    (when (and command
+               (equal (agent-scheme--capability-grant-symbol-name operation)
+                      "spawn")
+               (not (agent-scheme--process-command-allowlist-entry command)))
+      (agent-scheme--process-capability-deny
+       request request-id operation resource nil
+       "command is not in process allow-list"))
+    (when (and handle (not (agent-scheme--process-handle-live-p handle)))
+      (agent-scheme--process-capability-deny
+       request request-id operation resource nil
+       "stale process handle"))
+    (unless grants
+      (agent-scheme--process-capability-deny
+       request request-id operation resource nil
+       "no active process grant covers request"))
+    (dolist (grant grants)
+      (let ((candidate
+             (agent-scheme--process-capability-grant-match
+              grant operation resource)))
+        (when candidate
+          (if (plist-get candidate :grant)
+              (setq match candidate)
+            (setq denied candidate)))))
+    (unless match
+      (agent-scheme--process-capability-deny
+       request request-id operation resource
+       (plist-get denied :denied)
+       (or (plist-get denied :reason)
+           "no active process grant covers request")))
+    (let ((grant (plist-get match :grant)))
+      (condition-case condition
+          (progn
+            (agent-scheme-policy-authorize
+             (agent-scheme--process-capability-policy-category operation)
+             binding
+             `((domain . process)
+               (operation . ,operation)
+               (handle . ,(or handle agent-scheme-false))
+               (command . ,(or command agent-scheme-false))
+               (arguments . ,(or (agent-scheme--process-resource-arguments
+                                  resource)
+                                 nil))
+               (environment . ,(or (agent-scheme--process-resource-environment
+                                    resource)
+                                   nil))
+               (cwd . ,(or (agent-scheme--process-resource-cwd resource)
+                           agent-scheme-false))
+               (grant . ,(agent-scheme--capability-grant-id grant)))
+             context)
+            (agent-scheme--capability-grant-use! grant context)
+            (list :operation operation
+                  :request request
+                  :decision
+                  (agent-scheme--process-capability-record-decision
+                   request request-id 'approved grant
+                   "process request is covered by active grant")
+                  :grant grant))
+        (agent-scheme-policy-error
+         (let ((decision
+                (agent-scheme--process-capability-record-decision
+                 request request-id 'denied grant
+                 (error-message-string condition))))
+           (agent-scheme-capability-audit-process-result
+            (list :request request
+                  :decision decision
+                  :operation operation)
+            (error-message-string condition)
+            t)
+           (signal (car condition) (cdr condition))))))))
+
+(defun agent-scheme-capability-register-process-port
+    (port kind authorization process-handle stream operations)
+  "Attach a process-backed port capability handle to PORT."
+  (let* ((grant (plist-get authorization :grant))
+         (grant-id (agent-scheme--capability-grant-id grant))
+         (handle-id (agent-scheme--process-port-capability-handle-id))
+         (limits (agent-scheme--port-capability-limits grant))
+         (path (agent-scheme-handle-id process-handle))
+         (handle
+          (agent-scheme--port-capability-datum
+           handle-id kind 'process operations grant-id limits 'open path)))
+    (setf (agent-scheme--port-backing-domain port) 'process)
+    (setf (agent-scheme--port-operations port) operations)
+    (setf (agent-scheme--port-grant port) grant-id)
+    (setf (agent-scheme--port-limits port) limits)
+    (setf (agent-scheme--port-handle port) handle-id)
+    (setf (agent-scheme--port-status port) 'open)
+    (setf (agent-scheme--port-path port) path)
+    (setf (agent-scheme--port-counters port) nil)
+    (agent-scheme-audit-record
+     'capability-handle
+     `((handle . ,handle)
+       (domain . port)
+       (kind . ,kind)
+       (backing . process)
+       (process . ,process-handle)
+       (stream . ,stream)
+       (operations . ,operations)
+       (grant . ,grant-id)
+       (limits . ,limits)
+       (status . open)))
+    port))
 
 (defun agent-scheme--file-capability-deny
     (request request-id operation filename path grant reason
@@ -1705,16 +2466,28 @@ synthetic file grant so existing callers share the capability vocabulary."
 
 (defun agent-scheme--authorize-capability-grant-datum (grant context)
   "Authorize creation of GRANT in CONTEXT."
-  (if (agent-scheme--file-capability-grant-domain-p grant)
-      (agent-scheme-policy-authorize
-       'standard-host-effect
-       "grant-capability!"
-       `((domain . file)
-         (operations . ,(agent-scheme--capability-grant-field-values
-                         grant "operations"))
-         (grant . ,grant))
-       context
-       'capability-grant)
+  (cond
+   ((agent-scheme--file-capability-grant-domain-p grant)
+    (agent-scheme-policy-authorize
+     'standard-host-effect
+     "grant-capability!"
+     `((domain . file)
+       (operations . ,(agent-scheme--capability-grant-field-values
+                       grant "operations"))
+       (grant . ,grant))
+     context
+     'capability-grant))
+   ((agent-scheme--process-capability-grant-domain-p grant)
+    (agent-scheme-policy-authorize
+     'command-process
+     "grant-capability!"
+     `((domain . process)
+       (operations . ,(agent-scheme--capability-grant-field-values
+                       grant "operations"))
+       (grant . ,grant))
+     context
+     'capability-grant))
+   (t
     (let* ((library (agent-scheme--capability-grant-library-key grant))
            (effect (agent-scheme--capability-grant-effect-name grant))
            (spec (agent-scheme--emacs-capability-manifest-spec effect))
@@ -1726,7 +2499,7 @@ synthetic file grant so existing callers share the capability vocabulary."
          (capability . ,effect)
          (grant . ,grant))
        context
-       'capability-grant))))
+       'capability-grant)))))
 
 (defun agent-scheme-capability-grant! (datum &optional context)
   "Create a capability grant from DATUM in CONTEXT."
@@ -1995,14 +2768,15 @@ synthetic file grant so existing callers share the capability vocabulary."
   "Authorize Emacs capability NAME with ARGUMENTS in CONTEXT."
   (unless agent-scheme--emacs-capability-preauthorized
     (let ((spec (agent-scheme--emacs-capability-manifest-spec name)))
-      (agent-scheme-policy-authorize
-       (agent-scheme--emacs-capability-policy-category spec)
-       name
-       `((library . ,(and spec (plist-get spec :library)))
-         (capability . ,name)
-         (arguments . ,arguments))
-       context
-       'capability-call)
+      (unless (plist-get spec :requires-process-grant)
+        (agent-scheme-policy-authorize
+         (agent-scheme--emacs-capability-policy-category spec)
+         name
+         `((library . ,(and spec (plist-get spec :library)))
+           (capability . ,name)
+           (arguments . ,arguments))
+         context
+         'capability-call))
       (when (and agent-scheme-capability-require-grants-for-mutations
                  (plist-get spec :requires-grant))
         (agent-scheme--require-capability-grant
@@ -2540,7 +3314,8 @@ synthetic file grant so existing callers share the capability vocabulary."
     ('frame
      (frame-live-p (agent-scheme--handle-entry-object entry)))
     ('process
-     (process-live-p (agent-scheme--handle-entry-object entry)))
+     (agent-scheme--process-object-live-p
+      (agent-scheme--handle-entry-object entry)))
     ('project
      t)
     (_
@@ -2610,14 +3385,14 @@ Return non-nil when a registry entry was removed."
    (agent-scheme--handle-entry-for value 'project description)))
 
 (defun agent-scheme--live-process-for-handle (value description)
-  "Return live Emacs process for handle VALUE."
-  (let ((process
+  "Return live private process object for handle VALUE."
+  (let ((object
          (agent-scheme--handle-entry-object
           (agent-scheme--handle-entry-for value 'process description))))
-    (unless (process-live-p process)
+    (unless (agent-scheme--process-object-live-p object)
       (agent-scheme--eval-error
        "stale process handle: %s" (agent-scheme-handle-id value)))
-    process))
+    object))
 
 (defun agent-scheme--buffer-handle (buffer)
   "Return an opaque handle for BUFFER."
@@ -3198,37 +3973,191 @@ creates undo boundaries around the atomic change group."
      `((result-count . ,(length results))))
     agent-scheme-unspecified))
 
-(defun agent-scheme--primitive-emacs-process-list (arguments context)
+(defun agent-scheme--process-resource-for-handle (handle)
+  "Return an authorization resource plist for process HANDLE."
+  (let ((object (agent-scheme--process-handle-object handle)))
+    (list :handle handle
+          :command (and object (agent-scheme--process-object-command object))
+          :arguments (and object
+                          (agent-scheme--process-object-arguments object)))))
+
+(defun agent-scheme--primitive-process-start! (arguments context)
+  "Primitive process-start! over ARGUMENTS."
+  (let* ((name (agent-scheme--capability-string
+                (car arguments) "process-start! name"))
+         (command (agent-scheme--capability-string
+                   (cadr arguments) "process-start! command"))
+         (process-arguments
+          (agent-scheme--process-normalized-arguments (caddr arguments)))
+         (options (cadddr arguments))
+         (cwd (agent-scheme--process-cwd options))
+         (environment
+          (agent-scheme--process-normalized-environment options))
+         (resource (list :command command
+                         :arguments process-arguments
+                         :cwd cwd
+                         :environment environment
+                         :options options))
+         (authorization
+          (agent-scheme-capability-authorize-process
+           "process-start!" 'spawn context resource))
+         (raw
+          (let ((default-directory cwd))
+            (funcall agent-scheme-process-start-function
+                     name command process-arguments options context)))
+         (object
+          (agent-scheme--process-job-object
+           raw name command process-arguments options))
+         (handle
+          (agent-scheme--process-register-handle
+           object (plist-get authorization :grant))))
+    (agent-scheme-capability-audit-process-result
+     authorization
+     `(handle process-job ,(agent-scheme-handle-id handle)))
+    (agent-scheme--add-emacs-capability-result-fields
+     `((domain . process)
+       (operation . spawn)
+       (command . ,command)
+       (arguments . ,process-arguments)
+       (environment . ,environment)
+       (cwd . ,cwd)
+       (handle . ,handle)))
+    handle))
+
+(defun agent-scheme--primitive-emacs-process-list (_arguments context)
   "Primitive emacs-process-list."
-  (agent-scheme--authorize-emacs-capability
-   "emacs-process-list" arguments context)
-  (mapcar #'agent-scheme--process-handle
-          (seq-filter #'process-live-p (process-list))))
+  (let ((authorization
+         (agent-scheme-capability-authorize-process
+          "emacs-process-list" 'observe context nil))
+        handles)
+    (dolist (process (seq-filter #'process-live-p (process-list)))
+      (push (agent-scheme--process-register-handle
+             (agent-scheme--process-job-object
+              process
+              (process-name process)
+              (or (car (process-command process)) (process-name process))
+              (or (cdr (process-command process)) nil)
+              nil)
+             (plist-get authorization :grant))
+            handles))
+    (setq handles (nreverse handles))
+    (agent-scheme-capability-audit-process-result
+     authorization `(handles ,(length handles)))
+    handles))
 
 (defun agent-scheme--primitive-process-name (arguments context)
   "Primitive process-name over ARGUMENTS."
-  (agent-scheme--authorize-emacs-capability "process-name" arguments context)
-  (process-name
-   (agent-scheme--live-process-for-handle (car arguments) "process-name")))
+  (let* ((handle (car arguments))
+         (authorization
+          (agent-scheme-capability-authorize-process
+           "process-name" 'observe context
+           (agent-scheme--process-resource-for-handle handle)))
+         (object (agent-scheme--live-process-for-handle handle "process-name"))
+         (name (agent-scheme--process-object-name object)))
+    (agent-scheme-capability-audit-process-result authorization name)
+    name))
 
 (defun agent-scheme--primitive-process-status (arguments context)
   "Primitive process-status over ARGUMENTS."
-  (agent-scheme--authorize-emacs-capability "process-status" arguments context)
-  (agent-scheme--scheme-symbol
-   (process-status
-    (agent-scheme--live-process-for-handle
-     (car arguments) "process-status"))))
+  (let* ((handle (car arguments))
+         (authorization
+          (agent-scheme-capability-authorize-process
+           "process-status" 'observe context
+           (agent-scheme--process-resource-for-handle handle)))
+         (object (agent-scheme--live-process-for-handle
+                  handle "process-status"))
+         (status (agent-scheme--process-object-status object)))
+    (agent-scheme-capability-audit-process-result authorization status)
+    (agent-scheme--scheme-symbol status)))
 
 (defun agent-scheme--primitive-process-buffer (arguments context)
   "Primitive process-buffer over ARGUMENTS."
-  (agent-scheme--authorize-emacs-capability "process-buffer" arguments context)
-  (let ((buffer
-         (process-buffer
-          (agent-scheme--live-process-for-handle
-           (car arguments) "process-buffer"))))
+  (let* ((handle (car arguments))
+         (authorization
+          (agent-scheme-capability-authorize-process
+           "process-buffer" 'observe context
+           (agent-scheme--process-resource-for-handle handle)))
+         (object (agent-scheme--live-process-for-handle
+                  handle "process-buffer"))
+         (buffer (agent-scheme--process-object-buffer object)))
+    (agent-scheme-capability-audit-process-result
+     authorization
+     (if buffer (buffer-name buffer) agent-scheme-false))
     (if buffer
         (agent-scheme--buffer-handle buffer)
       agent-scheme-false)))
+
+(defun agent-scheme--process-port (handle stream kind operations context)
+  "Return process HANDLE STREAM as an Agent Scheme port."
+  (let* ((operation (if (eq stream 'stdin) 'input 'output))
+         (authorization
+          (agent-scheme-capability-authorize-process
+           (pcase stream
+             ('stdin "process-input-port")
+             ('stderr "process-error-port")
+             (_ "process-output-port"))
+           operation
+           context
+           (agent-scheme--process-resource-for-handle handle)))
+         (object
+          (agent-scheme--live-process-for-handle handle "process port"))
+         (port
+          (if (eq stream 'stdin)
+              (agent-scheme--make-port
+               :medium 'process
+               :outputp t
+               :textualp t
+               :contents "")
+            (agent-scheme--make-port
+             :medium 'process
+             :inputp t
+             :textualp t
+             :source (agent-scheme--process-object-output object stream)
+             :position 0))))
+    (agent-scheme-capability-audit-process-result
+     authorization `(port ,stream))
+    (agent-scheme-capability-register-process-port
+     port kind authorization handle stream operations)))
+
+(defun agent-scheme--primitive-process-output-port (arguments context)
+  "Primitive process-output-port over ARGUMENTS."
+  (agent-scheme--process-port
+   (car arguments) 'stdout 'textual-input '(read close) context))
+
+(defun agent-scheme--primitive-process-error-port (arguments context)
+  "Primitive process-error-port over ARGUMENTS."
+  (agent-scheme--process-port
+   (car arguments) 'stderr 'textual-input '(read close) context))
+
+(defun agent-scheme--primitive-process-input-port (arguments context)
+  "Primitive process-input-port over ARGUMENTS."
+  (agent-scheme--process-port
+   (car arguments) 'stdin 'textual-output '(write flush close) context))
+
+(defun agent-scheme--process-control! (handle operation binding context)
+  "Apply process control OPERATION for BINDING to HANDLE."
+  (let* ((authorization
+          (agent-scheme-capability-authorize-process
+           binding operation context
+           (agent-scheme--process-resource-for-handle handle)))
+         (object (agent-scheme--live-process-for-handle handle binding))
+         (process (agent-scheme--process-object-process object)))
+    (when process
+      (pcase operation
+        ('interrupt (interrupt-process process))
+        ('terminate (delete-process process))))
+    (agent-scheme-capability-audit-process-result authorization operation)
+    agent-scheme-unspecified))
+
+(defun agent-scheme--primitive-process-interrupt! (arguments context)
+  "Primitive process-interrupt! over ARGUMENTS."
+  (agent-scheme--process-control!
+   (car arguments) 'interrupt "process-interrupt!" context))
+
+(defun agent-scheme--primitive-process-kill! (arguments context)
+  "Primitive process-kill! over ARGUMENTS."
+  (agent-scheme--process-control!
+   (car arguments) 'terminate "process-kill!" context))
 
 (defun agent-scheme--documentation-string (symbol commandp)
   "Return raw documentation string for SYMBOL.

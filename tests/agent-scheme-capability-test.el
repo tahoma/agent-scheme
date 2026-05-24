@@ -21,6 +21,9 @@
 (defvar agent-scheme-capability-test--command-log nil
   "Arguments received by command capability test commands.")
 
+(defvar agent-scheme-capability-test--process-starts nil
+  "Process start requests received by process capability test stubs.")
+
 (defun agent-scheme-capability-test-command (value &optional flag)
   "Record VALUE and FLAG for command-call! tests."
   (interactive "sValue: ")
@@ -33,6 +36,19 @@
   (interactive "sValue: ")
   (setq agent-scheme-capability-test--command-log
         (list value)))
+
+(defun agent-scheme-capability-test--process-stub
+    (name command arguments options _context)
+  "Return a Scheme-facing process job plist for test process starts."
+  (push (list name command arguments options)
+        agent-scheme-capability-test--process-starts)
+  (list :name name
+        :command command
+        :arguments arguments
+        :options options
+        :status 'run
+        :stdout "out-secret sk-processoutput1234567890\n"
+        :stderr "err\n"))
 
 (defun agent-scheme-capability-test--external
     (source &optional environment options)
@@ -1205,7 +1221,9 @@
 
 (ert-deftest agent-scheme-capability-test-process-handles ()
   "Inspect live processes through opaque handles and reject stale handles."
-  (let ((environment (agent-scheme-make-base-environment))
+  (let ((agent-scheme-policy-category-actions
+         (agent-scheme-capability-test--actions '((command-process . allow))))
+        (environment (agent-scheme-make-base-environment))
         (buffer (generate-new-buffer "agent-scheme-capability-process-buffer"))
         process handle)
     (unwind-protect
@@ -1218,7 +1236,16 @@
           (should
            (equal
             (agent-scheme-capability-test--external
-             "(import (scheme base) (emacs buffer) (emacs process))
+             "(import (scheme base)
+                      (agent capability)
+                      (emacs buffer)
+                      (emacs process))
+              (grant-capability!
+               '(capability-grant
+                 (id process-observe-grant)
+                 (domain process)
+                 (operations (observe))
+                 (expires never)))
               (define (find-process handles)
                 (cond
                  ((null? handles) #f)
@@ -1234,7 +1261,15 @@
                     (buffer-name buffer))))
           (setq handle
                 (agent-scheme-eval-source
-                 "(import (scheme base) (emacs process))
+                 "(import (scheme base)
+                          (agent capability)
+                          (emacs process))
+                  (grant-capability!
+                   '(capability-grant
+                     (id process-observe-grant)
+                     (domain process)
+                     (operations (observe))
+                     (expires never)))
                   (define (find-process handles)
                     (cond
                      ((null? handles) #f)
@@ -1258,6 +1293,312 @@
         (delete-process process))
       (when (buffer-live-p buffer)
         (kill-buffer buffer)))))
+
+(ert-deftest agent-scheme-capability-test-process-domain-denied-by-default ()
+  "Construct and deny process requests before the host adapter starts a job."
+  (let ((agent-scheme-policy-category-actions
+         (agent-scheme-capability-test--actions '((command-process . allow))))
+        (agent-scheme-process-command-allowlist
+         '("agent-scheme-test-process"))
+        (agent-scheme-process-start-function
+         #'agent-scheme-capability-test--process-stub))
+    (setq agent-scheme-capability-test--process-starts nil)
+    (agent-scheme-audit-clear)
+    (should-error
+     (agent-scheme-eval-source
+      "(import (scheme base) (emacs process))
+       (process-start!
+        \"denied\" \"agent-scheme-test-process\" '(\"ok\") '())")
+     :type 'agent-scheme-capability-grant-error)
+    (should-not agent-scheme-capability-test--process-starts)
+    (should
+     (agent-scheme-capability-test--audit-entry-matching
+      "(event capability-request)"
+      "(domain process)"
+      "(operation spawn)"
+      "(command \"agent-scheme-test-process\")"))
+    (should
+     (agent-scheme-capability-test--audit-entry-matching
+      "(event capability-decision)"
+      "(status denied)"
+      "(reason \"no active process grant covers request\")"))))
+
+(ert-deftest agent-scheme-capability-test-process-domain-starts-through-grant ()
+  "Start a process through a grant and expose only Scheme-readable handles."
+  (let ((agent-scheme-policy-category-actions
+         (agent-scheme-capability-test--actions '((command-process . allow))))
+        (agent-scheme-process-command-allowlist
+         '("agent-scheme-test-process"))
+        (agent-scheme-process-start-function
+         #'agent-scheme-capability-test--process-stub))
+    (setq agent-scheme-capability-test--process-starts nil)
+    (agent-scheme-audit-clear)
+    (let ((external
+           (agent-scheme-capability-test--external
+            "(import (scheme base)
+                     (agent capability)
+                     (emacs process))
+             (grant-capability!
+              '(capability-grant
+                (id process-grant)
+                (domain process)
+                (operations (spawn observe output input terminate))
+                (scope (command \"agent-scheme-test-process\")
+                       (working-directory \"/tmp\")
+                       (environment (\"OPENAI_API_KEY\")))
+                (expires (uses 6))))
+             (let ((handle
+                    (process-start!
+                     \"allowed\"
+                     \"agent-scheme-test-process\"
+                     '(\"--token=sk-processarg1234567890\")
+                     '((cwd \"/tmp\")
+                       (environment
+                        ((\"OPENAI_API_KEY\"
+                          \"sk-processenv1234567890\")))))))
+               (list handle
+                     (process-name handle)
+                     (process-status handle)))")))
+      (should (string-match-p "(handle process h-[0-9]+)" external))
+      (should (string-match-p "\"allowed\"" external))
+      (should (string-match-p "run" external))
+      (should (= (length agent-scheme-capability-test--process-starts) 1))
+      (should-not (string-match-p "sk-processarg" external)))
+    (let ((audit (mapconcat #'identity
+                            (agent-scheme-capability-test--audit-strings)
+                            "\n")))
+      (should (string-match-p "\\[redacted\\]" audit))
+      (should-not (string-match-p "sk-processarg" audit))
+      (should-not (string-match-p "sk-processenv" audit)))
+    (should
+     (agent-scheme-capability-test--audit-entry-matching
+      "(event capability-handle)"
+      "(domain process)"
+      "(kind process-job)"
+      "(grant process-grant)"
+      "(status live)"))))
+
+(ert-deftest agent-scheme-capability-test-process-command-mismatch-denies ()
+  "Deny process starts whose command is outside the grant scope."
+  (let ((agent-scheme-policy-category-actions
+         (agent-scheme-capability-test--actions '((command-process . allow))))
+        (agent-scheme-process-command-allowlist
+         '("agent-scheme-test-process" "agent-scheme-other-process"))
+        (agent-scheme-process-start-function
+         #'agent-scheme-capability-test--process-stub))
+    (setq agent-scheme-capability-test--process-starts nil)
+    (agent-scheme-audit-clear)
+    (should-error
+     (agent-scheme-eval-source
+      "(import (scheme base)
+               (agent capability)
+               (emacs process))
+       (grant-capability!
+        '(capability-grant
+          (id process-grant)
+          (domain process)
+          (operations (spawn))
+          (scope (command \"agent-scheme-test-process\"))
+          (expires (uses 1))))
+       (process-start!
+        \"mismatch\" \"agent-scheme-other-process\" '() '())")
+     :type 'agent-scheme-capability-grant-error)
+    (should-not agent-scheme-capability-test--process-starts)
+    (should
+     (agent-scheme-capability-test--audit-entry-matching
+      "(event capability-decision)"
+      "(status denied)"
+      "(grant process-grant)"
+      "command is outside approved process grant scope"))))
+
+(ert-deftest agent-scheme-capability-test-process-environment-mismatch-denies ()
+  "Deny process starts whose environment is outside the grant scope."
+  (let ((agent-scheme-policy-category-actions
+         (agent-scheme-capability-test--actions '((command-process . allow))))
+        (agent-scheme-process-command-allowlist
+         '("agent-scheme-test-process"))
+        (agent-scheme-process-start-function
+         #'agent-scheme-capability-test--process-stub))
+    (setq agent-scheme-capability-test--process-starts nil)
+    (agent-scheme-audit-clear)
+    (should-error
+     (agent-scheme-eval-source
+      "(import (scheme base)
+               (agent capability)
+               (emacs process))
+       (grant-capability!
+        '(capability-grant
+          (id process-grant)
+          (domain process)
+          (operations (spawn))
+          (scope (command \"agent-scheme-test-process\")
+                 (environment (\"ALLOWED_ENV\")))
+          (expires (uses 1))))
+       (process-start!
+        \"env-mismatch\" \"agent-scheme-test-process\" '()
+        '((environment
+           ((\"DENIED_ENV\" \"sk-processenv-denied1234567890\")))))")
+     :type 'agent-scheme-capability-grant-error)
+    (should-not agent-scheme-capability-test--process-starts)
+    (should
+     (agent-scheme-capability-test--audit-entry-matching
+      "(event capability-decision)"
+      "(status denied)"
+      "(grant process-grant)"
+      "environment is outside approved process grant scope"))
+    (let ((audit (mapconcat #'identity
+                            (agent-scheme-capability-test--audit-strings)
+                            "\n")))
+      (should-not (string-match-p "sk-processenv-denied" audit)))))
+
+(ert-deftest agent-scheme-capability-test-process-ports-route-through-capabilities ()
+  "Represent process streams as process-backed port capabilities."
+  (let ((agent-scheme-policy-category-actions
+         (agent-scheme-capability-test--actions '((command-process . allow))))
+        (agent-scheme-process-command-allowlist
+         '("agent-scheme-test-process"))
+        (agent-scheme-process-start-function
+         #'agent-scheme-capability-test--process-stub))
+    (agent-scheme-audit-clear)
+    (let ((external
+           (agent-scheme-capability-test--external
+            "(import (scheme base)
+                     (agent capability)
+                     (emacs process))
+             (grant-capability!
+              '(capability-grant
+                (id process-port-grant)
+                (domain process)
+                (operations (spawn output input))
+                (scope (command \"agent-scheme-test-process\"))
+                (expires (uses 5))))
+             (define handle
+               (process-start!
+                \"ports\" \"agent-scheme-test-process\" '() '()))
+             (define stdout (process-output-port handle))
+             (define stdin (process-input-port handle))
+             (write-string \"payload\" stdin)
+             (list (input-port? stdout)
+                   (output-port? stdin)
+                   (read-string 3 stdout)
+                   (output-port-open? stdin))")))
+      (should (equal external "(#t #t \"out\" #t)")))
+    (should
+     (agent-scheme-capability-test--audit-entry-matching
+      "(event capability-handle)"
+      "(domain port)"
+      "(backing process)"
+      "(kind textual-input)"
+      "(grant process-port-grant)"))
+    (should
+     (agent-scheme-capability-test--audit-entry-matching
+      "(event capability-handle)"
+      "(domain port)"
+      "(backing process)"
+      "(kind textual-output)"
+      "(grant process-port-grant)"))
+    (should
+     (agent-scheme-capability-test--audit-entry-matching
+      "(event capability-audit)"
+      "(domain port)"
+      "(operation read)"
+      "(backing process)"))
+    (should
+     (agent-scheme-capability-test--audit-entry-matching
+      "(event capability-audit)"
+      "(domain port)"
+      "(operation write)"
+      "(backing process)"))))
+
+(ert-deftest agent-scheme-capability-test-process-port-stale-handle-denies ()
+  "Fail closed when a process-backed port outlives its process handle."
+  (let ((agent-scheme-policy-category-actions
+         (agent-scheme-capability-test--actions '((command-process . allow))))
+        (agent-scheme-process-command-allowlist
+         '("agent-scheme-test-process"))
+        (agent-scheme-process-start-function
+         #'agent-scheme-capability-test--process-stub)
+        (environment (agent-scheme-make-base-environment))
+        handle)
+    (setq handle
+          (agent-scheme-eval-source
+           "(import (scheme base)
+                    (agent capability)
+                    (emacs process))
+            (grant-capability!
+             '(capability-grant
+               (id process-port-grant)
+               (domain process)
+               (operations (spawn output))
+               (scope (command \"agent-scheme-test-process\"))
+               (expires never)))
+            (define handle
+              (process-start!
+               \"stale-port\" \"agent-scheme-test-process\" '() '()))
+            (define stdout (process-output-port handle))
+            handle"
+           environment))
+    (agent-scheme-capability-release-handle handle)
+    (agent-scheme--environment-define
+     environment
+     "stale-stdout"
+     (agent-scheme--environment-ref environment "stdout"))
+    (agent-scheme-audit-clear)
+    (let ((condition
+           (should-error
+            (agent-scheme-eval-source
+             "(read-string 1 stale-stdout)" environment)
+            :type 'agent-scheme-capability-grant-error)))
+      (should
+       (string-match-p "stale port capability handle" (cadr condition))))
+    (should
+     (agent-scheme-capability-test--audit-entry-matching
+      "(event capability-audit)"
+      "(domain port)"
+      "(operation read)"
+      "stale process port handle"))))
+
+(ert-deftest agent-scheme-capability-test-process-stale-handle-denies ()
+  "Fail closed when a process handle has gone stale."
+  (let ((agent-scheme-policy-category-actions
+         (agent-scheme-capability-test--actions '((command-process . allow))))
+        (agent-scheme-process-command-allowlist
+         '("agent-scheme-test-process"))
+        (agent-scheme-process-start-function
+         #'agent-scheme-capability-test--process-stub)
+        (environment (agent-scheme-make-base-environment))
+        handle)
+    (setq handle
+          (agent-scheme-eval-source
+           "(import (scheme base)
+                    (agent capability)
+                    (emacs process))
+            (grant-capability!
+             '(capability-grant
+               (id process-grant)
+               (domain process)
+               (operations (spawn observe))
+               (scope (command \"agent-scheme-test-process\"))
+               (expires (uses 2))))
+            (process-start!
+             \"stale\" \"agent-scheme-test-process\" '() '())"
+           environment))
+    (agent-scheme-capability-release-handle handle)
+    (agent-scheme--environment-define environment "stale-process" handle)
+    (agent-scheme-audit-clear)
+    (let ((condition
+           (should-error
+            (agent-scheme-eval-source
+             "(process-status stale-process)" environment)
+            :type 'agent-scheme-capability-grant-error)))
+      (should
+       (string-match-p "stale process handle" (cadr condition))))
+    (should
+     (agent-scheme-capability-test--audit-entry-matching
+      "(event capability-decision)"
+      "(domain process)"
+      "(status denied)"
+      "(reason \"stale process handle\")"))))
 
 (ert-deftest agent-scheme-capability-test-documentation-capabilities ()
   "Expose documentation metadata without exposing variable values."
