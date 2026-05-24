@@ -21,6 +21,7 @@
 (require 'agent-scheme-result)
 (require 'agent-scheme-policy)
 (require 'agent-scheme-redaction)
+(require 'agent-scheme-vcs)
 
 (declare-function agent-scheme--apply-procedure "agent-scheme-interpreter")
 
@@ -453,6 +454,48 @@ network-backed port."
      :emacs-hook agent-scheme--primitive-project-diff
      :portable-hook nil :emitter-hook capability-emacs
      :policy allow :test-categories (emacs diff project))
+    (:name "vcs-root" :library "(emacs vcs)"
+     :minimum-arity 0 :maximum-arity 0
+     :source host-capability :effect host-observation
+     :required-capability emacs-vcs
+     :emacs-hook agent-scheme--primitive-vcs-root
+     :portable-hook nil :emitter-hook capability-emacs
+     :policy allow :test-categories (emacs vcs root))
+    (:name "vcs-branch" :library "(emacs vcs)"
+     :minimum-arity 0 :maximum-arity 0
+     :source host-capability :effect host-observation
+     :required-capability emacs-vcs
+     :emacs-hook agent-scheme--primitive-vcs-branch
+     :portable-hook nil :emitter-hook capability-emacs
+     :policy allow :test-categories (emacs vcs branch))
+    (:name "vcs-status" :library "(emacs vcs)"
+     :minimum-arity 1 :maximum-arity 1
+     :source host-capability :effect host-observation
+     :required-capability emacs-vcs
+     :emacs-hook agent-scheme--primitive-vcs-status
+     :portable-hook nil :emitter-hook capability-emacs
+     :policy allow :test-categories (emacs vcs status))
+    (:name "vcs-diff" :library "(emacs vcs)"
+     :minimum-arity 1 :maximum-arity 1
+     :source host-capability :effect host-observation
+     :required-capability emacs-vcs
+     :emacs-hook agent-scheme--primitive-vcs-diff
+     :portable-hook nil :emitter-hook capability-emacs
+     :policy allow :test-categories (emacs vcs diff))
+    (:name "vcs-recent-commits" :library "(emacs vcs)"
+     :minimum-arity 1 :maximum-arity 1
+     :source host-capability :effect host-observation
+     :required-capability emacs-vcs
+     :emacs-hook agent-scheme--primitive-vcs-recent-commits
+     :portable-hook nil :emitter-hook capability-emacs
+     :policy allow :test-categories (emacs vcs commits))
+    (:name "vcs-yield" :library "(emacs vcs)"
+     :minimum-arity 1 :maximum-arity 1
+     :source host-capability :effect host-observation
+     :required-capability emacs-vcs
+     :emacs-hook agent-scheme--primitive-vcs-yield
+     :portable-hook nil :emitter-hook capability-emacs
+     :policy allow :test-categories (emacs vcs yield))
     (:name "buffer-diagnostics" :library "(emacs diagnostics)"
      :minimum-arity 1 :maximum-arity 1
      :source host-capability :effect host-observation
@@ -625,6 +668,7 @@ network-backed port."
     "(emacs process)"
     "(emacs project)"
     "(emacs search)"
+    "(emacs vcs)"
     "(emacs window)")
   "Recognized Emacs capability library keys.")
 
@@ -4644,6 +4688,64 @@ creates undo boundaries around the atomic change group."
      `((project-root . ,root)
        (result-count . ,(length diffs))))
     diffs))
+
+(defun agent-scheme--primitive-vcs-root (arguments context)
+  "Primitive vcs-root over ARGUMENTS."
+  (agent-scheme--authorize-emacs-capability "vcs-root" arguments context)
+  (let ((datum (agent-scheme-vcs-root-datum)))
+    (agent-scheme--add-emacs-capability-result-fields
+     `((adapter . emacs-vcs)))
+    datum))
+
+(defun agent-scheme--primitive-vcs-branch (arguments context)
+  "Primitive vcs-branch over ARGUMENTS."
+  (agent-scheme--authorize-emacs-capability "vcs-branch" arguments context)
+  (let ((datum (agent-scheme-vcs-branch-datum)))
+    (agent-scheme--add-emacs-capability-result-fields
+     `((adapter . emacs-vcs)))
+    datum))
+
+(defun agent-scheme--primitive-vcs-status (arguments context)
+  "Primitive vcs-status over ARGUMENTS."
+  (agent-scheme--authorize-emacs-capability "vcs-status" arguments context)
+  (agent-scheme--proper-list-elements (car arguments) "vcs-status options")
+  (let* ((datum (agent-scheme-vcs-status-datum (car arguments)))
+         (entries (agent-scheme-vcs-field-value datum "entries" nil)))
+    (agent-scheme--add-emacs-capability-result-fields
+     `((adapter . emacs-vcs)
+       (result-count . ,(length entries))))
+    datum))
+
+(defun agent-scheme--primitive-vcs-diff (arguments context)
+  "Primitive vcs-diff over ARGUMENTS."
+  (agent-scheme--authorize-emacs-capability "vcs-diff" arguments context)
+  (agent-scheme--proper-list-elements (car arguments) "vcs-diff options")
+  (let* ((datum (agent-scheme-vcs-diff-datum (car arguments)))
+         (files (agent-scheme-vcs-field-value datum "files" nil)))
+    (agent-scheme--add-emacs-capability-result-fields
+     `((adapter . emacs-vcs)
+       (result-count . ,(length files))))
+    datum))
+
+(defun agent-scheme--primitive-vcs-recent-commits (arguments context)
+  "Primitive vcs-recent-commits over ARGUMENTS."
+  (agent-scheme--authorize-emacs-capability
+   "vcs-recent-commits" arguments context)
+  (let* ((count (agent-scheme--capability-exact-integer
+                 (car arguments) "vcs-recent-commits count"))
+         (commits (agent-scheme-vcs-recent-commits-datum count)))
+    (agent-scheme--add-emacs-capability-result-fields
+     `((adapter . emacs-vcs)
+       (result-count . ,(length commits))))
+    commits))
+
+(defun agent-scheme--primitive-vcs-yield (arguments context)
+  "Primitive vcs-yield over ARGUMENTS."
+  (agent-scheme--authorize-emacs-capability "vcs-yield" arguments context)
+  (agent-scheme--add-emacs-capability-result-fields
+   `((adapter . emacs-vcs)
+     (yielded . t)))
+  (agent-scheme-agent-io--primitive-yield arguments context))
 
 (defun agent-scheme--diagnostics-result-count (snapshot)
   "Return the number of diagnostics in SNAPSHOT."

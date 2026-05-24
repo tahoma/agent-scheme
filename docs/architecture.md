@@ -594,7 +594,11 @@ repository, branch, status-entry, conflict, diff-summary, request/result, and
 outcome datums plus pure Git machine-format parsers. Host adapters obtain VCS
 state through local tools, editor APIs, or native services, but Scheme-visible
 values remain host-neutral records and repository mutation remains a separate
-policy-gated capability family.
+policy-gated capability family. `(emacs vcs)` is the first read-only adapter
+surface over that contract, with procedures such as `vcs-root`, `vcs-branch`,
+`vcs-status`, `vcs-diff`, `vcs-recent-commits`, and `vcs-yield`; it does not
+export stage, commit, branch creation, fetch, pull, push, or other mutating
+repository operations.
 
 ## Threat Model
 
