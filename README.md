@@ -163,6 +163,35 @@ can use it:
 (buffer-replace! handle 120 140 "new text")
 ```
 
+Read-only search capabilities return Scheme-readable source locations that can
+be yielded back to the agent event stream:
+
+```scheme
+(import (scheme base)
+        (emacs buffer)
+        (emacs search))
+
+(define matches
+  (buffer-search
+   (emacs-current-buffer)
+   "define-library"
+   '((limit 20))))
+
+(search-yield matches)
+```
+
+Project search uses the active Emacs project and skips generated directories,
+large files, and binary files by default:
+
+```scheme
+(import (emacs search))
+
+(project-search
+ "define-library"
+ '((limit 50)
+   (max-file-bytes 1048576)))
+```
+
 Skills can declare requested grants as data without receiving them
 automatically:
 
