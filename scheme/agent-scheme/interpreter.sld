@@ -38,6 +38,7 @@
           (agent-scheme base)
           (agent-scheme library)
           (prefix (agent-scheme approval) approval-model:)
+          (prefix (agent-scheme job) job-model:)
           (prefix (agent-scheme memory) memory-model:)
           (prefix (agent-scheme redaction) redaction-model:)
           (agent-scheme macro))
@@ -45,6 +46,10 @@
     ;; Process-local portable approvals used by `(agent approval)' primitives.
     (define interpreter-approval-store
       (approval-model:agent-scheme-make-approval-store))
+
+    ;; Process-local portable jobs used by `(agent job)' primitives.
+    (define interpreter-job-store
+      (job-model:agent-scheme-make-job-store))
 
     ;; Process-local portable memory used by `(agent memory)' primitives.
     (define interpreter-memory-store
@@ -4284,6 +4289,45 @@
                                         (car arguments)
                                         (second arguments)))
 
+    ;; Create a portable queued job record and return its job datum.
+    (define (primitive-job-start! arguments context)
+      (job-model:job-start! interpreter-job-store
+                            (car arguments)
+                            (second arguments)
+                            (third arguments)))
+
+    ;; Return a portable job record, or #f when unknown.
+    (define (primitive-job-ref arguments context)
+      (job-model:job-ref interpreter-job-store (car arguments)))
+
+    ;; Return portable job records, optionally scoped to one session.
+    (define (primitive-job-list arguments context)
+      (if (null? arguments)
+          (job-model:job-list interpreter-job-store)
+          (job-model:job-list interpreter-job-store (car arguments))))
+
+    ;; Request cooperative cancellation of a portable job record.
+    (define (primitive-job-cancel! arguments context)
+      (job-model:job-cancel! interpreter-job-store (car arguments)))
+
+    ;; Request cooperative interrupt of a portable job record.
+    (define (primitive-job-interrupt! arguments context)
+      (job-model:job-interrupt! interpreter-job-store
+                                (car arguments)
+                                (second arguments)))
+
+    ;; Return portable job stream events, optionally after an offset.
+    (define (primitive-job-yields arguments context)
+      (job-model:job-yields interpreter-job-store
+                            (car arguments)
+                            (if (null? (cdr arguments))
+                                '()
+                                (second arguments))))
+
+    ;; Return a portable job status, or #f when unknown.
+    (define (primitive-job-status arguments context)
+      (job-model:job-status interpreter-job-store (car arguments)))
+
     ;; Return FIELD from Scheme-readable grant DATUM, or #f when absent.
     (define (capability-grant-field datum field)
       (let loop ((fields (if (pair? datum) (cdr datum) '())))
@@ -6162,6 +6206,13 @@
        (cons 'primitive-approval-yield-pending
              primitive-approval-yield-pending)
        (cons 'primitive-approval-resolve! primitive-approval-resolve!)
+       (cons 'primitive-job-start! primitive-job-start!)
+       (cons 'primitive-job-ref primitive-job-ref)
+       (cons 'primitive-job-list primitive-job-list)
+       (cons 'primitive-job-cancel! primitive-job-cancel!)
+       (cons 'primitive-job-interrupt! primitive-job-interrupt!)
+       (cons 'primitive-job-yields primitive-job-yields)
+       (cons 'primitive-job-status primitive-job-status)
        (cons 'primitive-grant-capability! primitive-grant-capability!)
        (cons 'primitive-current-grants primitive-current-grants)
        (cons 'primitive-grant-ref primitive-grant-ref)

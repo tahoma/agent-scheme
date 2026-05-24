@@ -44,6 +44,14 @@
   "Agent Scheme evaluation budget exceeded"
   'agent-scheme-eval-error)
 
+(define-error 'agent-scheme-cancelled-error
+  "Agent Scheme evaluation cancelled"
+  'agent-scheme-eval-error)
+
+(define-error 'agent-scheme-interrupt-error
+  "Agent Scheme evaluation interrupted"
+  'agent-scheme-eval-error)
+
 (cl-defstruct (agent-scheme-unspecified
                (:constructor agent-scheme--make-unspecified)
                (:copier nil))
@@ -228,6 +236,7 @@ base syntax prelude has already been installed."
   event-count
   maximum-events
   maximum-event-nodes
+  event-hook
   syntax-environment
   libraries
   include-paths
@@ -242,6 +251,9 @@ base syntax prelude has already been installed."
   current-error-port
   current-error
   session-id
+  job-id
+  cancel-requested
+  interrupt-reason
   interaction-environment
   base-syntax-installed
   exception-handlers
@@ -312,6 +324,7 @@ MESSAGE and ARGS are passed to `format'."
      :maximum-event-nodes
      (agent-scheme--eval-option options :max-event-nodes
                                 agent-scheme-eval-maximum-event-nodes)
+     :event-hook nil
      :syntax-environment
      (agent-scheme--make-syntax-environment
       (make-hash-table :test #'equal) nil
@@ -336,6 +349,9 @@ MESSAGE and ARGS are passed to `format'."
      :current-error nil
      :session-id
      (agent-scheme--eval-option options :session-id nil)
+     :job-id nil
+     :cancel-requested nil
+     :interrupt-reason nil
      :base-syntax-installed nil
      :exception-handlers nil
      :dynamic-winds nil)))
@@ -561,7 +577,11 @@ environment for free-template-identifier hygiene."
 
 (defun agent-scheme--note-step (context)
   "Record one evaluator step in CONTEXT."
+  (agent-scheme--check-control-request context)
   (cl-incf (agent-scheme--eval-context-steps context))
+  (when (and (fboundp 'thread-yield)
+             (zerop (% (agent-scheme--eval-context-steps context) 128)))
+    (thread-yield))
   (when (> (agent-scheme--eval-context-steps context)
            (agent-scheme--eval-context-maximum-steps context))
     (agent-scheme--budget-error
@@ -646,6 +666,30 @@ SEEN prevents infinite recursion over cyclic host structures."
        (agent-scheme--eval-context-maximum-value-nodes context))))
   value)
 
+(defun agent-scheme--control-reason-string (value)
+  "Return VALUE as a short public control-reason string."
+  (cond
+   ((agent-scheme-symbol-p value)
+    (agent-scheme-symbol-name value))
+   ((symbolp value)
+    (symbol-name value))
+   ((stringp value)
+    value)
+   (t
+    (format "%S" value))))
+
+(defun agent-scheme--check-control-request (context)
+  "Signal any pending cancellation or interrupt request in CONTEXT."
+  (when-let ((reason (agent-scheme--eval-context-interrupt-reason context)))
+    (signal 'agent-scheme-interrupt-error
+            (list (format "job interrupted: %s"
+                          (agent-scheme--control-reason-string reason)))))
+  (when (agent-scheme--eval-context-cancel-requested context)
+    (signal 'agent-scheme-cancelled-error
+            (list (format "job cancelled: %s"
+                          (or (agent-scheme--eval-context-job-id context)
+                              "evaluation"))))))
+
 (defun agent-scheme--context-events (context)
   "Return CONTEXT's event records in emission order."
   (reverse (agent-scheme--eval-context-events context)))
@@ -674,6 +718,8 @@ SEEN prevents infinite recursion over cyclic host structures."
        maximum-events))
     (cl-incf (agent-scheme--eval-context-event-count context))
     (push event (agent-scheme--eval-context-events context))
+    (when-let ((hook (agent-scheme--eval-context-event-hook context)))
+      (funcall hook event context))
     event))
 
 (defun agent-scheme--values-list (value)

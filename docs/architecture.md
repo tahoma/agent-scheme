@@ -182,6 +182,7 @@ The agent layer provides self-scripting facilities as Scheme-readable data:
 - `(agent memory)` scoped memory
 - `(agent plan)` plans
 - `(agent approval)` approval requests
+- `(agent job)` long-running work, cancellation, and streaming yields
 - `(agent debugger)` condition, stack, environment, and restart datums
 - `(agent reflect)` runtime reflection
 - `(agent context)` request and project context
@@ -430,6 +431,7 @@ Agent interaction libraries live under `agent`:
 (agent memory)
 (agent plan)
 (agent approval)
+(agent job)
 (agent diff)
 (agent debugger)
 (agent reflect)
@@ -676,7 +678,8 @@ Example events:
 The outer agent loop, native REPL buffers, audit buffers, and MCP responses
 should preserve event records as Scheme-readable data.  The current Emacs
 bootstrap registers `(agent io)` and records emitted events as `agent-event`
-audit datums; named session event storage can layer on top of those records.
+audit datums.  The `(agent job)` layer streams those same event records from
+running jobs before the final evaluation result is available.
 
 ## Policy for Standard Libraries
 
