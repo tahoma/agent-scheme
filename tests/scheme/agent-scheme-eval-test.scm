@@ -6,7 +6,14 @@
 (import (scheme base)
         (scheme file)
         (scheme write)
-        (agent-scheme eval))
+        (agent-scheme eval)
+        (only (agent-scheme runtime)
+              audit-process-capability-result!
+              authorize-process-capability
+              context-audit-events
+              new-eval-context
+              process-capability-handle
+              process-port-capability-handle))
 
 ;; Shared evaluator behavior runs through agent-scheme-fixture-test.scm. This
 ;; file keeps portable evaluator API and bootstrap invariants close to the R7RS
@@ -948,6 +955,52 @@
              (symlinks resolve-within-root))
       (expires never)))))
 
+;; First-class process grants are host-neutral request/decision vocabulary.
+;; Host adapters decide whether to connect the authorization to a real child
+;; process; the portable runtime owns the datum shape and grant matching.
+(define process-grant-options
+  '((policy-actions
+     (command-process . allow)
+     (emacs-read-only . allow))
+    (capability-grants
+     (capability-grant
+      (id portable-process-grant)
+      (domain process)
+      (operations spawn observe output input terminate)
+      (scope (command "portable-process")
+             (working-directory "/tmp")
+             (environment ("OPENAI_API_KEY")))
+      (expires never)))))
+
+;; Process grant without policy allow action proves policy still gates spawns.
+(define process-grant-without-policy-options
+  '((capability-grants
+     (capability-grant
+      (id portable-process-grant)
+      (domain process)
+      (operations spawn)
+      (scope (command "portable-process"))
+      (expires never)))))
+
+;; Process request resource with secrets exercises redaction in audit events.
+(define portable-process-resource
+  '((command "portable-process")
+    (arguments ("--token=sk-portable-process1234567890"))
+    (cwd "/tmp")
+    (environment (("OPENAI_API_KEY" "sk-portable-env1234567890")))))
+
+;; Process request resource that reaches policy without secret-bearing fields.
+(define portable-process-policy-resource
+  '((command "portable-process")
+    (arguments ())
+    (cwd "/tmp")))
+
+;; Process request resource whose command intentionally misses grant scope.
+(define portable-process-command-mismatch-resource
+  '((command "other-process")
+    (arguments ())
+    (cwd "/tmp")))
+
 ;; First-class file grants for host-backed file port reads and creations.
 (define file-port-grant-options
   '((include-directory . "/tmp")
@@ -1272,6 +1325,127 @@
               (equal? (field-value audit 'result) '(ok deleted))
               #t)
          #t))
+
+(let* ((context (new-eval-context process-grant-options))
+       (authorization
+        (authorize-process-capability
+         '(portable process)
+         "process-start!"
+         context
+         'spawn
+         portable-process-resource
+         '("portable-process")))
+       (_audit
+        (audit-process-capability-result!
+         context
+         authorization
+         '(handle process-job h-portable-1)
+         #f))
+       (events (context-audit-events context))
+       (request (find-event-with-field
+                 events 'capability-request 'domain 'process))
+       (decision (find-event-with-field
+                  events 'capability-decision 'domain 'process))
+       (policy (find-event-with-field
+                events 'policy-decision 'category 'command-process))
+       (audit (find-event-with-field
+               events 'capability-audit 'domain 'process))
+       (external (agent-scheme-result->external (list 'events events))))
+  (check 'portable-process-capability-authorizes-and-audits
+         (and request
+              decision
+              policy
+              audit
+              (equal? (field-value request 'operation) 'spawn)
+              (equal? (field-value decision 'status) 'approved)
+              (equal? (field-value decision 'grant) 'portable-process-grant)
+              (equal? (field-value policy 'decision) 'allowed)
+              (equal? (field-value audit 'result)
+                      '(ok (handle process-job h-portable-1)))
+              (not (string-contains? external "sk-portable-process"))
+              (not (string-contains? external "sk-portable-env"))
+              #t)
+         #t))
+
+(let* ((context (new-eval-context process-grant-without-policy-options))
+       (raised
+        (raises?
+         (lambda ()
+           (authorize-process-capability
+            '(portable process)
+            "process-start!"
+            context
+            'spawn
+            portable-process-policy-resource
+            '("portable-process")))))
+       (events (context-audit-events context))
+       (decision (find-event-with-field
+                  events 'capability-decision 'domain 'process))
+       (policy (find-event-with-field
+                events 'policy-decision 'category 'command-process)))
+  (check 'portable-process-capability-denies-without-policy
+         (and raised
+              decision
+              policy
+              (equal? (field-value decision 'status) 'denied)
+              (equal? (field-value policy 'decision) 'denied)
+              #t)
+         #t))
+
+(let* ((context (new-eval-context process-grant-options))
+       (raised
+        (raises?
+         (lambda ()
+           (authorize-process-capability
+            '(portable process)
+            "process-start!"
+            context
+            'spawn
+            portable-process-command-mismatch-resource
+            '("portable-process")))))
+       (events (context-audit-events context))
+       (decision (find-event-with-field
+                  events 'capability-decision 'domain 'process)))
+  (check 'portable-process-capability-denies-command-mismatch
+         (and raised
+              decision
+              (equal? (field-value decision 'status) 'denied)
+              (equal? (field-value decision 'grant) 'none)
+              #t)
+         #t))
+
+(check 'portable-process-capability-handle-datums
+       (list
+        (process-capability-handle
+         'h-portable-1
+         '((command "portable-process") (arguments ("--safe")))
+         'portable-process-grant
+         'live)
+        (process-port-capability-handle
+         'p-portable-1
+         'textual-input
+         'h-portable-1
+         '(read close)
+         'portable-process-grant
+         '()
+         'open))
+       '((handle
+          (id h-portable-1)
+          (kind process-job)
+          (domain process)
+          (command "portable-process")
+          (arguments ("--safe"))
+          (grant portable-process-grant)
+          (status live))
+         (port-capability
+          (id p-portable-1)
+          (kind textual-input)
+          (backing process)
+          (operations read close)
+          (grant portable-process-grant)
+          (limits)
+          (path h-portable-1)
+          (status open))))
 
 (write-host-test-file port-test-input-path "abc")
 (if (file-exists? port-test-output-path)

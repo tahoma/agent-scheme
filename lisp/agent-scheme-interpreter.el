@@ -3374,7 +3374,7 @@ DESCRIPTION names the primitive for errors."
 (defun agent-scheme--write-text-to-port (text port description &optional context)
   "Append TEXT to textual output PORT for DESCRIPTION."
   (let ((output (agent-scheme--expect-textual-output-port port description)))
-    (unless (memq (agent-scheme--port-medium output) '(string file))
+    (unless (memq (agent-scheme--port-medium output) '(string file process))
       (agent-scheme--eval-error
        "%s host textual output ports are not available" description))
     (agent-scheme--port-capability-check output context 'write)
@@ -3596,7 +3596,7 @@ DESCRIPTION names the primitive for errors."
   "Return next character code from textual input PORT.
 Advance when ADVANCEP is non-nil.  Signal errors using DESCRIPTION."
   (let ((input (agent-scheme--expect-textual-input-port port description)))
-    (unless (memq (agent-scheme--port-medium input) '(string file))
+    (unless (memq (agent-scheme--port-medium input) '(string file process))
       (agent-scheme--eval-error
        "%s host textual input ports are not available" description))
     (agent-scheme--port-capability-check input context 'read)
@@ -3654,7 +3654,7 @@ Advance when ADVANCEP is non-nil.  Signal errors using DESCRIPTION."
     (cond
      ((null port)
       (if (zerop count) "" agent-scheme-eof-object))
-     ((not (memq (agent-scheme--port-medium port) '(string file)))
+     ((not (memq (agent-scheme--port-medium port) '(string file process)))
       (agent-scheme--eval-error
        "read-string host textual input ports are not available"))
      (t
@@ -3679,7 +3679,7 @@ Advance when ADVANCEP is non-nil.  Signal errors using DESCRIPTION."
                  (agent-scheme--current-input-port-or-deny
                   context "read-line"))
                "read-line")))
-      (unless (memq (agent-scheme--port-medium port) '(string file))
+      (unless (memq (agent-scheme--port-medium port) '(string file process))
         (agent-scheme--eval-error
          "read-line host textual input ports are not available"))
       (agent-scheme--port-capability-check port context 'read)
