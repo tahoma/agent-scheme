@@ -466,6 +466,7 @@ batch mode unless tests or callers install an explicit confirmation function.
 | `pure-r7rs` | `allow` | Ordinary Scheme evaluation remains available under resource budgets. |
 | `emacs-read-only` | `allow` | Current buffer, buffer text, project root, documentation, and other observation capabilities are still audited. |
 | `buffer-edit` | `confirm` | `(emacs buffer edit)` exposes `buffer-insert!`, `buffer-delete!`, `buffer-replace!`, and `buffer-save!`; each requires a matching capability grant and approval by default. |
+| `vcs-mutation` | `confirm` | `(emacs vcs mutation)` exposes `vcs-stage!`, `vcs-unstage!`, `vcs-commit!`, `vcs-branch-create!`, `vcs-switch!`, `vcs-fetch!`, `vcs-pull!`, and `vcs-push!`; each call also requires a shared VCS grant or approval record before Git changes repository state or contacts a remote. Credentialed remote-looking input is rejected and represented only as redacted request data in adapter-owned VCS audit records. |
 | `window-session` | `confirm` | `(emacs buffer)` and `(emacs window)` expose `buffer-switch!`, `window-select!`, `window-split!`, and safe `window-delete!`; mutating session capabilities require matching grants by default. |
 | `command-process` | `confirm` | `(emacs command)` exposes `command-call!` for user-customizable whitelisted commands, and `(emacs project)` exposes compile helpers; direct shell/process launch remains out of scope unless a whitelisted capability and policy decision allow it. |
 | `standard-host-effect` | `allow` | Host-effecting standard Scheme procedures still require their narrower path or session policy, such as `:file-paths`; without that grant they deny and audit. |
@@ -598,7 +599,8 @@ policy-gated capability family. `(emacs vcs)` is the first read-only adapter
 surface over that contract, with procedures such as `vcs-root`, `vcs-branch`,
 `vcs-status`, `vcs-diff`, `vcs-recent-commits`, and `vcs-yield`; it does not
 export stage, commit, branch creation, fetch, pull, push, or other mutating
-repository operations.
+repository operations. `(emacs vcs mutation)` is the separate Emacs mutation
+surface for policy-gated repository changes and remote intents.
 
 ## Threat Model
 

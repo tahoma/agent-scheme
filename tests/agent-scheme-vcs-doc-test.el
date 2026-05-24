@@ -99,4 +99,31 @@
        "Repository mutation, including stage, commit, branch creation, fetch, pull, and")
       readme))))
 
+(ert-deftest agent-scheme-vcs-doc-test-covers-emacs-mutation-adapter ()
+  "Ensure mutating Emacs VCS operations document their authority boundary."
+  (let ((architecture
+         (agent-scheme-vcs-doc-test--read "docs/architecture.md"))
+        (readme
+         (agent-scheme-vcs-doc-test--read "README.md"))
+        (doc
+         (agent-scheme-vcs-doc-test--read "docs/vcs-capability.md")))
+    (dolist (needle
+             '("(emacs vcs mutation)"
+               "vcs-stage!"
+               "vcs-unstage!"
+               "vcs-commit!"
+               "vcs-branch-create!"
+               "vcs-switch!"
+               "vcs-fetch!"
+               "vcs-pull!"
+               "vcs-push!"))
+      (should (string-match-p (regexp-quote needle) readme))
+      (should (string-match-p (regexp-quote needle) doc)))
+    (dolist (needle
+             '("vcs-mutation"
+               "VCS grant or approval"
+               "credentialed remote"))
+      (should (string-match-p (regexp-quote needle) architecture))
+      (should (string-match-p (regexp-quote needle) doc)))))
+
 ;;; agent-scheme-vcs-doc-test.el ends here

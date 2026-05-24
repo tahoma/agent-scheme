@@ -14,6 +14,7 @@
 (require 'seq)
 (require 'subr-x)
 (require 'vc)
+(require 'agent-scheme-audit)
 (require 'agent-scheme-result)
 (require 'agent-scheme-runtime)
 
@@ -21,6 +22,9 @@
   "Git executable used by the read-only Emacs VCS adapter."
   :type 'string
   :group 'agent-scheme)
+
+(defvar agent-scheme--next-vcs-capability-request-number 0
+  "Next numeric suffix for generated VCS capability request ids.")
 
 (defun agent-scheme-vcs--symbol (name)
   "Return NAME as an Agent Scheme symbol datum."
@@ -35,6 +39,17 @@
     (t
      (format "%S" name)))))
 
+(defun agent-scheme-vcs--name (value)
+  "Return VALUE as a plain symbol/string name, or nil."
+  (cond
+   ((agent-scheme-symbol-p value)
+    (agent-scheme-symbol-name value))
+   ((symbolp value)
+    (symbol-name value))
+   ((stringp value)
+    value)
+   (t nil)))
+
 (defun agent-scheme-vcs--field (name &rest values)
   "Return a Scheme-readable VCS field named NAME with VALUES."
   (cons (agent-scheme-vcs--symbol name) values))
@@ -47,6 +62,10 @@
 (defun agent-scheme-vcs--boolean (value)
   "Return VALUE as an Agent Scheme boolean datum."
   (if value agent-scheme-true agent-scheme-false))
+
+(defun agent-scheme-vcs--false-p (value)
+  "Return non-nil when VALUE represents Scheme false or absence."
+  (or (null value) (eq value agent-scheme-false)))
 
 (defun agent-scheme-vcs--maybe-string (value)
   "Return VALUE as a plain string datum, or #f when VALUE is nil."
@@ -74,6 +93,152 @@
   (list (agent-scheme-vcs--symbol "vcs-outcome")
         (agent-scheme-vcs--field "status" (agent-scheme-vcs--symbol status))
         (agent-scheme-vcs--field "message" message)))
+
+(defconst agent-scheme-vcs--read-only-operations
+  '("status" "refs" "branches" "commit-summary" "diff-summary" "remotes"
+    "operation-state")
+  "Read-only VCS operation names.")
+
+(defconst agent-scheme-vcs--mutating-operations
+  '("stage" "unstage" "commit" "branch-create" "branch-delete" "checkout"
+    "switch" "fetch" "pull" "push" "merge" "rebase" "cherry-pick" "revert"
+    "reset")
+  "Mutating VCS operation names.")
+
+(defconst agent-scheme-vcs--remote-operations
+  '("fetch" "pull" "push")
+  "VCS operation names that communicate with remotes.")
+
+(defun agent-scheme-vcs--read-only-operation-p (operation)
+  "Return non-nil when OPERATION is a read-only VCS operation."
+  (member (agent-scheme-vcs--name operation)
+          agent-scheme-vcs--read-only-operations))
+
+(defun agent-scheme-vcs--mutating-operation-p (operation)
+  "Return non-nil when OPERATION is a mutating VCS operation."
+  (member (agent-scheme-vcs--name operation)
+          agent-scheme-vcs--mutating-operations))
+
+(defun agent-scheme-vcs--remote-operation-p (operation)
+  "Return non-nil when OPERATION communicates with a remote."
+  (member (agent-scheme-vcs--name operation)
+          agent-scheme-vcs--remote-operations))
+
+(defun agent-scheme-vcs--operation-authority (operation)
+  "Return the authority family required for OPERATION."
+  (cond
+   ((agent-scheme-vcs--read-only-operation-p operation) "read-only-observation")
+   ((agent-scheme-vcs--remote-operation-p operation) "remote-mutation")
+   ((agent-scheme-vcs--mutating-operation-p operation) "repository-mutation")
+   (t "unknown")))
+
+(defun agent-scheme-vcs--request-id ()
+  "Return a fresh VCS capability request id."
+  (agent-scheme-vcs--symbol
+   (format "req-vcs-%d"
+           (cl-incf agent-scheme--next-vcs-capability-request-number))))
+
+(defun agent-scheme-vcs-capability-request
+    (id operation authority arguments)
+  "Return a VCS capability request datum."
+  (list (agent-scheme-vcs--symbol "vcs-capability-request")
+        (agent-scheme-vcs--field "id" id)
+        (agent-scheme-vcs--field "operation"
+                                 (agent-scheme-vcs--symbol operation))
+        (agent-scheme-vcs--field "authority"
+                                 (agent-scheme-vcs--symbol authority))
+        (agent-scheme-vcs--field "arguments" arguments)
+        (agent-scheme-vcs--field
+         "required-authority"
+         (agent-scheme-vcs--symbol
+          (agent-scheme-vcs--operation-authority operation)))
+        (agent-scheme-vcs--field
+         "remote?" (agent-scheme-vcs--boolean
+                    (agent-scheme-vcs--remote-operation-p operation)))
+        (agent-scheme-vcs--field
+         "mutating?" (agent-scheme-vcs--boolean
+                      (agent-scheme-vcs--mutating-operation-p operation)))))
+
+(defun agent-scheme-vcs-capability-result (id status value)
+  "Return a VCS capability result datum."
+  (list (agent-scheme-vcs--symbol "vcs-capability-result")
+        (agent-scheme-vcs--field "id" id)
+        (agent-scheme-vcs--field "status" (agent-scheme-vcs--symbol status))
+        (agent-scheme-vcs--field "value" value)))
+
+(defun agent-scheme-vcs-capability-decision
+    (request status grant approval reason)
+  "Return a VCS capability decision datum."
+  (let* ((operation (agent-scheme-vcs-field-value request "operation"))
+         (authority (agent-scheme-vcs--operation-authority operation)))
+    (list
+     (agent-scheme-vcs--symbol "vcs-capability-decision")
+     (agent-scheme-vcs--field
+      "id" (agent-scheme-vcs-field-value request "id"))
+     (agent-scheme-vcs--field "operation" operation)
+     (agent-scheme-vcs--field "authority"
+                              (agent-scheme-vcs--symbol authority))
+     (agent-scheme-vcs--field
+      "requested-authority"
+      (agent-scheme-vcs-field-value request "authority"))
+     (agent-scheme-vcs--field "status" (agent-scheme-vcs--symbol status))
+     (agent-scheme-vcs--field
+      "grant" (if grant
+                  (agent-scheme-vcs-field-value grant "id")
+                agent-scheme-false))
+     (agent-scheme-vcs--field
+      "approval" (if approval
+                     (agent-scheme-vcs-field-value approval "id")
+                   agent-scheme-false))
+     (agent-scheme-vcs--field "reason" reason)
+     (agent-scheme-vcs--field
+      "remote?" (agent-scheme-vcs--boolean
+                 (agent-scheme-vcs--remote-operation-p operation))))))
+
+(defun agent-scheme-vcs-capability-decision-status (decision)
+  "Return DECISION's status name."
+  (agent-scheme-vcs--name
+   (agent-scheme-vcs-field-value decision "status")))
+
+(defun agent-scheme-vcs--result-outcome-status (result)
+  "Return RESULT's VCS outcome status name, or nil."
+  (let ((value (agent-scheme-vcs-field-value result "value")))
+    (when (agent-scheme-vcs--record-p value "vcs-outcome")
+      (agent-scheme-vcs--name
+       (agent-scheme-vcs-field-value value "status")))))
+
+(defun agent-scheme-vcs-capability-audit (request decision result)
+  "Return a VCS capability audit datum."
+  (let ((operation (agent-scheme-vcs-field-value request "operation")))
+    (list (agent-scheme-vcs--symbol "vcs-capability-audit")
+          (agent-scheme-vcs--field "event"
+                                   (agent-scheme-vcs--symbol
+                                    "vcs-capability-audit"))
+          (agent-scheme-vcs--field
+           "id" (agent-scheme-vcs-field-value request "id"))
+          (agent-scheme-vcs--field "operation" operation)
+          (agent-scheme-vcs--field
+           "authority"
+           (agent-scheme-vcs--symbol
+            (agent-scheme-vcs--operation-authority operation)))
+          (agent-scheme-vcs--field
+           "remote?" (agent-scheme-vcs--boolean
+                      (agent-scheme-vcs--remote-operation-p operation)))
+          (agent-scheme-vcs--field
+           "remote"
+           (or (agent-scheme-vcs--request-argument request "remote")
+               agent-scheme-false))
+          (agent-scheme-vcs--field
+           "decision"
+           (agent-scheme-vcs-field-value decision "status"))
+          (agent-scheme-vcs--field
+           "result" (agent-scheme-vcs-field-value result "status"))
+          (agent-scheme-vcs--field
+           "outcome"
+           (or (and-let* ((status (agent-scheme-vcs--result-outcome-status
+                                   result)))
+                 (agent-scheme-vcs--symbol status))
+               agent-scheme-false)))))
 
 (defun agent-scheme-vcs-repository (system root identity)
   "Return a repository identity/root datum."
@@ -184,9 +349,44 @@
                (agent-scheme-vcs--options-list options "VCS options"))))
     (cadr entry)))
 
+(defun agent-scheme-vcs--option-values (options name)
+  "Return all values for option NAME from OPTIONS."
+  (if-let ((entry
+            (seq-find
+             (lambda (field)
+               (and (consp field)
+                    (equal (agent-scheme--symbol-name (car field)) name)))
+             (agent-scheme-vcs--options-list options "VCS options"))))
+      (cdr entry)
+    nil))
+
 (defun agent-scheme-vcs--scheme-true-p (value)
   "Return non-nil when VALUE is Scheme truth."
   (not (or (null value) (eq value agent-scheme-false))))
+
+(defun agent-scheme-vcs--option-datum-list (options name)
+  "Return option NAME as a proper datum list."
+  (let ((values (agent-scheme-vcs--option-values options name)))
+    (cond
+     ((null values) nil)
+     ((and (= (length values) 1)
+           (listp (car values))
+           (not (agent-scheme-symbol-p (car values))))
+      (agent-scheme--proper-list-elements
+       (car values) (format "VCS option %s" name)))
+     (t values))))
+
+(defun agent-scheme-vcs--option-string-list (options name)
+  "Return option NAME as a list of strings."
+  (mapcar
+   (lambda (value)
+     (unless (stringp value)
+       (agent-scheme--eval-error
+        "VCS option %s expected strings, got %s"
+        name
+        (agent-scheme-value->external value)))
+     (substring-no-properties value))
+   (agent-scheme-vcs--option-datum-list options name)))
 
 (defun agent-scheme-vcs--option-string (options name)
   "Return string option NAME from OPTIONS, or nil when absent."
@@ -197,6 +397,123 @@
        name
        (agent-scheme-value->external value)))
     (substring-no-properties value)))
+
+(defun agent-scheme-vcs--request-argument (request name)
+  "Return REQUEST argument NAME, or nil."
+  (when-let ((arguments (agent-scheme-vcs-field-value request "arguments")))
+    (when-let ((entry
+                (seq-find
+                 (lambda (field)
+                   (and (consp field)
+                        (equal (agent-scheme-vcs--name (car field)) name)))
+                 arguments)))
+      (cadr entry))))
+
+(defun agent-scheme-vcs--operation-covered-p (operation operations)
+  "Return non-nil when OPERATIONS covers OPERATION."
+  (let ((operation-name (agent-scheme-vcs--name operation)))
+    (cond
+     ((equal (agent-scheme-vcs--name operations) "all") t)
+     ((listp operations)
+      (seq-some
+       (lambda (candidate)
+         (or (equal (agent-scheme-vcs--name candidate) operation-name)
+             (equal (agent-scheme-vcs--name candidate) "all")))
+       operations))
+     (t
+      (equal (agent-scheme-vcs--name operations) operation-name)))))
+
+(defun agent-scheme-vcs--scope-matches-p (scope value)
+  "Return non-nil when SCOPE matches VALUE."
+  (or (agent-scheme-vcs--false-p scope)
+      (equal (agent-scheme-vcs--name scope) "all")
+      (equal scope value)
+      (and (agent-scheme-vcs--name scope)
+           (equal (agent-scheme-vcs--name scope)
+                  (agent-scheme-vcs--name value)))))
+
+(defun agent-scheme-vcs--grant-allows-p (request grant)
+  "Return non-nil when VCS GRANT authorizes REQUEST."
+  (let* ((operation (agent-scheme-vcs-field-value request "operation"))
+         (required-authority
+          (agent-scheme-vcs--operation-authority operation))
+         (grant-authority
+          (agent-scheme-vcs--name
+           (agent-scheme-vcs-field-value grant "authority"))))
+    (and (or (equal grant-authority required-authority)
+             (equal grant-authority "all"))
+         (agent-scheme-vcs--operation-covered-p
+          operation
+          (agent-scheme-vcs-field-value grant "operations"))
+         (agent-scheme-vcs--scope-matches-p
+          (agent-scheme-vcs-field-value grant "repository")
+          (agent-scheme-vcs--request-argument request "repository"))
+         (agent-scheme-vcs--scope-matches-p
+          (agent-scheme-vcs-field-value grant "remote")
+          (agent-scheme-vcs--request-argument request "remote")))))
+
+(defun agent-scheme-vcs--find-grant (request grants)
+  "Return the first VCS grant in GRANTS that authorizes REQUEST."
+  (seq-find
+   (lambda (grant)
+     (and (agent-scheme-vcs--record-p grant "vcs-capability-grant")
+          (agent-scheme-vcs--grant-allows-p request grant)))
+   grants))
+
+(defun agent-scheme-vcs--approval-allows-p (request approval)
+  "Return non-nil when APPROVAL authorizes REQUEST."
+  (and (agent-scheme-vcs--record-p approval "vcs-approval-decision")
+       (equal (agent-scheme-vcs-field-value request "id")
+              (agent-scheme-vcs-field-value approval "request-id"))
+       (equal (agent-scheme-vcs--name
+               (agent-scheme-vcs-field-value approval "status"))
+              "approved")))
+
+(defun agent-scheme-vcs--find-approval (request approvals)
+  "Return the first VCS approval in APPROVALS that authorizes REQUEST."
+  (seq-find
+   (lambda (approval)
+     (agent-scheme-vcs--approval-allows-p request approval))
+   approvals))
+
+(defun agent-scheme-vcs-authorize-capability-request
+    (request grants approvals)
+  "Return a fail-closed VCS authorization decision for REQUEST."
+  (let* ((operation (agent-scheme-vcs-field-value request "operation"))
+         (operation-name (agent-scheme-vcs--name operation))
+         (required-authority
+          (agent-scheme-vcs--operation-authority operation-name))
+         (requested-authority
+          (agent-scheme-vcs--name
+           (agent-scheme-vcs-field-value request "authority"))))
+    (cond
+     ((agent-scheme-vcs--read-only-operation-p operation-name)
+      (agent-scheme-vcs-capability-decision
+       request 'approved nil nil "read-only observation"))
+     ((not (agent-scheme-vcs--mutating-operation-p operation-name))
+      (agent-scheme-vcs-capability-decision
+       request 'denied nil nil "unknown VCS operation"))
+     ((not (equal requested-authority required-authority))
+      (agent-scheme-vcs-capability-decision
+       request
+       'denied
+       nil
+       nil
+       "requested VCS authority does not match operation"))
+     (t
+      (if-let ((grant (agent-scheme-vcs--find-grant request grants)))
+          (agent-scheme-vcs-capability-decision
+           request 'approved grant nil "authorized by VCS grant")
+        (if-let ((approval (agent-scheme-vcs--find-approval
+                            request approvals)))
+            (agent-scheme-vcs-capability-decision
+             request 'approved nil approval "authorized by VCS approval")
+          (agent-scheme-vcs-capability-decision
+           request
+           'denied
+           nil
+           nil
+           "missing VCS mutation grant or approval")))))))
 
 (defun agent-scheme-vcs--working-directory (&optional options)
   "Return the directory used for a VCS observation."
@@ -753,6 +1070,438 @@ Return a plist with `:exit' and `:output', or `:status' when Git is missing."
                       (split-string (plist-get result :output) "\x1e" t))
             nil))
       nil)))
+
+(defun agent-scheme-vcs--safe-relative-path (root path)
+  "Return PATH when it safely names a file under ROOT."
+  (when (or (string-empty-p path)
+            (file-name-absolute-p path)
+            (file-remote-p path))
+    (agent-scheme--eval-error
+     "VCS path must be a local repository-relative path: %s" path))
+  (let ((expanded (expand-file-name path root)))
+    (unless (file-in-directory-p expanded root)
+      (agent-scheme--eval-error
+       "VCS path escapes repository root: %s" path))
+    path))
+
+(defun agent-scheme-vcs--mutation-paths (root options)
+  "Return validated repository-relative mutation paths from OPTIONS."
+  (let ((paths (agent-scheme-vcs--option-string-list options "paths")))
+    (unless paths
+      (agent-scheme--eval-error "VCS mutation requires at least one path"))
+    (mapcar
+     (lambda (path)
+       (agent-scheme-vcs--safe-relative-path root path))
+     paths)))
+
+(defun agent-scheme-vcs--unsafe-remote-name-p (remote)
+  "Return non-nil when REMOTE looks like a URL, credential, or invalid name."
+  (or (string-empty-p remote)
+      (string-match-p "://" remote)
+      (string-match-p "@" remote)
+      (string-match-p "[[:space:]]" remote)))
+
+(defun agent-scheme-vcs--unsafe-ref-name-p (name)
+  "Return non-nil when NAME is unsafe for a branch/ref argument."
+  (or (string-empty-p name)
+      (string-prefix-p "-" name)
+      (string-match-p "[[:space:]]" name)
+      (string-match-p "\\.\\." name)
+      (string-match-p "[~^:?*\\[]" name)
+      (string-match-p "\\\\" name)
+      (string-match-p "@{" name)
+      (string-match-p "//" name)
+      (string-suffix-p "/" name)
+      (string-suffix-p ".lock" name)))
+
+(defun agent-scheme-vcs--required-string-option (options name operation)
+  "Return required string option NAME for OPERATION."
+  (let ((value (agent-scheme-vcs--option-string options name)))
+    (unless (and value (not (string-empty-p (string-trim value))))
+      (agent-scheme--eval-error
+       "VCS %s requires non-empty %s option"
+       operation
+       name))
+    value))
+
+(defun agent-scheme-vcs--mutation-grants (options)
+  "Return VCS grants from OPTIONS."
+  (agent-scheme-vcs--option-datum-list options "grants"))
+
+(defun agent-scheme-vcs--mutation-approvals (options)
+  "Return VCS approvals from OPTIONS."
+  (agent-scheme-vcs--option-datum-list options "approvals"))
+
+(defun agent-scheme-vcs--outcome-result-status (outcome)
+  "Return result status for OUTCOME."
+  (let ((status (agent-scheme-vcs--name
+                 (agent-scheme-vcs-field-value outcome "status"))))
+    (cond
+     ((equal status "ok") 'ok)
+     ((equal status "denied") 'denied)
+     (t 'error))))
+
+(defun agent-scheme-vcs--git-failure-outcome
+    (output &optional remote-operation)
+  "Return a VCS outcome for failed Git OUTPUT."
+  (let ((text (string-trim (or output "")))
+        (case-fold-search t))
+    (cond
+     ((and remote-operation
+           (string-match-p
+            "\\(authentication\\|permission denied\\|could not read username\\)"
+            text))
+      (agent-scheme-vcs-outcome
+       'remote-authentication-failed
+       (if (string-empty-p text)
+           "Remote authentication failed."
+         text)))
+     (remote-operation
+      (agent-scheme-vcs-outcome
+       'remote-unavailable
+       (if (string-empty-p text)
+           "Remote is unavailable."
+         text)))
+     ((string-match-p "\\(conflict\\|unmerged\\)" text)
+      (agent-scheme-vcs-outcome
+       'conflict
+       (if (string-empty-p text)
+           "Repository has conflicts."
+         text)))
+     ((string-match-p "\\(dirty\\|local changes\\)" text)
+      (agent-scheme-vcs-outcome
+       'dirty-index
+       (if (string-empty-p text)
+           "Repository index is dirty."
+         text)))
+     (t
+      (agent-scheme-vcs-outcome
+       'permission-denied
+       (if (string-empty-p text)
+           "Git operation failed."
+         text))))))
+
+(defun agent-scheme-vcs--record-capability-audit
+    (request decision result)
+  "Audit REQUEST, DECISION, and RESULT as a VCS capability event."
+  (let* ((audit
+          (agent-scheme-vcs-capability-audit request decision result))
+         (operation (agent-scheme-vcs-field-value request "operation"))
+         (operation-name (agent-scheme-vcs--name operation))
+         (decision-name (agent-scheme-vcs-capability-decision-status
+                         decision))
+         (result-name
+          (agent-scheme-vcs--name
+           (agent-scheme-vcs-field-value result "status")))
+         (outcome-name (agent-scheme-vcs--result-outcome-status result))
+         (remote-name
+          (or (agent-scheme-vcs--request-argument request "remote")
+              agent-scheme-false)))
+    (agent-scheme-audit-record
+     'vcs-capability-audit
+     `((adapter . emacs-vcs)
+       (audit . ,audit)
+       (operation . ,(intern operation-name))
+       (authority . ,(intern (agent-scheme-vcs--operation-authority
+                              operation-name)))
+       (remote? . ,(if (agent-scheme-vcs--remote-operation-p operation-name)
+                       t
+                     nil))
+       (remote . ,remote-name)
+       (decision . ,(intern decision-name))
+       (result . ,(intern result-name))
+       (outcome . ,(and outcome-name (intern outcome-name)))))))
+
+(defun agent-scheme-vcs--mutation-request
+    (operation authority root arguments)
+  "Return a VCS mutation request for OPERATION and ARGUMENTS."
+  (agent-scheme-vcs-capability-request
+   (agent-scheme-vcs--request-id)
+   operation
+   authority
+   (cons
+    (agent-scheme-vcs--field
+     "repository"
+     (and root (directory-file-name (file-truename root))))
+    arguments)))
+
+(defun agent-scheme-vcs--finish-mutation
+    (request decision outcome)
+  "Build and audit a VCS mutation result for REQUEST and DECISION."
+  (let ((result
+         (agent-scheme-vcs-capability-result
+          (agent-scheme-vcs-field-value request "id")
+          (agent-scheme-vcs--outcome-result-status outcome)
+          outcome)))
+    (agent-scheme-vcs--record-capability-audit request decision result)
+    result))
+
+(defun agent-scheme-vcs--run-authorized-mutation
+    (request options performer)
+  "Authorize REQUEST using OPTIONS, then call PERFORMER when allowed."
+  (let* ((decision
+          (agent-scheme-vcs-authorize-capability-request
+           request
+           (agent-scheme-vcs--mutation-grants options)
+           (agent-scheme-vcs--mutation-approvals options)))
+         (decision-status
+          (agent-scheme-vcs-capability-decision-status decision)))
+    (if (equal decision-status "approved")
+        (funcall performer decision)
+      (agent-scheme-vcs--finish-mutation
+       request
+       decision
+       (agent-scheme-vcs-outcome
+        'denied
+        (agent-scheme-vcs-field-value decision "reason"))))))
+
+(defun agent-scheme-vcs--repository-mutation-result
+    (operation options request-arguments git-arguments success-message)
+  "Return result for repository mutating OPERATION using GIT-ARGUMENTS."
+  (let ((info (agent-scheme-vcs--root-info options)))
+    (pcase (plist-get info :status)
+      ('ok
+       (let* ((root (plist-get info :root))
+              (request
+               (agent-scheme-vcs--mutation-request
+                operation
+                "repository-mutation"
+                root
+                request-arguments)))
+         (agent-scheme-vcs--run-authorized-mutation
+          request
+          options
+          (lambda (decision)
+            (let* ((result
+                    (apply #'agent-scheme-vcs--run-git
+                           root
+                           git-arguments))
+                   (outcome
+                    (if (equal (plist-get result :exit) 0)
+                        (agent-scheme-vcs-outcome 'ok success-message)
+                      (agent-scheme-vcs--git-failure-outcome
+                       (plist-get result :output)))))
+              (agent-scheme-vcs--finish-mutation
+               request decision outcome))))))
+      ('unsupported-vcs
+       (agent-scheme-vcs-capability-result
+        (agent-scheme-vcs--request-id)
+        'error
+        (plist-get info :outcome)))
+      ('git-not-found
+       (agent-scheme-vcs-capability-result
+        (agent-scheme-vcs--request-id)
+        'error
+        (plist-get info :outcome)))
+      (_
+       (agent-scheme-vcs-capability-result
+        (agent-scheme-vcs--request-id)
+        'error
+        (plist-get info :outcome))))))
+
+(defun agent-scheme-vcs--remote-mutation-result
+    (operation options git-arguments success-message)
+  "Return result for remote mutating OPERATION using GIT-ARGUMENTS."
+  (let ((info (agent-scheme-vcs--root-info options)))
+    (pcase (plist-get info :status)
+      ('ok
+       (let* ((root (plist-get info :root))
+              (raw-remote
+               (or (agent-scheme-vcs--option-string options "remote")
+                   "origin"))
+              (unsafe-remote
+               (agent-scheme-vcs--unsafe-remote-name-p raw-remote))
+              (remote
+               (if unsafe-remote "[redacted]" raw-remote))
+              (request
+               (agent-scheme-vcs--mutation-request
+                operation
+                "remote-mutation"
+                root
+                (list (agent-scheme-vcs--field "remote" remote)))))
+         (agent-scheme-vcs--run-authorized-mutation
+          request
+          options
+          (lambda (decision)
+            (let ((outcome
+                   (cond
+                    (unsafe-remote
+                     (agent-scheme-vcs-outcome
+                      'permission-denied
+                      "VCS remote must be a remote name, not a URL."))
+                    ((agent-scheme-vcs--scheme-true-p
+                      (agent-scheme-vcs--option-value
+                       options "live-remote?"))
+                     (let ((result
+                            (apply #'agent-scheme-vcs--run-git
+                                   root
+                                   (append git-arguments (list remote)))))
+                       (if (equal (plist-get result :exit) 0)
+                           (agent-scheme-vcs-outcome
+                            'ok
+                            success-message)
+                         (agent-scheme-vcs--git-failure-outcome
+                          (plist-get result :output)
+                          t))))
+                    (t
+                     (agent-scheme-vcs-outcome
+                      'remote-unavailable
+                      "Live remote VCS operations require explicit live-remote? authority.")))))
+              (agent-scheme-vcs--finish-mutation
+               request decision outcome))))))
+      ('unsupported-vcs
+       (agent-scheme-vcs-capability-result
+        (agent-scheme-vcs--request-id)
+        'error
+        (plist-get info :outcome)))
+      ('git-not-found
+       (agent-scheme-vcs-capability-result
+        (agent-scheme-vcs--request-id)
+        'error
+        (plist-get info :outcome)))
+      (_
+       (agent-scheme-vcs-capability-result
+        (agent-scheme-vcs--request-id)
+        'error
+        (plist-get info :outcome))))))
+
+(defun agent-scheme-vcs--local-mutation-result
+    (operation options git-arguments success-message)
+  "Return result for local mutating OPERATION using GIT-ARGUMENTS."
+  (let ((info (agent-scheme-vcs--root-info options)))
+    (pcase (plist-get info :status)
+      ('ok
+       (let* ((root (plist-get info :root))
+              (paths (agent-scheme-vcs--mutation-paths root options))
+              (request
+               (agent-scheme-vcs--mutation-request
+                operation
+                "repository-mutation"
+                root
+                (list
+                 (agent-scheme-vcs--field "paths" paths)))))
+         (agent-scheme-vcs--run-authorized-mutation
+          request
+          options
+          (lambda (decision)
+            (let* ((result
+                    (apply #'agent-scheme-vcs--run-git
+                           root
+                           (append git-arguments
+                                   '("--")
+                                   paths)))
+                   (outcome
+                    (if (equal (plist-get result :exit) 0)
+                        (agent-scheme-vcs-outcome 'ok success-message)
+                      (agent-scheme-vcs--git-failure-outcome
+                       (plist-get result :output)))))
+              (agent-scheme-vcs--finish-mutation
+               request decision outcome))))))
+      ('unsupported-vcs
+       (agent-scheme-vcs-capability-result
+        (agent-scheme-vcs--request-id)
+        'error
+        (plist-get info :outcome)))
+      ('git-not-found
+       (agent-scheme-vcs-capability-result
+        (agent-scheme-vcs--request-id)
+        'error
+        (plist-get info :outcome)))
+      (_
+       (agent-scheme-vcs-capability-result
+        (agent-scheme-vcs--request-id)
+        'error
+        (plist-get info :outcome))))))
+
+(defun agent-scheme-vcs-stage-datum (&optional options)
+  "Authorize and stage selected paths, returning a VCS result datum."
+  (agent-scheme-vcs--local-mutation-result
+   "stage"
+   options
+   '("add")
+   "Staged selected paths."))
+
+(defun agent-scheme-vcs-unstage-datum (&optional options)
+  "Authorize and unstage selected paths, returning a VCS result datum."
+  (agent-scheme-vcs--local-mutation-result
+   "unstage"
+   options
+   '("reset" "-q" "HEAD")
+   "Unstaged selected paths."))
+
+(defun agent-scheme-vcs-commit-datum (&optional options)
+  "Authorize and commit staged changes, returning a VCS result datum."
+  (let ((message
+         (agent-scheme-vcs--required-string-option
+          options
+          "message"
+          "commit")))
+    (agent-scheme-vcs--repository-mutation-result
+     "commit"
+     options
+     (list (agent-scheme-vcs--field "message" message))
+     (list "commit" "-q" "-m" message)
+     "Committed staged changes.")))
+
+(defun agent-scheme-vcs-branch-create-datum (&optional options)
+  "Authorize and create a branch, returning a VCS result datum."
+  (let ((branch
+         (agent-scheme-vcs--required-string-option
+          options
+          "name"
+          "branch-create")))
+    (when (agent-scheme-vcs--unsafe-ref-name-p branch)
+      (agent-scheme--eval-error
+       "VCS branch name is not safe: %s"
+       branch))
+    (agent-scheme-vcs--repository-mutation-result
+     "branch-create"
+     options
+     (list (agent-scheme-vcs--field "branch" branch))
+     (list "branch" "--" branch)
+     "Created branch.")))
+
+(defun agent-scheme-vcs-switch-datum (&optional options)
+  "Authorize and switch branches, returning a VCS result datum."
+  (let ((branch
+         (agent-scheme-vcs--required-string-option
+          options
+          "branch"
+          "switch")))
+    (when (agent-scheme-vcs--unsafe-ref-name-p branch)
+      (agent-scheme--eval-error
+       "VCS branch name is not safe: %s"
+       branch))
+    (agent-scheme-vcs--repository-mutation-result
+     "switch"
+     options
+     (list (agent-scheme-vcs--field "branch" branch))
+     (list "switch" "--" branch)
+     "Switched branch.")))
+
+(defun agent-scheme-vcs-fetch-datum (&optional options)
+  "Authorize a fetch intent without contacting a live remote by default."
+  (agent-scheme-vcs--remote-mutation-result
+   "fetch"
+   options
+   '("fetch")
+   "Fetched from remote."))
+
+(defun agent-scheme-vcs-pull-datum (&optional options)
+  "Authorize a pull intent without contacting a live remote by default."
+  (agent-scheme-vcs--remote-mutation-result
+   "pull"
+   options
+   '("pull")
+   "Pulled from remote."))
+
+(defun agent-scheme-vcs-push-datum (&optional options)
+  "Authorize a push intent without contacting a live remote by default."
+  (agent-scheme-vcs--remote-mutation-result
+   "push"
+   options
+   '("push")
+   "Pushed to remote."))
 
 (provide 'agent-scheme-vcs)
 

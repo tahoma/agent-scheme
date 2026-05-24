@@ -12,6 +12,7 @@
 (require 'seq)
 (require 'agent-scheme-audit)
 (require 'agent-scheme-eval)
+(require 'agent-scheme-policy)
 (require 'agent-scheme-result)
 
 (defun agent-scheme-vcs-test--external (source)
@@ -43,6 +44,13 @@
       snippets))
    (agent-scheme-vcs-test--audit-strings)))
 
+(defun agent-scheme-vcs-test--actions (overrides)
+  "Return policy category actions with OVERRIDES applied."
+  (append overrides
+          (seq-remove
+           (lambda (entry) (assq (car entry) overrides))
+           agent-scheme-policy-category-actions)))
+
 (defun agent-scheme-vcs-test--write-file (path text)
   "Write TEXT to PATH, creating parent directories."
   (make-directory (file-name-directory path) t)
@@ -63,6 +71,18 @@
           (error "git %S failed with %S: %s"
                  arguments status (buffer-string))))
       (buffer-string))))
+
+(defun agent-scheme-vcs-test--cached-files (root)
+  "Return staged file names in ROOT."
+  (split-string
+   (agent-scheme-vcs-test--git root "diff" "--cached" "--name-only")
+   "\n"
+   t))
+
+(defun agent-scheme-vcs-test--current-branch (root)
+  "Return the current branch name in ROOT."
+  (string-trim
+   (agent-scheme-vcs-test--git root "branch" "--show-current")))
 
 (defun agent-scheme-vcs-test--make-git-repo ()
   "Return a temporary Git repository with one modified tracked file."
@@ -371,6 +391,381 @@
                      "vcs-diff"
                      "vcs-recent-commits"
                      "vcs-yield")))))
+
+(ert-deftest agent-scheme-vcs-test-emacs-vcs-mutation-imports-separate-bindings ()
+  "The mutating VCS adapter surface is separate from read-only observations."
+  (should
+   (equal
+    (agent-scheme-vcs-test--external
+     "(import (scheme base) (emacs vcs mutation))
+      (list (procedure? vcs-stage!)
+            (procedure? vcs-unstage!)
+            (procedure? vcs-commit!)
+            (procedure? vcs-branch-create!)
+            (procedure? vcs-switch!)
+            (procedure? vcs-fetch!)
+            (procedure? vcs-pull!)
+            (procedure? vcs-push!))")
+    "(#t #t #t #t #t #t #t #t)"))
+  (let ((read-only-names
+         (mapcar
+          (lambda (spec) (plist-get spec :name))
+          (seq-filter
+           (lambda (spec)
+             (equal (plist-get spec :library) "(emacs vcs)"))
+           (agent-scheme-emacs-capability-binding-specs))))
+        (mutation-names
+         (mapcar
+          (lambda (spec) (plist-get spec :name))
+          (seq-filter
+           (lambda (spec)
+             (equal (plist-get spec :library) "(emacs vcs mutation)"))
+           (agent-scheme-emacs-capability-binding-specs)))))
+    (should (equal read-only-names
+                   '("vcs-root"
+                     "vcs-branch"
+                     "vcs-status"
+                     "vcs-diff"
+                     "vcs-recent-commits"
+                     "vcs-yield")))
+    (should (equal mutation-names
+                   '("vcs-stage!"
+                     "vcs-unstage!"
+                     "vcs-commit!"
+                     "vcs-branch-create!"
+                     "vcs-switch!"
+                     "vcs-fetch!"
+                     "vcs-pull!"
+                     "vcs-push!")))))
+
+(ert-deftest agent-scheme-vcs-test-emacs-vcs-stage-denies-without-vcs-authority ()
+  "Stage requests fail closed without a VCS grant or approval."
+  (let ((agent-scheme-policy-category-actions
+         (agent-scheme-vcs-test--actions '((vcs-mutation . allow))))
+        (root (agent-scheme-vcs-test--make-git-repo)))
+    (unwind-protect
+        (agent-scheme-vcs-test--with-project-root root
+          (agent-scheme-audit-clear)
+          (should
+           (equal
+            (agent-scheme-vcs-test--external
+             "(import (scheme base) (agent vcs) (emacs vcs mutation))
+              (define result
+                (vcs-stage! '((paths (\"src/main.scm\")))))
+              (define outcome (vcs-field-value result 'value #f))
+              (list
+               (vcs-field-value result 'status #f)
+               (vcs-outcome-status outcome)
+               (vcs-field-value outcome 'message #f))")
+            "(denied denied \"missing VCS mutation grant or approval\")"))
+          (should (equal (agent-scheme-vcs-test--cached-files root) nil))
+          (should
+           (agent-scheme-vcs-test--audit-entry-matching
+            "(event vcs-capability-audit)"
+            "(operation stage)"
+            "(decision denied)"
+            "(outcome denied)")))
+      (delete-directory root t))))
+
+(ert-deftest agent-scheme-vcs-test-emacs-vcs-stage-denies-by-host-policy ()
+  "Host policy denial stops a VCS mutation before Git changes the index."
+  (let ((agent-scheme-policy-category-actions
+         (agent-scheme-vcs-test--actions '((vcs-mutation . deny))))
+        (root (agent-scheme-vcs-test--make-git-repo)))
+    (unwind-protect
+        (agent-scheme-vcs-test--with-project-root root
+          (agent-scheme-audit-clear)
+          (should-error
+           (agent-scheme-vcs-test--external
+            "(import (scheme base)
+                     (agent vcs)
+                     (emacs vcs)
+                     (emacs vcs mutation))
+             (define repository
+               (vcs-field-value (vcs-root) 'root #f))
+             (define grant
+               (make-vcs-capability-grant
+                'grant-local
+                'repository-mutation
+                '(stage)
+                repository
+                #f))
+             (vcs-stage!
+              `((paths (\"src/main.scm\"))
+                (grants (,grant))))")
+           :type 'agent-scheme-policy-error)
+          (should (equal (agent-scheme-vcs-test--cached-files root) nil))
+          (should
+           (agent-scheme-vcs-test--audit-entry-matching
+            "(event capability-call)"
+            "(category vcs-mutation)"
+            "(operation \"vcs-stage!\")"
+            "(decision denied)")))
+      (delete-directory root t))))
+
+(ert-deftest agent-scheme-vcs-test-emacs-vcs-stage-with-grant-mutates-index ()
+  "A scoped VCS grant allows staging selected paths and audits the result."
+  (let ((agent-scheme-policy-category-actions
+         (agent-scheme-vcs-test--actions '((vcs-mutation . allow))))
+        (root (agent-scheme-vcs-test--make-git-repo)))
+    (unwind-protect
+        (agent-scheme-vcs-test--with-project-root root
+          (agent-scheme-audit-clear)
+          (should
+           (equal
+            (agent-scheme-vcs-test--external
+             "(import (scheme base)
+                      (agent vcs)
+                      (emacs vcs)
+                      (emacs vcs mutation))
+              (define repository
+                (vcs-field-value (vcs-root) 'root #f))
+              (define grant
+                (make-vcs-capability-grant
+                 'grant-local
+                 'repository-mutation
+                 '(stage)
+                 repository
+                 #f))
+              (define result
+                (vcs-stage!
+                 `((paths (\"src/main.scm\"))
+                   (grants (,grant)))))
+              (define outcome (vcs-field-value result 'value #f))
+              (list
+               (vcs-field-value result 'status #f)
+               (vcs-outcome-status outcome))")
+            "(ok ok)"))
+          (should (equal (agent-scheme-vcs-test--cached-files root)
+                         '("src/main.scm")))
+          (should
+           (agent-scheme-vcs-test--audit-entry-matching
+            "(event vcs-capability-audit)"
+            "(operation stage)"
+            "(decision approved)"
+            "(result ok)"
+            "(outcome ok)")))
+      (delete-directory root t))))
+
+(ert-deftest agent-scheme-vcs-test-emacs-vcs-commit-branch-and-switch-with-grant ()
+  "Representative local mutations commit, create a branch, and switch to it."
+  (let ((agent-scheme-policy-category-actions
+         (agent-scheme-vcs-test--actions '((vcs-mutation . allow))))
+        (root (agent-scheme-vcs-test--make-git-repo)))
+    (unwind-protect
+        (progn
+          (agent-scheme-vcs-test--git
+           root "config" "user.name" "Agent Scheme Tests")
+          (agent-scheme-vcs-test--git
+           root "config" "user.email" "agent-scheme-tests@example.invalid")
+          (agent-scheme-vcs-test--with-project-root root
+            (agent-scheme-audit-clear)
+            (should
+             (equal
+              (agent-scheme-vcs-test--external
+               "(import (scheme base)
+                        (agent vcs)
+                        (emacs vcs)
+                        (emacs vcs mutation))
+                (define repository
+                  (vcs-field-value (vcs-root) 'root #f))
+                (define grant
+                  (make-vcs-capability-grant
+                   'grant-local
+                   'repository-mutation
+                   '(stage commit branch-create switch)
+                   repository
+                   #f))
+                (define staged
+                  (vcs-stage!
+                   `((paths (\"src/main.scm\"))
+                     (grants (,grant)))))
+                (define committed
+                  (vcs-commit!
+                   `((message \"follow-up commit\")
+                     (grants (,grant)))))
+                (define branched
+                  (vcs-branch-create!
+                   `((name \"feature/topic\")
+                     (grants (,grant)))))
+                (define switched
+                  (vcs-switch!
+                   `((branch \"feature/topic\")
+                     (grants (,grant)))))
+                (list
+                 (vcs-outcome-status
+                  (vcs-field-value staged 'value #f))
+                 (vcs-outcome-status
+                  (vcs-field-value committed 'value #f))
+                 (vcs-field-value
+                  (car (vcs-recent-commits 1))
+                  'subject
+                  #f)
+                 (vcs-outcome-status
+                  (vcs-field-value branched 'value #f))
+                 (vcs-outcome-status
+                  (vcs-field-value switched 'value #f)))")
+              "(ok ok \"follow-up commit\" ok ok)"))
+            (should (equal (agent-scheme-vcs-test--current-branch root)
+                           "feature/topic"))
+            (dolist (operation '("commit" "branch-create" "switch"))
+              (should
+               (agent-scheme-vcs-test--audit-entry-matching
+                "(event vcs-capability-audit)"
+                (format "(operation %s)" operation)
+                "(decision approved)"
+                "(result ok)"
+                "(outcome ok)")))))
+      (delete-directory root t))))
+
+(ert-deftest agent-scheme-vcs-test-emacs-vcs-push-intent-is-authorized-without-live-remote ()
+  "Push intent uses VCS authority records and does not require a live remote."
+  (let ((agent-scheme-policy-category-actions
+         (agent-scheme-vcs-test--actions '((vcs-mutation . allow))))
+        (root (agent-scheme-vcs-test--make-git-repo)))
+    (unwind-protect
+        (agent-scheme-vcs-test--with-project-root root
+          (agent-scheme-audit-clear)
+          (should
+           (equal
+            (agent-scheme-vcs-test--external
+             "(import (scheme base)
+                      (agent vcs)
+                      (emacs vcs)
+                      (emacs vcs mutation))
+              (define repository
+                (vcs-field-value (vcs-root) 'root #f))
+              (define denied
+                (vcs-push! '((remote \"origin\"))))
+              (define grant
+                (make-vcs-capability-grant
+                 'grant-push
+                 'remote-mutation
+                 '(push)
+                 repository
+                 \"origin\"))
+              (define authorized
+                (vcs-push!
+                 `((remote \"origin\")
+                   (grants (,grant)))))
+              (list
+               (vcs-field-value denied 'status #f)
+               (vcs-outcome-status
+                (vcs-field-value denied 'value #f))
+               (vcs-field-value authorized 'status #f)
+               (vcs-outcome-status
+                (vcs-field-value authorized 'value #f)))")
+            "(denied denied error remote-unavailable)"))
+          (should
+           (agent-scheme-vcs-test--audit-entry-matching
+            "(event vcs-capability-audit)"
+            "(operation push)"
+            "(authority remote-mutation)"
+            "(remote? #t)"
+            "(decision approved)"
+            "(outcome remote-unavailable)")))
+      (delete-directory root t))))
+
+(ert-deftest agent-scheme-vcs-test-emacs-vcs-fetch-and-pull-intents-authorized-without-live-remote ()
+  "Fetch and pull intents use remote authority without requiring live remotes."
+  (let ((agent-scheme-policy-category-actions
+         (agent-scheme-vcs-test--actions '((vcs-mutation . allow))))
+        (root (agent-scheme-vcs-test--make-git-repo)))
+    (unwind-protect
+        (agent-scheme-vcs-test--with-project-root root
+          (agent-scheme-audit-clear)
+          (should
+           (equal
+            (agent-scheme-vcs-test--external
+             "(import (scheme base)
+                      (agent vcs)
+                      (emacs vcs)
+                      (emacs vcs mutation))
+              (define repository
+                (vcs-field-value (vcs-root) 'root #f))
+              (define grant
+                (make-vcs-capability-grant
+                 'grant-remote
+                 'remote-mutation
+                 '(fetch pull)
+                 repository
+                 \"origin\"))
+              (define fetched
+                (vcs-fetch!
+                 `((remote \"origin\")
+                   (grants (,grant)))))
+              (define pulled
+                (vcs-pull!
+                 `((remote \"origin\")
+                   (grants (,grant)))))
+              (list
+               (vcs-field-value fetched 'status #f)
+               (vcs-outcome-status
+                (vcs-field-value fetched 'value #f))
+               (vcs-field-value pulled 'status #f)
+               (vcs-outcome-status
+                (vcs-field-value pulled 'value #f)))")
+            "(error remote-unavailable error remote-unavailable)"))
+          (dolist (operation '("fetch" "pull"))
+            (should
+             (agent-scheme-vcs-test--audit-entry-matching
+              "(event vcs-capability-audit)"
+              (format "(operation %s)" operation)
+              "(authority remote-mutation)"
+              "(remote? #t)"
+              "(decision approved)"
+              "(outcome remote-unavailable)"))))
+      (delete-directory root t))))
+
+(ert-deftest agent-scheme-vcs-test-emacs-vcs-push-redacts-credentialed-remote-input ()
+  "Credentialed remote-looking input is denied without leaking audit text."
+  (let ((agent-scheme-policy-category-actions
+         (agent-scheme-vcs-test--actions '((vcs-mutation . allow))))
+        (root (agent-scheme-vcs-test--make-git-repo)))
+    (unwind-protect
+        (agent-scheme-vcs-test--with-project-root root
+          (agent-scheme-audit-clear)
+          (should
+           (equal
+            (agent-scheme-vcs-test--external
+             "(import (scheme base)
+                      (agent vcs)
+                      (emacs vcs)
+                      (emacs vcs mutation))
+              (define repository
+                (vcs-field-value (vcs-root) 'root #f))
+              (define grant
+                (make-vcs-capability-grant
+                 'grant-push-any
+                 'remote-mutation
+                 '(push)
+                 repository
+                 'all))
+              (define result
+                (vcs-push!
+                 `((remote \"https://token@example.com/repo.git\")
+                   (grants (,grant)))))
+              (define outcome (vcs-field-value result 'value #f))
+              (list
+               (vcs-field-value result 'status #f)
+               (vcs-outcome-status outcome)
+               (vcs-field-value outcome 'message #f))")
+            "(error permission-denied \"VCS remote must be a remote name, not a URL.\")"))
+          (let ((audit
+                 (agent-scheme-vcs-test--audit-entry-matching
+                  "(event vcs-capability-audit)"
+                  "(operation push)"
+                  "(outcome permission-denied)")))
+            (should audit)
+            (should-not
+             (agent-scheme-vcs-test--contains-p
+              audit
+              "token@example.com"))
+            (should
+             (agent-scheme-vcs-test--contains-p
+              audit
+              "[redacted]"))))
+      (delete-directory root t))))
 
 (ert-deftest agent-scheme-vcs-test-emacs-vcs-maps-git-status-diff-and-log ()
   "The Emacs adapter maps Git observations into shared VCS datums."
