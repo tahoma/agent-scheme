@@ -75,6 +75,21 @@
              (assq (car entry) overrides))
            agent-scheme-policy-category-actions)))
 
+(defun agent-scheme-capability-test--write-file (path contents)
+  "Write CONTENTS to PATH, creating parent directories."
+  (make-directory (file-name-directory path) t)
+  (with-temp-file path
+    (insert contents)))
+
+(defun agent-scheme-capability-test--write-binary-file (path bytes)
+  "Write BYTES to PATH, creating parent directories."
+  (make-directory (file-name-directory path) t)
+  (with-temp-buffer
+    (set-buffer-multibyte nil)
+    (dolist (byte bytes)
+      (insert (unibyte-string byte)))
+    (write-region (point-min) (point-max) path nil 'silent)))
+
 (ert-deftest agent-scheme-capability-test-manifest-names-backend-policy-path ()
   "Emacs capabilities expose the shared policy-gated backend path."
   (dolist (binding '(("(emacs buffer)" "buffer-name" host-observation
@@ -801,6 +816,183 @@
       (format "\"%s\""
               (file-name-as-directory
                (expand-file-name agent-scheme--test-root)))))))
+
+(ert-deftest agent-scheme-capability-test-search-manifest-and-import ()
+  "Expose the `(emacs search)' library as read-only capability bindings."
+  (dolist (binding '("buffer-search"
+                     "project-search"
+                     "project-files"
+                     "search-yield"))
+    (let ((spec (agent-scheme-capability-test--manifest-spec
+                 "(emacs search)" binding)))
+      (should spec)
+      (should (eq (plist-get spec :source) 'host-capability))
+      (should (eq (plist-get spec :effect) 'host-observation))
+      (should (eq (plist-get spec :required-capability) 'emacs-search))
+      (should (eq (plist-get spec :policy) 'allow))))
+  (should
+   (equal
+    (agent-scheme-capability-test--external
+     "(import (scheme base) (emacs search))
+      (list (procedure? buffer-search)
+            (procedure? project-search)
+            (procedure? project-files)
+            (procedure? search-yield))")
+    "(#t #t #t #t)")))
+
+(ert-deftest agent-scheme-capability-test-buffer-search-returns-source-locations ()
+  "Search a live buffer and return Scheme-readable source locations."
+  (with-temp-buffer
+    (rename-buffer "agent-scheme-search-buffer" t)
+    (insert "alpha one\nbeta\nalpha two\n")
+    (let ((external
+           (agent-scheme-capability-test--external
+            "(import (scheme base) (emacs buffer) (emacs search))
+             (buffer-search
+              (emacs-current-buffer)
+              \"alpha\"
+              '((limit 2)))")))
+      (should
+       (string-match-p
+        (regexp-quote
+         "((search-result (source buffer) (buffer \"agent-scheme-search-buffer\")")
+        external))
+      (should
+       (string-match-p
+        (regexp-quote
+         "(file #f) (relative-file #f) (line 1) (column 1) (start 1) (end 6)")
+        external))
+      (should
+       (string-match-p
+        (regexp-quote "(preview \"alpha one\")")
+        external))
+      (should
+       (string-match-p
+        (regexp-quote "(line 3) (column 1) (start 16) (end 21)")
+        external)))))
+
+(ert-deftest agent-scheme-capability-test-buffer-search-no-match-and-limit ()
+  "Return no matches cleanly and enforce the result limit."
+  (with-temp-buffer
+    (rename-buffer "agent-scheme-search-limit" t)
+    (insert "needle one\nneedle two\n")
+    (should
+     (equal
+      (agent-scheme-capability-test--external
+       "(import (emacs buffer) (emacs search))
+        (buffer-search (emacs-current-buffer) \"missing\" '())")
+      "()"))
+    (let ((external
+           (agent-scheme-capability-test--external
+            "(import (emacs buffer) (emacs search))
+             (buffer-search
+              (emacs-current-buffer)
+              \"needle\"
+              '((limit 1)))")))
+      (should
+       (string-match-p (regexp-quote "(preview \"needle one\")") external))
+      (should-not
+       (string-match-p (regexp-quote "(preview \"needle two\")") external)))))
+
+(ert-deftest agent-scheme-capability-test-project-search-respects-default-guards ()
+  "Search project files while skipping generated, binary, and oversized files."
+  (let* ((root (file-name-as-directory
+                (make-temp-file "agent-scheme-project-search-" t)))
+         (source (expand-file-name "src/main.scm" root))
+         (no-match (expand-file-name "src/a-no-match.scm" root))
+         (generated (expand-file-name "node_modules/generated.scm" root))
+         (binary (expand-file-name "src/blob.dat" root))
+         (large (expand-file-name "src/large.scm" root))
+         (default-directory root))
+    (unwind-protect
+        (progn
+          (agent-scheme-capability-test--write-file
+           source "(define needle 42)\n")
+          (agent-scheme-capability-test--write-file
+           no-match "(define other 42)\n")
+          (agent-scheme-capability-test--write-file
+           generated "needle from generated code\n")
+          (agent-scheme-capability-test--write-binary-file
+           binary '(110 101 101 100 108 101 0 120))
+          (agent-scheme-capability-test--write-file
+           large "needle in oversized file\n")
+          (cl-letf (((symbol-function 'project-current)
+                     (lambda (&optional _maybe-prompt _directory)
+                       (cons 'transient root))))
+            (let ((external
+                   (agent-scheme-capability-test--external
+                    "(import (emacs search))
+                     (project-search
+                      \"needle\"
+                      '((limit 10) (max-file-bytes 20)))")))
+              (should
+               (string-match-p
+                (regexp-quote "(relative-file \"src/main.scm\")")
+                external))
+              (should-not
+               (string-match-p (regexp-quote "node_modules") external))
+              (should-not
+               (string-match-p (regexp-quote "blob.dat") external))
+              (should-not
+               (string-match-p (regexp-quote "large.scm") external)))
+            (let ((external
+                   (agent-scheme-capability-test--external
+                    "(import (emacs search))
+                     (project-search
+                      \"needle\"
+                      '((limit 1) (max-file-bytes 20)))")))
+              (should
+               (string-match-p
+                (regexp-quote "(relative-file \"src/main.scm\")")
+                external)))
+            (let ((files
+                   (agent-scheme-capability-test--external
+                    "(import (emacs search))
+                     (project-files '((limit 10)))")))
+              (should
+               (string-match-p
+                (regexp-quote "((project-file (file")
+                files))
+              (should
+               (string-match-p
+                (regexp-quote "(relative-file \"src/main.scm\")")
+                files))
+              (should-not
+               (string-match-p (regexp-quote "node_modules") files)))))
+      (when (file-exists-p root)
+        (delete-directory root t)))))
+
+(ert-deftest agent-scheme-capability-test-search-yield-records-events ()
+  "Yield search results through the evaluation event channel."
+  (agent-scheme-audit-clear)
+  (with-temp-buffer
+    (rename-buffer "agent-scheme-search-yield" t)
+    (insert "alpha\n")
+    (let ((result
+           (agent-scheme-result->external
+            (agent-scheme-eval-source-result
+             "(import (scheme base) (emacs buffer) (emacs search))
+              (search-yield
+               (buffer-search
+                (emacs-current-buffer)
+                \"alpha\"
+                '((limit 1))))
+              'ok"))))
+      (should (string-match-p (regexp-quote "(status ok)") result))
+      (should
+       (string-match-p
+        (regexp-quote "(events ((yield (search-results")
+        result))
+      (should
+       (string-match-p
+        (regexp-quote "(buffer \"agent-scheme-search-yield\")")
+        result))))
+  (should
+   (agent-scheme-capability-test--audit-entry-matching
+    "(event agent-event)"
+    "(category emacs-search)"
+    "(operation \"search-yield\")"
+    "(decision recorded)")))
 
 (ert-deftest agent-scheme-capability-test-window-session-manifest-metadata ()
   "Expose mutating window/session capabilities through policy metadata."

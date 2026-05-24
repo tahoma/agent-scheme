@@ -49,6 +49,43 @@ Lisp arguments when Scheme does not pass any arguments."
                         (:default-arguments sexp))))
   :group 'agent-scheme)
 
+(defcustom agent-scheme-search-default-limit 100
+  "Default maximum number of results returned by one search capability call."
+  :type 'integer
+  :group 'agent-scheme)
+
+(defcustom agent-scheme-search-default-file-limit 10000
+  "Default maximum number of project files considered by search calls."
+  :type 'integer
+  :group 'agent-scheme)
+
+(defcustom agent-scheme-search-default-maximum-file-bytes 1048576
+  "Default maximum size of a project file read by search capabilities."
+  :type 'integer
+  :group 'agent-scheme)
+
+(defcustom agent-scheme-search-default-preview-characters 160
+  "Default maximum number of line-preview characters in search results."
+  :type 'integer
+  :group 'agent-scheme)
+
+(defcustom agent-scheme-search-generated-directories
+  '(".agent-scheme"
+    ".cache"
+    ".git"
+    ".hg"
+    ".svn"
+    "__pycache__"
+    "build"
+    "coverage"
+    "dist"
+    "node_modules"
+    "target"
+    "vendor")
+  "Project subdirectories skipped by search capabilities unless requested."
+  :type '(repeat string)
+  :group 'agent-scheme)
+
 (cl-defstruct (agent-scheme--handle-entry
                (:constructor agent-scheme--make-handle-entry (kind object))
                (:copier nil))
@@ -275,6 +312,34 @@ Lisp arguments when Scheme does not pass any arguments."
      :portable-hook nil :emitter-hook capability-emacs
      :policy confirm :policy-category command-process
      :test-categories (emacs project command process mutation))
+    (:name "buffer-search" :library "(emacs search)"
+     :minimum-arity 3 :maximum-arity 3
+     :source host-capability :effect host-observation
+     :required-capability emacs-search
+     :emacs-hook agent-scheme--primitive-buffer-search
+     :portable-hook nil :emitter-hook capability-emacs
+     :policy allow :test-categories (emacs search buffer))
+    (:name "project-search" :library "(emacs search)"
+     :minimum-arity 2 :maximum-arity 2
+     :source host-capability :effect host-observation
+     :required-capability emacs-search
+     :emacs-hook agent-scheme--primitive-project-search
+     :portable-hook nil :emitter-hook capability-emacs
+     :policy allow :test-categories (emacs search project))
+    (:name "project-files" :library "(emacs search)"
+     :minimum-arity 1 :maximum-arity 1
+     :source host-capability :effect host-observation
+     :required-capability emacs-search
+     :emacs-hook agent-scheme--primitive-project-files
+     :portable-hook nil :emitter-hook capability-emacs
+     :policy allow :test-categories (emacs search project files))
+    (:name "search-yield" :library "(emacs search)"
+     :minimum-arity 1 :maximum-arity 1
+     :source host-capability :effect host-observation
+     :required-capability emacs-search
+     :emacs-hook agent-scheme--primitive-search-yield
+     :portable-hook nil :emitter-hook capability-emacs
+     :policy allow :test-categories (emacs search agent-io))
     (:name "emacs-process-list" :library "(emacs process)"
      :minimum-arity 0 :maximum-arity 0
      :source host-capability :effect host-observation
@@ -341,6 +406,7 @@ Lisp arguments when Scheme does not pass any arguments."
     "(emacs frame)"
     "(emacs process)"
     "(emacs project)"
+    "(emacs search)"
     "(emacs window)")
   "Recognized Emacs capability library keys.")
 
@@ -2003,6 +2069,294 @@ synthetic file grant so existing callers share the capability vocabulary."
   "Return VALUE as a copied string datum, or #f when VALUE is nil."
   (if value (substring-no-properties value) agent-scheme-false))
 
+(defun agent-scheme--search-symbol (name)
+  "Return NAME as an Agent Scheme search datum symbol."
+  (agent-scheme--syntax-symbol name))
+
+(defun agent-scheme--search-field (name &rest values)
+  "Return a Scheme-readable search field NAME with VALUES."
+  (cons (agent-scheme--search-symbol name) values))
+
+(defun agent-scheme--search-option-name (datum description)
+  "Return DATUM as a search option name string for DESCRIPTION."
+  (cond
+   ((agent-scheme-symbol-p datum)
+    (agent-scheme-symbol-name datum))
+   ((stringp datum)
+    datum)
+   (t
+    (agent-scheme--eval-error
+     "%s option name must be a symbol or string, got %s"
+     description
+     (agent-scheme-value->external datum)))))
+
+(defun agent-scheme--search-options (datum description)
+  "Return DATUM as an alist of search option names to values."
+  (let (options)
+    (dolist (entry (agent-scheme--proper-list-elements datum description)
+                   (nreverse options))
+      (let ((elements (agent-scheme--proper-list-elements entry description)))
+        (unless (= (length elements) 2)
+          (agent-scheme--eval-error
+           "%s option entries must have exactly two fields" description))
+        (push (cons (agent-scheme--search-option-name
+                     (car elements) description)
+                    (cadr elements))
+              options)))))
+
+(defun agent-scheme--search-option (options name default)
+  "Return option NAME from OPTIONS, or DEFAULT."
+  (let ((entry (assoc name options)))
+    (if entry (cdr entry) default)))
+
+(defun agent-scheme--search-option-integer
+    (options name default description)
+  "Return non-negative integer search option NAME."
+  (let ((value (agent-scheme--search-option options name default)))
+    (unless (and (agent-scheme-number-p value)
+                 (eq (agent-scheme-number-kind value) 'integer)
+                 (eq (agent-scheme-number-exactness value) 'exact)
+                 (>= (agent-scheme-number-value value) 0))
+      (agent-scheme--eval-error
+       "%s option %s expected a non-negative exact integer, got %s"
+       description
+       name
+       (agent-scheme-value->external value)))
+    (agent-scheme-number-value value)))
+
+(defun agent-scheme--search-option-boolean
+    (options name default description)
+  "Return boolean search option NAME."
+  (let ((value (agent-scheme--search-option options name default)))
+    (cond
+     ((eq value agent-scheme-true) t)
+     ((eq value agent-scheme-false) nil)
+     (t
+      (agent-scheme--eval-error
+       "%s option %s expected a boolean, got %s"
+       description
+       name
+       (agent-scheme-value->external value))))))
+
+(defun agent-scheme--search-limit (options description)
+  "Return the result limit from OPTIONS for DESCRIPTION."
+  (agent-scheme--search-option-integer
+   options
+   "limit"
+   (agent-scheme--scheme-integer agent-scheme-search-default-limit)
+   description))
+
+(defun agent-scheme--search-preview-limit (options description)
+  "Return the preview limit from OPTIONS for DESCRIPTION."
+  (agent-scheme--search-option-integer
+   options
+   "max-preview"
+   (agent-scheme--scheme-integer
+    agent-scheme-search-default-preview-characters)
+   description))
+
+(defun agent-scheme--search-file-byte-limit (options description)
+  "Return the file byte limit from OPTIONS for DESCRIPTION."
+  (agent-scheme--search-option-integer
+   options
+   "max-file-bytes"
+   (agent-scheme--scheme-integer
+    agent-scheme-search-default-maximum-file-bytes)
+   description))
+
+(defun agent-scheme--search-file-limit (options description)
+  "Return the project file count limit from OPTIONS for DESCRIPTION."
+  (agent-scheme--search-option-integer
+   options
+   "file-limit"
+   (agent-scheme--scheme-integer agent-scheme-search-default-file-limit)
+   description))
+
+(defun agent-scheme--search-case-fold-p (options description)
+  "Return non-nil when OPTIONS request case-folded search."
+  (agent-scheme--search-option-boolean
+   options "case-fold" agent-scheme-false description))
+
+(defun agent-scheme--search-include-generated-p (options description)
+  "Return non-nil when OPTIONS request generated directories."
+  (or (agent-scheme--search-option-boolean
+       options "include-generated" agent-scheme-false description)
+      (agent-scheme--search-option-boolean
+       options "include-ignored" agent-scheme-false description)))
+
+(defun agent-scheme--search-include-binary-p (options description)
+  "Return non-nil when OPTIONS request binary files."
+  (agent-scheme--search-option-boolean
+   options "include-binary" agent-scheme-false description))
+
+(defun agent-scheme--search-truncate-preview (preview limit)
+  "Return PREVIEW truncated to LIMIT characters."
+  (let ((clean (substring-no-properties preview)))
+    (if (<= (length clean) limit)
+        clean
+      (concat (substring clean 0 limit) "..."))))
+
+(defun agent-scheme--search-relative-file (file root)
+  "Return FILE relative to ROOT, or #f when either is nil."
+  (if (and file root)
+      (file-relative-name (expand-file-name file)
+                          (file-name-as-directory (expand-file-name root)))
+    agent-scheme-false))
+
+(defun agent-scheme--search-result-datum
+    (source buffer file root line column start end preview)
+  "Return a Scheme-readable search result datum."
+  (list
+   (agent-scheme--search-symbol "search-result")
+   (agent-scheme--search-field
+    "source" (agent-scheme--search-symbol (symbol-name source)))
+   (agent-scheme--search-field
+    "buffer" (if buffer (buffer-name buffer) agent-scheme-false))
+   (agent-scheme--search-field
+    "file" (if file (expand-file-name file) agent-scheme-false))
+   (agent-scheme--search-field
+    "relative-file" (agent-scheme--search-relative-file file root))
+   (agent-scheme--search-field "line" (agent-scheme--scheme-integer line))
+   (agent-scheme--search-field "column" (agent-scheme--scheme-integer column))
+   (agent-scheme--search-field "start" (agent-scheme--scheme-integer start))
+   (agent-scheme--search-field "end" (agent-scheme--scheme-integer end))
+   (agent-scheme--search-field "preview" preview)))
+
+(defun agent-scheme--search-buffer-results
+    (buffer pattern options source &optional file root)
+  "Return search result datums for PATTERN in BUFFER."
+  (let ((limit (agent-scheme--search-limit options "search"))
+        (preview-limit (agent-scheme--search-preview-limit options "search"))
+        (case-fold-search (agent-scheme--search-case-fold-p options "search"))
+        results)
+    (when (> limit 0)
+      (with-current-buffer buffer
+        (save-excursion
+          (save-restriction
+            (widen)
+            (goto-char (point-min))
+            (while (and (< (length results) limit)
+                        (re-search-forward pattern nil t))
+              (let* ((start (match-beginning 0))
+                     (end (match-end 0))
+                     (line (line-number-at-pos start t))
+                     (column
+                      (save-excursion
+                        (goto-char start)
+                        (1+ (current-column))))
+                     (preview
+                      (agent-scheme--search-truncate-preview
+                       (buffer-substring-no-properties
+                        (line-beginning-position)
+                        (line-end-position))
+                       preview-limit)))
+                (push
+                 (agent-scheme--search-result-datum
+                  source buffer file root line column start end preview)
+                 results)
+                (when (and (= start end)
+                           (not (eobp)))
+                  (forward-char 1))))))))
+    (nreverse results)))
+
+(defun agent-scheme--search-project-root (operation)
+  "Return current project root for OPERATION."
+  (let ((root (agent-scheme--current-project-root-or-error operation)))
+    (when (file-remote-p root)
+      (agent-scheme--eval-error
+       "%s cannot search remote project root: %s" operation root))
+    root))
+
+(defun agent-scheme--search-project-files-raw (root)
+  "Return absolute project files under ROOT."
+  (let* ((project (project-current nil))
+         (files
+          (condition-case nil
+              (and project (project-files project))
+            (error nil))))
+    (unless files
+      (setq files
+            (directory-files-recursively
+             root
+             directory-files-no-dot-files-regexp
+             nil)))
+    (mapcar
+     (lambda (file)
+       (if (file-name-absolute-p file)
+           (expand-file-name file)
+         (expand-file-name file root)))
+     files)))
+
+(defun agent-scheme--search-generated-file-p (file root)
+  "Return non-nil when FILE is under a generated/runtime directory."
+  (let ((parts (split-string
+                (file-relative-name (expand-file-name file)
+                                    (file-name-as-directory
+                                     (expand-file-name root)))
+                "/" t)))
+    (seq-some
+     (lambda (part)
+       (member part agent-scheme-search-generated-directories))
+     parts)))
+
+(defun agent-scheme--search-file-size (file)
+  "Return FILE size in bytes, or nil."
+  (file-attribute-size (file-attributes file)))
+
+(defun agent-scheme--search-binary-file-p (file)
+  "Return non-nil when FILE appears to contain binary data."
+  (let ((limit (min (or (agent-scheme--search-file-size file) 0) 4096)))
+    (when (> limit 0)
+      (with-temp-buffer
+        (set-buffer-multibyte nil)
+        (insert-file-contents-literally file nil 0 limit)
+        (goto-char (point-min))
+        (search-forward (string 0) nil t)))))
+
+(defun agent-scheme--search-project-file-allowed-p
+    (file root options)
+  "Return non-nil when FILE may be inspected under ROOT and OPTIONS."
+  (let ((maximum-bytes
+         (agent-scheme--search-file-byte-limit options "project search")))
+    (and (file-regular-p file)
+         (not (file-remote-p file))
+         (file-in-directory-p (expand-file-name file)
+                              (file-name-as-directory
+                               (expand-file-name root)))
+         (or (agent-scheme--search-include-generated-p
+              options "project search")
+             (not (agent-scheme--search-generated-file-p file root)))
+         (let ((size (agent-scheme--search-file-size file)))
+           (and size (<= size maximum-bytes)))
+         (or (agent-scheme--search-include-binary-p options "project search")
+             (not (agent-scheme--search-binary-file-p file))))))
+
+(defun agent-scheme--search-project-files (root options &optional file-limit)
+  "Return guarded absolute project files under ROOT."
+  (let ((limit (or file-limit
+                   (agent-scheme--search-limit options "project files")))
+        files)
+    (when (> limit 0)
+      (catch 'done
+        (dolist (file (sort (agent-scheme--search-project-files-raw root)
+                            #'string<))
+          (when (agent-scheme--search-project-file-allowed-p file root options)
+            (push file files)
+            (when (>= (length files) limit)
+              (throw 'done nil))))))
+    (nreverse files)))
+
+(defun agent-scheme--project-file-datum (file root)
+  "Return a Scheme-readable project file datum for FILE."
+  (list
+   (agent-scheme--search-symbol "project-file")
+   (agent-scheme--search-field "file" (expand-file-name file))
+   (agent-scheme--search-field
+    "relative-file" (agent-scheme--search-relative-file file root))
+   (agent-scheme--search-field
+    "size" (agent-scheme--scheme-integer
+            (or (agent-scheme--search-file-size file) 0)))))
+
 (defun agent-scheme--capability-exact-integer (datum description)
   "Return DATUM as a host exact integer for DESCRIPTION."
   (unless (and (agent-scheme-number-p datum)
@@ -2635,6 +2989,97 @@ creates undo boundaries around the atomic change group."
        (command . recompile)))
     (let ((default-directory root))
       (recompile))
+    agent-scheme-unspecified))
+
+(defun agent-scheme--primitive-buffer-search (arguments context)
+  "Primitive buffer-search over ARGUMENTS."
+  (agent-scheme--authorize-emacs-capability "buffer-search" arguments context)
+  (let* ((buffer (agent-scheme--live-buffer-for-handle
+                  (car arguments) "buffer-search"))
+         (pattern (agent-scheme--capability-string
+                   (cadr arguments) "buffer-search pattern"))
+         (options (agent-scheme--search-options
+                   (caddr arguments) "buffer-search options"))
+         (file (agent-scheme--buffer-target-file buffer))
+         (results
+          (agent-scheme--search-buffer-results
+           buffer pattern options 'buffer file nil)))
+    (agent-scheme--add-emacs-capability-result-fields
+     (append
+      (agent-scheme--buffer-target-fields buffer)
+      `((pattern . ,pattern)
+        (result-count . ,(length results)))))
+    results))
+
+(defun agent-scheme--primitive-project-search (arguments context)
+  "Primitive project-search over ARGUMENTS."
+  (agent-scheme--authorize-emacs-capability "project-search" arguments context)
+  (let* ((pattern (agent-scheme--capability-string
+                   (car arguments) "project-search pattern"))
+         (options (agent-scheme--search-options
+                   (cadr arguments) "project-search options"))
+         (limit (agent-scheme--search-limit options "project-search"))
+         (file-limit
+          (agent-scheme--search-file-limit options "project-search"))
+         (root (agent-scheme--search-project-root "project-search"))
+         results)
+    (catch 'done
+      (dolist (file (agent-scheme--search-project-files
+                     root options file-limit))
+        (with-temp-buffer
+          (insert-file-contents file)
+          (let ((file-results
+                 (agent-scheme--search-buffer-results
+                  (current-buffer) pattern options 'project file root)))
+            (dolist (result file-results)
+              (push result results)
+              (when (>= (length results) limit)
+                (throw 'done nil)))))))
+    (setq results (nreverse results))
+    (agent-scheme--add-emacs-capability-result-fields
+     `((project-root . ,root)
+       (pattern . ,pattern)
+       (result-count . ,(length results))))
+    results))
+
+(defun agent-scheme--primitive-project-files (arguments context)
+  "Primitive project-files over ARGUMENTS."
+  (agent-scheme--authorize-emacs-capability "project-files" arguments context)
+  (let* ((options (agent-scheme--search-options
+                   (car arguments) "project-files options"))
+         (root (agent-scheme--search-project-root "project-files"))
+         (files (agent-scheme--search-project-files root options))
+         (results
+          (mapcar
+           (lambda (file)
+             (agent-scheme--project-file-datum file root))
+           files)))
+    (agent-scheme--add-emacs-capability-result-fields
+     `((project-root . ,root)
+       (result-count . ,(length results))))
+    results))
+
+(defun agent-scheme--primitive-search-yield (arguments context)
+  "Primitive search-yield over ARGUMENTS."
+  (agent-scheme--authorize-emacs-capability "search-yield" arguments context)
+  (let* ((results
+          (agent-scheme--proper-list-elements
+           (car arguments) "search-yield results"))
+         (event
+          (list
+           (agent-scheme--search-symbol "yield")
+           (cons (agent-scheme--search-symbol "search-results")
+                 results))))
+    (agent-scheme--record-event! context event)
+    (agent-scheme-audit-record
+     'agent-event
+     `((category . emacs-search)
+       (operation . "search-yield")
+       (decision . recorded)
+       (record . ,event)
+       (result-count . ,(length results))))
+    (agent-scheme--add-emacs-capability-result-fields
+     `((result-count . ,(length results))))
     agent-scheme-unspecified))
 
 (defun agent-scheme--primitive-emacs-process-list (arguments context)
