@@ -176,6 +176,31 @@ For first experiments, prefer pure expressions, standard pure libraries, and
 buffers, run commands, inspect environment variables, or depend on private
 machine state until you are intentionally testing capability policy.
 
+Read-only host observations can still return structured data. For example, a
+diagnostic-driven helper can inspect the current buffer through the Emacs
+adapter, then yield the portable diagnostic snapshot back to the session event
+stream:
+
+```scheme
+(import (scheme base)
+        (agent diagnostics)
+        (emacs buffer)
+        (emacs diagnostics))
+
+(define snapshot
+  (buffer-diagnostics (emacs-current-buffer)))
+
+(diagnostics-yield snapshot)
+snapshot
+```
+
+The yielded value is a `diagnostics-snapshot` datum containing zero or more
+`diagnostic` records with severity, message, source, buffer/file, range, and
+backend metadata. If project-wide diagnostics are unavailable for the current
+host state, `(project-diagnostics '())` returns an unavailable snapshot instead
+of trying to run a mutating command. Diagnostic code actions are not exposed by
+this read-only library.
+
 ## Verification
 
 The default local verification command is:
