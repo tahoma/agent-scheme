@@ -202,6 +202,35 @@ records with read-only procedures: `vcs-root`, `vcs-branch`, `vcs-status`,
 Repository mutation, including stage, commit, branch creation, fetch, pull, and
 push, is not exported by `(emacs vcs)`.
 
+Approved repository mutation lives behind the separate `(emacs vcs mutation)`
+library. Its first Emacs adapter slice exposes `vcs-stage!`, `vcs-unstage!`,
+`vcs-commit!`, `vcs-branch-create!`, `vcs-switch!`, `vcs-fetch!`,
+`vcs-pull!`, and `vcs-push!`; each call is subject to the host `vcs-mutation`
+policy and to the shared `(agent vcs)` VCS grant or approval records before Git
+changes repository state or a remote is contacted.
+
+```scheme
+(import (scheme base)
+        (agent vcs)
+        (emacs vcs)
+        (emacs vcs mutation))
+
+(define repository
+  (vcs-field-value (vcs-root) 'root #f))
+
+(define grant
+  (make-vcs-capability-grant
+   'stage-main
+   'repository-mutation
+   '(stage)
+   repository
+   #f))
+
+(vcs-stage!
+ `((paths ("src/main.scm"))
+   (grants (,grant))))
+```
+
 Capability grants narrow approved authority before a mutating host capability
 can use it:
 

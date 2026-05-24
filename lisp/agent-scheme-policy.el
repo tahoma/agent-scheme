@@ -25,6 +25,7 @@
   '(pure-r7rs
     emacs-read-only
     buffer-edit
+    vcs-mutation
     window-session
     command-process
     standard-host-effect
@@ -50,6 +51,7 @@
   '((pure-r7rs . allow)
     (emacs-read-only . allow)
     (buffer-edit . confirm)
+    (vcs-mutation . confirm)
     (window-session . confirm)
     (command-process . confirm)
     (standard-host-effect . allow)

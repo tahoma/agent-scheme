@@ -496,6 +496,70 @@ network-backed port."
      :emacs-hook agent-scheme--primitive-vcs-yield
      :portable-hook nil :emitter-hook capability-emacs
      :policy allow :test-categories (emacs vcs yield))
+    (:name "vcs-stage!" :library "(emacs vcs mutation)"
+     :minimum-arity 1 :maximum-arity 1
+     :source host-capability :effect host-mutation
+     :required-capability emacs-vcs
+     :emacs-hook agent-scheme--primitive-vcs-stage!
+     :portable-hook nil :emitter-hook capability-emacs
+     :policy confirm :policy-category vcs-mutation
+     :test-categories (emacs vcs mutation stage))
+    (:name "vcs-unstage!" :library "(emacs vcs mutation)"
+     :minimum-arity 1 :maximum-arity 1
+     :source host-capability :effect host-mutation
+     :required-capability emacs-vcs
+     :emacs-hook agent-scheme--primitive-vcs-unstage!
+     :portable-hook nil :emitter-hook capability-emacs
+     :policy confirm :policy-category vcs-mutation
+     :test-categories (emacs vcs mutation unstage))
+    (:name "vcs-commit!" :library "(emacs vcs mutation)"
+     :minimum-arity 1 :maximum-arity 1
+     :source host-capability :effect host-mutation
+     :required-capability emacs-vcs
+     :emacs-hook agent-scheme--primitive-vcs-commit!
+     :portable-hook nil :emitter-hook capability-emacs
+     :policy confirm :policy-category vcs-mutation
+     :test-categories (emacs vcs mutation commit))
+    (:name "vcs-branch-create!" :library "(emacs vcs mutation)"
+     :minimum-arity 1 :maximum-arity 1
+     :source host-capability :effect host-mutation
+     :required-capability emacs-vcs
+     :emacs-hook agent-scheme--primitive-vcs-branch-create!
+     :portable-hook nil :emitter-hook capability-emacs
+     :policy confirm :policy-category vcs-mutation
+     :test-categories (emacs vcs mutation branch))
+    (:name "vcs-switch!" :library "(emacs vcs mutation)"
+     :minimum-arity 1 :maximum-arity 1
+     :source host-capability :effect host-mutation
+     :required-capability emacs-vcs
+     :emacs-hook agent-scheme--primitive-vcs-switch!
+     :portable-hook nil :emitter-hook capability-emacs
+     :policy confirm :policy-category vcs-mutation
+     :test-categories (emacs vcs mutation switch))
+    (:name "vcs-fetch!" :library "(emacs vcs mutation)"
+     :minimum-arity 1 :maximum-arity 1
+     :source host-capability :effect host-mutation
+     :required-capability emacs-vcs
+     :emacs-hook agent-scheme--primitive-vcs-fetch!
+     :portable-hook nil :emitter-hook capability-emacs
+     :policy confirm :policy-category vcs-mutation
+     :test-categories (emacs vcs mutation remote fetch))
+    (:name "vcs-pull!" :library "(emacs vcs mutation)"
+     :minimum-arity 1 :maximum-arity 1
+     :source host-capability :effect host-mutation
+     :required-capability emacs-vcs
+     :emacs-hook agent-scheme--primitive-vcs-pull!
+     :portable-hook nil :emitter-hook capability-emacs
+     :policy confirm :policy-category vcs-mutation
+     :test-categories (emacs vcs mutation remote pull))
+    (:name "vcs-push!" :library "(emacs vcs mutation)"
+     :minimum-arity 1 :maximum-arity 1
+     :source host-capability :effect host-mutation
+     :required-capability emacs-vcs
+     :emacs-hook agent-scheme--primitive-vcs-push!
+     :portable-hook nil :emitter-hook capability-emacs
+     :policy confirm :policy-category vcs-mutation
+     :test-categories (emacs vcs mutation remote push))
     (:name "buffer-diagnostics" :library "(emacs diagnostics)"
      :minimum-arity 1 :maximum-arity 1
      :source host-capability :effect host-observation
@@ -669,6 +733,7 @@ network-backed port."
     "(emacs project)"
     "(emacs search)"
     "(emacs vcs)"
+    "(emacs vcs mutation)"
     "(emacs window)")
   "Recognized Emacs capability library keys.")
 
@@ -4746,6 +4811,87 @@ creates undo boundaries around the atomic change group."
    `((adapter . emacs-vcs)
      (yielded . t)))
   (agent-scheme-agent-io--primitive-yield arguments context))
+
+(defun agent-scheme--record-vcs-mutation-result-fields (operation result)
+  "Record audit fields for VCS mutation OPERATION returning RESULT."
+  (let* ((status (agent-scheme-vcs-field-value result "status"))
+         (outcome (agent-scheme-vcs-field-value result "value"))
+         (outcome-status
+          (and (agent-scheme-vcs--record-p outcome "vcs-outcome")
+               (agent-scheme-vcs-field-value outcome "status"))))
+    (agent-scheme--add-emacs-capability-result-fields
+     `((adapter . emacs-vcs)
+       (vcs-operation . ,operation)
+       (vcs-result-status . ,status)
+       (vcs-outcome . ,(or outcome-status agent-scheme-false))))))
+
+(defun agent-scheme--primitive-vcs-stage! (arguments context)
+  "Primitive vcs-stage! over ARGUMENTS."
+  (agent-scheme--authorize-emacs-capability "vcs-stage!" arguments context)
+  (agent-scheme--proper-list-elements (car arguments) "vcs-stage! options")
+  (let ((result (agent-scheme-vcs-stage-datum (car arguments))))
+    (agent-scheme--record-vcs-mutation-result-fields 'stage result)
+    result))
+
+(defun agent-scheme--primitive-vcs-unstage! (arguments context)
+  "Primitive vcs-unstage! over ARGUMENTS."
+  (agent-scheme--authorize-emacs-capability "vcs-unstage!" arguments context)
+  (agent-scheme--proper-list-elements (car arguments) "vcs-unstage! options")
+  (let ((result (agent-scheme-vcs-unstage-datum (car arguments))))
+    (agent-scheme--record-vcs-mutation-result-fields 'unstage result)
+    result))
+
+(defun agent-scheme--primitive-vcs-commit! (arguments context)
+  "Primitive vcs-commit! over ARGUMENTS."
+  (agent-scheme--authorize-emacs-capability "vcs-commit!" arguments context)
+  (agent-scheme--proper-list-elements (car arguments) "vcs-commit! options")
+  (let ((result (agent-scheme-vcs-commit-datum (car arguments))))
+    (agent-scheme--record-vcs-mutation-result-fields 'commit result)
+    result))
+
+(defun agent-scheme--primitive-vcs-branch-create! (arguments context)
+  "Primitive vcs-branch-create! over ARGUMENTS."
+  (agent-scheme--authorize-emacs-capability
+   "vcs-branch-create!"
+   arguments
+   context)
+  (agent-scheme--proper-list-elements
+   (car arguments) "vcs-branch-create! options")
+  (let ((result (agent-scheme-vcs-branch-create-datum (car arguments))))
+    (agent-scheme--record-vcs-mutation-result-fields 'branch-create result)
+    result))
+
+(defun agent-scheme--primitive-vcs-switch! (arguments context)
+  "Primitive vcs-switch! over ARGUMENTS."
+  (agent-scheme--authorize-emacs-capability "vcs-switch!" arguments context)
+  (agent-scheme--proper-list-elements (car arguments) "vcs-switch! options")
+  (let ((result (agent-scheme-vcs-switch-datum (car arguments))))
+    (agent-scheme--record-vcs-mutation-result-fields 'switch result)
+    result))
+
+(defun agent-scheme--primitive-vcs-fetch! (arguments context)
+  "Primitive vcs-fetch! over ARGUMENTS."
+  (agent-scheme--authorize-emacs-capability "vcs-fetch!" arguments context)
+  (agent-scheme--proper-list-elements (car arguments) "vcs-fetch! options")
+  (let ((result (agent-scheme-vcs-fetch-datum (car arguments))))
+    (agent-scheme--record-vcs-mutation-result-fields 'fetch result)
+    result))
+
+(defun agent-scheme--primitive-vcs-pull! (arguments context)
+  "Primitive vcs-pull! over ARGUMENTS."
+  (agent-scheme--authorize-emacs-capability "vcs-pull!" arguments context)
+  (agent-scheme--proper-list-elements (car arguments) "vcs-pull! options")
+  (let ((result (agent-scheme-vcs-pull-datum (car arguments))))
+    (agent-scheme--record-vcs-mutation-result-fields 'pull result)
+    result))
+
+(defun agent-scheme--primitive-vcs-push! (arguments context)
+  "Primitive vcs-push! over ARGUMENTS."
+  (agent-scheme--authorize-emacs-capability "vcs-push!" arguments context)
+  (agent-scheme--proper-list-elements (car arguments) "vcs-push! options")
+  (let ((result (agent-scheme-vcs-push-datum (car arguments))))
+    (agent-scheme--record-vcs-mutation-result-fields 'push result)
+    result))
 
 (defun agent-scheme--diagnostics-result-count (snapshot)
   "Return the number of diagnostics in SNAPSHOT."

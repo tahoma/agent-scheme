@@ -126,6 +126,37 @@ No repository mutation is exported by `(emacs vcs)`. Stage, unstage, commit,
 branch creation/deletion, checkout, switch, fetch, pull, push, merge, rebase,
 cherry-pick, revert, and reset remain outside this read-only adapter surface.
 
+## Emacs Mutation Adapter
+
+`(emacs vcs mutation)` is the separate Emacs adapter library for policy-gated
+repository mutation and remote intent. It currently exports:
+
+- `vcs-stage!`
+- `vcs-unstage!`
+- `vcs-commit!`
+- `vcs-branch-create!`
+- `vcs-switch!`
+- `vcs-fetch!`
+- `vcs-pull!`
+- `vcs-push!`
+
+Importing `(emacs vcs)` does not import these bindings. Calls to the mutation
+library first pass the host `vcs-mutation` policy category, then construct a
+shared `vcs-capability-request` and compute a `vcs-capability-decision` from
+the supplied VCS grant or approval records. Missing VCS grant or approval data
+returns a denied `vcs-capability-result` before Git changes the index or a
+remote is contacted.
+
+`vcs-stage!` and `vcs-unstage!` accept repository-relative `paths` and only pass
+validated local paths to Git. `vcs-commit!` accepts a non-empty `message`.
+`vcs-branch-create!` accepts a `name`, and `vcs-switch!` accepts a `branch`;
+both reject unsafe branch/ref-looking input before passing it to Git.
+`vcs-fetch!`, `vcs-pull!`, and `vcs-push!` represent remote mutation intents;
+without explicit `live-remote?` authority they return `remote-unavailable`
+instead of contacting the configured remote. Credentialed remote-looking input
+is denied as `permission-denied` and appears in adapter-owned VCS audit records
+only as redacted request data.
+
 ## Mutation Authority
 
 `(agent vcs)` classifies local repository mutations as `repository-mutation`
