@@ -107,6 +107,12 @@ The Emacs bootstrap also exposes matching `agent-scheme-session-*` functions
 and `agent-scheme-session-eval-source` for evaluating source inside a durable
 session.
 
+Foreground calls to `agent-scheme-session-eval-source` run to completion before
+the caller regains control.  Background work uses `(agent job)` and locks the
+session with `(locked-by-job j-N)` while the host evaluates.  See
+[`jobs.md`](jobs.md) for the job datum shape, streaming `agent-yield` workflow,
+and cancellation and interrupt behavior.
+
 ## Native Emacs REPL UX
 
 `agent-scheme-start-repl` starts or switches to a project session by default.
