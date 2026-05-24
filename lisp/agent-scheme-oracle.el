@@ -70,6 +70,20 @@ AGENT_SCHEME_CHICKEN and then PATH."
   :type '(choice (const :tag "Discover automatically" nil) string)
   :group 'agent-scheme-oracle)
 
+(defcustom agent-scheme-oracle-gambit-command nil
+  "Optional Gambit Scheme interpreter executable for oracle runs.
+When nil, `agent-scheme-oracle-gambit-reference' consults
+AGENT_SCHEME_GAMBIT and then PATH for gsi."
+  :type '(choice (const :tag "Discover automatically" nil) string)
+  :group 'agent-scheme-oracle)
+
+(defcustom agent-scheme-oracle-gambit-compiler-command nil
+  "Optional Gambit Scheme compiler executable for future compile checks.
+When nil, `agent-scheme-oracle-gambit-compiler-executable' consults
+AGENT_SCHEME_GAMBIT_COMPILER and then PATH for gsc."
+  :type '(choice (const :tag "Discover automatically" nil) string)
+  :group 'agent-scheme-oracle)
+
 (defconst agent-scheme-oracle--policy-gated-libraries
   '((scheme file)
     (scheme load)
@@ -88,7 +102,7 @@ AGENT_SCHEME_CHICKEN and then PATH."
   "Stable oracle report status order.")
 
 (defconst agent-scheme-oracle-reference-names
-  '(chibi gauche guile sagittarius racket chicken)
+  '(chibi gauche guile sagittarius racket chicken gambit)
   "Stable oracle reference adapter name order.")
 
 (cl-defstruct (agent-scheme-oracle-reference
@@ -744,6 +758,33 @@ When STATUSES is nil, return REPORTS unchanged."
                   "-q" "-R" "r7rs" "-b" "-e" "(import (scheme base))"))
         (file-error nil)))))
 
+(defun agent-scheme-oracle--gambit-library-search-directory ()
+  "Return the repository Scheme library directory for Gambit."
+  (expand-file-name "scheme" agent-scheme-oracle-root-directory))
+
+(defun agent-scheme-oracle--gambit-r7rs-arguments ()
+  "Return Gambit arguments for strict R7RS mode and local library search."
+  (list
+   (format "-:r7rs,search=%s"
+           (agent-scheme-oracle--gambit-library-search-directory))))
+
+(defun agent-scheme-oracle--gambit-r7rs-available-p (command)
+  "Return non-nil when COMMAND supports Gambit's R7RS mode."
+  (when command
+    (with-temp-buffer
+      (condition-case nil
+          (equal 0
+                 (apply
+                  #'process-file
+                  command
+                  nil
+                  t
+                  nil
+                  (append
+                   (agent-scheme-oracle--gambit-r7rs-arguments)
+                   '("-e" "(import (scheme base) (scheme write)) (write (+ 1 2)) (newline)"))))
+        (file-error nil)))))
+
 ;;;###autoload
 (defun agent-scheme-oracle-chibi-reference ()
   "Return the Chibi Scheme reference adapter."
@@ -814,6 +855,26 @@ When STATUSES is nil, return REPORTS unchanged."
     "csi")
    :arguments '("-q" "-R" "r7rs" "-s")))
 
+;;;###autoload
+(defun agent-scheme-oracle-gambit-compiler-executable ()
+  "Return the configured or discovered Gambit compiler executable."
+  (agent-scheme-oracle--configured-command
+   agent-scheme-oracle-gambit-compiler-command
+   "AGENT_SCHEME_GAMBIT_COMPILER"
+   "gsc"))
+
+;;;###autoload
+(defun agent-scheme-oracle-gambit-reference ()
+  "Return the Gambit Scheme reference adapter."
+  (agent-scheme-oracle-reference
+   :name 'gambit
+   :command
+   (agent-scheme-oracle--configured-command
+    agent-scheme-oracle-gambit-command
+    "AGENT_SCHEME_GAMBIT"
+    "gsi")
+   :arguments (agent-scheme-oracle--gambit-r7rs-arguments)))
+
 (defun agent-scheme-oracle--reference-builder (name)
   "Return the reference builder function for NAME."
   (pcase name
@@ -823,6 +884,7 @@ When STATUSES is nil, return REPORTS unchanged."
     ('sagittarius #'agent-scheme-oracle-sagittarius-reference)
     ('racket #'agent-scheme-oracle-racket-reference)
     ('chicken #'agent-scheme-oracle-chicken-reference)
+    ('gambit #'agent-scheme-oracle-gambit-reference)
     (_ (error "Unknown oracle reference: %S" name))))
 
 ;;;###autoload

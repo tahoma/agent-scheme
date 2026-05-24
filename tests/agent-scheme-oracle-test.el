@@ -320,6 +320,37 @@
       (should (equal (agent-scheme-oracle-reference-arguments implementation)
                      '("-q" "-R" "r7rs" "-s"))))))
 
+(ert-deftest agent-scheme-oracle-test-gambit-reference-uses-environment ()
+  "Build the Gambit adapter from AGENT_SCHEME_GAMBIT when configured."
+  (let ((process-environment
+         (cons "AGENT_SCHEME_GAMBIT=/example/bin/gsi"
+               process-environment))
+        (agent-scheme-oracle-gambit-command nil)
+        (agent-scheme-oracle-root-directory
+         (file-name-as-directory (expand-file-name "repo" temporary-file-directory))))
+    (let ((implementation (agent-scheme-oracle-gambit-reference)))
+      (should (eq (agent-scheme-oracle-reference-name implementation)
+                  'gambit))
+      (should (equal (agent-scheme-oracle-reference-command implementation)
+                     "/example/bin/gsi"))
+      (should
+       (equal
+        (agent-scheme-oracle-reference-arguments implementation)
+        (list
+         (format "-:r7rs,search=%s"
+                 (expand-file-name "scheme"
+                                   agent-scheme-oracle-root-directory))))))))
+
+(ert-deftest agent-scheme-oracle-test-gambit-compiler-uses-environment ()
+  "Discover the future Gambit compiler path from AGENT_SCHEME_GAMBIT_COMPILER."
+  (let ((process-environment
+         (cons "AGENT_SCHEME_GAMBIT_COMPILER=/example/bin/gsc"
+               process-environment))
+        (agent-scheme-oracle-gambit-compiler-command nil))
+    (should
+     (equal (agent-scheme-oracle-gambit-compiler-executable)
+            "/example/bin/gsc"))))
+
 (ert-deftest agent-scheme-oracle-test-default-references-use-chibi-sagittarius ()
   "Use Chibi and Sagittarius as the default oracle reference set."
   (should
@@ -327,19 +358,19 @@
                   (agent-scheme-oracle-default-references))
           '(chibi sagittarius))))
 
-(ert-deftest agent-scheme-oracle-test-all-references-include-six-candidates ()
+(ert-deftest agent-scheme-oracle-test-all-references-include-seven-candidates ()
   "Expose the full candidate set separately from defaults."
   (should
    (equal (mapcar #'agent-scheme-oracle-reference-name
                   (agent-scheme-oracle-all-references))
-          '(chibi gauche guile sagittarius racket chicken))))
+          '(chibi gauche guile sagittarius racket chicken gambit))))
 
 (ert-deftest agent-scheme-oracle-test-parses-reference-filter ()
   "Parse comma-separated oracle reference names from batch environment text."
   (should
    (equal
-    (agent-scheme-oracle-parse-reference-filter "racket, chicken")
-    '(racket chicken)))
+    (agent-scheme-oracle-parse-reference-filter "racket, gambit")
+    '(racket gambit)))
   (should-not (agent-scheme-oracle-parse-reference-filter nil))
   (should-error
    (agent-scheme-oracle-parse-reference-filter "unknown")
@@ -402,6 +433,17 @@
     (skip-unless (agent-scheme-oracle-reference-command implementation))
     (skip-unless
      (agent-scheme-oracle--racket-r7rs-available-p
+      (agent-scheme-oracle-reference-command implementation)))
+    (let* ((case (agent-scheme-test-fixture-case 'primitive-procedure-call))
+           (result (agent-scheme-oracle-run-reference implementation case)))
+      (should (equal result '(:status value :value "3"))))))
+
+(ert-deftest agent-scheme-oracle-test-gambit-runs-simple-fixture ()
+  "Run one small pure fixture through Gambit when R7RS mode is available."
+  (let ((implementation (agent-scheme-oracle-gambit-reference)))
+    (skip-unless (agent-scheme-oracle-reference-command implementation))
+    (skip-unless
+     (agent-scheme-oracle--gambit-r7rs-available-p
       (agent-scheme-oracle-reference-command implementation)))
     (let* ((case (agent-scheme-test-fixture-case 'primitive-procedure-call))
            (result (agent-scheme-oracle-run-reference implementation case)))
