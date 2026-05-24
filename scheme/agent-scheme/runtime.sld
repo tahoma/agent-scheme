@@ -218,6 +218,12 @@
           process-port-capability-handle
           authorize-process-capability
           audit-process-capability-result!
+          network-capability-effect
+          network-capability-request
+          network-capability-handle
+          network-port-capability-handle
+          authorize-network-capability
+          audit-network-capability-result!
           new-eval-context
           record-audit-event!
           record-agent-event!
@@ -1497,8 +1503,410 @@
                        (list 'error (redact result 'local-only))
                        (list 'ok (redact result 'local-only)))))))
 
-        ;; Resolve relative include paths against the active include directory.
-        (define (normalize-include-paths paths directory)
+    ;; Return RESOURCE's field alist, accepting either a plain field list or a
+    ;; `(resource ...)` datum.
+    (define (network-resource-fields resource)
+      (if (and (pair? resource) (eq? (car resource) 'resource))
+          (cdr resource)
+          resource))
+
+    ;; Return all values for RESOURCE FIELD.
+    (define (network-resource-field-values resource field)
+      (let ((entry (assq field (network-resource-fields resource))))
+        (if entry (cdr entry) '())))
+
+    ;; Return RESOURCE FIELD's first value, or #f.
+    (define (network-resource-value resource field)
+      (let ((values (network-resource-field-values resource field)))
+        (if (pair? values) (car values) #f)))
+
+    ;; Return RESOURCE FIELD's values, flattening single nested list fields.
+    (define (network-resource-values resource field)
+      (capability-flatten-values
+       (network-resource-field-values resource field)))
+
+    ;; Convert host-owned network metadata to Agent Scheme datums before
+    ;; publishing it through result or audit records.
+    (define (network-public-datum datum)
+      (cond
+       ((agent-scheme-number? datum) datum)
+       ((and (number? datum) (integer? datum))
+        (agent-scheme-make-canonical-integer datum))
+       ((number? datum)
+        (agent-scheme-make-canonical-decimal datum))
+       ((pair? datum)
+        (cons (network-public-datum (car datum))
+              (network-public-datum (cdr datum))))
+       ((vector? datum)
+        (list->vector
+         (map network-public-datum (vector->list datum))))
+       (else datum)))
+
+    ;; Redact network metadata, then make it safe for external rendering.
+    (define (network-redacted-public-datum datum)
+      (network-public-datum (redact datum 'local-only)))
+
+    ;; Return #t when VALUE is in VALUES using equal?.
+    (define (network-member-equal? value values)
+      (cond
+       ((null? values) #f)
+       ((equal? value (car values)) #t)
+       (else (network-member-equal? value (cdr values)))))
+
+    ;; Return #t when every LEFT value is a member of RIGHT.
+    (define (network-subset? left right)
+      (cond
+       ((null? left) #t)
+       ((or (null? right) (network-member-equal? 'all right)) #t)
+       ((network-member-equal? (car left) right)
+        (network-subset? (cdr left) right))
+       (else #f)))
+
+    ;; Return #t when VALUE is covered by ALLOWED values.
+    (define (network-value-covered? value allowed)
+      (or (null? allowed)
+          (network-member-equal? 'all allowed)
+          (network-member-equal? value allowed)))
+
+    ;; Return the effect class for a network capability operation.
+    (define (network-capability-effect operation)
+      (if (eq? operation 'stream)
+          'network-stream
+          'network-egress))
+
+    ;; Report whether GRANT is a network-domain grant.
+    (define (network-capability-grant? grant)
+      (and (pair? grant)
+           (eq? (car grant) 'capability-grant)
+           (eq? (capability-field-value grant 'domain) 'network)))
+
+    ;; Report whether GRANT authorizes network OPERATION.
+    (define (network-capability-operation? grant operation)
+      (let loop ((operations
+                  (capability-flatten-values
+                   (capability-field-values grant 'operations))))
+        (and (pair? operations)
+             (or (eq? (car operations) operation)
+                 (eq? (car operations) 'all)
+                 (loop (cdr operations))))))
+
+    ;; Return network-domain grants from CONTEXT.
+    (define (network-capability-grants context)
+      (let loop ((grants (context-capability-grants context)) (kept '()))
+        (cond
+         ((null? grants) (reverse kept))
+         ((network-capability-grant? (car grants))
+          (loop (cdr grants) (cons (car grants) kept)))
+         (else
+          (loop (cdr grants) kept)))))
+
+    ;; Return a network scope denial reason, or #f when RESOURCE is in scope.
+    (define (network-scope-denial grant resource)
+      (let ((schemes (capability-scope-values grant 'schemes))
+            (hosts (capability-scope-values grant 'hosts))
+            (ports (capability-scope-values grant 'ports))
+            (methods (capability-scope-values grant 'methods))
+            (header-classes (capability-scope-values grant 'header-classes))
+            (payload-classes (capability-scope-values grant 'payload-classes))
+            (max-response-bytes
+             (capability-scope-value grant 'max-response-bytes))
+            (max-redirects (capability-scope-value grant 'max-redirects))
+            (max-timeout-ms (capability-scope-value grant 'max-timeout-ms))
+            (max-stream-lifetime-ms
+             (capability-scope-value grant 'stream-lifetime-ms))
+            (scheme (network-resource-value resource 'scheme))
+            (host (network-resource-value resource 'host))
+            (port (network-resource-value resource 'port))
+            (method (network-resource-value resource 'method))
+            (resource-header-classes
+             (network-resource-values resource 'header-classes))
+            (payload-class
+             (network-resource-value resource 'payload-class))
+            (response-size
+             (network-resource-value resource 'response-size))
+            (redirects
+             (or (network-resource-value resource 'redirects) 0))
+            (timeout-ms
+             (network-resource-value resource 'timeout-ms))
+            (stream-lifetime-ms
+             (network-resource-value resource 'stream-lifetime-ms)))
+        (cond
+         ((not (network-value-covered? scheme schemes))
+          "scheme is outside approved network grant scope")
+         ((not (network-value-covered? host hosts))
+          "host is outside approved network grant scope")
+         ((not (network-value-covered? port ports))
+          "port is outside approved network grant scope")
+         ((not (network-value-covered? method methods))
+          "method is outside approved network grant scope")
+         ((not (network-subset? resource-header-classes header-classes))
+          "header class is outside approved network grant scope")
+         ((not (network-value-covered? payload-class payload-classes))
+          "payload class is outside approved network grant scope")
+         ((and max-response-bytes
+               response-size
+               (> response-size max-response-bytes))
+          "response size is outside approved network grant scope")
+         ((and max-redirects (> redirects max-redirects))
+          "redirect count is outside approved network grant scope")
+         ((and max-timeout-ms timeout-ms (> timeout-ms max-timeout-ms))
+          "timeout is outside approved network grant scope")
+         ((and max-stream-lifetime-ms
+               stream-lifetime-ms
+               (> stream-lifetime-ms max-stream-lifetime-ms))
+          "stream lifetime is outside approved network grant scope")
+         (else #f))))
+
+    ;; Return a matching network grant for RESOURCE and OPERATION, or a denial
+    ;; tuple.
+    (define (network-capability-match grants operation resource)
+      (let loop ((rest grants) (denied #f))
+        (cond
+         ((null? rest) denied)
+         ((not (network-capability-operation? (car rest) operation))
+          (loop (cdr rest) denied))
+         ((eq? (capability-field-value (car rest) 'status) 'revoked)
+          (loop (cdr rest)
+                (list 'denied
+                      (car rest)
+                      "revoked network capability grant")))
+         ((not (capability-grant-active? (car rest)))
+          (loop (cdr rest)
+                (list 'denied
+                      (car rest)
+                      "expired network capability grant")))
+         (else
+          (let ((reason (network-scope-denial (car rest) resource)))
+            (if reason
+                (loop (cdr rest) (list 'denied (car rest) reason))
+                (list 'approved (car rest))))))))
+
+    ;; Return a host-neutral network capability request datum.
+    (define (network-capability-request library binding operation resource)
+      (list 'capability-request
+            (list 'library library)
+            (list 'binding binding)
+            (list 'domain 'network)
+            (list 'operation operation)
+            (cons 'resource
+                  (network-redacted-public-datum
+                   (network-resource-fields resource)))
+            (list 'effect (network-capability-effect operation))))
+
+    ;; Return a network capability decision datum.
+    (define (network-capability-decision request status grant reason)
+      (list 'capability-decision
+            (list 'request request)
+            (list 'status status)
+            (list 'domain 'network)
+            (list 'grant (if grant (capability-field-value grant 'id) 'none))
+            (list 'reason reason)))
+
+    ;; Record DENIAL for network REQUEST and raise a portable evaluator error.
+    (define (deny-network-capability!
+             context request operation grant reason)
+      (let ((decision
+             (network-capability-decision request 'denied grant reason)))
+        (record-audit-event!
+         context
+         'capability-decision
+         (list (list 'request request)
+               (list 'decision decision)
+               (list 'domain 'network)
+               (list 'operation operation)
+               (list 'status 'denied)
+               (list 'grant
+                     (if grant (capability-field-value grant 'id) 'none))
+               (list 'reason reason)))
+        (record-audit-event!
+         context
+         'capability-audit
+         (list (list 'request request)
+               (list 'decision decision)
+               (list 'domain 'network)
+               (list 'operation operation)
+               (list 'result (list 'error reason))))
+        (eval-error
+         (string-append "network capability denied: " reason))))
+
+    ;; Return CONTEXT's configured network policy action.
+    (define (network-policy-action context)
+      (let ((entry (assq 'network-access (context-policy-actions context))))
+        (if entry (cdr entry) 'deny)))
+
+    ;; Require host policy approval for a network capability request.
+    (define (authorize-network-policy!
+             context request binding operation resource grant)
+      (let ((action (network-policy-action context))
+            (grant-id (capability-field-value grant 'id)))
+        (if (eq? action 'allow)
+            (record-audit-event!
+             context
+             'policy-decision
+             (list (list 'category 'network-access)
+                   (list 'operation binding)
+                   (list 'decision 'allowed)
+                   (list 'domain 'network)
+                   (list 'resource
+                         (network-redacted-public-datum
+                          (network-resource-fields resource)))
+                   (list 'grant grant-id)))
+            (begin
+              (record-audit-event!
+               context
+               'policy-decision
+               (list (list 'category 'network-access)
+                     (list 'operation binding)
+                     (list 'decision 'denied)
+                     (list 'domain 'network)
+                     (list 'resource
+                           (network-redacted-public-datum
+                            (network-resource-fields resource)))
+                     (list 'grant grant-id)))
+              (deny-network-capability!
+               context
+               request
+               operation
+               grant
+               "network request denied by policy")))))
+
+    ;; Authorize a host adapter network request against the shared network
+    ;; capability vocabulary. This does not perform transport.
+    (define (authorize-network-capability
+             library binding context operation resource)
+      (let* ((request
+              (network-capability-request
+               library
+               binding
+               operation
+               resource))
+             (grants (network-capability-grants context)))
+        (record-audit-event!
+         context
+         'capability-request
+         (list (list 'request request)
+               (list 'domain 'network)
+               (list 'operation operation)
+               (list 'binding binding)
+               (list 'scheme
+                     (network-public-datum
+                      (network-resource-value resource 'scheme)))
+               (list 'host
+                     (network-public-datum
+                      (network-resource-value resource 'host)))
+               (list 'port
+                     (network-public-datum
+                      (network-resource-value resource 'port)))
+               (list 'method
+                     (network-public-datum
+                      (network-resource-value resource 'method)))
+               (list 'header-classes
+                     (network-public-datum
+                      (network-resource-values resource 'header-classes)))
+               (list 'payload-class
+                     (network-public-datum
+                      (network-resource-value resource 'payload-class)))
+               (list 'payload
+                     (network-redacted-public-datum
+                      (network-resource-value resource 'payload)))
+               (list 'response-size
+                     (network-public-datum
+                      (network-resource-value resource 'response-size)))
+               (list 'redirects
+                     (network-public-datum
+                      (or (network-resource-value resource 'redirects)
+                          0)))))
+        (if (null? grants)
+            (deny-network-capability!
+             context
+             request
+             operation
+             #f
+             "no active network grant covers request"))
+        (let ((match
+               (network-capability-match grants operation resource)))
+          (if (or (not match) (eq? (car match) 'denied))
+              (deny-network-capability!
+               context
+               request
+               operation
+               (and match (second match))
+               (if match
+                   (third match)
+                   "no active network grant covers request")))
+          (let* ((grant (second match))
+                 (decision
+                  (network-capability-decision
+                   request
+                   'approved
+                   grant
+                   "network request is covered by active grant")))
+            (authorize-network-policy!
+             context
+             request
+             binding
+             operation
+             resource
+             grant)
+            (record-audit-event!
+             context
+             'capability-decision
+             (list (list 'request request)
+                   (list 'decision decision)
+                   (list 'domain 'network)
+                   (list 'operation operation)
+                   (list 'status 'approved)
+                   (list 'grant (capability-field-value grant 'id))
+                   (list 'reason
+                         "network request is covered by active grant")))
+            (list (list 'request request)
+                  (list 'decision decision)
+                  (list 'operation operation)
+                  (list 'grant grant))))))
+
+    ;; Return a Scheme-readable network stream handle datum.
+    (define (network-capability-handle id request url grant status)
+      (list 'handle
+            (list 'id id)
+            (list 'kind 'network-stream)
+            (list 'domain 'network)
+            (list 'request request)
+            (list 'url url)
+            (list 'grant grant)
+            (list 'status status)))
+
+    ;; Return a Scheme-readable network-backed port capability datum.
+    (define (network-port-capability-handle
+             id kind stream-handle operations grant limits status)
+      (list 'port-capability
+            (list 'id id)
+            (list 'kind kind)
+            (list 'backing 'network)
+            (cons 'operations operations)
+            (list 'grant grant)
+            (cons 'limits limits)
+            (list 'path stream-handle)
+            (list 'status status)))
+
+    ;; Record the result of an authorized network capability operation.
+    (define (audit-network-capability-result!
+             context authorization result error?)
+      (record-audit-event!
+       context
+       'capability-audit
+       (list (list 'request (cadr (assq 'request authorization)))
+             (list 'decision (cadr (assq 'decision authorization)))
+             (list 'domain 'network)
+             (list 'operation (cadr (assq 'operation authorization)))
+             (list 'result
+                   (if error?
+                       (list 'error
+                             (network-redacted-public-datum result))
+                       (list 'ok
+                             (network-redacted-public-datum result)))))))
+
+    ;; Resolve relative include paths against the active include directory.
+    (define (normalize-include-paths paths directory)
       (map (lambda (path)
              (path-normalize (path-join directory path)))
            paths))

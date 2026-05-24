@@ -35,6 +35,7 @@
     skill-resource-read
     skill-script-execution
     skill-export-write
+    network-access
     remote-provider-routing)
   "Policy categories recognized by Agent Scheme.")
 
@@ -59,6 +60,7 @@
     (skill-resource-read . confirm)
     (skill-script-execution . confirm)
     (skill-export-write . confirm)
+    (network-access . deny)
     (remote-provider-routing . allow))
   "Alist mapping policy categories to `allow', `deny', or `confirm'."
   :type `(alist :key-type (choice ,@(mapcar (lambda (category)

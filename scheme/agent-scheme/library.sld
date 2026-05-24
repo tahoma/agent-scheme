@@ -88,6 +88,7 @@
         (emacs command)
         (emacs diff)
         (emacs frame)
+        (emacs network)
         (emacs process)
         (emacs project)
         (emacs window)))
@@ -117,6 +118,7 @@
         (agent debugger)
         (agent diff)
         (agent vcs)
+        (agent network)
         (agent capability)
         (agent capability primitive)
         (agent memory)
@@ -133,7 +135,10 @@
          "agent/diff.sld")
         ((agent vcs)
          "scheme/agent/vcs.sld"
-         "agent/vcs.sld")))
+         "agent/vcs.sld")
+        ((agent network)
+         "scheme/agent/network.sld"
+         "agent/network.sld")))
 
     ;; Checked-in standard libraries loaded as portable Scheme source files.
     (define standard-source-library-load-paths
@@ -847,6 +852,12 @@
              context
              environment)))
        ((equal? key '(agent vcs))
+        (if (not (library-registry-ref context key))
+            (register-source-library!
+             (agent-source-library-source key)
+             context
+             environment)))
+       ((equal? key '(agent network))
         (if (not (library-registry-ref context key))
             (register-source-library!
              (agent-source-library-source key)

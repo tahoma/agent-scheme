@@ -3690,7 +3690,8 @@
     ;; Return the next character from PORT, optionally advancing its cursor.
     (define (text-port-next-char port advance? description . maybe-context)
       (let ((input (expect-textual-input-port port description)))
-        (if (not (memq (agent-scheme-port-medium input) '(string file)))
+        (if (not (memq (agent-scheme-port-medium input)
+                       '(string file network)))
             (eval-error
              (string-append description
                             " host textual input ports are not available")
@@ -3763,7 +3764,7 @@
             (eval-error "read-string count must be non-negative"))
         (cond
          ((not port) (if (= count 0) "" agent-scheme-eof-object))
-         ((not (memq (agent-scheme-port-medium port) '(string file)))
+         ((not (memq (agent-scheme-port-medium port) '(string file network)))
           (eval-error "read-string host textual input ports are not available"))
          (else
           (revalidate-port-operation! port context 'read)
@@ -3788,7 +3789,7 @@
                        (current-input-port-or-deny context "read-line")
                        (car arguments))
                    "read-line")))
-        (if (not (memq (agent-scheme-port-medium port) '(string file)))
+        (if (not (memq (agent-scheme-port-medium port) '(string file network)))
             (eval-error
              "read-line host textual input ports are not available"))
         (revalidate-port-operation! port context 'read)
