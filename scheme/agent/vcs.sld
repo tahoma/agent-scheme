@@ -28,11 +28,25 @@
           make-vcs-diff-file
           vcs-diff-summary-files
           make-vcs-capability-request
+          vcs-capability-request?
+          vcs-capability-request-id
+          vcs-capability-request-operation
           make-vcs-capability-result
+          make-vcs-capability-grant
+          make-vcs-approval-decision
+          make-vcs-capability-decision
+          vcs-capability-decision?
+          vcs-capability-decision-status
+          vcs-authorize-capability-request
+          make-vcs-capability-audit
+          vcs-capability-audit?
           make-vcs-outcome
           vcs-outcome-status
+          vcs-known-outcome?
           vcs-read-only-operation?
           vcs-mutating-operation?
+          vcs-remote-operation?
+          vcs-operation-required-authority
           parse-git-status-porcelain-v2-z
           parse-git-raw-diff-z)
   (import (scheme base))
@@ -47,6 +61,10 @@
         (if entry
             (if (null? (cdr entry)) default (cadr entry))
             default)))
+
+    ;; Report whether DATUM is a record tagged by TAG.
+    (define (vcs-record? datum tag)
+      (and (pair? datum) (eq? (car datum) tag)))
 
     ;; Return an explicit repository identity/root record.
     (define (make-vcs-repository system root identity)
@@ -179,7 +197,22 @@
             (vcs-field 'operation operation)
             (vcs-field 'authority authority)
             (vcs-field 'arguments arguments)
+            (vcs-field 'required-authority
+                       (vcs-operation-required-authority operation))
+            (vcs-field 'remote? (vcs-remote-operation? operation))
             (vcs-field 'mutating? (vcs-mutating-operation? operation))))
+
+    ;; Report whether DATUM is a VCS capability request record.
+    (define (vcs-capability-request? datum)
+      (vcs-record? datum 'vcs-capability-request))
+
+    ;; Return REQUEST's stable identifier.
+    (define (vcs-capability-request-id request)
+      (vcs-field-value request 'id #f))
+
+    ;; Return REQUEST's operation symbol.
+    (define (vcs-capability-request-operation request)
+      (vcs-field-value request 'operation #f))
 
     ;; Return a host-adapter result datum for a VCS operation.
     (define (make-vcs-capability-result id status value)
@@ -187,6 +220,51 @@
             (vcs-field 'id id)
             (vcs-field 'status status)
             (vcs-field 'value value)))
+
+    ;; Return a scoped VCS authority grant record.
+    (define (make-vcs-capability-grant id authority operations repository remote)
+      (list 'vcs-capability-grant
+            (vcs-field 'id id)
+            (vcs-field 'authority authority)
+            (vcs-field 'operations operations)
+            (vcs-field 'repository repository)
+            (vcs-field 'remote remote)))
+
+    ;; Return an explicit approval decision for one VCS request.
+    (define (make-vcs-approval-decision id request-id status reason)
+      (list 'vcs-approval-decision
+            (vcs-field 'id id)
+            (vcs-field 'request-id request-id)
+            (vcs-field 'status status)
+            (vcs-field 'reason reason)))
+
+    ;; Return a VCS capability authorization decision record.
+    (define (make-vcs-capability-decision request status grant approval reason)
+      (let ((operation (vcs-capability-request-operation request)))
+        (let ((required-authority (vcs-operation-required-authority operation)))
+          (list 'vcs-capability-decision
+                (vcs-field 'id (vcs-capability-request-id request))
+                (vcs-field 'operation operation)
+                (vcs-field 'authority required-authority)
+                (vcs-field 'requested-authority
+                           (vcs-field-value request 'authority #f))
+                (vcs-field 'status status)
+                (vcs-field 'grant
+                           (if grant (vcs-field-value grant 'id #f) #f))
+                (vcs-field 'approval
+                           (if approval
+                               (vcs-field-value approval 'id #f)
+                               #f))
+                (vcs-field 'reason reason)
+                (vcs-field 'remote? (vcs-remote-operation? operation))))))
+
+    ;; Report whether DATUM is a VCS capability decision record.
+    (define (vcs-capability-decision? datum)
+      (vcs-record? datum 'vcs-capability-decision))
+
+    ;; Return DECISION's status symbol.
+    (define (vcs-capability-decision-status decision)
+      (vcs-field-value decision 'status #f))
 
     ;; Return an explicit VCS outcome instead of a generic error.
     (define (make-vcs-outcome status message)
@@ -198,6 +276,10 @@
     (define (vcs-outcome-status outcome)
       (vcs-field-value outcome 'status #f))
 
+    ;; Report whether DATUM is a VCS outcome record.
+    (define (vcs-outcome? datum)
+      (vcs-record? datum 'vcs-outcome))
+
     ;; Read-only VCS observations never mutate repository state.
     (define vcs-read-only-operations
       '(status refs branches commit-summary diff-summary remotes operation-state))
@@ -207,6 +289,16 @@
       '(stage unstage commit branch-create branch-delete checkout switch
         fetch pull push merge rebase cherry-pick revert reset))
 
+    ;; Remote VCS operations may communicate with and mutate remote state.
+    (define vcs-remote-operations
+      '(fetch pull push))
+
+    ;; Stable VCS outcome vocabulary shared by adapters.
+    (define vcs-known-outcomes
+      '(ok no-vcs unsupported-vcs git-not-found dirty-index conflict timeout
+        permission-denied remote-authentication-failed remote-unavailable
+        denied cancelled))
+
     ;; Report whether OPERATION is a read-only VCS observation.
     (define (vcs-read-only-operation? operation)
       (if (memq operation vcs-read-only-operations) #t #f))
@@ -214,6 +306,152 @@
     ;; Report whether OPERATION mutates repository state.
     (define (vcs-mutating-operation? operation)
       (if (memq operation vcs-mutating-operations) #t #f))
+
+    ;; Report whether OPERATION communicates with a remote VCS endpoint.
+    (define (vcs-remote-operation? operation)
+      (if (memq operation vcs-remote-operations) #t #f))
+
+    ;; Return OPERATION's required policy authority family.
+    (define (vcs-operation-required-authority operation)
+      (cond
+       ((vcs-read-only-operation? operation) 'read-only-observation)
+       ((vcs-remote-operation? operation) 'remote-mutation)
+       ((vcs-mutating-operation? operation) 'repository-mutation)
+       (else 'unknown)))
+
+    ;; Report whether STATUS is part of the shared outcome vocabulary.
+    (define (vcs-known-outcome? status)
+      (if (memq status vcs-known-outcomes) #t #f))
+
+    ;; Return REQUEST's argument named NAME, or DEFAULT when absent.
+    (define (vcs-request-argument request name default)
+      (let ((arguments (vcs-field-value request 'arguments '())))
+        (let loop ((rest arguments))
+          (cond
+           ((null? rest) default)
+           ((and (pair? (car rest)) (eq? (car (car rest)) name))
+            (let ((values (cdr (car rest))))
+              (if (null? values) default (car values))))
+           (else
+            (loop (cdr rest)))))))
+
+    ;; Report whether OPERATIONS covers OPERATION.
+    (define (vcs-operation-covered? operation operations)
+      (cond
+       ((eq? operations 'all) #t)
+       ((pair? operations)
+        (if (or (memq operation operations) (memq 'all operations)) #t #f))
+       (else
+        (eq? operation operations))))
+
+    ;; Report whether VALUE matches SCOPE, where #f and all mean unrestricted.
+    (define (vcs-scope-matches? scope value)
+      (or (not scope) (eq? scope 'all) (equal? scope value)))
+
+    ;; Report whether GRANT authorizes REQUEST.
+    (define (vcs-grant-allows? request grant)
+      (let ((operation (vcs-capability-request-operation request)))
+        (let ((required-authority (vcs-operation-required-authority operation))
+              (grant-authority (vcs-field-value grant 'authority #f)))
+          (and (or (eq? grant-authority required-authority)
+                   (eq? grant-authority 'all))
+               (vcs-operation-covered?
+                operation
+                (vcs-field-value grant 'operations '()))
+               (vcs-scope-matches?
+                (vcs-field-value grant 'repository #f)
+                (vcs-request-argument request 'repository #f))
+               (vcs-scope-matches?
+                (vcs-field-value grant 'remote #f)
+                (vcs-request-argument request 'remote #f))))))
+
+    ;; Return the first GRANTS entry that authorizes REQUEST.
+    (define (vcs-find-grant request grants)
+      (let loop ((rest grants))
+        (cond
+         ((null? rest) #f)
+         ((vcs-grant-allows? request (car rest)) (car rest))
+         (else (loop (cdr rest))))))
+
+    ;; Report whether APPROVAL authorizes REQUEST.
+    (define (vcs-approval-allows? request approval)
+      (and (vcs-record? approval 'vcs-approval-decision)
+           (equal? (vcs-capability-request-id request)
+                   (vcs-field-value approval 'request-id #f))
+           (eq? (vcs-field-value approval 'status #f) 'approved)))
+
+    ;; Return the first APPROVALS entry that authorizes REQUEST.
+    (define (vcs-find-approval request approvals)
+      (let loop ((rest approvals))
+        (cond
+         ((null? rest) #f)
+         ((vcs-approval-allows? request (car rest)) (car rest))
+         (else (loop (cdr rest))))))
+
+    ;; Return a fail-closed authorization decision for REQUEST.
+    (define (vcs-authorize-capability-request request grants approvals)
+      (let ((operation (vcs-capability-request-operation request)))
+        (let ((required-authority (vcs-operation-required-authority operation))
+              (requested-authority (vcs-field-value request 'authority #f)))
+          (cond
+           ((vcs-read-only-operation? operation)
+            (make-vcs-capability-decision
+             request 'approved #f #f "read-only observation"))
+           ((not (vcs-mutating-operation? operation))
+            (make-vcs-capability-decision
+             request 'denied #f #f "unknown VCS operation"))
+           ((not (eq? requested-authority required-authority))
+            (make-vcs-capability-decision
+             request
+             'denied
+             #f
+             #f
+             "requested VCS authority does not match operation"))
+           (else
+            (let ((grant (vcs-find-grant request grants)))
+              (if grant
+                  (make-vcs-capability-decision
+                   request 'approved grant #f "authorized by VCS grant")
+                  (let ((approval (vcs-find-approval request approvals)))
+                    (if approval
+                        (make-vcs-capability-decision
+                         request
+                         'approved
+                         #f
+                         approval
+                         "authorized by VCS approval")
+                        (make-vcs-capability-decision
+                         request
+                         'denied
+                         #f
+                         #f
+                         "missing VCS mutation grant or approval"))))))))))
+
+    ;; Return RESULT's VCS outcome status when it carries a VCS outcome.
+    (define (vcs-result-outcome-status result)
+      (let ((value (vcs-field-value result 'value #f)))
+        (if (vcs-outcome? value)
+            (vcs-outcome-status value)
+            #f)))
+
+    ;; Return a stable audit event for a VCS authorization and result.
+    (define (make-vcs-capability-audit request decision result)
+      (let ((operation (vcs-capability-request-operation request)))
+        (list 'vcs-capability-audit
+              (vcs-field 'event 'vcs-capability-audit)
+              (vcs-field 'id (vcs-capability-request-id request))
+              (vcs-field 'operation operation)
+              (vcs-field 'authority
+                         (vcs-operation-required-authority operation))
+              (vcs-field 'remote? (vcs-remote-operation? operation))
+              (vcs-field 'decision
+                         (vcs-capability-decision-status decision))
+              (vcs-field 'result (vcs-field-value result 'status #f))
+              (vcs-field 'outcome (vcs-result-outcome-status result)))))
+
+    ;; Report whether DATUM is a VCS capability audit record.
+    (define (vcs-capability-audit? datum)
+      (vcs-record? datum 'vcs-capability-audit))
 
     ;; Return non-#f when TEXT starts with PREFIX.
     (define (vcs-string-prefix? prefix text)

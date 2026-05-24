@@ -27,6 +27,14 @@ The shared vocabulary is made of Scheme-readable records:
 - `vcs-capability-request` and `vcs-capability-result`: the request/result
   envelope that host adapters satisfy through local tools, editor APIs, or
   future native services.
+- `vcs-capability-grant`: scoped mutation authority for a repository, remote,
+  and operation set.
+- `vcs-approval-decision`: an explicit approval or denial for one requested VCS
+  mutation.
+- `vcs-capability-decision`: the fail-closed authorization decision computed
+  from a request, grants, and approvals.
+- `vcs-capability-audit`: the stable event record connecting a request,
+  decision, result, and outcome.
 - `vcs-outcome`: explicit success or failure status.
 
 Raw host objects, process handles, Magit records, editor VC objects, and
@@ -54,7 +62,23 @@ Host adapters use `vcs-capability-request` datums when satisfying observations:
   (operation status)
   (authority read-only-observation)
   (arguments ((path ".")))
+  (required-authority read-only-observation)
+  (remote? #f)
   (mutating? #f))
+```
+
+Mutating requests use the same envelope, but their required authority is
+separate from read-only observation:
+
+```scheme
+(vcs-capability-request
+  (id req-2)
+  (operation push)
+  (authority remote-mutation)
+  (arguments ((repository "/repo") (remote "origin") (branch "main")))
+  (required-authority remote-mutation)
+  (remote? #t)
+  (mutating? #t))
 ```
 
 Results return a matching `vcs-capability-result` with a Scheme-readable value
@@ -76,6 +100,49 @@ rebase, cherry-pick, revert, and reset require a separate policy-gated
 capability family. The shared contract may describe their request and result
 shapes, but importing `(agent vcs)` does not grant repository mutation.
 
+## Mutation Authority
+
+`(agent vcs)` classifies local repository mutations as `repository-mutation`
+and remote communication or remote-ref updates as `remote-mutation`. Stage,
+unstage, commit, branch create/delete, checkout/switch, merge, rebase,
+cherry-pick, revert, and reset are local repository mutations. Fetch, pull, and
+push are remote mutations because they communicate with configured remotes and
+may update local or remote refs.
+
+Adapters must authorize mutating requests before changing repository state or
+contacting a remote. Authorization is data-only: a
+`vcs-authorize-capability-request` decision is computed from the request, a
+list of `vcs-capability-grant` records, and a list of
+`vcs-approval-decision` records. Missing authority denies the request with a
+stable `vcs-capability-decision`; successful and denied attempts can both be
+recorded with `vcs-capability-audit`.
+
+Example scoped local grant:
+
+```scheme
+(vcs-capability-grant
+  (id grant-local)
+  (authority repository-mutation)
+  (operations (stage commit))
+  (repository "/repo")
+  (remote #f))
+```
+
+Example remote approval:
+
+```scheme
+(vcs-approval-decision
+  (id approve-push)
+  (request-id req-2)
+  (status approved)
+  (reason "User approved push."))
+```
+
+These records are not host process handles, Git objects, VC objects, Magit
+records, or credential containers. Emacs, native CLI, daemon, and future host
+adapters may implement the actual operations differently, but they should keep
+the same Scheme-visible request, decision, result, audit, and outcome datums.
+
 ## Outcomes
 
 VCS failures are represented explicitly instead of collapsed into generic
@@ -88,6 +155,10 @@ errors:
 - `conflict`
 - `timeout`
 - `permission-denied`
+- `remote-authentication-failed`
+- `remote-unavailable`
+- `denied`
+- `cancelled`
 
 Adapters may add narrower diagnostic fields around these statuses, but the
 portable status symbols remain the common boundary vocabulary.

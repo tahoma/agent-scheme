@@ -38,6 +38,7 @@
                  "## Git Parser Fixtures"
                  "## Capability Requests"
                  "## Read-Only Versus Mutation"
+                 "## Mutation Authority"
                  "## Outcomes"
                  "## SRFI Relationship"
                  "(agent vcs)"
@@ -47,6 +48,12 @@
                  "vcs-diff-summary"
                  "vcs-capability-request"
                  "vcs-capability-result"
+                 "vcs-capability-grant"
+                 "vcs-capability-decision"
+                 "vcs-capability-audit"
+                 "vcs-approval-decision"
+                 "repository-mutation"
+                 "remote-mutation"
                  "git status --porcelain=v2 -z"
                  "git diff --raw -z"
                  "no-vcs"
@@ -56,6 +63,8 @@
                  "conflict"
                  "timeout"
                  "permission-denied"
+                 "remote-authentication-failed"
+                 "remote-unavailable"
                  "not an SRFI compatibility target"))
         (should (string-match-p (regexp-quote needle) doc))))))
 
