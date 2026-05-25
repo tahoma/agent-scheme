@@ -680,7 +680,8 @@ Each spec has (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY)."
     ("(scheme repl)"
      (agent-scheme--register-primitive-library
       key
-      (list (agent-scheme--policy-denied-spec "interaction-environment"))
+      `(("interaction-environment"
+         ,#'agent-scheme--primitive-interaction-environment 0 0))
       context))
     ("(scheme r5rs)"
      (agent-scheme--register-r5rs-library key context environment))

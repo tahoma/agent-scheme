@@ -5265,6 +5265,54 @@
       (lambda (arguments context)
         (policy-denied description context '())))
 
+    ;; Return audit fields for a session-scoped interaction environment.
+    (define (interaction-environment-fields session-id)
+      (if session-id
+          (list (list 'session session-id))
+          '()))
+
+    ;; Record and raise an interaction-environment denial before exposing state.
+    (define (deny-interaction-environment! context reason fields)
+      (record-audit-event!
+       context
+       'policy-decision
+       (append
+        (list (list 'category 'standard-host-effect)
+              (list 'operation "interaction-environment")
+              (list 'decision 'denied)
+              (list 'reason reason))
+        fields))
+      (eval-error reason))
+
+    ;; Implement `interaction-environment` as a session-gated mutable specifier.
+    (define (primitive-interaction-environment arguments context)
+      (let ((session-id (context-session-id context))
+            (environment (context-interaction-environment context))
+            (syntax-environment (context-syntax-environment context)))
+        (if (or (not session-id) (not environment) (not syntax-environment))
+            (deny-interaction-environment!
+             context
+             "interaction-environment requires an active session"
+             '()))
+        (let ((fields (interaction-environment-fields session-id)))
+          (if (eq? (reflect-policy-action context 'standard-host-effect)
+                   'allow)
+              (begin
+                (record-audit-event!
+                 context
+                 'policy-decision
+                 (append
+                  (list (list 'category 'standard-host-effect)
+                        (list 'operation "interaction-environment")
+                        (list 'decision 'allowed))
+                  fields))
+                (make-environment-specifier
+                 environment syntax-environment #f))
+              (deny-interaction-environment!
+               context
+               "interaction-environment requires policy-gated host access"
+               fields)))))
+
     ;; Resolve FILENAME and enforce the file-operation capability policy.
     (define (resolve-file-policy-path filename context description)
       (authorize-file-capability
@@ -6805,6 +6853,8 @@
        (cons 'primitive-real-part primitive-real-part)
        (cons 'primitive-environment primitive-environment)
        (cons 'primitive-eval primitive-eval)
+       (cons 'primitive-interaction-environment
+             primitive-interaction-environment)
        (cons 'primitive-current-error-port primitive-current-error-port)
        (cons 'primitive-current-input-port primitive-current-input-port)
        (cons 'primitive-current-output-port primitive-current-output-port)
