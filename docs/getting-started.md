@@ -304,18 +304,25 @@ ollama pull gemma3:4b
 ollama pull gemma3:12b
 ```
 
-To run the opt-in live local model test, start an OpenAI-compatible local
-server such as Ollama and set:
+To run the same opt-in live local model smoke test used by CI, start an
+OpenAI-compatible local server such as Ollama and run:
 
 ```sh
-AGENT_SCHEME_LIVE_MODEL_TEST=1 make test
+make test-live-model-ci
+```
+
+To run all live local model tests, including the full suggested local model
+matrix after pulling those models, run:
+
+```sh
+make test-live-model
 ```
 
 The test defaults to `http://127.0.0.1:11434/v1` and
 `qwen2.5-coder:0.5b`. Override those with
 `AGENT_SCHEME_LIVE_MODEL_ENDPOINT` and `AGENT_SCHEME_LIVE_MODEL_ID`.
-To run the full suggested local model matrix after pulling those models, also
-set `AGENT_SCHEME_LIVE_MODEL_MATRIX=1`. The matrix test checks that each
+The Make targets set `AGENT_SCHEME_LIVE_MODEL_TEST=1`; `make test-live-model`
+also sets `AGENT_SCHEME_LIVE_MODEL_MATRIX=1`. The matrix test checks that each
 documented local model completes through Agent Scheme's OpenAI-compatible
 transport; it is not a quality or correctness benchmark.
 
