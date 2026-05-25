@@ -276,30 +276,33 @@ The default local verification command is:
 make test
 ```
 
-To run a narrower ERT selector:
-
-```sh
-AGENT_SCHEME_TEST_SELECTOR='agent-scheme-smoke-test-harness-runs' make test
-```
-
 CI runs the aggregate suite as host/runtime-oriented shards so timing and
 failures stay visible by architectural path:
 
 ```sh
-AGENT_SCHEME_CHIBI=chibi-scheme make test-portable
+AGENT_SCHEME_CHIBI=chibi-scheme make test-portable-eval
+AGENT_SCHEME_CHIBI=chibi-scheme make test-portable-rest
 make test-emacs-core
 make test-emacs-library
 make test-emacs-capabilities
 make test-emacs-tools
 ```
 
-`make test-portable` selects the portable Chibi-backed ERT bridge tests with
-`"agent-scheme-scheme-.*"`. The Emacs-hosted shards split the non-portable ERT
+`make test` runs those shard targets in parallel by default. `make
+test-portable` remains available as the local aggregate for the portable
+Chibi-backed ERT bridge tests, split between the evaluator suite and the
+remaining portable tests. The Emacs-hosted shards split the non-portable ERT
 suite into core language/runtime, library/conformance, capability/policy, and
-tools/docs/integration groups. `make test-emacs-hosted` remains available as the
-local aggregate for all non-portable ERT tests with
-`(not "agent-scheme-scheme-.*")`. The top-level `make test` command remains the
-canonical local aggregate and still includes the portable tests.
+tools/docs/integration groups. `make test-emacs-hosted` remains available as
+the local aggregate for all non-portable ERT tests with
+`(not "agent-scheme-scheme-.*")`.
+
+When `AGENT_SCHEME_TEST_SELECTOR` is set, `make test` uses a single ERT runner
+with that selector instead of the local shard fan-out:
+
+```sh
+AGENT_SCHEME_TEST_SELECTOR='agent-scheme-smoke-test-harness-runs' make test
+```
 
 Each shard uploads a `test-log-*` artifact and writes a job summary. On pull
 requests, the combined timing job also updates one PR comment with a compact
