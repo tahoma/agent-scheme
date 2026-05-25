@@ -38,6 +38,14 @@
   "<!-- agent-scheme-ci-timing-summary -->"
   "Hidden marker used to update the pull request timing comment.")
 
+(defconst agent-scheme-ci--shard-order
+  '(("Portable Chibi-backed ERT" . 0)
+    ("Emacs core language/runtime" . 1)
+    ("Emacs library/conformance" . 2)
+    ("Emacs capabilities/policy" . 3)
+    ("Emacs tools/docs/integration" . 4))
+  "Preferred display order for CI shard summaries.")
+
 (defun agent-scheme-ci--file-string (path)
   "Return the contents of PATH as a string."
   (with-temp-buffer
@@ -165,48 +173,61 @@ durations, and optional wall-clock seconds recorded by the workflow."
           (plist-get stats :count)
           (agent-scheme-ci--format-seconds (plist-get stats :seconds))))
 
+(defun agent-scheme-ci--shard-sort-key (shard)
+  "Return display sort key for SHARD."
+  (or (cdr (assoc (plist-get shard :name) agent-scheme-ci--shard-order))
+      99))
+
+(defun agent-scheme-ci--sort-shards (shards)
+  "Return SHARDS in stable report display order."
+  (sort (copy-sequence shards)
+        (lambda (left right)
+          (< (agent-scheme-ci--shard-sort-key left)
+             (agent-scheme-ci--shard-sort-key right)))))
+
 (defun agent-scheme-ci-render-markdown-summary (shards)
   "Render SHARDS as a GitHub Actions Markdown summary."
-  (concat
-   "## Test Shard Timing\n\n"
-   "| Shard | Selector | Ran | Expected | Unexpected | Skipped | ERT time | Wall time | Slowest tests |\n"
-   "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |\n"
-   (mapconcat
-    (lambda (shard)
-      (format "| %s | `%s` | %d | %d | %d | %d | %s | %s | %s |"
-              (agent-scheme-ci--markdown-cell (plist-get shard :name))
-              (agent-scheme-ci--markdown-cell (plist-get shard :selector))
-              (plist-get shard :ran)
-              (plist-get shard :expected)
-              (plist-get shard :unexpected)
-              (plist-get shard :skipped)
-              (agent-scheme-ci--format-seconds
-               (plist-get shard :ert-seconds))
-              (agent-scheme-ci--format-seconds
-               (plist-get shard :wall-seconds))
-              (agent-scheme-ci--format-slowest-tests shard)))
-    shards
-    "\n")
-   "\n\n"
-   "## Paired Validation Surfaces\n\n"
-   "Portable Chibi-backed rows are reported beside their Emacs-hosted counterparts where the suite already has paired coverage.\n\n"
-   "| Surface | Emacs-hosted tests / ERT time | Portable Chibi-backed tests / ERT time |\n"
-   "| --- | ---: | ---: |\n"
-   (mapconcat
-    (lambda (group)
-      (let ((emacs (agent-scheme-ci--surface-stats
-                    shards
-                    (plist-get group :emacs)))
-            (portable (agent-scheme-ci--surface-stats
-                       shards
-                       (plist-get group :portable))))
-        (format "| %s | %s | %s |"
-                (agent-scheme-ci--markdown-cell (plist-get group :name))
-                (agent-scheme-ci--format-surface-stats emacs)
-                (agent-scheme-ci--format-surface-stats portable))))
-    agent-scheme-ci--surface-groups
-    "\n")
-   "\n"))
+  (let ((shards (agent-scheme-ci--sort-shards shards)))
+    (concat
+     "## Test Shard Timing\n\n"
+     "| Shard | Selector | Ran | Expected | Unexpected | Skipped | ERT time | Wall time | Slowest tests |\n"
+     "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |\n"
+     (mapconcat
+      (lambda (shard)
+        (format "| %s | `%s` | %d | %d | %d | %d | %s | %s | %s |"
+                (agent-scheme-ci--markdown-cell (plist-get shard :name))
+                (agent-scheme-ci--markdown-cell (plist-get shard :selector))
+                (plist-get shard :ran)
+                (plist-get shard :expected)
+                (plist-get shard :unexpected)
+                (plist-get shard :skipped)
+                (agent-scheme-ci--format-seconds
+                 (plist-get shard :ert-seconds))
+                (agent-scheme-ci--format-seconds
+                 (plist-get shard :wall-seconds))
+                (agent-scheme-ci--format-slowest-tests shard)))
+      shards
+      "\n")
+     "\n\n"
+     "## Paired Validation Surfaces\n\n"
+     "Portable Chibi-backed rows are reported beside their Emacs-hosted counterparts where the suite already has paired coverage.\n\n"
+     "| Surface | Emacs-hosted tests / ERT time | Portable Chibi-backed tests / ERT time |\n"
+     "| --- | ---: | ---: |\n"
+     (mapconcat
+      (lambda (group)
+        (let ((emacs (agent-scheme-ci--surface-stats
+                      shards
+                      (plist-get group :emacs)))
+              (portable (agent-scheme-ci--surface-stats
+                         shards
+                         (plist-get group :portable))))
+          (format "| %s | %s | %s |"
+                  (agent-scheme-ci--markdown-cell (plist-get group :name))
+                  (agent-scheme-ci--format-surface-stats emacs)
+                  (agent-scheme-ci--format-surface-stats portable))))
+      agent-scheme-ci--surface-groups
+      "\n")
+     "\n")))
 
 (defun agent-scheme-ci--render-compact-shard-row (shard)
   "Render SHARD as one compact Markdown table row."
@@ -224,20 +245,21 @@ durations, and optional wall-clock seconds recorded by the workflow."
   "Render SHARDS as an updatable pull request Markdown comment.
 When RUN-URL is non-nil, include a link to the workflow run that produced the
 summary."
-  (concat
-   agent-scheme-ci-pr-summary-marker
-   "\n\n"
-   "## Test Shard Timing\n\n"
-   (when (and run-url (not (string-empty-p run-url)))
-     (format "Latest run: [GitHub Actions](%s).\n\n" run-url))
-   "| Shard | Ran | Unexpected | Skipped | ERT time | Wall time |\n"
-   "| --- | ---: | ---: | ---: | ---: | ---: |\n"
-   (mapconcat #'agent-scheme-ci--render-compact-shard-row shards "\n")
-   "\n\n"
-   "<details>\n"
-   "<summary>Slowest tests and paired validation surfaces</summary>\n\n"
-   (agent-scheme-ci-render-markdown-summary shards)
-   "\n</details>\n"))
+  (let ((shards (agent-scheme-ci--sort-shards shards)))
+    (concat
+     agent-scheme-ci-pr-summary-marker
+     "\n\n"
+     "## Test Shard Timing\n\n"
+     (when (and run-url (not (string-empty-p run-url)))
+       (format "Latest run: [GitHub Actions](%s).\n\n" run-url))
+     "| Shard | Ran | Unexpected | Skipped | ERT time | Wall time |\n"
+     "| --- | ---: | ---: | ---: | ---: | ---: |\n"
+     (mapconcat #'agent-scheme-ci--render-compact-shard-row shards "\n")
+     "\n\n"
+     "<details>\n"
+     "<summary>Slowest tests and paired validation surfaces</summary>\n\n"
+     (agent-scheme-ci-render-markdown-summary shards)
+     "\n</details>\n")))
 
 (defun agent-scheme-ci-write-summary (log-files &optional output-file)
   "Render LOG-FILES to OUTPUT-FILE, or print to standard output.
