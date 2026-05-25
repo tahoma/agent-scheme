@@ -138,21 +138,30 @@
                               :ert-seconds 1.0
                               :wall-seconds 1.0
                               :tests nil))
-         (portable-shard '(:name "Portable Chibi-backed ERT"
-                                 :selector "portable"
-                                 :ran 1
-                                 :expected 1
-                                 :unexpected 0
-                                 :skipped 0
-                                 :ert-seconds 1.0
-                                 :wall-seconds 1.0
-                                 :tests nil))
+         (portable-rest-shard '(:name "Portable Chibi-backed rest"
+                                      :selector "portable-rest"
+                                      :ran 1
+                                      :expected 1
+                                      :unexpected 0
+                                      :skipped 0
+                                      :ert-seconds 1.0
+                                      :wall-seconds 1.0
+                                      :tests nil))
+         (portable-eval-shard '(:name "Portable Chibi-backed eval"
+                                      :selector "portable-eval"
+                                      :ran 1
+                                      :expected 1
+                                      :unexpected 0
+                                      :skipped 0
+                                      :ert-seconds 1.0
+                                      :wall-seconds 1.0
+                                      :tests nil))
          (markdown
           (agent-scheme-ci-render-pr-markdown-summary
-           (list tools-shard portable-shard))))
+           (list tools-shard portable-rest-shard portable-eval-shard))))
     (should
      (string-match-p
-      "| Portable Chibi-backed ERT |.*\n| Emacs tools/docs/integration |"
+      "| Portable Chibi-backed eval |.*\n| Portable Chibi-backed rest |.*\n| Emacs tools/docs/integration |"
       markdown))))
 
 (provide 'agent-scheme-ci-test)

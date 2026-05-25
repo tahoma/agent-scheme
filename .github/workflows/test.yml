@@ -16,8 +16,24 @@ env:
 
 jobs:
   test-portable:
-    name: portable Chibi-backed tests
+    name: portable Chibi-backed (${{ matrix.label }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: portable-eval
+            label: evaluator
+            make_target: test-portable-eval
+            log_file: portable-eval.log
+            summary_name: Portable Chibi-backed eval
+            selector: '"^agent-scheme-scheme-eval-test-r7rs-suite$"'
+          - shard: portable-rest
+            label: remaining
+            make_target: test-portable-rest
+            log_file: portable-rest.log
+            summary_name: Portable Chibi-backed rest
+            selector: '(and "agent-scheme-scheme-.*" (not "^agent-scheme-scheme-eval-test-r7rs-suite$"))'
 
     steps:
       - name: Check out repository
@@ -28,37 +44,37 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y emacs-nox chibi-scheme
 
-      - name: Run portable Chibi-backed tests
+      - name: Run portable Chibi-backed shard
         shell: bash
         run: |
           mkdir -p ci-logs
           started=$SECONDS
           set +e
-          make test-portable 2>&1 | tee ci-logs/portable-chibi.log
+          make "${{ matrix.make_target }}" 2>&1 | tee "ci-logs/${{ matrix.log_file }}"
           status=${PIPESTATUS[0]}
           wall=$((SECONDS - started))
           {
-            printf 'AGENT_SCHEME_CI_SHARD_NAME=Portable Chibi-backed ERT\n'
-            printf 'AGENT_SCHEME_CI_SHARD_SELECTOR="agent-scheme-scheme-.*"\n'
+            printf 'AGENT_SCHEME_CI_SHARD_NAME=%s\n' '${{ matrix.summary_name }}'
+            printf 'AGENT_SCHEME_CI_SHARD_SELECTOR=%s\n' '${{ matrix.selector }}'
             printf 'AGENT_SCHEME_CI_WALL_SECONDS=%s\n' "$wall"
-          } >> ci-logs/portable-chibi.log
+          } >> "ci-logs/${{ matrix.log_file }}"
           exit "$status"
 
       - name: Upload portable shard log
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: test-log-portable-chibi
-          path: ci-logs/portable-chibi.log
+          name: test-log-${{ matrix.shard }}
+          path: ci-logs/${{ matrix.log_file }}
           if-no-files-found: warn
 
       - name: Render portable shard timing summary
         if: always()
         run: |
-          if [ -f ci-logs/portable-chibi.log ]; then
+          if [ -f "ci-logs/${{ matrix.log_file }}" ]; then
             emacs -Q --batch -L lisp \
               --eval "(require 'agent-scheme-ci)" \
-              --eval "(agent-scheme-ci-write-summary '(\"ci-logs/portable-chibi.log\") (getenv \"GITHUB_STEP_SUMMARY\"))"
+              --eval "(agent-scheme-ci-write-summary '(\"ci-logs/${{ matrix.log_file }}\") (getenv \"GITHUB_STEP_SUMMARY\"))"
           fi
 
   test-emacs-hosted:
