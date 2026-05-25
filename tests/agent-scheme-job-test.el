@@ -86,8 +86,8 @@
 (defconst agent-scheme-job-test--looping-source
   "(import (scheme base) (agent io))
    (agent-yield '(phase ready))
-   (let loop ((n 0))
-     (loop (+ n 1)))"
+   (letrec ((loop (lambda () (loop))))
+     (loop))"
   "Source for a job that yields once and then runs until stopped.")
 
 (ert-deftest agent-scheme-job-test-start-streams-yields-and-cancels ()
