@@ -286,6 +286,24 @@ Suggested downloadable local model profiles by Agent Scheme role:
 | `cheap-background` | `qwen2.5-coder:0.5b`, `qwen3:0.6b`, `gemma3:1b` |
 | `approval-explainer` | `qwen3:4b`, `qwen3:8b`, `gemma3:12b` |
 
+To prepare the full suggested local model matrix with Ollama:
+
+```sh
+ollama pull qwen2.5-coder:0.5b
+ollama pull qwen3:0.6b
+ollama pull gemma3:1b
+ollama pull qwen2.5-coder:7b
+ollama pull qwen2.5-coder:14b
+ollama pull qwen2.5-coder:32b
+ollama pull qwen3:4b
+ollama pull qwen3:8b
+ollama pull qwen3:30b
+ollama pull qwen3:32b
+ollama pull llama3.1:70b
+ollama pull gemma3:4b
+ollama pull gemma3:12b
+```
+
 To run the opt-in live local model test, start an OpenAI-compatible local
 server such as Ollama and set:
 
@@ -296,6 +314,10 @@ AGENT_SCHEME_LIVE_MODEL_TEST=1 make test
 The test defaults to `http://127.0.0.1:11434/v1` and
 `qwen2.5-coder:0.5b`. Override those with
 `AGENT_SCHEME_LIVE_MODEL_ENDPOINT` and `AGENT_SCHEME_LIVE_MODEL_ID`.
+To run the full suggested local model matrix after pulling those models, also
+set `AGENT_SCHEME_LIVE_MODEL_MATRIX=1`. The matrix test checks that each
+documented local model completes through Agent Scheme's OpenAI-compatible
+transport; it is not a quality or correctness benchmark.
 
 Keep provider profiles and credentials in private Emacs initialization or an
 ignored local file, then load them with `agent-scheme-models-register-provider!`

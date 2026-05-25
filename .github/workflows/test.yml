@@ -25,3 +25,56 @@ jobs:
 
       - name: Run tests
         run: make test
+
+  live-local-model:
+    name: live local model smoke
+    runs-on: ubuntu-latest
+
+    env:
+      AGENT_SCHEME_LIVE_MODEL_ENDPOINT: http://127.0.0.1:11434/v1
+      AGENT_SCHEME_LIVE_MODEL_ID: qwen2.5-coder:0.5b
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Emacs
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y emacs-nox
+
+      - name: Cache Ollama models
+        uses: actions/cache@v4
+        with:
+          path: ~/.ollama/models
+          key: ${{ runner.os }}-ollama-qwen25-coder-05b-v1
+
+      - name: Install Ollama
+        run: |
+          curl -fsSL https://ollama.com/install.sh | sh
+          ollama --version
+
+      - name: Start Ollama
+        run: |
+          ollama serve > /tmp/ollama.log 2>&1 &
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:11434/api/version; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/ollama.log
+          exit 1
+
+      - name: Pull smoke model
+        run: ollama pull "$AGENT_SCHEME_LIVE_MODEL_ID"
+
+      - name: Run live local model smoke
+        env:
+          AGENT_SCHEME_LIVE_MODEL_TEST: "1"
+          AGENT_SCHEME_TEST_SELECTOR: agent-scheme-models-test-live-local-openai-compatible-completion
+        run: make test
+
+      - name: Show Ollama log on failure
+        if: failure()
+        run: cat /tmp/ollama.log
