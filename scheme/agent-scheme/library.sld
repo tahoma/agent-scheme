@@ -753,7 +753,9 @@
        ((equal? key '(scheme repl))
         (register-primitive-library!
          key
-         (list (policy-denied-spec 'interaction-environment))
+         (list
+          (library-primitive-spec 'interaction-environment
+                                  'primitive-interaction-environment 0 0))
          context))
        ((equal? key '(scheme r5rs))
         (register-r5rs-library! key context environment))

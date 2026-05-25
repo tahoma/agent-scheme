@@ -532,10 +532,11 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
      :portable-hook policy-denied-primitive :emitter-hook capability-process
      :policy deny :test-categories (process policy))
     (:name "interaction-environment" :library "(scheme repl)" :minimum-arity 0
-     :maximum-arity nil :source host-capability :effect host-repl
-     :required-capability repl :emacs-hook agent-scheme--policy-denied-primitive
-     :portable-hook policy-denied-primitive :emitter-hook capability-repl
-     :policy deny :test-categories (repl policy))
+     :maximum-arity 0 :source host-capability :effect host-repl
+     :required-capability repl :emacs-hook agent-scheme--primitive-interaction-environment
+     :portable-hook primitive-interaction-environment
+     :emitter-hook capability-repl
+     :policy session :test-categories (repl policy session))
     (:name "current-jiffy" :library "(scheme time)" :minimum-arity 0
      :maximum-arity nil :source host-capability :effect host-time
      :required-capability clock :emacs-hook agent-scheme--policy-denied-primitive

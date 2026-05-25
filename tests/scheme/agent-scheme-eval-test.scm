@@ -966,6 +966,17 @@
              (symlinks resolve-within-root))
       (expires never)))))
 
+;; A session id marks portable evaluation as an authorized REPL-style
+;; interaction context without exposing any host adapter state.
+(define repl-session-options
+  '((session-id . portable-repl)))
+
+;; Session context alone is not enough when policy denies standard host effects.
+(define repl-session-denied-options
+  '((session-id . portable-repl-denied)
+    (policy-actions
+     (standard-host-effect . deny))))
+
 ;; First-class process grants are host-neutral request/decision vocabulary.
 ;; Host adapters decide whether to connect the authorization to a real child
 ;; process; the portable runtime owns the datum shape and grant matching.
@@ -1285,6 +1296,24 @@
           (agent-scheme-eval-source
            "(import (scheme base) (scheme eval))
             (eval '(define foo 32) (environment '(scheme base)))")))
+       #t)
+
+(check-external/options 'standard-repl-interaction-environment-mutates-session
+                        "(import (scheme base) (scheme eval) (scheme repl))
+                         (eval '(define portable-repl-value 42)
+                               (interaction-environment))
+                         portable-repl-value"
+                        repl-session-options
+                        "42")
+
+(check 'standard-repl-interaction-environment-policy-denied
+       (raises?
+        (lambda ()
+          (agent-scheme-eval-source
+           "(import (scheme base) (scheme repl))
+            (interaction-environment)"
+           #f
+           repl-session-denied-options)))
        #t)
 
 (check 'standard-load-default-denied

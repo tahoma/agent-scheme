@@ -3996,6 +3996,44 @@ Advance when ADVANCEP is non-nil.  Signal errors using DESCRIPTION."
    context
    (format "%s requires policy-gated host access" description)))
 
+(defun agent-scheme--interaction-session-symbol (session-id)
+  "Return SESSION-ID as a Scheme-readable symbol datum."
+  (agent-scheme--syntax-symbol
+   (cond
+    ((agent-scheme-symbol-p session-id)
+     (agent-scheme-symbol-name session-id))
+    ((symbolp session-id)
+     (symbol-name session-id))
+    ((stringp session-id)
+     session-id)
+    (t
+     (format "%S" session-id)))))
+
+(defun agent-scheme--primitive-interaction-environment (_arguments context)
+  "Primitive interaction-environment over _ARGUMENTS."
+  (let ((session-id (and context
+                         (agent-scheme--eval-context-session-id context)))
+        (environment (and context
+                          (agent-scheme--eval-context-interaction-environment
+                           context)))
+        (syntax-environment
+         (and context
+              (agent-scheme--eval-context-syntax-environment context))))
+    (unless (and session-id environment syntax-environment)
+      (agent-scheme-policy-deny
+       'standard-host-effect
+       "interaction-environment"
+       nil
+       context
+       "interaction-environment requires an active session"))
+    (agent-scheme-policy-authorize
+     'standard-host-effect
+     "interaction-environment"
+     `((session . ,(agent-scheme--interaction-session-symbol session-id)))
+     context)
+    (agent-scheme--make-environment-specifier
+     environment syntax-environment nil)))
+
 (defun agent-scheme--resolve-file-policy-path (filename context description)
   "Return a file authorization for FILENAME and DESCRIPTION."
   (agent-scheme-capability-authorize-file

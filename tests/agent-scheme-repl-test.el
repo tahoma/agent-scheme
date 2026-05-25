@@ -28,6 +28,21 @@
   (with-current-buffer buffer
     (buffer-substring-no-properties (point-min) (point-max))))
 
+(defun agent-scheme-repl-test--audit-strings ()
+  "Return recent audit entries as external Scheme-readable strings."
+  (mapcar #'agent-scheme-result->external
+          (agent-scheme-audit-recent-entries)))
+
+(defun agent-scheme-repl-test--audit-entry-matching (&rest snippets)
+  "Return non-nil when a recent audit entry contains all SNIPPETS."
+  (seq-some
+   (lambda (entry)
+     (cl-every
+      (lambda (snippet)
+        (string-match-p (regexp-quote snippet) entry))
+      snippets))
+   (agent-scheme-repl-test--audit-strings)))
+
 (ert-deftest agent-scheme-repl-test-starts-project-session-and-buffers ()
   "Start a project session and create the native special buffers."
   (agent-scheme-repl-test--reset)
@@ -104,6 +119,65 @@
       (should (string-match-p
                (regexp-quote (format "(session %s)" session-id))
                audit)))))
+
+(ert-deftest agent-scheme-repl-test-interaction-environment-is-session-gated ()
+  "Return the current mutable session environment only under session policy."
+  (agent-scheme-repl-test--reset)
+  (agent-scheme-session-create! 'named '(:id "repl-env-alpha"))
+  (agent-scheme-session-create! 'named '(:id "repl-env-beta"))
+  (should
+   (equal
+    (agent-scheme-value->external
+     (agent-scheme-session-eval-source
+      "repl-env-alpha"
+      "(import (scheme base) (scheme eval) (scheme repl))
+       (define alpha-value 41)
+       (eval '(define session-made 42) (interaction-environment))
+       session-made"))
+    "42"))
+  (should
+   (equal
+    (agent-scheme-value->external
+     (agent-scheme-session-eval-source
+      "repl-env-alpha"
+      "(eval '(+ session-made 1) (interaction-environment))"))
+    "43"))
+  (should
+   (equal
+    (agent-scheme-value->external
+     (agent-scheme-session-eval-source
+      "repl-env-beta"
+      "(import (scheme base) (scheme eval) (scheme repl))
+       (eval '(define session-made 7) (interaction-environment))
+       session-made"))
+    "7"))
+  (should
+   (equal
+    (agent-scheme-value->external
+     (agent-scheme-session-eval-source "repl-env-alpha" "session-made"))
+    "42"))
+  (should
+   (agent-scheme-repl-test--audit-entry-matching
+    "(event policy-decision)"
+    "(operation \"interaction-environment\")"
+    "(session repl-env-alpha)"
+    "(decision allowed)"))
+  (agent-scheme-session-create!
+   'named
+   '(:id "repl-env-denied"
+     :policy-actions ((standard-host-effect . deny))))
+  (should-error
+   (agent-scheme-session-eval-source
+    "repl-env-denied"
+    "(import (scheme base) (scheme repl))
+     (interaction-environment)")
+   :type 'agent-scheme-policy-error)
+  (should
+   (agent-scheme-repl-test--audit-entry-matching
+    "(event policy-decision)"
+    "(operation \"interaction-environment\")"
+    "(session repl-env-denied)"
+    "(decision denied)")))
 
 (ert-deftest agent-scheme-repl-test-approvals-switch-inspect-and-stop ()
   "Show request events as approvals and support session switching/teardown."
