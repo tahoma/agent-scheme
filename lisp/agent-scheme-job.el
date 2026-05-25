@@ -338,48 +338,49 @@ Scheme code."
 
 (defun agent-scheme-job--run (job)
   "Run JOB in its background thread."
-  (let* ((session (agent-scheme-session--require
-                   (agent-scheme-job--session-id job)))
-         (context (agent-scheme-session-context session))
-         (job-id (agent-scheme-job--id job)))
-    (setf (agent-scheme-job--context job) context)
-    (setf (agent-scheme--eval-context-event-hook context)
-          (lambda (event event-context)
-            (agent-scheme-job--capture-event job event event-context)))
-    (unwind-protect
-        (let ((agent-scheme--session-current-job-id job-id))
-          (condition-case condition
-              (progn
-                (agent-scheme-job--set-running! job)
-                (when (agent-scheme-job--cancel-requested job)
-                  (signal 'agent-scheme-cancelled-error
-                          (list (format "job cancelled: %s" job-id))))
-                (when (agent-scheme-job--interrupt-reason job)
-                  (signal
-                   'agent-scheme-interrupt-error
-                   (list
-                    (format
-                     "job interrupted: %s"
-                     (agent-scheme--control-reason-string
-                      (agent-scheme-job--interrupt-reason job))))))
-                (agent-scheme-job--finish!
-                 job
-                 'completed
-                 (agent-scheme-session-eval-source
-                  (agent-scheme-job--session-id job)
-                  (agent-scheme-job--source job)
-                  (agent-scheme-job--options job))))
-            (agent-scheme-cancelled-error
-             (agent-scheme-job--finish! job 'cancelled nil condition))
-            (agent-scheme-interrupt-error
-             (agent-scheme-job--finish! job 'failed nil condition))
-            (error
-             (agent-scheme-job--finish! job 'failed nil condition))))
-      (agent-scheme-session--unlock! session job-id)
-      (setf (agent-scheme--eval-context-event-hook context) nil)
-      (setf (agent-scheme--eval-context-job-id context) nil)
-      (setf (agent-scheme--eval-context-cancel-requested context) nil)
-      (setf (agent-scheme--eval-context-interrupt-reason context) nil))))
+  (unless (agent-scheme-job--terminal-p job)
+    (let* ((session (agent-scheme-session--require
+                     (agent-scheme-job--session-id job)))
+           (context (agent-scheme-session-context session))
+           (job-id (agent-scheme-job--id job)))
+      (setf (agent-scheme-job--context job) context)
+      (setf (agent-scheme--eval-context-event-hook context)
+            (lambda (event event-context)
+              (agent-scheme-job--capture-event job event event-context)))
+      (unwind-protect
+          (let ((agent-scheme--session-current-job-id job-id))
+            (condition-case condition
+                (progn
+                  (agent-scheme-job--set-running! job)
+                  (when (agent-scheme-job--cancel-requested job)
+                    (signal 'agent-scheme-cancelled-error
+                            (list (format "job cancelled: %s" job-id))))
+                  (when (agent-scheme-job--interrupt-reason job)
+                    (signal
+                     'agent-scheme-interrupt-error
+                     (list
+                      (format
+                       "job interrupted: %s"
+                       (agent-scheme--control-reason-string
+                        (agent-scheme-job--interrupt-reason job))))))
+                  (agent-scheme-job--finish!
+                   job
+                   'completed
+                   (agent-scheme-session-eval-source
+                    (agent-scheme-job--session-id job)
+                    (agent-scheme-job--source job)
+                    (agent-scheme-job--options job))))
+              (agent-scheme-cancelled-error
+               (agent-scheme-job--finish! job 'cancelled nil condition))
+              (agent-scheme-interrupt-error
+               (agent-scheme-job--finish! job 'failed nil condition))
+              (error
+               (agent-scheme-job--finish! job 'failed nil condition))))
+        (agent-scheme-session--unlock! session job-id)
+        (setf (agent-scheme--eval-context-event-hook context) nil)
+        (setf (agent-scheme--eval-context-job-id context) nil)
+        (setf (agent-scheme--eval-context-cancel-requested context) nil)
+        (setf (agent-scheme--eval-context-interrupt-reason context) nil)))))
 
 ;;;###autoload
 (defun agent-scheme-job-start! (session form &optional options)
@@ -469,7 +470,23 @@ that may include budget keys such as `:max-steps'."
 (defun agent-scheme-job-cancel! (id)
   "Request cooperative cancellation of job ID and return its datum."
   (let ((job (agent-scheme-job--require id)))
-    (agent-scheme-job--request-stop! job 'cancel nil)
+    (if (eq (agent-scheme-job--status job) 'queued)
+        (progn
+          (setf (agent-scheme-job--cancel-requested job) t)
+          (when-let ((session
+                      (agent-scheme-session--maybe
+                       (agent-scheme-job--session-id job))))
+            (agent-scheme-session--unlock!
+             session
+             (agent-scheme-job--id job)))
+          (agent-scheme-job--finish!
+           job
+           'cancelled
+           nil
+           (list 'agent-scheme-cancelled-error
+                 (format "job cancelled: %s"
+                         (agent-scheme-job--id job)))))
+      (agent-scheme-job--request-stop! job 'cancel nil))
     (agent-scheme-job--audit job "job-cancel!" 'requested)
     (agent-scheme-job-datum job)))
 
