@@ -61,8 +61,9 @@
                  "(recent-yields)"
                  "(recent-policy-decisions)"
                  "Availability is not authority"
+                 "fixtures/host-adapters/emacs.scm"
+                 "(name emacs)"
                  "#229"
-                 "#234"
                  "#235"
                  "#236"))
         (should (string-match-p (regexp-quote needle) doc))))))
