@@ -125,6 +125,7 @@
         (agent capability)
         (agent capability primitive)
         (agent memory)
+        (agent models)
         (agent context)
         (agent reflect)
         (agent redaction)))
@@ -936,6 +937,31 @@
                                   'primitive-memory-yield
                                   2
                                   2))
+         context))
+       ((equal? key '(agent models))
+        (register-primitive-library!
+         key
+         (list
+          (library-primitive-spec 'model-provider-register!
+                                  'primitive-model-provider-register!
+                                  1
+                                  1)
+          (library-primitive-spec 'model-providers
+                                  'primitive-model-providers
+                                  0
+                                  0)
+          (library-primitive-spec 'model-route
+                                  'primitive-model-route
+                                  1
+                                  2)
+          (library-primitive-spec 'model-complete
+                                  'primitive-model-complete
+                                  2
+                                  3)
+          (library-primitive-spec 'model-provider-diagnostics
+                                  'primitive-model-provider-diagnostics
+                                  0
+                                  1))
          context))
        ((equal? key '(agent context))
         (register-primitive-library!

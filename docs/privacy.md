@@ -55,6 +55,13 @@ local-only context. Provider routing must redact secret-bearing payloads before
 transport and must deny local-only context unless an explicit policy override
 approves that disclosure.
 
+The `(agent models)` library uses this boundary for model completion routing.
+Local providers may complete through the Emacs host's OpenAI-compatible local
+HTTP adapter. Remote providers are currently registrable and inspectable only;
+before any future remote transport runs, the request datum is checked by
+`remote-provider-routing`, redacted for audit, and rejected when it contains
+local-only context without explicit approval.
+
 Direct Scheme evaluation still returns the value being evaluated. Redaction is
 applied at disclosure and persistence boundaries so the language semantics stay
 unchanged while logs, transcripts, memory, skills, and provider payloads remain
