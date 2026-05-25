@@ -179,6 +179,7 @@ opaque handles that are useful only when passed back to registered capabilities.
 The agent layer provides self-scripting facilities as Scheme-readable data:
 
 - `(agent io)` event channel
+- `(agent task)` task lifecycle records and state transitions
 - `(agent memory)` scoped memory
 - `(agent plan)` plans
 - `(agent approval)` approval requests

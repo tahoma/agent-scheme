@@ -332,6 +332,24 @@ Records may carry implementation-specific extension fields, but core fields
 must remain readable by older hosts. Unknown fields are ignored by readers that
 do not need them.
 
+Issue #285 turns the record vocabulary into the `(agent task)` library and the
+Emacs-side `agent-scheme-task` module. That executable slice exposes:
+
+- public state data in `task-states`
+- the explicit transition table in `task-allowed-transitions`
+- predicates, constructors, and validators for `agent-task`, `agent-step`,
+  `agent-action`, `agent-observation`, `agent-decision`, `task-pause`,
+  `task-stop`, `task-wait`, `task-failure`, and `agent-completion`
+- structured validation conditions such as
+  `(task-condition (kind invalid-transition) (from created) (to complete))`
+- shared fixture records in `fixtures/agent/task-lifecycle.scm`
+
+The fixture suite covers normal completion, blocked approval, provider wait,
+host wait, cancellation, budget exhaustion, unrecovered failure, resumable
+pause receipts, and terminal stop receipts. These are record fixtures, not an
+executable task runner; #286 and #287 use the same datums for loop execution
+and replay-oriented control-loop fixtures.
+
 ## Capability Arbitration
 
 The control loop arbitrates actions before any host effect runs.

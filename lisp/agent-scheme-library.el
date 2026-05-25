@@ -81,6 +81,7 @@
     "(agent network)"
     "(agent capability)"
     "(agent capability primitive)"
+    "(agent task)"
     "(agent memory)"
     "(agent models)"
     "(agent context)"
@@ -99,7 +100,9 @@
     ("(agent vcs)"
      . "../scheme/agent/vcs.sld")
     ("(agent network)"
-     . "../scheme/agent/network.sld"))
+     . "../scheme/agent/network.sld")
+    ("(agent task)"
+     . "../scheme/agent/task.sld"))
   "Checked-in portable Agent Scheme libraries loaded as Scheme source.")
 
 ;; Bootstrap libraries are registered lazily into the current evaluation
@@ -378,6 +381,10 @@
        (agent-scheme--register-source-library
         (agent-scheme--agent-source-library-source key) context environment)))
     ("(agent network)"
+     (unless (gethash key (agent-scheme--eval-context-libraries context))
+       (agent-scheme--register-source-library
+        (agent-scheme--agent-source-library-source key) context environment)))
+    ("(agent task)"
      (unless (gethash key (agent-scheme--eval-context-libraries context))
        (agent-scheme--register-source-library
         (agent-scheme--agent-source-library-source key) context environment)))
