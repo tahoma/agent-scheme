@@ -282,18 +282,24 @@ To run a narrower ERT selector:
 AGENT_SCHEME_TEST_SELECTOR='agent-scheme-smoke-test-harness-runs' make test
 ```
 
-CI also runs the aggregate suite as two host/runtime-oriented shards so timing
-and failures stay visible by architectural path:
+CI runs the aggregate suite as host/runtime-oriented shards so timing and
+failures stay visible by architectural path:
 
 ```sh
 AGENT_SCHEME_CHIBI=chibi-scheme make test-portable
-make test-emacs-hosted
+make test-emacs-core
+make test-emacs-library
+make test-emacs-capabilities
+make test-emacs-tools
 ```
 
 `make test-portable` selects the portable Chibi-backed ERT bridge tests with
-`"agent-scheme-scheme-.*"`. `make test-emacs-hosted` selects the remaining ERT
-tests with `(not "agent-scheme-scheme-.*")`. The top-level `make test` command
-remains the canonical local aggregate and still includes the portable tests.
+`"agent-scheme-scheme-.*"`. The Emacs-hosted shards split the non-portable ERT
+suite into core language/runtime, library/conformance, capability/policy, and
+tools/docs/integration groups. `make test-emacs-hosted` remains available as the
+local aggregate for all non-portable ERT tests with
+`(not "agent-scheme-scheme-.*")`. The top-level `make test` command remains the
+canonical local aggregate and still includes the portable tests.
 
 Live local model tests require an OpenAI-compatible local model endpoint. Run
 the CI smoke selector with:
