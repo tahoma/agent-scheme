@@ -12,6 +12,7 @@
         (prefix (agent-scheme approval) approval:)
         (prefix (agent-scheme job) job:)
         (prefix (agent-scheme memory) memory:)
+        (prefix (agent-scheme context) context:)
         (prefix (agent-scheme redaction) redaction:)
         (prefix (agent-scheme session) session:)
         (prefix (agent-scheme interpreter) interpreter:))
@@ -151,6 +152,13 @@
 (check 'memory-boundary-find
        (length (memory:memory-find memory-store 'instance "portable memory"))
        1)
+
+;; Context helpers preserve canonical Scheme-readable record shape.
+(check 'context-boundary-request-record
+       (car (context:make-request-context 'portable-req
+                                          #f
+                                          "portable request"))
+       'request-context)
 
 ;; Portable redaction records never reveal the original secret.
 (define portable-secret

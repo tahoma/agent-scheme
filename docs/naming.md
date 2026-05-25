@@ -54,6 +54,7 @@ Implementation files under `lisp/` should follow the package namespace:
 - `lisp/agent-scheme-job.el` provides `agent-scheme-job`
 - `lisp/agent-scheme-diagnostics.el` provides `agent-scheme-diagnostics`
 - `lisp/agent-scheme-diff.el` provides `agent-scheme-diff`
+- `lisp/agent-scheme-context.el` provides `agent-scheme-context`
 - `lisp/agent-scheme-redaction.el` provides `agent-scheme-redaction`
 - `lisp/agent-scheme-mcp.el` provides `agent-scheme-mcp`
 
@@ -72,6 +73,7 @@ their library names:
 - `scheme/agent-scheme/eval.sld` defines `(agent-scheme eval)`
 - `scheme/agent-scheme/approval.sld` defines `(agent-scheme approval)`
 - `scheme/agent-scheme/job.sld` defines `(agent-scheme job)`
+- `scheme/agent-scheme/context.sld` defines `(agent-scheme context)`
 - `scheme/agent-scheme/redaction.sld` defines `(agent-scheme redaction)`
 
 Here "mirror" means naming and pass-ownership parity, not subordination. Core

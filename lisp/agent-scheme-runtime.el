@@ -251,6 +251,13 @@ base syntax prelude has already been installed."
   current-error-port
   current-error
   session-id
+  request-id
+  request
+  focus
+  region-context
+  buffer-context
+  project-context
+  conversation-summary
   job-id
   cancel-requested
   interrupt-reason
@@ -349,12 +356,52 @@ MESSAGE and ARGS are passed to `format'."
      :current-error nil
      :session-id
      (agent-scheme--eval-option options :session-id nil)
+     :request-id
+     (agent-scheme--eval-option options :request-id nil)
+     :request
+     (agent-scheme--eval-option options :request nil)
+     :focus
+     (agent-scheme--eval-option options :focus nil)
+     :region-context
+     (agent-scheme--eval-option options :region-context nil)
+     :buffer-context
+     (agent-scheme--eval-option options :buffer-context nil)
+     :project-context
+     (agent-scheme--eval-option options :project-context nil)
+     :conversation-summary
+     (agent-scheme--eval-option options :conversation-summary nil)
      :job-id nil
      :cancel-requested nil
      :interrupt-reason nil
      :base-syntax-installed nil
      :exception-handlers nil
      :dynamic-winds nil)))
+
+(defun agent-scheme--apply-current-context-options! (context options)
+  "Apply current-context OPTIONS to CONTEXT and return CONTEXT."
+  (when options
+    (when (plist-member options :request-id)
+      (setf (agent-scheme--eval-context-request-id context)
+            (plist-get options :request-id)))
+    (when (plist-member options :request)
+      (setf (agent-scheme--eval-context-request context)
+            (plist-get options :request)))
+    (when (plist-member options :focus)
+      (setf (agent-scheme--eval-context-focus context)
+            (plist-get options :focus)))
+    (when (plist-member options :region-context)
+      (setf (agent-scheme--eval-context-region-context context)
+            (plist-get options :region-context)))
+    (when (plist-member options :buffer-context)
+      (setf (agent-scheme--eval-context-buffer-context context)
+            (plist-get options :buffer-context)))
+    (when (plist-member options :project-context)
+      (setf (agent-scheme--eval-context-project-context context)
+            (plist-get options :project-context)))
+    (when (plist-member options :conversation-summary)
+      (setf (agent-scheme--eval-context-conversation-summary context)
+            (plist-get options :conversation-summary))))
+  context)
 
 (defun agent-scheme-make-empty-environment (&optional parent)
   "Return an empty lexical environment with optional PARENT."

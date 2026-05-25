@@ -159,6 +159,14 @@
           set-context-current-error-port!
           context-current-error
           set-context-current-error!
+          context-session-id
+          context-request-id
+          context-request
+          context-focus
+          context-region-context
+          context-buffer-context
+          context-project-context
+          context-conversation-summary
           context-interaction-environment
           set-context-interaction-environment!
           context-base-syntax-installed
@@ -496,6 +504,9 @@
                          current-input-port current-output-port
                          current-error-port
                          current-error
+                         session-id request-id request focus
+                         region-context buffer-context project-context
+                         conversation-summary
                          interaction-environment
                          base-syntax-installed next-syntax-id
                          exception-handlers dynamic-winds)
@@ -529,6 +540,14 @@
       (current-error-port context-current-error-port
                           set-context-current-error-port!)
       (current-error context-current-error set-context-current-error!)
+      (session-id context-session-id)
+      (request-id context-request-id)
+      (request context-request)
+      (focus context-focus)
+      (region-context context-region-context)
+      (buffer-context context-buffer-context)
+      (project-context context-project-context)
+      (conversation-summary context-conversation-summary)
       (interaction-environment context-interaction-environment
                                set-context-interaction-environment!)
       (base-syntax-installed context-base-syntax-installed
@@ -1958,6 +1977,14 @@
        #f
        #f
        #f
+       (option-ref options 'session-id #f)
+       (option-ref options 'request-id #f)
+       (option-ref options 'request #f)
+       (option-ref options 'focus #f)
+       (option-ref options 'region-context #f)
+       (option-ref options 'buffer-context #f)
+       (option-ref options 'project-context #f)
+       (option-ref options 'conversation-summary #f)
        #f
        #f
        0

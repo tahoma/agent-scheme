@@ -792,6 +792,20 @@ Return the stale handles that were removed."
           :current-error nil
           :session-id
           (agent-scheme--eval-context-session-id context)
+          :request-id
+          (agent-scheme--eval-context-request-id context)
+          :request
+          (agent-scheme--eval-context-request context)
+          :focus
+          (agent-scheme--eval-context-focus context)
+          :region-context
+          (agent-scheme--eval-context-region-context context)
+          :buffer-context
+          (agent-scheme--eval-context-buffer-context context)
+          :project-context
+          (agent-scheme--eval-context-project-context context)
+          :conversation-summary
+          (agent-scheme--eval-context-conversation-summary context)
           :job-id nil
           :cancel-requested nil
           :interrupt-reason nil
