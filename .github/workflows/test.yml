@@ -33,15 +33,16 @@ jobs:
     env:
       AGENT_SCHEME_LIVE_MODEL_ENDPOINT: http://127.0.0.1:11434/v1
       AGENT_SCHEME_LIVE_MODEL_ID: qwen2.5-coder:0.5b
+      OLLAMA_VERSION: 0.24.0
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Install Emacs
+      - name: Install runtime dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y emacs-nox
+          sudo apt-get install -y ca-certificates curl emacs-nox zstd
 
       - name: Cache Ollama models
         uses: actions/cache@v4
@@ -51,7 +52,9 @@ jobs:
 
       - name: Install Ollama
         run: |
-          curl -fsSL https://ollama.com/install.sh | sh
+          curl -fsSL "https://ollama.com/download/ollama-linux-amd64.tar.zst?version=${OLLAMA_VERSION}" \
+            | zstd -d \
+            | sudo tar -xf - -C /usr/local
           ollama --version
 
       - name: Start Ollama
