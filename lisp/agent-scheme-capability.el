@@ -154,6 +154,48 @@ network-backed port."
   :type 'function
   :group 'agent-scheme)
 
+(defcustom agent-scheme-time-tai-utc-offset 37
+  "TAI minus UTC offset applied to Emacs wall-clock seconds.
+Emacs exposes POSIX-style seconds; R7RS `current-second' is specified on the
+TAI scale.  Hosts can update this value when leap-second policy changes."
+  :type 'integer
+  :group 'agent-scheme)
+
+(defcustom agent-scheme-time-jiffies-per-second 1000000
+  "Number of clock jiffies per SI second for `(scheme time)'."
+  :type 'integer
+  :group 'agent-scheme)
+
+(defun agent-scheme--default-time-current-second ()
+  "Return an R7RS-compatible current-second value from the Emacs host clock."
+  (+ (float-time) agent-scheme-time-tai-utc-offset))
+
+(defun agent-scheme--default-time-current-jiffy ()
+  "Return an exact current-jiffy value from the Emacs host clock."
+  (truncate (* (float-time) agent-scheme-time-jiffies-per-second)))
+
+(defun agent-scheme--default-time-jiffies-per-second ()
+  "Return the Emacs host jiffies-per-second constant."
+  agent-scheme-time-jiffies-per-second)
+
+(defcustom agent-scheme-time-current-second-function
+  #'agent-scheme--default-time-current-second
+  "Function called after clock authorization to implement `current-second'."
+  :type 'function
+  :group 'agent-scheme)
+
+(defcustom agent-scheme-time-current-jiffy-function
+  #'agent-scheme--default-time-current-jiffy
+  "Function called after clock authorization to implement `current-jiffy'."
+  :type 'function
+  :group 'agent-scheme)
+
+(defcustom agent-scheme-time-jiffies-per-second-function
+  #'agent-scheme--default-time-jiffies-per-second
+  "Function called after clock authorization to implement `jiffies-per-second'."
+  :type 'function
+  :group 'agent-scheme)
+
 (defcustom agent-scheme-search-default-limit 100
   "Default maximum number of results returned by one search capability call."
   :type 'integer
@@ -244,6 +286,12 @@ network-backed port."
 
 (defvar agent-scheme--next-network-capability-decision-number 0
   "Next numeric suffix for generated network capability decision ids.")
+
+(defvar agent-scheme--next-clock-capability-request-number 0
+  "Next numeric suffix for generated clock capability request ids.")
+
+(defvar agent-scheme--next-clock-capability-decision-number 0
+  "Next numeric suffix for generated clock capability decision ids.")
 
 (defvar agent-scheme--next-network-stream-handle-number 0
   "Next numeric suffix for generated network stream handles.")
@@ -1272,6 +1320,18 @@ network-backed port."
    (format "dec-network-%d"
            (cl-incf agent-scheme--next-network-capability-decision-number))))
 
+(defun agent-scheme--clock-capability-request-id ()
+  "Return a fresh clock capability request id."
+  (agent-scheme--capability-grant-symbol
+   (format "req-clock-%d"
+           (cl-incf agent-scheme--next-clock-capability-request-number))))
+
+(defun agent-scheme--clock-capability-decision-id ()
+  "Return a fresh clock capability decision id."
+  (agent-scheme--capability-grant-symbol
+   (format "dec-clock-%d"
+           (cl-incf agent-scheme--next-clock-capability-decision-number))))
+
 (defun agent-scheme--network-stream-handle-id ()
   "Return a fresh network stream handle id."
   (format "h-network-%d"
@@ -1829,8 +1889,194 @@ AUTHORIZATION is the approved file authorization that created PORT."
        (domain . code-loading)
        (operation . load)
        (result . ,(if errored
-                      (list 'error result)
-                    (list 'ok result)))))))
+                    (list 'error result)
+                  (list 'ok result)))))))
+
+(defun agent-scheme--clock-capability-operation-symbol (operation)
+  "Return OPERATION as an Agent Scheme symbol datum."
+  (agent-scheme--capability-grant-symbol operation))
+
+(defun agent-scheme--clock-capability-operation-name (operation)
+  "Return OPERATION as a stable string."
+  (agent-scheme--capability-grant-symbol-name operation))
+
+(defun agent-scheme--clock-capability-grant-p (grant)
+  "Return non-nil when GRANT is a clock-domain grant."
+  (and (agent-scheme--capability-grant-datum-p grant)
+       (equal (agent-scheme--capability-grant-symbol-name
+               (agent-scheme--capability-grant-field-value grant "domain"))
+              "clock")))
+
+(defun agent-scheme--clock-capability-grants (context)
+  "Return active clock-domain grants carried by CONTEXT."
+  (seq-filter
+   #'agent-scheme--clock-capability-grant-p
+   (agent-scheme--capability-context-grants context)))
+
+(defun agent-scheme--clock-capability-operation-p (grant operation)
+  "Return non-nil when GRANT authorizes clock OPERATION."
+  (let ((operation-name (agent-scheme--clock-capability-operation-name operation)))
+    (cl-some
+     (lambda (candidate)
+       (let ((candidate-name
+              (agent-scheme--capability-grant-symbol-name candidate)))
+         (or (equal candidate-name operation-name)
+             (equal candidate-name "read"))))
+     (agent-scheme--capability-grant-field-values grant "operations"))))
+
+(defun agent-scheme--clock-capability-match (grants operation)
+  "Return a grant match plist for clock OPERATION."
+  (let (denied)
+    (catch 'matched
+      (dolist (grant grants)
+        (cond
+         ((not (agent-scheme--clock-capability-operation-p grant operation)))
+         ((eq (agent-scheme--capability-grant-status grant) 'revoked)
+          (setq denied
+                (list :denied grant
+                      :reason "revoked clock capability grant")))
+         ((not (agent-scheme--capability-grant-active-p grant))
+          (setq denied
+                (list :denied grant
+                      :reason "expired clock capability grant")))
+         (t
+          (throw 'matched (list :grant grant)))))
+      denied)))
+
+(defun agent-scheme--clock-capability-request-datum
+    (request-id binding operation)
+  "Return a Scheme-readable clock capability request datum."
+  `(,(agent-scheme--capability-grant-symbol "capability-request")
+    (,(agent-scheme--capability-grant-symbol "id") ,request-id)
+    (,(agent-scheme--capability-grant-symbol "session") ,agent-scheme-false)
+    (,(agent-scheme--capability-grant-symbol "library")
+     (,(agent-scheme--capability-grant-symbol "scheme")
+      ,(agent-scheme--capability-grant-symbol "time")))
+    (,(agent-scheme--capability-grant-symbol "binding")
+     ,(agent-scheme--clock-capability-operation-symbol binding))
+    (,(agent-scheme--capability-grant-symbol "domain")
+     ,(agent-scheme--capability-grant-symbol "clock"))
+    (,(agent-scheme--capability-grant-symbol "operation")
+     ,(agent-scheme--clock-capability-operation-symbol operation))
+    (,(agent-scheme--capability-grant-symbol "resource")
+     (,(agent-scheme--capability-grant-symbol "clock")
+      ,(agent-scheme--capability-grant-symbol "system")))
+    (,(agent-scheme--capability-grant-symbol "effect")
+     ,(agent-scheme--capability-grant-symbol "read-only-observation"))))
+
+(defun agent-scheme--clock-capability-record-request
+    (request operation binding)
+  "Audit clock capability REQUEST."
+  (agent-scheme-audit-record
+   'capability-request
+   `((request . ,request)
+     (domain . clock)
+     (operation . ,(agent-scheme--clock-capability-operation-symbol operation))
+     (binding . ,(agent-scheme--clock-capability-operation-symbol binding)))))
+
+(defun agent-scheme--clock-capability-record-decision
+    (request request-id operation status grant reason)
+  "Audit and return a clock capability decision datum."
+  (let* ((decision-id (agent-scheme--clock-capability-decision-id))
+         (grant-id (or (and grant (agent-scheme--capability-grant-id grant))
+                       (agent-scheme--capability-grant-symbol "none")))
+         (decision
+          `(,(agent-scheme--capability-grant-symbol "capability-decision")
+            (,(agent-scheme--capability-grant-symbol "id") ,decision-id)
+            (,(agent-scheme--capability-grant-symbol "request") ,request-id)
+            (,(agent-scheme--capability-grant-symbol "status")
+             ,(agent-scheme--capability-grant-symbol status))
+            (,(agent-scheme--capability-grant-symbol "domain")
+             ,(agent-scheme--capability-grant-symbol "clock"))
+            (,(agent-scheme--capability-grant-symbol "grant") ,grant-id)
+            (,(agent-scheme--capability-grant-symbol "reason") ,reason))))
+    (agent-scheme-audit-record
+     'capability-decision
+     `((request . ,request)
+       (decision . ,decision)
+       (domain . clock)
+       (operation . ,(agent-scheme--clock-capability-operation-symbol operation))
+       (status . ,status)
+       (grant . ,grant-id)
+       (reason . ,reason)))
+    decision))
+
+(defun agent-scheme-capability-audit-clock-result
+    (authorization result &optional errored)
+  "Audit clock capability AUTHORIZATION with RESULT."
+  (let ((request (plist-get authorization :request))
+        (decision (plist-get authorization :decision))
+        (operation (plist-get authorization :operation)))
+    (agent-scheme-audit-record
+     'capability-audit
+     `((request . ,request)
+       (decision . ,decision)
+       (domain . clock)
+       (operation . ,(agent-scheme--clock-capability-operation-symbol operation))
+       (result . ,(if errored
+                    (list 'error result)
+                  (list 'ok result)))))))
+
+(defun agent-scheme--clock-capability-deny
+    (request request-id operation binding grant reason context)
+  "Record a denied clock capability REQUEST and signal REASON."
+  (let ((decision
+         (agent-scheme--clock-capability-record-decision
+          request request-id operation 'denied grant reason)))
+    (agent-scheme-capability-audit-clock-result
+     (list :request request :decision decision :operation operation)
+     reason
+     t)
+    (agent-scheme-policy-deny
+     'standard-host-effect
+     (agent-scheme--clock-capability-operation-name binding)
+     `((domain . clock)
+       (operation . ,(agent-scheme--clock-capability-operation-symbol operation)))
+     context
+     reason)))
+
+(defun agent-scheme-capability-authorize-clock
+    (binding context &optional operation)
+  "Authorize a `(scheme time)` clock read for BINDING.
+OPERATION defaults to BINDING and may be a symbol or string."
+  (let* ((operation (or operation binding))
+         (request-id (agent-scheme--clock-capability-request-id))
+         (request
+          (agent-scheme--clock-capability-request-datum
+           request-id binding operation))
+         (grants (agent-scheme--clock-capability-grants context)))
+    (agent-scheme--clock-capability-record-request
+     request operation binding)
+    (unless grants
+      (agent-scheme--clock-capability-deny
+       request request-id operation binding nil
+       "no active clock grant covers request"
+       context))
+    (let ((match (agent-scheme--clock-capability-match grants operation)))
+      (unless (and match (plist-get match :grant))
+        (agent-scheme--clock-capability-deny
+         request request-id operation binding
+         (plist-get match :denied)
+         (or (plist-get match :reason)
+             "no active clock grant covers request")
+         context))
+      (let ((grant (plist-get match :grant)))
+        (agent-scheme-policy-authorize
+         'standard-host-effect
+         (agent-scheme--clock-capability-operation-name binding)
+         `((domain . clock)
+           (operation . ,(agent-scheme--clock-capability-operation-symbol operation))
+           (grant . ,(agent-scheme--capability-grant-id grant)))
+         context)
+        (agent-scheme--capability-grant-use! grant context)
+        (let ((decision
+               (agent-scheme--clock-capability-record-decision
+                request request-id operation 'approved grant
+                "clock read is covered by active grant")))
+          (list :request request
+                :decision decision
+                :operation operation
+                :grant grant))))))
 
 (defun agent-scheme-capability-authorize-code-loading
     (file-authorization context binding)

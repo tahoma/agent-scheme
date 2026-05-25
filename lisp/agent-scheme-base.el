@@ -538,20 +538,22 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
      :emitter-hook capability-repl
      :policy session :test-categories (repl policy session))
     (:name "current-jiffy" :library "(scheme time)" :minimum-arity 0
-     :maximum-arity nil :source host-capability :effect host-time
-     :required-capability clock :emacs-hook agent-scheme--policy-denied-primitive
-     :portable-hook policy-denied-primitive :emitter-hook capability-time
-     :policy deny :test-categories (time policy))
+     :maximum-arity 0 :source host-capability :effect host-time
+     :required-capability clock :emacs-hook agent-scheme--primitive-current-jiffy
+     :portable-hook primitive-current-jiffy :emitter-hook capability-time
+     :policy grant :test-categories (time policy clock))
     (:name "current-second" :library "(scheme time)" :minimum-arity 0
-     :maximum-arity nil :source host-capability :effect host-time
-     :required-capability clock :emacs-hook agent-scheme--policy-denied-primitive
-     :portable-hook policy-denied-primitive :emitter-hook capability-time
-     :policy deny :test-categories (time policy))
+     :maximum-arity 0 :source host-capability :effect host-time
+     :required-capability clock :emacs-hook agent-scheme--primitive-current-second
+     :portable-hook primitive-current-second :emitter-hook capability-time
+     :policy grant :test-categories (time policy clock))
     (:name "jiffies-per-second" :library "(scheme time)" :minimum-arity 0
-     :maximum-arity nil :source host-capability :effect host-time
-     :required-capability clock :emacs-hook agent-scheme--policy-denied-primitive
-     :portable-hook policy-denied-primitive :emitter-hook capability-time
-     :policy deny :test-categories (time policy)))
+     :maximum-arity 0 :source host-capability :effect host-time
+     :required-capability clock
+     :emacs-hook agent-scheme--primitive-jiffies-per-second
+     :portable-hook primitive-jiffies-per-second
+     :emitter-hook capability-time
+     :policy grant :test-categories (time policy clock)))
   "Explicit manifest metadata for host-effecting standard primitives.")
 
 (defun agent-scheme-standard-primitive-binding-specs ()

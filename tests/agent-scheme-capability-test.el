@@ -30,6 +30,9 @@
 (defvar agent-scheme-capability-test--network-streams nil
   "Network stream requests received by network capability test stubs.")
 
+(defvar agent-scheme-capability-test--clock-calls 0
+  "Number of test clock adapter reads.")
+
 (defun agent-scheme-capability-test-command (value &optional flag)
   "Record VALUE and FLAG for command-call! tests."
   (interactive "sValue: ")
@@ -79,6 +82,21 @@
   "Return fake SSE bytes for RESOURCE."
   (push resource agent-scheme-capability-test--network-streams)
   "data: ok\n\n")
+
+(defun agent-scheme-capability-test--current-second-stub ()
+  "Return a deterministic current-second value for clock tests."
+  (cl-incf agent-scheme-capability-test--clock-calls)
+  1000.25)
+
+(defun agent-scheme-capability-test--current-jiffy-stub ()
+  "Return a deterministic current-jiffy value for clock tests."
+  (cl-incf agent-scheme-capability-test--clock-calls)
+  12345)
+
+(defun agent-scheme-capability-test--jiffies-per-second-stub ()
+  "Return a deterministic jiffies-per-second value for clock tests."
+  (cl-incf agent-scheme-capability-test--clock-calls)
+  1000)
 
 (defun agent-scheme-capability-test--external
     (source &optional environment options)
@@ -153,6 +171,78 @@
                   'shared-capability-request))
       (should (eq (plist-get spec :policy-category) (nth 4 binding)))
       (should (eq (plist-get spec :policy) (nth 5 binding))))))
+
+(ert-deftest agent-scheme-capability-test-time-denies-before-clock-read ()
+  "Deny `(scheme time)` calls without reading the host clock."
+  (let ((agent-scheme-time-current-second-function
+         #'agent-scheme-capability-test--current-second-stub))
+    (setq agent-scheme-capability-test--clock-calls 0)
+    (agent-scheme-audit-clear)
+    (should-error
+     (agent-scheme-eval-source
+      "(import (scheme base) (scheme time))
+       (current-second)")
+     :type 'agent-scheme-policy-error)
+    (should (= agent-scheme-capability-test--clock-calls 0))
+    (should
+     (agent-scheme-capability-test--audit-entry-matching
+      "(event capability-request)"
+      "(domain clock)"
+      "(operation current-second)"))
+    (should
+     (agent-scheme-capability-test--audit-entry-matching
+      "(event capability-decision)"
+      "(domain clock)"
+      "(status denied)"))
+    (should
+     (agent-scheme-capability-test--audit-entry-matching
+      "(event capability-audit)"
+      "(domain clock)"
+      "(result (error"))))
+
+(ert-deftest agent-scheme-capability-test-time-reads-through-clock-grant ()
+  "Read `(scheme time)` values only after a clock grant authorizes them."
+  (let ((agent-scheme-time-current-second-function
+         #'agent-scheme-capability-test--current-second-stub)
+        (agent-scheme-time-current-jiffy-function
+         #'agent-scheme-capability-test--current-jiffy-stub)
+        (agent-scheme-time-jiffies-per-second-function
+         #'agent-scheme-capability-test--jiffies-per-second-stub))
+    (setq agent-scheme-capability-test--clock-calls 0)
+    (agent-scheme-audit-clear)
+    (should
+     (equal
+      (agent-scheme-capability-test--external
+       "(import (scheme base) (scheme time) (agent capability))
+        (grant-capability!
+         '(capability-grant
+           (id clock-read-grant)
+           (domain clock)
+           (operations read)
+           (scope (clock system))
+           (expires (uses 3))))
+        (list (current-second)
+              (current-jiffy)
+              (jiffies-per-second))")
+      "(1000.25 12345 1000)"))
+    (should (= agent-scheme-capability-test--clock-calls 3))
+    (should
+     (agent-scheme-capability-test--audit-entry-matching
+      "(event capability-request)"
+      "(domain clock)"
+      "(operation current-second)"))
+    (should
+     (agent-scheme-capability-test--audit-entry-matching
+      "(event capability-decision)"
+      "(domain clock)"
+      "(status approved)"
+      "(grant clock-read-grant)"))
+    (should
+     (agent-scheme-capability-test--audit-entry-matching
+      "(event capability-audit)"
+      "(domain clock)"
+      "(operation jiffies-per-second)"
+      "(result (ok 1000))"))))
 
 (ert-deftest agent-scheme-capability-test-buffer-capabilities-use-handles ()
   "Inspect the current buffer through an opaque handle."
