@@ -79,9 +79,11 @@ open or closed status and ordering.
   and daemon mutating VCS adapter operations.
 - Task lifecycle and control loop:
   [#281](https://github.com/tahoma/agent-scheme/issues/281) is the umbrella for
-  task lifecycle and control-loop design, with concrete slices for task records
-  ([#285](https://github.com/tahoma/agent-scheme/issues/285)), the minimal task
-  runner ([#286](https://github.com/tahoma/agent-scheme/issues/286)), shared
+  task lifecycle and control-loop design, documented in
+  [Task Lifecycle and Control Loop](control-loop.md), with concrete slices for
+  task records ([#285](https://github.com/tahoma/agent-scheme/issues/285)),
+  the minimal task runner
+  ([#286](https://github.com/tahoma/agent-scheme/issues/286)), shared
   control-loop fixtures
   ([#287](https://github.com/tahoma/agent-scheme/issues/287)), persistence and
   resume ([#288](https://github.com/tahoma/agent-scheme/issues/288)), and
