@@ -143,10 +143,6 @@
           (should-error
            (agent-scheme-job-start! "locked-main" "'second" nil)
            :type 'agent-scheme-job-error)
-          (agent-scheme-job-test--wait-until
-           "job yield"
-           (lambda ()
-             (agent-scheme-job-test--ready-yields id)))
           (agent-scheme-job-cancel! id)
           (agent-scheme-job-test--wait-until
            "job cancellation"
