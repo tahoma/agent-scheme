@@ -100,13 +100,19 @@
     (should (eq (plist-get open-input-file :backend-effect-path)
                 'shared-capability-request))
     (should (eq (plist-get open-input-file :policy) 'deny))
+    (should (equal (plist-get current-second :minimum-arity) 0))
+    (should (equal (plist-get current-second :maximum-arity) 0))
     (should (eq (plist-get current-second :effect) 'host-time))
     (should (eq (plist-get current-second :required-capability) 'clock))
+    (should (eq (plist-get current-second :emacs-hook)
+                'agent-scheme--primitive-current-second))
+    (should (eq (plist-get current-second :portable-hook)
+                'primitive-current-second))
     (should (eq (plist-get current-second :backend-effect-path)
                 'shared-capability-request))
     (should (eq (plist-get current-second :policy-category)
                 'standard-host-effect))
-    (should (eq (plist-get current-second :policy) 'deny))))
+    (should (eq (plist-get current-second :policy) 'grant))))
 
 (ert-deftest agent-scheme-base-test-effectful-manifest-has-backend-policy-path ()
   "Effectful manifest entries identify the shared backend policy path."
@@ -115,10 +121,10 @@
       (should (eq (plist-get spec :backend-effect-path)
                   'shared-capability-request))
       (should (plist-get spec :policy-category))))
-  (dolist (binding '(("(scheme file)" "file-exists?" host-file file-system)
+  (dolist (binding '(("(scheme file)" "file-exists?" host-file file-system deny)
                      ("(scheme process-context)" "command-line"
-                      host-process process-environment)
-                     ("(scheme time)" "current-second" host-time clock)))
+                      host-process process-environment deny)
+                     ("(scheme time)" "current-second" host-time clock grant)))
     (let ((spec (agent-scheme-base-test--manifest-spec
                  (nth 0 binding)
                  (nth 1 binding))))
@@ -130,7 +136,7 @@
                   'shared-capability-request))
       (should (eq (plist-get spec :policy-category)
                   'standard-host-effect))
-      (should (eq (plist-get spec :policy) 'deny))))
+      (should (eq (plist-get spec :policy) (nth 4 binding)))))
   (let ((read-char (agent-scheme-base-test--manifest-spec
                     "(scheme base)" "read-char")))
     (should read-char)

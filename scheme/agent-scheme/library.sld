@@ -762,8 +762,19 @@
        ((equal? key '(scheme time))
         (register-primitive-library!
          key
-         (map policy-denied-spec
-              '(current-jiffy current-second jiffies-per-second))
+         (list
+          (library-primitive-spec 'current-jiffy
+                                  'primitive-current-jiffy
+                                  0
+                                  0)
+          (library-primitive-spec 'current-second
+                                  'primitive-current-second
+                                  0
+                                  0)
+          (library-primitive-spec 'jiffies-per-second
+                                  'primitive-jiffies-per-second
+                                  0
+                                  0))
          context))
        ((equal? key '(scheme write))
         (register-primitive-library!

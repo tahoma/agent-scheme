@@ -1189,6 +1189,27 @@
      (source "(import (scheme base) (scheme time))\n(current-second)")
      (expect (error)))
 
+    ((id standard-library-time-clock-grant)
+     (kind r7rs-conformance)
+     (phase eval)
+     (category standard-libraries)
+     (section "6.14")
+     (status implemented)
+     (oracle shared)
+     (oracle-eligibility policy-gated)
+     (oracle-reason host-policy)
+     (options
+      ((capability-grants
+        ((capability-grant
+          (id fixture-clock-grant)
+          (domain clock)
+          (operations read)
+          (scope (clock system))
+          (expires never))))))
+     (description "The time library returns R7RS-shaped clock values when a clock grant authorizes host observation.")
+     (source "(import (scheme base) (scheme time))\n(list (real? (current-second))\n      (exact-integer? (current-jiffy))\n      (exact-integer? (jiffies-per-second))\n      (> (jiffies-per-second) 0))")
+     (expect (value "(#t #t #t #t)")))
+
     ((id standard-library-repl-policy-denied)
      (kind r7rs-conformance)
      (phase eval)

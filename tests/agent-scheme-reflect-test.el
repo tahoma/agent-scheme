@@ -71,6 +71,22 @@
     (should-not (string-match-p "agent-scheme--primitive" external))
     (should-not (string-match-p "emacs-hook" external))))
 
+(ert-deftest agent-scheme-reflect-test-time-capability-uses-clock-grant-policy ()
+  "Reflect `(scheme time)` as a functional clock capability."
+  (agent-scheme-reflect-test--reset)
+  (let ((external
+         (agent-scheme-reflect-test--eval-value-string
+          "(import (scheme base) (agent reflect))
+           (capability-info 'current-second)")))
+    (should (string-match-p (regexp-quote "(library (scheme time))") external))
+    (should (string-match-p (regexp-quote "(name current-second)") external))
+    (should (string-match-p (regexp-quote "(effect host-time)") external))
+    (should (string-match-p (regexp-quote "(required-capability clock)") external))
+    (should (string-match-p
+             (regexp-quote "(backend-effect-path shared-capability-request)")
+             external))
+    (should (string-match-p (regexp-quote "(policy grant)") external))))
+
 (ert-deftest agent-scheme-reflect-test-recent-yields-redact-secret-values ()
   "Reflect recent yield events without exposing raw credential-like data."
   (agent-scheme-reflect-test--reset)
