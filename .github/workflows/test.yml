@@ -193,10 +193,7 @@ jobs:
         run: ollama pull "$AGENT_SCHEME_LIVE_MODEL_ID"
 
       - name: Run live local model smoke
-        env:
-          AGENT_SCHEME_LIVE_MODEL_TEST: "1"
-          AGENT_SCHEME_TEST_SELECTOR: agent-scheme-models-test-live-local-openai-compatible-completion
-        run: make test
+        run: make test-live-model-ci
 
       - name: Show Ollama log on failure
         if: failure()
