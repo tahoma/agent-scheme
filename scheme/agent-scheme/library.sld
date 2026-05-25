@@ -125,6 +125,7 @@
         (agent capability)
         (agent capability primitive)
         (agent memory)
+        (agent plan)
         (agent models)
         (agent context)
         (agent reflect)
@@ -950,6 +951,33 @@
                                   'primitive-memory-yield
                                   2
                                   2))
+         context))
+       ((equal? key '(agent plan))
+        (register-primitive-library!
+         key
+         (list
+          (library-primitive-spec 'plan-create!
+                                  'primitive-plan-create!
+                                  1
+                                  1)
+          (library-primitive-spec 'plan-ref 'primitive-plan-ref 1 1)
+          (library-primitive-spec 'plan-list 'primitive-plan-list 1 1)
+          (library-primitive-spec 'plan-step-add!
+                                  'primitive-plan-step-add!
+                                  2
+                                  2)
+          (library-primitive-spec 'plan-step-status!
+                                  'primitive-plan-step-status!
+                                  3
+                                  3)
+          (library-primitive-spec 'plan-status!
+                                  'primitive-plan-status!
+                                  2
+                                  2)
+          (library-primitive-spec 'plan-yield
+                                  'primitive-plan-yield
+                                  1
+                                  1))
          context))
        ((equal? key '(agent models))
         (register-primitive-library!

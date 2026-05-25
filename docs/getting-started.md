@@ -151,6 +151,11 @@ buffer set; after loading `agent-scheme-memory`, use `M-x
 agent-scheme-memory-open` to inspect instance, session, or project memory as
 Scheme-readable data.
 
+Plans are represented through `(agent plan)` when that library is imported.
+Use `plan-create!`, `plan-step-status!`, and `plan-yield` to share an editable
+project or session plan with the outer loop. See [First-Class Plans](plans.md)
+for a REPL example and the canonical plan datum shape.
+
 ## Context-Driven Helpers
 
 The `(agent context)` library exposes the current request, editor focus,
