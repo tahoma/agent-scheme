@@ -57,6 +57,57 @@
   (or (getenv "AGENT_SCHEME_LIVE_MODEL_ID")
       "qwen2.5-coder:0.5b"))
 
+(defun agent-scheme-models-test--live-matrix-enabled-p ()
+  "Return non-nil when the full live local model matrix is enabled."
+  (let ((enabled (getenv "AGENT_SCHEME_LIVE_MODEL_MATRIX")))
+    (and enabled (> (length enabled) 0))))
+
+(defconst agent-scheme-models-test--live-suggested-models
+  '((cheap-background . "qwen2.5-coder:0.5b")
+    (cheap-background . "qwen3:0.6b")
+    (cheap-background . "gemma3:1b")
+    (scheme-scripter . "qwen2.5-coder:7b")
+    (coder . "qwen2.5-coder:14b")
+    (reviewer . "qwen2.5-coder:32b")
+    (memory-curator . "qwen3:4b")
+    (approval-explainer . "qwen3:8b")
+    (planner . "qwen3:30b")
+    (planner . "qwen3:32b")
+    (reviewer . "llama3.1:70b")
+    (summarizer . "gemma3:4b")
+    (approval-explainer . "gemma3:12b"))
+  "Representative live local model cases for the documented role matrix.")
+
+(defun agent-scheme-models-test--live-completion-external (role model)
+  "Return live completion output for ROLE and MODEL as external text."
+  (let ((role-name (symbol-name role)))
+    (agent-scheme-models-test--external
+     (format
+      "(import (scheme base) (agent models))
+       (model-provider-register!
+        '(model-provider
+          (id local-live)
+          (kind local)
+          (transport openai-compatible-http)
+          (endpoint %S)
+          (models
+           (((id %S)
+             (roles (%s))
+             (privacy local))))))
+       (model-complete '%s
+                       \"What is 2 plus 3? Reply with only the numeral.\"
+                       '())"
+      (agent-scheme-models-test--live-endpoint)
+      model
+      role-name
+      role-name))))
+
+(defun agent-scheme-models-test--live-completion-present-p (external)
+  "Return non-nil when EXTERNAL renders a non-empty completion string."
+  (and (stringp external)
+       (> (length external) 2)
+       (not (string-match-p "\\`\"[[:space:]]*\"\\'" external))))
+
 (ert-deftest agent-scheme-models-test-local-complete-through-transport ()
   "Expose `(agent models)' and complete through a selected local provider."
   (agent-scheme-models-test--reset)
@@ -117,6 +168,30 @@
             endpoint
             model))))
     (should (string-match-p "5" external))))
+
+(ert-deftest agent-scheme-models-test-live-local-suggested-model-matrix ()
+  "Opt-in live proof across the documented local role/model matrix."
+  (skip-unless (and (agent-scheme-models-test--live-enabled-p)
+                    (agent-scheme-models-test--live-matrix-enabled-p)))
+  (let (failures)
+    (dolist (case agent-scheme-models-test--live-suggested-models)
+      (let ((role (car case))
+            (model (cdr case)))
+        (agent-scheme-models-test--reset)
+        (condition-case error
+            (let ((external
+                   (agent-scheme-models-test--live-completion-external
+                    role
+                    model)))
+              (unless (agent-scheme-models-test--live-completion-present-p
+                       external)
+                (push (format "%s/%s returned %s" role model external)
+                      failures)))
+          (error
+           (push (format "%s/%s failed: %S" role model error)
+                 failures)))))
+    (when failures
+      (ert-fail (mapconcat #'identity (nreverse failures) "\n")))))
 
 (ert-deftest agent-scheme-models-test-routing-falls-back-past-unavailable ()
   "Skip unavailable models and select the next role-compatible local model."
