@@ -127,6 +127,34 @@
                                   markdown)))
       (delete-file log))))
 
+(ert-deftest agent-scheme-ci-test-pr-summary-uses-stable-shard-order ()
+  "Render pull request timing rows in the intended shard display order."
+  (let* ((tools-shard '(:name "Emacs tools/docs/integration"
+                              :selector "tools"
+                              :ran 1
+                              :expected 1
+                              :unexpected 0
+                              :skipped 0
+                              :ert-seconds 1.0
+                              :wall-seconds 1.0
+                              :tests nil))
+         (portable-shard '(:name "Portable Chibi-backed ERT"
+                                 :selector "portable"
+                                 :ran 1
+                                 :expected 1
+                                 :unexpected 0
+                                 :skipped 0
+                                 :ert-seconds 1.0
+                                 :wall-seconds 1.0
+                                 :tests nil))
+         (markdown
+          (agent-scheme-ci-render-pr-markdown-summary
+           (list tools-shard portable-shard))))
+    (should
+     (string-match-p
+      "| Portable Chibi-backed ERT |.*\n| Emacs tools/docs/integration |"
+      markdown))))
+
 (provide 'agent-scheme-ci-test)
 
 ;;; agent-scheme-ci-test.el ends here
