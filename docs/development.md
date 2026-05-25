@@ -295,6 +295,25 @@ make test-emacs-hosted
 tests with `(not "agent-scheme-scheme-.*")`. The top-level `make test` command
 remains the canonical local aggregate and still includes the portable tests.
 
+Live local model tests require an OpenAI-compatible local model endpoint. Run
+the CI smoke selector with:
+
+```sh
+make test-live-model-ci
+```
+
+Run all opt-in live local model tests, including the documented local model
+matrix, with:
+
+```sh
+make test-live-model
+```
+
+Both live targets set `AGENT_SCHEME_LIVE_MODEL_TEST=1`. The all-live target also
+sets `AGENT_SCHEME_LIVE_MODEL_MATRIX=1`. Use
+`AGENT_SCHEME_LIVE_MODEL_ENDPOINT` and `AGENT_SCHEME_LIVE_MODEL_ID` to override
+the default local endpoint and smoke model id.
+
 For documentation-only changes, also run:
 
 ```sh
