@@ -58,6 +58,11 @@ open or closed status and ordering.
   tracks this roadmap summary, and
   [#295](https://github.com/tahoma/agent-scheme/issues/295) tracks label,
   sub-issue, dependency, and chunk-placement cleanup.
+- CI visibility and shard feedback:
+  [#322](https://github.com/tahoma/agent-scheme/issues/322) splits CI tests and
+  reports timing by Emacs-hosted and portable Chibi-backed validation path, and
+  [#325](https://github.com/tahoma/agent-scheme/issues/325) tracks the later
+  rebalancing pass after enough timing summaries are available.
 - Shared effect domains:
   [#220](https://github.com/tahoma/agent-scheme/issues/220) for files,
   [#221](https://github.com/tahoma/agent-scheme/issues/221) for ports,
