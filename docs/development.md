@@ -282,6 +282,19 @@ To run a narrower ERT selector:
 AGENT_SCHEME_TEST_SELECTOR='agent-scheme-smoke-test-harness-runs' make test
 ```
 
+CI also runs the aggregate suite as two host/runtime-oriented shards so timing
+and failures stay visible by architectural path:
+
+```sh
+AGENT_SCHEME_CHIBI=chibi-scheme make test-portable
+make test-emacs-hosted
+```
+
+`make test-portable` selects the portable Chibi-backed ERT bridge tests with
+`"agent-scheme-scheme-.*"`. `make test-emacs-hosted` selects the remaining ERT
+tests with `(not "agent-scheme-scheme-.*")`. The top-level `make test` command
+remains the canonical local aggregate and still includes the portable tests.
+
 For documentation-only changes, also run:
 
 ```sh
