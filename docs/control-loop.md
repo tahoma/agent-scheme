@@ -27,6 +27,59 @@ Task state is a public symbol. The state machine intentionally separates active
 work, pause states, and stop states so hosts can distinguish "resume this
 later" from "this task is done."
 
+The diagram uses underscores for Mermaid state identifiers; the table below it
+keeps the public Agent Scheme state symbol spellings.
+
+```mermaid
+stateDiagram-v2
+    [*] --> created
+    created --> observing
+    created --> cancelled
+
+    observing --> planning
+    observing --> waiting_for_host
+    observing --> blocked
+    observing --> failed
+
+    planning --> acting
+    planning --> waiting_for_model
+    planning --> blocked
+    planning --> failed
+
+    acting --> observing
+    acting --> waiting_for_approval
+    acting --> waiting_for_host
+    acting --> waiting_for_model
+    acting --> blocked
+    acting --> complete
+    acting --> failed
+
+    waiting_for_approval --> acting
+    waiting_for_approval --> blocked
+    waiting_for_approval --> cancelled
+
+    waiting_for_model --> planning
+    waiting_for_model --> acting
+    waiting_for_model --> blocked
+    waiting_for_model --> failed
+    waiting_for_model --> cancelled
+
+    waiting_for_host --> observing
+    waiting_for_host --> acting
+    waiting_for_host --> blocked
+    waiting_for_host --> failed
+    waiting_for_host --> cancelled
+
+    blocked --> observing
+    blocked --> planning
+    blocked --> acting
+    blocked --> cancelled
+
+    complete --> [*]
+    failed --> [*]
+    cancelled --> [*]
+```
+
 | State | Meaning | Normal exits |
 | --- | --- | --- |
 | `created` | A task datum exists but no observation has run. | `observing`, `cancelled` |
