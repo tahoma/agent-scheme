@@ -301,6 +301,11 @@ local aggregate for all non-portable ERT tests with
 `(not "agent-scheme-scheme-.*")`. The top-level `make test` command remains the
 canonical local aggregate and still includes the portable tests.
 
+Each shard uploads a `test-log-*` artifact and writes a job summary. On pull
+requests, the combined timing job also updates one PR comment with a compact
+shard timing table and a collapsible detail section so reviewers can see timing
+at a glance from the PR conversation.
+
 Live local model tests require an OpenAI-compatible local model endpoint. Run
 the CI smoke selector with:
 

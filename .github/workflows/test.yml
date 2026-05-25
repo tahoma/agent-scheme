@@ -8,6 +8,8 @@ on:
 
 permissions:
   contents: read
+  issues: write
+  pull-requests: write
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
@@ -169,9 +171,57 @@ jobs:
             printf '%s\n' 'No shard logs were available.' >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          emacs -Q --batch -L lisp \
+          summary_file=ci-logs/test-shard-summary.md
+          : > "$summary_file"
+          AGENT_SCHEME_CI_SUMMARY_FILE="$summary_file" emacs -Q --batch -L lisp \
             --eval "(require 'agent-scheme-ci)" \
             --funcall agent-scheme-ci-summary-batch-main -- "${logs[@]}"
+          cat "$summary_file" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Prepare pull request timing comment
+        if: github.event_name == 'pull_request'
+        shell: bash
+        env:
+          AGENT_SCHEME_CI_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          mkdir -p ci-logs
+          logs=()
+          while IFS= read -r -d '' log; do
+            logs+=("$log")
+          done < <(find ci-logs -type f -name '*.log' -print0)
+          if [ "${#logs[@]}" -eq 0 ]; then
+            printf '%s\n\n%s\n' '<!-- agent-scheme-ci-timing-summary -->' 'No shard logs were available.' > ci-logs/pr-timing-summary.md
+            exit 0
+          fi
+          AGENT_SCHEME_CI_PR_SUMMARY_FILE=ci-logs/pr-timing-summary.md emacs -Q --batch -L lisp \
+            --eval "(require 'agent-scheme-ci)" \
+            --funcall agent-scheme-ci-pr-summary-batch-main -- "${logs[@]}"
+
+      - name: Publish pull request timing comment
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AGENT_SCHEME_PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          marker='<!-- agent-scheme-ci-timing-summary -->'
+          comment_file=ci-logs/pr-timing-summary.md
+          if [ ! -s "$comment_file" ]; then
+            printf '%s\n\nNo shard timing summary was available.' "$marker" > "$comment_file"
+          fi
+          comment_id="$(gh api "repos/${GITHUB_REPOSITORY}/issues/${AGENT_SCHEME_PR_NUMBER}/comments" \
+            --paginate \
+            --jq '.[] | select(.body | contains("<!-- agent-scheme-ci-timing-summary -->")) | .id' \
+            | head -n 1)"
+          if [ -n "$comment_id" ]; then
+            gh api --method PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${comment_id}" \
+              --field "body=@${comment_file}" \
+              --silent
+          else
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/${AGENT_SCHEME_PR_NUMBER}/comments" \
+              --field "body=@${comment_file}" \
+              --silent
+          fi
 
   live-local-model:
     name: live local model smoke
