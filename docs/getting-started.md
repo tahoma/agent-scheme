@@ -151,6 +151,53 @@ buffer set; after loading `agent-scheme-memory`, use `M-x
 agent-scheme-memory-open` to inspect instance, session, or project memory as
 Scheme-readable data.
 
+## Context-Driven Helpers
+
+The `(agent context)` library exposes the current request, editor focus,
+region, buffer, project, and conversation summary as ordinary datums. This lets
+helpers reason over what the user is doing without receiving raw Emacs objects
+or protocol-specific payloads:
+
+```scheme
+(import (scheme base)
+        (agent context))
+
+(current-request)
+(current-focus)
+(current-region-context)
+(current-buffer-context)
+(current-project-context)
+(current-conversation-summary)
+```
+
+Region and buffer records include source metadata such as the opaque buffer
+handle, file path, point or region range, line number, and current line or
+selected text. Project records include the project root. If a buffer is marked
+local-only by the host, the context record carries `(local-only #t)` and is not
+safe for provider routing unless an explicit provider policy override allows
+that disclosure.
+
+Context can be yielded back to the session event stream:
+
+```scheme
+(import (scheme base)
+        (agent context))
+
+(context-yield 'buffer)
+(context-yield '(request project conversation-summary))
+```
+
+To keep context intentionally, store the datum through `(agent memory)` instead
+of relying on implicit persistence:
+
+```scheme
+(import (scheme base)
+        (agent context)
+        (agent memory))
+
+(memory-put! 'instance 'last-focus (current-focus))
+```
+
 ## Policy and Capabilities
 
 Agent Scheme keeps host authority explicit. Pure R7RS evaluation is allowed

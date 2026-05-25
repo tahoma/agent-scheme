@@ -125,6 +125,7 @@
         (agent capability)
         (agent capability primitive)
         (agent memory)
+        (agent context)
         (agent reflect)
         (agent redaction)))
 
@@ -935,6 +936,39 @@
                                   'primitive-memory-yield
                                   2
                                   2))
+         context))
+       ((equal? key '(agent context))
+        (register-primitive-library!
+         key
+         (list
+          (library-primitive-spec 'current-request
+                                  'primitive-current-request
+                                  0
+                                  0)
+          (library-primitive-spec 'current-focus
+                                  'primitive-current-focus
+                                  0
+                                  0)
+          (library-primitive-spec 'current-region-context
+                                  'primitive-current-region-context
+                                  0
+                                  0)
+          (library-primitive-spec 'current-buffer-context
+                                  'primitive-current-buffer-context
+                                  0
+                                  0)
+          (library-primitive-spec 'current-project-context
+                                  'primitive-current-project-context
+                                  0
+                                  0)
+          (library-primitive-spec 'current-conversation-summary
+                                  'primitive-current-conversation-summary
+                                  0
+                                  0)
+          (library-primitive-spec 'context-yield
+                                  'primitive-context-yield
+                                  1
+                                  1))
          context))
        ((equal? key '(agent reflect))
         (register-primitive-library!

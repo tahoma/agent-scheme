@@ -149,7 +149,8 @@ agent events, and handle references across calls."
               (plist-get options :max-value-nodes)))
       (when (plist-member options :max-host-callbacks)
         (setf (agent-scheme--eval-context-maximum-host-callbacks context)
-              (plist-get options :max-host-callbacks))))
+              (plist-get options :max-host-callbacks)))
+      (agent-scheme--apply-current-context-options! context options))
     (agent-scheme-session--prepare-eval! session)
     (let ((start-count (agent-scheme-session--audit-start-count)))
       (condition-case condition

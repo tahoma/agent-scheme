@@ -17,6 +17,7 @@
 (require 'agent-scheme-capability)
 (require 'agent-scheme-agent-io)
 (require 'agent-scheme-approval)
+(require 'agent-scheme-context)
 (require 'agent-scheme-debugger)
 (require 'agent-scheme-job)
 (require 'agent-scheme-memory)
@@ -80,6 +81,7 @@
     "(agent capability)"
     "(agent capability primitive)"
     "(agent memory)"
+    "(agent context)"
     "(agent reflect)"
     "(agent redaction)"
     "(agent session)")
@@ -386,6 +388,11 @@
      (agent-scheme--register-primitive-library
       key
       (agent-scheme-memory-primitive-specs)
+      context))
+    ("(agent context)"
+     (agent-scheme--register-primitive-library
+      key
+      (agent-scheme-context-primitive-specs)
       context))
     ("(agent reflect)"
      (agent-scheme--register-primitive-library
