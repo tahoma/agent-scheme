@@ -4193,6 +4193,279 @@
       (record-agent-event! context (list 'request (car arguments)))
       agent-scheme-unspecified)
 
+    ;; Policy categories reported by `(agent reflect)'.
+    (define reflect-policy-categories
+      '(pure-r7rs
+        emacs-read-only
+        buffer-edit
+        vcs-mutation
+        window-session
+        command-process
+        standard-host-effect
+        raw-emacs-lisp
+        approval-resolution
+        skill-discovery-activation
+        project-skill-trust
+        skill-resource-read
+        skill-script-execution
+        skill-export-write
+        network-access
+        remote-provider-routing))
+
+    ;; Default policy actions mirror the Emacs bootstrap policy table.
+    (define reflect-default-policy-actions
+      '((pure-r7rs . allow)
+        (emacs-read-only . allow)
+        (buffer-edit . confirm)
+        (vcs-mutation . confirm)
+        (window-session . confirm)
+        (command-process . confirm)
+        (standard-host-effect . allow)
+        (raw-emacs-lisp . deny)
+        (approval-resolution . deny)
+        (skill-discovery-activation . confirm)
+        (project-skill-trust . deny)
+        (skill-resource-read . confirm)
+        (skill-script-execution . confirm)
+        (skill-export-write . confirm)
+        (network-access . deny)
+        (remote-provider-routing . allow)))
+
+    ;; Return FIELD's value from association-list SPEC, or DEFAULT.
+    (define (reflect-field-value spec field default)
+      (let ((entry (assq field spec)))
+        (if entry (cadr entry) default)))
+
+    ;; Return host VALUE as a Scheme-readable reflection datum.
+    (define (reflect-datumize value)
+      (cond
+       ((integer? value) (agent-scheme-make-canonical-integer value))
+       ((pair? value)
+        (cons (reflect-datumize (car value))
+              (reflect-datumize (cdr value))))
+       ((vector? value)
+        (list->vector (map reflect-datumize (vector->list value))))
+       (else value)))
+
+    ;; Report whether SPEC describes a host capability.
+    (define (reflect-host-capability-spec? spec)
+      (eq? (reflect-field-value spec 'source #f) 'host-capability))
+
+    ;; Convert a primitive manifest SPEC into a public capability record.
+    (define (reflect-capability-record spec)
+      (list 'host-capability
+            (result-field 'library
+                          (reflect-field-value spec 'library #f))
+            (result-field 'name
+                          (reflect-field-value spec 'name #f))
+            (result-field 'minimum-arity
+                          (reflect-datumize
+                           (reflect-field-value spec 'minimum-arity #f)))
+            (result-field 'maximum-arity
+                          (reflect-datumize
+                           (reflect-field-value spec 'maximum-arity #f)))
+            (result-field 'source
+                          (reflect-field-value spec 'source #f))
+            (result-field 'effect
+                          (reflect-field-value spec 'effect #f))
+            (result-field 'required-capability
+                          (reflect-field-value spec
+                                               'required-capability
+                                               #f))
+            (result-field 'backend-effect-path
+                          (reflect-field-value spec
+                                               'backend-effect-path
+                                               #f))
+            (result-field 'policy-category
+                          (reflect-field-value spec 'policy-category #f))
+            (result-field 'policy
+                          (reflect-field-value spec 'policy #f))
+            (result-field 'requires-grant
+                          (if (reflect-field-value spec
+                                                   'requires-grant
+                                                   #f)
+                              #t
+                              #f))))
+
+    ;; Return all host capability reflection records from the manifest.
+    (define (reflect-current-capabilities)
+      (let loop ((specs (agent-scheme-primitive-manifest-binding-specs))
+                 (records '()))
+        (cond
+         ((null? specs) (reverse records))
+         ((reflect-host-capability-spec? (car specs))
+          (loop (cdr specs)
+                (cons (reflect-capability-record (car specs))
+                      records)))
+         (else (loop (cdr specs) records)))))
+
+    ;; Return SYMBOL-OR-NAME as a capability name symbol.
+    (define (reflect-capability-name symbol-or-name)
+      (cond
+       ((symbol? symbol-or-name) symbol-or-name)
+       ((string? symbol-or-name) (string->symbol symbol-or-name))
+       (else (eval-error "capability-info expects a symbol or string"))))
+
+    ;; Return capability metadata for SYMBOL-OR-NAME, or #f.
+    (define (reflect-capability-info symbol-or-name)
+      (let ((name (reflect-capability-name symbol-or-name)))
+        (let loop ((specs (agent-scheme-primitive-manifest-binding-specs)))
+          (cond
+           ((null? specs) #f)
+           ((and (reflect-host-capability-spec? (car specs))
+                 (eq? (reflect-field-value (car specs) 'name #f) name))
+            (reflect-capability-record (car specs)))
+           (else (loop (cdr specs)))))))
+
+    ;; Return the active budget counters and limits for CONTEXT.
+    (define (reflect-current-budget context)
+      (list 'budget
+            (result-field 'steps-used
+                          (agent-scheme-make-canonical-integer
+                           (context-steps context)))
+            (result-field 'max-steps
+                          (reflect-datumize
+                           (context-maximum-steps context)))
+            (result-field 'host-calls
+                          (agent-scheme-make-canonical-integer
+                           (context-host-callbacks context)))
+            (result-field 'max-host-calls
+                          (reflect-datumize
+                           (context-maximum-host-callbacks context)))
+            (result-field 'events-used
+                          (agent-scheme-make-canonical-integer
+                           (context-event-count context)))
+            (result-field 'max-events
+                          (reflect-datumize
+                           (context-maximum-events context)))
+            (result-field 'max-event-nodes
+                          (reflect-datumize
+                           (context-maximum-event-nodes context)))
+            (result-field 'max-value-nodes
+                          (reflect-datumize
+                           (context-maximum-value-nodes context)))))
+
+    ;; Return CATEGORY's effective policy action in CONTEXT.
+    (define (reflect-policy-action context category)
+      (let ((override (assq category (context-policy-actions context))))
+        (if override
+            (cdr override)
+            (let ((default (assq category reflect-default-policy-actions)))
+              (if default (cdr default) 'deny)))))
+
+    ;; Return the active policy table and per-context overrides.
+    (define (reflect-current-policy context)
+      (list 'policy
+            (result-field
+             'categories
+             (map (lambda (category)
+                    (list category
+                          (reflect-policy-action context category)))
+                  reflect-policy-categories))
+            (result-field 'overrides
+                          (context-policy-actions context))
+            (result-field 'confirmation
+                          (if (context-policy-confirmation-function context)
+                              #t
+                              #f))))
+
+    ;; Return registered library names for CONTEXT.
+    (define (reflect-current-imports context)
+      (map car (context-libraries context)))
+
+    ;; Return public session and event identity for CONTEXT.
+    (define (reflect-current-session-info context)
+      (list 'session-info
+            (result-field 'id #f)
+            (result-field 'job #f)
+            (result-field 'events-used
+                          (agent-scheme-make-canonical-integer
+                           (context-event-count context)))))
+
+    ;; Return FIELD from a Scheme-readable reflection or audit ENTRY.
+    (define (reflect-entry-field entry field)
+      (let ((cell (assq field (cdr entry))))
+        (if cell (cadr cell) #f)))
+
+    ;; Filter LIST by PREDICATE while preserving source order.
+    (define (reflect-filter predicate list)
+      (let loop ((rest list) (kept '()))
+        (cond
+         ((null? rest) (reverse kept))
+         ((predicate (car rest))
+          (loop (cdr rest) (cons (car rest) kept)))
+         (else (loop (cdr rest) kept)))))
+
+    ;; Return recent yield events from CONTEXT in emission order.
+    (define (reflect-recent-yields context)
+      (redaction-model:redact
+       (reflect-filter
+        (lambda (event)
+          (and (pair? event) (eq? (car event) 'yield)))
+        (reverse (context-audit-events context)))
+       'runtime-reflection))
+
+    ;; Return recent error conditions known to CONTEXT.
+    (define (reflect-recent-errors context)
+      (redaction-model:redact
+       (if (context-current-error context)
+           (list (context-current-error context))
+           '())
+       'runtime-reflection))
+
+    ;; Return recent policy decisions from CONTEXT in emission order.
+    (define (reflect-recent-policy-decisions context)
+      (redaction-model:redact
+       (reflect-filter
+        (lambda (entry)
+          (and (pair? entry)
+               (eq? (car entry) 'audit-entry)
+               (eq? (reflect-entry-field entry 'event) 'policy-decision)))
+        (reverse (context-audit-events context)))
+       'runtime-reflection))
+
+    ;; Return the runtime capability metadata list.
+    (define (primitive-current-capabilities arguments context)
+      (redaction-model:redact (reflect-current-capabilities)
+                              'runtime-reflection))
+
+    ;; Return the runtime policy snapshot.
+    (define (primitive-current-policy arguments context)
+      (redaction-model:redact (reflect-current-policy context)
+                              'runtime-reflection))
+
+    ;; Return the current evaluation budget snapshot.
+    (define (primitive-current-budget arguments context)
+      (redaction-model:redact (reflect-current-budget context)
+                              'runtime-reflection))
+
+    ;; Return the current import snapshot.
+    (define (primitive-current-imports arguments context)
+      (redaction-model:redact (reflect-current-imports context)
+                              'runtime-reflection))
+
+    ;; Return current session metadata.
+    (define (primitive-current-session-info arguments context)
+      (redaction-model:redact (reflect-current-session-info context)
+                              'runtime-reflection))
+
+    ;; Return recent yield events.
+    (define (primitive-recent-yields arguments context)
+      (reflect-recent-yields context))
+
+    ;; Return recent error records.
+    (define (primitive-recent-errors arguments context)
+      (reflect-recent-errors context))
+
+    ;; Return recent policy decision records.
+    (define (primitive-recent-policy-decisions arguments context)
+      (reflect-recent-policy-decisions context))
+
+    ;; Return metadata for one named capability.
+    (define (primitive-capability-info arguments context)
+      (redaction-model:redact (reflect-capability-info (car arguments))
+                              'runtime-reflection))
+
     ;; Return the active debugger condition, or #f outside error handling.
     (define (primitive-current-error arguments context)
       (let ((current (context-current-error context)))
@@ -6193,6 +6466,16 @@
        (cons 'primitive-agent-progress primitive-agent-progress)
        (cons 'primitive-agent-warn primitive-agent-warn)
        (cons 'primitive-agent-request primitive-agent-request)
+       (cons 'primitive-current-capabilities primitive-current-capabilities)
+       (cons 'primitive-current-policy primitive-current-policy)
+       (cons 'primitive-current-budget primitive-current-budget)
+       (cons 'primitive-current-imports primitive-current-imports)
+       (cons 'primitive-current-session-info primitive-current-session-info)
+       (cons 'primitive-recent-yields primitive-recent-yields)
+       (cons 'primitive-recent-errors primitive-recent-errors)
+       (cons 'primitive-recent-policy-decisions
+             primitive-recent-policy-decisions)
+       (cons 'primitive-capability-info primitive-capability-info)
        (cons 'primitive-current-error primitive-current-error)
        (cons 'primitive-condition-stack primitive-condition-stack)
        (cons 'primitive-condition-environment

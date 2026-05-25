@@ -2006,6 +2006,47 @@
          #t)
          #t))
 
+(let ((external
+       (agent-scheme-value->external
+        (agent-scheme-eval-source
+         "(import (scheme base) (agent io) (agent reflect))
+          (agent-yield '(first 1))
+          (list (capability-info 'file-exists?)
+                (current-budget)
+                (current-imports)
+                (recent-yields))"
+         #f
+         '((max-steps . 777)
+           (max-host-callbacks . 66)
+           (max-events . 4)
+           (max-event-nodes . 44))))))
+  (check 'agent-reflect-capability-budget-imports-and-yields
+         (and (string-contains? external "(host-capability")
+              (string-contains? external "(library (scheme file))")
+              (string-contains? external "(name file-exists?)")
+              (string-contains? external "(max-steps 777)")
+              (string-contains? external "(max-host-calls 66)")
+              (string-contains? external "(max-events 4)")
+              (string-contains? external "(max-event-nodes 44)")
+              (string-contains? external "(agent reflect)")
+              (string-contains? external "(yield (first 1))")
+              #t)
+         #t))
+
+(let ((external
+       (agent-scheme-value->external
+        (agent-scheme-eval-source
+         "(import (scheme base) (agent io) (agent reflect))
+          (agent-yield '((source env)
+                         (field \"OPENAI_API_KEY\")
+                         (value \"sk-portablereflect1234567890\")))
+          (recent-yields)"))))
+  (check 'agent-reflect-recent-yields-redacts-secrets
+         (and (string-contains? external "(redaction (kind secret)")
+              (not (string-contains? external "sk-portablereflect"))
+              #t)
+         #t))
+
 (check 'agent-diff-proposed-edit-renders
        (agent-scheme-eval-source
         "(import (agent diff))

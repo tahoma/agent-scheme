@@ -21,6 +21,7 @@
 (require 'agent-scheme-job)
 (require 'agent-scheme-memory)
 (require 'agent-scheme-redaction)
+(require 'agent-scheme-reflect)
 (require 'agent-scheme-session)
 (require 'agent-scheme-policy)
 
@@ -79,6 +80,7 @@
     "(agent capability)"
     "(agent capability primitive)"
     "(agent memory)"
+    "(agent reflect)"
     "(agent redaction)"
     "(agent session)")
   "Agent interaction library keys with focused bootstrap support.")
@@ -384,6 +386,11 @@
      (agent-scheme--register-primitive-library
       key
       (agent-scheme-memory-primitive-specs)
+      context))
+    ("(agent reflect)"
+     (agent-scheme--register-primitive-library
+      key
+      (agent-scheme-reflect-primitive-specs)
       context))
     ("(agent redaction)"
      (agent-scheme--register-primitive-library
