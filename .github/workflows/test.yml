@@ -13,8 +13,8 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
-  test:
-    name: make test
+  test-portable:
+    name: portable Chibi-backed tests
     runs-on: ubuntu-latest
 
     steps:
@@ -26,8 +26,125 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y emacs-nox chibi-scheme
 
-      - name: Run tests
-        run: make test
+      - name: Run portable Chibi-backed tests
+        shell: bash
+        run: |
+          mkdir -p ci-logs
+          started=$SECONDS
+          set +e
+          make test-portable 2>&1 | tee ci-logs/portable-chibi.log
+          status=${PIPESTATUS[0]}
+          wall=$((SECONDS - started))
+          {
+            printf 'AGENT_SCHEME_CI_SHARD_NAME=Portable Chibi-backed ERT\n'
+            printf 'AGENT_SCHEME_CI_SHARD_SELECTOR="agent-scheme-scheme-.*"\n'
+            printf 'AGENT_SCHEME_CI_WALL_SECONDS=%s\n' "$wall"
+          } >> ci-logs/portable-chibi.log
+          exit "$status"
+
+      - name: Upload portable shard log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-log-portable-chibi
+          path: ci-logs/portable-chibi.log
+          if-no-files-found: warn
+
+      - name: Render portable shard timing summary
+        if: always()
+        run: |
+          if [ -f ci-logs/portable-chibi.log ]; then
+            emacs -Q --batch -L lisp \
+              --eval "(require 'agent-scheme-ci)" \
+              --eval "(agent-scheme-ci-write-summary '(\"ci-logs/portable-chibi.log\") (getenv \"GITHUB_STEP_SUMMARY\"))"
+          fi
+
+  test-emacs-hosted:
+    name: Emacs-hosted ERT tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Install Emacs
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y emacs-nox chibi-scheme
+
+      - name: Run Emacs-hosted ERT tests
+        shell: bash
+        run: |
+          mkdir -p ci-logs
+          started=$SECONDS
+          set +e
+          make test-emacs-hosted 2>&1 | tee ci-logs/emacs-hosted-ert.log
+          status=${PIPESTATUS[0]}
+          wall=$((SECONDS - started))
+          {
+            printf 'AGENT_SCHEME_CI_SHARD_NAME=Emacs-hosted ERT\n'
+            printf 'AGENT_SCHEME_CI_SHARD_SELECTOR=(not "agent-scheme-scheme-.*")\n'
+            printf 'AGENT_SCHEME_CI_WALL_SECONDS=%s\n' "$wall"
+          } >> ci-logs/emacs-hosted-ert.log
+          exit "$status"
+
+      - name: Upload Emacs-hosted shard log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-log-emacs-hosted-ert
+          path: ci-logs/emacs-hosted-ert.log
+          if-no-files-found: warn
+
+      - name: Render Emacs-hosted shard timing summary
+        if: always()
+        run: |
+          if [ -f ci-logs/emacs-hosted-ert.log ]; then
+            emacs -Q --batch -L lisp \
+              --eval "(require 'agent-scheme-ci)" \
+              --eval "(agent-scheme-ci-write-summary '(\"ci-logs/emacs-hosted-ert.log\") (getenv \"GITHUB_STEP_SUMMARY\"))"
+          fi
+
+  test-summary:
+    name: test shard timing summary
+    runs-on: ubuntu-latest
+    needs:
+      - test-portable
+      - test-emacs-hosted
+    if: always()
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Install Emacs
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y emacs-nox
+
+      - name: Download shard logs
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          pattern: test-log-*
+          path: ci-logs
+          merge-multiple: true
+
+      - name: Render combined timing summary
+        shell: bash
+        run: |
+          mkdir -p ci-logs
+          logs=()
+          while IFS= read -r -d '' log; do
+            logs+=("$log")
+          done < <(find ci-logs -type f -name '*.log' -print0)
+          if [ "${#logs[@]}" -eq 0 ]; then
+            printf '%s\n' 'No shard logs were available.' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          emacs -Q --batch -L lisp \
+            --eval "(require 'agent-scheme-ci)" \
+            --funcall agent-scheme-ci-summary-batch-main -- "${logs[@]}"
 
   live-local-model:
     name: live local model smoke
