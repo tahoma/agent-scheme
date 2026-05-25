@@ -2415,6 +2415,37 @@
                 "(value \"yield portable\") (source ()) "
                 "(confidence unknown) (created-at 3) "
                 "(updated-at 3)))))"))
+         #t)
+         #t))
+
+(let* ((result
+        (agent-scheme-eval-source-result
+         "(import (scheme base) (agent context))
+          (context-yield 'request)
+          (list (current-request)
+                (current-conversation-summary)
+                (current-focus)
+                (current-buffer-context))"
+         #f
+         '((request-id . portable-req)
+           (request . "portable context request")
+           (conversation-summary . "portable conversation summary"))))
+       (events (field-value result 'events))
+       (value (field-value result 'value)))
+  (check 'agent-context-portable-request-summary-focus-and-yield
+         (and (equal? (field-value result 'status) 'ok)
+              (string-contains?
+               (agent-scheme-value->external value)
+               "(request-context (request-id portable-req) (request \"portable context request\"))")
+              (string-contains?
+               (agent-scheme-value->external value)
+               "(conversation-summary (summary \"portable conversation summary\"))")
+              (string-contains?
+               (agent-scheme-value->external value)
+               "(focus-context")
+              (string-contains?
+               (agent-scheme-result->external (list 'events events))
+               "(yield (request-context")
               #t)
          #t))
 

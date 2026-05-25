@@ -38,6 +38,7 @@
           (agent-scheme base)
           (agent-scheme library)
           (prefix (agent-scheme approval) approval-model:)
+          (prefix (agent-scheme context) context-model:)
           (prefix (agent-scheme job) job-model:)
           (prefix (agent-scheme memory) memory-model:)
           (prefix (agent-scheme redaction) redaction-model:)
@@ -4193,6 +4194,118 @@
       (record-agent-event! context (list 'request (car arguments)))
       agent-scheme-unspecified)
 
+    ;; Return the current request context, or #f when no request was supplied.
+    (define (context-current-request context)
+      (context-model:make-request-context
+       (context-request-id context)
+       (context-session-id context)
+       (context-request context)))
+
+    ;; Return the current region context supplied by the host, or #f.
+    (define (context-current-region-context context)
+      (context-region-context context))
+
+    ;; Return the current buffer context supplied by the host, or #f.
+    (define (context-current-buffer-context context)
+      (context-buffer-context context))
+
+    ;; Return the current project context supplied by the host, or #f.
+    (define (context-current-project-context context)
+      (context-project-context context))
+
+    ;; Return the current conversation summary, or #f when no summary exists.
+    (define (context-current-conversation-summary context)
+      (context-model:make-conversation-summary
+       (context-session-id context)
+       (context-conversation-summary context)))
+
+    ;; Return the current focus context, synthesizing one from known records.
+    (define (context-current-focus context)
+      (or (context-focus context)
+          (context-model:make-focus-context
+           (list
+            (context-current-request context)
+            (context-current-region-context context)
+            (context-current-buffer-context context)
+            (context-current-project-context context)
+            (context-current-conversation-summary context)))))
+
+    ;; Return QUERY as a context selector name, or #f when unsupported.
+    (define (context-query-name query)
+      (cond
+       ((symbol? query) query)
+       ((string? query) (string->symbol query))
+       (else #f)))
+
+    ;; Return one context record selected by NAME.
+    (define (context-select-one name context)
+      (cond
+       ((or (eq? name 'all) (eq? name 'context))
+        (context-model:make-context-bundle
+         (list
+          (context-current-request context)
+          (context-current-region-context context)
+          (context-current-buffer-context context)
+          (context-current-project-context context)
+          (context-current-conversation-summary context))))
+       ((eq? name 'request) (context-current-request context))
+       ((eq? name 'focus) (context-current-focus context))
+       ((eq? name 'region) (context-current-region-context context))
+       ((eq? name 'buffer) (context-current-buffer-context context))
+       ((eq? name 'project) (context-current-project-context context))
+       ((or (eq? name 'conversation)
+            (eq? name 'conversation-summary))
+        (context-current-conversation-summary context))
+       (else #f)))
+
+    ;; Return context records selected by QUERY.
+    (define (context-select query context)
+      (let ((name (context-query-name query)))
+        (cond
+         (name (context-select-one name context))
+         ((pair? query)
+          (context-model:make-context-bundle
+           (map
+            (lambda (item)
+              (context-select-one
+               (or (context-query-name item) 'unknown)
+               context))
+            (proper-list-elements query "context-yield query"))))
+         (else #f))))
+
+    ;; Return the current request context primitive value.
+    (define (primitive-current-request arguments context)
+      (context-current-request context))
+
+    ;; Return the current focus context primitive value.
+    (define (primitive-current-focus arguments context)
+      (context-current-focus context))
+
+    ;; Return the current region context primitive value.
+    (define (primitive-current-region-context arguments context)
+      (context-current-region-context context))
+
+    ;; Return the current buffer context primitive value.
+    (define (primitive-current-buffer-context arguments context)
+      (context-current-buffer-context context))
+
+    ;; Return the current project context primitive value.
+    (define (primitive-current-project-context arguments context)
+      (context-current-project-context context))
+
+    ;; Return the current conversation summary primitive value.
+    (define (primitive-current-conversation-summary arguments context)
+      (context-current-conversation-summary context))
+
+    ;; Yield selected context through the event channel.
+    (define (primitive-context-yield arguments context)
+      (let ((record (context-select (car arguments) context)))
+        (if record
+            (record-agent-event!
+             context
+             (list 'yield (redaction-model:redact record 'agent-context))))
+        record))
+
     ;; Policy categories reported by `(agent reflect)'.
     (define reflect-policy-categories
       '(pure-r7rs
@@ -6511,6 +6624,17 @@
        (cons 'primitive-memory-by-tag primitive-memory-by-tag)
        (cons 'primitive-memory-recent primitive-memory-recent)
        (cons 'primitive-memory-yield primitive-memory-yield)
+       (cons 'primitive-current-request primitive-current-request)
+       (cons 'primitive-current-focus primitive-current-focus)
+       (cons 'primitive-current-region-context
+             primitive-current-region-context)
+       (cons 'primitive-current-buffer-context
+             primitive-current-buffer-context)
+       (cons 'primitive-current-project-context
+             primitive-current-project-context)
+       (cons 'primitive-current-conversation-summary
+             primitive-current-conversation-summary)
+       (cons 'primitive-context-yield primitive-context-yield)
        (cons 'primitive-secret-source? primitive-secret-source?)
        (cons 'primitive-redact primitive-redact)
        (cons 'primitive-context-local-only! primitive-context-local-only!)
