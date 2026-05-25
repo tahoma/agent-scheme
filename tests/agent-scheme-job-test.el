@@ -44,9 +44,9 @@
     (while (and (not result) (< (float-time) deadline))
       (setq result (funcall predicate))
       (unless result
-        (when (fboundp 'thread-yield)
-          (thread-yield))
-        (sleep-for 0.01)))
+        (if (fboundp 'thread-yield)
+            (thread-yield)
+          (sleep-for 0.01))))
     (unless result
       (ert-fail (format "timed out waiting for %s" description)))
     result))
