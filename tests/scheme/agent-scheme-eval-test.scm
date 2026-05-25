@@ -2536,6 +2536,61 @@
 
 (let* ((result
         (agent-scheme-eval-source-result
+         "(import (scheme base) (agent plan))
+          (plan-create!
+           '(plan
+              (id portable-plan)
+              (scope project)
+              (goal \"Expose portable planning data\")
+              (steps (((id first) (status pending))))))
+          (plan-step-add!
+           'portable-plan
+           '((id second) (status pending) (goal \"Check portability\")))
+          (plan-step-status! 'portable-plan 'first 'done)
+          (plan-status! 'portable-plan 'active)
+          (plan-ref 'portable-plan)"))
+       (value (field-value result 'value)))
+  (check 'agent-plan-crud-step-status
+         (and (equal? (field-value result 'status) 'ok)
+              (string=?
+               (agent-scheme-value->external value)
+               (string-append
+                "(plan (id portable-plan) (scope project) "
+                "(status active) "
+                "(goal \"Expose portable planning data\") "
+                "(steps (((id first) (status done)) "
+                "((id second) (status pending) "
+                "(goal \"Check portability\")))) "
+                "(created-at 1) (updated-at 4))"))
+              #t)
+         #t))
+
+(let* ((result
+        (agent-scheme-eval-source-result
+         "(import (scheme base) (agent plan))
+          (plan-create!
+           '(plan
+              (id portable-yield)
+              (scope project)
+              (goal \"Yield portable plan\")
+              (steps ())))
+          (plan-yield 'portable-yield)
+          'done"))
+       (events (field-value result 'events)))
+  (check 'agent-plan-yield-emits-agent-event
+         (and (equal? (field-value result 'status) 'ok)
+              (string-contains?
+               (agent-scheme-result->external (list 'events events))
+               (string-append
+                "(yield (plan (id portable-yield) "
+                "(scope project) (status pending) "
+                "(goal \"Yield portable plan\") (steps ()) "
+                "(created-at 5) (updated-at 5)))"))
+              #t)
+         #t))
+
+(let* ((result
+        (agent-scheme-eval-source-result
          "(import (scheme base) (agent context))
           (context-yield 'request)
           (list (current-request)

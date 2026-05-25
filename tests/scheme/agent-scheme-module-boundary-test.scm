@@ -12,6 +12,7 @@
         (prefix (agent-scheme approval) approval:)
         (prefix (agent-scheme job) job:)
         (prefix (agent-scheme memory) memory:)
+        (prefix (agent-scheme plan) plan:)
         (prefix (agent-scheme context) context:)
         (prefix (agent-scheme redaction) redaction:)
         (prefix (agent-scheme session) session:)
@@ -153,6 +154,32 @@
 (check 'memory-boundary-find
        (length (memory:memory-find memory-store 'instance "portable memory"))
        1)
+
+;; Store for exercising the portable plan boundary.
+(define plan-store (plan:agent-scheme-make-plan-store))
+
+;; Plan records are scoped, mutable Scheme-readable datums.
+(define portable-plan
+  (plan:plan-create!
+   plan-store
+   '(plan
+      (id boundary-plan)
+      (scope project)
+      (goal "Exercise portable plan store.")
+      (steps (((id first) (status pending)))))))
+
+(check 'plan-boundary-ref
+       (plan:plan-record-id
+        (plan:plan-ref plan-store 'boundary-plan))
+       'boundary-plan)
+
+(plan:plan-step-status! plan-store 'boundary-plan 'first 'done)
+
+(check 'plan-boundary-step-status
+       (plan:plan-step-status
+        (car (plan:plan-record-steps
+              (plan:plan-ref plan-store 'boundary-plan))))
+       'done)
 
 ;; Context helpers preserve canonical Scheme-readable record shape.
 (check 'context-boundary-request-record
