@@ -39,11 +39,13 @@
   "Hidden marker used to update the pull request timing comment.")
 
 (defconst agent-scheme-ci--shard-order
-  '(("Portable Chibi-backed ERT" . 0)
-    ("Emacs core language/runtime" . 1)
-    ("Emacs library/conformance" . 2)
-    ("Emacs capabilities/policy" . 3)
-    ("Emacs tools/docs/integration" . 4))
+  '(("Portable Chibi-backed eval" . 0)
+    ("Portable Chibi-backed rest" . 1)
+    ("Portable Chibi-backed ERT" . 1)
+    ("Emacs core language/runtime" . 2)
+    ("Emacs library/conformance" . 3)
+    ("Emacs capabilities/policy" . 4)
+    ("Emacs tools/docs/integration" . 5))
   "Preferred display order for CI shard summaries.")
 
 (defun agent-scheme-ci--file-string (path)
