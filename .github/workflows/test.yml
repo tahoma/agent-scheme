@@ -60,9 +60,36 @@ jobs:
           fi
 
   test-emacs-hosted:
-    name: Emacs-hosted ERT tests
+    name: Emacs-hosted ERT (${{ matrix.label }})
     runs-on: ubuntu-latest
-
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: emacs-core
+            label: core language/runtime
+            make_target: test-emacs-core
+            log_file: emacs-core.log
+            summary_name: Emacs core language/runtime
+            selector: '(or "agent-scheme-base.*" "agent-scheme-eval.*" "agent-scheme-interpreter-module.*" "agent-scheme-macro.*" "agent-scheme-reader.*" "agent-scheme-result.*" "agent-scheme-runtime.*")'
+          - shard: emacs-library
+            label: library/conformance
+            make_target: test-emacs-library
+            log_file: emacs-library.log
+            summary_name: Emacs library/conformance
+            selector: '(or "agent-scheme-conformance.*" "agent-scheme-fixture.*" "agent-scheme-host-adapter-fixture.*" "agent-scheme-library.*" "agent-scheme-oracle.*")'
+          - shard: emacs-capabilities
+            label: capabilities/policy
+            make_target: test-emacs-capabilities
+            log_file: emacs-capabilities.log
+            summary_name: Emacs capabilities/policy
+            selector: '(or "agent-scheme-agent-io.*" "agent-scheme-approval.*" "agent-scheme-capability.*" "agent-scheme-context.*" "agent-scheme-memory.*" "agent-scheme-models.*" "agent-scheme-network.*" "agent-scheme-policy.*" "agent-scheme-redaction.*" "agent-scheme-session.*")'
+          - shard: emacs-tools
+            label: tools/docs/integration
+            make_target: test-emacs-tools
+            log_file: emacs-tools.log
+            summary_name: Emacs tools/docs/integration
+            selector: '(or "agent-scheme-ci.*" "agent-scheme-compile.*" "agent-scheme-control-loop-doc.*" "agent-scheme-debugger.*" "agent-scheme-diagnostics.*" "agent-scheme-diff.*" "agent-scheme-feature-reflection-doc.*" "agent-scheme-job.*" "agent-scheme-native-cli-daemon-doc.*" "agent-scheme-reflect.*" "agent-scheme-repl.*" "agent-scheme-skill.*" "agent-scheme-smoke.*" "agent-scheme-vcs.*")'
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
@@ -72,37 +99,37 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y emacs-nox chibi-scheme
 
-      - name: Run Emacs-hosted ERT tests
+      - name: Run Emacs-hosted ERT shard
         shell: bash
         run: |
           mkdir -p ci-logs
           started=$SECONDS
           set +e
-          make test-emacs-hosted 2>&1 | tee ci-logs/emacs-hosted-ert.log
+          make "${{ matrix.make_target }}" 2>&1 | tee "ci-logs/${{ matrix.log_file }}"
           status=${PIPESTATUS[0]}
           wall=$((SECONDS - started))
           {
-            printf 'AGENT_SCHEME_CI_SHARD_NAME=Emacs-hosted ERT\n'
-            printf 'AGENT_SCHEME_CI_SHARD_SELECTOR=(not "agent-scheme-scheme-.*")\n'
+            printf 'AGENT_SCHEME_CI_SHARD_NAME=%s\n' '${{ matrix.summary_name }}'
+            printf 'AGENT_SCHEME_CI_SHARD_SELECTOR=%s\n' '${{ matrix.selector }}'
             printf 'AGENT_SCHEME_CI_WALL_SECONDS=%s\n' "$wall"
-          } >> ci-logs/emacs-hosted-ert.log
+          } >> "ci-logs/${{ matrix.log_file }}"
           exit "$status"
 
       - name: Upload Emacs-hosted shard log
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: test-log-emacs-hosted-ert
-          path: ci-logs/emacs-hosted-ert.log
+          name: test-log-${{ matrix.shard }}
+          path: ci-logs/${{ matrix.log_file }}
           if-no-files-found: warn
 
       - name: Render Emacs-hosted shard timing summary
         if: always()
         run: |
-          if [ -f ci-logs/emacs-hosted-ert.log ]; then
+          if [ -f "ci-logs/${{ matrix.log_file }}" ]; then
             emacs -Q --batch -L lisp \
               --eval "(require 'agent-scheme-ci)" \
-              --eval "(agent-scheme-ci-write-summary '(\"ci-logs/emacs-hosted-ert.log\") (getenv \"GITHUB_STEP_SUMMARY\"))"
+              --eval "(agent-scheme-ci-write-summary '(\"ci-logs/${{ matrix.log_file }}\") (getenv \"GITHUB_STEP_SUMMARY\"))"
           fi
 
   test-summary:

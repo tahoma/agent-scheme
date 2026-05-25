@@ -2,27 +2,39 @@ EMACS ?= emacs
 AGENT_SCHEME_TEST_RUNNER = $(EMACS) -Q --batch --load tests/agent-scheme-test-runner.el
 AGENT_SCHEME_PORTABLE_TEST_SELECTOR ?= "agent-scheme-scheme-.*"
 AGENT_SCHEME_EMACS_HOSTED_TEST_SELECTOR ?= (not "agent-scheme-scheme-.*")
+AGENT_SCHEME_EMACS_CORE_TEST_SELECTOR ?= (or "agent-scheme-base.*" "agent-scheme-eval.*" "agent-scheme-interpreter-module.*" "agent-scheme-macro.*" "agent-scheme-reader.*" "agent-scheme-result.*" "agent-scheme-runtime.*")
+AGENT_SCHEME_EMACS_LIBRARY_TEST_SELECTOR ?= (or "agent-scheme-conformance.*" "agent-scheme-fixture.*" "agent-scheme-host-adapter-fixture.*" "agent-scheme-library.*" "agent-scheme-oracle.*")
+AGENT_SCHEME_EMACS_CAPABILITY_TEST_SELECTOR ?= (or "agent-scheme-agent-io.*" "agent-scheme-approval.*" "agent-scheme-capability.*" "agent-scheme-context.*" "agent-scheme-memory.*" "agent-scheme-models.*" "agent-scheme-network.*" "agent-scheme-policy.*" "agent-scheme-redaction.*" "agent-scheme-session.*")
+AGENT_SCHEME_EMACS_TOOLS_TEST_SELECTOR ?= (or "agent-scheme-ci.*" "agent-scheme-compile.*" "agent-scheme-control-loop-doc.*" "agent-scheme-debugger.*" "agent-scheme-diagnostics.*" "agent-scheme-diff.*" "agent-scheme-feature-reflection-doc.*" "agent-scheme-job.*" "agent-scheme-native-cli-daemon-doc.*" "agent-scheme-reflect.*" "agent-scheme-repl.*" "agent-scheme-skill.*" "agent-scheme-smoke.*" "agent-scheme-vcs.*")
 AGENT_SCHEME_LIVE_MODEL_CI_SELECTOR ?= agent-scheme-models-test-live-local-openai-compatible-completion
 AGENT_SCHEME_LIVE_MODEL_SELECTOR ?= "agent-scheme-models-test-live-local-.*"
 
 .DEFAULT_GOAL := help
 
-.PHONY: help test test-portable test-emacs-hosted test-live-model-ci test-live-model conformance-oracle
+.PHONY: help test test-portable test-emacs-hosted test-emacs-core test-emacs-library test-emacs-capabilities test-emacs-tools test-live-model-ci test-live-model conformance-oracle
 
 help:
 	@printf '%s\n' 'Agent Scheme top-level actions:'
-	@printf '  %-20s %s\n' 'help' 'Show this help.'
-	@printf '  %-20s %s\n' 'test' 'Run the project test suite.'
-	@printf '  %-20s %s\n' 'test-portable' 'Run the portable Chibi-backed ERT shard.'
-	@printf '  %-20s %s\n' 'test-emacs-hosted' 'Run the remaining Emacs-hosted ERT shard.'
-	@printf '  %-20s %s\n' 'test-live-model-ci' 'Run the CI live local model smoke test.'
-	@printf '  %-20s %s\n' 'test-live-model' 'Run all opt-in live local model tests.'
-	@printf '  %-20s %s\n' 'conformance-oracle' 'Compare pure shared fixtures with reference R7RS implementations.'
+	@printf '  %-26s %s\n' 'help' 'Show this help.'
+	@printf '  %-26s %s\n' 'test' 'Run the project test suite.'
+	@printf '  %-26s %s\n' 'test-portable' 'Run the portable Chibi-backed ERT shard.'
+	@printf '  %-26s %s\n' 'test-emacs-hosted' 'Run all non-portable Emacs-hosted ERT tests.'
+	@printf '  %-26s %s\n' 'test-emacs-core' 'Run the Emacs-hosted core language/runtime shard.'
+	@printf '  %-26s %s\n' 'test-emacs-library' 'Run the Emacs-hosted library/conformance shard.'
+	@printf '  %-26s %s\n' 'test-emacs-capabilities' 'Run the Emacs-hosted capability and policy shard.'
+	@printf '  %-26s %s\n' 'test-emacs-tools' 'Run the Emacs-hosted tools, docs, and integration shard.'
+	@printf '  %-26s %s\n' 'test-live-model-ci' 'Run the CI live local model smoke test.'
+	@printf '  %-26s %s\n' 'test-live-model' 'Run all opt-in live local model tests.'
+	@printf '  %-26s %s\n' 'conformance-oracle' 'Compare pure shared fixtures with reference R7RS implementations.'
 	@printf '\n%s\n' 'Variables:'
 	@printf '  %-40s %s\n' 'EMACS=emacs' 'Emacs command used by make test.'
 	@printf '  %-40s %s\n' 'AGENT_SCHEME_TEST_SELECTOR=SEL' 'Optional ERT selector for make test.'
 	@printf '  %-40s %s\n' 'AGENT_SCHEME_PORTABLE_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable.'
 	@printf '  %-40s %s\n' 'AGENT_SCHEME_EMACS_HOSTED_TEST_SELECTOR=SEL' 'ERT selector used by make test-emacs-hosted.'
+	@printf '  %-40s %s\n' 'AGENT_SCHEME_EMACS_CORE_TEST_SELECTOR=SEL' 'ERT selector used by make test-emacs-core.'
+	@printf '  %-40s %s\n' 'AGENT_SCHEME_EMACS_LIBRARY_TEST_SELECTOR=SEL' 'ERT selector used by make test-emacs-library.'
+	@printf '  %-40s %s\n' 'AGENT_SCHEME_EMACS_CAPABILITY_TEST_SELECTOR=SEL' 'ERT selector used by make test-emacs-capabilities.'
+	@printf '  %-40s %s\n' 'AGENT_SCHEME_EMACS_TOOLS_TEST_SELECTOR=SEL' 'ERT selector used by make test-emacs-tools.'
 	@printf '  %-40s %s\n' 'AGENT_SCHEME_LIVE_MODEL_CI_SELECTOR=SEL' 'ERT selector used by make test-live-model-ci.'
 	@printf '  %-40s %s\n' 'AGENT_SCHEME_LIVE_MODEL_SELECTOR=SEL' 'ERT selector used by make test-live-model.'
 	@printf '  %-40s %s\n' 'AGENT_SCHEME_LIVE_MODEL_ENDPOINT=URL' 'OpenAI-compatible endpoint for live local model tests.'
@@ -47,6 +59,18 @@ test-portable:
 
 test-emacs-hosted:
 	AGENT_SCHEME_TEST_SELECTOR='$(AGENT_SCHEME_EMACS_HOSTED_TEST_SELECTOR)' $(AGENT_SCHEME_TEST_RUNNER)
+
+test-emacs-core:
+	AGENT_SCHEME_TEST_SELECTOR='$(AGENT_SCHEME_EMACS_CORE_TEST_SELECTOR)' $(AGENT_SCHEME_TEST_RUNNER)
+
+test-emacs-library:
+	AGENT_SCHEME_TEST_SELECTOR='$(AGENT_SCHEME_EMACS_LIBRARY_TEST_SELECTOR)' $(AGENT_SCHEME_TEST_RUNNER)
+
+test-emacs-capabilities:
+	AGENT_SCHEME_TEST_SELECTOR='$(AGENT_SCHEME_EMACS_CAPABILITY_TEST_SELECTOR)' $(AGENT_SCHEME_TEST_RUNNER)
+
+test-emacs-tools:
+	AGENT_SCHEME_TEST_SELECTOR='$(AGENT_SCHEME_EMACS_TOOLS_TEST_SELECTOR)' $(AGENT_SCHEME_TEST_RUNNER)
 
 test-live-model-ci:
 	AGENT_SCHEME_LIVE_MODEL_TEST=1 AGENT_SCHEME_TEST_SELECTOR='$(AGENT_SCHEME_LIVE_MODEL_CI_SELECTOR)' $(AGENT_SCHEME_TEST_RUNNER)
