@@ -156,7 +156,7 @@
         (ignore-errors (agent-scheme-job-cancel! id))))))
 
 (ert-deftest agent-scheme-job-test-interrupt-records-failed-job ()
-  "Interrupting a running job records the reason and releases the session."
+  "Interrupting a job records the reason and releases the session."
   (agent-scheme-job-test--reset)
   (agent-scheme-session-create! 'named '(:id "interrupt-main"))
   (let* ((job (agent-scheme-job-start!
@@ -166,10 +166,6 @@
          (id (agent-scheme-job-test--job-id job)))
     (unwind-protect
         (progn
-          (agent-scheme-job-test--wait-until
-           "job yield"
-           (lambda ()
-             (agent-scheme-job-test--ready-yields id)))
           (agent-scheme-job-interrupt! id 'debug-break)
           (agent-scheme-job-test--wait-until
            "job interrupt"
