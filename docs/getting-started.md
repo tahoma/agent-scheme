@@ -229,6 +229,63 @@ with a fake function, so CI does not require a running model server. The
 portable Scheme implementation registers the same library and routing surface;
 portable completion reports that no portable host transport is configured.
 
+### Ollama Setup
+
+Ollama is the simplest local OpenAI-compatible provider to use while this layer
+is bootstrapping. Install Ollama for your platform, then pull a small model:
+
+```sh
+ollama pull qwen2.5-coder:0.5b
+```
+
+Start the local server if it is not already running:
+
+```sh
+ollama serve
+```
+
+Register that local server from Agent Scheme:
+
+```scheme
+(import (scheme base)
+        (agent models))
+
+(model-provider-register!
+ '(model-provider
+   (id local-qwen)
+   (kind local)
+   (transport openai-compatible-http)
+   (endpoint "http://127.0.0.1:11434/v1")
+   (models
+    (((id qwen2.5-coder:0.5b)
+      (roles (cheap-background scheme-scripter coder))
+      (privacy local))))))
+
+(model-complete 'scheme-scripter
+                "What is 2 plus 3? Reply with only the numeral."
+                '())
+```
+
+Larger local profiles can use the same provider shape with stronger model ids.
+Useful starting points are `qwen2.5-coder:7b` or `qwen2.5-coder:14b` for
+routine code work, `qwen2.5-coder:32b` for stronger code and review work,
+`qwen3:8b` or `gemma3:12b` for summarization and explanation, and
+`qwen3:30b`, `qwen3:32b`, or `llama3.1:70b` for slower planning or review
+passes on machines with enough memory.
+
+Suggested downloadable local model profiles by Agent Scheme role:
+
+| Role | Practical local models |
+| --- | --- |
+| `planner` | `qwen3:30b`, `qwen3:32b`, `llama3.1:70b` |
+| `scheme-scripter` | `qwen2.5-coder:7b`, `qwen2.5-coder:14b`, `qwen2.5-coder:32b` |
+| `coder` | `qwen2.5-coder:14b`, `qwen2.5-coder:32b` |
+| `reviewer` | `qwen2.5-coder:32b`, `qwen3:32b`, `llama3.1:70b` |
+| `summarizer` | `gemma3:4b`, `gemma3:12b`, `qwen3:8b` |
+| `memory-curator` | `qwen3:4b`, `qwen3:8b`, `gemma3:4b` |
+| `cheap-background` | `qwen2.5-coder:0.5b`, `qwen3:0.6b`, `gemma3:1b` |
+| `approval-explainer` | `qwen3:4b`, `qwen3:8b`, `gemma3:12b` |
+
 To run the opt-in live local model test, start an OpenAI-compatible local
 server such as Ollama and set:
 
