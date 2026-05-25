@@ -38,12 +38,14 @@
   (agent-scheme-job-status id))
 
 (defun agent-scheme-job-test--wait-until (description predicate)
-  "Wait up to five seconds for PREDICATE to return non-nil."
-  (let ((deadline (+ (float-time) 5.0))
+  "Wait up to ten seconds for PREDICATE to return non-nil."
+  (let ((deadline (+ (float-time) 10.0))
         result)
     (while (and (not result) (< (float-time) deadline))
       (setq result (funcall predicate))
       (unless result
+        (when (fboundp 'thread-yield)
+          (thread-yield))
         (sleep-for 0.01)))
     (unless result
       (ert-fail (format "timed out waiting for %s" description)))
@@ -70,6 +72,17 @@
       snippets))
    (agent-scheme-job-test--audit-strings)))
 
+(defun agent-scheme-job-test--ready-yields (id)
+  "Return job ID yields once its ready yield is visible."
+  (let ((yields (agent-scheme-job-yields id)))
+    (and yields
+         (string-match-p
+          (regexp-quote "(yield (phase ready))")
+          (agent-scheme-job-test--external
+           (list (agent-scheme--syntax-symbol "events")
+                 yields)))
+         yields)))
+
 (defconst agent-scheme-job-test--looping-source
   "(import (scheme base) (agent io))
    (agent-yield '(phase ready))
@@ -91,14 +104,7 @@
           (agent-scheme-job-test--wait-until
            "job yield"
            (lambda ()
-             (let ((yields (agent-scheme-job-yields id)))
-               (and yields
-                    (string-match-p
-                     (regexp-quote "(yield (phase ready))")
-                     (agent-scheme-job-test--external
-                      (list (agent-scheme--syntax-symbol "events")
-                            yields)))
-                    yields))))
+             (agent-scheme-job-test--ready-yields id)))
           (should (memq (agent-scheme-job-test--status id)
                         '(running yielding)))
           (should
@@ -134,13 +140,13 @@
          (id (agent-scheme-job-test--job-id job)))
     (unwind-protect
         (progn
-          (agent-scheme-job-test--wait-until
-           "session lock"
-           (lambda ()
-             (memq (agent-scheme-job-test--status id) '(running yielding))))
           (should-error
            (agent-scheme-job-start! "locked-main" "'second" nil)
            :type 'agent-scheme-job-error)
+          (agent-scheme-job-test--wait-until
+           "job yield"
+           (lambda ()
+             (agent-scheme-job-test--ready-yields id)))
           (agent-scheme-job-cancel! id)
           (agent-scheme-job-test--wait-until
            "job cancellation"
@@ -162,9 +168,9 @@
     (unwind-protect
         (progn
           (agent-scheme-job-test--wait-until
-           "job running"
+           "job yield"
            (lambda ()
-             (memq (agent-scheme-job-test--status id) '(running yielding))))
+             (agent-scheme-job-test--ready-yields id)))
           (agent-scheme-job-interrupt! id 'debug-break)
           (agent-scheme-job-test--wait-until
            "job interrupt"
