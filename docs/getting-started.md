@@ -201,6 +201,38 @@ host state, `(project-diagnostics '())` returns an unavailable snapshot instead
 of trying to run a mutating command. Diagnostic code actions are not exposed by
 this read-only library.
 
+Compile and test workflows use the Emacs compile adapter, but command execution
+still goes through the shared process capability domain. The host policy must
+allow or confirm `command-process`, and the exact command must be present in
+the process command allow-list before Scheme code can start it. A minimal
+approved `make test` workflow looks like:
+
+```scheme
+(import (scheme base)
+        (agent capability)
+        (emacs compile))
+
+(grant-capability!
+ '(capability-grant
+   (id make-test-grant)
+   (domain process)
+   (operations (spawn observe output))
+   (scope (command "make test"))
+   (expires (uses 3))))
+
+(define job
+  (compile-run! "make test" '()))
+
+(compile-status job)
+(compile-output job '((max-chars 4000)))
+```
+
+`compile-run!`, `project-compile!`, and `recompile!` return opaque process-job
+handles. `compile-status`, `compile-output`, and `compile-yield` return or emit
+Scheme-readable datums that include the command, process status, exit status
+when available, output text, truncation status, and parsed Emacs
+`compilation-mode` error locations where Emacs can identify them.
+
 ## Verification
 
 The default local verification command is:

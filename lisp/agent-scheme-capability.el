@@ -96,6 +96,32 @@ grant, and policy checks succeed."
   :type 'function
   :group 'agent-scheme)
 
+(defun agent-scheme--default-compile-start (command options _context)
+  "Default host adapter for `(emacs compile)' COMMAND and OPTIONS."
+  (let* ((default-directory (agent-scheme--process-cwd options))
+         (buffer (compile command))
+         (process (get-buffer-process buffer)))
+    (list :name (buffer-name buffer)
+          :command command
+          :arguments nil
+          :options options
+          :status (if process (process-status process) 'exit)
+          :process process
+          :buffer buffer
+          :stdout ""
+          :stderr "")))
+
+(defcustom agent-scheme-compile-start-function
+  #'agent-scheme--default-compile-start
+  "Function that starts authorized Emacs compilation jobs.
+The function receives COMMAND, OPTIONS, and CONTEXT after process
+allow-list, grant, and policy checks succeed.  It must return a
+host process object or a plist with Scheme-readable process
+metadata such as `:name', `:status', `:buffer', `:stdout', and
+`:stderr'."
+  :type 'function
+  :group 'agent-scheme)
+
 (defun agent-scheme--default-network-request (resource _context)
   "Default host adapter for network requests.
 RESOURCE is a redacted Scheme-readable request resource.  The
@@ -672,6 +698,60 @@ network-backed port."
      :policy confirm :policy-category command-process
      :requires-process-grant t
      :test-categories (emacs process control mutation))
+    (:name "compile-run!" :library "(emacs compile)"
+     :minimum-arity 2 :maximum-arity 2
+     :source host-capability :effect host-mutation
+     :required-capability emacs-compile
+     :emacs-hook agent-scheme--primitive-compile-run!
+     :portable-hook nil :emitter-hook capability-emacs
+     :policy confirm :policy-category command-process
+     :requires-process-grant t
+     :test-categories (emacs compile process mutation handle))
+    (:name "project-compile!" :library "(emacs compile)"
+     :minimum-arity 1 :maximum-arity 1
+     :source host-capability :effect host-mutation
+     :required-capability emacs-compile
+     :emacs-hook agent-scheme--primitive-emacs-compile-project-compile!
+     :portable-hook nil :emitter-hook capability-emacs
+     :policy confirm :policy-category command-process
+     :requires-process-grant t
+     :test-categories (emacs compile project process mutation handle))
+    (:name "recompile!" :library "(emacs compile)"
+     :minimum-arity 1 :maximum-arity 1
+     :source host-capability :effect host-mutation
+     :required-capability emacs-compile
+     :emacs-hook agent-scheme--primitive-compile-recompile!
+     :portable-hook nil :emitter-hook capability-emacs
+     :policy confirm :policy-category command-process
+     :requires-process-grant t
+     :test-categories (emacs compile process mutation handle))
+    (:name "compile-status" :library "(emacs compile)"
+     :minimum-arity 1 :maximum-arity 1
+     :source host-capability :effect host-observation
+     :required-capability emacs-compile
+     :emacs-hook agent-scheme--primitive-compile-status
+     :portable-hook nil :emitter-hook capability-emacs
+     :policy allow :policy-category command-process
+     :requires-process-grant t
+     :test-categories (emacs compile process handle))
+    (:name "compile-output" :library "(emacs compile)"
+     :minimum-arity 2 :maximum-arity 2
+     :source host-capability :effect host-observation
+     :required-capability emacs-compile
+     :emacs-hook agent-scheme--primitive-compile-output
+     :portable-hook nil :emitter-hook capability-emacs
+     :policy allow :policy-category command-process
+     :requires-process-grant t
+     :test-categories (emacs compile process output))
+    (:name "compile-yield" :library "(emacs compile)"
+     :minimum-arity 1 :maximum-arity 1
+     :source host-capability :effect host-observation
+     :required-capability emacs-compile
+     :emacs-hook agent-scheme--primitive-compile-yield
+     :portable-hook nil :emitter-hook capability-emacs
+     :policy allow :policy-category command-process
+     :requires-process-grant t
+     :test-categories (emacs compile process agent-io))
     (:name "network-http-request" :library "(emacs network)"
      :minimum-arity 5 :maximum-arity 5
      :source host-capability :effect host-network
@@ -725,6 +805,7 @@ network-backed port."
   '("(emacs buffer)"
     "(emacs buffer edit)"
     "(emacs command)"
+    "(emacs compile)"
     "(emacs diagnostics)"
     "(emacs diff)"
     "(emacs frame)"
@@ -2163,8 +2244,9 @@ AUTHORIZATION is the approved file authorization that created PORT."
    ((agent-scheme--process-object-process object)
     (process-live-p (agent-scheme--process-object-process object)))
    ((and (consp object) (plist-member object :status))
-    (not (memq (plist-get object :status)
-               '(closed deleted exit failed killed signal stale stopped))))
+    (or (plist-get object :retain-after-exit)
+        (not (memq (plist-get object :status)
+                   '(closed deleted exit failed killed signal stale stopped)))))
    (t object)))
 
 (defun agent-scheme--process-object-status (object)
@@ -5246,6 +5328,342 @@ creates undo boundaries around the atomic change group."
   "Primitive process-kill! over ARGUMENTS."
   (agent-scheme--process-control!
    (car arguments) 'terminate "process-kill!" context))
+
+(defun agent-scheme--compile-normalized-options (options)
+  "Validate and return compile OPTIONS."
+  (agent-scheme--proper-list-elements options "compile options")
+  options)
+
+(defun agent-scheme--compile-start! (binding command options context)
+  "Start authorized compile COMMAND with OPTIONS for BINDING."
+  (let* ((options (agent-scheme--compile-normalized-options options))
+         (cwd (agent-scheme--process-cwd options))
+         (environment (agent-scheme--process-normalized-environment options))
+         (resource (list :command command
+                         :arguments nil
+                         :cwd cwd
+                         :environment environment
+                         :options options))
+         (authorization
+          (agent-scheme-capability-authorize-process
+           binding 'spawn context resource))
+         (raw
+          (let ((default-directory cwd))
+            (funcall agent-scheme-compile-start-function
+                     command options context)))
+         (object
+          (let ((object
+                 (agent-scheme--process-job-object
+                  raw "compile" command nil options)))
+            (setq object (plist-put object :compile t))
+            (setq object (plist-put object :retain-after-exit t))
+            (setq object (plist-put object :cwd cwd))
+            object))
+         (handle
+          (agent-scheme--process-register-handle
+           object (plist-get authorization :grant))))
+    (agent-scheme-capability-audit-process-result
+     authorization
+     `(handle process-job ,(agent-scheme-handle-id handle)))
+    (agent-scheme--add-emacs-capability-result-fields
+     `((domain . process)
+       (operation . spawn)
+       (adapter . emacs-compile)
+       (command . ,command)
+       (environment . ,environment)
+       (cwd . ,cwd)
+       (handle . ,handle)))
+    handle))
+
+(defun agent-scheme--primitive-compile-run! (arguments context)
+  "Primitive compile-run! over ARGUMENTS."
+  (let ((command (agent-scheme--capability-string
+                  (car arguments) "compile-run! command"))
+        (options (cadr arguments)))
+    (agent-scheme--compile-start!
+     "compile-run!" command options context)))
+
+(defun agent-scheme--compile-field (name &rest values)
+  "Return a Scheme-readable compile field NAME with VALUES."
+  (cons (agent-scheme--capability-grant-symbol name) values))
+
+(defun agent-scheme--compile-exit-status (object)
+  "Return compile OBJECT's exit status, or nil when unavailable."
+  (or (and (consp object) (plist-get object :exit-status))
+      (when-let ((process (agent-scheme--process-object-process object)))
+        (when (memq (process-status process) '(exit signal))
+          (process-exit-status process)))))
+
+(defun agent-scheme--compile-status-symbol (object)
+  "Return Agent Scheme compile status symbol for OBJECT."
+  (let ((status (agent-scheme--process-object-status object))
+        (exit-status (agent-scheme--compile-exit-status object)))
+    (cond
+     ((memq status '(run open listen connect stop))
+      'running)
+     ((and (memq status '(exit completed))
+           (or (null exit-status) (= exit-status 0)))
+      'completed)
+     ((memq status '(exit signal failed killed closed deleted stale stopped))
+      'failed)
+     (t status))))
+
+(defun agent-scheme--compile-status-datum (handle object)
+  "Return Scheme-readable compile status for HANDLE and OBJECT."
+  (let ((exit-status (agent-scheme--compile-exit-status object))
+        (buffer (agent-scheme--process-object-buffer object)))
+    `(,(agent-scheme--capability-grant-symbol "compile-status")
+      ,(agent-scheme--compile-field "handle" handle)
+      ,(agent-scheme--compile-field
+        "status"
+        (agent-scheme--capability-grant-symbol
+         (agent-scheme--compile-status-symbol object)))
+      ,(agent-scheme--compile-field
+        "process-status"
+        (agent-scheme--capability-grant-symbol
+         (agent-scheme--process-object-status object)))
+      ,(agent-scheme--compile-field
+        "exit-status"
+        (if exit-status
+            (agent-scheme--scheme-integer exit-status)
+          agent-scheme-false))
+      ,(agent-scheme--compile-field
+        "command"
+        (or (agent-scheme--process-object-command object) agent-scheme-false))
+      ,(agent-scheme--compile-field
+        "buffer"
+        (if buffer (buffer-name buffer) agent-scheme-false)))))
+
+(defun agent-scheme--compile-option-integer (options name description)
+  "Return compile OPTIONS integer NAME, or nil."
+  (when-let ((value (agent-scheme--process-option-value options name)))
+    (agent-scheme--capability-exact-integer value description)))
+
+(defun agent-scheme--compile-option-command (options description)
+  "Return compile command from OPTIONS, or signal with DESCRIPTION."
+  (or (when-let ((command (agent-scheme--process-option-value
+                          options "command")))
+        (agent-scheme--capability-string command description))
+      (agent-scheme--eval-error "%s requires a command option" description)))
+
+(defun agent-scheme--compile-output-text (object)
+  "Return compile OBJECT stdout or compilation buffer text."
+  (agent-scheme--process-object-output object 'stdout))
+
+(defun agent-scheme--compile-location-type (type)
+  "Return Scheme-readable severity symbol for compilation TYPE."
+  (agent-scheme--capability-grant-symbol
+   (cond
+    ((eq type 0) "info")
+    ((eq type 1) "warning")
+    ((eq type 2) "error")
+    ((symbolp type) (symbol-name type))
+    (t "error"))))
+
+(defun agent-scheme--compile-location-file (loc)
+  "Return compilation LOC file name, or #f when unavailable."
+  (let* ((file-struct
+          (and (fboundp 'compilation--loc->file-struct)
+               (compilation--loc->file-struct loc)))
+         (file-spec
+          (and file-struct
+               (fboundp 'compilation--file-struct->file-spec)
+               (compilation--file-struct->file-spec file-struct)))
+         (file (car-safe file-spec)))
+    (or file agent-scheme-false)))
+
+(defun agent-scheme--compile-location-line (loc)
+  "Return compilation LOC line as a Scheme integer or #f."
+  (let ((line (and (fboundp 'compilation--loc->line)
+                   (compilation--loc->line loc))))
+    (if line (agent-scheme--scheme-integer line) agent-scheme-false)))
+
+(defun agent-scheme--compile-location-column (loc)
+  "Return compilation LOC column as a Scheme integer or #f."
+  (let ((column (and (fboundp 'compilation--loc->col)
+                     (compilation--loc->col loc))))
+    (if column (agent-scheme--scheme-integer column) agent-scheme-false)))
+
+(defun agent-scheme--compile-message-line (position)
+  "Return the compilation message line at POSITION."
+  (save-excursion
+    (goto-char position)
+    (buffer-substring-no-properties
+     (line-beginning-position)
+     (line-end-position))))
+
+(defun agent-scheme--compile-error-location-datum (message position)
+  "Return MESSAGE at POSITION as a Scheme-readable error location."
+  (let ((loc (and (fboundp 'compilation--message->loc)
+                  (compilation--message->loc message))))
+    `(,(agent-scheme--capability-grant-symbol "error-location")
+      ,(agent-scheme--compile-field
+        "file" (if loc
+                   (agent-scheme--compile-location-file loc)
+                 agent-scheme-false))
+      ,(agent-scheme--compile-field
+        "line" (if loc
+                   (agent-scheme--compile-location-line loc)
+                 agent-scheme-false))
+      ,(agent-scheme--compile-field
+        "column" (if loc
+                     (agent-scheme--compile-location-column loc)
+                   agent-scheme-false))
+      ,(agent-scheme--compile-field
+        "type"
+        (agent-scheme--compile-location-type
+         (and (fboundp 'compilation--message->type)
+              (compilation--message->type message))))
+      ,(agent-scheme--compile-field
+        "message" (agent-scheme--compile-message-line position)))))
+
+(defun agent-scheme--compile-error-locations (object)
+  "Return parsed compilation error locations for OBJECT."
+  (let ((buffer (agent-scheme--process-object-buffer object))
+        locations
+        seen)
+    (when (and buffer (fboundp 'compilation--ensure-parse))
+      (with-current-buffer buffer
+        (save-excursion
+          (save-restriction
+            (widen)
+            (compilation--ensure-parse (point-max))
+            (goto-char (point-min))
+            (while (< (point) (point-max))
+              (let ((message (get-text-property
+                              (point) 'compilation-message))
+                    (position (point)))
+                (when (and message (not (memq message seen)))
+                  (push message seen)
+                  (push
+                   (agent-scheme--compile-error-location-datum
+                    message position)
+                   locations))
+                (goto-char
+                 (or (next-single-property-change
+                      (point) 'compilation-message nil (point-max))
+                     (point-max)))))))))
+    (nreverse locations)))
+
+(defun agent-scheme--compile-limited-output (text options)
+  "Return TEXT limited by compile OUTPUT OPTIONS."
+  (let ((limit (agent-scheme--compile-option-integer
+                options "max-chars" "compile-output max-chars")))
+    (if (and limit (> (length text) limit))
+        (list (substring text 0 limit) t)
+      (list text nil))))
+
+(defun agent-scheme--compile-output-datum (handle object options)
+  "Return Scheme-readable compile output for HANDLE and OBJECT."
+  (let* ((options (agent-scheme--compile-normalized-options options))
+         (limited (agent-scheme--compile-limited-output
+                   (agent-scheme--compile-output-text object)
+                   options))
+         (text (car limited))
+         (truncated (cadr limited)))
+    `(,(agent-scheme--capability-grant-symbol "compile-output")
+      ,(agent-scheme--compile-field "handle" handle)
+      ,(agent-scheme--compile-field
+        "status"
+        (agent-scheme--capability-grant-symbol
+         (agent-scheme--compile-status-symbol object)))
+      ,(agent-scheme--compile-field "text" text)
+      ,(agent-scheme--compile-field
+        "truncated"
+        (if truncated agent-scheme-true agent-scheme-false))
+      ,(agent-scheme--compile-field
+        "error-locations"
+        (agent-scheme--compile-error-locations object)))))
+
+(defun agent-scheme--compile-authorized-object
+    (handle binding operation context)
+  "Return authorization and compile object for HANDLE."
+  (let* ((authorization
+          (agent-scheme-capability-authorize-process
+           binding operation context
+           (agent-scheme--process-resource-for-handle handle)))
+         (object (agent-scheme--live-process-for-handle handle binding)))
+    (unless (and (consp object) (plist-get object :compile))
+      (agent-scheme--eval-error "%s expected compile job handle" binding))
+    (list authorization object)))
+
+(defun agent-scheme--primitive-emacs-compile-project-compile!
+    (arguments context)
+  "Primitive project-compile! from `(emacs compile)'."
+  (let* ((options (agent-scheme--compile-normalized-options
+                   (car arguments)))
+         (command (agent-scheme--compile-option-command
+                   options "project-compile!"))
+         (root (agent-scheme--current-project-root-or-error
+                "project-compile!")))
+    (let ((default-directory root))
+      (agent-scheme--compile-start!
+       "project-compile!" command options context))))
+
+(defun agent-scheme--primitive-compile-recompile! (arguments context)
+  "Primitive recompile! over ARGUMENTS."
+  (let* ((handle (car arguments))
+         (object (agent-scheme--live-process-for-handle handle "recompile!")))
+    (unless (and (consp object) (plist-get object :compile))
+      (agent-scheme--eval-error "recompile! expected compile job handle"))
+    (let ((default-directory
+            (or (plist-get object :cwd)
+                (file-name-as-directory (expand-file-name default-directory)))))
+      (agent-scheme--compile-start!
+       "recompile!"
+       (or (agent-scheme--process-object-command object)
+           (agent-scheme--eval-error "recompile! missing prior command"))
+       (or (plist-get object :options) nil)
+       context))))
+
+(defun agent-scheme--primitive-compile-status (arguments context)
+  "Primitive compile-status over ARGUMENTS."
+  (let* ((handle (car arguments))
+         (authorized
+          (agent-scheme--compile-authorized-object
+           handle "compile-status" 'observe context))
+         (authorization (car authorized))
+         (object (cadr authorized))
+         (datum (agent-scheme--compile-status-datum handle object)))
+    (agent-scheme-capability-audit-process-result authorization datum)
+    (agent-scheme--add-emacs-capability-result-fields
+     `((adapter . emacs-compile)
+       (operation . status)
+       (compile-status . ,(agent-scheme--compile-status-symbol object))))
+    datum))
+
+(defun agent-scheme--primitive-compile-output (arguments context)
+  "Primitive compile-output over ARGUMENTS."
+  (let* ((handle (car arguments))
+         (options (cadr arguments))
+         (authorized
+          (agent-scheme--compile-authorized-object
+           handle "compile-output" 'output context))
+         (authorization (car authorized))
+         (object (cadr authorized))
+         (datum (agent-scheme--compile-output-datum handle object options)))
+    (agent-scheme-capability-audit-process-result authorization datum)
+    (agent-scheme--add-emacs-capability-result-fields
+     `((adapter . emacs-compile)
+       (operation . output)
+       (compile-status . ,(agent-scheme--compile-status-symbol object))))
+    datum))
+
+(defun agent-scheme--primitive-compile-yield (arguments context)
+  "Primitive compile-yield over ARGUMENTS."
+  (let* ((handle (car arguments))
+         (authorized
+          (agent-scheme--compile-authorized-object
+           handle "compile-yield" 'output context))
+         (authorization (car authorized))
+         (object (cadr authorized))
+         (datum (agent-scheme--compile-output-datum handle object nil)))
+    (agent-scheme-capability-audit-process-result authorization datum)
+    (agent-scheme--add-emacs-capability-result-fields
+     `((adapter . emacs-compile)
+       (operation . yield)
+       (compile-status . ,(agent-scheme--compile-status-symbol object))))
+    (agent-scheme-agent-io--primitive-yield (list datum) context)))
 
 (defun agent-scheme--primitive-network-http-request (arguments context)
   "Primitive network-http-request over ARGUMENTS."
