@@ -43,6 +43,7 @@
      (library (agent capability primitive))
      (library (agent task))
      (library (agent memory))
+     (library (agent plan))
      (library (agent models))
      (library (agent context))
      (library (agent reflect))

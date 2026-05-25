@@ -22,6 +22,7 @@
 (require 'agent-scheme-job)
 (require 'agent-scheme-memory)
 (require 'agent-scheme-models)
+(require 'agent-scheme-plan)
 (require 'agent-scheme-redaction)
 (require 'agent-scheme-reflect)
 (require 'agent-scheme-session)
@@ -83,6 +84,7 @@
     "(agent capability primitive)"
     "(agent task)"
     "(agent memory)"
+    "(agent plan)"
     "(agent models)"
     "(agent context)"
     "(agent reflect)"
@@ -397,6 +399,11 @@
      (agent-scheme--register-primitive-library
       key
       (agent-scheme-memory-primitive-specs)
+      context))
+    ("(agent plan)"
+     (agent-scheme--register-primitive-library
+      key
+      (agent-scheme-plan-primitive-specs)
       context))
     ("(agent models)"
      (agent-scheme--register-primitive-library

@@ -45,6 +45,7 @@
           (prefix (agent-scheme context) context-model:)
           (prefix (agent-scheme job) job-model:)
           (prefix (agent-scheme memory) memory-model:)
+          (prefix (agent-scheme plan) plan-model:)
           (prefix (agent-scheme redaction) redaction-model:)
           (agent-scheme macro))
   (begin
@@ -59,6 +60,10 @@
     ;; Process-local portable memory used by `(agent memory)' primitives.
     (define interpreter-memory-store
       (memory-model:agent-scheme-make-memory-store))
+
+    ;; Process-local portable plans used by `(agent plan)' primitives.
+    (define interpreter-plan-store
+      (plan-model:agent-scheme-make-plan-store))
 
     ;; Process-local portable model provider profiles.
     (define interpreter-model-providers '())
@@ -4967,6 +4972,108 @@
          records)
         records))
 
+    ;; Return the memory scope corresponding to PLAN-SCOPE.
+    (define (plan-memory-scope plan-scope)
+      (if (eq? plan-scope 'fresh)
+          'instance
+          plan-scope))
+
+    ;; Create or replace a portable plan record.
+    (define (primitive-plan-create! arguments context)
+      (let* ((datum (car arguments))
+             (record
+              (plan-model:plan-create! interpreter-plan-store datum)))
+        (if (plan-model:plan-memory-important? datum)
+            (memory-model:memory-put!
+             interpreter-memory-store
+             (plan-memory-scope (plan-model:plan-record-scope record))
+             (plan-model:plan-record-id record)
+             (list
+              (list 'tags '(plan important))
+              (list 'value record)
+              (list 'source '(agent-plan))
+              (list 'confidence 'high))))
+        (record-audit-event!
+         context
+         'agent-plan
+         (list (list 'operation "plan-create!")
+               (list 'plan (plan-model:plan-record-id record))
+               (list 'scope (plan-model:plan-record-scope record))
+               (list 'record record)))
+        record))
+
+    ;; Return a portable plan record by id, or #f.
+    (define (primitive-plan-ref arguments context)
+      (plan-model:plan-ref interpreter-plan-store (car arguments)))
+
+    ;; Return portable plans in a scope.
+    (define (primitive-plan-list arguments context)
+      (plan-model:plan-list interpreter-plan-store (car arguments)))
+
+    ;; Add a step to a portable plan.
+    (define (primitive-plan-step-add! arguments context)
+      (let ((record
+             (plan-model:plan-step-add!
+              interpreter-plan-store
+              (car arguments)
+              (second arguments))))
+        (record-audit-event!
+         context
+         'agent-plan
+         (list (list 'operation "plan-step-add!")
+               (list 'plan (plan-model:plan-record-id record))
+               (list 'record record)))
+        record))
+
+    ;; Update a portable plan step status.
+    (define (primitive-plan-step-status! arguments context)
+      (let ((record
+             (plan-model:plan-step-status!
+              interpreter-plan-store
+              (car arguments)
+              (second arguments)
+              (third arguments))))
+        (record-audit-event!
+         context
+         'agent-plan
+         (list (list 'operation "plan-step-status!")
+               (list 'plan (plan-model:plan-record-id record))
+               (list 'step (second arguments))
+               (list 'status (third arguments))
+               (list 'record record)))
+        record))
+
+    ;; Update a portable plan status.
+    (define (primitive-plan-status! arguments context)
+      (let ((record
+             (plan-model:plan-status!
+              interpreter-plan-store
+              (car arguments)
+              (second arguments))))
+        (record-audit-event!
+         context
+         'agent-plan
+         (list (list 'operation "plan-status!")
+               (list 'plan (plan-model:plan-record-id record))
+               (list 'status (second arguments))
+               (list 'record record)))
+        record))
+
+    ;; Yield a portable plan through the event channel.
+    (define (primitive-plan-yield arguments context)
+      (let ((record
+             (plan-model:plan-ref interpreter-plan-store (car arguments))))
+        (if (not record)
+            (eval-error "unknown plan"))
+        (record-agent-event! context (list 'yield record))
+        (record-audit-event!
+         context
+         'agent-plan
+         (list (list 'operation "plan-yield")
+               (list 'plan (plan-model:plan-record-id record))
+               (list 'scope (plan-model:plan-record-scope record))))
+        record))
+
     ;; Return DATUM's model-record head or #f for association-list payloads.
     (define (model-record-head datum)
       (if (and (pair? datum)
@@ -7000,6 +7107,13 @@
        (cons 'primitive-memory-by-tag primitive-memory-by-tag)
        (cons 'primitive-memory-recent primitive-memory-recent)
        (cons 'primitive-memory-yield primitive-memory-yield)
+       (cons 'primitive-plan-create! primitive-plan-create!)
+       (cons 'primitive-plan-ref primitive-plan-ref)
+       (cons 'primitive-plan-list primitive-plan-list)
+       (cons 'primitive-plan-step-add! primitive-plan-step-add!)
+       (cons 'primitive-plan-step-status! primitive-plan-step-status!)
+       (cons 'primitive-plan-status! primitive-plan-status!)
+       (cons 'primitive-plan-yield primitive-plan-yield)
        (cons 'primitive-model-provider-register!
              primitive-model-provider-register!)
        (cons 'primitive-model-providers primitive-model-providers)
