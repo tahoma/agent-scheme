@@ -125,6 +125,7 @@
         (agent capability)
         (agent capability primitive)
         (agent memory)
+        (agent reflect)
         (agent redaction)))
 
     ;; Checked-in Agent Scheme source libraries loaded by the portable
@@ -934,6 +935,47 @@
                                   'primitive-memory-yield
                                   2
                                   2))
+         context))
+       ((equal? key '(agent reflect))
+        (register-primitive-library!
+         key
+         (list
+          (library-primitive-spec 'current-capabilities
+                                  'primitive-current-capabilities
+                                  0
+                                  0)
+          (library-primitive-spec 'current-policy
+                                  'primitive-current-policy
+                                  0
+                                  0)
+          (library-primitive-spec 'current-budget
+                                  'primitive-current-budget
+                                  0
+                                  0)
+          (library-primitive-spec 'current-imports
+                                  'primitive-current-imports
+                                  0
+                                  0)
+          (library-primitive-spec 'current-session-info
+                                  'primitive-current-session-info
+                                  0
+                                  0)
+          (library-primitive-spec 'recent-yields
+                                  'primitive-recent-yields
+                                  0
+                                  0)
+          (library-primitive-spec 'recent-errors
+                                  'primitive-recent-errors
+                                  0
+                                  0)
+          (library-primitive-spec 'recent-policy-decisions
+                                  'primitive-recent-policy-decisions
+                                  0
+                                  0)
+          (library-primitive-spec 'capability-info
+                                  'primitive-capability-info
+                                  1
+                                  1))
          context))
        ((equal? key '(agent redaction))
         (register-primitive-library!

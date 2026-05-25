@@ -91,6 +91,59 @@ Adapter reflection follows these rules:
 - Programs should ask for the narrow capability they need. Host identity is a
   last resort for diagnostics or UX differences.
 
+## Runtime Reflection Library
+
+`(agent reflect)` exposes read-only snapshots of the active Agent Scheme
+runtime. It is for diagnostics, adaptive helper libraries, and agent-authored
+scripts that need to understand their current authority and budget before
+choosing what to do next.
+
+Current procedures:
+
+- `(current-capabilities)` returns public `host-capability` records from the
+  primitive manifest.
+- `(capability-info symbol-or-name)` returns one matching `host-capability`
+  record, or `#f` if the capability is unavailable.
+- `(current-policy)` returns the active policy category actions and per-run
+  overrides.
+- `(current-budget)` returns evaluator step, host-call, event, event-node, and
+  value-node counters and limits.
+- `(current-imports)` returns the libraries registered in the current
+  evaluation context.
+- `(current-session-info)` returns public session/job identity and event count
+  information for the current evaluation.
+- `(recent-yields)`, `(recent-errors)`, and `(recent-policy-decisions)` return
+  recent event and audit data useful for debugging scripts.
+
+Reflection data is Scheme-readable data. It does not expose raw Emacs objects,
+native descriptors, provider clients, credentials, hidden model internals, or
+private host structures. Returned event and audit data is redacted at the
+reflection boundary, so secret-prone fields such as tokens, API keys, passwords,
+authorization headers, and local-only context are replaced with redaction
+records before the caller sees them.
+
+An agent script can combine reflection with `(agent io)` to yield a diagnostic
+snapshot:
+
+```scheme
+(import (scheme base)
+        (agent io)
+        (agent reflect))
+
+(define file-metadata (capability-info 'file-exists?))
+
+(agent-yield
+ (list 'runtime-snapshot
+       (list 'file-metadata-available (if file-metadata #t #f))
+       (current-budget)
+       (current-imports)
+       (recent-policy-decisions)))
+```
+
+Availability is still not authority. A `host-capability` record tells Scheme
+code that a binding exists and describes its policy path; calling the capability
+still goes through grants, policy checks, redaction, and audit.
+
 ## Host Effects
 
 Once code calls a host capability, all hosts use the same effect path:
@@ -115,6 +168,8 @@ Current implemented pieces:
 - `(features)` reports implementation-level feature identifiers, including
   `agent-scheme`.
 - Emacs capability libraries are registered under `(emacs ...)` names.
+- `(agent reflect)` exposes capability, policy, budget, import, session, recent
+  yield, recent error, and recent policy-decision snapshots.
 
 Tracked follow-up work:
 
