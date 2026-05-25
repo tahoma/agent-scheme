@@ -34,6 +34,10 @@
      :portable ("agent-scheme-scheme-module-boundary-test-")))
   "Comparable host/runtime validation surfaces shown in CI summaries.")
 
+(defconst agent-scheme-ci-pr-summary-marker
+  "<!-- agent-scheme-ci-timing-summary -->"
+  "Hidden marker used to update the pull request timing comment.")
+
 (defun agent-scheme-ci--file-string (path)
   "Return the contents of PATH as a string."
   (with-temp-buffer
@@ -204,6 +208,37 @@ durations, and optional wall-clock seconds recorded by the workflow."
     "\n")
    "\n"))
 
+(defun agent-scheme-ci--render-compact-shard-row (shard)
+  "Render SHARD as one compact Markdown table row."
+  (format "| %s | %d | %d | %d | %s | %s |"
+          (agent-scheme-ci--markdown-cell (plist-get shard :name))
+          (plist-get shard :ran)
+          (plist-get shard :unexpected)
+          (plist-get shard :skipped)
+          (agent-scheme-ci--format-seconds
+           (plist-get shard :ert-seconds))
+          (agent-scheme-ci--format-seconds
+           (plist-get shard :wall-seconds))))
+
+(defun agent-scheme-ci-render-pr-markdown-summary (shards &optional run-url)
+  "Render SHARDS as an updatable pull request Markdown comment.
+When RUN-URL is non-nil, include a link to the workflow run that produced the
+summary."
+  (concat
+   agent-scheme-ci-pr-summary-marker
+   "\n\n"
+   "## Test Shard Timing\n\n"
+   (when (and run-url (not (string-empty-p run-url)))
+     (format "Latest run: [GitHub Actions](%s).\n\n" run-url))
+   "| Shard | Ran | Unexpected | Skipped | ERT time | Wall time |\n"
+   "| --- | ---: | ---: | ---: | ---: | ---: |\n"
+   (mapconcat #'agent-scheme-ci--render-compact-shard-row shards "\n")
+   "\n\n"
+   "<details>\n"
+   "<summary>Slowest tests and paired validation surfaces</summary>\n\n"
+   (agent-scheme-ci-render-markdown-summary shards)
+   "\n</details>\n"))
+
 (defun agent-scheme-ci-write-summary (log-files &optional output-file)
   "Render LOG-FILES to OUTPUT-FILE, or print to standard output.
 When OUTPUT-FILE is non-nil, append the summary so it can be used directly with
@@ -217,12 +252,43 @@ the GITHUB_STEP_SUMMARY file."
           (write-region (point-min) (point-max) output-file t 'silent))
       (princ markdown))))
 
+(defun agent-scheme-ci-write-pr-summary
+    (log-files output-file &optional run-url)
+  "Render a pull request timing comment for LOG-FILES to OUTPUT-FILE.
+RUN-URL, when non-nil, links the comment back to the producing workflow run."
+  (with-temp-buffer
+    (insert
+     (agent-scheme-ci-render-pr-markdown-summary
+      (mapcar #'agent-scheme-ci-parse-log-file log-files)
+      run-url))
+    (write-region (point-min) (point-max) output-file nil 'silent)))
+
+(defun agent-scheme-ci--batch-log-files ()
+  "Return log file arguments passed after the batch command separator."
+  (cl-remove "--" command-line-args-left :test #'string=))
+
 (defun agent-scheme-ci-summary-batch-main ()
   "Batch entry point that summarizes paths from `command-line-args-left'."
-  (let ((log-files (cl-remove "--" command-line-args-left :test #'string=)))
+  (let ((log-files (agent-scheme-ci--batch-log-files)))
     (unless log-files
       (error "No CI log files supplied"))
-    (agent-scheme-ci-write-summary log-files (getenv "GITHUB_STEP_SUMMARY"))))
+    (agent-scheme-ci-write-summary
+     log-files
+     (or (getenv "AGENT_SCHEME_CI_SUMMARY_FILE")
+         (getenv "GITHUB_STEP_SUMMARY")))))
+
+(defun agent-scheme-ci-pr-summary-batch-main ()
+  "Batch entry point that writes a pull request timing comment body."
+  (let ((log-files (agent-scheme-ci--batch-log-files))
+        (output-file (getenv "AGENT_SCHEME_CI_PR_SUMMARY_FILE")))
+    (unless log-files
+      (error "No CI log files supplied"))
+    (unless (and output-file (not (string-empty-p output-file)))
+      (error "AGENT_SCHEME_CI_PR_SUMMARY_FILE is required"))
+    (agent-scheme-ci-write-pr-summary
+     log-files
+     output-file
+     (getenv "AGENT_SCHEME_CI_RUN_URL"))))
 
 (provide 'agent-scheme-ci)
 

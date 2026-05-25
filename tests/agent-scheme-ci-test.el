@@ -94,6 +94,39 @@
       (delete-file emacs-log)
       (delete-file portable-log))))
 
+(ert-deftest agent-scheme-ci-test-renders-pr-summary-comment ()
+  "Render a compact pull request timing comment with detailed summary content."
+  (let* ((log
+          (agent-scheme-ci-test--write-log
+           (concat
+            "Running 1 tests (2026-05-25 13:00:00-0700, selector `x')\n"
+            "   passed  1/1  agent-scheme-reader-test-booleans (0.040000 sec)\n"
+            "\n"
+            "Ran 1 tests, 1 results as expected, 0 unexpected "
+            "(2026-05-25 13:00:01-0700, 0.040000 sec)\n"
+            "AGENT_SCHEME_CI_SHARD_NAME=Emacs core language/runtime\n"
+            "AGENT_SCHEME_CI_SHARD_SELECTOR=\"agent-scheme-reader.*\"\n"
+            "AGENT_SCHEME_CI_WALL_SECONDS=1\n")))
+         (markdown
+          (agent-scheme-ci-render-pr-markdown-summary
+           (list (agent-scheme-ci-parse-log-file log))
+           "https://github.example/run/1")))
+    (unwind-protect
+        (progn
+          (should (string-match-p agent-scheme-ci-pr-summary-marker markdown))
+          (should (string-match-p
+                   "Latest run: \\[GitHub Actions\\](https://github.example/run/1)"
+                   markdown))
+          (should (string-match-p
+                   "| Emacs core language/runtime | 1 | 0 | 0 | 0\\.040s | 1\\.000s |"
+                   markdown))
+          (should (string-match-p
+                   "<summary>Slowest tests and paired validation surfaces</summary>"
+                   markdown))
+          (should (string-match-p "`agent-scheme-reader-test-booleans` 0\\.040s"
+                                  markdown)))
+      (delete-file log))))
+
 (provide 'agent-scheme-ci-test)
 
 ;;; agent-scheme-ci-test.el ends here
