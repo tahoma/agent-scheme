@@ -2295,6 +2295,22 @@
               #t)
          #t))
 
+(check-external
+ 'agent-models-register-and-route
+ "(import (scheme base) (agent models))
+  (model-provider-register!
+   '(model-provider
+     (id portable-local)
+     (kind local)
+     (transport openai-compatible-http)
+     (endpoint \"http://127.0.0.1:11434/v1\")
+     (models
+      (((id portable-coder)
+        (roles (scheme-scripter code))
+        (privacy local))))))
+  (model-route 'scheme-scripter '())"
+ "(model-routing-decision (status selected) (role scheme-scripter) (provider portable-local) (model portable-coder) (kind local) (transport openai-compatible-http) (endpoint \"http://127.0.0.1:11434/v1\"))")
+
 (let* ((result
         (agent-scheme-eval-source-result
          "(import (scheme base) (agent capability))
