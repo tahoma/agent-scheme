@@ -76,6 +76,23 @@ This reflection path is for runtime decisions, diagnostics, helper scripts, and
 agent-authored workflows. It should report what a host can mediate, not grant
 permission by itself.
 
+The checked-in Emacs fixture at `fixtures/host-adapters/emacs.scm` records
+Emacs-specific facilities with the same `host-adapter` declaration shape as
+other hosts:
+
+```scheme
+(host-adapter
+  (name emacs)
+  (contract r7rs-small)
+  (provides
+    ((library (emacs buffer))
+     (library (agent capability)))))
+```
+
+Future runtime reflection can consume this Scheme-readable declaration and its
+capability manifest without exposing raw Emacs buffers, windows, frames,
+processes, command objects, audit entries, secrets, or private local state.
+
 Adapter reflection follows these rules:
 
 - `host-adapter` records name the host, modes, provided libraries, mediated
@@ -168,6 +185,8 @@ Current implemented pieces:
 - `(features)` reports implementation-level feature identifiers, including
   `agent-scheme`.
 - Emacs capability libraries are registered under `(emacs ...)` names.
+- The Emacs host-adapter declaration and capability manifest fixture is checked
+  in as `fixtures/host-adapters/emacs.scm`.
 - `(agent reflect)` exposes capability, policy, budget, import, session, recent
   yield, recent error, and recent policy-decision snapshots.
 
@@ -175,7 +194,6 @@ Tracked follow-up work:
 
 - #229 adds the native CLI/daemon `host-adapter` declaration fixture and
   portable validator.
-- #234 adds the Emacs `host-adapter` declaration fixture.
 - #235 exposes current host-adapter and capability reflection to Scheme.
 - #236 adds reusable host-adapter introspection conformance for future adapter
   contracts.
