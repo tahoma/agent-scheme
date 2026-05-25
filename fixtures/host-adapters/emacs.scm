@@ -41,6 +41,7 @@
      (library (agent network))
      (library (agent capability))
      (library (agent capability primitive))
+     (library (agent task))
      (library (agent memory))
      (library (agent models))
      (library (agent context))

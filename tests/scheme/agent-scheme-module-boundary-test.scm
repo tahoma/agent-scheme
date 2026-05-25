@@ -15,6 +15,7 @@
         (prefix (agent-scheme context) context:)
         (prefix (agent-scheme redaction) redaction:)
         (prefix (agent-scheme session) session:)
+        (prefix (agent task) task:)
         (prefix (agent-scheme interpreter) interpreter:))
 
 ;; Record one failed portable module-boundary check.
@@ -209,6 +210,55 @@
                                        'portable-main
                                        '((id portable-snap))))
        'session-snapshot)
+
+;; Task lifecycle records are canonical datums with explicit transitions.
+(define portable-task
+  (task:make-agent-task 'portable-task
+                        "Validate portable task lifecycle records."
+                        'portable-main
+                        '((plan . portable-plan)
+                          (transcript . portable-transcript)
+                          (budget . (task-budget (max-steps 100)))
+                          (audit . portable-audit))))
+
+;; Portable pause receipt under test.
+(define portable-pause
+  (task:make-task-pause
+   'portable-task
+   'waiting-for-host
+   'host-effect-timeout
+   '((observed-state . (observation-set obs-portable))
+     (intended-next-action . action-portable)
+     (capability-gate . none)
+     (model-route . none)
+     (approval-status . none)
+     (verifier-result . not-run))))
+
+(check 'task-boundary-transition-allowed
+       (task:task-transition-allowed? 'created 'observing)
+       #t)
+
+(check 'task-boundary-transition-rejected
+       (task:task-transition-allowed? 'created 'complete)
+       #f)
+
+(check 'task-boundary-task-record
+       (task:agent-task? portable-task)
+       #t)
+
+(check 'task-boundary-pause-record
+       (task:task-pause? portable-pause)
+       #t)
+
+(check 'task-boundary-record-valid
+       (task:task-record-valid? portable-task)
+       #t)
+
+(check 'task-boundary-invalid-transition-raises
+       (raises?
+        (lambda ()
+          (task:validate-task-transition 'created 'complete)))
+       #t)
 
 (check 'interpreter-boundary
        (interpreter:agent-scheme-value->external
