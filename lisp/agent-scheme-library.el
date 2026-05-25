@@ -688,8 +688,10 @@ Each spec has (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY)."
     ("(scheme time)"
      (agent-scheme--register-primitive-library
       key
-      (mapcar #'agent-scheme--policy-denied-spec
-              '("current-jiffy" "current-second" "jiffies-per-second"))
+      `(("current-jiffy" ,#'agent-scheme--primitive-current-jiffy 0 0)
+        ("current-second" ,#'agent-scheme--primitive-current-second 0 0)
+        ("jiffies-per-second"
+         ,#'agent-scheme--primitive-jiffies-per-second 0 0))
       context))
     ("(scheme write)"
      (agent-scheme--register-primitive-library

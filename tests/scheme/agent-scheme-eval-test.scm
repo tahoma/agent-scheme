@@ -311,7 +311,7 @@
                     (cadr (assq 'policy-category current-second))
                     (cadr (assq 'policy current-second))))
          '(host-time clock shared-capability-request
-           standard-host-effect deny))
+           standard-host-effect grant))
   (let ((read-char
          (find-manifest-spec '(scheme base) 'read-char manifest-specs)))
     (check 'primitive-manifest-port-runtime-path
@@ -977,6 +977,16 @@
     (policy-actions
      (standard-host-effect . deny))))
 
+;; Clock grants authorize policy-gated `(scheme time)` host observations.
+(define clock-grant-options
+  '((capability-grants
+     (capability-grant
+      (id portable-clock-grant)
+      (domain clock)
+      (operations read)
+      (scope (clock system))
+      (expires never)))))
+
 ;; First-class process grants are host-neutral request/decision vocabulary.
 ;; Host adapters decide whether to connect the authorization to a real child
 ;; process; the portable runtime owns the datum shape and grant matching.
@@ -1384,6 +1394,67 @@
               (equal? (field-value event 'decision) 'denied)
               (equal? (field-value event 'filename)
                       "fixtures/r7rs/conformance-cases.scm")
+              #t)
+         #t))
+
+(let* ((result
+        (agent-scheme-eval-source-result
+         "(import (scheme base) (scheme time))
+          (current-second)"))
+       (events (field-value result 'events))
+       (request (find-event-with-field
+                 events 'capability-request 'domain 'clock))
+       (decision (find-event-with-field
+                  events 'capability-decision 'domain 'clock))
+       (audit (find-event-with-field
+               events 'capability-audit 'domain 'clock)))
+  (check 'standard-time-default-denial-audits-clock-request
+         (and (equal? (field-value result 'status) 'error)
+              request
+              decision
+              audit
+              (equal? (field-value request 'operation) 'current-second)
+              (equal? (field-value decision 'status) 'denied)
+              (equal? (field-value audit 'result)
+                      '(error "no active clock grant covers request"))
+              #t)
+         #t))
+
+(check-external/options 'standard-time-clock-grant-allowed
+                        "(import (scheme base) (scheme time))
+                         (list (real? (current-second))
+                               (exact-integer? (current-jiffy))
+                               (exact-integer? (jiffies-per-second))
+                               (> (jiffies-per-second) 0))"
+                        clock-grant-options
+                        "(#t #t #t #t)")
+
+(let* ((result
+        (agent-scheme-eval-source-result
+         "(import (scheme base) (scheme time))
+          (current-jiffy)"
+         #f
+         clock-grant-options))
+       (events (field-value result 'events))
+       (request (find-event-with-field
+                 events 'capability-request 'domain 'clock))
+       (decision (find-event-with-field
+                  events 'capability-decision 'domain 'clock))
+       (policy (find-event-with-field
+                events 'policy-decision 'domain 'clock))
+       (audit (find-event-with-field
+               events 'capability-audit 'domain 'clock)))
+  (check 'standard-time-clock-grant-audits-request-decision-result
+         (and (equal? (field-value result 'status) 'ok)
+              request
+              decision
+              policy
+              audit
+              (equal? (field-value request 'operation) 'current-jiffy)
+              (equal? (field-value decision 'status) 'approved)
+              (equal? (field-value decision 'grant) 'portable-clock-grant)
+              (equal? (field-value policy 'decision) 'allowed)
+              (equal? (car (field-value audit 'result)) 'ok)
               #t)
          #t))
 

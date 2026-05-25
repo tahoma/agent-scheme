@@ -475,9 +475,9 @@
       (append (agent-scheme-base-primitive-specs)
               (agent-scheme-base-prelude-binding-specs)))
 
-    ;; Explicit manifest metadata for currently host-effecting standard
-    ;; primitives.  These records keep denied stubs visible before the full
-    ;; capability system exists.
+    ;; Explicit manifest metadata for host-effecting standard primitives.
+    ;; These records keep the shared capability path visible to reflection and
+    ;; backend planning even when a binding still fails closed by default.
     (define standard-primitive-manifest-specs
       (list
        (list (list 'name 'delete-file)
@@ -688,39 +688,39 @@
        (list (list 'name 'current-jiffy)
              (list 'library '(scheme time))
              (list 'minimum-arity 0)
-             (list 'maximum-arity #f)
+             (list 'maximum-arity 0)
              (list 'source 'host-capability)
              (list 'effect 'host-time)
              (list 'required-capability 'clock)
-             (list 'emacs-hook 'agent-scheme--policy-denied-primitive)
-             (list 'portable-hook 'policy-denied-primitive)
+             (list 'emacs-hook 'agent-scheme--primitive-current-jiffy)
+             (list 'portable-hook 'primitive-current-jiffy)
              (list 'emitter-hook 'capability-time)
-             (list 'policy 'deny)
-             (list 'test-categories '(time policy)))
+             (list 'policy 'grant)
+             (list 'test-categories '(time policy clock)))
        (list (list 'name 'current-second)
              (list 'library '(scheme time))
              (list 'minimum-arity 0)
-             (list 'maximum-arity #f)
+             (list 'maximum-arity 0)
              (list 'source 'host-capability)
              (list 'effect 'host-time)
              (list 'required-capability 'clock)
-             (list 'emacs-hook 'agent-scheme--policy-denied-primitive)
-             (list 'portable-hook 'policy-denied-primitive)
+             (list 'emacs-hook 'agent-scheme--primitive-current-second)
+             (list 'portable-hook 'primitive-current-second)
              (list 'emitter-hook 'capability-time)
-             (list 'policy 'deny)
-             (list 'test-categories '(time policy)))
+             (list 'policy 'grant)
+             (list 'test-categories '(time policy clock)))
        (list (list 'name 'jiffies-per-second)
              (list 'library '(scheme time))
              (list 'minimum-arity 0)
-             (list 'maximum-arity #f)
+             (list 'maximum-arity 0)
              (list 'source 'host-capability)
              (list 'effect 'host-time)
              (list 'required-capability 'clock)
-             (list 'emacs-hook 'agent-scheme--policy-denied-primitive)
-             (list 'portable-hook 'policy-denied-primitive)
+             (list 'emacs-hook 'agent-scheme--primitive-jiffies-per-second)
+             (list 'portable-hook 'primitive-jiffies-per-second)
              (list 'emitter-hook 'capability-time)
-             (list 'policy 'deny)
-             (list 'test-categories '(time policy)))))
+             (list 'policy 'grant)
+             (list 'test-categories '(time policy clock)))))
 
     ;; Add shared backend policy-path metadata to host-effecting standard specs.
     (define (standard-primitive-manifest-spec spec)

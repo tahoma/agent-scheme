@@ -31,6 +31,10 @@
           (scheme char)
           (scheme file)
           (scheme inexact)
+          (rename (scheme time)
+                  (current-second host-current-second)
+                  (current-jiffy host-current-jiffy)
+                  (jiffies-per-second host-jiffies-per-second))
           (scheme write)
           (agent-scheme reader)
           (agent-scheme runtime)
@@ -5313,6 +5317,73 @@
                "interaction-environment requires policy-gated host access"
                fields)))))
 
+    ;; Return VALUE as an inexact Agent Scheme number for DESCRIPTION.
+    (define (time-inexact-number value description)
+      (if (not (number? value))
+          (eval-error
+           (string-append description " host adapter returned non-number")
+           value))
+      (agent-scheme-make-canonical-decimal (inexact value)))
+
+    ;; Return VALUE as an exact Agent Scheme integer for DESCRIPTION.
+    (define (time-exact-integer value description)
+      (if (not (exact-integer? value))
+          (eval-error
+           (string-append description
+                          " host adapter returned non-exact-integer")
+           value))
+      (agent-scheme-make-canonical-integer value))
+
+    ;; Return VALUE as a positive exact Agent Scheme integer for DESCRIPTION.
+    (define (time-positive-exact-integer value description)
+      (if (not (and (exact-integer? value) (> value 0)))
+          (eval-error
+           (string-append description
+                          " host adapter returned non-positive exact integer")
+           value))
+      (agent-scheme-make-canonical-integer value))
+
+    ;; Authorize clock BINDING, call THUNK, and record the capability result.
+    (define (call-authorized-clock binding context thunk)
+      (let* ((authorization (authorize-clock-capability binding context))
+             (value (thunk)))
+        (audit-clock-capability-result!
+         context
+         authorization
+         value
+         #f)
+        value))
+
+    ;; Implement R7RS `current-second` through a policy-gated clock read.
+    (define (primitive-current-second arguments context)
+      (call-authorized-clock
+       'current-second
+       context
+       (lambda ()
+         (time-inexact-number
+          (host-current-second)
+          "current-second"))))
+
+    ;; Implement R7RS `current-jiffy` through a policy-gated clock read.
+    (define (primitive-current-jiffy arguments context)
+      (call-authorized-clock
+       'current-jiffy
+       context
+       (lambda ()
+         (time-exact-integer
+          (host-current-jiffy)
+          "current-jiffy"))))
+
+    ;; Implement R7RS `jiffies-per-second` through a policy-gated clock read.
+    (define (primitive-jiffies-per-second arguments context)
+      (call-authorized-clock
+       'jiffies-per-second
+       context
+       (lambda ()
+         (time-positive-exact-integer
+          (host-jiffies-per-second)
+          "jiffies-per-second"))))
+
     ;; Resolve FILENAME and enforce the file-operation capability policy.
     (define (resolve-file-policy-path filename context description)
       (authorize-file-capability
@@ -6871,6 +6942,9 @@
        (cons 'primitive-with-input-from-file primitive-with-input-from-file)
        (cons 'primitive-with-output-to-file primitive-with-output-to-file)
        (cons 'primitive-load primitive-load)
+       (cons 'primitive-current-second primitive-current-second)
+       (cons 'primitive-current-jiffy primitive-current-jiffy)
+       (cons 'primitive-jiffies-per-second primitive-jiffies-per-second)
        (cons 'primitive-read primitive-read)
        (cons 'primitive-display primitive-display)
        (cons 'primitive-write primitive-write)

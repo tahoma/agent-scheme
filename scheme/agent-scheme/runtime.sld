@@ -235,6 +235,8 @@
           network-port-capability-handle
           authorize-network-capability
           audit-network-capability-result!
+          authorize-clock-capability
+          audit-clock-capability-result!
           new-eval-context
           record-audit-event!
           record-agent-event!
@@ -1114,6 +1116,211 @@
              (list 'decision (cadr (assq 'decision authorization)))
              (list 'domain 'code-loading)
              (list 'operation 'load)
+             (list 'result
+                   (if error?
+                       (list 'error result)
+                       (list 'ok result))))))
+
+    ;; Report whether GRANT is a clock-domain capability grant.
+    (define (clock-capability-grant? grant)
+      (and (pair? grant)
+           (eq? (car grant) 'capability-grant)
+           (eq? (capability-field-value grant 'domain) 'clock)))
+
+    ;; Report whether GRANT authorizes clock OPERATION.
+    (define (clock-capability-operation? grant operation)
+      (let loop ((operations (capability-field-values grant 'operations)))
+        (and (pair? operations)
+             (or (eq? (car operations) operation)
+                 (eq? (car operations) 'read)
+                 (loop (cdr operations))))))
+
+    ;; Return clock-domain grants from CONTEXT.
+    (define (clock-capability-grants context)
+      (let loop ((grants (context-capability-grants context)) (kept '()))
+        (cond
+         ((null? grants) (reverse kept))
+         ((clock-capability-grant? (car grants))
+          (loop (cdr grants) (cons (car grants) kept)))
+         (else
+          (loop (cdr grants) kept)))))
+
+    ;; Return a clock grant match for OPERATION, or the strongest denial.
+    (define (clock-capability-match grants operation)
+      (let loop ((rest grants) (denied #f))
+        (cond
+         ((null? rest) denied)
+         ((not (clock-capability-operation? (car rest) operation))
+          (loop (cdr rest) denied))
+         ((eq? (capability-field-value (car rest) 'status) 'revoked)
+          (loop (cdr rest)
+                (list 'denied
+                      (car rest)
+                      "revoked clock capability grant")))
+         ((not (capability-grant-active? (car rest)))
+          (loop (cdr rest)
+                (list 'denied
+                      (car rest)
+                      "expired clock capability grant")))
+         (else
+          (list 'approved (car rest))))))
+
+    ;; Return a portable clock capability request datum.
+    (define (clock-capability-request binding operation)
+      (list 'capability-request
+            (list 'library '(scheme time))
+            (list 'binding binding)
+            (list 'domain 'clock)
+            (list 'operation operation)
+            (list 'resource (list 'clock 'system))
+            (list 'effect 'read-only-observation)))
+
+    ;; Return a clock capability decision datum.
+    (define (clock-capability-decision request status grant reason)
+      (list 'capability-decision
+            (list 'request request)
+            (list 'status status)
+            (list 'domain 'clock)
+            (list 'grant (if grant (capability-field-value grant 'id) 'none))
+            (list 'reason reason)))
+
+    ;; Record DENIAL for clock REQUEST and raise a portable evaluator error.
+    (define (deny-clock-capability!
+             context request operation grant reason)
+      (let ((decision
+             (clock-capability-decision request 'denied grant reason)))
+        (record-audit-event!
+         context
+         'capability-decision
+         (list (list 'request request)
+               (list 'decision decision)
+               (list 'domain 'clock)
+               (list 'operation operation)
+               (list 'status 'denied)
+               (list 'grant
+                     (if grant (capability-field-value grant 'id) 'none))
+               (list 'reason reason)))
+        (record-audit-event!
+         context
+         'capability-audit
+         (list (list 'request request)
+               (list 'decision decision)
+               (list 'domain 'clock)
+               (list 'operation operation)
+               (list 'result (list 'error reason))))
+        (eval-error (string-append "clock capability denied: " reason))))
+
+    ;; Return CONTEXT's standard host-effect policy action for clock reads.
+    (define (clock-policy-action context)
+      (let ((entry (assq 'standard-host-effect
+                         (context-policy-actions context))))
+        (if entry (cdr entry) 'allow)))
+
+    ;; Require policy approval after a clock grant covers the operation.
+    (define (authorize-clock-policy!
+             context request binding operation grant)
+      (let ((grant-id (capability-field-value grant 'id)))
+        (if (eq? (clock-policy-action context) 'allow)
+            (record-audit-event!
+             context
+             'policy-decision
+             (list (list 'category 'standard-host-effect)
+                   (list 'operation binding)
+                   (list 'decision 'allowed)
+                   (list 'domain 'clock)
+                   (list 'grant grant-id)))
+            (begin
+              (record-audit-event!
+               context
+               'policy-decision
+               (list (list 'category 'standard-host-effect)
+                     (list 'operation binding)
+                     (list 'decision 'denied)
+                     (list 'domain 'clock)
+                     (list 'grant grant-id)))
+              (deny-clock-capability!
+               context
+               request
+               operation
+               grant
+               "clock request denied by policy")))))
+
+    ;; Authorize a policy-gated `(scheme time)` clock read.
+    (define (authorize-clock-capability binding context)
+      (let* ((operation binding)
+             (request (clock-capability-request binding operation))
+             (grants (clock-capability-grants context)))
+        (record-audit-event!
+         context
+         'capability-request
+         (list (list 'request request)
+               (list 'domain 'clock)
+               (list 'operation operation)
+               (list 'binding binding)))
+        (if (null? grants)
+            (begin
+              (record-audit-event!
+               context
+               'policy-decision
+               (list (list 'category 'standard-host-effect)
+                     (list 'operation binding)
+                     (list 'decision 'denied)
+                     (list 'domain 'clock)))
+              (deny-clock-capability!
+               context
+               request
+               operation
+               #f
+               "no active clock grant covers request")))
+        (let ((match (clock-capability-match grants operation)))
+          (if (or (not match) (eq? (car match) 'denied))
+              (deny-clock-capability!
+               context
+               request
+               operation
+               (and match (second match))
+               (if match
+                   (third match)
+                   "no active clock grant covers request")))
+          (let* ((grant (second match))
+                 (decision
+                  (clock-capability-decision
+                   request
+                   'approved
+                   grant
+                   "clock read is covered by active grant")))
+            (authorize-clock-policy!
+             context
+             request
+             binding
+             operation
+             grant)
+            (record-audit-event!
+             context
+             'capability-decision
+             (list (list 'request request)
+                   (list 'decision decision)
+                   (list 'domain 'clock)
+                   (list 'operation operation)
+                   (list 'status 'approved)
+                   (list 'grant (capability-field-value grant 'id))
+                   (list 'reason
+                         "clock read is covered by active grant")))
+            (list (list 'request request)
+                  (list 'decision decision)
+                  (list 'operation operation)
+                  (list 'grant grant))))))
+
+    ;; Record the result of an authorized clock capability operation.
+    (define (audit-clock-capability-result!
+             context authorization result error?)
+      (record-audit-event!
+       context
+       'capability-audit
+       (list (list 'request (cadr (assq 'request authorization)))
+             (list 'decision (cadr (assq 'decision authorization)))
+             (list 'domain 'clock)
+             (list 'operation (cadr (assq 'operation authorization)))
              (list 'result
                    (if error?
                        (list 'error result)

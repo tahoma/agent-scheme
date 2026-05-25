@@ -4034,6 +4034,71 @@ Advance when ADVANCEP is non-nil.  Signal errors using DESCRIPTION."
     (agent-scheme--make-environment-specifier
      environment syntax-environment nil)))
 
+(defun agent-scheme--time-inexact-number (value description)
+  "Return VALUE as an inexact Agent Scheme number for DESCRIPTION."
+  (unless (numberp value)
+    (agent-scheme--eval-error
+     "%s host adapter returned non-number: %S" description value))
+  (agent-scheme--number-from-host (float value)))
+
+(defun agent-scheme--time-exact-integer (value description)
+  "Return VALUE as an exact Agent Scheme integer for DESCRIPTION."
+  (unless (integerp value)
+    (agent-scheme--eval-error
+     "%s host adapter returned non-integer: %S" description value))
+  (agent-scheme--number-from-host value))
+
+(defun agent-scheme--time-positive-exact-integer (value description)
+  "Return VALUE as a positive exact Agent Scheme integer for DESCRIPTION."
+  (unless (and (integerp value) (> value 0))
+    (agent-scheme--eval-error
+     "%s host adapter returned non-positive integer: %S" description value))
+  (agent-scheme--number-from-host value))
+
+(defun agent-scheme--call-authorized-clock
+    (binding context thunk)
+  "Authorize clock BINDING, call THUNK, and audit the result."
+  (let ((authorization
+         (agent-scheme-capability-authorize-clock binding context)))
+    (condition-case condition
+        (let ((value (funcall thunk)))
+          (agent-scheme-capability-audit-clock-result authorization value)
+          value)
+      (error
+       (agent-scheme-capability-audit-clock-result
+        authorization (error-message-string condition) t)
+       (signal (car condition) (cdr condition))))))
+
+(defun agent-scheme--primitive-current-second (_arguments context)
+  "Primitive current-second over _ARGUMENTS."
+  (agent-scheme--call-authorized-clock
+   "current-second"
+   context
+   (lambda ()
+     (agent-scheme--time-inexact-number
+      (funcall agent-scheme-time-current-second-function)
+      "current-second"))))
+
+(defun agent-scheme--primitive-current-jiffy (_arguments context)
+  "Primitive current-jiffy over _ARGUMENTS."
+  (agent-scheme--call-authorized-clock
+   "current-jiffy"
+   context
+   (lambda ()
+     (agent-scheme--time-exact-integer
+      (funcall agent-scheme-time-current-jiffy-function)
+      "current-jiffy"))))
+
+(defun agent-scheme--primitive-jiffies-per-second (_arguments context)
+  "Primitive jiffies-per-second over _ARGUMENTS."
+  (agent-scheme--call-authorized-clock
+   "jiffies-per-second"
+   context
+   (lambda ()
+     (agent-scheme--time-positive-exact-integer
+      (funcall agent-scheme-time-jiffies-per-second-function)
+      "jiffies-per-second"))))
+
 (defun agent-scheme--resolve-file-policy-path (filename context description)
   "Return a file authorization for FILENAME and DESCRIPTION."
   (agent-scheme-capability-authorize-file
