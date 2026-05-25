@@ -56,6 +56,9 @@
     (define interpreter-memory-store
       (memory-model:agent-scheme-make-memory-store))
 
+    ;; Process-local portable model provider profiles.
+    (define interpreter-model-providers '())
+
     ;; Process-local ids for portable host-backed port capability handles.
     (define next-port-capability-handle-number 0)
 
@@ -4960,6 +4963,255 @@
          records)
         records))
 
+    ;; Return DATUM's model-record head or #f for association-list payloads.
+    (define (model-record-head datum)
+      (if (and (pair? datum)
+               (not (and (pair? (car datum))
+                         (symbol? (caar datum))))
+               (symbol? (car datum)))
+          (car datum)
+          #f))
+
+    ;; Return model field pairs from DATUM.
+    (define (model-field-values datum)
+      (if (not (pair? datum))
+          '()
+          (let ((fields (if (model-record-head datum)
+                            (cdr datum)
+                            datum)))
+            (let loop ((cursor fields) (result '()))
+              (cond
+               ((null? cursor) (reverse result))
+               ((and (pair? (car cursor))
+                     (symbol? (caar cursor)))
+                (loop (cdr cursor) (cons (car cursor) result)))
+               (else (loop (cdr cursor) result)))))))
+
+    ;; Return field NAME from DATUM, or DEFAULT.
+    (define (model-field-value datum name default)
+      (let loop ((fields (model-field-values datum)))
+        (cond
+         ((null? fields) default)
+         ((eq? (car (car fields)) name)
+          (if (null? (cdr (car fields)))
+              default
+              (car (cdr (car fields)))))
+         (else (loop (cdr fields))))))
+
+    ;; Return VALUE as a provider/model name.
+    (define (model-name value description)
+      (cond
+       ((symbol? value) value)
+       ((string? value) (string->symbol value))
+       (else (eval-error
+              (string-append description " must be a symbol or string")
+              value))))
+
+    ;; Return DATUM as a list of model names.
+    (define (model-name-list datum description)
+      (map (lambda (item) (model-name item description))
+           (proper-list-elements datum description)))
+
+    ;; Return VALUE's truth value using Scheme conventions.
+    (define (model-truthy? value)
+      (if value #t #f))
+
+    ;; Normalize a model profile datum.
+    (define (model-normalize-model datum)
+      (list
+       (cons 'id (model-name (model-field-value datum 'id #f)
+                             "model id"))
+       (cons 'roles
+             (model-name-list (model-field-value datum 'roles '())
+                              "model roles"))
+       (cons 'privacy
+             (model-name (model-field-value datum 'privacy 'public)
+                         "model privacy"))
+       (cons 'status
+             (model-name (model-field-value datum 'status 'available)
+                         "model status"))
+       (cons 'raw datum)))
+
+    ;; Normalize a provider profile datum.
+    (define (model-normalize-provider datum)
+      (if (not (eq? (model-record-head datum) 'model-provider))
+          (eval-error
+           "model-provider-register! expects a model-provider datum"
+           datum))
+      (list
+       (cons 'id (model-name (model-field-value datum 'id #f)
+                             "provider id"))
+       (cons 'kind
+             (model-name (model-field-value datum 'kind 'local)
+                         "provider kind"))
+       (cons 'transport
+             (model-name
+              (model-field-value datum 'transport 'openai-compatible-http)
+              "provider transport"))
+       (cons 'endpoint (model-field-value datum 'endpoint #f))
+       (cons 'credentials (model-field-value datum 'credentials #f))
+       (cons 'available
+             (model-truthy? (model-field-value datum 'available #t)))
+       (cons 'models
+             (map model-normalize-model
+                  (proper-list-elements
+                   (model-field-value datum 'models '())
+                   "provider models")))
+       (cons 'raw datum)))
+
+    ;; Return FIELD from normalized model/provider ENTRY.
+    (define (model-entry-ref entry field)
+      (let ((cell (assq field entry)))
+        (if cell (cdr cell) #f)))
+
+    ;; Replace existing provider with PROVIDER by id.
+    (define (model-register-provider! provider)
+      (let ((id (model-entry-ref provider 'id)))
+        (let loop ((cursor interpreter-model-providers) (result '()))
+          (cond
+           ((null? cursor)
+            (set! interpreter-model-providers
+                  (append (reverse result) (list provider))))
+           ((eq? id (model-entry-ref (car cursor) 'id))
+            (set! interpreter-model-providers
+                  (append (reverse result) (cons provider (cdr cursor)))))
+           (else (loop (cdr cursor) (cons (car cursor) result)))))))
+
+    ;; Return #t when MODEL is selectable.
+    (define (model-available? model)
+      (let ((status (model-entry-ref model 'status)))
+        (or (eq? status 'available)
+            (eq? status 'ready))))
+
+    ;; Return #t when ROLE is declared by MODEL.
+    (define (model-role? model role)
+      (let loop ((roles (model-entry-ref model 'roles)))
+        (cond
+         ((null? roles) #f)
+         ((eq? (car roles) role) #t)
+         (else (loop (cdr roles))))))
+
+    ;; Return route candidates for ROLE.
+    (define (model-role-candidates role)
+      (let provider-loop ((providers interpreter-model-providers)
+                          (local '())
+                          (remote '()))
+        (if (null? providers)
+            (append (reverse local) (reverse remote))
+            (let ((provider (car providers)))
+              (let model-loop ((models (model-entry-ref provider 'models))
+                               (next-local local)
+                               (next-remote remote))
+                (if (null? models)
+                    (provider-loop (cdr providers)
+                                   next-local
+                                   next-remote)
+                    (let ((model (car models)))
+                      (if (and (model-entry-ref provider 'available)
+                               (model-available? model)
+                               (model-role? model role))
+                          (if (eq? (model-entry-ref provider 'kind) 'local)
+                              (model-loop (cdr models)
+                                          (cons (cons provider model)
+                                                next-local)
+                                          next-remote)
+                              (model-loop (cdr models)
+                                          next-local
+                                          (cons (cons provider model)
+                                                next-remote)))
+                          (model-loop (cdr models)
+                                      next-local
+                                      next-remote)))))))))
+
+    ;; Return selected provider/model candidate for ROLE.
+    (define (model-select role)
+      (let ((candidates (model-role-candidates role)))
+        (if (null? candidates) #f (car candidates))))
+
+    ;; Return a Scheme-readable routing decision.
+    (define (model-routing-decision role candidate)
+      (if candidate
+          (let ((provider (car candidate))
+                (model (cdr candidate)))
+            (append
+             (list 'model-routing-decision
+                   (list 'status 'selected)
+                   (list 'role role)
+                   (list 'provider (model-entry-ref provider 'id))
+                   (list 'model (model-entry-ref model 'id))
+                   (list 'kind (model-entry-ref provider 'kind))
+                   (list 'transport (model-entry-ref provider 'transport)))
+             (let ((endpoint (model-entry-ref provider 'endpoint)))
+               (if endpoint
+                   (list (list 'endpoint endpoint))
+                   '()))))
+          (list 'model-routing-decision
+                (list 'status 'unavailable)
+                (list 'role role)
+                (list 'reason
+                      "no registered provider model supports role"))))
+
+    ;; Return a model diagnostic datum.
+    (define (model-diagnostic model)
+      (list
+       (list 'model (model-entry-ref model 'id))
+       (list 'roles (model-entry-ref model 'roles))
+       (list 'status (model-entry-ref model 'status))
+       (list 'privacy (model-entry-ref model 'privacy))))
+
+    ;; Return a provider diagnostic datum.
+    (define (model-provider-diagnostic provider)
+      (append
+       (list
+        (list 'provider (model-entry-ref provider 'id))
+        (list 'kind (model-entry-ref provider 'kind))
+        (list 'transport (model-entry-ref provider 'transport))
+        (list 'available (model-entry-ref provider 'available)))
+       (let ((endpoint (model-entry-ref provider 'endpoint)))
+         (if endpoint (list (list 'endpoint endpoint)) '()))
+       (let ((credentials (model-entry-ref provider 'credentials)))
+         (if credentials
+             (list (list 'credentials
+                         (redaction-model:redact credentials
+                                                 'model-diagnostics)))
+             '()))
+       (list
+        (list 'models
+              (map model-diagnostic
+                   (model-entry-ref provider 'models))))))
+
+    ;; Register a portable model provider profile.
+    (define (primitive-model-provider-register! arguments context)
+      (let ((provider (model-normalize-provider (car arguments))))
+        (model-register-provider! provider)
+        (model-provider-diagnostic provider)))
+
+    ;; Return registered provider diagnostics.
+    (define (primitive-model-providers arguments context)
+      (list 'providers
+            (map model-provider-diagnostic interpreter-model-providers)))
+
+    ;; Return a portable model routing decision.
+    (define (primitive-model-route arguments context)
+      (let* ((role (model-name (car arguments) "model role"))
+             (candidate (model-select role)))
+        (model-routing-decision role candidate)))
+
+    ;; Portable completion has the same routing surface but no host transport.
+    (define (primitive-model-complete arguments context)
+      (let* ((role (model-name (car arguments) "model role"))
+             (candidate (model-select role)))
+        (if (not candidate)
+            (eval-error "no registered provider model supports role" role)
+            (eval-error "portable model transport is not configured" role))))
+
+    ;; Return redacted portable model provider diagnostics.
+    (define (primitive-model-provider-diagnostics arguments context)
+      (list 'model-provider-diagnostics
+            (list 'providers
+                  (map model-provider-diagnostic
+                       interpreter-model-providers))))
+
     ;; Report whether a datum contains secret-prone source data.
     (define (primitive-secret-source? arguments context)
       (if (redaction-model:secret-source? (car arguments)) #t #f))
@@ -6624,6 +6876,13 @@
        (cons 'primitive-memory-by-tag primitive-memory-by-tag)
        (cons 'primitive-memory-recent primitive-memory-recent)
        (cons 'primitive-memory-yield primitive-memory-yield)
+       (cons 'primitive-model-provider-register!
+             primitive-model-provider-register!)
+       (cons 'primitive-model-providers primitive-model-providers)
+       (cons 'primitive-model-route primitive-model-route)
+       (cons 'primitive-model-complete primitive-model-complete)
+       (cons 'primitive-model-provider-diagnostics
+             primitive-model-provider-diagnostics)
        (cons 'primitive-current-request primitive-current-request)
        (cons 'primitive-current-focus primitive-current-focus)
        (cons 'primitive-current-region-context

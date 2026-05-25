@@ -198,6 +198,48 @@ of relying on implicit persistence:
 (memory-put! 'instance 'last-focus (current-focus))
 ```
 
+## Local Model Providers
+
+The `(agent models)` library provides the current model-facing entry point.
+It can register provider profiles, inspect the routing decision for a role, and
+run a local OpenAI-compatible completion request:
+
+```scheme
+(import (scheme base)
+        (agent models))
+
+(model-provider-register!
+ '(model-provider
+   (id local-llama)
+   (kind local)
+   (transport openai-compatible-http)
+   (endpoint "http://127.0.0.1:11434/v1")
+   (models
+    (((id qwen-coder)
+      (roles (scheme-scripter code))
+      (privacy local))))))
+
+(model-route 'scheme-scripter '())
+(model-complete 'scheme-scripter "Write a small Scheme helper." '())
+```
+
+For the Emacs host, `model-complete` calls the selected local provider through
+the OpenAI-compatible `/chat/completions` endpoint. Tests replace that transport
+with a fake function, so CI does not require a running model server. The
+portable Scheme implementation registers the same library and routing surface;
+portable completion reports that no portable host transport is configured.
+
+Keep provider profiles and credentials in private Emacs initialization or an
+ignored local file, then load them with `agent-scheme-models-register-provider!`
+from `agent-scheme-models.el`. Do not commit provider tokens. Diagnostics from
+`model-provider-diagnostics` redact credential-shaped fields before they appear
+in Scheme-readable output.
+
+Remote providers can be registered and inspected, but this bootstrap slice does
+not ship a live remote transport. A completion routed to a remote provider must
+pass the `remote-provider-routing` policy gate first, and local-only context is
+denied before any transport can run.
+
 ## Policy and Capabilities
 
 Agent Scheme keeps host authority explicit. Pure R7RS evaluation is allowed

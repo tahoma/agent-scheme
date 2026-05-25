@@ -358,6 +358,10 @@ more focused frontend, runtime, and backend modules:
   the trampoline, and Scheme-readable evaluation result records live in
   `agent-scheme-interpreter.el`; `agent-scheme-eval.el` remains the public
   orchestration entry point.
+- Model provider registration, role routing, diagnostics, and the Emacs local
+  OpenAI-compatible transport live in `agent-scheme-models.el`, with matching
+  portable `(agent models)` registration and routing primitives in
+  `scheme/agent-scheme/interpreter.sld`.
 - Default-denied file, process, time, default-port, and host-capability
   primitives are backend-visible capability calls, but their authority decisions
   belong to policy and adapter modules rather than to portable frontend passes.
@@ -858,6 +862,7 @@ Likely Emacs Lisp bootstrap and adapter modules:
 - `lisp/agent-scheme-agent-io.el`
 - `lisp/agent-scheme-handle.el`
 - `lisp/agent-scheme-capability.el`
+- `lisp/agent-scheme-models.el`
 - `lisp/agent-scheme-repl.el`
 - `lisp/agent-scheme-mcp.el`
 
