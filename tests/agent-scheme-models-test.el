@@ -42,6 +42,21 @@
   (agent-scheme-audit-clear)
   (setq agent-scheme-models-test--requests nil))
 
+(defun agent-scheme-models-test--live-enabled-p ()
+  "Return non-nil when live local model tests are explicitly enabled."
+  (let ((enabled (getenv "AGENT_SCHEME_LIVE_MODEL_TEST")))
+    (and enabled (> (length enabled) 0))))
+
+(defun agent-scheme-models-test--live-endpoint ()
+  "Return the live local OpenAI-compatible endpoint for integration tests."
+  (or (getenv "AGENT_SCHEME_LIVE_MODEL_ENDPOINT")
+      "http://127.0.0.1:11434/v1"))
+
+(defun agent-scheme-models-test--live-model ()
+  "Return the live local model id for integration tests."
+  (or (getenv "AGENT_SCHEME_LIVE_MODEL_ID")
+      "qwen2.5-coder:0.5b"))
+
 (ert-deftest agent-scheme-models-test-local-complete-through-transport ()
   "Expose `(agent models)' and complete through a selected local provider."
   (agent-scheme-models-test--reset)
@@ -75,6 +90,33 @@
       (should (equal (plist-get model :id) "qwen-coder"))
       (should (equal (plist-get payload :prompt)
                      "Write a Scheme helper.")))))
+
+(ert-deftest agent-scheme-models-test-live-local-openai-compatible-completion ()
+  "Opt-in live proof that `model-complete' reaches a local model endpoint."
+  (skip-unless (agent-scheme-models-test--live-enabled-p))
+  (agent-scheme-models-test--reset)
+  (let* ((endpoint (agent-scheme-models-test--live-endpoint))
+         (model (agent-scheme-models-test--live-model))
+         (external
+          (agent-scheme-models-test--external
+           (format
+            "(import (scheme base) (agent models))
+             (model-provider-register!
+              '(model-provider
+                (id local-live)
+                (kind local)
+                (transport openai-compatible-http)
+                (endpoint %S)
+                (models
+                 (((id %S)
+                   (roles (scheme-scripter code))
+                   (privacy local))))))
+             (model-complete 'scheme-scripter
+                             \"What is 2 plus 3? Reply with only the numeral.\"
+                             '())"
+            endpoint
+            model))))
+    (should (string-match-p "5" external))))
 
 (ert-deftest agent-scheme-models-test-routing-falls-back-past-unavailable ()
   "Skip unavailable models and select the next role-compatible local model."

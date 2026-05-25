@@ -229,6 +229,17 @@ with a fake function, so CI does not require a running model server. The
 portable Scheme implementation registers the same library and routing surface;
 portable completion reports that no portable host transport is configured.
 
+To run the opt-in live local model test, start an OpenAI-compatible local
+server such as Ollama and set:
+
+```sh
+AGENT_SCHEME_LIVE_MODEL_TEST=1 make test
+```
+
+The test defaults to `http://127.0.0.1:11434/v1` and
+`qwen2.5-coder:0.5b`. Override those with
+`AGENT_SCHEME_LIVE_MODEL_ENDPOINT` and `AGENT_SCHEME_LIVE_MODEL_ID`.
+
 Keep provider profiles and credentials in private Emacs initialization or an
 ignored local file, then load them with `agent-scheme-models-register-provider!`
 from `agent-scheme-models.el`. Do not commit provider tokens. Diagnostics from
