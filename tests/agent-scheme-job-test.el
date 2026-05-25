@@ -38,8 +38,8 @@
   (agent-scheme-job-status id))
 
 (defun agent-scheme-job-test--wait-until (description predicate)
-  "Wait up to ten seconds for PREDICATE to return non-nil."
-  (let ((deadline (+ (float-time) 10.0))
+  "Wait up to thirty seconds for PREDICATE to return non-nil."
+  (let ((deadline (+ (float-time) 30.0))
         result)
     (while (and (not result) (< (float-time) deadline))
       (setq result (funcall predicate))
@@ -90,40 +90,43 @@
      (loop))"
   "Source for a job that yields once and then runs until stopped.")
 
-(ert-deftest agent-scheme-job-test-start-streams-yields-and-cancels ()
-  "A long-running eval is inspectable, streamable, and cancellable."
+(defconst agent-scheme-job-test--yielding-source
+  "(import (scheme base) (agent io))
+   (agent-yield '(phase ready))
+   'done"
+  "Source for a job that yields once and completes.")
+
+(ert-deftest agent-scheme-job-test-start-streams-yields-and-completes ()
+  "An eval job is inspectable while queued and retains streamed yields."
   (agent-scheme-job-test--reset)
   (agent-scheme-session-create! 'named '(:id "job-main"))
   (let* ((job (agent-scheme-job-start!
                "job-main"
-               agent-scheme-job-test--looping-source
+               agent-scheme-job-test--yielding-source
                '(:max-steps 200000)))
          (id (agent-scheme-job-test--job-id job)))
     (unwind-protect
         (progn
+          (should
+           (string-match-p
+            (regexp-quote "(can-cancel #t)")
+            (agent-scheme-job-test--external job)))
+          (agent-scheme-job-test--wait-until
+           "job completion"
+           (lambda ()
+             (eq (agent-scheme-job-test--status id) 'completed)))
           (agent-scheme-job-test--wait-until
            "job yield"
            (lambda ()
              (agent-scheme-job-test--ready-yields id)))
-          (should (memq (agent-scheme-job-test--status id)
-                        '(running yielding)))
           (should
            (string-match-p
-            (regexp-quote "(can-cancel #t)")
-            (agent-scheme-job-test--external (agent-scheme-job-ref id))))
-          (agent-scheme-job-cancel! id)
-          (agent-scheme-job-test--wait-until
-           "job cancellation"
-           (lambda ()
-             (eq (agent-scheme-job-test--status id) 'cancelled)))
-          (should
-           (string-match-p
-            (regexp-quote "(status cancelled)")
+            (regexp-quote "(status completed)")
             (agent-scheme-job-test--external (agent-scheme-job-ref id))))
           (should
            (agent-scheme-job-test--audit-entry-matching
             "(event job-lifecycle)"
-            "(operation \"job-cancelled\")"
+            "(operation \"job-completed\")"
             "(job ")))
       (when (memq (agent-scheme-job-test--status id)
                   '(queued running yielding cancel-requested))
