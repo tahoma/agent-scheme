@@ -98,9 +98,13 @@ with dependency-free or explicitly unblocked issues.
 
 ## Scheme Source Comments
 
-Portable Scheme does not have the Emacs Lisp docstring convention, so source
-comments carry the API and invariant documentation that future contributors
-need while editing `.sld` and `.scm` files.
+Portable Scheme comments carry the API and invariant documentation that future
+contributors need while editing `.sld` and `.scm` files. Runtime-visible
+documentation belongs to the body literal convention in
+[Docstring Metadata Convention](docstring-metadata.md) when a binding needs
+metadata that standard readers, reflection, reference tools, or compiled
+runtimes can preserve. Comments remain source-only and are not visible through
+ordinary R7RS reading.
 
 - Start each portable Scheme file with a `;;;` header that names the library or
   source file responsibility and the host/core boundary it belongs to.

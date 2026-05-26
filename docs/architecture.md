@@ -198,6 +198,12 @@ The agent layer provides self-scripting facilities as Scheme-readable data:
 This layer should be usable from a shared REPL by both the user and the outer
 agent loop.
 
+Runtime-visible documentation metadata follows the R7RS-compatible body literal
+convention in [Docstring Metadata Convention](docstring-metadata.md). Comments
+remain source-only contributor notes, while docstring metadata is intended to
+survive as Scheme-readable data for reflection, logs, yields, static reference
+generation, and future compiled runtimes.
+
 The task-level state machine, control-loop semantics, pause and stop receipts,
 provider interaction points, and minimal executable slice are defined in
 [Task Lifecycle and Control Loop](control-loop.md).
