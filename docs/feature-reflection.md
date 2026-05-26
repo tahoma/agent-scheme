@@ -84,6 +84,11 @@ other hosts:
 (host-adapter
   (name emacs)
   (contract r7rs-small)
+  (implementation
+    ((runtime agent-scheme)
+     (version-source-file "scheme/agent-scheme/version.sld")
+     (version-binding agent-scheme-version-datum)
+     (version-source roadmap-derived)))
   (provides
     ((library (emacs buffer))
      (library (agent capability)))))
@@ -117,6 +122,14 @@ choosing what to do next.
 
 Current procedures:
 
+- `(agent-scheme-version)` returns the canonical Agent Scheme runtime version
+  datum, shaped as `(agent-scheme-version primary secondary tertiary)`.
+  Components are exact non-negative integers. The initial value is
+  `(agent-scheme-version 0 14 1)`: primary version `0`, secondary version `14`
+  for the roadmap chunk, and tertiary version `1` for the first issue in that
+  chunk. Strings such as `0.14.1` are derived presentation, not the canonical
+  value. This scheme is roadmap-derived for now and can change once Agent
+  Scheme has an explicit release policy.
 - `(current-capabilities)` returns public `host-capability` records from the
   primitive manifest.
 - `(capability-info symbol-or-name)` returns one matching `host-capability`
@@ -180,6 +193,10 @@ boundary remains Scheme-readable data.
 
 Current implemented pieces:
 
+- `(agent-scheme-version)` reports the roadmap-derived runtime version as
+  `(agent-scheme-version 0 14 1)`, and the Emacs host-adapter fixture points
+  at `scheme/agent-scheme/version.sld` as the single source of truth for the
+  runtime version datum.
 - R7RS `cond-expand` library requirements are available for implemented
   libraries.
 - `(features)` reports implementation-level feature identifiers, including

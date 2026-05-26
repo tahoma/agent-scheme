@@ -345,6 +345,10 @@
   (agent-scheme-reflect--redact
    (agent-scheme-reflect-current-capabilities)))
 
+(defun agent-scheme-reflect--primitive-agent-scheme-version (_arguments _context)
+  "Primitive `agent-scheme-version'."
+  (agent-scheme-version))
+
 (defun agent-scheme-reflect--primitive-current-policy (_arguments context)
   "Primitive `current-policy'."
   (agent-scheme-reflect--redact
@@ -386,7 +390,9 @@
 ;;;###autoload
 (defun agent-scheme-reflect-primitive-specs ()
   "Return primitive specs for the `(agent reflect)' library."
-  `(("current-capabilities"
+  `(("agent-scheme-version"
+     ,#'agent-scheme-reflect--primitive-agent-scheme-version 0 0)
+    ("current-capabilities"
      ,#'agent-scheme-reflect--primitive-current-capabilities 0 0)
     ("current-policy"
      ,#'agent-scheme-reflect--primitive-current-policy 0 0)

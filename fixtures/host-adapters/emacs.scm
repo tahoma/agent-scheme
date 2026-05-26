@@ -7,6 +7,11 @@
   (host-adapter
    (name emacs)
    (contract r7rs-small)
+   (implementation
+    ((runtime agent-scheme)
+     (version-source-file "scheme/agent-scheme/version.sld")
+     (version-binding agent-scheme-version-datum)
+     (version-source roadmap-derived)))
    (modes (editor batch))
    (execution
     ((interpreted

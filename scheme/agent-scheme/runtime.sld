@@ -8,6 +8,8 @@
   (export agent-scheme-default-maximum-steps
           agent-scheme-default-maximum-value-nodes
           agent-scheme-default-maximum-host-callbacks
+          agent-scheme-version-components
+          agent-scheme-version
           agent-scheme-make-empty-environment
           agent-scheme-unspecified
           agent-scheme-unspecified?
@@ -274,6 +276,7 @@
           parse-formals)
   (import (scheme base)
           (scheme char)
+          (agent-scheme version)
           (agent-scheme reader)
           (agent-scheme redaction))
   (begin
@@ -287,6 +290,16 @@
     (define agent-scheme-default-maximum-events 1000)
     ;; Default maximum reachable value graph size for one event record.
     (define agent-scheme-default-maximum-event-nodes 100000)
+
+    ;; Return the Agent Scheme version as exact non-negative host integers.
+    (define (agent-scheme-version-components)
+      (cdr agent-scheme-version-datum))
+
+    ;; Return the canonical Scheme-readable Agent Scheme version datum.
+    (define (agent-scheme-version)
+      (cons (car agent-scheme-version-datum)
+            (map agent-scheme-make-canonical-integer
+                 (agent-scheme-version-components))))
 
     ;; Record type for the singleton unspecified value returned by effect-only
     ;; forms.

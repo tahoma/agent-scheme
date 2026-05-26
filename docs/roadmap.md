@@ -46,6 +46,22 @@ The current chunk bands are:
   conformance, CLI-compatible Emacs slices, and future editor, browser,
   notebook, WASI, and JVM host contracts.
 
+## Runtime Version Mapping
+
+Agent Scheme runtime versions are derived from #53 until the project adopts an
+explicit release policy. Every issue branch updates
+`scheme/agent-scheme/version.sld` so the public runtime version reports the
+roadmap position of the issue being advanced.
+
+Use the version shape `0.<chunk>.<ordinal>`:
+
+- `0` is the primary version during the pre-release roadmap phase.
+- `<chunk>` is the issue's chunk number in #53's flat chunk map.
+- `<ordinal>` is the issue's one-based position inside that chunk.
+
+For example, the first issue in chunk 14 maps to `0.14.1`, represented in
+source as `(agent-scheme-version 0 14 1)`.
+
 ## Roadmap Areas
 
 The roadmap currently emphasizes these durable work areas. Some have completed

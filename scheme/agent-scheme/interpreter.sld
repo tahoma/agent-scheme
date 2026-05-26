@@ -4554,6 +4554,10 @@
         (reverse (context-audit-events context)))
        'runtime-reflection))
 
+    ;; Return the canonical Agent Scheme version datum.
+    (define (primitive-agent-scheme-version arguments context)
+      (agent-scheme-version))
+
     ;; Return the runtime capability metadata list.
     (define (primitive-current-capabilities arguments context)
       (redaction-model:redact (reflect-current-capabilities)
@@ -7227,6 +7231,7 @@
        (cons 'primitive-agent-progress primitive-agent-progress)
        (cons 'primitive-agent-warn primitive-agent-warn)
        (cons 'primitive-agent-request primitive-agent-request)
+       (cons 'primitive-agent-scheme-version primitive-agent-scheme-version)
        (cons 'primitive-current-capabilities primitive-current-capabilities)
        (cons 'primitive-current-policy primitive-current-policy)
        (cons 'primitive-current-budget primitive-current-budget)
