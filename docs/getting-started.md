@@ -93,7 +93,7 @@ Enter a pure Scheme expression:
 
 The command evaluates the source in the current session and refreshes the native
 session buffers. The REPL transcript buffer records the source and result as a
-Scheme-readable `transcript-entry`.
+Scheme-readable `transcript-event`.
 
 For a small session example that preserves a definition and emits a safe event,
 evaluate:
@@ -134,7 +134,7 @@ session:
 | Buffer | Role |
 | --- | --- |
 | `*Agent: PROJECT*` | Status and session record view. This is the primary state view for imports, definitions, memory references, handles, status, transcript references, and recent events. |
-| `*Agent Scheme: PROJECT*` | Persistent REPL transcript. Evaluations appear as Scheme-readable `transcript-entry` datums. |
+| `*Agent Scheme: PROJECT*` | Persistent REPL transcript. Evaluations appear as summarized Scheme-readable `transcript-event` datums. |
 | `*Agent Events: PROJECT*` | Recent `(agent io)` events, such as `agent-yield`, `agent-log`, progress, warnings, and request records. |
 | `*Agent Audit: PROJECT*` | Session-scoped audit entries for lifecycle transitions, evaluations, policy decisions, approval records, and capability activity. |
 | `*Agent Approvals: PROJECT*` | Pending and resolved approval request datums for effects that need host or user confirmation. Pure examples normally leave this buffer empty. |

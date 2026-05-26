@@ -44,7 +44,7 @@
               (map exact-integer? (cdr version))
               (map (lambda (component) (>= component 0))
                    (cdr version))))")
-    "((agent-scheme-version 0 14 1) (#t #t #t) (#t #t #t))")))
+    "((agent-scheme-version 0 14 2) (#t #t #t) (#t #t #t))")))
 
 (ert-deftest agent-scheme-reflect-test-capability-budget-and-imports ()
   "Inspect capability metadata, active budget limits, imports, and session ids."

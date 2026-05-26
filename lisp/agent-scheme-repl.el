@@ -19,6 +19,7 @@
 (require 'agent-scheme-eval)
 (require 'agent-scheme-result)
 (require 'agent-scheme-session)
+(require 'agent-scheme-transcript)
 
 (defgroup agent-scheme-repl nil
   "Native REPL session UX for Agent Scheme."
@@ -164,6 +165,13 @@
     (agent-scheme-repl--insert-datum datum)
     (insert "\n\n")))
 
+(defun agent-scheme-repl--render-transcript (events)
+  "Insert transcript EVENTS as summaries followed by raw datums."
+  (dolist (event events)
+    (insert ";; " (agent-scheme-transcript-event-summary event) "\n")
+    (agent-scheme-repl--insert-datum event)
+    (insert "\n\n")))
+
 (defun agent-scheme-repl--datum-contains-session-p (datum id-symbol)
   "Return non-nil when DATUM contains `(session ID-SYMBOL)'."
   (cond
@@ -258,7 +266,7 @@
   (agent-scheme-repl--refresh-buffer
    'repl id #'agent-scheme-repl-mode
    (lambda ()
-     (agent-scheme-repl--render-datums
+     (agent-scheme-repl--render-transcript
       (agent-scheme-repl--field-value
        (agent-scheme-repl--session-datum id)
        "transcript")))))

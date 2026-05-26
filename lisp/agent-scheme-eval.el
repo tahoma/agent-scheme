@@ -153,6 +153,7 @@ agent events, and handle references across calls."
       (agent-scheme--apply-current-context-options! context options))
     (agent-scheme-session--prepare-eval! session)
     (let ((start-count (agent-scheme-session--audit-start-count)))
+      (agent-scheme-session--record-eval-start! session source)
       (condition-case condition
           (progn
             (agent-scheme-policy-authorize

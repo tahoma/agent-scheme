@@ -19,6 +19,7 @@
 (require 'agent-scheme-redaction)
 (require 'agent-scheme-result)
 (require 'agent-scheme-runtime)
+(require 'agent-scheme-transcript)
 
 (define-error 'agent-scheme-session-error
   "Agent Scheme session error"
@@ -935,6 +936,32 @@ Return the stale handles that were removed."
          (equal (agent-scheme-symbol-name (cadr event-field))
                 "agent-event"))))
 
+(defun agent-scheme-session--policy-datum (decision)
+  "Return a Scheme-readable pure-evaluation policy datum for DECISION."
+  (list
+   (list (agent-scheme-session--symbol "category")
+         (agent-scheme-session--symbol "pure-r7rs"))
+   (list (agent-scheme-session--symbol "decision")
+         (agent-scheme-session--symbol decision))))
+
+(defun agent-scheme-session--append-transcript-event! (session event)
+  "Append transcript EVENT to SESSION using transcript retention policy."
+  (setf (agent-scheme-session-transcript session)
+        (agent-scheme-transcript-rotate
+         (append (agent-scheme-session-transcript session) (list event))))
+  event)
+
+(defun agent-scheme-session--record-eval-start! (session source)
+  "Record the start of SESSION evaluation of SOURCE."
+  (agent-scheme-session--append-transcript-event!
+   session
+   (agent-scheme-transcript-event
+    'eval-start
+    `((session . ,(agent-scheme-session--symbol
+                   (agent-scheme-session-id session)))
+      (form . ,source)
+      (policy . ,(agent-scheme-session--policy-datum 'requested))))))
+
 (defun agent-scheme-session--prepare-eval! (session)
   "Mark SESSION active and reset per-evaluation counters."
   (when (memq (agent-scheme-session-status session) '(retired collectable))
@@ -975,19 +1002,17 @@ Return the stale handles that were removed."
                               new-entries)
                   'transcript))
          (entry
-          (list
-           (agent-scheme-session--symbol "transcript-entry")
-           (agent-scheme-session--field
-            "source" (agent-scheme-redact source 'transcript))
-           (agent-scheme-session--field
-            "status" (agent-scheme-session--symbol "ok"))
-           (agent-scheme-session--field
-            "result" (agent-scheme-redact
-                      (agent-scheme-value->external value)
-                      'transcript)))))
+          (agent-scheme-transcript-event
+           'eval-end
+           `((session . ,(agent-scheme-session--symbol
+                          (agent-scheme-session-id session)))
+             (form . ,source)
+             (status . ok)
+             (result . ,(agent-scheme-value->external value))
+             (yields ,events)
+             (policy . ,(agent-scheme-session--policy-datum 'allowed))))))
     (setf (agent-scheme-session-recent-events session) events)
-    (setf (agent-scheme-session-transcript session)
-          (append (agent-scheme-session-transcript session) (list entry)))
+    (agent-scheme-session--append-transcript-event! session entry)
     (setf (agent-scheme-session-failure session) nil)
     (agent-scheme-audit-record
      'session-evaluation
@@ -1031,17 +1056,18 @@ Return the stale handles that were removed."
             ('agent-scheme-interrupt-error "session-eval-interrupted!")
             (_ "session-eval-failed!")))
          (entry
-          (list
-           (agent-scheme-session--symbol "transcript-entry")
-           (agent-scheme-session--field
-            "source" (agent-scheme-redact source 'transcript))
-           (agent-scheme-session--field
-            "status" (agent-scheme-session--symbol transcript-status))
-           (agent-scheme-session--field
-            "error" (agent-scheme-redact message 'transcript)))))
+          (agent-scheme-transcript-event
+           'eval-error
+           `((session . ,(agent-scheme-session--symbol
+                          (agent-scheme-session-id session)))
+             (form . ,source)
+             (status . ,(intern transcript-status))
+             (error . ,message)
+             (yields ,events)
+             (policy . ,(agent-scheme-session--policy-datum
+                         audit-decision))))))
     (setf (agent-scheme-session-recent-events session) events)
-    (setf (agent-scheme-session-transcript session)
-          (append (agent-scheme-session-transcript session) (list entry)))
+    (agent-scheme-session--append-transcript-event! session entry)
     (setf (agent-scheme-session-failure session) message)
     (agent-scheme-audit-record
      'session-evaluation

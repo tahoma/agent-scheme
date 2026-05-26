@@ -57,6 +57,7 @@ Implementation files under `lisp/` should follow the package namespace:
 - `lisp/agent-scheme-diff.el` provides `agent-scheme-diff`
 - `lisp/agent-scheme-context.el` provides `agent-scheme-context`
 - `lisp/agent-scheme-redaction.el` provides `agent-scheme-redaction`
+- `lisp/agent-scheme-transcript.el` provides `agent-scheme-transcript`
 - `lisp/agent-scheme-mcp.el` provides `agent-scheme-mcp`
 
 Tests should mirror the module names, such as
@@ -88,7 +89,8 @@ as code rather than imported as libraries.
 Public Agent Scheme libraries that are not implementation-pass modules may live
 under their public namespace, such as `scheme/agent/diff.sld` for `(agent
 diff)`, `scheme/agent/diagnostics.sld` for `(agent diagnostics)`, and
-`scheme/agent/task.sld` for `(agent task)`.
+`scheme/agent/task.sld` for `(agent task)`, and
+`scheme/agent/transcript.sld` for `(agent transcript)`.
 
 Scheme-side tests live under `tests/scheme/`; their ERT bridge files still use
 the normal `tests/agent-scheme-*-test.el` naming pattern.
