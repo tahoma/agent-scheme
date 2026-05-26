@@ -386,6 +386,31 @@
          (else
           (cons (reverse definitions) cursor)))))
 
+    ;; Join simple string docstrings with the documented separator.
+    (define (join-documentation-strings strings)
+      (cond
+       ((null? strings) "")
+       ((null? (cdr strings)) (car strings))
+       (else
+        (string-append (car strings)
+                       "\n"
+                       (join-documentation-strings (cdr strings))))))
+
+    ;; Return simple string documentation metadata from BODY, or #f.
+    (define (body-documentation body)
+      (let skip-definitions ((cursor body))
+        (if (and (pair? cursor) (body-definition-form? (car cursor)))
+            (skip-definitions (cdr cursor))
+            (let collect ((rest cursor) (strings '()))
+              (cond
+               ((and (pair? rest) (string? (car rest)))
+                (collect (cdr rest) (cons (car rest) strings)))
+               ((and (pair? rest)
+                     (not (null? strings))
+                     (not (body-definition-form? (car rest))))
+                (join-documentation-strings (reverse strings)))
+               (else #f))))))
+
     ;; Allocate and initialize an internal-definition environment for BODY.
     (define (prepare-body-environment body environment context)
       (let* ((split (split-body body))
@@ -1074,11 +1099,12 @@
                  (special-operator-active? operator environment))
             (if (< (length parts) 3)
                 (eval-error "lambda requires formals and a body" parts))
-            (continue
+           (continue
              continuation
              (make-procedure (parse-formals (second parts))
                              (cddr parts)
-                             environment)))
+                             environment
+                             (body-documentation (cddr parts)))))
            ((and (identifier-named? operator 'if)
                  (special-operator-active? operator environment))
             (eval-if parts environment context tail? continuation))
@@ -4449,6 +4475,69 @@
             (reflect-capability-record (car specs)))
            (else (loop (cdr specs)))))))
 
+    ;; Return primitive manifest metadata for binding NAME, or #f.
+    (define (reflect-manifest-spec-for-name name)
+      (let loop ((specs (agent-scheme-primitive-manifest-binding-specs)))
+        (cond
+         ((null? specs) #f)
+         ((eq? (reflect-field-value (car specs) 'name #f) name)
+          (car specs))
+         (else (loop (cdr specs))))))
+
+    ;; Return documentation metadata attached to callable VALUE, or #f.
+    (define (reflect-procedure-documentation value)
+      (cond
+       ((agent-scheme-procedure? value)
+        (procedure-documentation value))
+       ((agent-scheme-primitive-procedure? value)
+        (let ((spec
+               (reflect-manifest-spec-for-name
+                (primitive-procedure-name value))))
+          (and spec (reflect-field-value spec 'documentation #f))))
+       (else #f)))
+
+    ;; Return a Scheme-readable documentation metadata record.
+    (define (reflect-documentation-record subject documentation)
+      (list 'documentation-metadata
+            (result-field 'subject subject)
+            (result-field 'kind 'procedure)
+            (result-field 'library #f)
+            (result-field 'source #f)
+            (result-field 'origin '(body-literal string))
+            (result-field 'fields
+                          (list (list 'documentation documentation)))))
+
+    ;; Return SYMBOL-OR-NAME as a binding symbol, or #f.
+    (define (reflect-binding-name symbol-or-name)
+      (cond
+       ((symbol? symbol-or-name) symbol-or-name)
+       ((string? symbol-or-name) (string->symbol symbol-or-name))
+       (else #f)))
+
+    ;; Return documentation metadata for SUBJECT, or #f.
+    (define (reflect-documentation subject context)
+      (cond
+       ((or (agent-scheme-procedure? subject)
+            (agent-scheme-primitive-procedure? subject))
+        (let ((documentation (reflect-procedure-documentation subject)))
+          (if documentation
+              (reflect-documentation-record '(procedure) documentation)
+              #f)))
+       (else
+        (let* ((name (reflect-binding-name subject))
+               (environment (context-interaction-environment context))
+               (cell (and name environment (environment-cell environment name)))
+               (value (and cell (cell-value cell)))
+               (documentation
+                (and value
+                     (not (undefined? value))
+                     (reflect-procedure-documentation value))))
+          (if documentation
+              (reflect-documentation-record
+               (list 'binding name)
+               documentation)
+              #f)))))
+
     ;; Return the active budget counters and limits for CONTEXT.
     (define (reflect-current-budget context)
       (list 'budget
@@ -4600,6 +4689,11 @@
     ;; Return metadata for one named capability.
     (define (primitive-capability-info arguments context)
       (redaction-model:redact (reflect-capability-info (car arguments))
+                              'runtime-reflection))
+
+    ;; Return documentation metadata for a binding or procedure.
+    (define (primitive-documentation arguments context)
+      (redaction-model:redact (reflect-documentation (car arguments) context)
                               'runtime-reflection))
 
     ;; Return optional macro introspection options from primitive ARGUMENTS.
@@ -7294,6 +7388,7 @@
        (cons 'primitive-recent-policy-decisions
              primitive-recent-policy-decisions)
        (cons 'primitive-capability-info primitive-capability-info)
+       (cons 'primitive-documentation primitive-documentation)
        (cons 'primitive-macroexpand primitive-macroexpand)
        (cons 'primitive-macroexpand-1 primitive-macroexpand-1)
        (cons 'primitive-macroexpand-library primitive-macroexpand-library)

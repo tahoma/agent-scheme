@@ -184,6 +184,87 @@
         (agent-scheme-reflect--manifest-record spec)
       agent-scheme-false)))
 
+(defun agent-scheme-reflect--binding-name (symbol-or-name)
+  "Return SYMBOL-OR-NAME as a binding name string."
+  (cond
+   ((agent-scheme-symbol-p symbol-or-name)
+    (agent-scheme-symbol-name symbol-or-name))
+   ((symbolp symbol-or-name)
+    (symbol-name symbol-or-name))
+   ((stringp symbol-or-name)
+    symbol-or-name)
+   (t nil)))
+
+(defun agent-scheme-reflect--manifest-spec-for-name (name)
+  "Return primitive manifest metadata for binding NAME, or nil."
+  (seq-find
+   (lambda (candidate)
+     (equal (plist-get candidate :name) name))
+   (agent-scheme-primitive-manifest-binding-specs)))
+
+(defun agent-scheme-reflect--procedure-documentation (value)
+  "Return documentation metadata attached to callable VALUE, or nil."
+  (cond
+   ((agent-scheme-procedure-p value)
+    (agent-scheme-procedure-documentation value))
+   ((agent-scheme-primitive-procedure-p value)
+    (plist-get
+     (agent-scheme-reflect--manifest-spec-for-name
+      (agent-scheme-primitive-procedure-name value))
+     :documentation))
+   (t nil)))
+
+(defun agent-scheme-reflect--documentation-metadata (subject documentation)
+  "Return a Scheme-readable documentation record for SUBJECT."
+  (list
+   (agent-scheme-reflect--symbol "documentation-metadata")
+   (agent-scheme-reflect--field "subject" subject)
+   (agent-scheme-reflect--field "kind"
+                                (agent-scheme-reflect--symbol "procedure"))
+   (agent-scheme-reflect--field "library" agent-scheme-false)
+   (agent-scheme-reflect--field "source" agent-scheme-false)
+   (agent-scheme-reflect--field
+    "origin"
+    (list (agent-scheme-reflect--symbol "body-literal")
+          (agent-scheme-reflect--symbol "string")))
+   (agent-scheme-reflect--field
+    "fields"
+    (list (list (agent-scheme-reflect--symbol "documentation")
+                documentation)))))
+
+(defun agent-scheme-reflect-documentation (subject context)
+  "Return documentation metadata for SUBJECT, or #f when absent.
+SUBJECT may be a binding symbol/name or a procedure value."
+  (cond
+   ((or (agent-scheme-procedure-p subject)
+        (agent-scheme-primitive-procedure-p subject))
+    (let ((documentation
+           (agent-scheme-reflect--procedure-documentation subject)))
+      (if documentation
+          (agent-scheme-reflect--documentation-metadata
+           (list (agent-scheme-reflect--symbol "procedure"))
+           documentation)
+        agent-scheme-false)))
+   (t
+    (let* ((name (agent-scheme-reflect--binding-name subject))
+           (environment
+            (and context
+                 (agent-scheme--eval-context-interaction-environment context)))
+           (cell (and name
+                      environment
+                      (agent-scheme--environment-cell environment name)))
+           (value (and cell (agent-scheme--cell-value cell)))
+           (documentation
+            (and value
+                 (not (agent-scheme--undefined-p value))
+                 (agent-scheme-reflect--procedure-documentation value))))
+      (if documentation
+          (agent-scheme-reflect--documentation-metadata
+           (list (agent-scheme-reflect--symbol "binding")
+                 (agent-scheme-reflect--symbol name))
+           documentation)
+        agent-scheme-false)))))
+
 (defun agent-scheme-reflect-current-budget (context)
   "Return the active budget counters and limits for CONTEXT."
   (list
@@ -393,6 +474,11 @@
   (agent-scheme-reflect--redact
    (agent-scheme-reflect-capability-info (car arguments))))
 
+(defun agent-scheme-reflect--primitive-documentation (arguments context)
+  "Primitive `documentation'."
+  (agent-scheme-reflect--redact
+   (agent-scheme-reflect-documentation (car arguments) context)))
+
 (defun agent-scheme-reflect--macro-options (arguments)
   "Return optional macro introspection options from ARGUMENTS."
   (and (cdr arguments) (cadr arguments)))
@@ -469,6 +555,8 @@
      ,#'agent-scheme-reflect--primitive-recent-policy-decisions 0 0)
     ("capability-info"
      ,#'agent-scheme-reflect--primitive-capability-info 1 1)
+    ("documentation"
+     ,#'agent-scheme-reflect--primitive-documentation 1 1)
     ("macroexpand"
      ,#'agent-scheme-reflect--primitive-macroexpand 1 2)
     ("macroexpand-1"
