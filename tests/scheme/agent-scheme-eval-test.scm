@@ -66,11 +66,56 @@
 
 (check 'runtime-version-components
        (agent-scheme-version-components)
-       '(0 14 6))
+       '(0 14 7))
 
 (check 'runtime-version-datum
        (agent-scheme-result->external (agent-scheme-version))
-       "(agent-scheme-version 0 14 6)")
+       "(agent-scheme-version 0 14 7)")
+
+(check-external 'simple-string-docstring-reflection
+                "(import (scheme base) (agent reflect))
+                 (define (field datum name)
+                   (cadr (assq name (cdr datum))))
+                 (define (doc-string datum)
+                   (cadr (assq 'documentation (field datum 'fields))))
+                 (define (documented x)
+                   \"Return X plus one.\"
+                   (+ x 1))
+                 (list (documented 4)
+                       (field (documentation 'documented) 'subject)
+                       (doc-string (documentation 'documented))
+                       (field (documentation documented) 'subject)
+                       (doc-string (documentation documented)))"
+                "(5 (binding documented) \"Return X plus one.\" (procedure) \"Return X plus one.\")")
+
+(check-external 'docstring-edge-cases
+                "(import (scheme base) (agent reflect))
+                 (define (field datum name)
+                   (cadr (assq name (cdr datum))))
+                 (define (doc-string datum)
+                   (if datum
+                       (cadr (assq 'documentation (field datum 'fields)))
+                     #f))
+                 (define (multiline x)
+                   \"First line.\"
+                   \"Second line.\"
+                   x)
+                 (define (with-internal x)
+                   (define local 2)
+                   \"Use the local definition.\"
+                   (+ x local))
+                 (define (final-string)
+                   \"result\")
+                 (define (no-doc x)
+                   x)
+                 (list (doc-string (documentation 'multiline))
+                       (with-internal 3)
+                       (doc-string (documentation 'with-internal))
+                       (final-string)
+                       (doc-string (documentation 'final-string))
+                       (doc-string (documentation 'no-doc))
+                       (doc-string (documentation 'missing)))"
+                "(\"First line.\\nSecond line.\" 5 \"Use the local definition.\" \"result\" #f #f #f)")
 
 ;; Report whether TEXT starts with PREFIX.
 (define (string-prefix? prefix text)

@@ -44,7 +44,63 @@
               (map exact-integer? (cdr version))
               (map (lambda (component) (>= component 0))
                    (cdr version))))")
-    "((agent-scheme-version 0 14 6) (#t #t #t) (#t #t #t))")))
+    "((agent-scheme-version 0 14 7) (#t #t #t) (#t #t #t))")))
+
+(ert-deftest agent-scheme-reflect-test-simple-string-docstrings ()
+  "Expose simple procedure docstrings through `(agent reflect)'."
+  (agent-scheme-reflect-test--reset)
+  (let ((external
+         (agent-scheme-reflect-test--eval-value-string
+          "(import (scheme base) (agent reflect))
+           (define (field datum name)
+             (cadr (assq name (cdr datum))))
+           (define (doc-string datum)
+             (cadr (assq 'documentation (field datum 'fields))))
+           (define (documented x)
+             \"Return X plus one.\"
+             (+ x 1))
+           (list (documented 4)
+                 (field (documentation 'documented) 'subject)
+                 (doc-string (documentation 'documented))
+                 (field (documentation documented) 'subject)
+                 (doc-string (documentation documented)))")))
+    (should
+     (equal external
+            "(5 (binding documented) \"Return X plus one.\" (procedure) \"Return X plus one.\")"))))
+
+(ert-deftest agent-scheme-reflect-test-docstring-edge-cases ()
+  "Reflect adjacent docstrings and preserve final-string body semantics."
+  (agent-scheme-reflect-test--reset)
+  (should
+   (equal
+    (agent-scheme-reflect-test--eval-value-string
+     "(import (scheme base) (agent reflect))
+      (define (field datum name)
+        (cadr (assq name (cdr datum))))
+      (define (doc-string datum)
+        (if datum
+            (cadr (assq 'documentation (field datum 'fields)))
+          #f))
+      (define (multiline x)
+        \"First line.\"
+        \"Second line.\"
+        x)
+      (define (with-internal x)
+        (define local 2)
+        \"Use the local definition.\"
+        (+ x local))
+      (define (final-string)
+        \"result\")
+      (define (no-doc x)
+        x)
+      (list (doc-string (documentation 'multiline))
+            (with-internal 3)
+            (doc-string (documentation 'with-internal))
+            (final-string)
+            (doc-string (documentation 'final-string))
+            (doc-string (documentation 'no-doc))
+            (doc-string (documentation 'missing)))")
+    "(\"First line.\\nSecond line.\" 5 \"Use the local definition.\" \"result\" #f #f #f)")))
 
 (ert-deftest agent-scheme-reflect-test-capability-budget-and-imports ()
   "Inspect capability metadata, active budget limits, imports, and session ids."

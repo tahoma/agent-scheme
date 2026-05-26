@@ -394,8 +394,35 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
        ((agent-scheme-symbol-p cursor)
         (cons minimum nil))
        (t
-        (agent-scheme--eval-error
-         "prelude definition has invalid formals")))))))
+       (agent-scheme--eval-error
+        "prelude definition has invalid formals")))))))
+
+(defun agent-scheme--base-body-definition-form-p (form)
+  "Return non-nil if FORM is a definition-like body form."
+  (and (consp form)
+       (member (agent-scheme--symbol-name (car form))
+               '("define" "define-values" "define-record-type"))))
+
+(defun agent-scheme--base-body-documentation (body)
+  "Return simple string documentation metadata from BODY, or nil."
+  (let ((cursor body)
+        strings)
+    (while (and cursor
+                (agent-scheme--base-body-definition-form-p (car cursor)))
+      (setq cursor (cdr cursor)))
+    (while (and cursor (stringp (car cursor)))
+      (push (car cursor) strings)
+      (setq cursor (cdr cursor)))
+    (when (and strings
+               cursor
+               (not (agent-scheme--base-body-definition-form-p
+                     (car cursor))))
+      (mapconcat #'identity (nreverse strings) "\n"))))
+
+(defun agent-scheme--base-documentation-properties (documentation)
+  "Return plist fields for optional DOCUMENTATION metadata."
+  (when documentation
+    (list :documentation documentation)))
 
 (defun agent-scheme--prelude-definition-spec (form)
   "Return metadata for one portable prelude definition FORM."
@@ -418,17 +445,23 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
             (agent-scheme--eval-error
              "prelude variable definition must initialize a lambda"))
           (setq arity (agent-scheme--formals-arity (cadr initializer)))
-          (list :name (agent-scheme-symbol-name target)
-                :minimum-arity (car arity)
-                :maximum-arity (cdr arity)
-                :source 'prelude)))
+          (append
+           (list :name (agent-scheme-symbol-name target)
+                 :minimum-arity (car arity)
+                 :maximum-arity (cdr arity)
+                 :source 'prelude)
+           (agent-scheme--base-documentation-properties
+            (agent-scheme--base-body-documentation (cddr initializer))))))
        ((consp target)
         (setq arity (agent-scheme--formals-arity (cdr target)))
-        (list :name (agent-scheme--expect-symbol-name
-                     (car target) "prelude function name")
-              :minimum-arity (car arity)
-              :maximum-arity (cdr arity)
-              :source 'prelude))
+        (append
+         (list :name (agent-scheme--expect-symbol-name
+                      (car target) "prelude function name")
+               :minimum-arity (car arity)
+               :maximum-arity (cdr arity)
+               :source 'prelude)
+         (agent-scheme--base-documentation-properties
+          (agent-scheme--base-body-documentation (cddr parts)))))
        (t
         (agent-scheme--eval-error
          "prelude define target must be an identifier or function signature"))))))

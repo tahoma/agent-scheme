@@ -193,10 +193,10 @@ template resolve there instead of at the macro use site."
 
 (cl-defstruct (agent-scheme-procedure
                (:constructor agent-scheme--make-procedure
-                             (formals body environment))
+                             (formals body environment documentation))
                (:copier nil))
   "Scheme procedure value."
-  formals body environment)
+  formals body environment documentation)
 
 (cl-defstruct (agent-scheme-primitive-procedure
                (:constructor agent-scheme--make-primitive-procedure

@@ -52,6 +52,7 @@
           procedure-formals
           procedure-body
           procedure-environment
+          procedure-documentation
           make-primitive-procedure
           agent-scheme-primitive-procedure?
           primitive-procedure-name
@@ -379,11 +380,12 @@
     ;; Record type for compound Scheme procedures and their closure
     ;; environment.
     (define-record-type <procedure>
-      (make-procedure formals body environment)
+      (make-procedure formals body environment documentation)
       agent-scheme-procedure?
       (formals procedure-formals)
       (body procedure-body)
-      (environment procedure-environment))
+      (environment procedure-environment)
+      (documentation procedure-documentation))
 
     ;; Primitive procedures are the kernel boundary: each call is budgeted as a
     ;; host callback even when the primitive implements pure R7RS behavior.
