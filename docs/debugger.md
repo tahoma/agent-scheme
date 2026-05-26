@@ -53,7 +53,9 @@ The library exports:
 - `condition-environment`: takes a condition and frame id. Pass `#f` to return
   all environment frame records, or a frame id such as `'f-0` to return one.
 - `condition-restarts`: returns restart records from a debugger condition.
-- `restart-invoke!`: invokes restarts that the current runtime can model.
+- `restart-invoke!`: invokes restarts that the current runtime can model. In
+  the Emacs host, recovery restarts for the active debugger condition are routed
+  through host policy before the restart action runs.
 - `debugger-yield`: records a debugger event in the evaluation result event
   stream.
 
@@ -66,6 +68,24 @@ Example:
  (lambda ()
    (raise-continuable 'boom)))
 ```
+
+## Emacs Debugger Buffer
+
+The Emacs adapter renders debugger datums with
+`agent-scheme-debugger-display`.  The command opens a read-only
+`agent-scheme-debugger-mode` buffer derived from Emacs `special-mode` rather
+than introducing a separate UI protocol.  The buffer shows:
+
+- the condition summary
+- stack frame records
+- the shallow environment snapshot
+- recent debugger, yield, log, and restart events
+- restart buttons built from the Scheme-readable restart datums
+
+Standard Emacs affordances apply: `q` quits the buffer, `g` refreshes it, and
+`RET` follows the restart button at point.  Restart buttons use `button.el`, so
+they remain inspectable ordinary Emacs controls over the underlying Scheme
+datums.
 
 ## Restarts
 
@@ -83,10 +103,15 @@ The core restart ids are:
 - `continue-with-warning`: continue and return a restart result record.
 - `request-user-input`: ask the host or user for a recovery decision.
 
-The current bootstrap implementation invokes `continue-with-warning` directly
-and treats the other recovery restarts as host debugger policy hooks. Later
-transcript, job, budget, and process integrations should consume these same
-condition and restart datums instead of inventing separate error payloads.
+The portable direct path is `continue-with-warning`, which returns a
+`restart-result` datum without host policy.  The Emacs host treats recovery
+restarts such as `retry`, `provide-value`, `define-binding`, and
+`import-library` as `debugger-recovery` policy actions.  `request-user-input`
+uses the existing `approval-resolution` category.  Denied restarts fail closed,
+and allowed restarts emit debugger restart events plus audit entries.
+
+Later transcript, job, budget, and process integrations should consume these
+same condition and restart datums instead of inventing separate error payloads.
 
 ## Host Boundary
 
