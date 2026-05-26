@@ -108,11 +108,13 @@ ordinary R7RS reading.
 
 - Start each portable Scheme file with a `;;;` header that names the library or
   source file responsibility and the host/core boundary it belongs to.
-- Put a leading `;;` comment before every top-level Scheme `define`,
-  `define-record-type`, and `define-syntax` form.  The comment should describe
-  the contract, data shape, invariant, or pass boundary that is not obvious
-  from the identifier.  Section comments may supplement these comments, but they
-  do not replace the per-binding leading comment.
+- Put a leading `;;` comment before top-level Scheme `define-record-type`,
+  `define-syntax`, and plain data `define` forms.  For procedure definitions, a
+  simple string docstring supersedes a leading summary comment.  Add a separate
+  source comment only when it describes an invariant, policy, pass boundary, or
+  portability concern that does not belong in the runtime docstring.  Section
+  comments may supplement per-binding comments, but they do not replace needed
+  per-binding documentation.
 - For record types, document ownership of the record shape, any mutable fields,
   and whether the record is part of the public Agent Scheme datum surface or an
   internal implementation record.
@@ -126,6 +128,15 @@ ordinary R7RS reading.
   for simple selectors, wrappers, or local loops.
 - Keep Scheme comments public-repo safe: avoid project history, personal
   machine paths, secrets, transcripts, and non-project branding.
+
+Runtime-visible documentation for public procedures belongs in a simple string
+docstring in the procedure body, using the convention in
+[Docstring Metadata Convention](docstring-metadata.md). Add docstrings to new
+exported public procedures in checked-in Scheme libraries when the procedure
+body form supports them. Do not keep a leading `;;` comment that only restates
+the docstring. Simple string docstrings do not document macros, record fields,
+library forms, renamed exports, or plain data bindings; those surfaces need
+future metadata records rather than a placeholder procedure docstring.
 
 ## Test Layout
 

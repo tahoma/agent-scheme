@@ -26,8 +26,8 @@
       (records store-records set-store-records!)
       (next-id store-next-id set-store-next-id!))
 
-    ;; Construct an empty approval store.
     (define (agent-scheme-make-approval-store)
+      "Construct an empty approval store."
       (make-approval-store '() 0))
 
     ;; Report whether VALUE is in LIST using eq?.
@@ -109,22 +109,22 @@
                (list record)))
       record)
 
-    ;; Return approval record ID from STORE, or #f.
     (define (approval-ref store id)
+      "Return approval record ID from STORE, or #f."
       (let loop ((records (store-records store)))
         (cond
          ((null? records) #f)
          ((eq? (record-id (car records)) id) (car records))
          (else (loop (cdr records))))))
 
-    ;; Create an approval request from DATUM in STORE and return its id.
     (define (approval-request! store datum)
+      "Create an approval request from DATUM in STORE and return its id."
       (let ((record (make-approval-record store datum)))
         (store-record! store record)
         (record-id record)))
 
-    ;; Return approval ID status from STORE, or #f.
     (define (approval-status store id)
+      "Return approval ID status from STORE, or #f."
       (let ((record (approval-ref store id)))
         (if record (record-status record) #f)))
 
@@ -141,8 +141,8 @@
          (else
           (loop (cdr fields) (cons (car fields) result))))))
 
-    ;; Resolve approval ID in STORE with DECISION and return the record.
     (define (approval-resolve! store id decision)
+      "Resolve approval ID in STORE with DECISION and return the record."
       (let ((status (normalize-status decision))
             (record (approval-ref store id)))
         (if (not (or (eq? status 'approved) (eq? status 'denied)))
@@ -151,8 +151,8 @@
             (error "unknown approval id" id))
         (store-record! store (record-with-status record status))))
 
-    ;; Cancel approval ID in STORE and return the record.
     (define (approval-cancel! store id)
+      "Cancel approval ID in STORE and return the record."
       (let ((record (approval-ref store id)))
         (if (not record)
             (error "unknown approval id" id))
@@ -160,8 +160,8 @@
             (error "only pending approvals can be canceled" id))
         (store-record! store (record-with-status record 'canceled))))
 
-    ;; Return pending approval records in creation order.
     (define (approval-pending store)
+      "Return pending approval records in creation order."
       (let loop ((records (store-records store)) (result '()))
         (cond
          ((null? records) (reverse result))

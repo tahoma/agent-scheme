@@ -25,12 +25,12 @@
           network-audit?)
   (import (scheme base))
   (begin
-    ;; Return a Scheme-readable record field named NAME with VALUES.
     (define (network-field name . values)
+      "Return a Scheme-readable record field named NAME with VALUES."
       (cons name values))
 
-    ;; Return FIELD's first value from RECORD, or DEFAULT when absent.
     (define (network-field-value record field default)
+      "Return FIELD's first value from RECORD, or DEFAULT when absent."
       (let ((entry (and (pair? record) (assq field (cdr record)))))
         (if entry
             (if (null? (cdr entry)) default (cadr entry))
@@ -44,8 +44,8 @@
     (define (network-third list)
       (car (cdr (cdr list))))
 
-    ;; Return a host-adapter request datum for one network operation.
     (define (make-network-request id operation resource)
+      "Return a host-adapter request datum for one network operation."
       (list 'network-capability-request
             (network-field 'id id)
             (network-field 'operation operation)
@@ -83,35 +83,35 @@
                             #f))
             (network-field 'resource resource)))
 
-    ;; Report whether DATUM is a network request record.
     (define (network-request? datum)
+      "Return #t when DATUM is a network request record."
       (network-record? datum 'network-capability-request))
 
-    ;; Return REQUEST's stable identifier.
     (define (network-request-id request)
+      "Return REQUEST's stable identifier."
       (network-field-value request 'id #f))
 
-    ;; Return REQUEST's operation symbol.
     (define (network-request-operation request)
+      "Return REQUEST's operation symbol."
       (network-field-value request 'operation #f))
 
-    ;; Return a scoped network authority grant record.
     (define (make-network-grant id operations scope)
+      "Return a scoped network authority grant record."
       (list 'network-capability-grant
             (network-field 'id id)
             (network-field 'operations operations)
             (network-field 'scope scope)))
 
-    ;; Return an explicit approval decision for one network request.
     (define (make-network-approval-decision id request-id status reason)
+      "Return an explicit approval decision for one network request."
       (list 'network-approval-decision
             (network-field 'id id)
             (network-field 'request-id request-id)
             (network-field 'status status)
             (network-field 'reason reason)))
 
-    ;; Return a network authorization decision record.
     (define (make-network-capability-decision request status grant approval reason)
+      "Return a network authorization decision record."
       (list 'network-capability-decision
             (network-field 'id (network-request-id request))
             (network-field 'operation (network-request-operation request))
@@ -130,24 +130,24 @@
                                #f))
             (network-field 'reason reason)))
 
-    ;; Report whether DATUM is a network decision record.
     (define (network-capability-decision? datum)
+      "Return #t when DATUM is a network decision record."
       (network-record? datum 'network-capability-decision))
 
-    ;; Return DECISION's status symbol.
     (define (network-capability-decision-status decision)
+      "Return DECISION's status symbol."
       (network-field-value decision 'status #f))
 
-    ;; Return a host-adapter response datum for a network operation.
     (define (make-network-response id status fields)
+      "Return a host-adapter response datum for a network operation."
       (append
        (list 'network-response
              (network-field 'id id)
              (network-field 'status status))
        fields))
 
-    ;; Return a Scheme-readable network stream handle datum.
     (define (make-network-stream-handle id request url grant status)
+      "Return a Scheme-readable network stream handle datum."
       (list 'handle
             (network-field 'id id)
             (network-field 'kind 'network-stream)
@@ -157,9 +157,9 @@
             (network-field 'grant grant)
             (network-field 'status status)))
 
-    ;; Return a Scheme-readable network-backed port capability datum.
     (define (make-network-port-capability
              id kind stream-handle operations grant limits status)
+      "Return a Scheme-readable network-backed port capability datum."
       (list 'port-capability
             (network-field 'id id)
             (network-field 'kind kind)
@@ -170,8 +170,8 @@
             (network-field 'path stream-handle)
             (network-field 'status status)))
 
-    ;; Return a stable audit event for a network authorization and result.
     (define (make-network-audit request decision result)
+      "Return a stable audit event for a network authorization and result."
       (list 'network-capability-audit
             (network-field 'event 'network-capability-audit)
             (network-field 'id (network-request-id request))
@@ -185,8 +185,8 @@
             (network-field 'result
                            (network-field-value result 'status #f))))
 
-    ;; Report whether DATUM is a network audit record.
     (define (network-audit? datum)
+      "Return #t when DATUM is a network audit record."
       (network-record? datum 'network-capability-audit))
 
     ;; Return RESOURCE's argument named FIELD, or DEFAULT when absent.
@@ -311,8 +311,8 @@
          ((network-approval-allows? request (car rest)) (car rest))
          (else (loop (cdr rest))))))
 
-    ;; Return a fail-closed authorization decision for REQUEST.
     (define (network-authorize-request request grants approvals)
+      "Return a fail-closed authorization decision for REQUEST."
       (let ((match (network-find-grant request grants)))
         (cond
          ((and match (eq? (car match) 'approved))

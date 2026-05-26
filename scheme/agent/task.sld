@@ -117,8 +117,8 @@
        ((eq? value (car values)) #t)
        (else (member-eq? value (cdr values)))))
 
-    ;; Report whether STATE is part of the public task lifecycle vocabulary.
     (define (task-state? state)
+      "Return #t when STATE is part of the public task lifecycle vocabulary."
       (member-eq? state task-states))
 
     ;; Return KEY from OPTIONS, or DEFAULT if absent.  OPTIONS may contain
@@ -136,8 +136,8 @@
     (define (portable-timestamp)
       "portable")
 
-    ;; Return a Scheme-readable task condition datum.
     (define (make-task-condition kind fields)
+      "Return a Scheme-readable task condition datum."
       (cons 'task-condition
             (cons (list 'kind kind)
                   (map (lambda (field)
@@ -155,15 +155,15 @@
           (raise-task-error 'unknown-state
                             (list (cons 'state state)))))
 
-    ;; Return #t when task state FROM may transition to TO.
     (define (task-transition-allowed? from to)
+      "Return #t when task state FROM may transition to TO."
       (let ((row (assq from task-allowed-transitions)))
         (if (and (task-state? from) (task-state? to) row)
             (member-eq? to (cdr row))
             #f)))
 
-    ;; Validate transition FROM to TO and return TO.
     (define (validate-task-transition from to)
+      "Validate transition FROM to TO and return TO."
       (let ((from-state (normalize-state from))
             (to-state (normalize-state to)))
         (if (task-transition-allowed? from-state to-state)
@@ -185,8 +185,8 @@
          ((field-named? (car fields) name) #t)
          (else (loop (cdr fields))))))
 
-    ;; Return RECORD field NAME, or DEFAULT when absent.
     (define (task-field-value record name . maybe-default)
+      "Return RECORD field NAME, or DEFAULT when absent."
       (let ((default (if (null? maybe-default) #f (car maybe-default))))
         (let loop ((fields (cdr record)))
           (cond
@@ -194,48 +194,48 @@
            ((field-named? (car fields) name) (cadr (car fields)))
            (else (loop (cdr fields)))))))
 
-    ;; Report whether DATUM is a task lifecycle record tagged TAG.
     (define (task-record? datum tag)
+      "Return #t when DATUM is a task lifecycle record tagged TAG."
       (and (pair? datum) (eq? (car datum) tag)))
 
-    ;; Report whether DATUM is an `agent-task' record.
     (define (agent-task? datum)
+      "Return #t when DATUM is an agent-task record."
       (task-record? datum 'agent-task))
 
-    ;; Report whether DATUM is an `agent-step' record.
     (define (agent-step? datum)
+      "Return #t when DATUM is an agent-step record."
       (task-record? datum 'agent-step))
 
-    ;; Report whether DATUM is an `agent-action' record.
     (define (agent-action? datum)
+      "Return #t when DATUM is an agent-action record."
       (task-record? datum 'agent-action))
 
-    ;; Report whether DATUM is an `agent-observation' record.
     (define (agent-observation? datum)
+      "Return #t when DATUM is an agent-observation record."
       (task-record? datum 'agent-observation))
 
-    ;; Report whether DATUM is an `agent-decision' record.
     (define (agent-decision? datum)
+      "Return #t when DATUM is an agent-decision record."
       (task-record? datum 'agent-decision))
 
-    ;; Report whether DATUM is a `task-pause' receipt.
     (define (task-pause? datum)
+      "Return #t when DATUM is a task-pause receipt."
       (task-record? datum 'task-pause))
 
-    ;; Report whether DATUM is a `task-stop' receipt.
     (define (task-stop? datum)
+      "Return #t when DATUM is a task-stop receipt."
       (task-record? datum 'task-stop))
 
-    ;; Report whether DATUM is a `task-wait' record.
     (define (task-wait? datum)
+      "Return #t when DATUM is a task-wait record."
       (task-record? datum 'task-wait))
 
-    ;; Report whether DATUM is a `task-failure' record.
     (define (task-failure? datum)
+      "Return #t when DATUM is a task-failure record."
       (task-record? datum 'task-failure))
 
-    ;; Report whether DATUM is an `agent-completion' record.
     (define (agent-completion? datum)
+      "Return #t when DATUM is an agent-completion record."
       (task-record? datum 'agent-completion))
 
     ;; Return required field names for TAG, or #f.
@@ -292,8 +292,8 @@
              'invalid-completion-status
              (list (cons 'status (task-field-value record 'status))))))))
 
-    ;; Validate RECORD as a public task lifecycle datum and return RECORD.
     (define (validate-task-record record)
+      "Validate RECORD as a public task lifecycle datum and return RECORD."
       (if (not (pair? record))
           (raise-task-error 'malformed-record (list (cons 'record record))))
       (let ((tag (car record)))
@@ -305,15 +305,15 @@
           (validate-state-shape record tag)
           record)))
 
-    ;; Return #t when RECORD validates as a public task lifecycle datum.
     (define (task-record-valid? record)
+      "Return #t when RECORD validates as a public task lifecycle datum."
       (guard (condition
               (else #f))
         (validate-task-record record)
         #t))
 
-    ;; Create a canonical `agent-task' datum.
     (define (make-agent-task id goal session options)
+      "Create a canonical agent-task datum."
       (let ((created-at (option-ref options 'created-at
                                     (portable-timestamp))))
         (let ((updated-at (option-ref options 'updated-at created-at)))
@@ -343,8 +343,8 @@
                 (list 'transcript (option-ref options 'transcript 'none))
                 (list 'audit (option-ref options 'audit 'none))))))
 
-    ;; Create a canonical `agent-step' datum.
     (define (make-agent-step id task goal options)
+      "Create a canonical agent-step datum."
       (list 'agent-step
             (list 'id id)
             (list 'task task)
@@ -358,8 +358,8 @@
             (list 'events (option-ref options 'events '()))
             (list 'result (option-ref options 'result 'pending))))
 
-    ;; Create a canonical `agent-action' datum.
     (define (make-agent-action id task step kind options)
+      "Create a canonical agent-action datum."
       (list 'agent-action
             (list 'id id)
             (list 'task task)
@@ -372,8 +372,8 @@
             (list 'expected-outcome
                   (option-ref options 'expected-outcome 'none))))
 
-    ;; Create a canonical `agent-observation' datum.
     (define (make-agent-observation id task source kind value options)
+      "Create a canonical agent-observation datum."
       (list 'agent-observation
             (list 'id id)
             (list 'task task)
@@ -383,9 +383,9 @@
             (list 'redactions (option-ref options 'redactions '()))
             (list 'audit (option-ref options 'audit 'none))))
 
-    ;; Create a canonical `agent-decision' datum.
     (define (make-agent-decision id task step observed-state
                                  selected-action reason options)
+      "Create a canonical agent-decision datum."
       (list 'agent-decision
             (list 'id id)
             (list 'task task)
@@ -399,8 +399,8 @@
             (list 'verifier-result
                   (option-ref options 'verifier-result 'not-run))))
 
-    ;; Create a canonical `task-pause' receipt.
     (define (make-task-pause task state reason options)
+      "Create a canonical task-pause receipt."
       (list 'task-pause
             (list 'task task)
             (list 'state state)
@@ -417,8 +417,8 @@
                   (option-ref options 'verifier-result 'not-run))
             (list 'pause-reason reason)))
 
-    ;; Create a canonical `task-stop' receipt.
     (define (make-task-stop task state reason options)
+      "Create a canonical task-stop receipt."
       (list 'task-stop
             (list 'task task)
             (list 'state state)
@@ -435,8 +435,8 @@
                   (option-ref options 'verifier-result 'not-run))
             (list 'stop-reason reason)))
 
-    ;; Create a canonical `task-wait' record.
     (define (make-task-wait task state kind request options)
+      "Create a canonical task-wait record."
       (list 'task-wait
             (list 'task task)
             (list 'state state)
@@ -448,8 +448,8 @@
             (list 'transcript (option-ref options 'transcript 'none))
             (list 'audit (option-ref options 'audit 'none))))
 
-    ;; Create a canonical `task-failure' record.
     (define (make-task-failure task condition options)
+      "Create a canonical task-failure record."
       (list 'task-failure
             (list 'task task)
             (list 'state 'failed)
@@ -458,8 +458,8 @@
             (list 'transcript (option-ref options 'transcript 'none))
             (list 'audit (option-ref options 'audit 'none))))
 
-    ;; Create a canonical `agent-completion' record.
     (define (make-agent-completion task value stop options)
+      "Create a canonical agent-completion record."
       (list 'agent-completion
             (list 'task task)
             (list 'status 'complete)

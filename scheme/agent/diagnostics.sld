@@ -38,12 +38,12 @@
   (import (scheme base)
           (agent io))
   (begin
-    ;; Return a Scheme-readable record field named NAME with VALUES.
     (define (diagnostics-field name . values)
+      "Return a Scheme-readable record field named NAME with VALUES."
       (cons name values))
 
-    ;; Return FIELD's first value from RECORD, or DEFAULT when absent.
     (define (diagnostics-field-value record field default)
+      "Return FIELD's first value from RECORD, or DEFAULT when absent."
       (let ((entry (and (pair? record) (assq field (cdr record)))))
         (if entry
             (if (null? (cdr entry)) default (cadr entry))
@@ -53,8 +53,8 @@
     (define (diagnostics-record? datum tag)
       (and (pair? datum) (eq? (car datum) tag)))
 
-    ;; Return a source range with absolute and line/column positions.
     (define (make-diagnostic-range start end line column end-line end-column)
+      "Return a source range with absolute and line/column positions."
       (list 'diagnostic-range
             (diagnostics-field 'start start)
             (diagnostics-field 'end end)
@@ -63,20 +63,20 @@
             (diagnostics-field 'end-line end-line)
             (diagnostics-field 'end-column end-column)))
 
-    ;; Report whether DATUM is a diagnostic range record.
     (define (diagnostic-range? datum)
+      "Return #t when DATUM is a diagnostic range record."
       (diagnostics-record? datum 'diagnostic-range))
 
-    ;; Return RANGE's absolute start position.
     (define (diagnostic-range-start range)
+      "Return RANGE's absolute start position."
       (diagnostics-field-value range 'start #f))
 
-    ;; Return RANGE's absolute end position.
     (define (diagnostic-range-end range)
+      "Return RANGE's absolute end position."
       (diagnostics-field-value range 'end #f))
 
-    ;; Return one diagnostic record in the shared adapter-neutral shape.
     (define (make-diagnostic severity message source file buffer range metadata)
+      "Return one diagnostic record in the shared adapter-neutral shape."
       (list 'diagnostic
             (diagnostics-field 'severity severity)
             (diagnostics-field 'message message)
@@ -86,40 +86,40 @@
             (diagnostics-field 'range range)
             (diagnostics-field 'metadata metadata)))
 
-    ;; Report whether DATUM is a diagnostic record.
     (define (diagnostic? datum)
+      "Return #t when DATUM is a diagnostic record."
       (diagnostics-record? datum 'diagnostic))
 
-    ;; Return DIAGNOSTIC's severity symbol.
     (define (diagnostic-severity diagnostic)
+      "Return DIAGNOSTIC's severity symbol."
       (diagnostics-field-value diagnostic 'severity #f))
 
-    ;; Return DIAGNOSTIC's human-readable message.
     (define (diagnostic-message diagnostic)
+      "Return DIAGNOSTIC's human-readable message."
       (diagnostics-field-value diagnostic 'message #f))
 
-    ;; Return DIAGNOSTIC's originating backend or protocol source.
     (define (diagnostic-source diagnostic)
+      "Return DIAGNOSTIC's originating backend or protocol source."
       (diagnostics-field-value diagnostic 'source #f))
 
-    ;; Return DIAGNOSTIC's file path, or #f when it is buffer-only.
     (define (diagnostic-file diagnostic)
+      "Return DIAGNOSTIC's file path, or #f when it is buffer-only."
       (diagnostics-field-value diagnostic 'file #f))
 
-    ;; Return DIAGNOSTIC's buffer name or handle metadata.
     (define (diagnostic-buffer diagnostic)
+      "Return DIAGNOSTIC's buffer name or handle metadata."
       (diagnostics-field-value diagnostic 'buffer #f))
 
-    ;; Return DIAGNOSTIC's source range record.
     (define (diagnostic-range diagnostic)
+      "Return DIAGNOSTIC's source range record."
       (diagnostics-field-value diagnostic 'range #f))
 
-    ;; Return DIAGNOSTIC's backend metadata fields.
     (define (diagnostic-metadata diagnostic)
+      "Return DIAGNOSTIC's backend metadata fields."
       (diagnostics-field-value diagnostic 'metadata '()))
 
-    ;; Return a stable diagnostic snapshot for one adapter observation.
     (define (make-diagnostics-snapshot status scope buffer file diagnostics metadata)
+      "Return a stable diagnostic snapshot for one adapter observation."
       (list 'diagnostics-snapshot
             (diagnostics-field 'status status)
             (diagnostics-field 'scope scope)
@@ -128,20 +128,20 @@
             (diagnostics-field 'diagnostics diagnostics)
             (diagnostics-field 'metadata metadata)))
 
-    ;; Report whether DATUM is a diagnostics snapshot record.
     (define (diagnostics-snapshot? datum)
+      "Return #t when DATUM is a diagnostics snapshot record."
       (diagnostics-record? datum 'diagnostics-snapshot))
 
-    ;; Return SNAPSHOT's status symbol.
     (define (diagnostics-snapshot-status snapshot)
+      "Return SNAPSHOT's status symbol."
       (diagnostics-field-value snapshot 'status #f))
 
-    ;; Return SNAPSHOT's diagnostic record list.
     (define (diagnostics-snapshot-diagnostics snapshot)
+      "Return SNAPSHOT's diagnostic record list."
       (diagnostics-field-value snapshot 'diagnostics '()))
 
-    ;; Return a host-adapter request datum for a diagnostics operation.
     (define (make-diagnostics-capability-request id operation authority arguments)
+      "Return a host-adapter request datum for a diagnostics operation."
       (list 'diagnostics-capability-request
             (diagnostics-field 'id id)
             (diagnostics-field 'operation operation)
@@ -153,51 +153,51 @@
                                    'unknown))
             (diagnostics-field 'mutating? #f)))
 
-    ;; Report whether DATUM is a diagnostics capability request record.
     (define (diagnostics-capability-request? datum)
+      "Return #t when DATUM is a diagnostics capability request record."
       (diagnostics-record? datum 'diagnostics-capability-request))
 
-    ;; Return REQUEST's operation symbol.
     (define (diagnostics-capability-request-operation request)
+      "Return REQUEST's operation symbol."
       (diagnostics-field-value request 'operation #f))
 
-    ;; Return a host-adapter result datum for a diagnostics operation.
     (define (make-diagnostics-capability-result id status value)
+      "Return a host-adapter result datum for a diagnostics operation."
       (list 'diagnostics-capability-result
             (diagnostics-field 'id id)
             (diagnostics-field 'status status)
             (diagnostics-field 'value value)))
 
-    ;; Return an explicit diagnostics outcome record for adapter availability.
     (define (make-diagnostics-outcome status message)
+      "Return an explicit diagnostics outcome record for adapter availability."
       (list 'diagnostics-outcome
             (diagnostics-field 'status status)
             (diagnostics-field 'message message)))
 
-    ;; Report whether DATUM is a diagnostics outcome record.
     (define (diagnostics-outcome? datum)
+      "Return #t when DATUM is a diagnostics outcome record."
       (diagnostics-record? datum 'diagnostics-outcome))
 
-    ;; Return OUTCOME's status symbol.
     (define (diagnostics-outcome-status outcome)
+      "Return OUTCOME's status symbol."
       (diagnostics-field-value outcome 'status #f))
 
     ;; Stable severity vocabulary shared by host adapters.
     (define diagnostic-known-severities
       '(error warning note info hint unknown))
 
-    ;; Report whether SEVERITY is in the shared diagnostic vocabulary.
     (define (diagnostic-known-severity? severity)
+      "Return #t when SEVERITY is in the shared diagnostic vocabulary."
       (if (memq severity diagnostic-known-severities) #t #f))
 
     ;; Read-only diagnostic observations never perform code actions.
     (define diagnostics-read-only-operations
       '(buffer-diagnostics project-diagnostics diagnostic-at))
 
-    ;; Report whether OPERATION is a read-only diagnostics observation.
     (define (diagnostics-read-only-operation? operation)
+      "Return #t when OPERATION is a read-only diagnostics observation."
       (if (memq operation diagnostics-read-only-operations) #t #f))
 
-    ;; Yield a diagnostic datum through the portable Agent Scheme event channel.
     (define (diagnostics-yield diagnostics)
+      "Yield DIAGNOSTICS through the portable Agent Scheme event channel."
       (agent-yield diagnostics))))

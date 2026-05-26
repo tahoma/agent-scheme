@@ -51,12 +51,12 @@
           parse-git-raw-diff-z)
   (import (scheme base))
   (begin
-    ;; Return a Scheme-readable record field named NAME with VALUES.
     (define (vcs-field name . values)
+      "Return a Scheme-readable record field named NAME with VALUES."
       (cons name values))
 
-    ;; Return FIELD's first value from RECORD, or DEFAULT when absent.
     (define (vcs-field-value record field default)
+      "Return FIELD's first value from RECORD, or DEFAULT when absent."
       (let ((entry (and (pair? record) (assq field (cdr record)))))
         (if entry
             (if (null? (cdr entry)) default (cadr entry))
@@ -66,15 +66,15 @@
     (define (vcs-record? datum tag)
       (and (pair? datum) (eq? (car datum) tag)))
 
-    ;; Return an explicit repository identity/root record.
     (define (make-vcs-repository system root identity)
+      "Return an explicit repository identity/root record."
       (list 'vcs-repository
             (vcs-field 'system system)
             (vcs-field 'root root)
             (vcs-field 'identity identity)))
 
-    ;; Return a branch or detached-head record.
     (define (make-vcs-branch head oid upstream ahead behind detached?)
+      "Return a branch or detached-head record."
       (list 'vcs-branch
             (vcs-field 'head head)
             (vcs-field 'oid oid)
@@ -83,14 +83,14 @@
             (vcs-field 'behind behind)
             (vcs-field 'detached? detached?)))
 
-    ;; Return safe remote metadata without requiring a raw host remote object.
     (define (make-vcs-remote name url-metadata)
+      "Return safe remote metadata without requiring a raw host remote object."
       (list 'vcs-remote
             (vcs-field 'name name)
             (vcs-field 'url url-metadata)))
 
-    ;; Return a compact commit summary record suitable for log adapters.
     (define (make-vcs-commit-summary oid parents subject author timestamp)
+      "Return a compact commit summary record suitable for log adapters."
       (list 'vcs-commit-summary
             (vcs-field 'oid oid)
             (vcs-field 'parents parents)
@@ -98,8 +98,8 @@
             (vcs-field 'author author)
             (vcs-field 'timestamp timestamp)))
 
-    ;; Return a repository status snapshot from pure Scheme-readable fields.
     (define (make-vcs-status system repository branch entries operation-state outcome)
+      "Return a repository status snapshot from pure Scheme-readable fields."
       (list 'vcs-status
             (vcs-field 'system system)
             (vcs-field 'repository repository)
@@ -108,20 +108,20 @@
             (vcs-field 'operation-state operation-state)
             (vcs-field 'outcome outcome)))
 
-    ;; Report whether DATUM is a VCS status record.
     (define (vcs-status? datum)
+      "Return #t when DATUM is a VCS status record."
       (and (pair? datum) (eq? (car datum) 'vcs-status)))
 
-    ;; Return STATUS's branch or detached-head record.
     (define (vcs-status-branch status)
+      "Return STATUS's branch or detached-head record."
       (vcs-field-value status 'branch #f))
 
-    ;; Return STATUS's status entry list.
     (define (vcs-status-entries status)
+      "Return STATUS's status entry list."
       (vcs-field-value status 'entries '()))
 
-    ;; Return a worktree/index status entry with additional DETAILS fields.
     (define (make-vcs-status-entry kind path index-status worktree-status details)
+      "Return a worktree/index status entry with additional DETAILS fields."
       (append
        (list 'vcs-status-entry
              (vcs-field 'kind kind)
@@ -130,52 +130,52 @@
              (vcs-field 'worktree-status worktree-status))
        details))
 
-    ;; Report whether DATUM is a VCS status entry record.
     (define (vcs-status-entry? datum)
+      "Return #t when DATUM is a VCS status entry record."
       (and (pair? datum) (eq? (car datum) 'vcs-status-entry)))
 
-    ;; Return ENTRY's normalized kind.
     (define (vcs-status-entry-kind entry)
+      "Return ENTRY's normalized kind."
       (vcs-field-value entry 'kind #f))
 
-    ;; Return ENTRY's repository-relative path.
     (define (vcs-status-entry-path entry)
+      "Return ENTRY's repository-relative path."
       (vcs-field-value entry 'path #f))
 
-    ;; Return ENTRY's index-side status.
     (define (vcs-status-entry-index-status entry)
+      "Return ENTRY's index-side status."
       (vcs-field-value entry 'index-status #f))
 
-    ;; Return ENTRY's worktree-side status.
     (define (vcs-status-entry-worktree-status entry)
+      "Return ENTRY's worktree-side status."
       (vcs-field-value entry 'worktree-status #f))
 
-    ;; Report whether ENTRY represents an unresolved conflict.
     (define (vcs-status-entry-conflict? entry)
+      "Return #t when ENTRY represents an unresolved conflict."
       (eq? (vcs-field-value entry 'kind #f) 'conflicted))
 
-    ;; Return merge/rebase/cherry-pick/bisect state as explicit data.
     (define (make-vcs-operation-state merge rebase cherry-pick bisect)
+      "Return merge/rebase/cherry-pick/bisect state as explicit data."
       (list 'vcs-operation-state
             (vcs-field 'merge merge)
             (vcs-field 'rebase rebase)
             (vcs-field 'cherry-pick cherry-pick)
             (vcs-field 'bisect bisect)))
 
-    ;; Return conflict state independent of any host-native merge object.
     (define (make-vcs-conflict-state type paths)
+      "Return conflict state independent of any host-native merge object."
       (list 'vcs-conflict-state
             (vcs-field 'type type)
             (vcs-field 'paths paths)))
 
-    ;; Return a diff summary whose files may compose with `(agent diff)' hunks.
     (define (make-vcs-diff-summary system files)
+      "Return a diff summary whose files may compose with `(agent diff)' hunks."
       (list 'vcs-diff-summary
             (vcs-field 'system system)
             (vcs-field 'files files)))
 
-    ;; Return one file-level raw diff summary.
     (define (make-vcs-diff-file status path orig-path old-mode new-mode old-object new-object score)
+      "Return one file-level raw diff summary."
       (list 'vcs-diff-file
             (vcs-field 'status status)
             (vcs-field 'path path)
@@ -186,12 +186,12 @@
             (vcs-field 'new-object new-object)
             (vcs-field 'score score)))
 
-    ;; Return DIFF's file summary list.
     (define (vcs-diff-summary-files diff)
+      "Return DIFF's file summary list."
       (vcs-field-value diff 'files '()))
 
-    ;; Return a host-adapter request datum for a VCS operation.
     (define (make-vcs-capability-request id operation authority arguments)
+      "Return a host-adapter request datum for a VCS operation."
       (list 'vcs-capability-request
             (vcs-field 'id id)
             (vcs-field 'operation operation)
@@ -202,27 +202,27 @@
             (vcs-field 'remote? (vcs-remote-operation? operation))
             (vcs-field 'mutating? (vcs-mutating-operation? operation))))
 
-    ;; Report whether DATUM is a VCS capability request record.
     (define (vcs-capability-request? datum)
+      "Return #t when DATUM is a VCS capability request record."
       (vcs-record? datum 'vcs-capability-request))
 
-    ;; Return REQUEST's stable identifier.
     (define (vcs-capability-request-id request)
+      "Return REQUEST's stable identifier."
       (vcs-field-value request 'id #f))
 
-    ;; Return REQUEST's operation symbol.
     (define (vcs-capability-request-operation request)
+      "Return REQUEST's operation symbol."
       (vcs-field-value request 'operation #f))
 
-    ;; Return a host-adapter result datum for a VCS operation.
     (define (make-vcs-capability-result id status value)
+      "Return a host-adapter result datum for a VCS operation."
       (list 'vcs-capability-result
             (vcs-field 'id id)
             (vcs-field 'status status)
             (vcs-field 'value value)))
 
-    ;; Return a scoped VCS authority grant record.
     (define (make-vcs-capability-grant id authority operations repository remote)
+      "Return a scoped VCS authority grant record."
       (list 'vcs-capability-grant
             (vcs-field 'id id)
             (vcs-field 'authority authority)
@@ -230,16 +230,16 @@
             (vcs-field 'repository repository)
             (vcs-field 'remote remote)))
 
-    ;; Return an explicit approval decision for one VCS request.
     (define (make-vcs-approval-decision id request-id status reason)
+      "Return an explicit approval decision for one VCS request."
       (list 'vcs-approval-decision
             (vcs-field 'id id)
             (vcs-field 'request-id request-id)
             (vcs-field 'status status)
             (vcs-field 'reason reason)))
 
-    ;; Return a VCS capability authorization decision record.
     (define (make-vcs-capability-decision request status grant approval reason)
+      "Return a VCS capability authorization decision record."
       (let ((operation (vcs-capability-request-operation request)))
         (let ((required-authority (vcs-operation-required-authority operation)))
           (list 'vcs-capability-decision
@@ -258,22 +258,22 @@
                 (vcs-field 'reason reason)
                 (vcs-field 'remote? (vcs-remote-operation? operation))))))
 
-    ;; Report whether DATUM is a VCS capability decision record.
     (define (vcs-capability-decision? datum)
+      "Return #t when DATUM is a VCS capability decision record."
       (vcs-record? datum 'vcs-capability-decision))
 
-    ;; Return DECISION's status symbol.
     (define (vcs-capability-decision-status decision)
+      "Return DECISION's status symbol."
       (vcs-field-value decision 'status #f))
 
-    ;; Return an explicit VCS outcome instead of a generic error.
     (define (make-vcs-outcome status message)
+      "Return an explicit VCS outcome instead of a generic error."
       (list 'vcs-outcome
             (vcs-field 'status status)
             (vcs-field 'message message)))
 
-    ;; Return OUTCOME's status symbol.
     (define (vcs-outcome-status outcome)
+      "Return OUTCOME's status symbol."
       (vcs-field-value outcome 'status #f))
 
     ;; Report whether DATUM is a VCS outcome record.
@@ -299,28 +299,28 @@
         permission-denied remote-authentication-failed remote-unavailable
         denied cancelled))
 
-    ;; Report whether OPERATION is a read-only VCS observation.
     (define (vcs-read-only-operation? operation)
+      "Return #t when OPERATION is a read-only VCS observation."
       (if (memq operation vcs-read-only-operations) #t #f))
 
-    ;; Report whether OPERATION mutates repository state.
     (define (vcs-mutating-operation? operation)
+      "Return #t when OPERATION mutates repository state."
       (if (memq operation vcs-mutating-operations) #t #f))
 
-    ;; Report whether OPERATION communicates with a remote VCS endpoint.
     (define (vcs-remote-operation? operation)
+      "Return #t when OPERATION communicates with a remote VCS endpoint."
       (if (memq operation vcs-remote-operations) #t #f))
 
-    ;; Return OPERATION's required policy authority family.
     (define (vcs-operation-required-authority operation)
+      "Return OPERATION's required policy authority family."
       (cond
        ((vcs-read-only-operation? operation) 'read-only-observation)
        ((vcs-remote-operation? operation) 'remote-mutation)
        ((vcs-mutating-operation? operation) 'repository-mutation)
        (else 'unknown)))
 
-    ;; Report whether STATUS is part of the shared outcome vocabulary.
     (define (vcs-known-outcome? status)
+      "Return #t when STATUS is part of the shared outcome vocabulary."
       (if (memq status vcs-known-outcomes) #t #f))
 
     ;; Return REQUEST's argument named NAME, or DEFAULT when absent.
@@ -388,8 +388,8 @@
          ((vcs-approval-allows? request (car rest)) (car rest))
          (else (loop (cdr rest))))))
 
-    ;; Return a fail-closed authorization decision for REQUEST.
     (define (vcs-authorize-capability-request request grants approvals)
+      "Return a fail-closed authorization decision for REQUEST."
       (let ((operation (vcs-capability-request-operation request)))
         (let ((required-authority (vcs-operation-required-authority operation))
               (requested-authority (vcs-field-value request 'authority #f)))
@@ -434,8 +434,8 @@
             (vcs-outcome-status value)
             #f)))
 
-    ;; Return a stable audit event for a VCS authorization and result.
     (define (make-vcs-capability-audit request decision result)
+      "Return a stable audit event for a VCS authorization and result."
       (let ((operation (vcs-capability-request-operation request)))
         (list 'vcs-capability-audit
               (vcs-field 'event 'vcs-capability-audit)
@@ -449,8 +449,8 @@
               (vcs-field 'result (vcs-field-value result 'status #f))
               (vcs-field 'outcome (vcs-result-outcome-status result)))))
 
-    ;; Report whether DATUM is a VCS capability audit record.
     (define (vcs-capability-audit? datum)
+      "Return #t when DATUM is a VCS capability audit record."
       (vcs-record? datum 'vcs-capability-audit))
 
     ;; Return non-#f when TEXT starts with PREFIX.
@@ -709,8 +709,8 @@
          kind
          '())))
 
-    ;; Parse Git status --porcelain=v2 -z --branch output into a status datum.
     (define (parse-git-status-porcelain-v2-z text)
+      "Parse Git status --porcelain=v2 -z --branch output into a status datum."
       (let loop ((tokens (vcs-split-nul text))
                  (oid #f)
                  (head #f)
@@ -882,8 +882,8 @@
                     score)
                    (if (null? rest) rest (cdr rest)))))))))
 
-    ;; Parse Git diff --raw -z output into a file-level summary datum.
     (define (parse-git-raw-diff-z text)
+      "Parse Git diff --raw -z output into a file-level summary datum."
       (let loop ((tokens (vcs-split-nul text))
                  (files '()))
         (cond
