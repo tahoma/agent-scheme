@@ -34,6 +34,7 @@
      (library (agent io))
      (library (agent approval))
      (library (agent debugger))
+     (library (agent helper))
      (library (agent job))
      (library (agent diagnostics))
      (library (agent diff))

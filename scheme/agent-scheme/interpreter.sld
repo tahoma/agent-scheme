@@ -43,6 +43,7 @@
           (agent-scheme library)
           (prefix (agent-scheme approval) approval-model:)
           (prefix (agent-scheme context) context-model:)
+          (prefix (agent-scheme helper) helper-model:)
           (prefix (agent-scheme job) job-model:)
           (prefix (agent-scheme memory) memory-model:)
           (prefix (agent-scheme plan) plan-model:)
@@ -60,6 +61,10 @@
     ;; Process-local portable memory used by `(agent memory)' primitives.
     (define interpreter-memory-store
       (memory-model:agent-scheme-make-memory-store))
+
+    ;; Process-local portable helpers used by `(agent helper)' primitives.
+    (define interpreter-helper-store
+      (helper-model:agent-scheme-make-helper-store))
 
     ;; Process-local portable plans used by `(agent plan)' primitives.
     (define interpreter-plan-store
@@ -4972,6 +4977,119 @@
          records)
         records))
 
+    ;; Return KEY from OPTIONS, or DEFAULT if absent.
+    (define (helper-option-ref options key default)
+      (let ((entry (assq key options)))
+        (if entry
+            (let ((value (cdr entry)))
+              (if (and (pair? value) (null? (cdr value)))
+                  (car value)
+                  value))
+            default)))
+
+    ;; Return the default helper scope for CONTEXT.
+    (define (helper-default-scope context)
+      (if (context-session-id context)
+          'session
+          'project-private))
+
+    ;; Return helper options from optional primitive ARGUMENTS.
+    (define (helper-options arguments)
+      (if (and (pair? arguments) (pair? (cdr arguments)) (pair? (cddr arguments)))
+          (third arguments)
+          '()))
+
+    ;; Return helper scope from OPTIONS and CONTEXT.
+    (define (helper-scope options context)
+      (let ((scope (helper-option-ref options
+                                      'scope
+                                      (helper-default-scope context))))
+        (if (eq? scope 'project)
+            'project-private
+            scope)))
+
+    ;; Return a Scheme-readable source datum for helper SCOPE and CONTEXT.
+    (define (helper-source scope context)
+      (if (eq? scope 'session)
+          (list 'session (context-session-id context))
+          '(project-root portable)))
+
+    ;; Save a structured helper artifact and yield it through the event channel.
+    (define (primitive-agent-artifact arguments context)
+      (let* ((scope (helper-default-scope context))
+             (record
+              (helper-model:artifact-save!
+               interpreter-helper-store
+               scope
+               (car arguments)
+               (second arguments)
+               (helper-source scope context))))
+        (record-agent-event! context (list 'yield record))
+        record))
+
+    ;; Save helper source forms in the portable helper store.
+    (define (primitive-agent-helper-save! arguments context)
+      (let* ((options (helper-options arguments))
+             (scope (helper-scope options context))
+             (record
+              (helper-model:helper-save!
+               interpreter-helper-store
+               scope
+               (car arguments)
+               (second arguments)
+               (helper-source scope context))))
+        (record-audit-event!
+         context
+         'agent-helper
+         (list (list 'operation "agent-helper-save!")
+               (list 'scope scope)
+               (list 'library (helper-model:helper-record-name record))
+               (list 'record record)))
+        record))
+
+    ;; Return a helper record by library name and options, or #f.
+    (define (helper-record-ref library-name options context)
+      (helper-model:helper-ref interpreter-helper-store
+                               (helper-scope options context)
+                               library-name))
+
+    ;; Load helper source forms into the current interaction environment.
+    (define (primitive-agent-helper-load arguments context)
+      (let* ((options (if (pair? (cdr arguments)) (second arguments) '()))
+             (record (helper-record-ref (car arguments) options context)))
+        (if (not record)
+            (eval-error "unknown helper library" (car arguments)))
+        (drain-state
+         (eval-sequence (helper-model:helper-record-forms record)
+                        (context-interaction-environment context)
+                        context
+                        #t
+                        #t)
+         context)
+        record))
+
+    ;; Return portable helper records in a scope.
+    (define (primitive-agent-helper-list arguments context)
+      (helper-model:helper-list interpreter-helper-store (car arguments)))
+
+    ;; Return one portable helper record or #f.
+    (define (primitive-agent-helper-ref arguments context)
+      (let ((options (if (pair? (cdr arguments)) (second arguments) '())))
+        (helper-record-ref (car arguments) options context)))
+
+    ;; Promote a portable helper into a skill candidate datum.
+    (define (primitive-agent-helper-promote-to-skill arguments context)
+      (let* ((helper-or-name (car arguments))
+             (options (if (pair? (cdr arguments)) (second arguments) '()))
+             (record (if (and (pair? helper-or-name)
+                              (eq? (car helper-or-name)
+                                   'agent-helper-library))
+                         helper-or-name
+                         (helper-record-ref helper-or-name options context))))
+        (if (not record)
+            (eval-error "unknown helper library" helper-or-name))
+        (helper-model:helper-promote-to-skill record options)))
+
     ;; Return the memory scope corresponding to PLAN-SCOPE.
     (define (plan-memory-scope plan-scope)
       (if (eq? plan-scope 'fresh)
@@ -7107,6 +7225,13 @@
        (cons 'primitive-memory-by-tag primitive-memory-by-tag)
        (cons 'primitive-memory-recent primitive-memory-recent)
        (cons 'primitive-memory-yield primitive-memory-yield)
+       (cons 'primitive-agent-artifact primitive-agent-artifact)
+       (cons 'primitive-agent-helper-save! primitive-agent-helper-save!)
+       (cons 'primitive-agent-helper-load primitive-agent-helper-load)
+       (cons 'primitive-agent-helper-list primitive-agent-helper-list)
+       (cons 'primitive-agent-helper-ref primitive-agent-helper-ref)
+       (cons 'primitive-agent-helper-promote-to-skill
+             primitive-agent-helper-promote-to-skill)
        (cons 'primitive-plan-create! primitive-plan-create!)
        (cons 'primitive-plan-ref primitive-plan-ref)
        (cons 'primitive-plan-list primitive-plan-list)

@@ -118,6 +118,7 @@
       '((agent io)
         (agent approval)
         (agent debugger)
+        (agent helper)
         (agent job)
         (agent diff)
         (agent vcs)
@@ -858,6 +859,35 @@
                                   'primitive-debugger-yield
                                   1
                                   1))
+         context))
+       ((equal? key '(agent helper))
+        (register-primitive-library!
+         key
+         (list
+          (library-primitive-spec 'agent-artifact
+                                  'primitive-agent-artifact
+                                  2
+                                  2)
+          (library-primitive-spec 'agent-helper-save!
+                                  'primitive-agent-helper-save!
+                                  2
+                                  3)
+          (library-primitive-spec 'agent-helper-load
+                                  'primitive-agent-helper-load
+                                  1
+                                  2)
+          (library-primitive-spec 'agent-helper-list
+                                  'primitive-agent-helper-list
+                                  1
+                                  1)
+          (library-primitive-spec 'agent-helper-ref
+                                  'primitive-agent-helper-ref
+                                  1
+                                  2)
+          (library-primitive-spec 'agent-helper-promote-to-skill
+                                  'primitive-agent-helper-promote-to-skill
+                                  1
+                                  2))
          context))
        ((equal? key '(agent job))
         (register-primitive-library!

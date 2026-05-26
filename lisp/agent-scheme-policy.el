@@ -36,6 +36,8 @@
     skill-resource-read
     skill-script-execution
     skill-export-write
+    helper-tracked-write
+    helper-skill-candidate-write
     network-access
     remote-provider-routing)
   "Policy categories recognized by Agent Scheme.")
@@ -62,6 +64,8 @@
     (skill-resource-read . confirm)
     (skill-script-execution . confirm)
     (skill-export-write . confirm)
+    (helper-tracked-write . confirm)
+    (helper-skill-candidate-write . confirm)
     (network-access . deny)
     (remote-provider-routing . allow))
   "Alist mapping policy categories to `allow', `deny', or `confirm'."
@@ -250,6 +254,30 @@ to `policy-decision'."
      (export-path . ,export-path))
    context
    'skill-export))
+
+;;;###autoload
+(defun agent-scheme-policy-authorize-helper-tracked-write
+    (library-name target-path &optional context)
+  "Authorize helper LIBRARY-NAME writing tracked TARGET-PATH."
+  (agent-scheme-policy-authorize
+   'helper-tracked-write
+   "helper-tracked-write"
+   `((library-name . ,library-name)
+     (target-path . ,target-path))
+   context
+   'helper-tracked-write))
+
+;;;###autoload
+(defun agent-scheme-policy-authorize-helper-skill-candidate-write
+    (candidate-name target-path &optional context)
+  "Authorize skill CANDIDATE-NAME writing TARGET-PATH."
+  (agent-scheme-policy-authorize
+   'helper-skill-candidate-write
+   "helper-skill-candidate-write"
+   `((candidate-name . ,candidate-name)
+     (target-path . ,target-path))
+   context
+   'helper-skill-candidate-write))
 
 ;;;###autoload
 (defun agent-scheme-policy-authorize-provider-routing
