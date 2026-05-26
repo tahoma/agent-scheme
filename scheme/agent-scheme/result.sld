@@ -262,7 +262,7 @@
     (define (debugger-default-restarts)
       (list
        (debugger-restart-record 'abort 'abort 'pure-r7rs)
-       (debugger-restart-record 'retry 'retry 'pure-r7rs)
+       (debugger-restart-record 'retry 'retry 'debugger-recovery)
        (debugger-restart-record
         'provide-value 'provide-value 'debugger-recovery)
        (debugger-restart-record

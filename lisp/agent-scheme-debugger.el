@@ -10,13 +10,34 @@
 
 (require 'cl-lib)
 (require 'seq)
+(require 'button)
+(require 'subr-x)
 (require 'agent-scheme-audit)
+(require 'agent-scheme-policy)
 (require 'agent-scheme-redaction)
 (require 'agent-scheme-result)
 (require 'agent-scheme-runtime)
 
 (defconst agent-scheme-debugger--maximum-frame-bindings 40
   "Maximum binding names included in one debugger environment frame.")
+
+(defconst agent-scheme-debugger--buffer-name "*Agent Scheme Debugger*"
+  "Name of the Agent Scheme debugger display buffer.")
+
+(defvar agent-scheme-debugger-restart-action-function
+  #'agent-scheme-debugger--default-restart-action
+  "Function called to execute policy-gated debugger restarts.
+The function receives the restart datum, condition datum, options datum, and
+evaluation context.")
+
+(defvar-local agent-scheme-debugger--condition nil
+  "Debugger condition datum displayed in the current debugger buffer.")
+
+(defvar-local agent-scheme-debugger--context nil
+  "Evaluation context displayed in the current debugger buffer.")
+
+(defvar-local agent-scheme-debugger--view nil
+  "Debugger view datum displayed in the current debugger buffer.")
 
 (define-error 'agent-scheme-debugger-error
   "Agent Scheme debugger error"
@@ -56,6 +77,22 @@
 (defun agent-scheme-debugger--field-value (datum name)
   "Return first value for field NAME from debugger DATUM."
   (car (agent-scheme-debugger--field-values datum name)))
+
+(defun agent-scheme-debugger--record-named-p (datum name)
+  "Return non-nil when DATUM is a Scheme-readable record named NAME."
+  (and (consp datum)
+       (agent-scheme-symbol-p (car datum))
+       (equal (agent-scheme-symbol-name (car datum)) name)))
+
+(defun agent-scheme-debugger--symbol-name (datum)
+  "Return DATUM's symbol name, or nil."
+  (cond
+   ((agent-scheme-symbol-p datum)
+    (agent-scheme-symbol-name datum))
+   ((symbolp datum)
+    (symbol-name datum))
+   ((stringp datum)
+    datum)))
 
 (defun agent-scheme-debugger--host-condition-message (condition)
   "Return CONDITION's raw message when possible."
@@ -166,7 +203,7 @@ graphs that are unsuitable for the stable public result datum."
   "Return default debugger restart records."
   (list
    (agent-scheme-debugger--restart-record "abort" "abort" "pure-r7rs")
-   (agent-scheme-debugger--restart-record "retry" "retry" "pure-r7rs")
+   (agent-scheme-debugger--restart-record "retry" "retry" "debugger-recovery")
    (agent-scheme-debugger--restart-record
     "provide-value" "provide-value" "debugger-recovery")
    (agent-scheme-debugger--restart-record
@@ -261,6 +298,347 @@ inspection.  PHASE defaults to `evaluation'."
     (signal 'agent-scheme-debugger-error
             (list "restart id must be a symbol or string")))))
 
+(defun agent-scheme-debugger--restart-records (condition)
+  "Return restart records from CONDITION."
+  (or (agent-scheme-debugger--field-value
+       (agent-scheme-debugger--expect-condition condition "restart lookup")
+       "restarts")
+      nil))
+
+(defun agent-scheme-debugger--restart-matches-id-p (restart id-name)
+  "Return non-nil when RESTART has ID-NAME."
+  (and (agent-scheme-debugger--record-named-p restart "restart")
+       (equal (agent-scheme-debugger--id-name
+               (agent-scheme-debugger--field-value restart "id"))
+              id-name)))
+
+(defun agent-scheme-debugger--restart-by-id (condition id)
+  "Return restart ID from CONDITION or signal a debugger error."
+  (let* ((id-name (agent-scheme-debugger--id-name id))
+         (restart
+          (seq-find
+           (lambda (candidate)
+             (agent-scheme-debugger--restart-matches-id-p candidate id-name))
+           (agent-scheme-debugger--restart-records condition))))
+    (or restart
+        (signal 'agent-scheme-debugger-error
+                (list (format "unknown debugger restart: %s" id-name))))))
+
+(defun agent-scheme-debugger--restart-policy-category (restart)
+  "Return RESTART's policy category as a host symbol."
+  (intern
+   (or (agent-scheme-debugger--symbol-name
+        (agent-scheme-debugger--field-value restart "policy"))
+       "debugger-recovery")))
+
+(defun agent-scheme-debugger--restart-id-symbol (id)
+  "Return ID as an Agent Scheme symbol datum."
+  (agent-scheme-debugger--symbol (agent-scheme-debugger--id-name id)))
+
+(defun agent-scheme-debugger--restart-result (id status options)
+  "Return a Scheme-readable restart result datum."
+  (list
+   (agent-scheme-debugger--symbol "restart-result")
+   (agent-scheme-debugger--field
+    "id" (agent-scheme-debugger--restart-id-symbol id))
+   (agent-scheme-debugger--field
+    "status" (agent-scheme-debugger--symbol status))
+   (agent-scheme-debugger--field "options" options)))
+
+(defun agent-scheme-debugger--restart-event (id status &optional result)
+  "Return a debugger restart event for ID with STATUS and optional RESULT."
+  (append
+   (list
+    (agent-scheme-debugger--symbol "debugger-restart")
+    (agent-scheme-debugger--field
+     "id" (agent-scheme-debugger--restart-id-symbol id))
+    (agent-scheme-debugger--field
+     "status" (agent-scheme-debugger--symbol status)))
+   (when result
+     (list (agent-scheme-debugger--field "result" result)))))
+
+(defun agent-scheme-debugger--record-restart-event!
+    (context id status &optional result)
+  "Record a debugger restart event in CONTEXT when available."
+  (when (and context (agent-scheme--eval-context-p context))
+    (agent-scheme--record-event!
+     context
+     (agent-scheme-debugger--restart-event id status result))))
+
+(defun agent-scheme-debugger--restart-audit-fields (restart id options)
+  "Return common audit fields for RESTART invocation."
+  `((restart-id . ,(agent-scheme-debugger--restart-id-symbol id))
+    (restart . ,restart)
+    (options . ,options)))
+
+(defun agent-scheme-debugger--default-restart-action
+    (restart _condition _options _context)
+  "Signal that RESTART has no concrete host action installed."
+  (signal 'agent-scheme-debugger-error
+          (list (format "no host action installed for debugger restart: %s"
+                        (agent-scheme-debugger--id-name
+                         (agent-scheme-debugger--field-value
+                          restart "id"))))))
+
+;;;###autoload
+(defun agent-scheme-debugger-invoke-restart
+    (condition restart-id options &optional context)
+  "Invoke RESTART-ID from CONDITION with OPTIONS in optional CONTEXT.
+`continue-with-warning' stays a direct portable restart path.  Other recovery
+restarts are authorized through the policy category carried by their restart
+datum before `agent-scheme-debugger-restart-action-function' is called."
+  (let* ((condition-datum
+          (agent-scheme-debugger--expect-condition
+           condition "agent-scheme-debugger-invoke-restart"))
+         (id-name (agent-scheme-debugger--id-name restart-id)))
+    (cond
+     ((equal id-name "continue-with-warning")
+      (let ((result (agent-scheme-debugger--restart-result
+                     id-name "continued" options)))
+        (agent-scheme-debugger--record-restart-event!
+         context id-name "continued" result)
+        result))
+     ((equal id-name "abort")
+      (agent-scheme-debugger--record-restart-event!
+       context id-name "aborted")
+      (signal 'agent-scheme-debugger-error
+              (list "debugger abort restart invoked")))
+     (t
+      (let* ((restart (agent-scheme-debugger--restart-by-id
+                       condition-datum id-name))
+             (category
+              (agent-scheme-debugger--restart-policy-category restart))
+             (fields
+              (agent-scheme-debugger--restart-audit-fields
+               restart id-name options)))
+        (agent-scheme-policy-authorize
+         category "debugger-restart" fields context 'debugger-restart)
+        (condition-case error
+            (let ((result
+                   (funcall agent-scheme-debugger-restart-action-function
+                            restart condition-datum options context)))
+              (agent-scheme-debugger--record-restart-event!
+               context id-name "completed" result)
+              (agent-scheme-audit-record
+               'debugger-restart
+               (append
+                `((category . ,category)
+                  (operation . "debugger-restart")
+                  (decision . completed))
+                fields
+                `((result . ,result))))
+              result)
+          (error
+           (agent-scheme-debugger--record-restart-event!
+            context id-name "failed")
+           (agent-scheme-audit-record
+            'debugger-restart
+            (append
+             `((category . ,category)
+               (operation . "debugger-restart")
+               (decision . failed)
+               (reason . ,(error-message-string error)))
+             fields))
+           (signal (car error) (cdr error)))))))))
+
+(defun agent-scheme-debugger--condition-summary (condition)
+  "Return a compact Scheme-readable summary for CONDITION."
+  (append
+   (list
+    (agent-scheme-debugger--symbol "condition-summary")
+    (agent-scheme-debugger--field
+     "type" (agent-scheme-debugger--field-value condition "type"))
+    (agent-scheme-debugger--field
+     "message" (agent-scheme-debugger--field-value condition "message"))
+    (agent-scheme-debugger--field
+     "phase" (agent-scheme-debugger--field-value condition "phase")))
+   (when-let ((symbol (agent-scheme-debugger--field-value
+                       condition "symbol")))
+     (list (agent-scheme-debugger--field "symbol" symbol)))
+   (when-let ((session (agent-scheme-debugger--field-value
+                        condition "session")))
+     (list (agent-scheme-debugger--field "session" session)))))
+
+;;;###autoload
+(defun agent-scheme-debugger-view-datum (condition &optional context)
+  "Return an Emacs debugger view datum for CONDITION and optional CONTEXT."
+  (let* ((condition-datum
+          (agent-scheme-redact
+           (agent-scheme-debugger--expect-condition
+            condition "agent-scheme-debugger-view-datum")
+           'debugger))
+         (events
+          (if (and context (agent-scheme--eval-context-p context))
+              (mapcar
+               (lambda (event)
+                 (agent-scheme-redact event 'debugger))
+               (agent-scheme--context-events context))
+            nil)))
+    (list
+     (agent-scheme-debugger--symbol "debugger-view")
+     (agent-scheme-debugger--field
+      "summary" (agent-scheme-debugger--condition-summary condition-datum))
+     (agent-scheme-debugger--field
+      "stack" (agent-scheme-debugger--field-value condition-datum "stack"))
+     (agent-scheme-debugger--field
+      "environment"
+      (agent-scheme-debugger--field-value condition-datum "environment"))
+     (agent-scheme-debugger--field "events" events)
+     (agent-scheme-debugger--field
+      "restarts"
+      (agent-scheme-debugger--field-value condition-datum "restarts")))))
+
+(defun agent-scheme-debugger--insert-heading (heading)
+  "Insert a debugger section HEADING."
+  (insert heading "\n")
+  (insert (make-string (length heading) ?-) "\n"))
+
+(defun agent-scheme-debugger--view-field (view name)
+  "Return field NAME from debugger VIEW."
+  (agent-scheme-debugger--field-value view name))
+
+(defun agent-scheme-debugger--insert-datum-lines (datum)
+  "Insert DATUM as stable external Scheme text."
+  (insert (agent-scheme-result->external datum) "\n\n"))
+
+(defun agent-scheme-debugger--restart-label (restart)
+  "Return a human-readable button label for RESTART."
+  (format "%s  %s  policy: %s"
+          (agent-scheme-debugger--id-name
+           (agent-scheme-debugger--field-value restart "id"))
+          (agent-scheme-debugger--id-name
+           (agent-scheme-debugger--field-value restart "category"))
+          (agent-scheme-debugger--id-name
+           (agent-scheme-debugger--field-value restart "policy"))))
+
+(defun agent-scheme-debugger--read-restart-options (restart)
+  "Read option datums for RESTART using ordinary Emacs minibuffer prompts."
+  (let ((category
+         (agent-scheme-debugger--id-name
+          (agent-scheme-debugger--field-value restart "category"))))
+    (pcase category
+      ("provide-value"
+       (list (agent-scheme-debugger--field
+              "value" (read-string "Debugger value: "))))
+      ("define-binding"
+       (list (agent-scheme-debugger--field
+              "binding" (read-string "Binding name: "))
+             (agent-scheme-debugger--field
+              "value" (read-string "Binding value: "))))
+      ("import-library"
+       (list (agent-scheme-debugger--field
+              "library" (read-string "Library name: "))))
+      ("request-user-input"
+       (list (agent-scheme-debugger--field
+              "input" (read-string "Debugger input: "))))
+      (_ nil))))
+
+(defun agent-scheme-debugger--restart-button-action (button)
+  "Invoke the debugger restart represented by BUTTON."
+  (let* ((restart (button-get button 'agent-scheme-debugger-restart))
+         (restart-id (button-get button 'agent-scheme-debugger-restart-id))
+         (condition agent-scheme-debugger--condition)
+         (context agent-scheme-debugger--context)
+         (options (agent-scheme-debugger--read-restart-options restart))
+         (result
+          (agent-scheme-debugger-invoke-restart
+           condition restart-id options context)))
+    (message "Agent Scheme restart %s: %s"
+             restart-id
+             (agent-scheme-result->external result))
+    result))
+
+(defun agent-scheme-debugger--insert-restart-button (restart)
+  "Insert an Emacs button for RESTART."
+  (let ((id (agent-scheme-debugger--id-name
+             (agent-scheme-debugger--field-value restart "id")))
+        (start (point)))
+    (insert-text-button
+     (agent-scheme-debugger--restart-label restart)
+     'action #'agent-scheme-debugger--restart-button-action
+     'follow-link t
+     'help-echo "Invoke Agent Scheme debugger restart"
+     'agent-scheme-debugger-restart restart
+     'agent-scheme-debugger-restart-id id)
+    (add-text-properties
+     start (point)
+     (list 'agent-scheme-debugger-restart-id id
+           'agent-scheme-debugger-restart restart))
+    (insert "\n")))
+
+(defun agent-scheme-debugger--render-buffer (condition context)
+  "Render CONDITION and CONTEXT in the current debugger buffer."
+  (let ((view (agent-scheme-debugger-view-datum condition context))
+        (inhibit-read-only t))
+    (setq agent-scheme-debugger--condition condition
+          agent-scheme-debugger--context context
+          agent-scheme-debugger--view view)
+    (erase-buffer)
+    (agent-scheme-debugger--insert-heading "Condition")
+    (agent-scheme-debugger--insert-datum-lines
+     (agent-scheme-debugger--view-field view "summary"))
+    (agent-scheme-debugger--insert-heading "Stack Frames")
+    (agent-scheme-debugger--insert-datum-lines
+     (agent-scheme-debugger--view-field view "stack"))
+    (agent-scheme-debugger--insert-heading "Environment")
+    (agent-scheme-debugger--insert-datum-lines
+     (agent-scheme-debugger--view-field view "environment"))
+    (agent-scheme-debugger--insert-heading "Recent Events")
+    (agent-scheme-debugger--insert-datum-lines
+     (agent-scheme-debugger--view-field view "events"))
+    (agent-scheme-debugger--insert-heading "Restart Choices")
+    (dolist (restart (agent-scheme-debugger--view-field view "restarts"))
+      (agent-scheme-debugger--insert-restart-button restart))
+    (goto-char (point-min))))
+
+(defvar agent-scheme-debugger-mode-map
+  (let ((map (make-sparse-keymap)))
+    (set-keymap-parent map special-mode-map)
+    (define-key map (kbd "RET") #'agent-scheme-debugger-activate-at-point)
+    (define-key map (kbd "g") #'agent-scheme-debugger-refresh)
+    map)
+  "Keymap for `agent-scheme-debugger-mode'.")
+
+;;;###autoload
+(define-derived-mode agent-scheme-debugger-mode special-mode
+  "Agent Scheme Debugger"
+  "Major mode for Agent Scheme debugger buffers.")
+
+;;;###autoload
+(defun agent-scheme-debugger-refresh ()
+  "Refresh the current Agent Scheme debugger buffer."
+  (interactive)
+  (unless agent-scheme-debugger--condition
+    (user-error "No Agent Scheme debugger condition in this buffer"))
+  (agent-scheme-debugger--render-buffer
+   agent-scheme-debugger--condition
+   agent-scheme-debugger--context))
+
+;;;###autoload
+(defun agent-scheme-debugger-activate-at-point ()
+  "Invoke the restart button at point."
+  (interactive)
+  (if-let ((button (button-at (point))))
+      (push-button (point))
+    (user-error "No debugger restart at point")))
+
+;;;###autoload
+(defun agent-scheme-debugger-display (condition &optional context)
+  "Display CONDITION and optional CONTEXT in an Emacs debugger buffer."
+  (interactive
+   (list (or (and (boundp 'agent-scheme-debugger--condition)
+                  agent-scheme-debugger--condition)
+             (user-error "No Agent Scheme debugger condition provided"))
+         (and (boundp 'agent-scheme-debugger--context)
+              agent-scheme-debugger--context)))
+  (let ((buffer (get-buffer-create agent-scheme-debugger--buffer-name)))
+    (with-current-buffer buffer
+      (agent-scheme-debugger-mode)
+      (agent-scheme-debugger--render-buffer condition context))
+    (when (called-interactively-p 'interactive)
+      (pop-to-buffer buffer))
+    buffer))
+
 (defun agent-scheme-debugger--primitive-current-error (_arguments context)
   "Primitive current-error over CONTEXT."
   (or (agent-scheme--eval-context-current-error context)
@@ -302,26 +680,23 @@ inspection.  PHASE defaults to `evaluation'."
    "restarts"))
 
 (defun agent-scheme-debugger--primitive-restart-invoke!
-    (arguments _context)
+    (arguments context)
   "Primitive restart-invoke! over ARGUMENTS."
   (let ((id (agent-scheme-debugger--id-name (car arguments)))
         (options (cadr arguments)))
     (cond
      ((equal id "continue-with-warning")
-      (list
-       (agent-scheme-debugger--symbol "restart-result")
-       (agent-scheme-debugger--field
-        "id" (agent-scheme-debugger--symbol id))
-       (agent-scheme-debugger--field
-        "status" (agent-scheme-debugger--symbol "continued"))
-       (agent-scheme-debugger--field "options" options)))
+      (agent-scheme-debugger--restart-result id "continued" options))
      ((equal id "abort")
       (signal 'agent-scheme-debugger-error
               (list "debugger abort restart invoked")))
      (t
-      (signal 'agent-scheme-debugger-error
-              (list (format "restart requires host debugger policy: %s"
-                            id)))))))
+      (if-let ((condition (agent-scheme--eval-context-current-error context)))
+          (agent-scheme-debugger-invoke-restart
+           condition id options context)
+        (signal 'agent-scheme-debugger-error
+                (list (format "restart requires host debugger policy: %s"
+                              id))))))))
 
 (defun agent-scheme-debugger--primitive-debugger-yield
     (arguments context)
