@@ -403,21 +403,13 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
        (member (agent-scheme--symbol-name (car form))
                '("define" "define-values" "define-record-type"))))
 
-(defun agent-scheme--base-body-documentation (body)
-  "Return simple string documentation metadata from BODY, or nil."
-  (let ((cursor body)
-        strings)
-    (while (and cursor
-                (agent-scheme--base-body-definition-form-p (car cursor)))
-      (setq cursor (cdr cursor)))
-    (while (and cursor (stringp (car cursor)))
-      (push (car cursor) strings)
-      (setq cursor (cdr cursor)))
-    (when (and strings
-               cursor
-               (not (agent-scheme--base-body-definition-form-p
-                     (car cursor))))
-      (mapconcat #'identity (nreverse strings) "\n"))))
+(defun agent-scheme--base-body-documentation (body &rest maybe-formals)
+  "Return documentation metadata from BODY and optional FORMALS."
+  (apply
+   #'agent-scheme--documentation-metadata-from-body
+   body
+   #'agent-scheme--base-body-definition-form-p
+   maybe-formals))
 
 (defun agent-scheme--base-documentation-properties (documentation)
   "Return plist fields for optional DOCUMENTATION metadata."
@@ -451,7 +443,9 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
                  :maximum-arity (cdr arity)
                  :source 'prelude)
            (agent-scheme--base-documentation-properties
-            (agent-scheme--base-body-documentation (cddr initializer))))))
+            (agent-scheme--base-body-documentation
+             (cddr initializer)
+             (cadr initializer))))))
        ((consp target)
         (setq arity (agent-scheme--formals-arity (cdr target)))
         (append
@@ -461,7 +455,9 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
                :maximum-arity (cdr arity)
                :source 'prelude)
          (agent-scheme--base-documentation-properties
-          (agent-scheme--base-body-documentation (cddr parts)))))
+          (agent-scheme--base-body-documentation
+           (cddr parts)
+           (cdr target)))))
        (t
         (agent-scheme--eval-error
          "prelude define target must be an identifier or function signature"))))))

@@ -47,6 +47,10 @@
           formals?
           formals-required
           formals-rest
+          documentation-metadata?
+          documentation-metadata-fields
+          documentation-metadata-origins
+          documentation-metadata-from-body
           make-procedure
           agent-scheme-procedure?
           procedure-formals
@@ -292,12 +296,12 @@
     ;; Default maximum reachable value graph size for one event record.
     (define agent-scheme-default-maximum-event-nodes 100000)
 
-    ;; Return the Agent Scheme version as exact non-negative host integers.
     (define (agent-scheme-version-components)
+      "Return the Agent Scheme version as exact non-negative host integers."
       (cdr agent-scheme-version-datum))
 
-    ;; Return the canonical Scheme-readable Agent Scheme version datum.
     (define (agent-scheme-version)
+      "Return the canonical Scheme-readable Agent Scheme version datum."
       (cons (car agent-scheme-version-datum)
             (map agent-scheme-make-canonical-integer
                  (agent-scheme-version-components))))
@@ -376,6 +380,14 @@
       formals?
       (required formals-required)
       (rest formals-rest))
+
+    ;; Documentation metadata is extracted from ordinary non-final body
+    ;; literals and later rendered through `(agent reflect)'.
+    (define-record-type <documentation-metadata>
+      (make-documentation-metadata fields origins)
+      documentation-metadata?
+      (fields documentation-metadata-fields)
+      (origins documentation-metadata-origins))
 
     ;; Record type for compound Scheme procedures and their closure
     ;; environment.
@@ -625,25 +637,25 @@
       (value-environment library-value-environment)
       (syntax-environment library-syntax-environment))
 
-    ;; Return the option value for KEY or DEFAULT when KEY is absent.
     (define (option-ref options key default)
+      "Return the option value for KEY or DEFAULT when KEY is absent."
       (let ((cell (assq key options)))
         (if cell (cdr cell) default)))
 
-    ;; Raise an evaluator error with the Agent Scheme diagnostic prefix.
     (define (eval-error message . irritants)
+      "Raise an evaluator error with the Agent Scheme diagnostic prefix."
       (apply error
              (string-append "agent-scheme eval error: " message)
              irritants))
 
-    ;; Raise an evaluator budget error with the Agent Scheme diagnostic prefix.
     (define (budget-error message . irritants)
+      "Raise an evaluator budget error with the Agent Scheme diagnostic prefix."
       (apply error
              (string-append "agent-scheme budget error: " message)
              irritants))
 
-    ;; Normalize include-directory options to a stable prefix form.
     (define (normalize-include-directory directory)
+      "Normalize include-directory options to a stable prefix form."
       (cond
        ((or (string=? directory "")
             (string=? directory "."))
@@ -653,13 +665,13 @@
        (else
         (string-append directory "/"))))
 
-    ;; Report whether PATH is absolute for include/load path resolution.
     (define (path-absolute? path)
+      "Report whether PATH is absolute for include/load path resolution."
       (and (> (string-length path) 0)
            (char=? (string-ref path 0) #\/)))
 
-    ;; Join DIRECTORY and PATH unless PATH is already absolute.
     (define (path-join directory path)
+      "Join DIRECTORY and PATH unless PATH is already absolute."
       (cond
        ((or (string=? directory "") (path-absolute? path))
         path)
@@ -668,9 +680,8 @@
        (else
         (string-append directory "/" path))))
 
-    ;; Split PATH on slash characters, preserving empty components for absolute
-    ;; path detection while letting normalization discard redundant separators.
     (define (path-split path)
+      "Split PATH on slash characters, preserving empty components for absolute path detection while letting normalization discard redundant separators."
       (let ((length (string-length path)))
         (let loop ((index 0) (start 0) (parts '()))
           (cond
@@ -683,16 +694,16 @@
            (else
             (loop (+ index 1) start parts))))))
 
-    ;; Join path PARTS with slash separators.
     (define (path-join-parts parts)
+      "Join path PARTS with slash separators."
       (cond
        ((null? parts) "")
        ((null? (cdr parts)) (car parts))
        (else
         (string-append (car parts) "/" (path-join-parts (cdr parts))))))
 
-    ;; Resolve . and .. path components without consulting the host filesystem.
     (define (path-normalize path)
+      "Resolve . and .. path components without consulting the host filesystem."
       (let ((absolute? (path-absolute? path)))
         (let loop ((parts (path-split path)) (stack '()))
           (cond
@@ -716,23 +727,23 @@
            (else
             (loop (cdr parts) (cons (car parts) stack)))))))
 
-    ;; Return FIELD from DATUM, or #f when it is absent.
     (define (capability-field datum field)
+      "Return FIELD from DATUM, or #f when it is absent."
       (let ((entry (and (pair? datum) (assq field (cdr datum)))))
         (if entry entry #f)))
 
-    ;; Return the first value for FIELD from DATUM, or #f.
     (define (capability-field-value datum field)
+      "Return the first value for FIELD from DATUM, or #f."
       (let ((entry (capability-field datum field)))
         (if (and entry (pair? (cdr entry))) (cadr entry) #f)))
 
-    ;; Return every value for FIELD from DATUM.
     (define (capability-field-values datum field)
+      "Return every value for FIELD from DATUM."
       (let ((entry (capability-field datum field)))
         (if entry (cdr entry) '())))
 
-    ;; Flatten a Scheme field that may store its values as one nested list.
     (define (capability-flatten-values values)
+      "Flatten a Scheme field that may store its values as one nested list."
       (if (and (pair? values)
                (null? (cdr values))
                (list? (car values))
@@ -740,8 +751,8 @@
           (car values)
           values))
 
-    ;; Return the scope clause named NAME from GRANT.
     (define (capability-scope-clause grant name)
+      "Return the scope clause named NAME from GRANT."
       (let ((scope (capability-field-values grant 'scope)))
         (let loop ((rest scope))
           (cond
@@ -749,36 +760,36 @@
            ((and (pair? (car rest)) (eq? (caar rest) name)) (car rest))
            (else (loop (cdr rest)))))))
 
-    ;; Return the first scope value named NAME from GRANT.
     (define (capability-scope-value grant name)
+      "Return the first scope value named NAME from GRANT."
       (let ((clause (capability-scope-clause grant name)))
         (if (and clause (pair? (cdr clause))) (cadr clause) #f)))
 
-    ;; Return flattened scope values named NAME from GRANT.
     (define (capability-scope-values grant name)
+      "Return flattened scope values named NAME from GRANT."
       (let ((clause (capability-scope-clause grant name)))
         (if clause (capability-flatten-values (cdr clause)) '())))
 
-    ;; Report whether GRANT is an active file-domain grant.
     (define (file-capability-grant? grant)
+      "Report whether GRANT is an active file-domain grant."
       (and (pair? grant)
            (eq? (car grant) 'capability-grant)
            (eq? (capability-field-value grant 'domain) 'file)))
 
-    ;; Report whether GRANT currently has active status.
     (define (capability-grant-active? grant)
+      "Report whether GRANT currently has active status."
       (let ((status (capability-field-value grant 'status)))
         (or (not status) (eq? status 'active))))
 
-    ;; Report whether GRANT authorizes OPERATION.
     (define (file-capability-operation? grant operation)
+      "Report whether GRANT authorizes OPERATION."
       (let loop ((operations (capability-field-values grant 'operations)))
         (and (pair? operations)
              (or (eq? (car operations) operation)
                  (loop (cdr operations))))))
 
-    ;; Return file-domain grants from CONTEXT.
     (define (file-capability-grants context)
+      "Return file-domain grants from CONTEXT."
       (let loop ((grants (context-capability-grants context)) (kept '()))
         (cond
          ((null? grants) (reverse kept))
@@ -787,8 +798,8 @@
          (else
           (loop (cdr grants) kept)))))
 
-    ;; Return a synthetic file grant for legacy allow-list PATHS.
     (define (legacy-file-capability-grants paths operation)
+      "Return a synthetic file grant for legacy allow-list PATHS."
       (if (null? paths)
           '()
           (list
@@ -804,8 +815,8 @@
                  (list 'expires 'after-eval)
                  (list 'status 'active)))))
 
-    ;; Test whether TEXT begins with PREFIX.
     (define (string-prefix? prefix text)
+      "Test whether TEXT begins with PREFIX."
       (let ((prefix-length (string-length prefix))
             (text-length (string-length text)))
         (and (<= prefix-length text-length)
@@ -815,15 +826,15 @@
                                 (string-ref text index))
                         (loop (+ index 1))))))))
 
-    ;; Remove a single trailing slash from PATH for prefix checks.
     (define (strip-trailing-slash path)
+      "Remove a single trailing slash from PATH for prefix checks."
       (if (and (> (string-length path) 0)
                (char=? (string-ref path (- (string-length path) 1)) #\/))
           (substring path 0 (- (string-length path) 1))
           path))
 
-    ;; Report whether TEXT contains NEEDLE.
     (define (string-contains? text needle)
+      "Report whether TEXT contains NEEDLE."
       (let ((text-length (string-length text))
             (needle-length (string-length needle)))
         (let loop ((index 0))
@@ -833,26 +844,26 @@
                     (substring text index text-length))
                    (loop (+ index 1)))))))
 
-    ;; Report whether FILENAME names a non-local resource outside file grants.
     (define (remote-file-path? filename)
+      "Report whether FILENAME names a non-local resource outside file grants."
       (string-contains? filename "://"))
 
-    ;; Return the effect class for a file capability operation.
     (define (file-capability-effect operation)
+      "Return the effect class for a file capability operation."
       (if (memq operation '(write create delete))
           'host-file-mutation
           'read-only-observation))
 
-    ;; Report whether PATH is equal to or nested inside ROOT.
     (define (path-contained? path root)
+      "Report whether PATH is equal to or nested inside ROOT."
       (let* ((normalized-path (path-normalize path))
              (normalized-root (strip-trailing-slash (path-normalize root)))
              (root-directory (string-append normalized-root "/")))
         (or (string=? normalized-path normalized-root)
             (string-prefix? root-directory normalized-path))))
 
-    ;; Return normalized allowed roots described by GRANT.
     (define (file-capability-roots grant context)
+      "Return normalized allowed roots described by GRANT."
       (let* ((project-root (capability-scope-value grant 'project-root))
              (file-root (capability-scope-value grant 'file-root))
              (base-root
@@ -866,8 +877,8 @@
                     (path-join base-root path))))
              paths)))
 
-    ;; Return a matching grant for PATH and OPERATION, or a denial reason.
     (define (file-capability-match grants path operation context)
+      "Return a matching grant for PATH and OPERATION, or a denial reason."
       (let loop ((rest grants) (denied #f))
         (cond
          ((null? rest) denied)
@@ -891,8 +902,8 @@
              (else
               (root-loop (cdr roots)))))))))
 
-    ;; Return a portable file capability request datum.
     (define (file-capability-request filename path operation binding)
+      "Return a portable file capability request datum."
       (list 'capability-request
             (list 'library
                   (cond
@@ -908,8 +919,8 @@
                   (list 'normalized-path path))
             (list 'effect (file-capability-effect operation))))
 
-    ;; Return a portable Scheme-readable file handle datum.
     (define (file-capability-handle path grant)
+      "Return a portable Scheme-readable file handle datum."
       (list 'handle
             (list 'id (string-append "file:" path))
             (list 'kind 'file)
@@ -918,8 +929,8 @@
             (list 'grant (capability-field-value grant 'id))
             (list 'status 'live)))
 
-    ;; Record DENIAL for REQUEST and raise a portable evaluator error.
     (define (deny-file-capability! context request operation grant reason)
+      "Record DENIAL for REQUEST and raise a portable evaluator error."
       (let* ((grant-id (if grant
                            (capability-field-value grant 'id)
                            'none))
@@ -947,9 +958,9 @@
                (list 'result (list 'error reason))))
         (eval-error (string-append "file capability denied: " reason))))
 
-    ;; Authorize FILENAME for file OPERATION and return authorization data.
     (define (authorize-file-capability
              filename context operation binding legacy-paths)
+      "Authorize FILENAME for file OPERATION and return authorization data."
       (let* ((path (path-normalize
                     (path-join (context-include-directory context)
                                filename)))
@@ -1047,13 +1058,13 @@
                   (list 'grant grant)
                   (list 'handle (file-capability-handle path grant)))))))
 
-    ;; Return the authorized normalized host path from AUTHORIZATION.
     (define (file-authorization-path authorization)
+      "Return the authorized normalized host path from AUTHORIZATION."
       (cadr (assq 'path authorization)))
 
-    ;; Record the result of an authorized file capability operation.
     (define (audit-file-capability-result!
              context authorization result error?)
+      "Record the result of an authorized file capability operation."
       (record-audit-event!
        context
        'capability-audit
@@ -1066,8 +1077,8 @@
                        (list 'error result)
                        (list 'ok result))))))
 
-    ;; Return a portable code-loading request datum.
     (define (code-loading-request authorization binding)
+      "Return a portable code-loading request datum."
       (let ((path (file-authorization-path authorization)))
         (list 'capability-request
               (list 'library '(scheme load))
@@ -1080,8 +1091,8 @@
                           (cadr (assq 'request authorization))))
               (list 'effect 'environment-mutation))))
 
-    ;; Authorize evaluation of source forms read by a file capability request.
     (define (authorize-code-loading authorization context binding)
+      "Authorize evaluation of source forms read by a file capability request."
       (let* ((path (file-authorization-path authorization))
              (request (code-loading-request authorization binding))
              (decision
@@ -1121,9 +1132,9 @@
               (list 'decision decision)
               (list 'operation 'load))))
 
-    ;; Record the result of a code-loading capability operation.
     (define (audit-code-loading-result!
              context authorization result error?)
+      "Record the result of a code-loading capability operation."
       (record-audit-event!
        context
        'capability-audit
@@ -1136,22 +1147,22 @@
                        (list 'error result)
                        (list 'ok result))))))
 
-    ;; Report whether GRANT is a clock-domain capability grant.
     (define (clock-capability-grant? grant)
+      "Report whether GRANT is a clock-domain capability grant."
       (and (pair? grant)
            (eq? (car grant) 'capability-grant)
            (eq? (capability-field-value grant 'domain) 'clock)))
 
-    ;; Report whether GRANT authorizes clock OPERATION.
     (define (clock-capability-operation? grant operation)
+      "Report whether GRANT authorizes clock OPERATION."
       (let loop ((operations (capability-field-values grant 'operations)))
         (and (pair? operations)
              (or (eq? (car operations) operation)
                  (eq? (car operations) 'read)
                  (loop (cdr operations))))))
 
-    ;; Return clock-domain grants from CONTEXT.
     (define (clock-capability-grants context)
+      "Return clock-domain grants from CONTEXT."
       (let loop ((grants (context-capability-grants context)) (kept '()))
         (cond
          ((null? grants) (reverse kept))
@@ -1160,8 +1171,8 @@
          (else
           (loop (cdr grants) kept)))))
 
-    ;; Return a clock grant match for OPERATION, or the strongest denial.
     (define (clock-capability-match grants operation)
+      "Return a clock grant match for OPERATION, or the strongest denial."
       (let loop ((rest grants) (denied #f))
         (cond
          ((null? rest) denied)
@@ -1180,8 +1191,8 @@
          (else
           (list 'approved (car rest))))))
 
-    ;; Return a portable clock capability request datum.
     (define (clock-capability-request binding operation)
+      "Return a portable clock capability request datum."
       (list 'capability-request
             (list 'library '(scheme time))
             (list 'binding binding)
@@ -1190,8 +1201,8 @@
             (list 'resource (list 'clock 'system))
             (list 'effect 'read-only-observation)))
 
-    ;; Return a clock capability decision datum.
     (define (clock-capability-decision request status grant reason)
+      "Return a clock capability decision datum."
       (list 'capability-decision
             (list 'request request)
             (list 'status status)
@@ -1199,9 +1210,9 @@
             (list 'grant (if grant (capability-field-value grant 'id) 'none))
             (list 'reason reason)))
 
-    ;; Record DENIAL for clock REQUEST and raise a portable evaluator error.
     (define (deny-clock-capability!
              context request operation grant reason)
+      "Record DENIAL for clock REQUEST and raise a portable evaluator error."
       (let ((decision
              (clock-capability-decision request 'denied grant reason)))
         (record-audit-event!
@@ -1225,15 +1236,15 @@
                (list 'result (list 'error reason))))
         (eval-error (string-append "clock capability denied: " reason))))
 
-    ;; Return CONTEXT's standard host-effect policy action for clock reads.
     (define (clock-policy-action context)
+      "Return CONTEXT's standard host-effect policy action for clock reads."
       (let ((entry (assq 'standard-host-effect
                          (context-policy-actions context))))
         (if entry (cdr entry) 'allow)))
 
-    ;; Require policy approval after a clock grant covers the operation.
     (define (authorize-clock-policy!
              context request binding operation grant)
+      "Require policy approval after a clock grant covers the operation."
       (let ((grant-id (capability-field-value grant 'id)))
         (if (eq? (clock-policy-action context) 'allow)
             (record-audit-event!
@@ -1260,8 +1271,8 @@
                grant
                "clock request denied by policy")))))
 
-    ;; Authorize a policy-gated `(scheme time)` clock read.
     (define (authorize-clock-capability binding context)
+      "Authorize a policy-gated `(scheme time)` clock read."
       (let* ((operation binding)
              (request (clock-capability-request binding operation))
              (grants (clock-capability-grants context)))
@@ -1326,9 +1337,9 @@
                   (list 'operation operation)
                   (list 'grant grant))))))
 
-    ;; Record the result of an authorized clock capability operation.
     (define (audit-clock-capability-result!
              context authorization result error?)
+      "Record the result of an authorized clock capability operation."
       (record-audit-event!
        context
        'capability-audit
@@ -1341,69 +1352,68 @@
                        (list 'error result)
                        (list 'ok result))))))
 
-    ;; Return VALUE as a string name when it names a host process resource.
     (define (process-name-string value)
+      "Return VALUE as a string name when it names a host process resource."
       (cond
        ((symbol? value) (symbol->string value))
        ((string? value) value)
        (else #f)))
 
-    ;; Return #t when VALUE is in VALUES using equal?.
     (define (process-member-equal? value values)
+      "Return #t when VALUE is in VALUES using equal?."
       (cond
        ((null? values) #f)
        ((equal? value (car values)) #t)
        (else (process-member-equal? value (cdr values)))))
 
-    ;; Return RESOURCE's field alist, accepting either a plain field list or a
-    ;; `(resource ...)` datum.
     (define (process-resource-fields resource)
+      "Return RESOURCE's field alist, accepting either a plain field list or a `(resource ...)` datum."
       (if (and (pair? resource) (eq? (car resource) 'resource))
           (cdr resource)
           resource))
 
-    ;; Return all values for RESOURCE FIELD.
     (define (process-resource-field-values resource field)
+      "Return all values for RESOURCE FIELD."
       (let ((entry (assq field (process-resource-fields resource))))
         (if entry (cdr entry) '())))
 
-    ;; Return RESOURCE FIELD's first value, or #f.
     (define (process-resource-value resource field)
+      "Return RESOURCE FIELD's first value, or #f."
       (let ((values (process-resource-field-values resource field)))
         (if (pair? values) (car values) #f)))
 
-    ;; Return RESOURCE FIELD's values, flattening single nested list fields.
     (define (process-resource-values resource field)
+      "Return RESOURCE FIELD's values, flattening single nested list fields."
       (capability-flatten-values
        (process-resource-field-values resource field)))
 
-    ;; Return the effect class for a process capability operation.
     (define (process-capability-effect operation)
+      "Return the effect class for a process capability operation."
       (if (memq operation '(spawn input interrupt terminate))
           'process-control
           'read-only-observation))
 
-    ;; Return the policy category for a process capability operation.
     (define (process-capability-policy-category operation)
+      "Return the policy category for a process capability operation."
       (if (eq? (process-capability-effect operation) 'process-control)
           'command-process
           'emacs-read-only))
 
-    ;; Report whether GRANT is a process-domain grant.
     (define (process-capability-grant? grant)
+      "Report whether GRANT is a process-domain grant."
       (and (pair? grant)
            (eq? (car grant) 'capability-grant)
            (eq? (capability-field-value grant 'domain) 'process)))
 
-    ;; Report whether GRANT authorizes process OPERATION.
     (define (process-capability-operation? grant operation)
+      "Report whether GRANT authorizes process OPERATION."
       (let loop ((operations (capability-field-values grant 'operations)))
         (and (pair? operations)
              (or (eq? (car operations) operation)
                  (loop (cdr operations))))))
 
-    ;; Return process-domain grants from CONTEXT.
     (define (process-capability-grants context)
+      "Return process-domain grants from CONTEXT."
       (let loop ((grants (context-capability-grants context)) (kept '()))
         (cond
          ((null? grants) (reverse kept))
@@ -1412,13 +1422,13 @@
          (else
           (loop (cdr grants) kept)))))
 
-    ;; Return process ENVIRONMENT entry's variable name.
     (define (process-environment-entry-name entry)
+      "Return process ENVIRONMENT entry's variable name."
       (process-name-string
        (if (pair? entry) (car entry) entry)))
 
-    ;; Return process ENVIRONMENT variable names.
     (define (process-environment-names environment)
+      "Return process ENVIRONMENT variable names."
       (let loop ((rest environment) (names '()))
         (if (null? rest)
             (reverse names)
@@ -1426,37 +1436,37 @@
                   (cons (process-environment-entry-name (car rest))
                         names)))))
 
-    ;; Return #t when every LEFT value is a member of RIGHT.
     (define (process-subset? left right)
+      "Return #t when every LEFT value is a member of RIGHT."
       (cond
        ((null? left) #t)
        ((process-member-equal? (car left) right)
         (process-subset? (cdr left) right))
        (else #f)))
 
-    ;; Return GRANT's process command scope as a string, or #f.
     (define (process-scope-command grant)
+      "Return GRANT's process command scope as a string, or #f."
       (let ((command (capability-scope-value grant 'command)))
         (and command (process-name-string command))))
 
-    ;; Return GRANT's process working directory scope, or #f.
     (define (process-scope-cwd grant)
+      "Return GRANT's process working directory scope, or #f."
       (or (capability-scope-value grant 'working-directory)
           (capability-scope-value grant 'cwd)))
 
-    ;; Return GRANT's process environment variable scope, or #f.
     (define (process-scope-environment grant)
+      "Return GRANT's process environment variable scope, or #f."
       (let ((values (capability-scope-values grant 'environment)))
         (and (pair? values)
              (process-environment-names values))))
 
-    ;; Return GRANT's process handle scope, or #f.
     (define (process-scope-handle grant)
+      "Return GRANT's process handle scope, or #f."
       (or (capability-scope-value grant 'handle)
           (capability-scope-value grant 'process)))
 
-    ;; Return a process scope denial reason, or #f when RESOURCE is in scope.
     (define (process-scope-denial grant resource)
+      "Return a process scope denial reason, or #f when RESOURCE is in scope."
       (let ((scope-command (process-scope-command grant))
             (scope-arguments (capability-scope-values grant 'arguments))
             (scope-cwd (process-scope-cwd grant))
@@ -1489,9 +1499,8 @@
           "handle is outside approved process grant scope")
          (else #f))))
 
-    ;; Return a matching process grant for RESOURCE and OPERATION, or a
-    ;; denial tuple.
     (define (process-capability-match grants operation resource)
+      "Return a matching process grant for RESOURCE and OPERATION, or a denial tuple."
       (let loop ((rest grants) (denied #f))
         (cond
          ((null? rest) denied)
@@ -1513,15 +1522,15 @@
                 (loop (cdr rest) (list 'denied (car rest) reason))
                 (list 'approved (car rest))))))))
 
-    ;; Return #t when COMMAND is in ALLOW-LIST.
     (define (process-command-allowed? command allow-list)
+      "Return #t when COMMAND is in ALLOW-LIST."
       (let loop ((rest allow-list))
         (and (pair? rest)
              (or (equal? command (process-name-string (car rest)))
                  (loop (cdr rest))))))
 
-    ;; Return a host-neutral process capability request datum.
     (define (process-capability-request library binding operation resource)
+      "Return a host-neutral process capability request datum."
       (list 'capability-request
             (list 'library library)
             (list 'binding binding)
@@ -1531,8 +1540,8 @@
                   (redact (process-resource-fields resource) 'local-only))
             (list 'effect (process-capability-effect operation))))
 
-    ;; Return a process capability decision datum.
     (define (process-capability-decision request status grant reason)
+      "Return a process capability decision datum."
       (list 'capability-decision
             (list 'request request)
             (list 'status status)
@@ -1540,9 +1549,9 @@
             (list 'grant (if grant (capability-field-value grant 'id) 'none))
             (list 'reason reason)))
 
-    ;; Record DENIAL for process REQUEST and raise a portable evaluator error.
     (define (deny-process-capability!
              context request operation grant reason)
+      "Record DENIAL for process REQUEST and raise a portable evaluator error."
       (let ((decision
              (process-capability-decision request 'denied grant reason)))
         (record-audit-event!
@@ -1567,17 +1576,17 @@
         (eval-error
          (string-append "process capability denied: " reason))))
 
-    ;; Return CONTEXT's configured policy action for CATEGORY.
     (define (process-policy-action context category)
+      "Return CONTEXT's configured policy action for CATEGORY."
       (let ((entry (assq category (context-policy-actions context))))
         (cond
          (entry (cdr entry))
          ((eq? category 'emacs-read-only) 'allow)
          (else 'deny))))
 
-    ;; Require host policy approval for a process capability request.
     (define (authorize-process-policy!
              context request binding operation resource grant)
+      "Require host policy approval for a process capability request."
       (let* ((category (process-capability-policy-category operation))
              (action (process-policy-action context category))
              (grant-id (capability-field-value grant 'id)))
@@ -1612,11 +1621,9 @@
                grant
                "process request denied by policy")))))
 
-    ;; Authorize a host adapter process request against the shared process
-    ;; capability vocabulary.  This does not start or observe a real process;
-    ;; adapters call it before touching host process APIs.
     (define (authorize-process-capability
              library binding context operation resource command-allow-list)
+      "Authorize a host adapter process request against the shared process capability vocabulary.  This does not start or observe a real process; adapters call it before touching host process APIs."
       (let* ((request
               (process-capability-request
                library
@@ -1703,8 +1710,8 @@
                   (list 'operation operation)
                   (list 'grant grant))))))
 
-    ;; Return a Scheme-readable process job handle datum.
     (define (process-capability-handle id resource grant status)
+      "Return a Scheme-readable process job handle datum."
       (list 'handle
             (list 'id id)
             (list 'kind 'process-job)
@@ -1719,9 +1726,9 @@
             (list 'grant grant)
             (list 'status status)))
 
-    ;; Return a Scheme-readable process-backed port capability datum.
     (define (process-port-capability-handle
              id kind process-handle operations grant limits status)
+      "Return a Scheme-readable process-backed port capability datum."
       (list 'port-capability
             (list 'id id)
             (list 'kind kind)
@@ -1732,9 +1739,9 @@
             (list 'path process-handle)
             (list 'status status)))
 
-    ;; Record the result of an authorized process capability operation.
     (define (audit-process-capability-result!
              context authorization result error?)
+      "Record the result of an authorized process capability operation."
       (record-audit-event!
        context
        'capability-audit
@@ -1747,31 +1754,29 @@
                        (list 'error (redact result 'local-only))
                        (list 'ok (redact result 'local-only)))))))
 
-    ;; Return RESOURCE's field alist, accepting either a plain field list or a
-    ;; `(resource ...)` datum.
     (define (network-resource-fields resource)
+      "Return RESOURCE's field alist, accepting either a plain field list or a `(resource ...)` datum."
       (if (and (pair? resource) (eq? (car resource) 'resource))
           (cdr resource)
           resource))
 
-    ;; Return all values for RESOURCE FIELD.
     (define (network-resource-field-values resource field)
+      "Return all values for RESOURCE FIELD."
       (let ((entry (assq field (network-resource-fields resource))))
         (if entry (cdr entry) '())))
 
-    ;; Return RESOURCE FIELD's first value, or #f.
     (define (network-resource-value resource field)
+      "Return RESOURCE FIELD's first value, or #f."
       (let ((values (network-resource-field-values resource field)))
         (if (pair? values) (car values) #f)))
 
-    ;; Return RESOURCE FIELD's values, flattening single nested list fields.
     (define (network-resource-values resource field)
+      "Return RESOURCE FIELD's values, flattening single nested list fields."
       (capability-flatten-values
        (network-resource-field-values resource field)))
 
-    ;; Convert host-owned network metadata to Agent Scheme datums before
-    ;; publishing it through result or audit records.
     (define (network-public-datum datum)
+      "Convert host-owned network metadata to Agent Scheme datums before publishing it through result or audit records."
       (cond
        ((agent-scheme-number? datum) datum)
        ((and (number? datum) (integer? datum))
@@ -1786,19 +1791,19 @@
          (map network-public-datum (vector->list datum))))
        (else datum)))
 
-    ;; Redact network metadata, then make it safe for external rendering.
     (define (network-redacted-public-datum datum)
+      "Redact network metadata, then make it safe for external rendering."
       (network-public-datum (redact datum 'local-only)))
 
-    ;; Return #t when VALUE is in VALUES using equal?.
     (define (network-member-equal? value values)
+      "Return #t when VALUE is in VALUES using equal?."
       (cond
        ((null? values) #f)
        ((equal? value (car values)) #t)
        (else (network-member-equal? value (cdr values)))))
 
-    ;; Return #t when every LEFT value is a member of RIGHT.
     (define (network-subset? left right)
+      "Return #t when every LEFT value is a member of RIGHT."
       (cond
        ((null? left) #t)
        ((or (null? right) (network-member-equal? 'all right)) #t)
@@ -1806,26 +1811,26 @@
         (network-subset? (cdr left) right))
        (else #f)))
 
-    ;; Return #t when VALUE is covered by ALLOWED values.
     (define (network-value-covered? value allowed)
+      "Return #t when VALUE is covered by ALLOWED values."
       (or (null? allowed)
           (network-member-equal? 'all allowed)
           (network-member-equal? value allowed)))
 
-    ;; Return the effect class for a network capability operation.
     (define (network-capability-effect operation)
+      "Return the effect class for a network capability operation."
       (if (eq? operation 'stream)
           'network-stream
           'network-egress))
 
-    ;; Report whether GRANT is a network-domain grant.
     (define (network-capability-grant? grant)
+      "Report whether GRANT is a network-domain grant."
       (and (pair? grant)
            (eq? (car grant) 'capability-grant)
            (eq? (capability-field-value grant 'domain) 'network)))
 
-    ;; Report whether GRANT authorizes network OPERATION.
     (define (network-capability-operation? grant operation)
+      "Report whether GRANT authorizes network OPERATION."
       (let loop ((operations
                   (capability-flatten-values
                    (capability-field-values grant 'operations))))
@@ -1834,8 +1839,8 @@
                  (eq? (car operations) 'all)
                  (loop (cdr operations))))))
 
-    ;; Return network-domain grants from CONTEXT.
     (define (network-capability-grants context)
+      "Return network-domain grants from CONTEXT."
       (let loop ((grants (context-capability-grants context)) (kept '()))
         (cond
          ((null? grants) (reverse kept))
@@ -1844,8 +1849,8 @@
          (else
           (loop (cdr grants) kept)))))
 
-    ;; Return a network scope denial reason, or #f when RESOURCE is in scope.
     (define (network-scope-denial grant resource)
+      "Return a network scope denial reason, or #f when RESOURCE is in scope."
       (let ((schemes (capability-scope-values grant 'schemes))
             (hosts (capability-scope-values grant 'hosts))
             (ports (capability-scope-values grant 'ports))
@@ -1901,9 +1906,8 @@
           "stream lifetime is outside approved network grant scope")
          (else #f))))
 
-    ;; Return a matching network grant for RESOURCE and OPERATION, or a denial
-    ;; tuple.
     (define (network-capability-match grants operation resource)
+      "Return a matching network grant for RESOURCE and OPERATION, or a denial tuple."
       (let loop ((rest grants) (denied #f))
         (cond
          ((null? rest) denied)
@@ -1925,8 +1929,8 @@
                 (loop (cdr rest) (list 'denied (car rest) reason))
                 (list 'approved (car rest))))))))
 
-    ;; Return a host-neutral network capability request datum.
     (define (network-capability-request library binding operation resource)
+      "Return a host-neutral network capability request datum."
       (list 'capability-request
             (list 'library library)
             (list 'binding binding)
@@ -1937,8 +1941,8 @@
                    (network-resource-fields resource)))
             (list 'effect (network-capability-effect operation))))
 
-    ;; Return a network capability decision datum.
     (define (network-capability-decision request status grant reason)
+      "Return a network capability decision datum."
       (list 'capability-decision
             (list 'request request)
             (list 'status status)
@@ -1946,9 +1950,9 @@
             (list 'grant (if grant (capability-field-value grant 'id) 'none))
             (list 'reason reason)))
 
-    ;; Record DENIAL for network REQUEST and raise a portable evaluator error.
     (define (deny-network-capability!
              context request operation grant reason)
+      "Record DENIAL for network REQUEST and raise a portable evaluator error."
       (let ((decision
              (network-capability-decision request 'denied grant reason)))
         (record-audit-event!
@@ -1973,14 +1977,14 @@
         (eval-error
          (string-append "network capability denied: " reason))))
 
-    ;; Return CONTEXT's configured network policy action.
     (define (network-policy-action context)
+      "Return CONTEXT's configured network policy action."
       (let ((entry (assq 'network-access (context-policy-actions context))))
         (if entry (cdr entry) 'deny)))
 
-    ;; Require host policy approval for a network capability request.
     (define (authorize-network-policy!
              context request binding operation resource grant)
+      "Require host policy approval for a network capability request."
       (let ((action (network-policy-action context))
             (grant-id (capability-field-value grant 'id)))
         (if (eq? action 'allow)
@@ -2014,10 +2018,9 @@
                grant
                "network request denied by policy")))))
 
-    ;; Authorize a host adapter network request against the shared network
-    ;; capability vocabulary. This does not perform transport.
     (define (authorize-network-capability
              library binding context operation resource)
+      "Authorize a host adapter network request against the shared network capability vocabulary. This does not perform transport."
       (let* ((request
               (network-capability-request
                library
@@ -2108,8 +2111,8 @@
                   (list 'operation operation)
                   (list 'grant grant))))))
 
-    ;; Return a Scheme-readable network stream handle datum.
     (define (network-capability-handle id request url grant status)
+      "Return a Scheme-readable network stream handle datum."
       (list 'handle
             (list 'id id)
             (list 'kind 'network-stream)
@@ -2119,9 +2122,9 @@
             (list 'grant grant)
             (list 'status status)))
 
-    ;; Return a Scheme-readable network-backed port capability datum.
     (define (network-port-capability-handle
              id kind stream-handle operations grant limits status)
+      "Return a Scheme-readable network-backed port capability datum."
       (list 'port-capability
             (list 'id id)
             (list 'kind kind)
@@ -2132,9 +2135,9 @@
             (list 'path stream-handle)
             (list 'status status)))
 
-    ;; Record the result of an authorized network capability operation.
     (define (audit-network-capability-result!
              context authorization result error?)
+      "Record the result of an authorized network capability operation."
       (record-audit-event!
        context
        'capability-audit
@@ -2149,14 +2152,14 @@
                        (list 'ok
                              (network-redacted-public-datum result)))))))
 
-    ;; Resolve relative include paths against the active include directory.
     (define (normalize-include-paths paths directory)
+      "Resolve relative include paths against the active include directory."
       (map (lambda (path)
              (path-normalize (path-join directory path)))
            paths))
 
-    ;; Create a fresh evaluation context from user option overrides.
     (define (new-eval-context options)
+      "Create a fresh evaluation context from user option overrides."
       (let ((include-directory
              (normalize-include-directory
               (option-ref options 'include-directory "."))))
@@ -2213,8 +2216,8 @@
        '()
        '())))
 
-    ;; Record a Scheme-readable audit EVENT with FIELDS in CONTEXT.
     (define (record-audit-event! context event fields)
+      "Record a Scheme-readable audit EVENT with FIELDS in CONTEXT."
       (let ((entry (cons 'audit-entry
                          (cons (list 'event event) fields))))
         (set-context-audit-events!
@@ -2222,8 +2225,8 @@
          (cons entry (context-audit-events context)))
         entry))
 
-    ;; Record an ordered event-channel EVENT after enforcing event budgets.
     (define (record-agent-event! context event)
+      "Record an ordered event-channel EVENT after enforcing event budgets."
       (let ((node-count (value-node-count event '())))
         (if (> node-count (context-maximum-event-nodes context))
             (budget-error "event node budget exceeded"
@@ -2242,15 +2245,15 @@
        (cons event (context-audit-events context)))
       event)
 
-    ;; Charge one evaluator step against the active step budget.
     (define (note-step! context)
+      "Charge one evaluator step against the active step budget."
       (set-context-steps! context (+ (context-steps context) 1))
       (if (> (context-steps context) (context-maximum-steps context))
           (budget-error "evaluation step budget exceeded"
                         (context-maximum-steps context))))
 
-    ;; Charge one primitive callback against the host-callback budget.
     (define (note-host-callback! context primitive)
+      "Charge one primitive callback against the host-callback budget."
       (set-context-host-callbacks!
        context
        (+ (context-host-callbacks context) 1))
@@ -2259,8 +2262,8 @@
           (budget-error "host callback budget exceeded"
                         (primitive-procedure-name primitive))))
 
-    ;; Count the reachable nodes in VALUE while tolerating cycles.
     (define (value-node-count value seen)
+      "Count the reachable nodes in VALUE while tolerating cycles."
       (cond
        ((or (boolean? value)
             (null? value)
@@ -2324,8 +2327,8 @@
        (else
         (eval-error "unsupported Scheme value" value))))
 
-    ;; Reject VALUE when its reachable node count exceeds the result budget.
     (define (check-value-budget value context)
+      "Reject VALUE when its reachable node count exceeds the result budget."
       (let ((count (value-node-count value '())))
         (if (> count (context-maximum-value-nodes context))
             (budget-error "value node budget exceeded"
@@ -2333,14 +2336,14 @@
                           (context-maximum-value-nodes context))))
       value)
 
-    ;; Unpack a single or multiple-value result into a list.
     (define (values-list value)
+      "Unpack a single or multiple-value result into a list."
       (if (multiple-values? value)
           (multiple-values-values value)
           (list value)))
 
-    ;; Require VALUE to contain exactly one Scheme value.
     (define (single-value value description)
+      "Require VALUE to contain exactly one Scheme value."
       (let ((values (values-list value)))
         (if (not (= (length values) 1))
             (eval-error
@@ -2348,22 +2351,22 @@
              (length values)))
         (car values)))
 
-    ;; Default continuation that returns its input value unchanged.
     (define (identity-continuation value)
+      "Default continuation that returns its input value unchanged."
       value)
 
-    ;; Invoke a continuation procedure with VALUE.
     (define (continue continuation value)
+      "Invoke a continuation procedure with VALUE."
       (continuation value))
 
-    ;; Package continuation arguments as one value or multiple values.
     (define (continuation-value arguments)
+      "Package continuation arguments as one value or multiple values."
       (if (= (length arguments) 1)
           (car arguments)
           (make-multiple-values arguments)))
 
-    ;; Return DATUM as a proper list or raise an evaluator error.
     (define (proper-list-elements datum description)
+      "Return DATUM as a proper list or raise an evaluator error."
       (let loop ((cursor datum) (elements '()))
         (cond
          ((null? cursor) (reverse elements))
@@ -2372,39 +2375,319 @@
           (eval-error
            (string-append description " must be a proper list"))))))
 
-    ;; Return the second element of LIST for parser helpers.
+    (define (proper-list? datum)
+      "Report whether DATUM is a proper Scheme list."
+      (let loop ((cursor datum))
+        (cond
+         ((null? cursor) #t)
+         ((pair? cursor) (loop (cdr cursor)))
+         (else #f))))
+
+    ;; Documentation metadata fields whose list values append in source order.
+    (define documentation-list-field-names '(examples see-also))
+
+    (define (documentation-field fields name)
+      "Return FIELDS entry named NAME, or #f."
+      (assq name fields))
+
+    (define (documentation-add-origin origins origin)
+      "Return ORIGINS with ORIGIN appended once in source order."
+      (if (memq origin origins)
+          origins
+          (append origins (list origin))))
+
+    (define (documentation-set-field fields name value)
+      "Return FIELDS with NAME set to VALUE, preserving field order."
+      (if (documentation-field fields name)
+          (map (lambda (field)
+                 (if (eq? (car field) name)
+                     (cons name value)
+                     field))
+               fields)
+          (append fields (list (cons name value)))))
+
+    (define (documentation-add-field fields name value)
+      "Return FIELDS with NAME/VALUE appended."
+      (append fields (list (cons name value))))
+
+    (define (documentation-formals->datum formals)
+      (define (dotted required rest)
+        (if (null? required)
+            rest
+            (cons (car required) (dotted (cdr required) rest))))
+      "Return FORMALS as a Scheme-readable arguments datum."
+      (let ((required (formals-required formals))
+            (rest (formals-rest formals)))
+        (cond
+         ((not rest) required)
+         ((null? required) rest)
+         (else (dotted required rest)))))
+
+    (define (documentation-metadata-from-formals formals)
+      "Return generated documentation metadata for lambda FORMALS."
+      (let ((parsed (if (formals? formals) formals (parse-formals formals))))
+        (make-documentation-metadata
+         (list (cons 'arguments (documentation-formals->datum parsed)))
+         '())))
+
+    (define (documentation-metadata-fields-present? metadata)
+      "Report whether METADATA contains at least one field."
+      (and metadata (not (null? (documentation-metadata-fields metadata)))))
+
+    (define (documentation-join-strings strings)
+      "Join adjacent simple string docstrings with the documented separator."
+      (cond
+       ((null? strings) "")
+       ((null? (cdr strings)) (car strings))
+       (else
+        (string-append (car strings)
+                       "\n"
+                       (documentation-join-strings (cdr strings))))))
+
+    (define (documentation-parameter-names parameters)
+      "Return `(ok . names)' for valid parameter alists, otherwise #f."
+      (if (not (proper-list? parameters))
+          #f
+          (let loop ((rest parameters) (names '()))
+            (cond
+             ((null? rest) (cons 'ok (reverse names)))
+             ((not (pair? (car rest))) #f)
+             ((not (symbol? (car (car rest)))) #f)
+             ((memq (car (car rest)) names) #f)
+             (else
+              (loop (cdr rest) (cons (car (car rest)) names)))))))
+
+    (define (documentation-argument-names arguments)
+      "Return `(ok . names)' for valid argument datums, otherwise #f."
+      (cond
+       ((symbol? arguments) (cons 'ok (list arguments)))
+       (else
+        (let loop ((cursor arguments) (names '()))
+          (cond
+           ((null? cursor) (cons 'ok (reverse names)))
+           ((pair? cursor)
+            (if (not (symbol? (car cursor)))
+                #f
+                (loop (cdr cursor) (cons (car cursor) names))))
+           ((symbol? cursor) (cons 'ok (reverse (cons cursor names))))
+           (else #f))))))
+
+    (define (documentation-parameters-match-arguments? fields names)
+      "Report whether parameter NAMES are all present in FIELDS arguments."
+      (let ((arguments (documentation-field fields 'arguments)))
+        (if (not arguments)
+            #t
+            (let ((argument-names-result
+                   (documentation-argument-names (cdr arguments))))
+              (and argument-names-result
+                   (let loop ((rest names)
+                              (argument-names (cdr argument-names-result)))
+                     (cond
+                      ((null? rest) #t)
+                      ((memq (car rest) argument-names)
+                       (loop (cdr rest) argument-names))
+                      (else #f))))))))
+
+    (define (documentation-merge-parameters fields value)
+      "Return FIELDS merged with parameter metadata VALUE, or #f if malformed."
+      (let ((new-names-result (documentation-parameter-names value))
+            (existing (documentation-field fields 'parameters)))
+        (if (not new-names-result)
+            #f
+            (let ((new-names (cdr new-names-result)))
+              (cond
+               ((not (documentation-parameters-match-arguments?
+                      fields new-names))
+                #f)
+               (existing
+                (let ((existing-names-result
+                       (documentation-parameter-names (cdr existing))))
+                  (if (not existing-names-result)
+                      #f
+                      (let duplicate-loop
+                          ((rest new-names)
+                           (existing-names (cdr existing-names-result)))
+                        (cond
+                         ((null? rest)
+                          (documentation-set-field
+                           fields
+                           'parameters
+                           (append (cdr existing) value)))
+                         ((memq (car rest) existing-names) #f)
+                         (else
+                          (duplicate-loop
+                           (cdr rest)
+                           existing-names)))))))
+               (else
+                (documentation-add-field fields 'parameters value)))))))
+
+    (define (documentation-merge-field fields name value)
+      "Return FIELDS merged with NAME/VALUE, or #f if malformed."
+      (let ((existing (documentation-field fields name)))
+        (cond
+         ((eq? name 'documentation)
+          (if (not (string? value))
+              #f
+              (if existing
+                  (if (string? (cdr existing))
+                      (documentation-set-field
+                       fields
+                       name
+                       (string-append (cdr existing) "\n" value))
+                      #f)
+                  (documentation-add-field fields name value))))
+         ((eq? name 'parameters)
+          (documentation-merge-parameters fields value))
+         ((memq name documentation-list-field-names)
+          (if (not (proper-list? value))
+              #f
+              (if existing
+                  (if (proper-list? (cdr existing))
+                      (documentation-set-field
+                       fields name (append (cdr existing) value))
+                      #f)
+                  (documentation-add-field fields name value))))
+         (existing #f)
+         (else
+          (documentation-add-field fields name value)))))
+
+    (define (documentation-merge-fields fields new-fields)
+      "Return FIELDS merged with NEW-FIELDS, or #f when malformed."
+      (let loop ((rest new-fields) (merged fields))
+        (cond
+         ((null? rest) merged)
+         (else
+          (let ((next
+                 (documentation-merge-field
+                  merged
+                  (car (car rest))
+                  (cdr (car rest)))))
+            (and next (loop (cdr rest) next)))))))
+
+    (define (documentation-rich-vector-fields literal)
+      "Return field alist for rich metadata LITERAL, or #f if malformed."
+      (let ((items (vector->list literal)))
+        (if (null? items)
+            #f
+            (let loop ((rest items) (fields '()))
+              (cond
+               ((null? rest) (reverse fields))
+               ((not (pair? (car rest))) #f)
+               ((not (symbol? (car (car rest)))) #f)
+               (else
+                (loop (cdr rest)
+                      (cons (cons (car (car rest)) (cdr (car rest)))
+                            fields))))))))
+
+    (define (documentation-merge-string-run metadata strings)
+      "Return METADATA merged with adjacent documentation STRINGS."
+      (let ((merged-fields
+             (documentation-merge-field
+              (documentation-metadata-fields metadata)
+              'documentation
+              (documentation-join-strings strings))))
+        (and merged-fields
+             (make-documentation-metadata
+              merged-fields
+              (documentation-add-origin
+               (documentation-metadata-origins metadata)
+               'string)))))
+
+    (define (documentation-merge-rich-vector metadata literal)
+      "Return METADATA merged with rich vector LITERAL, or #f when malformed."
+      (let* ((new-fields (documentation-rich-vector-fields literal))
+             (merged-fields
+              (and new-fields
+                   (documentation-merge-fields
+                    (documentation-metadata-fields metadata)
+                    new-fields))))
+        (and merged-fields
+             (make-documentation-metadata
+              merged-fields
+              (documentation-add-origin
+               (documentation-metadata-origins metadata)
+               'vector)))))
+
+    (define (documentation-metadata-from-body
+             body body-definition-form? . maybe-formals)
+      "Return metadata from BODY using BODY-DEFINITION-FORM? to skip internal definitions.  The body itself is left unchanged for ordinary R7RS evaluation."
+      (let ((base-metadata
+             (if (null? maybe-formals)
+                 (make-documentation-metadata '() '())
+                 (documentation-metadata-from-formals (car maybe-formals)))))
+        (define (finish cursor saw-metadata metadata)
+          (cond
+           ((and (pair? cursor)
+                 (not (body-definition-form? (car cursor)))
+                 (or saw-metadata
+                     (documentation-metadata-fields-present? base-metadata)))
+            metadata)
+           ((documentation-metadata-fields-present? base-metadata)
+            base-metadata)
+           (else #f)))
+        (let skip-definitions ((cursor body))
+          (if (and (pair? cursor) (body-definition-form? (car cursor)))
+              (skip-definitions (cdr cursor))
+              (let scan ((rest cursor)
+                         (metadata base-metadata)
+                         (saw-metadata #f))
+                (cond
+                 ((not (pair? rest))
+                  (finish rest saw-metadata metadata))
+                 ((string? (car rest))
+                  (let collect ((cursor rest) (strings '()))
+                    (if (and (pair? cursor) (string? (car cursor)))
+                        (collect (cdr cursor) (cons (car cursor) strings))
+                        (let ((merged
+                               (documentation-merge-string-run
+                                metadata
+                                (reverse strings))))
+                          (if merged
+                              (scan cursor merged #t)
+                              (finish cursor saw-metadata metadata))))))
+                 ((vector? (car rest))
+                  (let ((merged
+                         (documentation-merge-rich-vector metadata
+                                                          (car rest))))
+                    (if merged
+                        (scan (cdr rest) merged #t)
+                        (finish rest saw-metadata metadata))))
+                 (else
+                  (finish rest saw-metadata metadata))))))))
+
     (define (second list)
+      "Return the second element of LIST for parser helpers."
       (car (cdr list)))
 
-    ;; Return the third element of LIST for parser helpers.
     (define (third list)
+      "Return the third element of LIST for parser helpers."
       (car (cdr (cdr list))))
 
-    ;; Return the fourth element of LIST for parser helpers.
     (define (fourth list)
+      "Return the fourth element of LIST for parser helpers."
       (car (cdr (cdr (cdr list)))))
 
-    ;; Validate that DATUM is a symbol for a named syntax context.
     (define (expect-symbol datum description)
+      "Validate that DATUM is a symbol for a named syntax context."
       (if (symbol? datum)
           datum
           (eval-error
            (string-append description " must be an identifier")
            datum)))
 
-    ;; Report whether DATUM is a symbol or wrapped syntax identifier.
     (define (identifier-datum? datum)
+      "Report whether DATUM is a symbol or wrapped syntax identifier."
       (or (symbol? datum) (identifier? datum)))
 
-    ;; Return the symbolic name from a raw or wrapped identifier.
     (define (identifier-datum-name datum)
+      "Return the symbolic name from a raw or wrapped identifier."
       (cond
        ((symbol? datum) datum)
        ((identifier? datum) (identifier-name datum))
        (else #f)))
 
-    ;; Return the lookup key for an identifier, preserving macro context.
     (define (identifier-key identifier)
+      "Return the lookup key for an identifier, preserving macro context."
       (cond
        ((identifier? identifier)
         (let ((context (identifier-context identifier)))
@@ -2417,42 +2700,41 @@
        (else
         (eval-error "expected identifier" identifier))))
 
-    ;; Report whether DATUM names the given symbol after identifier unwrapping.
     (define (identifier-named? datum name)
+      "Report whether DATUM names the given symbol after identifier unwrapping."
       (let ((actual (identifier-datum-name datum)))
         (and actual (eq? actual name))))
 
-    ;; Return an identifier lookup key or raise a syntax-specific error.
     (define (expect-identifier-key datum description)
+      "Return an identifier lookup key or raise a syntax-specific error."
       (if (identifier-datum? datum)
           (identifier-key datum)
           (eval-error
            (string-append description " must be an identifier")
            datum)))
 
-    ;; Public constructor for a mutable lexical environment with an optional
-    ;; parent.
     (define (agent-scheme-make-empty-environment . maybe-parent)
+      "Public constructor for a mutable lexical environment with an optional parent."
       (make-environment
        '()
        (if (null? maybe-parent) #f (car maybe-parent))
        '()))
 
-    ;; Return the cell for NAME in ENVIRONMENT's current frame, or #f.
     (define (frame-cell environment name)
+      "Return the cell for NAME in ENVIRONMENT's current frame, or #f."
       (let ((cell (assoc name (environment-frame environment))))
         (if cell (cdr cell) #f)))
 
-    ;; Return the nearest lexical cell for NAME, walking parent environments.
     (define (environment-cell environment name)
+      "Return the nearest lexical cell for NAME, walking parent environments."
       (let loop ((cursor environment))
         (cond
          ((not cursor) #f)
          ((frame-cell cursor name) => (lambda (cell) cell))
          (else (loop (environment-parent cursor))))))
 
-    ;; Report whether CELL is marked imported in ENVIRONMENT or its parents.
     (define (environment-cell-imported? environment cell)
+      "Report whether CELL is marked imported in ENVIRONMENT or its parents."
       (let environment-loop ((cursor environment))
         (and cursor
              (or (let frame-loop ((frame (environment-frame cursor)))
@@ -2463,12 +2745,12 @@
                             (frame-loop (cdr frame)))))
                  (environment-loop (environment-parent cursor))))))
 
-    ;; Report whether NAME is an imported binding in ENVIRONMENT's own frame.
     (define (current-environment-imported? environment name)
+      "Report whether NAME is an imported binding in ENVIRONMENT's own frame."
       (memq name (environment-imported-names environment)))
 
-    ;; Add NAME to ENVIRONMENT's current frame unless it would redefine import.
     (define (environment-define! environment name value)
+      "Add NAME to ENVIRONMENT's current frame unless it would redefine import."
       (if (current-environment-imported? environment name)
           (eval-error "cannot redefine imported binding" name))
       (set-environment-frame!
@@ -2476,8 +2758,8 @@
        (cons (cons name (make-cell value))
              (environment-frame environment))))
 
-    ;; Mutate an existing lexical binding, rejecting unbound and imported names.
     (define (environment-set! environment name value)
+      "Mutate an existing lexical binding, rejecting unbound and imported names."
       (let ((cell (environment-cell environment name)))
         (cond
          ((not cell)
@@ -2487,8 +2769,8 @@
          (else
           (set-cell-value! cell value)))))
 
-    ;; Update NAME in the current frame, or define it if no current cell exists.
     (define (environment-define-or-set! environment name value)
+      "Update NAME in the current frame, or define it if no current cell exists."
       (let ((cell (frame-cell environment name)))
         (if cell
             (begin
@@ -2497,8 +2779,8 @@
               (set-cell-value! cell value))
             (environment-define! environment name value))))
 
-    ;; Return NAME's value, rejecting unbound or still-undefined bindings.
     (define (environment-ref environment name)
+      "Return NAME's value, rejecting unbound or still-undefined bindings."
       (let ((cell (environment-cell environment name)))
         (if (not cell)
             (eval-error "unbound identifier" name)
@@ -2509,8 +2791,8 @@
                    name)
                   value)))))
 
-    ;; Resolve a raw or hygienic identifier to its lexical cell.
     (define (environment-cell-for-identifier environment identifier)
+      "Resolve a raw or hygienic identifier to its lexical cell."
       ;; Hygienic identifiers first try their generated lexical key at the use
       ;; site, then fall back to the macro definition environment for free
       ;; template identifiers.
@@ -2529,8 +2811,8 @@
         (environment-cell environment identifier))
        (else #f)))
 
-    ;; Return IDENTIFIER's value after hygienic lookup and undefined checks.
     (define (environment-ref-identifier environment identifier)
+      "Return IDENTIFIER's value after hygienic lookup and undefined checks."
       (let ((cell (environment-cell-for-identifier environment identifier)))
         (if (not cell)
             (eval-error "unbound identifier" (identifier-datum-name identifier))
@@ -2541,8 +2823,8 @@
                    (identifier-datum-name identifier))
                   value)))))
 
-    ;; Mutate IDENTIFIER's binding after hygienic lookup and import checks.
     (define (environment-set-identifier! environment identifier value)
+      "Mutate IDENTIFIER's binding after hygienic lookup and import checks."
       (let ((cell (environment-cell-for-identifier environment identifier)))
         (cond
          ((not cell)
@@ -2554,8 +2836,8 @@
          (else
           (set-cell-value! cell value)))))
 
-    ;; Reject duplicate symbols in NAMES using DESCRIPTION for diagnostics.
     (define (ensure-distinct-names names description)
+      "Reject duplicate symbols in NAMES using DESCRIPTION for diagnostics."
       (let loop ((rest names) (seen '()))
         (if (not (null? rest))
             (begin
@@ -2565,8 +2847,8 @@
                    (car rest)))
               (loop (cdr rest) (cons (car rest) seen))))))
 
-    ;; Parse lambda formals into required-name and optional-rest metadata.
     (define (parse-formals formals)
+      "Parse lambda formals into required-name and optional-rest metadata."
       (cond
        ((symbol? formals)
         (make-formals '() (identifier-key formals)))

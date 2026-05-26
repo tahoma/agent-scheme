@@ -543,6 +543,366 @@ proper list."
   "Return Agent Scheme symbol datum for NAME."
   (agent-scheme--intern-symbol name))
 
+(defconst agent-scheme--documentation-list-field-names
+  '("examples" "see-also")
+  "Documentation metadata fields whose list values append in source order.")
+
+(defun agent-scheme--proper-list-p (datum)
+  "Return non-nil when DATUM is a proper Scheme list."
+  (let ((cursor datum)
+        (proper nil))
+    (catch 'done
+      (while t
+        (cond
+         ((null cursor)
+          (setq proper t)
+          (throw 'done nil))
+         ((consp cursor)
+          (setq cursor (cdr cursor)))
+         (t
+          (throw 'done nil)))))
+    proper))
+
+(defun agent-scheme--documentation-metadata-object-p (value)
+  "Return non-nil when VALUE is normalized documentation metadata."
+  (and (listp value)
+       (plist-get value :agent-scheme-documentation-metadata)))
+
+(defun agent-scheme--make-documentation-metadata (fields origins)
+  "Return normalized documentation metadata with FIELDS and ORIGINS."
+  (list :agent-scheme-documentation-metadata t
+        :fields fields
+        :origins origins))
+
+(defun agent-scheme--documentation-metadata-fields (metadata)
+  "Return normalized documentation field alist from METADATA."
+  (cond
+   ((stringp metadata)
+    (list (cons "documentation" metadata)))
+   ((agent-scheme--documentation-metadata-object-p metadata)
+    (plist-get metadata :fields))
+   (t nil)))
+
+(defun agent-scheme--documentation-metadata-origins (metadata)
+  "Return normalized documentation origin names from METADATA."
+  (cond
+   ((stringp metadata)
+    '("string"))
+   ((agent-scheme--documentation-metadata-object-p metadata)
+    (plist-get metadata :origins))
+   (t nil)))
+
+(defun agent-scheme--documentation-add-origin (origins origin)
+  "Return ORIGINS with ORIGIN appended once in source order."
+  (if (member origin origins)
+      origins
+    (append origins (list origin))))
+
+(defun agent-scheme--documentation-field (fields name)
+  "Return the field entry named NAME from FIELDS."
+  (assoc name fields))
+
+(defun agent-scheme--documentation-set-field (fields name value)
+  "Return FIELDS with NAME set to VALUE, preserving field order."
+  (if (agent-scheme--documentation-field fields name)
+      (mapcar
+       (lambda (field)
+         (if (equal (car field) name)
+             (cons name value)
+           field))
+       fields)
+    (append fields (list (cons name value)))))
+
+(defun agent-scheme--documentation-add-field (fields name value)
+  "Return FIELDS with NAME/VALUE appended."
+  (append fields (list (cons name value))))
+
+(defun agent-scheme--documentation-formals->datum (formals)
+  "Return FORMALS as a Scheme-readable arguments datum."
+  (let ((required
+         (mapcar #'agent-scheme--syntax-symbol
+                 (agent-scheme--formals-required formals)))
+        (rest
+         (and (agent-scheme--formals-rest formals)
+              (agent-scheme--syntax-symbol
+               (agent-scheme--formals-rest formals)))))
+    (cond
+     ((not rest)
+      required)
+     ((null required)
+      rest)
+     (t
+      (let ((arguments (copy-sequence required)))
+        (setcdr (last arguments) rest)
+        arguments)))))
+
+(defun agent-scheme--documentation-expect-identifier-key (datum description)
+  "Return DATUM's lexical key for documentation metadata."
+  (unless (agent-scheme--identifier-datum-p datum)
+    (agent-scheme--eval-error "%s must be an identifier" description))
+  (agent-scheme--identifier-key datum))
+
+(defun agent-scheme--documentation-parse-formals (formals)
+  "Parse raw lambda FORMALS for documentation metadata."
+  (cond
+   ((agent-scheme--identifier-datum-p formals)
+    (agent-scheme--make-formals nil (agent-scheme--identifier-key formals)))
+   (t
+    (let ((cursor formals)
+          required
+          rest)
+      (while (consp cursor)
+        (push (agent-scheme--documentation-expect-identifier-key
+               (car cursor) "lambda formal")
+              required)
+        (setq cursor (cdr cursor)))
+      (cond
+       ((null cursor))
+       ((agent-scheme--identifier-datum-p cursor)
+        (setq rest (agent-scheme--identifier-key cursor)))
+       (t
+        (agent-scheme--eval-error
+         "lambda formals must be an identifier, a proper list, or a dotted list")))
+      (setq required (nreverse required))
+      (agent-scheme--ensure-distinct-names
+       (if rest (append required (list rest)) required)
+       "lambda formals")
+      (agent-scheme--make-formals required rest)))))
+
+(defun agent-scheme--documentation-metadata-from-formals (formals)
+  "Return generated documentation metadata for lambda FORMALS."
+  (let ((arguments
+         (agent-scheme--documentation-formals->datum
+          (if (agent-scheme--formals-p formals)
+              formals
+            (agent-scheme--documentation-parse-formals formals)))))
+    (agent-scheme--make-documentation-metadata
+     (list (cons "arguments" arguments))
+     nil)))
+
+(defun agent-scheme--documentation-metadata-fields-present-p (metadata)
+  "Return non-nil when METADATA contains at least one field."
+  (and metadata
+       (agent-scheme--documentation-metadata-fields metadata)))
+
+(defun agent-scheme--documentation-parameter-names (parameters)
+  "Return parameter names in PARAMETERS, or `:malformed' when malformed.
+PARAMETERS is valid when it is a proper association list whose keys
+are Scheme identifiers and whose keys do not repeat."
+  (catch 'malformed
+    (unless (agent-scheme--proper-list-p parameters)
+      (throw 'malformed :malformed))
+    (let (names)
+      (dolist (entry (agent-scheme--proper-list-elements parameters
+                                                         "parameters"))
+        (unless (consp entry)
+          (throw 'malformed :malformed))
+        (let ((name (agent-scheme--symbol-name (car entry))))
+          (unless name
+            (throw 'malformed :malformed))
+          (when (member name names)
+            (throw 'malformed :malformed))
+          (push name names)))
+      (nreverse names))))
+
+(defun agent-scheme--documentation-argument-names (arguments)
+  "Return argument names in ARGUMENTS, or `:malformed' when malformed."
+  (catch 'malformed
+    (cond
+     ((agent-scheme--identifier-datum-p arguments)
+      (list (agent-scheme--identifier-key arguments)))
+     (t
+      (let ((cursor arguments)
+            names)
+        (while (consp cursor)
+          (unless (agent-scheme--identifier-datum-p (car cursor))
+            (throw 'malformed :malformed))
+          (push (agent-scheme--identifier-key (car cursor)) names)
+          (setq cursor (cdr cursor)))
+        (cond
+         ((null cursor)
+          (nreverse names))
+         ((agent-scheme--identifier-datum-p cursor)
+          (nreverse (cons (agent-scheme--identifier-key cursor) names)))
+         (t
+          (throw 'malformed :malformed))))))))
+
+(defun agent-scheme--documentation-parameters-match-arguments-p
+    (fields names)
+  "Return non-nil when parameter NAMES are present in FIELDS arguments."
+  (let ((arguments (agent-scheme--documentation-field fields "arguments")))
+    (if (not arguments)
+        t
+      (let ((argument-names
+             (agent-scheme--documentation-argument-names (cdr arguments))))
+        (and (not (eq argument-names :malformed))
+             (cl-every (lambda (name) (member name argument-names))
+                       names))))))
+
+(defun agent-scheme--documentation-merge-parameters (fields value)
+  "Return FIELDS merged with parameter metadata VALUE, or nil if malformed."
+  (let ((new-names (agent-scheme--documentation-parameter-names value))
+        (existing (agent-scheme--documentation-field fields "parameters")))
+    (when (eq new-names :malformed)
+      (setq fields nil))
+    (when (and fields
+               (not (agent-scheme--documentation-parameters-match-arguments-p
+                     fields new-names)))
+      (setq fields nil))
+    (when fields
+      (let ((existing-value (cdr existing))
+            existing-names)
+        (when existing
+          (setq existing-names
+                (agent-scheme--documentation-parameter-names existing-value))
+          (when (eq existing-names :malformed)
+            (setq fields nil)))
+        (when fields
+          (dolist (name new-names)
+            (when (member name existing-names)
+              (setq fields nil)))
+          (when fields
+            (if existing
+                (agent-scheme--documentation-set-field
+                 fields "parameters" (append existing-value value))
+              (agent-scheme--documentation-add-field
+               fields "parameters" value))))))))
+
+(defun agent-scheme--documentation-merge-field (fields name value)
+  "Return FIELDS merged with NAME/VALUE, or nil if malformed."
+  (let ((existing (agent-scheme--documentation-field fields name)))
+    (cond
+     ((equal name "documentation")
+      (if (not (stringp value))
+          nil
+        (if existing
+            (if (stringp (cdr existing))
+                (agent-scheme--documentation-set-field
+                 fields name (concat (cdr existing) "\n" value))
+              nil)
+          (agent-scheme--documentation-add-field fields name value))))
+     ((equal name "parameters")
+      (agent-scheme--documentation-merge-parameters fields value))
+     ((member name agent-scheme--documentation-list-field-names)
+      (if (not (agent-scheme--proper-list-p value))
+          nil
+        (if existing
+            (if (agent-scheme--proper-list-p (cdr existing))
+                (agent-scheme--documentation-set-field
+                 fields name (append (cdr existing) value))
+              nil)
+          (agent-scheme--documentation-add-field fields name value))))
+     (existing
+      nil)
+     (t
+      (agent-scheme--documentation-add-field fields name value)))))
+
+(defun agent-scheme--documentation-merge-fields (fields new-fields)
+  "Return FIELDS merged with NEW-FIELDS, or nil when malformed."
+  (catch 'malformed
+    (let ((merged fields))
+      (dolist (field new-fields)
+        (setq merged
+              (agent-scheme--documentation-merge-field
+               merged (car field) (cdr field)))
+        (unless merged
+          (throw 'malformed nil)))
+      merged)))
+
+(defun agent-scheme--documentation-rich-vector-fields (literal)
+  "Return field alist for rich metadata LITERAL, or nil if malformed."
+  (catch 'malformed
+    (let (fields)
+      (dotimes (index (length literal))
+        (let* ((entry (aref literal index))
+               (name (and (consp entry)
+                          (agent-scheme--symbol-name (car entry)))))
+          (unless name
+            (throw 'malformed nil))
+          (push (cons name (cdr entry)) fields)))
+      (nreverse fields))))
+
+(defun agent-scheme--documentation-merge-string-run (metadata strings)
+  "Return METADATA merged with adjacent documentation STRINGS."
+  (let* ((fields (plist-get metadata :fields))
+         (origins (plist-get metadata :origins))
+         (documentation (mapconcat #'identity strings "\n"))
+         (merged-fields
+          (agent-scheme--documentation-merge-field
+           fields "documentation" documentation)))
+    (and merged-fields
+         (agent-scheme--make-documentation-metadata
+          merged-fields
+          (agent-scheme--documentation-add-origin origins "string")))))
+
+(defun agent-scheme--documentation-merge-rich-vector (metadata literal)
+  "Return METADATA merged with rich vector LITERAL, or nil when malformed."
+  (let* ((fields (plist-get metadata :fields))
+         (origins (plist-get metadata :origins))
+         (new-fields (agent-scheme--documentation-rich-vector-fields literal))
+         (merged-fields
+          (and new-fields
+               (agent-scheme--documentation-merge-fields fields new-fields))))
+    (and merged-fields
+         (agent-scheme--make-documentation-metadata
+          merged-fields
+          (agent-scheme--documentation-add-origin origins "vector")))))
+
+(defun agent-scheme--documentation-metadata-from-body
+    (body definition-form-predicate &rest maybe-formals)
+  "Return documentation metadata from BODY, or nil.
+DEFINITION-FORM-PREDICATE recognizes body-leading internal
+definitions.  Metadata literals are recognized only in the
+non-final leading metadata prefix after those definitions; BODY is
+not rewritten.  When FORMALS is supplied, include generated
+procedure argument metadata before body-literal fields."
+  (let* ((base-metadata
+          (if maybe-formals
+              (agent-scheme--documentation-metadata-from-formals
+               (car maybe-formals))
+            (agent-scheme--make-documentation-metadata nil nil)))
+         (cursor body)
+         (metadata base-metadata)
+        saw-metadata)
+    (while (and cursor (funcall definition-form-predicate (car cursor)))
+      (setq cursor (cdr cursor)))
+    (catch 'done
+      (while cursor
+        (cond
+         ((stringp (car cursor))
+          (let (strings)
+            (while (and cursor (stringp (car cursor)))
+              (push (car cursor) strings)
+              (setq cursor (cdr cursor)))
+            (let ((merged
+                   (agent-scheme--documentation-merge-string-run
+                    metadata (nreverse strings))))
+              (unless merged
+                (throw 'done nil))
+              (setq metadata merged
+                    saw-metadata t))))
+         ((vectorp (car cursor))
+          (let ((merged
+                 (agent-scheme--documentation-merge-rich-vector
+                  metadata (car cursor))))
+            (unless merged
+              (throw 'done nil))
+            (setq metadata merged
+                  saw-metadata t
+                  cursor (cdr cursor))))
+         (t
+          (throw 'done nil)))))
+    (cond
+     ((and cursor
+           (not (funcall definition-form-predicate (car cursor)))
+           (or saw-metadata
+               (agent-scheme--documentation-metadata-fields-present-p
+                base-metadata)))
+      metadata)
+     ((agent-scheme--documentation-metadata-fields-present-p base-metadata)
+      base-metadata)
+     (t nil))))
+
 (defun agent-scheme--identifier-key (identifier)
   "Return the lexical binding key for IDENTIFIER."
   (cond

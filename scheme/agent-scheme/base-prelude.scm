@@ -30,9 +30,8 @@
   (cdr (cdr pair)))
 
 (define (length list)
-  ;; R7RS requires a proper list; reaching a non-pair tail forces an error
-  ;; through a primitive operation instead of silently accepting dotted input.
   (define (loop cursor count)
+    "R7RS requires a proper list; reaching a non-pair tail forces an error through a primitive operation instead of silently accepting dotted input."
     (if (null? cursor)
         count
         (if (pair? cursor)
@@ -42,9 +41,8 @@
   (loop list 0))
 
 (define (append . lists)
-  ;; The final argument is reused as the tail, matching Scheme's variadic
-  ;; `append' behavior for both proper and improper final lists.
   (define (append-two left right)
+    "The final argument is reused as the tail, matching Scheme's variadic `append' behavior for both proper and improper final lists."
     (if (null? left)
         right
         (cons (car left)
@@ -84,9 +82,8 @@
   (set-car! (list-tail list k) obj))
 
 (define (make-list k . fill)
-  ;; `(if #f #f)' produces the implementation's unspecified value when no fill
-  ;; argument is supplied.
   (define (loop remaining value)
+    "`(if #f #f)' produces the implementation's unspecified value when no fill argument is supplied."
     (if (= remaining 0)
         '()
         (cons value (loop (- remaining 1) value))))
@@ -214,8 +211,8 @@
   (loop first rest))
 
 (define (map proc first-list . rest-lists)
-  ;; R7RS `map' and `for-each' stop at the shortest input list.
   (define (any-null? lists)
+    "R7RS `map' and `for-each' stop at the shortest input list."
     (if (null? lists)
         #f
         (if (null? (car lists))

@@ -214,6 +214,23 @@
      :documentation))
    (t nil)))
 
+(defun agent-scheme-reflect--documentation-origin (documentation)
+  "Return the Scheme-readable origin for DOCUMENTATION metadata."
+  (let ((origins
+         (agent-scheme--documentation-metadata-origins documentation)))
+    (if origins
+        (cons (agent-scheme-reflect--symbol "body-literal")
+              (mapcar #'agent-scheme-reflect--symbol origins))
+      (list (agent-scheme-reflect--symbol "signature")))))
+
+(defun agent-scheme-reflect--documentation-fields (documentation)
+  "Return Scheme-readable fields for DOCUMENTATION metadata."
+  (mapcar
+   (lambda (field)
+     (list (agent-scheme-reflect--symbol (car field))
+           (agent-scheme-reflect--datumize (cdr field))))
+   (agent-scheme--documentation-metadata-fields documentation)))
+
 (defun agent-scheme-reflect--documentation-metadata (subject documentation)
   "Return a Scheme-readable documentation record for SUBJECT."
   (list
@@ -225,12 +242,10 @@
    (agent-scheme-reflect--field "source" agent-scheme-false)
    (agent-scheme-reflect--field
     "origin"
-    (list (agent-scheme-reflect--symbol "body-literal")
-          (agent-scheme-reflect--symbol "string")))
+    (agent-scheme-reflect--documentation-origin documentation))
    (agent-scheme-reflect--field
     "fields"
-    (list (list (agent-scheme-reflect--symbol "documentation")
-                documentation)))))
+    (agent-scheme-reflect--documentation-fields documentation))))
 
 (defun agent-scheme-reflect-documentation (subject context)
   "Return documentation metadata for SUBJECT, or #f when absent.

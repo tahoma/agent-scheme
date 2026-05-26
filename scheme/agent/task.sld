@@ -110,8 +110,8 @@
         (task-failure task state condition retry transcript audit)
         (agent-completion task status value stop transcript audit)))
 
-    ;; Return #t when VALUE is a member of VALUES using eq?.
     (define (member-eq? value values)
+      "Return #t when VALUE is a member of VALUES using eq?."
       (cond
        ((null? values) #f)
        ((eq? value (car values)) #t)
@@ -119,11 +119,13 @@
 
     (define (task-state? state)
       "Return #t when STATE is part of the public task lifecycle vocabulary."
+      #((parameters . ((state . "Symbol to check against the task lifecycle vocabulary.")))
+        (returns . "#t when STATE is a public task state; otherwise #f.")
+        (effects . (pure)))
       (member-eq? state task-states))
 
-    ;; Return KEY from OPTIONS, or DEFAULT if absent.  OPTIONS may contain
-    ;; dotted alist cells or two-element Scheme option records.
     (define (option-ref options key default)
+      "Return KEY from OPTIONS, or DEFAULT if absent.  OPTIONS may contain dotted alist cells or two-element Scheme option records."
       (let ((cell (assq key options)))
         (if cell
             (let ((value (cdr cell)))
@@ -132,24 +134,28 @@
                   value))
             default)))
 
-    ;; Return a portable placeholder timestamp for host-neutral constructors.
     (define (portable-timestamp)
+      "Return a portable placeholder timestamp for host-neutral constructors."
       "portable")
 
     (define (make-task-condition kind fields)
       "Return a Scheme-readable task condition datum."
+      #((parameters . ((kind . "Condition kind symbol.")
+                       (fields . "Association list of condition fields.")))
+        (returns . "A `task-condition` datum suitable for an error irritant.")
+        (effects . (pure)))
       (cons 'task-condition
             (cons (list 'kind kind)
                   (map (lambda (field)
                          (list (car field) (cdr field)))
                        fields))))
 
-    ;; Raise a task lifecycle error carrying a structured condition datum.
     (define (raise-task-error kind fields)
+      "Raise a task lifecycle error carrying a structured condition datum."
       (error "agent-scheme-task" (make-task-condition kind fields)))
 
-    ;; Validate and return STATE.
     (define (normalize-state state)
+      "Validate and return STATE."
       (if (task-state? state)
           state
           (raise-task-error 'unknown-state
@@ -157,6 +163,10 @@
 
     (define (task-transition-allowed? from to)
       "Return #t when task state FROM may transition to TO."
+      #((parameters . ((from . "Current task state symbol.")
+                       (to . "Proposed next task state symbol.")))
+        (returns . "#t when the transition is part of the public lifecycle table; otherwise #f.")
+        (effects . (pure)))
       (let ((row (assq from task-allowed-transitions)))
         (if (and (task-state? from) (task-state? to) row)
             (member-eq? to (cdr row))
@@ -164,6 +174,11 @@
 
     (define (validate-task-transition from to)
       "Validate transition FROM to TO and return TO."
+      #((parameters . ((from . "Current task state symbol.")
+                       (to . "Proposed next task state symbol.")))
+        (returns . "TO when the transition is valid.")
+        (effects . (error))
+        (see-also . (task-transition-allowed?)))
       (let ((from-state (normalize-state from))
             (to-state (normalize-state to)))
         (if (task-transition-allowed? from-state to-state)
@@ -173,12 +188,12 @@
              (list (cons 'from from-state)
                    (cons 'to to-state))))))
 
-    ;; Return #t when FIELD is a record field named NAME.
     (define (field-named? field name)
+      "Return #t when FIELD is a record field named NAME."
       (and (pair? field) (eq? (car field) name)))
 
-    ;; Return #t when RECORD has a field named NAME.
     (define (field-present? record name)
+      "Return #t when RECORD has a field named NAME."
       (let loop ((fields (cdr record)))
         (cond
          ((null? fields) #f)
@@ -187,6 +202,11 @@
 
     (define (task-field-value record name . maybe-default)
       "Return RECORD field NAME, or DEFAULT when absent."
+      #((parameters . ((record . "Task lifecycle record represented as a tagged list.")
+                       (name . "Symbol naming the field to read.")
+                       (maybe-default . "Optional fallback value; defaults to #f.")))
+        (returns . "The field value, or DEFAULT when NAME is absent.")
+        (effects . (pure)))
       (let ((default (if (null? maybe-default) #f (car maybe-default))))
         (let loop ((fields (cdr record)))
           (cond
@@ -196,55 +216,89 @@
 
     (define (task-record? datum tag)
       "Return #t when DATUM is a task lifecycle record tagged TAG."
+      #((parameters . ((datum . "Value to inspect.")
+                       (tag . "Expected task record tag symbol.")))
+        (returns . "#t when DATUM is a pair tagged by TAG; otherwise #f.")
+        (effects . (pure)))
       (and (pair? datum) (eq? (car datum) tag)))
 
     (define (agent-task? datum)
       "Return #t when DATUM is an agent-task record."
+      #((parameters . ((datum . "Value to inspect.")))
+        (returns . "#t when DATUM is tagged as an agent-task; otherwise #f.")
+        (effects . (pure)))
       (task-record? datum 'agent-task))
 
     (define (agent-step? datum)
       "Return #t when DATUM is an agent-step record."
+      #((parameters . ((datum . "Value to inspect.")))
+        (returns . "#t when DATUM is tagged as an agent-step; otherwise #f.")
+        (effects . (pure)))
       (task-record? datum 'agent-step))
 
     (define (agent-action? datum)
       "Return #t when DATUM is an agent-action record."
+      #((parameters . ((datum . "Value to inspect.")))
+        (returns . "#t when DATUM is tagged as an agent-action; otherwise #f.")
+        (effects . (pure)))
       (task-record? datum 'agent-action))
 
     (define (agent-observation? datum)
       "Return #t when DATUM is an agent-observation record."
+      #((parameters . ((datum . "Value to inspect.")))
+        (returns . "#t when DATUM is tagged as an agent-observation; otherwise #f.")
+        (effects . (pure)))
       (task-record? datum 'agent-observation))
 
     (define (agent-decision? datum)
       "Return #t when DATUM is an agent-decision record."
+      #((parameters . ((datum . "Value to inspect.")))
+        (returns . "#t when DATUM is tagged as an agent-decision; otherwise #f.")
+        (effects . (pure)))
       (task-record? datum 'agent-decision))
 
     (define (task-pause? datum)
       "Return #t when DATUM is a task-pause receipt."
+      #((parameters . ((datum . "Value to inspect.")))
+        (returns . "#t when DATUM is tagged as a task-pause receipt; otherwise #f.")
+        (effects . (pure)))
       (task-record? datum 'task-pause))
 
     (define (task-stop? datum)
       "Return #t when DATUM is a task-stop receipt."
+      #((parameters . ((datum . "Value to inspect.")))
+        (returns . "#t when DATUM is tagged as a task-stop receipt; otherwise #f.")
+        (effects . (pure)))
       (task-record? datum 'task-stop))
 
     (define (task-wait? datum)
       "Return #t when DATUM is a task-wait record."
+      #((parameters . ((datum . "Value to inspect.")))
+        (returns . "#t when DATUM is tagged as a task-wait record; otherwise #f.")
+        (effects . (pure)))
       (task-record? datum 'task-wait))
 
     (define (task-failure? datum)
       "Return #t when DATUM is a task-failure record."
+      #((parameters . ((datum . "Value to inspect.")))
+        (returns . "#t when DATUM is tagged as a task-failure record; otherwise #f.")
+        (effects . (pure)))
       (task-record? datum 'task-failure))
 
     (define (agent-completion? datum)
       "Return #t when DATUM is an agent-completion record."
+      #((parameters . ((datum . "Value to inspect.")))
+        (returns . "#t when DATUM is tagged as an agent-completion record; otherwise #f.")
+        (effects . (pure)))
       (task-record? datum 'agent-completion))
 
-    ;; Return required field names for TAG, or #f.
     (define (required-fields tag)
+      "Return required field names for TAG, or #f."
       (let ((row (assq tag task-required-fields)))
         (if row (cdr row) #f)))
 
-    ;; Validate that RECORD has every FIELD in FIELDS.
     (define (validate-required-fields record tag fields)
+      "Validate that RECORD has every FIELD in FIELDS."
       (let loop ((rest fields))
         (if (not (null? rest))
             (begin
@@ -255,8 +309,8 @@
                          (cons 'field (car rest)))))
               (loop (cdr rest))))))
 
-    ;; Validate state-specific invariants for RECORD tagged TAG.
     (define (validate-state-shape record tag)
+      "Validate state-specific invariants for RECORD tagged TAG."
       (cond
        ((or (eq? tag 'agent-task) (eq? tag 'agent-step))
         (normalize-state (task-field-value record 'state)))
@@ -294,6 +348,10 @@
 
     (define (validate-task-record record)
       "Validate RECORD as a public task lifecycle datum and return RECORD."
+      #((parameters . ((record . "Task lifecycle datum to validate.")))
+        (returns . "RECORD unchanged when it satisfies required fields and state invariants.")
+        (effects . (error))
+        (see-also . (task-record-valid?)))
       (if (not (pair? record))
           (raise-task-error 'malformed-record (list (cons 'record record))))
       (let ((tag (car record)))
@@ -307,6 +365,10 @@
 
     (define (task-record-valid? record)
       "Return #t when RECORD validates as a public task lifecycle datum."
+      #((parameters . ((record . "Task lifecycle datum to validate.")))
+        (returns . "#t when RECORD passes validation; otherwise #f.")
+        (effects . (pure))
+        (see-also . (validate-task-record)))
       (guard (condition
               (else #f))
         (validate-task-record record)
@@ -314,6 +376,13 @@
 
     (define (make-agent-task id goal session options)
       "Create a canonical agent-task datum."
+      #((parameters . ((id . "Stable task id.")
+                       (goal . "User or agent goal datum.")
+                       (session . "Session id or session metadata for the task.")
+                       (options . "Association list overriding task fields such as state, scope, context, memory, plan, budget, provider routes, transcript, and audit.")))
+        (returns . "A canonical `agent-task` datum.")
+        (effects . (pure))
+        (see-also . (validate-task-record make-agent-step)))
       (let ((created-at (option-ref options 'created-at
                                     (portable-timestamp))))
         (let ((updated-at (option-ref options 'updated-at created-at)))
@@ -345,6 +414,12 @@
 
     (define (make-agent-step id task goal options)
       "Create a canonical agent-step datum."
+      #((parameters . ((id . "Stable step id.")
+                       (task . "Parent task id or task datum.")
+                       (goal . "Step-level goal datum.")
+                       (options . "Association list overriding step fields such as state, plan item, attempt, observations, decision, action, events, and result.")))
+        (returns . "A canonical `agent-step` datum.")
+        (effects . (pure)))
       (list 'agent-step
             (list 'id id)
             (list 'task task)
@@ -360,6 +435,13 @@
 
     (define (make-agent-action id task step kind options)
       "Create a canonical agent-action datum."
+      #((parameters . ((id . "Stable action id.")
+                       (task . "Parent task id or task datum.")
+                       (step . "Parent step id or step datum.")
+                       (kind . "Action kind symbol.")
+                       (options . "Association list overriding library, binding, arguments, required capabilities, and expected outcome.")))
+        (returns . "A canonical `agent-action` datum.")
+        (effects . (pure)))
       (list 'agent-action
             (list 'id id)
             (list 'task task)
@@ -374,6 +456,14 @@
 
     (define (make-agent-observation id task source kind value options)
       "Create a canonical agent-observation datum."
+      #((parameters . ((id . "Stable observation id.")
+                       (task . "Parent task id or task datum.")
+                       (source . "Observation source datum.")
+                       (kind . "Observation kind symbol.")
+                       (value . "Observed value as Scheme-readable data.")
+                       (options . "Association list overriding redactions and audit metadata.")))
+        (returns . "A canonical `agent-observation` datum.")
+        (effects . (pure)))
       (list 'agent-observation
             (list 'id id)
             (list 'task task)
@@ -386,6 +476,15 @@
     (define (make-agent-decision id task step observed-state
                                  selected-action reason options)
       "Create a canonical agent-decision datum."
+      #((parameters . ((id . "Stable decision id.")
+                       (task . "Parent task id or task datum.")
+                       (step . "Parent step id or step datum.")
+                       (observed-state . "State summary considered by the decision.")
+                       (selected-action . "Selected action id, action datum, or none.")
+                       (reason . "Human-readable or Scheme-readable reason for the decision.")
+                       (options . "Association list overriding policy, model, rules, and verifier inputs.")))
+        (returns . "A canonical `agent-decision` datum.")
+        (effects . (pure)))
       (list 'agent-decision
             (list 'id id)
             (list 'task task)
@@ -401,6 +500,12 @@
 
     (define (make-task-pause task state reason options)
       "Create a canonical task-pause receipt."
+      #((parameters . ((task . "Task id or task datum being paused.")
+                       (state . "Resumable pause state.")
+                       (reason . "Pause reason symbol from the public vocabulary.")
+                       (options . "Association list describing observed state, intended action, gates, routing, approvals, and verifier result.")))
+        (returns . "A canonical `task-pause` receipt datum.")
+        (effects . (pure)))
       (list 'task-pause
             (list 'task task)
             (list 'state state)
@@ -419,6 +524,12 @@
 
     (define (make-task-stop task state reason options)
       "Create a canonical task-stop receipt."
+      #((parameters . ((task . "Task id or task datum being stopped.")
+                       (state . "Terminal stop state.")
+                       (reason . "Stop reason symbol from the public vocabulary.")
+                       (options . "Association list describing observed state, intended action, gates, routing, approvals, and verifier result.")))
+        (returns . "A canonical `task-stop` receipt datum.")
+        (effects . (pure)))
       (list 'task-stop
             (list 'task task)
             (list 'state state)
@@ -437,6 +548,13 @@
 
     (define (make-task-wait task state kind request options)
       "Create a canonical task-wait record."
+      #((parameters . ((task . "Task id or task datum that is waiting.")
+                       (state . "Waiting state symbol.")
+                       (kind . "Wait kind symbol, such as approval, model, or host.")
+                       (request . "Scheme-readable wait request datum.")
+                       (options . "Association list overriding started-at, budget, transcript, and audit fields.")))
+        (returns . "A canonical `task-wait` datum.")
+        (effects . (pure)))
       (list 'task-wait
             (list 'task task)
             (list 'state state)
@@ -450,6 +568,11 @@
 
     (define (make-task-failure task condition options)
       "Create a canonical task-failure record."
+      #((parameters . ((task . "Task id or task datum that failed.")
+                       (condition . "Condition datum explaining the failure.")
+                       (options . "Association list overriding retry, transcript, and audit fields.")))
+        (returns . "A canonical `task-failure` datum.")
+        (effects . (pure)))
       (list 'task-failure
             (list 'task task)
             (list 'state 'failed)
@@ -460,6 +583,12 @@
 
     (define (make-agent-completion task value stop options)
       "Create a canonical agent-completion record."
+      #((parameters . ((task . "Task id or task datum being completed.")
+                       (value . "Completion value as Scheme-readable data.")
+                       (stop . "Task-stop receipt or stop metadata.")
+                       (options . "Association list overriding transcript and audit fields.")))
+        (returns . "A canonical `agent-completion` datum.")
+        (effects . (pure)))
       (list 'agent-completion
             (list 'task task)
             (list 'status 'complete)

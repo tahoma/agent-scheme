@@ -40,27 +40,27 @@
         audit-log
         skill-resource))
 
-    ;; Return #t when VALUE is in LIST using equal?.
     (define (member-equal? value list)
+      "Return #t when VALUE is in LIST using equal?."
       (cond
        ((null? list) #f)
        ((equal? value (car list)) #t)
        (else (member-equal? value (cdr list)))))
 
-    ;; Return VALUE as a plain string name when it is name-like.
     (define (name-string value)
+      "Return VALUE as a plain string name when it is name-like."
       (cond
        ((symbol? value) (symbol->string value))
        ((string? value) value)
        (else #f)))
 
-    ;; Lowercase TEXT for case-insensitive field-name checks.
     (define (string-downcase* text)
+      "Lowercase TEXT for case-insensitive field-name checks."
       (list->string
        (map char-downcase (string->list text))))
 
-    ;; Return #t when NEEDLE occurs in HAYSTACK.
     (define (string-contains? haystack needle)
+      "Return #t when NEEDLE occurs in HAYSTACK."
       (let ((haystack-length (string-length haystack))
             (needle-length (string-length needle)))
         (let loop ((index 0))
@@ -71,8 +71,8 @@
             #t)
            (else (loop (+ index 1)))))))
 
-    ;; Return #t when NAME looks like a sensitive field name.
     (define (sensitive-name? name)
+      "Return #t when NAME looks like a sensitive field name."
       (if (not name)
           #f
           (let ((lower (string-downcase* name)))
@@ -91,8 +91,8 @@
                 (string-contains? lower "session_cookie")
                 (string-contains? lower "token")))))
 
-    ;; Return #t when TEXT contains a recognizable secret spelling.
     (define (secret-string? text)
+      "Return #t when TEXT contains a recognizable secret spelling."
       (and (string? text)
            (or (string-contains? text "sk-")
                (string-contains? text "ghp_")
@@ -104,8 +104,8 @@
                (string-contains? text "AKIA")
                (string-contains? text "PRIVATE KEY"))))
 
-    ;; Return DATUM's record head or #f for association-list payloads.
     (define (record-head datum)
+      "Return DATUM's record head or #f for association-list payloads."
       (if (and (pair? datum)
                (not (and (pair? (car datum))
                          (symbol? (caar datum))))
@@ -113,8 +113,8 @@
           (car datum)
           #f))
 
-    ;; Return field pairs from DATUM.
     (define (field-values datum)
+      "Return field pairs from DATUM."
       (if (not (pair? datum))
           '()
           (let ((fields (if (and (pair? (car datum))
@@ -124,21 +124,26 @@
             (let loop ((cursor fields) (result '()))
               (cond
                ((null? cursor) (reverse result))
+               ((not (pair? cursor)) (reverse result))
                ((and (pair? (car cursor))
                      (symbol? (caar cursor)))
                 (loop (cdr cursor) (cons (car cursor) result)))
                (else (loop (cdr cursor) result)))))))
 
-    ;; Return FIELD's name.
     (define (field-name field)
+      "Return FIELD's name."
       (car field))
 
-    ;; Return FIELD's first value, or #f.
     (define (field-main-value field)
-      (if (null? (cdr field)) #f (cadr field)))
+      "Return FIELD's first value, or #f."
+      (let ((rest (cdr field)))
+        (cond
+         ((null? rest) #f)
+         ((and (pair? rest) (null? (cdr rest))) (car rest))
+         (else rest))))
 
-    ;; Return field NAME from DATUM, or #f.
     (define (field-value datum name)
+      "Return field NAME from DATUM, or #f."
       (let loop ((fields (field-values datum)))
         (cond
          ((null? fields) #f)
@@ -146,8 +151,8 @@
           (field-main-value (car fields)))
          (else (loop (cdr fields))))))
 
-    ;; Return source name for DATUM, if any.
     (define (source-name datum)
+      "Return source name for DATUM, if any."
       (let ((source-field (field-value datum 'source))
             (head (record-head datum)))
         (cond
@@ -159,8 +164,8 @@
           'private-buffer)
          (else #f))))
 
-    ;; Return sensitive field name in DATUM, or #f.
     (define (sensitive-field-name datum)
+      "Return sensitive field name in DATUM, or #f."
       (let ((declared (field-value datum 'field)))
         (if (sensitive-name? (name-string declared))
             (name-string declared)
@@ -172,22 +177,22 @@
                 (symbol->string (field-name (car fields))))
                (else (loop (cdr fields))))))))
 
-    ;; Return #t when any string field in DATUM looks secret.
     (define (record-secret-value? datum)
+      "Return #t when any string field in DATUM looks secret."
       (let loop ((fields (field-values datum)))
         (cond
          ((null? fields) #f)
          ((secret-string? (field-main-value (car fields))) #t)
          (else (loop (cdr fields))))))
 
-    ;; Return #t when DATUM is already a redaction/log record.
     (define (redaction-record? datum)
+      "Return #t when DATUM is already a redaction/log record."
       (let ((head (record-head datum)))
         (or (eq? head 'redaction)
             (eq? head 'redaction-log))))
 
-    ;; Return #t when DATUM itself describes a secret source.
     (define (self-secret-source? datum)
+      "Return #t when DATUM itself describes a secret source."
       (if (and (pair? datum)
                (not (redaction-record? datum))
                (let ((source (source-name datum))
@@ -205,13 +210,13 @@
           #t
           #f))
 
-    ;; Return #t when DATUM itself is local-only.
     (define (self-local-only? datum)
+      "Return #t when DATUM itself is local-only."
       (or (eq? (record-head datum) 'local-only)
           (and (pair? datum) (field-value datum 'local-only))))
 
-    ;; Build a redaction record.
     (define (make-redaction-record kind source field policy)
+      "Build a redaction record."
       (list 'redaction
             (list 'kind kind)
             (list 'source (if source source 'unknown))
@@ -219,8 +224,8 @@
             (list 'replacement redaction-replacement)
             (list 'policy policy)))
 
-    ;; Build a local-only redaction record.
     (define (make-local-only-record reason)
+      "Build a local-only redaction record."
       (list 'redaction
             (list 'kind 'local-only)
             (list 'source 'local-only)
@@ -229,13 +234,13 @@
             (list 'policy 'local-only)
             (list 'reason reason)))
 
-    ;; Remember RECORD in the process-local redaction log.
     (define (remember! record)
+      "Remember RECORD in the process-local redaction log."
       (set! redaction-records (cons record redaction-records))
       record)
 
-    ;; Return a redaction record for DATUM and log it.
     (define (record-for-datum datum)
+      "Return a redaction record for DATUM and log it."
       (remember!
        (make-redaction-record
         'secret
@@ -243,8 +248,8 @@
         (sensitive-field-name datum)
         'local-only)))
 
-    ;; Return #t when DATUM contains local-only context.
     (define (local-only? datum)
+      "Return #t when DATUM contains local-only context."
       (cond
        ((redaction-record? datum) #f)
        ((pair? datum)
@@ -261,6 +266,9 @@
 
     (define (secret-source? datum)
       "Return #t when DATUM contains secret-prone source data."
+      #((parameters . ((datum . "Scheme-readable value to inspect recursively.")))
+        (returns . "#t when DATUM appears to contain a secret or secret-prone source marker; otherwise #f.")
+        (effects . (pure)))
       (cond
        ((redaction-record? datum) #f)
        ((string? datum) (secret-string? datum))
@@ -278,6 +286,10 @@
 
     (define (redact datum policy)
       "Return DATUM with secret and local-only content redacted."
+      #((parameters . ((datum . "Scheme-readable value to sanitize recursively.")
+                       (policy . "Redaction policy datum reserved for host-specific policy choices.")))
+        (returns . "DATUM with secret-like values and local-only context replaced by safe public records.")
+        (effects . (state-write)))
       (cond
        ((redaction-record? datum) datum)
        ((and (string? datum) (secret-string? datum))
@@ -301,6 +313,10 @@
 
     (define (context-local-only! datum reason)
       "Wrap DATUM as local-only context."
+      #((parameters . ((datum . "Context value that should not leave the local host boundary.")
+                       (reason . "Human-readable reason for withholding DATUM.")))
+        (returns . "A `local-only` wrapper datum carrying REASON and DATUM.")
+        (effects . (state-write)))
       (remember! (make-local-only-record reason))
       (list 'local-only
             (list 'reason reason)
@@ -308,14 +324,24 @@
 
     (define (redaction-log . options)
       "Return recent redaction records as a Scheme-readable datum."
+      #((parameters . ((options . "Reserved option list for future filtering or pagination.")))
+        (returns . "A `redaction-log` datum containing recent redaction records.")
+        (effects . (state-read)))
       (list 'redaction-log
             (list 'records redaction-records)))
 
     (define (agent-scheme-redaction-clear!)
       "Clear the process-local redaction log."
+      #((parameters . ())
+        (returns . "An unspecified value after clearing the process-local redaction records.")
+        (effects . (state-write)))
       (set! redaction-records '()))
 
     (define (safe-for-provider? datum provider)
       "Return #t when DATUM can be sent to PROVIDER without redaction."
+      #((parameters . ((datum . "Scheme-readable value to inspect recursively.")
+                       (provider . "Provider identifier or metadata reserved for provider-specific policy.")))
+        (returns . "#t when DATUM has no detected secret or local-only content; otherwise #f.")
+        (effects . (pure)))
       (and (not (secret-source? datum))
            (not (local-only? datum))))))

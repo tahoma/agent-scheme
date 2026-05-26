@@ -48,24 +48,24 @@
           (agent-scheme base)
           (agent-scheme library))
   (begin
-    ;; Report whether FORM is a core define form headed by the raw symbol.
     (define (definition-form? form)
+      "Report whether FORM is a core define form headed by the raw symbol."
       (and (pair? form) (eq? (car form) 'define)))
 
-    ;; Report whether FORM is a define-values form after identifier unwrapping.
     (define (define-values-form? form)
+      "Report whether FORM is a define-values form after identifier unwrapping."
       (and (pair? form) (identifier-named? (car form) 'define-values)))
 
-    ;; Report whether FORM is a core begin form headed by the raw symbol.
     (define (begin-form? form)
+      "Report whether FORM is a core begin form headed by the raw symbol."
       (and (pair? form) (eq? (car form) 'begin)))
 
-    ;; Construct the lambda expression used by function-definition shorthand.
     (define (make-lambda-expression formals body)
+      "Construct the lambda expression used by function-definition shorthand."
       (cons 'lambda (cons formals body)))
 
-    ;; Parse variable or procedure define syntax into a name/expression pair.
     (define (parse-definition form)
+      "Parse variable or procedure define syntax into a name/expression pair."
       (let ((parts (proper-list-elements form "define form")))
         (if (< (length parts) 3)
             (eval-error "define requires a target and a value" form))
@@ -96,8 +96,8 @@
              "define target must be an identifier or function signature"
              form))))))
 
-    ;; Parse define-values syntax into formals metadata and an initializer.
     (define (parse-define-values form)
+      "Parse define-values syntax into formals metadata and an initializer."
       (let ((parts (proper-list-elements form "define-values form")))
         (if (not (= (length parts) 3))
             (eval-error
@@ -105,33 +105,33 @@
              form))
         (cons (parse-formals (second parts)) (third parts))))
 
-    ;; Return every symbol named by parsed FORMALS.
     (define (formals-names formals)
+      "Return every symbol named by parsed FORMALS."
       (if (formals-rest formals)
           (append (formals-required formals) (list (formals-rest formals)))
           (formals-required formals)))
 
-    ;; Return every name bound by a define-values form.
     (define (define-values-bound-names form)
+      "Return every name bound by a define-values form."
       (formals-names (car (parse-define-values form))))
 
-    ;; Report whether FORM is a define-record-type form.
     (define (record-definition-form? form)
+      "Report whether FORM is a define-record-type form."
       (and (pair? form) (identifier-named? (car form) 'define-record-type)))
 
-    ;; Report whether FORM is any definition accepted at body start.
     (define (body-definition-form? form)
+      "Report whether FORM is any definition accepted at body start."
       (or (definition-form? form)
           (define-values-form? form)
           (record-definition-form? form)))
 
-    ;; Report whether DATUM is a pair headed by identifier TAG.
     (define (tagged-list? datum tag)
+      "Report whether DATUM is a pair headed by identifier TAG."
       (and (pair? datum)
            (identifier-named? (car datum) tag)))
 
-    ;; Return the sole operand from FORM or raise a syntax error.
     (define (single-argument-syntax form description)
+      "Return the sole operand from FORM or raise a syntax error."
       (let ((parts (proper-list-elements form description)))
         (if (not (= (length parts) 2))
             (eval-error
@@ -139,12 +139,12 @@
              form))
         (second parts)))
 
-    ;; Report whether FORM is a syntax-error expansion result.
     (define (syntax-error-form? form)
+      "Report whether FORM is a syntax-error expansion result."
       (tagged-list? form 'syntax-error))
 
-    ;; Render syntax-error operands into one diagnostic message.
     (define (syntax-error-message form)
+      "Render syntax-error operands into one diagnostic message."
       (let ((parts (proper-list-elements form "syntax-error form")))
         (let loop ((rest (cdr parts)) (message ""))
           (cond
@@ -158,8 +158,8 @@
                    " "
                    (agent-scheme-value->external (car rest)))))))))
 
-    ;; Raise the diagnostic represented by a syntax-error form.
     (define (raise-syntax-error form . maybe-source-form)
+      "Raise the diagnostic represented by a syntax-error form."
       (let ((message (syntax-error-message form)))
         (if (null? maybe-source-form)
             (eval-error (string-append "syntax-error: " message))
@@ -170,12 +170,12 @@
               ": "
               message)))))
 
-    ;; Construct an empty syntax environment with an optional parent.
     (define (make-empty-syntax-environment parent)
+      "Construct an empty syntax environment with an optional parent."
       (make-syntax-environment '() parent '()))
 
-    ;; Return NAME's syntax transformer by walking syntax-environment parents.
     (define (syntax-environment-ref syntax-environment name)
+      "Return NAME's syntax transformer by walking syntax-environment parents."
       (let loop ((cursor syntax-environment))
         (cond
          ((not cursor) #f)
@@ -183,8 +183,8 @@
           => (lambda (cell) (cdr cell)))
          (else (loop (syntax-environment-parent cursor))))))
 
-    ;; Add a syntax binding unless NAME is imported into this syntax frame.
     (define (syntax-environment-define! syntax-environment name transformer)
+      "Add a syntax binding unless NAME is imported into this syntax frame."
       (if (memq name (syntax-environment-imported-names syntax-environment))
           (eval-error "cannot redefine imported syntax binding" name))
       (set-syntax-environment-frame!
@@ -192,26 +192,26 @@
        (cons (cons name transformer)
              (syntax-environment-frame syntax-environment))))
 
-    ;; Run THUNK with CONTEXT temporarily using SYNTAX-ENVIRONMENT.
     (define (with-syntax-environment context syntax-environment thunk)
+      "Run THUNK with CONTEXT temporarily using SYNTAX-ENVIRONMENT."
       (let ((old-syntax-environment (context-syntax-environment context)))
         (set-context-syntax-environment! context syntax-environment)
         (let ((value (thunk)))
           (set-context-syntax-environment! context old-syntax-environment)
           value)))
 
-    ;; Report whether OPERATOR is shadowed by a value binding.
     (define (operator-shadowed? operator environment)
+      "Report whether OPERATOR is shadowed by a value binding."
       (and (symbol? operator) (environment-cell environment operator)))
 
-    ;; Report whether OPERATOR can still dispatch as syntax in ENVIRONMENT.
     (define (special-operator-active? operator environment)
+      "Report whether OPERATOR can still dispatch as syntax in ENVIRONMENT."
       (and (identifier-datum? operator)
            (or (identifier? operator)
                (not (operator-shadowed? operator environment)))))
 
-    ;; Resolve OPERATOR to its active syntax transformer, respecting hygiene.
     (define (syntax-binding-for-operator operator environment context)
+      "Resolve OPERATOR to its active syntax transformer, respecting hygiene."
       ;; Macro-introduced operators consult their definition-time syntax
       ;; environment.  Plain symbols use the active syntax environment unless a
       ;; value binding shadows the syntactic keyword.
@@ -233,25 +233,25 @@
               name))
             #f)))
 
-    ;; Report whether DATUM names the active syntax-rules ellipsis identifier.
     (define (ellipsis-identifier? datum ellipsis)
+      "Report whether DATUM names the active syntax-rules ellipsis identifier."
       (and (identifier-datum? datum)
            (eq? (identifier-datum-name datum) ellipsis)))
 
-    ;; Return DATUM's list elements, or #f when DATUM is not a proper list.
     (define (proper-list-elements/maybe datum)
+      "Return DATUM's list elements, or #f when DATUM is not a proper list."
       (let loop ((cursor datum) (elements '()))
         (cond
          ((null? cursor) (reverse elements))
          ((pair? cursor) (loop (cdr cursor) (cons (car cursor) elements)))
          (else #f))))
 
-    ;; Report whether FORM is a syntax-rules transformer spec.
     (define (syntax-rules-spec? form)
+      "Report whether FORM is a syntax-rules transformer spec."
       (and (pair? form) (identifier-named? (car form) 'syntax-rules)))
 
-    ;; Parse one syntax-rules rule into pattern and template.
     (define (parse-syntax-rule rule)
+      "Parse one syntax-rules rule into pattern and template."
       (let ((parts (proper-list-elements rule "syntax-rules rule")))
         (if (not (= (length parts) 2))
             (eval-error
@@ -265,8 +265,8 @@
                pattern))
           (cons pattern (second parts)))))
 
-    ;; Parse a syntax-rules transformer, including optional custom ellipsis.
     (define (parse-syntax-rules form value-environment syntax-environment)
+      "Parse a syntax-rules transformer, including optional custom ellipsis."
       (if (not (syntax-rules-spec? form))
           (eval-error "transformer spec must be a syntax-rules form" form))
       (let* ((parts (proper-list-elements form "syntax-rules form"))
@@ -305,8 +305,8 @@
            value-environment
            syntax-environment))))
 
-    ;; Report whether IDENTIFIER names one of the syntax-rules literals.
     (define (syntax-literal? identifier literals)
+      "Report whether IDENTIFIER names one of the syntax-rules literals."
       (let ((name (identifier-datum-name identifier)))
         (let loop ((rest literals))
           (cond
@@ -314,25 +314,25 @@
            ((eq? name (identifier-datum-name (car rest))) #t)
            (else (loop (cdr rest)))))))
 
-    ;; Create the mutable capture table used while matching one macro rule.
     (define (make-pattern-bindings)
+      "Create the mutable capture table used while matching one macro rule."
       (list 'bindings))
 
-    ;; Return the capture-table cell for pattern variable NAME, or #f.
     (define (pattern-binding-cell bindings name)
+      "Return the capture-table cell for pattern variable NAME, or #f."
       (assoc name (cdr bindings)))
 
-    ;; Return the pattern binding entry for NAME, or #f.
     (define (pattern-binding bindings name)
+      "Return the pattern binding entry for NAME, or #f."
       (let ((cell (pattern-binding-cell bindings name)))
         (if cell (cdr cell) #f)))
 
-    ;; Add ENTRY for pattern variable NAME to the capture table.
     (define (add-pattern-binding! bindings name entry)
+      "Add ENTRY for pattern variable NAME to the capture table."
       (set-cdr! bindings (cons (cons name entry) (cdr bindings))))
 
-    ;; Report whether PREFIX is an initial segment of repetition PATH.
     (define (path-prefix? prefix path)
+      "Report whether PREFIX is an initial segment of repetition PATH."
       (cond
        ((null? prefix) #t)
        ((null? path) #f)
@@ -340,13 +340,13 @@
         (path-prefix? (cdr prefix) (cdr path)))
        (else #f)))
 
-    ;; Return the capture stored for PATH, or #f when none exists.
     (define (capture-ref captures path)
+      "Return the capture stored for PATH, or #f when none exists."
       (let ((cell (assoc path captures)))
         (if cell (cdr cell) #f)))
 
-    ;; Return NAME's capture entry, creating it with DEPTH when needed.
     (define (ensure-pattern-binding! bindings name depth)
+      "Return NAME's capture entry, creating it with DEPTH when needed."
       (let ((entry (pattern-binding bindings name)))
         (cond
          ((not entry)
@@ -363,8 +363,8 @@
               (set-pattern-binding-depth! entry depth))
           entry))))
 
-    ;; Record VALUE as NAME's capture at the current ellipsis PATH.
     (define (syntax-bind-pattern-variable! bindings name value path)
+      "Record VALUE as NAME's capture at the current ellipsis PATH."
       (let* ((entry (ensure-pattern-binding! bindings name (length path)))
              (captures (pattern-binding-captures entry)))
         (if (assoc path captures)
@@ -376,21 +376,21 @@
          (cons (cons path value) captures)))
       #t)
 
-    ;; Split DATUM into list elements and the final tail value.
     (define (list-elements-tail datum)
+      "Split DATUM into list elements and the final tail value."
       (let loop ((cursor datum) (elements '()))
         (if (pair? cursor)
             (loop (cdr cursor) (cons (car cursor) elements))
             (cons (reverse elements) cursor))))
 
-    ;; Append ELEMENTS in front of TAIL without requiring TAIL to be a list.
     (define (append-tail elements tail)
+      "Append ELEMENTS in front of TAIL without requiring TAIL to be a list."
       (if (null? elements)
           tail
           (cons (car elements) (append-tail (cdr elements) tail))))
 
-    ;; Return every pattern variable name introduced by PATTERN.
     (define (pattern-variable-names pattern literals ellipsis)
+      "Return every pattern variable name introduced by PATTERN."
       (cond
        ((identifier-datum? pattern)
         (let ((name (identifier-datum-name pattern)))
@@ -419,9 +419,9 @@
                     (vector->list pattern))))
        (else '())))
 
-    ;; Mark repeated variables under PATTERN as captured zero times at PATH.
     (define (bind-empty-repeated-pattern-variables!
              pattern literals ellipsis bindings path)
+      "Mark repeated variables under PATTERN as captured zero times at PATH."
       (for-each
        (lambda (name)
          (let ((entry
@@ -432,25 +432,25 @@
                 (cons path (pattern-binding-empty-prefixes entry))))))
        (pattern-variable-names pattern literals ellipsis)))
 
-    ;; Return the first COUNT elements of LIST.
     (define (list-take list count)
+      "Return the first COUNT elements of LIST."
       (let loop ((rest list) (remaining count) (result '()))
         (if (= remaining 0)
             (reverse result)
             (loop (cdr rest) (- remaining 1) (cons (car rest) result)))))
 
-    ;; Return LIST after skipping COUNT elements.
     (define (list-drop list count)
+      "Return LIST after skipping COUNT elements."
       (if (= count 0)
           list
           (list-drop (cdr list) (- count 1))))
 
-    ;; Return the last COUNT elements of LIST.
     (define (list-last-n list count)
+      "Return the last COUNT elements of LIST."
       (list-drop list (- (length list) count)))
 
-    ;; Resolve IDENTIFIER's syntax binding in a given syntax environment.
     (define (identifier-syntax-binding-in identifier syntax-environment)
+      "Resolve IDENTIFIER's syntax binding in a given syntax environment."
       (let ((name (identifier-datum-name identifier)))
         (and name
              (or
@@ -467,9 +467,9 @@
               (and syntax-environment
                    (syntax-environment-ref syntax-environment name))))))
 
-    ;; Return the value or syntax token used for literal-identifier comparison.
     (define (identifier-binding-token identifier value-environment
                                       syntax-environment)
+      "Return the value or syntax token used for literal-identifier comparison."
       (let ((cell
              (and value-environment
                   (environment-cell-for-identifier
@@ -481,9 +481,8 @@
          (syntax-binding (cons 'syntax syntax-binding))
          (else #f))))
 
-    ;; Report whether two literal-identifier binding tokens denote the same
-    ;; binding.
     (define (binding-tokens-equal? left right)
+      "Report whether two literal-identifier binding tokens denote the same binding."
       (cond
        ((and (not left) (not right)) #t)
        ((and left right
@@ -492,9 +491,9 @@
         #t)
        (else #f)))
 
-    ;; Report whether a syntax-rules literal matches by name and binding.
     (define (literal-identifier-match? pattern input transformer
                                        use-environment use-syntax-environment)
+      "Report whether a syntax-rules literal matches by name and binding."
       (and (identifier-datum? input)
            (eq? (identifier-datum-name pattern)
                 (identifier-datum-name input))
@@ -506,9 +505,9 @@
             (identifier-binding-token
              input use-environment use-syntax-environment))))
 
-    ;; Match one syntax-rules pattern node and record pattern captures.
     (define (match-pattern pattern input transformer bindings path
                            use-environment use-syntax-environment)
+      "Match one syntax-rules pattern node and record pattern captures."
       (let ((literals (syntax-transformer-literals transformer))
             (ellipsis (syntax-transformer-ellipsis transformer)))
         (cond
@@ -556,8 +555,8 @@
          (else
           (equal? pattern input)))))
 
-    ;; Return the index of the ellipsis marker in PATTERNS, or #f.
     (define (find-ellipsis-index patterns ellipsis)
+      "Return the index of the ellipsis marker in PATTERNS, or #f."
       (if (null? patterns)
           #f
           (let loop ((rest (cdr patterns)) (index 1))
@@ -566,9 +565,9 @@
              ((ellipsis-identifier? (car rest) ellipsis) index)
              (else (loop (cdr rest) (+ index 1)))))))
 
-    ;; Match fixed pattern and input element lists from left to right.
     (define (match-pattern-list patterns inputs transformer bindings path
                                 use-environment use-syntax-environment)
+      "Match fixed pattern and input element lists from left to right."
       (cond
        ((null? patterns) #t)
        ((null? inputs) #f)
@@ -588,14 +587,14 @@
                             use-syntax-environment))
        (else #f)))
 
-    ;; Return PATH extended with one repetition INDEX.
     (define (path-add-index path index)
+      "Return PATH extended with one repetition INDEX."
       (append path (list index)))
 
-    ;; Match list/vector pattern elements, including one ellipsis repetition.
     (define (match-pattern-elements patterns pattern-tail input-elements
                                     input-tail transformer bindings path
                                     use-environment use-syntax-environment)
+      "Match list/vector pattern elements, including one ellipsis repetition."
       (let* ((ellipsis (syntax-transformer-ellipsis transformer))
              (ellipsis-index (find-ellipsis-index patterns ellipsis)))
         (if ellipsis-index
@@ -682,9 +681,9 @@
                                       use-syntax-environment)
                        (and (null? remaining) (null? input-tail))))))))
 
-    ;; Try one syntax-rules rule against FORM and fill BINDINGS on success.
     (define (match-syntax-rule rule form transformer bindings
                                use-environment use-syntax-environment)
+      "Try one syntax-rules rule against FORM and fill BINDINGS on success."
       (let* ((pattern-pieces (list-elements-tail (car rule)))
              (input-pieces (list-elements-tail form))
              (pattern-elements (car pattern-pieces))
@@ -703,8 +702,8 @@
               use-environment
               use-syntax-environment))))
 
-    ;; Return captured pattern variables referenced by a template fragment.
     (define (template-pattern-variable-names template bindings ellipsis)
+      "Return captured pattern variables referenced by a template fragment."
       (cond
        ((identifier-datum? template)
         (let ((name (identifier-datum-name template)))
@@ -733,16 +732,16 @@
                     (vector->list template))))
        (else '())))
 
-    ;; Return the greatest number in a nonempty list.
     (define (max-number-list numbers)
+      "Return the greatest number in a nonempty list."
       (let loop ((rest (cdr numbers)) (best (car numbers)))
         (if (null? rest)
             best
             (loop (cdr rest)
                   (if (> (car rest) best) (car rest) best)))))
 
-    ;; Return distinct repetition indices immediately under PATH.
     (define (collect-next-indices paths path)
+      "Return distinct repetition indices immediately under PATH."
       (let ((path-length (length path)))
         (let loop ((rest paths) (indices '()))
           (cond
@@ -757,8 +756,8 @@
            (else
             (loop (cdr rest) indices))))))
 
-    ;; Return how many repetitions ENTRY has below PATH, if knowable.
     (define (pattern-binding-repeat-count-at entry path)
+      "Return how many repetitions ENTRY has below PATH, if knowable."
       (if (<= (pattern-binding-depth entry) (length path))
           #f
           (let* ((capture-paths (map car (pattern-binding-captures entry)))
@@ -773,8 +772,8 @@
              ((member path empty-prefixes) 0)
              (else #f)))))
 
-    ;; Determine the repetition count required for a template ellipsis.
     (define (template-repeat-count template bindings ellipsis path)
+      "Determine the repetition count required for a template ellipsis."
       (let loop ((names (template-pattern-variable-names
                          template bindings ellipsis))
                  (count #f))
@@ -796,8 +795,8 @@
                       (loop (cdr names) entry-count))
                 (loop (cdr names) count)))))))
 
-    ;; Return NAME's captured value at PATH, enforcing ellipsis depth.
     (define (pattern-binding-value-at entry name path)
+      "Return NAME's captured value at PATH, enforcing ellipsis depth."
       (let* ((depth (pattern-binding-depth entry))
              (capture-path
               (if (<= depth (length path))
@@ -810,8 +809,8 @@
             (cdr cell)
             (eval-error "missing pattern variable capture" name))))
 
-    ;; Expand a syntax-rules template using captured pattern bindings.
     (define (expand-template template bindings syntax-context ellipsis . rest)
+      "Expand a syntax-rules template using captured pattern bindings."
       ;; Identifiers not captured by BINDINGS are wrapped with SYNTAX-CONTEXT
       ;; so free template identifiers keep their definition-time bindings.
       (let ((path (if (null? rest) '() (car rest)))
@@ -897,16 +896,16 @@
                             ellipsis-literal?)))
          (else template))))
 
-    ;; Allocate a fresh syntax context for identifiers introduced by a macro.
     (define (next-syntax-context! context value-environment syntax-environment)
+      "Allocate a fresh syntax context for identifiers introduced by a macro."
       ;; Each expansion gets a fresh context id so introduced bindings cannot
       ;; collide accidentally with names from the macro use site.
       (let ((id (context-next-syntax-id context)))
         (set-context-next-syntax-id! context (+ id 1))
         (make-syntax-context id value-environment syntax-environment)))
 
-    ;; Apply TRANSFORMER to FORM by matching rules and expanding the template.
     (define (apply-syntax-transformer transformer form environment context)
+      "Apply TRANSFORMER to FORM by matching rules and expanding the template."
       (let loop ((rules (syntax-transformer-rules transformer)))
         (if (null? rules)
             (eval-error
@@ -934,12 +933,12 @@
                         result))
                   (loop (cdr rules)))))))
 
-    ;; Report whether FORM is a define-syntax form.
     (define (syntax-definition-form? form)
+      "Report whether FORM is a define-syntax form."
       (and (pair? form) (identifier-named? (car form) 'define-syntax)))
 
-    ;; Evaluate a define-syntax form and install its transformer.
     (define (eval-define-syntax form environment context syntax-environment)
+      "Evaluate a define-syntax form and install its transformer."
       (let ((parts (proper-list-elements form "define-syntax form")))
         (if (not (= (length parts) 3))
             (eval-error
@@ -955,8 +954,8 @@
            syntax-environment keyword transformer)
           agent-scheme-unspecified)))
 
-    ;; Parse one let-syntax binding into keyword and transformer spec.
     (define (parse-let-syntax-binding binding)
+      "Parse one let-syntax binding into keyword and transformer spec."
       (let ((parts (proper-list-elements binding "syntax binding")))
         (if (not (= (length parts) 2))
             (eval-error
@@ -965,8 +964,8 @@
         (cons (expect-symbol (car parts) "syntax binding keyword")
               (second parts))))
 
-    ;; Build the syntax scope created by let-syntax or letrec-syntax.
     (define (make-local-syntax-scope parts environment context recursive?)
+      "Build the syntax scope created by let-syntax or letrec-syntax."
       (if (< (length parts) 3)
           (eval-error
            (string-append
@@ -996,8 +995,8 @@
          bindings)
         (make-syntax-scope (cddr parts) local-syntax-environment)))
 
-    ;; Expand one expression enough to expose core forms or syntax scopes.
     (define (expand-expression expression environment context)
+      "Expand one expression enough to expose core forms or syntax scopes."
       (if (not (pair? expression))
           expression
           (let* ((parts (proper-list-elements expression "expression"))
@@ -1020,8 +1019,8 @@
                                              context)))
              (else expression)))))
 
-    ;; Fully expand a define form while preserving its definition shape.
     (define (expand-definition-form form environment context)
+      "Fully expand a define form while preserving its definition shape."
       (let* ((parts (proper-list-elements form "define form"))
              (target (second parts)))
         (cond
@@ -1043,8 +1042,8 @@
            "define target must be an identifier or function signature"
            form)))))
 
-    ;; Fully expand the initializer in a define-values form.
     (define (expand-define-values-form form environment context)
+      "Fully expand the initializer in a define-values form."
       (let ((parts (proper-list-elements form "define-values form")))
         (if (not (= (length parts) 3))
             (eval-error
@@ -1054,8 +1053,8 @@
               (second parts)
               (expand-expression/fully (third parts) environment context))))
 
-    ;; Fully expand core special forms and ordinary combinations.
     (define (expand-core-combination expression environment context)
+      "Fully expand core special forms and ordinary combinations."
       (let* ((parts (proper-list-elements expression "expression"))
              (operator (car parts)))
         (cond
@@ -1164,8 +1163,8 @@
                  (expand-expression/fully part environment context))
                parts)))))
 
-    ;; Recursively expand EXPRESSION until no macro expansion remains.
     (define (expand-expression/fully expression environment context)
+      "Recursively expand EXPRESSION until no macro expansion remains."
       (note-step! context)
       (let ((expanded (expand-expression expression environment context)))
         (cond
@@ -1188,8 +1187,8 @@
           (expand-core-combination expression environment context))
          (else expression))))
 
-    ;; Fully expand a sequence, executing allowed definition-time forms.
     (define (expand-sequence-forms forms environment context allow-definitions?)
+      "Fully expand a sequence, executing allowed definition-time forms."
       (let loop ((rest forms) (expanded '()))
         (if (null? rest)
             (reverse expanded)
@@ -1235,40 +1234,39 @@
                             expanded))))))))
 
 
-    ;; Return the optional caller environment or a fresh base environment.
     (define (macro-rest-environment rest)
+      "Return the optional caller environment or a fresh base environment."
       (if (or (null? rest) (not (car rest)))
           (agent-scheme-make-base-environment)
           (car rest)))
 
-    ;; Return the optional caller options alist, defaulting to empty.
     (define (macro-rest-options rest)
+      "Return the optional caller options alist, defaulting to empty."
       (if (or (null? rest) (null? (cdr rest)))
           '()
           (second rest)))
 
-    ;; Fully expand one already-read expression without evaluating its result.
     (define (agent-scheme-expand expression . rest)
+      "Fully expand one already-read expression without evaluating its result."
       (let ((context (new-eval-context (macro-rest-options rest)))
             (environment (macro-rest-environment rest)))
         (ensure-base-syntax! context environment)
         (expand-expression/fully expression environment context)))
 
-    ;; Read and expand a source body, preserving top-level definition structure
-    ;; for tests and future compiler/backend passes.
     (define (agent-scheme-expand-source source . rest)
+      "Read and expand a source body, preserving top-level definition structure for tests and future compiler/backend passes."
       (let ((context (new-eval-context (macro-rest-options rest)))
             (environment (macro-rest-environment rest))
             (forms (agent-scheme-read-all source)))
         (ensure-base-syntax! context environment)
         (expand-sequence-forms forms environment context #t)))
 
-    ;; Build one field for Scheme-readable macro introspection records.
     (define (macro-field name . values)
+      "Build one field for Scheme-readable macro introspection records."
       (cons name values))
 
-    ;; Return the active macro operator name for FORM, or #f.
     (define (macro-active-name form environment context)
+      "Return the active macro operator name for FORM, or #f."
       (and (pair? form)
            (let ((operator (car form)))
              (cond
@@ -1282,16 +1280,16 @@
                (identifier-datum-name operator))
               (else #f)))))
 
-    ;; Return one Scheme-readable top-level macro expansion step.
     (define (macro-step-record index macro-name input output)
+      "Return one Scheme-readable top-level macro expansion step."
       (list 'step
             (macro-field 'index (agent-scheme-make-canonical-integer index))
             (macro-field 'macro macro-name)
             (macro-field 'input (strip-identifiers input))
             (macro-field 'output (strip-identifiers output))))
 
-    ;; Return NAME as a supported macro expansion option name.
     (define (macro-option-name datum)
+      "Return NAME as a supported macro expansion option name."
       (let ((name (identifier-datum-name datum)))
         (cond
          ((not name)
@@ -1305,8 +1303,8 @@
          (else
           (eval-error "unknown macroexpand option" name)))))
 
-    ;; Return VALUE as a host exact integer for macro option NAME.
     (define (macro-option-integer value name)
+      "Return VALUE as a host exact integer for macro option NAME."
       (cond
        ((and (agent-scheme-number? value)
              (eq? (agent-scheme-number-kind value) 'integer)
@@ -1317,8 +1315,8 @@
        (else
         (eval-error "macroexpand option expects exact integer" name))))
 
-    ;; Convert one Scheme-readable option entry to the host context alist shape.
     (define (macro-option-entry entry)
+      "Convert one Scheme-readable option entry to the host context alist shape."
       (let ((parts (proper-list-elements/maybe entry)))
         (cond
          ((and parts (= (length parts) 2))
@@ -1330,15 +1328,15 @@
          (else
           (eval-error "macroexpand option must be a pair" entry)))))
 
-    ;; Convert Scheme-readable macroexpand OPTIONS to evaluator context options.
     (define (macro-options-alist options)
+      "Convert Scheme-readable macroexpand OPTIONS to evaluator context options."
       (map macro-option-entry
            (proper-list-elements
             (if options options '())
             "macroexpand options")))
 
-    ;; Return a child expansion context sharing the caller's macro state.
     (define (macro-introspection-context context options)
+      "Return a child expansion context sharing the caller's macro state."
       (let ((child (new-eval-context (macro-options-alist options))))
         (set-context-syntax-environment!
          child
@@ -1352,14 +1350,14 @@
          (context-base-syntax-installed context))
         child))
 
-    ;; Return EXPANDED in the readable shape used by expansion records.
     (define (macro-visible-expanded expanded)
+      "Return EXPANDED in the readable shape used by expansion records."
       (if (syntax-scope? expanded)
           (cons 'begin (syntax-scope-forms expanded))
           expanded))
 
-    ;; Fully expand TARGET, preserving local syntax scope when present.
     (define (macro-expand-target/fully target environment context)
+      "Fully expand TARGET, preserving local syntax scope when present."
       (if (syntax-scope? target)
           (with-syntax-environment
            context
@@ -1373,8 +1371,8 @@
                     #t))))
           (expand-expression/fully target environment context)))
 
-    ;; Return a top-level expansion trace for FORM.
     (define (macro-trace-top-level form environment context one-step?)
+      "Return a top-level expansion trace for FORM."
       (let loop ((current form)
                  (index 0)
                  (steps '())
@@ -1410,21 +1408,21 @@
                     (cons 'steps (reverse steps))
                     (cons 'macros (reverse macros)))))))
 
-    ;; Return FIELD from a trace alist.
     (define (macro-trace-ref trace field)
+      "Return FIELD from a trace alist."
       (cdr (assq field trace)))
 
-    ;; Convert a raised condition into a macro-expansion condition datum.
     (define (macro-condition-datum condition context)
+      "Convert a raised condition into a macro-expansion condition datum."
       (map (lambda (field)
              (if (and (pair? field) (eq? (car field) 'phase))
                  (macro-field 'phase 'macro-expansion)
                  field))
            (debugger-condition-datum condition context)))
 
-    ;; Build a Scheme-readable macro expansion result datum.
     (define (macro-expansion-result status mode original expanded
                                     steps macros errors)
+      "Build a Scheme-readable macro expansion result datum."
       (list 'macro-expansion
             (macro-field 'status status)
             (macro-field 'mode mode)
@@ -1437,8 +1435,8 @@
             (macro-field 'warnings '())
             (macro-field 'errors errors)))
 
-    ;; Return macro expansion introspection for FORM.
     (define (macroexpand/result form environment context options mode)
+      "Return macro expansion introspection for FORM."
       (let* ((child (macro-introspection-context context options))
              (trace #f))
         (guard (condition
@@ -1471,16 +1469,16 @@
              (macro-trace-ref trace 'macros)
              '())))))
 
-    ;; Return a full macro expansion introspection datum for FORM.
     (define (agent-scheme-macroexpand form environment context options)
+      "Return a full macro expansion introspection datum for FORM."
       (macroexpand/result form environment context options 'full))
 
-    ;; Return a one-step macro expansion introspection datum for FORM.
     (define (agent-scheme-macroexpand-1 form environment context options)
+      "Return a one-step macro expansion introspection datum for FORM."
       (macroexpand/result form environment context options 'one-step))
 
-    ;; Return syntax binding metadata for IDENTIFIER in CONTEXT.
     (define (agent-scheme-macro-binding-info identifier environment context)
+      "Return syntax binding metadata for IDENTIFIER in CONTEXT."
       (let ((name (expect-symbol identifier "macro-binding-info identifier")))
         (if (syntax-environment-ref (context-syntax-environment context) name)
             (list 'macro-binding
@@ -1490,12 +1488,12 @@
                   (macro-field 'library #f))
             #f)))
 
-    ;; Return source metadata for DATUM, or #f when none is attached.
     (define (agent-scheme-syntax-source datum)
+      "Return source metadata for DATUM, or #f when none is attached."
       #f)
 
-    ;; Build a Scheme-readable macro library introspection record.
     (define (macro-library-record status library-name macros errors)
+      "Build a Scheme-readable macro library introspection record."
       (list 'macro-library
             (macro-field 'status status)
             (macro-field 'library (strip-identifiers library-name))
@@ -1503,8 +1501,8 @@
             (macro-field 'warnings '())
             (macro-field 'errors errors)))
 
-    ;; Insert RECORD into sorted macro RECORDS by exported name.
     (define (insert-macro-record record records)
+      "Insert RECORD into sorted macro RECORDS by exported name."
       (cond
        ((null? records) (list record))
        ((string<? (symbol->string (second record))
@@ -1513,9 +1511,9 @@
        (else
         (cons (car records) (insert-macro-record record (cdr records))))))
 
-    ;; Return syntax export metadata for LIBRARY-NAME.
     (define (agent-scheme-macroexpand-library library-name environment
                                               context options)
+      "Return syntax export metadata for LIBRARY-NAME."
       (let ((child (macro-introspection-context context options)))
         (guard (condition
                 (else
