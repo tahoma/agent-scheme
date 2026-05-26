@@ -197,6 +197,26 @@
                 (agent-scheme-host-adapter-fixture-test--field-value
                  adapter "modes")))))))
 
+(ert-deftest agent-scheme-host-adapter-fixture-test-version-matches-runtime ()
+  "The host-adapter declaration points at the canonical version source."
+  (let* ((fixture (agent-scheme-host-adapter-fixture-test--fixture))
+         (adapter (agent-scheme-host-adapter-fixture-test--section
+                   fixture "adapter"))
+         (implementation (agent-scheme-host-adapter-fixture-test--field-value
+                          adapter "implementation"))
+         (version-source-file
+          (agent-scheme-host-adapter-fixture-test--field-value
+           implementation "version-source-file")))
+    (should (equal version-source-file "scheme/agent-scheme/version.sld"))
+    (should (file-exists-p
+             (expand-file-name version-source-file agent-scheme--test-root)))
+    (should (equal (agent-scheme-host-adapter-fixture-test--record-symbol-field
+                    implementation "version-binding")
+                   "agent-scheme-version-datum"))
+    (should (equal (agent-scheme-host-adapter-fixture-test--record-symbol-field
+                    implementation "version-source")
+                   "roadmap-derived"))))
+
 (ert-deftest agent-scheme-host-adapter-fixture-test-libraries-match-registry ()
   "Declared Emacs and shared agent libraries align with registries."
   (let* ((fixture (agent-scheme-host-adapter-fixture-test--fixture))

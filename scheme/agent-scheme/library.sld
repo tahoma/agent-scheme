@@ -1091,6 +1091,10 @@
         (register-primitive-library!
          key
          (list
+          (library-primitive-spec 'agent-scheme-version
+                                  'primitive-agent-scheme-version
+                                  0
+                                  0)
           (library-primitive-spec 'current-capabilities
                                   'primitive-current-capabilities
                                   0
