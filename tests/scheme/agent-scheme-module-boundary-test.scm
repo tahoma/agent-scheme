@@ -12,6 +12,7 @@
         (prefix (agent-scheme approval) approval:)
         (prefix (agent-scheme job) job:)
         (prefix (agent-scheme memory) memory:)
+        (prefix (agent-scheme helper) helper:)
         (prefix (agent-scheme plan) plan:)
         (prefix (agent-scheme context) context:)
         (prefix (agent-scheme redaction) redaction:)
@@ -154,6 +155,49 @@
 (check 'memory-boundary-find
        (length (memory:memory-find memory-store 'instance "portable memory"))
        1)
+
+;; Store for exercising the portable helper/artifact boundary.
+(define helper-store (helper:agent-scheme-make-helper-store))
+
+;; Helper libraries and artifacts are canonical Scheme-readable datums.
+(define portable-helper
+  (helper:helper-save! helper-store
+                       'session
+                       '(agent helpers portable)
+                       '((define (portable-helper x) (+ x 1)))
+                       '(session portable-main)))
+
+(check 'helper-boundary-save-ref
+       (helper:helper-record-name
+        (helper:helper-ref helper-store 'session '(agent helpers portable)))
+       '(agent helpers portable))
+
+(check 'helper-boundary-list-is-scoped
+       (length (helper:helper-list helper-store 'session))
+       1)
+
+;; Artifact record used for exercising portable helper artifact storage.
+(define portable-artifact
+  (helper:artifact-save! helper-store
+                         'session
+                         'example
+                         '(example (source "(portable-helper 41)")
+                                   (expect "42"))
+                         '(session portable-main)))
+
+(check 'helper-boundary-artifact-record
+       (car portable-artifact)
+       'agent-artifact)
+
+(check 'helper-boundary-skill-candidate
+       (car (helper:helper-promote-to-skill
+             portable-helper
+             '((name "portable-helper")
+               (examples ((example (source "(portable-helper 41)")
+                                   (expect "42"))))
+               (references ((r7rs "docs/r7rs-small-report.md")))
+               (tests (((source "(portable-helper 41)") (expect "42")))))))
+       'agent-skill-candidate)
 
 ;; Store for exercising the portable plan boundary.
 (define plan-store (plan:agent-scheme-make-plan-store))

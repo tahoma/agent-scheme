@@ -211,6 +211,12 @@ bridge them into `make test` through ERT so a minimal checkout still has one
 verification command. If an external Scheme is unavailable, the bridge may skip
 the external run, but the fixture shape should still be validated.
 
+The helper library and artifact workflow in
+[Helper Libraries and Artifacts](helper-artifacts.md) follows this boundary:
+the portable core owns helper, artifact, and skill candidate datums, while host
+adapters own private-local persistence, project-tracked writes, and approval
+prompts.
+
 Feature and host discovery expectations are documented in
 [Feature and Host Reflection](feature-reflection.md). Host adapters should
 support static discovery through library availability and runtime discovery
