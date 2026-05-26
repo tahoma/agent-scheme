@@ -1134,7 +1134,31 @@
           (library-primitive-spec 'capability-info
                                   'primitive-capability-info
                                   1
-                                  1))
+                                  1)
+          (library-primitive-spec 'macroexpand
+                                  'primitive-macroexpand
+                                  1
+                                  2)
+          (library-primitive-spec 'macroexpand-1
+                                  'primitive-macroexpand-1
+                                  1
+                                  2)
+          (library-primitive-spec 'macroexpand-library
+                                  'primitive-macroexpand-library
+                                  1
+                                  2)
+          (library-primitive-spec 'macro-binding-info
+                                  'primitive-macro-binding-info
+                                  1
+                                  1)
+          (library-primitive-spec 'syntax-source
+                                  'primitive-syntax-source
+                                  1
+                                  1)
+          (library-primitive-spec 'macroexpand-yield
+                                  'primitive-macroexpand-yield
+                                  2
+                                  2))
          context))
        ((equal? key '(agent redaction))
         (register-primitive-library!

@@ -6,6 +6,11 @@
 (define-library (agent-scheme macro)
   (export agent-scheme-expand
           agent-scheme-expand-source
+          agent-scheme-macroexpand
+          agent-scheme-macroexpand-1
+          agent-scheme-macroexpand-library
+          agent-scheme-macro-binding-info
+          agent-scheme-syntax-source
           definition-form?
           define-values-form?
           begin-form?
@@ -1161,6 +1166,7 @@
 
     ;; Recursively expand EXPRESSION until no macro expansion remains.
     (define (expand-expression/fully expression environment context)
+      (note-step! context)
       (let ((expanded (expand-expression expression environment context)))
         (cond
          ((not (eq? expanded expression))
@@ -1256,5 +1262,284 @@
             (forms (agent-scheme-read-all source)))
         (ensure-base-syntax! context environment)
         (expand-sequence-forms forms environment context #t)))
+
+    ;; Build one field for Scheme-readable macro introspection records.
+    (define (macro-field name . values)
+      (cons name values))
+
+    ;; Return the active macro operator name for FORM, or #f.
+    (define (macro-active-name form environment context)
+      (and (pair? form)
+           (let ((operator (car form)))
+             (cond
+              ((and (identifier-named? operator 'let-syntax)
+                    (special-operator-active? operator environment))
+               'let-syntax)
+              ((and (identifier-named? operator 'letrec-syntax)
+                    (special-operator-active? operator environment))
+               'letrec-syntax)
+              ((syntax-binding-for-operator operator environment context)
+               (identifier-datum-name operator))
+              (else #f)))))
+
+    ;; Return one Scheme-readable top-level macro expansion step.
+    (define (macro-step-record index macro-name input output)
+      (list 'step
+            (macro-field 'index (agent-scheme-make-canonical-integer index))
+            (macro-field 'macro macro-name)
+            (macro-field 'input (strip-identifiers input))
+            (macro-field 'output (strip-identifiers output))))
+
+    ;; Return NAME as a supported macro expansion option name.
+    (define (macro-option-name datum)
+      (let ((name (identifier-datum-name datum)))
+        (cond
+         ((not name)
+          (eval-error "macroexpand option name must be an identifier" datum))
+         ((or (eq? name 'max-steps)
+              (eq? name 'max-non-tail-steps)
+              (eq? name 'max-value-nodes)
+              (eq? name 'max-events)
+              (eq? name 'max-event-nodes))
+          name)
+         (else
+          (eval-error "unknown macroexpand option" name)))))
+
+    ;; Return VALUE as a host exact integer for macro option NAME.
+    (define (macro-option-integer value name)
+      (cond
+       ((and (agent-scheme-number? value)
+             (eq? (agent-scheme-number-kind value) 'integer)
+             (eq? (agent-scheme-number-exactness value) 'exact))
+        (agent-scheme-number-value value))
+       ((and (integer? value) (exact? value))
+        value)
+       (else
+        (eval-error "macroexpand option expects exact integer" name))))
+
+    ;; Convert one Scheme-readable option entry to the host context alist shape.
+    (define (macro-option-entry entry)
+      (let ((parts (proper-list-elements/maybe entry)))
+        (cond
+         ((and parts (= (length parts) 2))
+          (let ((name (macro-option-name (car parts))))
+            (cons name (macro-option-integer (cadr parts) name))))
+         ((pair? entry)
+          (let ((name (macro-option-name (car entry))))
+            (cons name (macro-option-integer (cdr entry) name))))
+         (else
+          (eval-error "macroexpand option must be a pair" entry)))))
+
+    ;; Convert Scheme-readable macroexpand OPTIONS to evaluator context options.
+    (define (macro-options-alist options)
+      (map macro-option-entry
+           (proper-list-elements
+            (if options options '())
+            "macroexpand options")))
+
+    ;; Return a child expansion context sharing the caller's macro state.
+    (define (macro-introspection-context context options)
+      (let ((child (new-eval-context (macro-options-alist options))))
+        (set-context-syntax-environment!
+         child
+         (context-syntax-environment context))
+        (set-context-libraries! child (context-libraries context))
+        (set-context-interaction-environment!
+         child
+         (context-interaction-environment context))
+        (set-context-base-syntax-installed!
+         child
+         (context-base-syntax-installed context))
+        child))
+
+    ;; Return EXPANDED in the readable shape used by expansion records.
+    (define (macro-visible-expanded expanded)
+      (if (syntax-scope? expanded)
+          (cons 'begin (syntax-scope-forms expanded))
+          expanded))
+
+    ;; Fully expand TARGET, preserving local syntax scope when present.
+    (define (macro-expand-target/fully target environment context)
+      (if (syntax-scope? target)
+          (with-syntax-environment
+           context
+           (syntax-scope-syntax-environment target)
+           (lambda ()
+             (cons 'begin
+                   (expand-sequence-forms
+                    (syntax-scope-forms target)
+                    environment
+                    context
+                    #t))))
+          (expand-expression/fully target environment context)))
+
+    ;; Return a top-level expansion trace for FORM.
+    (define (macro-trace-top-level form environment context one-step?)
+      (let loop ((current form)
+                 (index 0)
+                 (steps '())
+                 (macros '()))
+        (note-step! context)
+        (let* ((macro-name (macro-active-name current environment context))
+               (expanded (expand-expression current environment context))
+               (visible-expanded (macro-visible-expanded expanded)))
+          (if (not (eq? expanded current))
+              (let ((name (or macro-name 'syntax))
+                    (step-index (+ index 1)))
+                (if (or one-step? (syntax-scope? expanded))
+                    (list (cons 'expanded visible-expanded)
+                          (cons 'target expanded)
+                          (cons 'steps
+                                (reverse
+                                 (cons
+                                  (macro-step-record
+                                   step-index name current visible-expanded)
+                                  steps)))
+                          (cons 'macros (reverse (cons name macros))))
+                    (loop expanded
+                          step-index
+                          (cons
+                           (macro-step-record
+                            step-index name current visible-expanded)
+                           steps)
+                          (if (memq name macros)
+                              macros
+                              (cons name macros)))))
+              (list (cons 'expanded current)
+                    (cons 'target current)
+                    (cons 'steps (reverse steps))
+                    (cons 'macros (reverse macros)))))))
+
+    ;; Return FIELD from a trace alist.
+    (define (macro-trace-ref trace field)
+      (cdr (assq field trace)))
+
+    ;; Convert a raised condition into a macro-expansion condition datum.
+    (define (macro-condition-datum condition context)
+      (map (lambda (field)
+             (if (and (pair? field) (eq? (car field) 'phase))
+                 (macro-field 'phase 'macro-expansion)
+                 field))
+           (debugger-condition-datum condition context)))
+
+    ;; Build a Scheme-readable macro expansion result datum.
+    (define (macro-expansion-result status mode original expanded
+                                    steps macros errors)
+      (list 'macro-expansion
+            (macro-field 'status status)
+            (macro-field 'mode mode)
+            (macro-field 'original (strip-identifiers original))
+            (macro-field 'expanded
+                         (if expanded (strip-identifiers expanded) #f))
+            (macro-field 'steps steps)
+            (macro-field 'macros macros)
+            (macro-field 'source #f)
+            (macro-field 'warnings '())
+            (macro-field 'errors errors)))
+
+    ;; Return macro expansion introspection for FORM.
+    (define (macroexpand/result form environment context options mode)
+      (let* ((child (macro-introspection-context context options))
+             (trace #f))
+        (guard (condition
+                (else
+                 (macro-expansion-result
+                  'error
+                  mode
+                  form
+                  #f
+                  (if trace (macro-trace-ref trace 'steps) '())
+                  (if trace (macro-trace-ref trace 'macros) '())
+                  (list (macro-condition-datum condition child)))))
+          (ensure-base-syntax! child environment)
+          (set! trace
+                (macro-trace-top-level
+                 form environment child (eq? mode 'one-step)))
+          (let ((expanded
+                 (if (eq? mode 'one-step)
+                     (macro-trace-ref trace 'expanded)
+                     (macro-expand-target/fully
+                      (macro-trace-ref trace 'target)
+                      environment
+                      child))))
+            (macro-expansion-result
+             'ok
+             mode
+             form
+             expanded
+             (macro-trace-ref trace 'steps)
+             (macro-trace-ref trace 'macros)
+             '())))))
+
+    ;; Return a full macro expansion introspection datum for FORM.
+    (define (agent-scheme-macroexpand form environment context options)
+      (macroexpand/result form environment context options 'full))
+
+    ;; Return a one-step macro expansion introspection datum for FORM.
+    (define (agent-scheme-macroexpand-1 form environment context options)
+      (macroexpand/result form environment context options 'one-step))
+
+    ;; Return syntax binding metadata for IDENTIFIER in CONTEXT.
+    (define (agent-scheme-macro-binding-info identifier environment context)
+      (let ((name (expect-symbol identifier "macro-binding-info identifier")))
+        (if (syntax-environment-ref (context-syntax-environment context) name)
+            (list 'macro-binding
+                  (macro-field 'identifier name)
+                  (macro-field 'status 'bound)
+                  (macro-field 'kind 'syntax-rules)
+                  (macro-field 'library #f))
+            #f)))
+
+    ;; Return source metadata for DATUM, or #f when none is attached.
+    (define (agent-scheme-syntax-source datum)
+      #f)
+
+    ;; Build a Scheme-readable macro library introspection record.
+    (define (macro-library-record status library-name macros errors)
+      (list 'macro-library
+            (macro-field 'status status)
+            (macro-field 'library (strip-identifiers library-name))
+            (macro-field 'macros macros)
+            (macro-field 'warnings '())
+            (macro-field 'errors errors)))
+
+    ;; Insert RECORD into sorted macro RECORDS by exported name.
+    (define (insert-macro-record record records)
+      (cond
+       ((null? records) (list record))
+       ((string<? (symbol->string (second record))
+                  (symbol->string (second (car records))))
+        (cons record records))
+       (else
+        (cons (car records) (insert-macro-record record (cdr records))))))
+
+    ;; Return syntax export metadata for LIBRARY-NAME.
+    (define (agent-scheme-macroexpand-library library-name environment
+                                              context options)
+      (let ((child (macro-introspection-context context options)))
+        (guard (condition
+                (else
+                 (macro-library-record
+                  'error
+                  library-name
+                  '()
+                  (list (macro-condition-datum condition child)))))
+          (ensure-base-syntax! child environment)
+          (let* ((library (resolve-library library-name child environment))
+                 (macros
+                  (let loop ((exports (library-exports library))
+                             (records '()))
+                    (cond
+                     ((null? exports) records)
+                     ((eq? (library-binding-kind (car exports)) 'syntax)
+                      (loop
+                       (cdr exports)
+                       (insert-macro-record
+                        (list 'macro
+                              (library-binding-name (car exports))
+                              (macro-field 'kind 'syntax-rules))
+                        records)))
+                     (else (loop (cdr exports) records))))))
+            (macro-library-record 'ok library-name macros '())))))
 
     ))

@@ -15,6 +15,7 @@
 (require 'agent-scheme-result)
 (require 'agent-scheme-base)
 (require 'agent-scheme-library)
+(require 'agent-scheme-debugger)
 
 (cl-defstruct (agent-scheme--syntax-transformer
                (:constructor agent-scheme--make-syntax-transformer
@@ -1020,6 +1021,7 @@ When RECURSIVE is non-nil, transformer specs see the new bindings."
 
 (defun agent-scheme--expand-expression-fully (expression environment context)
   "Return EXPRESSION after recursive macro expansion."
+  (agent-scheme--note-step context)
   (let ((expanded (agent-scheme--expand-expression
                    expression environment context)))
     (cond
@@ -1109,6 +1111,375 @@ When RECURSIVE is non-nil, transformer specs see the new bindings."
      context
      t)))
 
+(defun agent-scheme--macro-symbol (name)
+  "Return NAME as an Agent Scheme symbol datum."
+  (agent-scheme--syntax-symbol
+   (cond
+    ((agent-scheme-symbol-p name)
+     (agent-scheme-symbol-name name))
+    ((symbolp name)
+     (symbol-name name))
+    ((stringp name)
+     name)
+    (t
+     (format "%S" name)))))
+
+(defun agent-scheme--macro-field (name &rest values)
+  "Return a Scheme-readable macro introspection field."
+  (cons (agent-scheme--macro-symbol name) values))
+
+(defun agent-scheme--macro-integer (value)
+  "Return VALUE as an exact Agent Scheme integer datum."
+  (agent-scheme--make-canonical-integer value))
+
+(defun agent-scheme--macro-option-name (datum description)
+  "Return DATUM as an option-name string for DESCRIPTION."
+  (or (agent-scheme--symbol-name datum)
+      (and (symbolp datum) (symbol-name datum))
+      (and (stringp datum) datum)
+      (agent-scheme--eval-error "%s option name must be a symbol" description)))
+
+(defun agent-scheme--macro-option-integer (datum description)
+  "Return DATUM as a host integer for DESCRIPTION."
+  (unless (and (agent-scheme-number-p datum)
+               (eq (agent-scheme-number-kind datum) 'integer)
+               (eq (agent-scheme-number-exactness datum) 'exact))
+    (agent-scheme--eval-error "%s option value must be an exact integer"
+                              description))
+  (agent-scheme-number-value datum))
+
+(defun agent-scheme--macro-option-entry (entry)
+  "Return ENTRY as a (NAME . VALUE) option pair."
+  (cond
+   ((and (consp entry)
+         (consp (cdr entry))
+         (null (cddr entry)))
+    (cons (car entry) (cadr entry)))
+   ((consp entry)
+    (cons (car entry) (cdr entry)))
+   (t
+    (agent-scheme--eval-error
+     "macroexpand option entry must be a pair"))))
+
+(defun agent-scheme--macro-options-plist (options)
+  "Return Emacs option plist parsed from Scheme OPTIONS datum."
+  (let (plist)
+    (dolist (entry (agent-scheme--proper-list-elements
+                    (or options nil) "macroexpand options"))
+      (let* ((pair (agent-scheme--macro-option-entry entry))
+             (name (agent-scheme--macro-option-name
+                    (car pair) "macroexpand"))
+             (value (cdr pair)))
+        (pcase name
+          ("max-steps"
+           (setq plist
+                 (plist-put plist :max-steps
+                            (agent-scheme--macro-option-integer
+                             value name))))
+          ("max-non-tail-steps"
+           (setq plist
+                 (plist-put plist :max-non-tail-steps
+                            (agent-scheme--macro-option-integer
+                             value name))))
+          ("max-value-nodes"
+           (setq plist
+                 (plist-put plist :max-value-nodes
+                            (agent-scheme--macro-option-integer
+                             value name))))
+          ("max-events"
+           (setq plist
+                 (plist-put plist :max-events
+                            (agent-scheme--macro-option-integer
+                             value name))))
+          ("max-event-nodes"
+           (setq plist
+                 (plist-put plist :max-event-nodes
+                            (agent-scheme--macro-option-integer
+                             value name))))
+          (_
+           (agent-scheme--eval-error
+            "unknown macroexpand option: %s" name)))))
+    plist))
+
+(defun agent-scheme--macro-introspection-context (context options)
+  "Return a child expansion context from CONTEXT and Scheme OPTIONS."
+  (let ((child (agent-scheme--new-eval-context
+                (agent-scheme--macro-options-plist options))))
+    (when context
+      (setf (agent-scheme--eval-context-syntax-environment child)
+            (agent-scheme--eval-context-syntax-environment context))
+      (setf (agent-scheme--eval-context-libraries child)
+            (agent-scheme--eval-context-libraries context))
+      (setf (agent-scheme--eval-context-interaction-environment child)
+            (agent-scheme--eval-context-interaction-environment context))
+      (setf (agent-scheme--eval-context-base-syntax-installed child)
+            (agent-scheme--eval-context-base-syntax-installed context)))
+    child))
+
+(defun agent-scheme--macro-expand-environment (environment context)
+  "Return the lexical ENVIRONMENT used for macro introspection."
+  (or environment
+      (and context
+           (agent-scheme--eval-context-interaction-environment context))
+      (agent-scheme-make-base-environment)))
+
+(defun agent-scheme--macro-active-name (form environment context)
+  "Return the active macro operator name for FORM, or nil."
+  (when (consp form)
+    (let ((operator (car form)))
+      (cond
+       ((and (agent-scheme--symbol-named-p operator "let-syntax")
+             (agent-scheme--special-operator-active-p operator environment))
+        "let-syntax")
+       ((and (agent-scheme--symbol-named-p operator "letrec-syntax")
+             (agent-scheme--special-operator-active-p operator environment))
+        "letrec-syntax")
+       ((agent-scheme--syntax-binding-for-operator operator environment context)
+        (agent-scheme--symbol-name operator))))))
+
+(defun agent-scheme--macro-step-record (index macro-name input output)
+  "Return one Scheme-readable macro expansion step record."
+  (list
+   (agent-scheme--macro-symbol "step")
+   (agent-scheme--macro-field "index" (agent-scheme--macro-integer index))
+   (agent-scheme--macro-field "macro" (agent-scheme--macro-symbol macro-name))
+   (agent-scheme--macro-field
+    "input" (agent-scheme--strip-identifiers input))
+   (agent-scheme--macro-field
+    "output" (agent-scheme--strip-identifiers output))))
+
+(defun agent-scheme--macro-visible-expanded (expanded)
+  "Return EXPANDED in the readable shape used by expansion records."
+  (if (agent-scheme--syntax-scope-p expanded)
+      (cons (agent-scheme--macro-symbol "begin")
+            (agent-scheme--syntax-scope-forms expanded))
+    expanded))
+
+(defun agent-scheme--macro-expand-target-fully
+    (target environment context)
+  "Fully expand TARGET, preserving local syntax scope when present."
+  (if (agent-scheme--syntax-scope-p target)
+      (agent-scheme--with-syntax-environment
+       context
+       (agent-scheme--syntax-scope-syntax-environment target)
+       (lambda ()
+         (cons (agent-scheme--macro-symbol "begin")
+               (agent-scheme--expand-sequence-forms
+                (agent-scheme--syntax-scope-forms target)
+                environment
+                context
+                t))))
+    (agent-scheme--expand-expression-fully target environment context)))
+
+(defun agent-scheme--macro-trace-top-level
+    (form environment context one-step)
+  "Return a plist with top-level expansion trace for FORM.
+ONE-STEP stops after the first macro expansion."
+  (let ((current form)
+        (target form)
+        steps
+        macros
+        (index 0)
+        continue)
+    (setq continue t)
+    (while continue
+      (agent-scheme--note-step context)
+      (let* ((macro-name
+              (agent-scheme--macro-active-name current environment context))
+             (expanded
+              (agent-scheme--expand-expression current environment context))
+             (visible-expanded
+              (agent-scheme--macro-visible-expanded expanded)))
+        (if (not (eq expanded current))
+            (progn
+              (setq target expanded)
+              (cl-incf index)
+              (push (agent-scheme--macro-step-record
+                     index
+                     (or macro-name "syntax")
+                     current
+                     visible-expanded)
+                    steps)
+              (cl-pushnew (or macro-name "syntax") macros :test #'equal)
+              (setq current visible-expanded)
+              (when (or one-step (agent-scheme--syntax-scope-p expanded))
+                (setq continue nil)))
+          (setq target current)
+          (setq continue nil))))
+    (list :expanded current
+          :target target
+          :steps (nreverse steps)
+          :macros (nreverse macros))))
+
+(defun agent-scheme--macro-condition-datum
+    (condition context environment)
+  "Return CONDITION as a macro-expansion debugger condition datum."
+  (agent-scheme-debugger-condition-datum
+   condition context 'macro-expansion environment))
+
+(defun agent-scheme--macro-expansion-result
+    (status mode original expanded steps macros errors)
+  "Build a Scheme-readable macro expansion result datum."
+  (list
+   (agent-scheme--macro-symbol "macro-expansion")
+   (agent-scheme--macro-field "status" (agent-scheme--macro-symbol status))
+   (agent-scheme--macro-field "mode" (agent-scheme--macro-symbol mode))
+   (agent-scheme--macro-field
+    "original" (agent-scheme--strip-identifiers original))
+   (agent-scheme--macro-field
+    "expanded" (if expanded
+                   (agent-scheme--strip-identifiers expanded)
+                 agent-scheme-false))
+   (agent-scheme--macro-field "steps" steps)
+   (agent-scheme--macro-field
+    "macros" (mapcar #'agent-scheme--macro-symbol macros))
+   (agent-scheme--macro-field "source" agent-scheme-false)
+   (agent-scheme--macro-field "warnings" nil)
+   (agent-scheme--macro-field "errors" errors)))
+
+(defun agent-scheme--macroexpand-result
+    (form environment context options mode)
+  "Return macro expansion introspection for FORM in MODE."
+  (let* ((parent-context (or context (agent-scheme--new-eval-context nil)))
+         (child-context
+          (agent-scheme--macro-introspection-context parent-context options))
+         (eval-environment
+          (agent-scheme--macro-expand-environment environment parent-context))
+         trace)
+    (setf (agent-scheme--eval-context-interaction-environment child-context)
+          eval-environment)
+    (condition-case condition
+        (progn
+          (agent-scheme--ensure-base-syntax child-context eval-environment)
+          (setq trace
+                (agent-scheme--macro-trace-top-level
+                 form eval-environment child-context (eq mode 'one-step)))
+          (let ((expanded
+                 (if (eq mode 'one-step)
+                     (plist-get trace :expanded)
+                   (agent-scheme--macro-expand-target-fully
+                    (plist-get trace :target)
+                    eval-environment
+                    child-context))))
+            (agent-scheme--macro-expansion-result
+             'ok
+             mode
+             form
+             expanded
+             (plist-get trace :steps)
+             (plist-get trace :macros)
+             nil)))
+      (error
+       (agent-scheme--macro-expansion-result
+        'error
+        mode
+        form
+        nil
+        (and trace (plist-get trace :steps))
+        (and trace (plist-get trace :macros))
+        (list (agent-scheme--macro-condition-datum
+               condition child-context eval-environment)))))))
+
+;;;###autoload
+(defun agent-scheme-macroexpand
+    (form &optional environment options context)
+  "Return a Scheme-readable full macro expansion record for FORM."
+  (agent-scheme--macroexpand-result form environment context options 'full))
+
+;;;###autoload
+(defun agent-scheme-macroexpand-1
+    (form &optional environment options context)
+  "Return a Scheme-readable one-step macro expansion record for FORM."
+  (agent-scheme--macroexpand-result form environment context options 'one-step))
+
+(defun agent-scheme-macro-binding-info
+    (identifier &optional environment context)
+  "Return Scheme-readable syntax binding metadata for IDENTIFIER."
+  (let* ((name (agent-scheme--expect-symbol-name
+                identifier "macro-binding-info identifier"))
+         (syntax-environment
+          (and context
+               (agent-scheme--eval-context-syntax-environment context)))
+         (binding
+          (and syntax-environment
+               (agent-scheme--syntax-environment-ref syntax-environment name))))
+    (if binding
+        (list
+         (agent-scheme--macro-symbol "macro-binding")
+         (agent-scheme--macro-field "identifier"
+                                    (agent-scheme--macro-symbol name))
+         (agent-scheme--macro-field "status"
+                                    (agent-scheme--macro-symbol "bound"))
+         (agent-scheme--macro-field "kind"
+                                    (agent-scheme--macro-symbol "syntax-rules"))
+         (agent-scheme--macro-field "library" agent-scheme-false))
+      agent-scheme-false)))
+
+(defun agent-scheme-syntax-source (_datum)
+  "Return source metadata for DATUM, or #f when none is attached."
+  agent-scheme-false)
+
+(defun agent-scheme--macro-library-record
+    (status library-name macros errors)
+  "Build a Scheme-readable macro library introspection record."
+  (list
+   (agent-scheme--macro-symbol "macro-library")
+   (agent-scheme--macro-field "status" (agent-scheme--macro-symbol status))
+   (agent-scheme--macro-field
+    "library" (agent-scheme--strip-identifiers library-name))
+   (agent-scheme--macro-field "macros" macros)
+   (agent-scheme--macro-field "warnings" nil)
+   (agent-scheme--macro-field "errors" errors)))
+
+(defun agent-scheme-macroexpand-library
+    (library-name &optional environment options context)
+  "Return syntax export metadata for LIBRARY-NAME."
+  (let* ((parent-context (or context (agent-scheme--new-eval-context nil)))
+         (child-context
+          (agent-scheme--macro-introspection-context parent-context options))
+         (eval-environment
+          (agent-scheme--macro-expand-environment environment parent-context)))
+    (setf (agent-scheme--eval-context-interaction-environment child-context)
+          eval-environment)
+    (condition-case condition
+        (progn
+          (agent-scheme--ensure-base-syntax child-context eval-environment)
+          (let* ((library
+                  (agent-scheme--resolve-library
+                   library-name child-context eval-environment))
+                 (macros
+                  (sort
+                   (delq nil
+                         (mapcar
+                          (lambda (binding)
+                            (when (eq (agent-scheme--library-binding-kind
+                                       binding)
+                                      'syntax)
+                              (list
+                               (agent-scheme--macro-symbol "macro")
+                               (agent-scheme--macro-symbol
+                                (agent-scheme--library-binding-name
+                                 binding))
+                               (agent-scheme--macro-field
+                                "kind"
+                                (agent-scheme--macro-symbol
+                                 "syntax-rules")))))
+                          (agent-scheme--library-exports library)))
+                   (lambda (left right)
+                     (string<
+                      (agent-scheme-symbol-name
+                       (cadr left))
+                      (agent-scheme-symbol-name
+                       (cadr right)))))))
+            (agent-scheme--macro-library-record
+             'ok library-name macros nil)))
+      (error
+       (agent-scheme--macro-library-record
+        'error
+        library-name
+        nil
+        (list (agent-scheme--macro-condition-datum
+               condition child-context eval-environment)))))))
 
 (provide 'agent-scheme-macro)
 
