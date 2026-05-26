@@ -66,11 +66,11 @@
 
 (check 'runtime-version-components
        (agent-scheme-version-components)
-       '(0 14 5))
+       '(0 14 6))
 
 (check 'runtime-version-datum
        (agent-scheme-result->external (agent-scheme-version))
-       "(agent-scheme-version 0 14 5)")
+       "(agent-scheme-version 0 14 6)")
 
 ;; Report whether TEXT starts with PREFIX.
 (define (string-prefix? prefix text)

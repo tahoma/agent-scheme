@@ -297,6 +297,7 @@ requested-grants: ((capability-grant (library (emacs buffer edit)) (effect buffe
 - [Getting started](docs/getting-started.md)
 - [Architecture and threat model](docs/architecture.md)
 - [Feature and host reflection](docs/feature-reflection.md)
+- [Docstring metadata convention](docs/docstring-metadata.md)
 - [Debugger workflow](docs/debugger.md)
 - [Multi-host adapter and bootstrap strategy](docs/multi-host-bootstrap.md)
 - [Native CLI and daemon adapter contract](docs/native-cli-daemon-adapter.md)
