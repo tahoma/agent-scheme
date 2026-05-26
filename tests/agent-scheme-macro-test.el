@@ -214,4 +214,121 @@
     (should (string-match-p "while expanding (bad-use 123)" message))
     (should (string-match-p "bad macro" message))))
 
+(ert-deftest agent-scheme-macro-test-macroexpand-1-returns-readable-step-datum ()
+  "Expose one-step macro expansion as a Scheme-readable introspection record."
+  (let ((external
+         (agent-scheme-macro-test--external
+          "(import (scheme base) (agent reflect))
+           (define-syntax my-unless
+             (syntax-rules ()
+               ((my-unless test body ...)
+                (if test #f (begin body ...)))))
+           (macroexpand-1 '(my-unless #f 42))")))
+    (should (string-match-p (regexp-quote "(macro-expansion") external))
+    (should (string-match-p (regexp-quote "(status ok)") external))
+    (should (string-match-p (regexp-quote "(mode one-step)") external))
+    (should (string-match-p
+             (regexp-quote "(original (my-unless #f 42))")
+             external))
+    (should (string-match-p
+             (regexp-quote "(expanded (if #f #f (begin 42)))")
+             external))
+    (should (string-match-p
+             (regexp-quote "(step (index 1) (macro my-unless)")
+             external))))
+
+(ert-deftest agent-scheme-macro-test-macroexpand-does-not-evaluate-expanded-form ()
+  "Inspecting a macro expansion must not run effects in the expanded form."
+  (should
+   (equal
+    (agent-scheme-macro-test--external
+     "(import (scheme base) (agent reflect))
+      (define touched #f)
+      (define-syntax run!
+        (syntax-rules ()
+          ((run!) (begin (set! touched #t) 99))))
+      (let ((expansion (macroexpand '(run!))))
+        (list (cadr (assq 'expanded (cdr expansion)))
+              touched))")
+    "((begin (set! touched #t) 99) #f)")))
+
+(ert-deftest agent-scheme-macro-test-macroexpand-expands-local-syntax-scope ()
+  "Full macro expansion preserves let-syntax bindings while expanding."
+  (should
+   (equal
+    (agent-scheme-macro-test--external
+     "(import (scheme base) (agent reflect))
+      (let ((expansion
+             (macroexpand
+              '(let-syntax
+                   ((twice
+                     (syntax-rules ()
+                       ((twice value) (+ value value)))))
+                 (twice 21)))))
+        (list (cadr (assq 'expanded (cdr expansion)))
+              (cadr (assq 'macros (cdr expansion)))))")
+    "((begin (+ 21 21)) (let-syntax))")))
+
+(ert-deftest agent-scheme-macro-test-macroexpand-reports-budget-errors ()
+  "Expansion budgets stop runaway or oversized macro expansion attempts."
+  (let ((external
+         (agent-scheme-macro-test--external
+          "(import (scheme base) (agent reflect))
+           (macroexpand
+            '(let loop ((n 1)) (loop n))
+            '((max-steps 1)))")))
+    (should (string-match-p (regexp-quote "(macro-expansion") external))
+    (should (string-match-p (regexp-quote "(status error)") external))
+    (should (string-match-p (regexp-quote "(type budget-exhausted)")
+                            external))
+    (should (string-match-p (regexp-quote "(phase macro-expansion)")
+                            external))))
+
+(ert-deftest agent-scheme-macro-test-macro-binding-info-and-source-placeholders ()
+  "Expose macro binding metadata and explicit absent source metadata."
+  (should
+   (equal
+    (agent-scheme-macro-test--external
+     "(import (scheme base) (agent reflect))
+      (define-syntax twice
+        (syntax-rules ()
+          ((twice value) (+ value value))))
+      (list (macro-binding-info 'twice)
+            (macro-binding-info 'missing)
+            (syntax-source '(twice 21)))")
+    "((macro-binding (identifier twice) (status bound) (kind syntax-rules) (library #f)) #f #f)")))
+
+(ert-deftest agent-scheme-macro-test-macroexpand-library-lists-syntax-exports ()
+  "Inspect library macro exports without evaluating a macro use."
+  (let ((external
+         (agent-scheme-macro-test--external
+          "(import (scheme base) (agent reflect))
+           (macroexpand-library '(scheme base))")))
+    (should (string-match-p (regexp-quote "(macro-library") external))
+    (should (string-match-p (regexp-quote "(library (scheme base))")
+                            external))
+    (should (string-match-p (regexp-quote "(macro cond (kind syntax-rules))")
+                            external))
+    (should (string-match-p (regexp-quote "(macro let (kind syntax-rules))")
+                            external))))
+
+(ert-deftest agent-scheme-macro-test-macroexpand-yield-records-expansion-event ()
+  "Yield macro expansion records into the evaluation event stream."
+  (let ((external
+         (agent-scheme-result->external
+          (agent-scheme-eval-source-result
+           "(import (scheme base) (agent reflect))
+            (define-syntax my-unless
+              (syntax-rules ()
+                ((my-unless test body ...)
+                 (if test #f (begin body ...)))))
+            (macroexpand-yield '(my-unless #f 42) '())"))))
+    (should (string-match-p (regexp-quote "(status ok)") external))
+    (should (string-match-p (regexp-quote "(value (macro-expansion")
+                            external))
+    (should (string-match-p (regexp-quote "(events ((macroexpand")
+                            external))
+    (should (string-match-p (regexp-quote "(expanded (if #f #f (begin 42)))")
+                            external))))
+
 ;;; agent-scheme-macro-test.el ends here

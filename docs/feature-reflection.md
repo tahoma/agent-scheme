@@ -125,9 +125,9 @@ Current procedures:
 - `(agent-scheme-version)` returns the canonical Agent Scheme runtime version
   datum, shaped as `(agent-scheme-version primary secondary tertiary)`.
   Components are exact non-negative integers. The initial value is
-  `(agent-scheme-version 0 14 4)`: primary version `0`, secondary version `14`
-  for the roadmap chunk, and tertiary version `4` for the issue's position in
-  that chunk. Strings such as `0.14.4` are derived presentation, not the canonical
+  `(agent-scheme-version 0 14 5)`: primary version `0`, secondary version `14`
+  for the roadmap chunk, and tertiary version `5` for the issue's position in
+  that chunk. Strings such as `0.14.5` are derived presentation, not the canonical
   value. This scheme is roadmap-derived for now and can change once Agent
   Scheme has an explicit release policy.
 - `(current-capabilities)` returns public `host-capability` records from the
@@ -144,6 +144,11 @@ Current procedures:
   information for the current evaluation.
 - `(recent-yields)`, `(recent-errors)`, and `(recent-policy-decisions)` return
   recent event and audit data useful for debugging scripts.
+- `(macroexpand form)`, `(macroexpand-1 form)`, `(macroexpand-library name)`,
+  `(macro-binding-info identifier)`, `(syntax-source datum)`, and
+  `(macroexpand-yield form options)` expose macro expansion debugging data.
+  See [macro-introspection.md](macro-introspection.md) for the REPL workflow and
+  record shape.
 
 Reflection data is Scheme-readable data. It does not expose raw Emacs objects,
 native descriptors, provider clients, credentials, hidden model internals, or
@@ -194,7 +199,7 @@ boundary remains Scheme-readable data.
 Current implemented pieces:
 
 - `(agent-scheme-version)` reports the roadmap-derived runtime version as
-  `(agent-scheme-version 0 14 4)`, and the Emacs host-adapter fixture points
+  `(agent-scheme-version 0 14 5)`, and the Emacs host-adapter fixture points
   at `scheme/agent-scheme/version.sld` as the single source of truth for the
   runtime version datum.
 - R7RS `cond-expand` library requirements are available for implemented
@@ -204,8 +209,8 @@ Current implemented pieces:
 - Emacs capability libraries are registered under `(emacs ...)` names.
 - The Emacs host-adapter declaration and capability manifest fixture is checked
   in as `fixtures/host-adapters/emacs.scm`.
-- `(agent reflect)` exposes capability, policy, budget, import, session, recent
-  yield, recent error, and recent policy-decision snapshots.
+- `(agent reflect)` exposes capability, policy, budget, import, session, macro
+  expansion, recent yield, recent error, and recent policy-decision snapshots.
 
 Tracked follow-up work:
 

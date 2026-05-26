@@ -122,6 +122,37 @@
                (regexp-quote (format "(session %s)" session-id))
                audit)))))
 
+(ert-deftest agent-scheme-repl-test-macroexpand-view-renders-comparison ()
+  "Render a session-local macro expansion as original, expanded, and steps."
+  (agent-scheme-repl-test--reset)
+  (agent-scheme-start-repl 'named "macro-view")
+  (agent-scheme-repl-eval-source
+   "(import (scheme base))
+    (define-syntax my-unless
+      (syntax-rules ()
+        ((my-unless test body ...)
+         (if test #f (begin body ...)))))"
+   "macro-view")
+  (let* ((buffer
+          (agent-scheme-repl-macroexpand-source
+           "(my-unless #f 42)"
+           "macro-view"))
+         (contents (agent-scheme-repl-test--buffer-string buffer)))
+    (with-current-buffer buffer
+      (should (derived-mode-p 'agent-scheme-macroexpand-mode)))
+    (should (equal (buffer-name buffer) "*Agent Macroexpand: macro-view*"))
+    (should (string-match-p ";; Original" contents))
+    (should (string-match-p ";; Expanded" contents))
+    (should (string-match-p
+             (regexp-quote "(my-unless #f 42)")
+             contents))
+    (should (string-match-p
+             (regexp-quote "(if #f #f (begin 42))")
+             contents))
+    (should (string-match-p
+             (regexp-quote "(step (index 1) (macro my-unless)")
+             contents))))
+
 (ert-deftest agent-scheme-repl-test-interaction-environment-is-session-gated ()
   "Return the current mutable session environment only under session policy."
   (agent-scheme-repl-test--reset)
