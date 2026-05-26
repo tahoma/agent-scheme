@@ -58,8 +58,8 @@
       (options job-options)
       (interrupt-reason job-interrupt-reason set-job-interrupt-reason!))
 
-    ;; Construct an empty portable job store.
     (define (agent-scheme-make-job-store)
+      "Construct an empty portable job store."
       (make-job-store '() 0))
 
     ;; Report whether VALUE is in LIST using eq?.
@@ -171,12 +171,12 @@
            (list (list 'error (job-error job)))
            '())))
 
-    ;; Return the id field from a public JOB-DATUM.
     (define (job-datum-id job-datum)
+      "Return the id field from a public JOB-DATUM."
       (cadr (cadr job-datum)))
 
-    ;; Create a queued eval job in STORE for SESSION and FORM.
     (define (job-start! store session form options)
+      "Create a queued eval job in STORE for SESSION and FORM."
       (let* ((id (option-ref options 'id (generated-id store)))
              (job (make-job id
                             (session-id-value session)
@@ -195,13 +195,13 @@
         (store-record! store job)
         (job->datum job)))
 
-    ;; Return job ID datum from STORE, or #f.
     (define (job-ref store id)
+      "Return job ID datum from STORE, or #f."
       (let ((job (find-job store id)))
         (if job (job->datum job) #f)))
 
-    ;; Return job datums from STORE, optionally filtered by SESSION.
     (define (job-list store . maybe-session)
+      "Return job datums from STORE, optionally filtered by SESSION."
       (let ((session (if (null? maybe-session) #f (car maybe-session))))
         (let loop ((records (store-records store)) (result '()))
           (cond
@@ -212,13 +212,13 @@
            (else
             (loop (cdr records) result))))))
 
-    ;; Return job ID status from STORE, or #f.
     (define (job-status store id)
+      "Return job ID status from STORE, or #f."
       (let ((job (find-job store id)))
         (if job (job-record-status job) #f)))
 
-    ;; Return job ID yields from STORE after any requested offset.
     (define (job-yields store id options)
+      "Return job ID yields from STORE after any requested offset."
       (let ((after (option-ref options 'after 0))
             (yields (job-record-yields (require-job store id))))
         (let loop ((rest yields) (index after))
@@ -226,8 +226,8 @@
               rest
               (loop (cdr rest) (- index 1))))))
 
-    ;; Mark job ID as running.
     (define (job-mark-running! store id)
+      "Mark job ID as running."
       (let ((job (require-job store id)))
         (if (not (terminal-job? job))
             (set-job-status! job 'running))
@@ -245,8 +245,8 @@
         'yielding)
        (else 'running)))
 
-    ;; Append EVENT to job ID's stream and update its streaming status.
     (define (job-record-yield! store id event)
+      "Append EVENT to job ID's stream and update its streaming status."
       (let ((job (require-job store id)))
         (set-job-yields!
          job
@@ -255,8 +255,8 @@
             (set-job-status! job (event-status event)))
         (job->datum job)))
 
-    ;; Request cooperative cancellation of job ID.
     (define (job-cancel! store id)
+      "Request cooperative cancellation of job ID."
       (let ((job (require-job store id)))
         (if (not (terminal-job? job))
             (begin
@@ -264,8 +264,8 @@
               (set-job-status! job 'cancel-requested)))
         (job->datum job)))
 
-    ;; Request cooperative interrupt of job ID with REASON.
     (define (job-interrupt! store id reason)
+      "Request cooperative interrupt of job ID with REASON."
       (let ((job (require-job store id)))
         (if (not (terminal-job? job))
             (begin
@@ -274,8 +274,8 @@
               (set-job-status! job 'cancel-requested)))
         (job->datum job)))
 
-    ;; Complete job ID with RESULT.
     (define (job-complete! store id result)
+      "Complete job ID with RESULT."
       (let ((job (require-job store id)))
         (set-job-can-cancel! job #f)
         (set-job-result! job result)
@@ -283,8 +283,8 @@
         (set-job-status! job 'completed)
         (job->datum job)))
 
-    ;; Fail job ID with MESSAGE.
     (define (job-fail! store id message)
+      "Fail job ID with MESSAGE."
       (let ((job (require-job store id)))
         (set-job-can-cancel! job #f)
         (set-job-error! job message)
@@ -292,8 +292,8 @@
         (set-job-status! job 'failed)
         (job->datum job)))
 
-    ;; Finish job ID as cancelled with MESSAGE.
     (define (job-finish-cancelled! store id message)
+      "Finish job ID as cancelled with MESSAGE."
       (let ((job (require-job store id)))
         (set-job-can-cancel! job #f)
         (set-job-error! job message)

@@ -80,8 +80,8 @@
       (parent-id session-parent-id)
       (forked-from session-forked-from))
 
-    ;; Construct an empty portable session store.
     (define (agent-scheme-make-session-store)
+      "Construct an empty portable session store."
       (make-session-store '() 0 0))
 
     ;; Report whether VALUE is in LIST using equal?.
@@ -107,7 +107,6 @@
                   value))
             default)))
 
-    ;; Generate a fresh session id for SCOPE in STORE.
     (define (generated-session-id store scope)
       (let ((next (+ (store-next-session-number store) 1)))
         (set-store-next-session-number! store next)
@@ -165,12 +164,12 @@
                      (cadr (cadr snapshot)))
                    (session-snapshots session))))))
 
-    ;; Return the id field from a public SESSION-DATUM.
     (define (session-datum-id session-datum)
+      "Return the id field from a public SESSION-DATUM."
       (cadr (cadr session-datum)))
 
-    ;; Create a session in STORE for SCOPE using OPTIONS.
     (define (session-create! store scope options)
+      "Create a session in STORE for SCOPE using OPTIONS."
       (let* ((normalized-scope (normalize-scope scope))
              (id (option-ref options
                              'id
@@ -195,13 +194,13 @@
         (store-session! store session)
         (session->datum session)))
 
-    ;; Return a session datum by ID from STORE, or #f.
     (define (session-ref store id)
+      "Return a session datum by ID from STORE, or #f."
       (let ((session (find-session store id)))
         (if session (session->datum session) #f)))
 
-    ;; Return session datums from STORE, optionally filtered by SCOPE.
     (define (session-list store . maybe-scope)
+      "Return session datums from STORE, optionally filtered by SCOPE."
       (let ((scope (if (null? maybe-scope)
                        #f
                        (normalize-scope (car maybe-scope)))))
@@ -228,12 +227,12 @@
       (set-session-status! session status)
       (session->datum session))
 
-    ;; Suspend session ID in STORE.
     (define (session-suspend! store id)
+      "Suspend session ID in STORE."
       (transition! (require-session store id) 'suspended))
 
-    ;; Resume session ID in STORE.
     (define (session-resume! store id)
+      "Resume session ID in STORE."
       (transition! (require-session store id) 'active))
 
     ;; Build a snapshot record for SESSION using SNAPSHOT-ID.
@@ -255,8 +254,8 @@
             (list 'revalidates agent-scheme-session-revalidated-fields)
             (list 'never-restore agent-scheme-session-never-restored-fields)))
 
-    ;; Snapshot session ID in STORE using OPTIONS.
     (define (session-snapshot! store id options)
+      "Snapshot session ID in STORE using OPTIONS."
       (let* ((session (require-session store id))
              (snapshot-id
               (option-ref options 'id (generated-snapshot-id store)))
@@ -266,8 +265,8 @@
          (cons snapshot (session-snapshots session)))
         snapshot))
 
-    ;; Fork session ID in STORE using OPTIONS and return the fork datum.
     (define (session-fork! store id options)
+      "Fork session ID in STORE using OPTIONS and return the fork datum."
       (let* ((source (require-session store id))
              (fork-id
               (option-ref options
@@ -291,8 +290,8 @@
         (store-session! store fork)
         (session->datum fork)))
 
-    ;; Retire session ID in STORE and return its datum.
     (define (session-retire! store id)
+      "Retire session ID in STORE and return its datum."
       (let ((session (require-session store id)))
         (set-session-handles! session '())
         (transition! session 'retired)))))

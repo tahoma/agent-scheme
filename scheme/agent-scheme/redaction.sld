@@ -259,8 +259,8 @@
            (else (loop (cdr values))))))
        (else #f)))
 
-    ;; Return #t when DATUM contains secret-prone source data.
     (define (secret-source? datum)
+      "Return #t when DATUM contains secret-prone source data."
       (cond
        ((redaction-record? datum) #f)
        ((string? datum) (secret-string? datum))
@@ -276,8 +276,8 @@
            (else (loop (cdr values))))))
        (else #f)))
 
-    ;; Return DATUM with secret and local-only content redacted.
     (define (redact datum policy)
+      "Return DATUM with secret and local-only content redacted."
       (cond
        ((redaction-record? datum) datum)
        ((and (string? datum) (secret-string? datum))
@@ -299,23 +299,23 @@
                            (vector->list datum))))
        (else datum)))
 
-    ;; Wrap DATUM as local-only context.
     (define (context-local-only! datum reason)
+      "Wrap DATUM as local-only context."
       (remember! (make-local-only-record reason))
       (list 'local-only
             (list 'reason reason)
             (list 'datum datum)))
 
-    ;; Return recent redaction records as a Scheme-readable datum.
     (define (redaction-log . options)
+      "Return recent redaction records as a Scheme-readable datum."
       (list 'redaction-log
             (list 'records redaction-records)))
 
-    ;; Clear the process-local redaction log.
     (define (agent-scheme-redaction-clear!)
+      "Clear the process-local redaction log."
       (set! redaction-records '()))
 
-    ;; Return #t when DATUM can be sent to PROVIDER without redaction.
     (define (safe-for-provider? datum provider)
+      "Return #t when DATUM can be sent to PROVIDER without redaction."
       (and (not (secret-source? datum))
            (not (local-only? datum))))))

@@ -12,19 +12,19 @@
     (define (%promise lazy? value)
       (list 'agent-scheme-promise lazy? value))
 
-    ;; Report whether OBJ is an Agent Scheme promise record.
     (define (promise? obj)
+      "Return #t when OBJ is an Agent Scheme promise record."
       (and (pair? obj)
            (eq? (car obj) 'agent-scheme-promise)))
 
-    ;; Wrap OBJ as an already computed promise unless it is a promise already.
     (define (make-promise obj)
+      "Return OBJ as a promise, preserving existing promises."
       (if (promise? obj)
           obj
           (%promise #t obj)))
 
-    ;; Return PROMISE's value, evaluating and memoizing delayed thunks once.
     (define (force promise)
+      "Return PROMISE's value, evaluating and memoizing delayed thunks once."
       (if (promise? promise)
           (if (cadr promise)
               (car (cdr (cdr promise)))

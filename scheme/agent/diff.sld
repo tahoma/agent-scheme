@@ -63,12 +63,12 @@
     (define (diff-string-line-count text)
       (diff-list-length (diff-string-lines text)))
 
-    ;; Return one line record for a hunk. KIND is context, remove, or add.
     (define (diff-line kind text)
+      "Return one line record for a hunk."
       (list 'line kind text))
 
-    ;; Return one hunk record with explicit old and new ranges.
     (define (make-diff-hunk old-start old-count new-start new-count lines)
+      "Return one hunk record with explicit old and new ranges."
       (list 'hunk
             (diff-field 'old-start old-start)
             (diff-field 'old-count old-count)
@@ -76,8 +76,8 @@
             (diff-field 'new-count new-count)
             (diff-field 'lines lines)))
 
-    ;; Return a canonical diff datum from SOURCE labels and HUNKS.
     (define (make-diff source old-label new-label hunks)
+      "Return a canonical diff datum from SOURCE labels and HUNKS."
       (list 'diff
             (diff-field 'source source)
             (diff-field 'old-label old-label)
@@ -85,24 +85,24 @@
             (diff-field 'status (if (null? hunks) 'no-change 'changed))
             (diff-field 'hunks hunks)))
 
-    ;; Return an explicit no-change diff for SOURCE and LABEL.
     (define (no-change-diff source label)
+      "Return an explicit no-change diff for SOURCE and LABEL."
       (make-diff source label label '()))
 
-    ;; Report whether DATUM is a portable diff record.
     (define (diff? datum)
+      "Return #t when DATUM is a portable diff record."
       (and (pair? datum) (eq? (car datum) 'diff)))
 
-    ;; Report whether DIFF contains at least one changed hunk.
     (define (diff-changed? diff)
+      "Return #t when DIFF contains at least one changed hunk."
       (eq? (diff-field-value diff 'status 'no-change) 'changed))
 
-    ;; Return DIFF's source field.
     (define (diff-source diff)
+      "Return DIFF's source field."
       (diff-field-value diff 'source #f))
 
-    ;; Return DIFF's hunk list.
     (define (diff-hunks diff)
+      "Return DIFF's hunk list."
       (diff-field-value diff 'hunks '()))
 
     ;; Return a list of removal line records from TEXT.
@@ -115,8 +115,8 @@
       (map (lambda (line) (diff-line 'add line))
            (diff-string-lines text)))
 
-    ;; Return a one-hunk diff for a proposed edit datum.
     (define (proposed-edit-diff edit)
+      "Return a one-hunk diff for a proposed edit datum."
       (let ((source (diff-field-value edit 'source 'proposed-edit))
             (old-label (diff-field-value edit 'old-label "before"))
             (new-label (diff-field-value edit 'new-label "after"))
@@ -164,7 +164,6 @@
     (define (diff-render-lines lines)
       (diff-string-append-all (map diff-render-line lines)))
 
-    ;; Render one hunk record to unified-diff text.
     (define (diff-render-hunk hunk)
       (string-append
        "@@ -"
@@ -182,8 +181,8 @@
     (define (diff-render-hunks diff)
       (diff-string-append-all (map diff-render-hunk (diff-hunks diff))))
 
-    ;; Render DIFF to deterministic unified-diff text for humans.
     (define (diff-render-unified diff)
+      "Render DIFF to deterministic unified-diff text for humans."
       (if (diff-changed? diff)
           (string-append
            "--- "
@@ -194,6 +193,6 @@
            (diff-render-hunks diff))
           ""))
 
-    ;; Yield DIFF through the portable Agent Scheme event channel.
     (define (diff-yield diff)
+      "Yield DIFF through the portable Agent Scheme event channel."
       (agent-yield diff))))

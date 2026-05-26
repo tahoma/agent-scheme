@@ -72,14 +72,14 @@
                 value)))
          (else (loop (cdr rest))))))
 
-    ;; Return field NAME from DATUM, or DEFAULT when absent.
     (define (transcript-field-value datum name . maybe-default)
+      "Return field NAME from DATUM, or DEFAULT when absent."
       (fields-value (if (pair? datum) (cdr datum) '())
                     name
                     (default-value maybe-default)))
 
-    ;; Report whether DATUM is a transcript event record.
     (define (transcript-event? datum)
+      "Return #t when DATUM is a transcript event record."
       (and (pair? datum) (eq? (car datum) 'transcript-event)))
 
     ;; Report whether KIND represents a non-replayable host observation.
@@ -156,9 +156,8 @@
          (else
           (loop (cdr rest) (cons (car rest) result))))))
 
-    ;; Create a transcript event.  Hosts may pass explicit `id' and `time'
-    ;; fields; otherwise this portable constructor uses deterministic defaults.
     (define (make-transcript-event kind fields)
+      "Create a transcript event with deterministic defaults for missing fields."
       (let ((id (fields-value fields 'id 'e-0))
             (session (fields-value fields 'session #f))
             (time (fields-value fields 'time "portable")))
@@ -172,17 +171,17 @@
                 (list (list 'time time)))))
           (append base (list (replay-field base))))))
 
-    ;; Return EVENT's replay mode.
     (define (transcript-event-replay-mode event)
+      "Return EVENT's replay mode."
       (classify-transcript-event event))
 
-    ;; Report whether EVENT can drive deterministic replay or fixtures.
     (define (transcript-replayable? event)
+      "Return #t when EVENT can drive deterministic replay or fixtures."
       (memq (transcript-event-replay-mode event)
             '(deterministic-pure fixture-generation)))
 
-    ;; Report whether EVENT represents a recorded host observation.
     (define (transcript-recorded-observation? event)
+      "Return #t when EVENT represents a recorded host observation."
       (eq? (transcript-event-replay-mode event) 'recorded-observation))
 
     ;; Return VALUE as a summary string.
@@ -206,8 +205,8 @@
     (define (fixture-result result)
       (if (string? result) result "<datum>"))
 
-    ;; Generate a shared fixture case from EVENT when replay permits it.
     (define (transcript-event->fixture-case event)
+      "Generate a shared fixture case from EVENT when replay permits it."
       (let ((mode (transcript-event-replay-mode event))
             (id (transcript-field-value event 'id))
             (form (transcript-field-value event 'form))
@@ -251,8 +250,8 @@
            (list 'expect (list 'error))))
          (else #f))))
 
-    ;; Return a human-readable one-line summary for EVENT.
     (define (transcript-event-summary event)
+      "Return a human-readable one-line summary for EVENT."
       (let ((id (summary-value (transcript-field-value event 'id)))
             (kind (summary-value (transcript-field-value event 'kind)))
             (session (summary-value
@@ -276,12 +275,12 @@
             (string-append base " ! " (summary-value error)))
            (else base)))))
 
-    ;; Return EVENTS as raw Scheme-readable datums.
     (define (transcript-raw-view events)
+      "Return EVENTS as raw Scheme-readable datums."
       events)
 
-    ;; Return human-readable summaries for EVENTS.
     (define (transcript-summary-view events)
+      "Return human-readable summaries for EVENTS."
       (map transcript-event-summary events))
 
     ;; Drop the first COUNT items from ITEMS.
@@ -290,8 +289,8 @@
           items
           (drop (cdr items) (- count 1))))
 
-    ;; Return the newest KEEP events from chronological EVENTS.
     (define (transcript-rotate events keep)
+      "Return the newest KEEP events from chronological EVENTS."
       (let ((count (length events)))
         (if (or (<= count keep) (<= keep 0))
             events
@@ -307,8 +306,8 @@
             (loop (cdr rest)
                   (if value (cons value result) result)))))))
 
-    ;; Return a transcript view for EVENTS in FORMAT.
     (define (transcript-export events format)
+      "Return a transcript view for EVENTS in FORMAT."
       (cond
        ((eq? format 'scheme-datum)
         (transcript-raw-view events))
