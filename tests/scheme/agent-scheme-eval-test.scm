@@ -66,11 +66,11 @@
 
 (check 'runtime-version-components
        (agent-scheme-version-components)
-       '(0 14 4))
+       '(0 14 5))
 
 (check 'runtime-version-datum
        (agent-scheme-result->external (agent-scheme-version))
-       "(agent-scheme-version 0 14 4)")
+       "(agent-scheme-version 0 14 5)")
 
 ;; Report whether TEXT starts with PREFIX.
 (define (string-prefix? prefix text)
@@ -807,6 +807,59 @@
                     ((library (scheme base)) 'base)
                     (else 'missing)))"
                 "(ok base)")
+
+(check-external 'macroexpand-one-step-record
+                "(import (scheme base) (agent reflect))
+                 (define-syntax my-unless
+                   (syntax-rules ()
+                     ((my-unless test body ...)
+                      (if test #f (begin body ...)))))
+                 (macroexpand-1 '(my-unless #f 42))"
+                "(macro-expansion (status ok) (mode one-step) (original (my-unless #f 42)) (expanded (if #f #f (begin 42))) (steps ((step (index 1) (macro my-unless) (input (my-unless #f 42)) (output (if #f #f (begin 42)))))) (macros (my-unless)) (source #f) (warnings ()) (errors ()))")
+
+(check-external 'macroexpand-does-not-evaluate-expanded-form
+                "(import (scheme base) (agent reflect))
+                 (define touched #f)
+                 (define-syntax run!
+                   (syntax-rules ()
+                     ((run!) (begin (set! touched #t) 99))))
+                 (let ((expansion (macroexpand '(run!))))
+                   (list (cadr (assq 'expanded (cdr expansion)))
+                        touched))"
+                "((begin (set! touched #t) 99) #f)")
+
+(check-result-contains 'macroexpand-budget-errors
+                       "(import (scheme base) (agent reflect))
+                        (macroexpand
+                         '(let loop ((n 1)) (loop n))
+                         '((max-steps 1)))"
+                       '("(macro-expansion"
+                         "(status error)"
+                         "(type budget-exhausted)"
+                         "(phase macro-expansion)"))
+
+(check-external 'macroexpand-expands-local-syntax-scope
+                "(import (scheme base) (agent reflect))
+                 (let ((expansion
+                        (macroexpand
+                         '(let-syntax
+                              ((twice
+                                (syntax-rules ()
+                                  ((twice value) (+ value value)))))
+                            (twice 21)))))
+                   (list (cadr (assq 'expanded (cdr expansion)))
+                         (cadr (assq 'macros (cdr expansion)))))"
+                "((begin (+ 21 21)) (let-syntax))")
+
+(check-external 'macro-binding-info-and-syntax-source
+                "(import (scheme base) (agent reflect))
+                 (define-syntax twice
+                   (syntax-rules ()
+                     ((twice value) (+ value value))))
+                 (list (macro-binding-info 'twice)
+                       (macro-binding-info 'missing)
+                       (syntax-source '(twice 21)))"
+                "((macro-binding (identifier twice) (status bound) (kind syntax-rules) (library #f)) #f #f)")
 
 (check 'import-scheme-base-into-empty-environment
        (agent-scheme-value->external

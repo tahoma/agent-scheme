@@ -17,6 +17,8 @@
 (require 'agent-scheme-approval)
 (require 'agent-scheme-audit)
 (require 'agent-scheme-eval)
+(require 'agent-scheme-macro)
+(require 'agent-scheme-reader)
 (require 'agent-scheme-result)
 (require 'agent-scheme-session)
 (require 'agent-scheme-transcript)
@@ -51,6 +53,10 @@
 
 (define-derived-mode agent-scheme-events-mode special-mode "Agent Events"
   "Major mode for Agent Scheme event timeline buffers.")
+
+(define-derived-mode agent-scheme-macroexpand-mode special-mode
+  "Agent Macroexpand"
+  "Major mode for Agent Scheme macro expansion buffers.")
 
 (define-derived-mode agent-scheme-approvals-mode special-mode "Agent Approvals"
   "Major mode for Agent Scheme approval request buffers.")
@@ -151,6 +157,7 @@
       ('status (format "*Agent: %s*" label))
       ('repl (format "*Agent Scheme: %s*" label))
       ('events (format "*Agent Events: %s*" label))
+      ('macroexpand (format "*Agent Macroexpand: %s*" label))
       ('audit (format "*Agent Audit: %s*" label))
       ('approvals (format "*Agent Approvals: %s*" label))
       (_ (format "*Agent %s: %s*" kind label)))))
@@ -164,6 +171,12 @@
   (dolist (datum datums)
     (agent-scheme-repl--insert-datum datum)
     (insert "\n\n")))
+
+(defun agent-scheme-repl--render-section (heading datum)
+  "Insert HEADING and DATUM as a Scheme-readable buffer section."
+  (insert ";; " heading "\n")
+  (agent-scheme-repl--insert-datum datum)
+  (insert "\n\n"))
 
 (defun agent-scheme-repl--render-transcript (events)
   "Insert transcript EVENTS as summaries followed by raw datums."
@@ -297,6 +310,41 @@
      (agent-scheme-repl--render-datums
       (agent-scheme-repl--approval-entries-for-session id)))))
 
+(defun agent-scheme-repl--read-single-form (source)
+  "Read exactly one Agent Scheme form from SOURCE."
+  (let ((forms (agent-scheme-read-all source)))
+    (unless (and (consp forms) (null (cdr forms)))
+      (signal 'agent-scheme-eval-error
+              (list "macroexpand view expects exactly one form")))
+    (car forms)))
+
+(defun agent-scheme-repl--macroexpand-datum (source id options one-step)
+  "Return a macro expansion datum for SOURCE in session ID."
+  (let* ((session (agent-scheme-repl--session id))
+         (form (agent-scheme-repl--read-single-form source))
+         (environment (agent-scheme-session-environment session))
+         (context (agent-scheme-session-context session)))
+    (if one-step
+        (agent-scheme-macroexpand-1 form environment options context)
+      (agent-scheme-macroexpand form environment options context))))
+
+(defun agent-scheme-repl--refresh-macroexpand
+    (id expansion)
+  "Refresh the macro expansion comparison buffer for session ID."
+  (agent-scheme-repl--refresh-buffer
+   'macroexpand id #'agent-scheme-macroexpand-mode
+   (lambda ()
+     (agent-scheme-repl--render-section
+      "Original"
+      (agent-scheme-repl--field-value expansion "original"))
+     (agent-scheme-repl--render-section
+      "Expanded"
+      (agent-scheme-repl--field-value expansion "expanded"))
+     (agent-scheme-repl--render-section
+      "Steps"
+      (agent-scheme-repl--field-value expansion "steps"))
+     (agent-scheme-repl--render-section "Record" expansion))))
+
 ;;;###autoload
 (defun agent-scheme-refresh-session-buffers (&optional id)
   "Refresh native buffers for session ID.
@@ -423,6 +471,32 @@ needed.  OPTIONS are passed to `agent-scheme-session-eval-source'."
                (read-string "Agent Scheme source: ")))))
     (agent-scheme-repl-eval-source input)))
 
+;;;###autoload
+(defun agent-scheme-repl-macroexpand-source
+    (source &optional id options one-step)
+  "Open a macro expansion comparison for SOURCE in session ID.
+When ONE-STEP is non-nil, show only the first expansion step.  OPTIONS are
+passed to the macro expansion introspection primitive."
+  (interactive
+   (list
+    (if (use-region-p)
+        (buffer-substring-no-properties
+         (region-beginning)
+         (region-end))
+      (read-string "Agent Scheme macro form: "))
+    nil nil current-prefix-arg))
+  (unless (or id agent-scheme-current-session-id)
+    (agent-scheme-start-repl 'project))
+  (let* ((session-id (or id agent-scheme-current-session-id))
+         (expansion
+          (agent-scheme-repl--macroexpand-datum
+           source session-id options one-step))
+         (buffer
+          (agent-scheme-repl--refresh-macroexpand session-id expansion)))
+    (when (called-interactively-p 'interactive)
+      (pop-to-buffer buffer))
+    buffer))
+
 (defun agent-scheme-repl--open-buffer (kind id)
   "Open native buffer KIND for session ID."
   (let ((buffer (agent-scheme-refresh-session-buffers
@@ -493,7 +567,8 @@ needed.  OPTIONS are passed to `agent-scheme-session-eval-source'."
     ("u" "audit" agent-scheme-open-audit)
     ("p" "approvals" agent-scheme-open-approvals)]
    ["Evaluation"
-    ("RET" "eval source" agent-scheme-repl-eval)]])
+    ("RET" "eval source" agent-scheme-repl-eval)
+    ("m" "macroexpand" agent-scheme-repl-macroexpand-source)]])
 
 (define-key global-map (kbd "C-c a") #'agent-scheme-dispatch)
 

@@ -4602,6 +4602,56 @@
       (redaction-model:redact (reflect-capability-info (car arguments))
                               'runtime-reflection))
 
+    ;; Return optional macro introspection options from primitive ARGUMENTS.
+    (define (macro-primitive-options arguments)
+      (if (null? (cdr arguments)) '() (second arguments)))
+
+    ;; Return a full macro expansion record.
+    (define (primitive-macroexpand arguments context)
+      (agent-scheme-macroexpand
+       (car arguments)
+       (context-interaction-environment context)
+       context
+       (macro-primitive-options arguments)))
+
+    ;; Return a one-step macro expansion record.
+    (define (primitive-macroexpand-1 arguments context)
+      (agent-scheme-macroexpand-1
+       (car arguments)
+       (context-interaction-environment context)
+       context
+       (macro-primitive-options arguments)))
+
+    ;; Return macro export metadata for a library.
+    (define (primitive-macroexpand-library arguments context)
+      (agent-scheme-macroexpand-library
+       (car arguments)
+       (context-interaction-environment context)
+       context
+       (macro-primitive-options arguments)))
+
+    ;; Return metadata for an active syntax binding.
+    (define (primitive-macro-binding-info arguments context)
+      (agent-scheme-macro-binding-info
+       (car arguments)
+       (context-interaction-environment context)
+       context))
+
+    ;; Return source metadata attached to a syntax datum, if any.
+    (define (primitive-syntax-source arguments context)
+      (agent-scheme-syntax-source (car arguments)))
+
+    ;; Record a macro expansion event and return the expansion record.
+    (define (primitive-macroexpand-yield arguments context)
+      (let ((result
+             (agent-scheme-macroexpand
+              (car arguments)
+              (context-interaction-environment context)
+              context
+              (second arguments))))
+        (record-agent-event! context (list 'macroexpand result))
+        result))
+
     ;; Return the active debugger condition, or #f outside error handling.
     (define (primitive-current-error arguments context)
       (let ((current (context-current-error context)))
@@ -7244,6 +7294,12 @@
        (cons 'primitive-recent-policy-decisions
              primitive-recent-policy-decisions)
        (cons 'primitive-capability-info primitive-capability-info)
+       (cons 'primitive-macroexpand primitive-macroexpand)
+       (cons 'primitive-macroexpand-1 primitive-macroexpand-1)
+       (cons 'primitive-macroexpand-library primitive-macroexpand-library)
+       (cons 'primitive-macro-binding-info primitive-macro-binding-info)
+       (cons 'primitive-syntax-source primitive-syntax-source)
+       (cons 'primitive-macroexpand-yield primitive-macroexpand-yield)
        (cons 'primitive-current-error primitive-current-error)
        (cons 'primitive-condition-stack primitive-condition-stack)
        (cons 'primitive-condition-environment

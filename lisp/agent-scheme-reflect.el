@@ -19,6 +19,12 @@
 (require 'agent-scheme-redaction)
 (require 'agent-scheme-runtime)
 
+(declare-function agent-scheme-macroexpand "agent-scheme-macro")
+(declare-function agent-scheme-macroexpand-1 "agent-scheme-macro")
+(declare-function agent-scheme-macroexpand-library "agent-scheme-macro")
+(declare-function agent-scheme-macro-binding-info "agent-scheme-macro")
+(declare-function agent-scheme-syntax-source "agent-scheme-macro")
+
 (defconst agent-scheme-reflect--omitted-manifest-fields
   '(:emacs-hook :portable-hook :emitter-hook :test-categories)
   "Primitive manifest fields not exposed through runtime reflection.")
@@ -387,6 +393,59 @@
   (agent-scheme-reflect--redact
    (agent-scheme-reflect-capability-info (car arguments))))
 
+(defun agent-scheme-reflect--macro-options (arguments)
+  "Return optional macro introspection options from ARGUMENTS."
+  (and (cdr arguments) (cadr arguments)))
+
+(defun agent-scheme-reflect--primitive-macroexpand (arguments context)
+  "Primitive `macroexpand'."
+  (agent-scheme-macroexpand
+   (car arguments)
+   (agent-scheme--eval-context-interaction-environment context)
+   (agent-scheme-reflect--macro-options arguments)
+   context))
+
+(defun agent-scheme-reflect--primitive-macroexpand-1 (arguments context)
+  "Primitive `macroexpand-1'."
+  (agent-scheme-macroexpand-1
+   (car arguments)
+   (agent-scheme--eval-context-interaction-environment context)
+   (agent-scheme-reflect--macro-options arguments)
+   context))
+
+(defun agent-scheme-reflect--primitive-macroexpand-library (arguments context)
+  "Primitive `macroexpand-library'."
+  (agent-scheme-macroexpand-library
+   (car arguments)
+   (agent-scheme--eval-context-interaction-environment context)
+   (agent-scheme-reflect--macro-options arguments)
+   context))
+
+(defun agent-scheme-reflect--primitive-macro-binding-info (arguments context)
+  "Primitive `macro-binding-info'."
+  (agent-scheme-macro-binding-info
+   (car arguments)
+   (agent-scheme--eval-context-interaction-environment context)
+   context))
+
+(defun agent-scheme-reflect--primitive-syntax-source (arguments _context)
+  "Primitive `syntax-source'."
+  (agent-scheme-syntax-source (car arguments)))
+
+(defun agent-scheme-reflect--primitive-macroexpand-yield
+    (arguments context)
+  "Primitive `macroexpand-yield'."
+  (let ((result
+         (agent-scheme-macroexpand
+          (car arguments)
+          (agent-scheme--eval-context-interaction-environment context)
+          (cadr arguments)
+          context)))
+    (agent-scheme--record-event!
+     context
+     (list (agent-scheme-reflect--symbol "macroexpand") result))
+    result))
+
 ;;;###autoload
 (defun agent-scheme-reflect-primitive-specs ()
   "Return primitive specs for the `(agent reflect)' library."
@@ -409,7 +468,19 @@
     ("recent-policy-decisions"
      ,#'agent-scheme-reflect--primitive-recent-policy-decisions 0 0)
     ("capability-info"
-     ,#'agent-scheme-reflect--primitive-capability-info 1 1)))
+     ,#'agent-scheme-reflect--primitive-capability-info 1 1)
+    ("macroexpand"
+     ,#'agent-scheme-reflect--primitive-macroexpand 1 2)
+    ("macroexpand-1"
+     ,#'agent-scheme-reflect--primitive-macroexpand-1 1 2)
+    ("macroexpand-library"
+     ,#'agent-scheme-reflect--primitive-macroexpand-library 1 2)
+    ("macro-binding-info"
+     ,#'agent-scheme-reflect--primitive-macro-binding-info 1 1)
+    ("syntax-source"
+     ,#'agent-scheme-reflect--primitive-syntax-source 1 1)
+    ("macroexpand-yield"
+     ,#'agent-scheme-reflect--primitive-macroexpand-yield 2 2)))
 
 (provide 'agent-scheme-reflect)
 
