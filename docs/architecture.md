@@ -183,6 +183,7 @@ The agent layer provides self-scripting facilities as Scheme-readable data:
 - `(agent memory)` scoped memory
 - `(agent plan)` plans
 - `(agent helper)` helper libraries and artifacts
+- `(agent test)` helper and skill self-test result datums
 - `(agent approval)` approval requests
 - `(agent job)` long-running work, cancellation, and streaming yields
 - `(agent debugger)` condition, stack, environment, and restart datums
