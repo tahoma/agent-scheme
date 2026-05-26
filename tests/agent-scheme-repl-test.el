@@ -111,8 +111,10 @@
           (audit
            (agent-scheme-repl-test--buffer-string
             (get-buffer (format "*Agent Audit: %s*" project-label)))))
-      (should (string-match-p "(transcript-entry" transcript))
-      (should (string-match-p "(source \"(agent-yield '(persisted))" transcript))
+      (should (string-match-p "(transcript-event" transcript))
+      (should (string-match-p ";; e-" transcript))
+      (should (string-match-p "(kind eval-end)" transcript))
+      (should (string-match-p "(form \"(agent-yield '(persisted))" transcript))
       (should (string-match-p "(result \"42\")" transcript))
       (should (string-match-p "(record (yield (persisted)))" events))
       (should (string-match-p "(event session-evaluation)" audit))

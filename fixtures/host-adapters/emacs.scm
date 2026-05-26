@@ -56,7 +56,8 @@
      (library (agent context))
      (library (agent reflect))
      (library (agent redaction))
-     (library (agent session))))
+     (library (agent session))
+     (library (agent transcript))))
    (mediates
     ((library (scheme file))
      (library (scheme load))

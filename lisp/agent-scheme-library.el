@@ -28,6 +28,7 @@
 (require 'agent-scheme-reflect)
 (require 'agent-scheme-session)
 (require 'agent-scheme-test)
+(require 'agent-scheme-transcript)
 (require 'agent-scheme-policy)
 
 (defconst agent-scheme--library-source-directory
@@ -94,7 +95,8 @@
     "(agent context)"
     "(agent reflect)"
     "(agent redaction)"
-    "(agent session)")
+    "(agent session)"
+    "(agent transcript)")
   "Agent interaction library keys with focused bootstrap support.")
 
 (defconst agent-scheme--agent-source-library-files
@@ -111,7 +113,9 @@
     ("(agent task)"
      . "../scheme/agent/task.sld")
     ("(agent test)"
-     . "../scheme/agent/test.sld"))
+     . "../scheme/agent/test.sld")
+    ("(agent transcript)"
+     . "../scheme/agent/transcript.sld"))
   "Checked-in portable Agent Scheme libraries loaded as Scheme source.")
 
 ;; Bootstrap libraries are registered lazily into the current evaluation
@@ -451,6 +455,11 @@
       key
       (agent-scheme-session-primitive-specs)
       context))
+    ("(agent transcript)"
+     (agent-scheme--register-source-library
+      (agent-scheme--agent-source-library-source key)
+      context
+      environment))
     (_
      (agent-scheme--eval-error "unknown agent library: %s" key))))
 
