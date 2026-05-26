@@ -28,12 +28,12 @@
     ;; Registry of test results attached to skill names in this interaction.
     (define registered-skill-tests '())
 
-    ;; Return a Scheme-readable field with NAME and VALUES.
     (define (test-field name . values)
+      "Return a Scheme-readable field with NAME and VALUES."
       (cons name values))
 
-    ;; Return DATUM's record fields, accepting both records and bare alists.
     (define (datum-fields datum)
+      "Return DATUM's record fields, accepting both records and bare alists."
       (cond
        ((and (pair? datum) (symbol? (car datum)))
         (cdr datum))
@@ -41,8 +41,8 @@
         datum)
        (else '())))
 
-    ;; Return values for FIELD from DATUM.
     (define (field-values datum field)
+      "Return values for FIELD from DATUM."
       (let loop ((fields (datum-fields datum)))
         (cond
          ((null? fields) '())
@@ -51,23 +51,23 @@
           (cdar fields))
          (else (loop (cdr fields))))))
 
-    ;; Return FIELD's first value from DATUM, or DEFAULT when absent.
     (define (field-value datum field default)
+      "Return FIELD's first value from DATUM, or DEFAULT when absent."
       (let ((values (field-values datum field)))
         (if (null? values) default (car values))))
 
-    ;; Report whether DATUM starts with symbolic KIND.
     (define (record-kind? datum kind)
+      "Report whether DATUM starts with symbolic KIND."
       (and (pair? datum) (equal? (car datum) kind)))
 
-    ;; Render DATUM using write syntax for source-test expected strings.
     (define (datum->external datum)
+      "Render DATUM using write syntax for source-test expected strings."
       (let ((port (open-output-string)))
         (write datum port)
         (get-output-string port)))
 
-    ;; Report whether TEXT starts with PREFIX.
     (define (string-prefix? prefix text)
+      "Report whether TEXT starts with PREFIX."
       (let ((prefix-length (string-length prefix))
             (text-length (string-length text)))
         (and (<= prefix-length text-length)
@@ -77,8 +77,8 @@
                                 (string-ref text index))
                         (loop (+ index 1))))))))
 
-    ;; Report whether TEXT contains NEEDLE.
     (define (string-contains? text needle)
+      "Report whether TEXT contains NEEDLE."
       (let ((text-length (string-length text))
             (needle-length (string-length needle)))
         (let loop ((index 0))
@@ -87,8 +87,8 @@
                                    (substring text index text-length))
                    (loop (+ index 1)))))))
 
-    ;; Return CONDITION as a Scheme-readable error datum.
     (define (condition->datum condition)
+      "Return CONDITION as a Scheme-readable error datum."
       (cond
        ((error-object? condition)
         (list 'error-object
@@ -98,8 +98,8 @@
        (else
         (list 'raised (test-field 'value condition)))))
 
-    ;; Build one test result datum.
     (define (make-test-result name kind status . fields)
+      "Build one test result datum."
       (append
        (list 'agent-test-result
              (test-field 'name name)
@@ -107,27 +107,27 @@
              (test-field 'status status))
        fields))
 
-    ;; Build a skipped test result with a stable reason.
     (define (make-skipped-result name kind reason)
+      "Build a skipped test result with a stable reason."
       (make-test-result name
                         kind
                         'skipped
                         (test-field 'reason reason)))
 
-    ;; Return #t when DATUM is an individual test result.
     (define (test-result? datum)
+      "Return #t when DATUM is an individual test result."
       (record-kind? datum 'agent-test-result))
 
-    ;; Return #t when DATUM is a test group result.
     (define (test-group? datum)
+      "Return #t when DATUM is a test group result."
       (record-kind? datum 'agent-test-group))
 
-    ;; Return DATUM's test status, or skipped when it is not a test result.
     (define (test-status datum)
+      "Return DATUM's test status, or skipped when it is not a test result."
       (field-value datum 'status 'skipped))
 
-    ;; Return TESTS count whose status is STATUS.
     (define (count-status tests status)
+      "Return TESTS count whose status is STATUS."
       (let loop ((rest tests) (count 0))
         (cond
          ((null? rest) count)
@@ -136,8 +136,8 @@
          (else
           (loop (cdr rest) count)))))
 
-    ;; Build a summary field for TESTS.
     (define (summary-field tests)
+      "Build a summary field for TESTS."
       (test-field
        'summary
        (test-field 'total (length tests))
@@ -148,8 +148,8 @@
        (test-field 'budget-exhausted
                    (count-status tests 'budget-exhausted))))
 
-    ;; Return aggregate status for TESTS.
     (define (group-status tests)
+      "Return aggregate status for TESTS."
       (cond
        ((null? tests) 'skipped)
        ((or (> (count-status tests 'fail) 0)
@@ -160,8 +160,8 @@
         'skipped)
        (else 'pass)))
 
-    ;; Remove NAME from REGISTRY.
     (define (without-registration registry name)
+      "Remove NAME from REGISTRY."
       (let loop ((rest registry) (result '()))
         (cond
          ((null? rest) (reverse result))
@@ -170,15 +170,15 @@
          (else
           (loop (cdr rest) (cons (car rest) result))))))
 
-    ;; Register RESULT under NAME and return RESULT.
     (define (register-test! name result)
+      "Register RESULT under NAME and return RESULT."
       (set! registered-tests
             (cons (cons name result)
                   (without-registration registered-tests name)))
       result)
 
-    ;; Build and register a test group.
     (define (make-test-group name tests kind)
+      "Build and register a test group."
       (let ((group
              (list 'agent-test-group
                    (test-field 'name name)
@@ -188,24 +188,24 @@
                    (test-field 'tests tests))))
         (register-test! name group)))
 
-    ;; Build a passing ordinary test-case result.
     (define (make-case-pass-result name expected actual)
+      "Build a passing ordinary test-case result."
       (make-test-result name
                         'case
                         'pass
                         (test-field 'expected expected)
                         (test-field 'actual actual)))
 
-    ;; Build a failing ordinary test-case result.
     (define (make-case-fail-result name expected actual)
+      "Build a failing ordinary test-case result."
       (make-test-result name
                         'case
                         'fail
                         (test-field 'expected expected)
                         (test-field 'actual actual)))
 
-    ;; Build an error ordinary test-case result.
     (define (make-case-error-result name expected condition)
+      "Build an error ordinary test-case result."
       (make-test-result name
                         'case
                         'error
@@ -213,24 +213,24 @@
                         (test-field 'error
                                     (condition->datum condition))))
 
-    ;; Build a passing expected-error result.
     (define (make-expected-error-pass-result name condition)
+      "Build a passing expected-error result."
       (make-test-result name
                         'expected-error
                         'pass
                         (test-field 'error
                                     (condition->datum condition))))
 
-    ;; Build a failing expected-error result from a raised condition.
     (define (make-expected-error-fail-result name condition)
+      "Build a failing expected-error result from a raised condition."
       (make-test-result name
                         'expected-error
                         'fail
                         (test-field 'error
                                     (condition->datum condition))))
 
-    ;; Build a failing expected-error result when no error was raised.
     (define (make-expected-error-missing-result name)
+      "Build a failing expected-error result when no error was raised."
       (make-test-result name
                         'expected-error
                         'fail
@@ -272,13 +272,16 @@
         ((_ name tests ...)
          (make-test-group name (list tests ...) 'group))))
 
-    ;; Return the registered test named NAME, if any.
     (define (registered-test name)
+      "Return the registered test named NAME, if any."
       (let ((entry (assoc name registered-tests)))
         (if entry (cdr entry) #f)))
 
     (define (test-run name-or-library)
       "Return a registered test group or result for NAME-OR-LIBRARY."
+      #((parameters . ((name-or-library . "Registered test name, test result, or test group datum.")))
+        (returns . "The matching test result/group, NAME-OR-LIBRARY unchanged when it is already a result, or a skipped run group.")
+        (effects . (state-read)))
       (cond
        ((or (test-result? name-or-library)
             (test-group? name-or-library))
@@ -294,8 +297,8 @@
                                'not-registered))
          'run))))
 
-    ;; Return failures nested in RESULT.
     (define (result-failures result)
+      "Return failures nested in RESULT."
       (cond
        ((test-result? result)
         (if (or (equal? (test-status result) 'pass)
@@ -314,6 +317,10 @@
 
     (define (test-yield-failures result)
       "Yield failed tests from RESULT as one structured Agent Scheme event."
+      #((parameters . ((result . "Test result, test group, or registered test name to inspect.")))
+        (returns . "List of failed nested test result datums.")
+        (effects . (state-read agent-yield))
+        (see-also . (test-run)))
       (let ((run (test-run result)))
         (let ((failures (result-failures run)))
           (if (not (null? failures))
@@ -323,8 +330,8 @@
                      (test-field 'failures failures))))
           failures)))
 
-    ;; Compare ACTUAL to EXPECTED, allowing EXPECTED to be external text.
     (define (expected-matches? actual expected)
+      "Compare ACTUAL to EXPECTED, allowing EXPECTED to be external text."
       (cond
        ((equal? expected missing-field) #t)
        ((string? expected)
@@ -332,14 +339,14 @@
        (else
         (equal? actual expected))))
 
-    ;; Return an evaluation-result's debugger condition type, if any.
     (define (evaluation-condition-type evaluation)
+      "Return an evaluation-result's debugger condition type, if any."
       (let ((error-field (field-value evaluation 'error '())))
         (let ((condition (field-value error-field 'condition '())))
           (field-value condition 'type #f))))
 
-    ;; Return #t when EVALUATION reports budget exhaustion.
     (define (budget-exhausted-evaluation? evaluation)
+      "Return #t when EVALUATION reports budget exhaustion."
       (or (equal? (evaluation-condition-type evaluation) 'budget-exhausted)
           (string-contains? (datum->external evaluation)
                             "budget-exhausted")
@@ -348,8 +355,8 @@
             (and (string? message)
                  (string-contains? message "budget"))))))
 
-    ;; Run one source-string test datum for SKILL-NAME.
     (define (run-source-test skill-name test-datum)
+      "Run one source-string test datum for SKILL-NAME."
       (let ((name (field-value test-datum 'name skill-name))
             (source (field-value test-datum 'source #f))
             (expected (field-value test-datum
@@ -395,8 +402,8 @@
                                   (test-field 'source source)
                                   (test-field 'evaluation evaluation)))))))))
 
-    ;; Return the Agent Test status corresponding to SRFI 64 RESULT.
     (define (srfi-64-status result)
+      "Return the Agent Test status corresponding to SRFI 64 RESULT."
       (cond
        ((equal? result 'pass) 'pass)
        ((equal? result 'fail) 'fail)
@@ -408,8 +415,8 @@
        ((equal? result 'budget-exhausted) 'budget-exhausted)
        (else 'error)))
 
-    ;; Adapt one SRFI 64-style test event into an Agent Test result.
     (define (adapt-srfi-64-test test-datum)
+      "Adapt one SRFI 64-style test event into an Agent Test result."
       (let ((name (field-value test-datum
                                'test-name
                                (field-value test-datum 'name 'srfi-64-test)))
@@ -424,8 +431,8 @@
          (test-field 'expected expected)
          (test-field 'actual actual))))
 
-    ;; Run TEST-DATUM as a skill-attached test.
     (define (run-skill-test-datum skill-name test-datum)
+      "Run TEST-DATUM as a skill-attached test."
       (cond
        ((or (test-result? test-datum)
             (test-group? test-datum))
@@ -445,12 +452,12 @@
          'skill
          'unsupported-test-datum))))
 
-    ;; Remove SKILL-NAME from the skill-test registry.
     (define (without-skill-tests skill-name)
+      "Remove SKILL-NAME from the skill-test registry."
       (without-registration registered-skill-tests skill-name))
 
-    ;; Register RESULT under SKILL-NAME and return RESULT.
     (define (register-skill-test! skill-name result)
+      "Register RESULT under SKILL-NAME and return RESULT."
       (let ((entry (assoc skill-name registered-skill-tests)))
         (set! registered-skill-tests
               (cons
@@ -462,22 +469,27 @@
 
     (define (skill-test skill-name test-datum)
       "Run and register TEST-DATUM for SKILL-NAME."
+      #((parameters . ((skill-name . "Skill name symbol or datum used as the registry key.")
+                       (test-datum . "Agent Test datum, SRFI 64 event, source test, or existing result.")))
+        (returns . "The normalized test result registered for SKILL-NAME.")
+        (effects . (state-write host-eval))
+        (see-also . (skill-test-run)))
       (register-skill-test!
        skill-name
        (run-skill-test-datum skill-name test-datum)))
 
-    ;; Return the tests declared directly in SKILL-DATUM.
     (define (skill-datum-tests skill-datum)
+      "Return the tests declared directly in SKILL-DATUM."
       (field-value skill-datum 'tests '()))
 
-    ;; Return a useful name for SKILL-DATUM.
     (define (skill-datum-name skill-datum)
+      "Return a useful name for SKILL-DATUM."
       (field-value skill-datum
                    'name
                    (field-value skill-datum 'source-library 'skill)))
 
-    ;; Run tests declared in a normalized skill datum.
     (define (run-skill-datum skill-datum)
+      "Run tests declared in a normalized skill datum."
       (let ((name (skill-datum-name skill-datum)))
         (make-test-group
          name
@@ -488,6 +500,10 @@
 
     (define (skill-test-run skill-name)
       "Run registered tests for SKILL-NAME, or tests declared by a skill datum."
+      #((parameters . ((skill-name . "Skill name symbol, agent-skill datum, or agent-skill-candidate datum.")))
+        (returns . "An `agent-test-group` datum summarizing registered or declared skill tests.")
+        (effects . (state-read host-eval))
+        (see-also . (skill-test test-yield-failures)))
       (cond
        ((or (record-kind? skill-name 'agent-skill)
             (record-kind? skill-name 'agent-skill-candidate))

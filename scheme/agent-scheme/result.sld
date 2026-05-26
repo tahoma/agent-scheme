@@ -25,10 +25,18 @@
   (begin
     (define (result-field name . values)
       "Construct a named field for public result datums."
+      #((parameters . ((name . "Symbol naming the result field.")
+                       (values . "Zero or more Scheme-readable field values.")))
+        (returns . "A field pair whose car is NAME and whose cdr is VALUES.")
+        (effects . (pure)))
       (cons name values))
 
     (define (value->result-datum value . maybe-seen)
       "Return VALUE converted to a public result datum."
+      #((parameters . ((value . "Runtime value to render as stable Scheme-readable data.")
+                       (maybe-seen . "Internal cycle-detection list used while rendering compound values.")))
+        (returns . "A public datum representation of VALUE suitable for evaluation-result records.")
+        (effects . (pure)))
       (let ((seen (if (null? maybe-seen) '() (car maybe-seen))))
         (cond
          ((or (boolean? value)
@@ -100,6 +108,10 @@
 
     (define (strip-identifiers value . maybe-seen)
       "Remove hygienic identifier wrappers from VALUE for readable output."
+      #((parameters . ((value . "Runtime value to simplify for display.")
+                       (maybe-seen . "Internal cycle-detection list used while walking compound values.")))
+        (returns . "VALUE with identifiers replaced by their names inside lists and vectors.")
+        (effects . (pure)))
       (let ((seen (if (null? maybe-seen) '() (car maybe-seen))))
         (cond
          ((identifier? value)
@@ -124,6 +136,9 @@
 
     (define (budget-result-field context)
       "Build the budget field for a public evaluation-result datum."
+      #((parameters . ((context . "Evaluation context containing budget counters.")))
+        (returns . "A `budget` result field with steps-used and host-calls counters.")
+        (effects . (state-read)))
       (result-field
        'budget
        (result-field
@@ -134,15 +149,15 @@
         (agent-scheme-make-canonical-integer
          (context-host-callbacks context)))))
 
-    ;; Return policy and agent-channel events in the order they were recorded.
     (define (context-events context)
+      "Return policy and agent-channel events in the order they were recorded."
       (reverse (context-audit-events context)))
 
     ;; Maximum current-frame binding names included in debugger conditions.
     (define debugger-maximum-frame-bindings 40)
 
-    ;; Report whether TEXT begins with PREFIX.
     (define (string-prefix? prefix text)
+      "Report whether TEXT begins with PREFIX."
       (let ((prefix-length (string-length prefix))
             (text-length (string-length text)))
         (and (<= prefix-length text-length)
@@ -152,8 +167,8 @@
                                 (string-ref text index))
                         (loop (+ index 1))))))))
 
-    ;; Report whether TEXT contains NEEDLE.
     (define (string-contains? text needle)
+      "Report whether TEXT contains NEEDLE."
       (let ((text-length (string-length text))
             (needle-length (string-length needle)))
         (let loop ((index 0))
@@ -163,8 +178,8 @@
                     (substring text index text-length))
                    (loop (+ index 1)))))))
 
-    ;; Return CONDITION's printable message.
     (define (condition-message condition)
+      "Return CONDITION's printable message."
       (cond
        ((error-object? condition)
         (error-object-message condition))
@@ -175,8 +190,8 @@
        (else
         "error")))
 
-    ;; Return CONDITION's portable irritants when they are available.
     (define (condition-irritants condition)
+      "Return CONDITION's portable irritants when they are available."
       (cond
        ((error-object? condition)
         (error-object-irritants condition))
@@ -184,8 +199,8 @@
         (agent-scheme-error-object-irritants condition))
        (else '())))
 
-    ;; Return a debugger condition type derived from CONDITION and MESSAGE.
     (define (debugger-condition-type condition message)
+      "Return a debugger condition type derived from CONDITION and MESSAGE."
       (cond
        ((string-contains? message "budget")
         'budget-exhausted)
@@ -204,36 +219,36 @@
        (else
         'evaluation-error)))
 
-    ;; Return the first symbol irritant for CONDITION, if any.
     (define (debugger-condition-symbol condition)
+      "Return the first symbol irritant for CONDITION, if any."
       (let loop ((irritants (condition-irritants condition)))
         (cond
          ((null? irritants) #f)
          ((symbol? (car irritants)) (car irritants))
          (else (loop (cdr irritants))))))
 
-    ;; Return the first COUNT items from ITEMS.
     (define (take items count)
+      "Return the first COUNT items from ITEMS."
       (if (or (= count 0) (null? items))
           '()
           (cons (car items) (take (cdr items) (- count 1)))))
 
-    ;; Return a safe binding record for NAME.
     (define (debugger-binding-record name)
+      "Return a safe binding record for NAME."
       (list 'binding
             (result-field 'name
                           (if (symbol? name) name 'unknown-binding))))
 
-    ;; Return binding-name records for ENVIRONMENT's current frame.
     (define (debugger-frame-bindings environment)
+      "Return binding-name records for ENVIRONMENT's current frame."
       (if environment
           (map debugger-binding-record
                (take (map car (environment-frame environment))
                      debugger-maximum-frame-bindings))
           '()))
 
-    ;; Return a debugger environment frame for ENVIRONMENT and FRAME-ID.
     (define (debugger-environment-frame environment frame-id)
+      "Return a debugger environment frame for ENVIRONMENT and FRAME-ID."
       (let ((binding-count
              (if environment (length (environment-frame environment)) 0)))
         (list
@@ -243,14 +258,14 @@
           'truncated
           (if (> binding-count debugger-maximum-frame-bindings) #t #f)))))
 
-    ;; Return a debugger stack frame.
     (define (debugger-stack-frame phase frame-id)
+      "Return a debugger stack frame."
       (list 'frame
             (result-field 'id frame-id)
             (result-field 'phase phase)))
 
-    ;; Return a debugger restart record.
     (define (debugger-restart-record id category policy)
+      "Return a debugger restart record."
       (list 'restart
             (result-field 'id id)
             (result-field 'category category)
@@ -259,6 +274,9 @@
 
     (define (debugger-default-restarts)
       "Return debugger restarts that are always safe to advertise."
+      #((parameters . ())
+        (returns . "List of debugger restart datums available for ordinary evaluation failures.")
+        (effects . (pure)))
       (list
        (debugger-restart-record 'abort 'abort 'pure-r7rs)
        (debugger-restart-record 'retry 'retry 'debugger-recovery)
@@ -275,16 +293,28 @@
 
     (define (debugger-field-values datum field)
       "Return values for FIELD from a debugger datum."
+      #((parameters . ((datum . "Debugger datum represented as a tagged list.")
+                       (field . "Symbol naming the field to read.")))
+        (returns . "The field values for FIELD, or the empty list.")
+        (effects . (pure)))
       (let ((entry (and (pair? datum) (assq field (cdr datum)))))
         (if entry (cdr entry) '())))
 
     (define (debugger-field-value datum field)
       "Return the first value for FIELD from a debugger datum."
+      #((parameters . ((datum . "Debugger datum represented as a tagged list.")
+                       (field . "Symbol naming the field to read.")))
+        (returns . "The first field value for FIELD, or #f.")
+        (effects . (pure)))
       (let ((values (debugger-field-values datum field)))
         (if (null? values) #f (car values))))
 
     (define (debugger-expect-condition datum operation)
       "Return DATUM or raise when OPERATION expected a debugger condition."
+      #((parameters . ((datum . "Value expected to be a debugger condition datum.")
+                       (operation . "Operation name used in the error message.")))
+        (returns . "DATUM when it is tagged as a debugger condition.")
+        (effects . (error)))
       (if (not (and (pair? datum) (eq? (car datum) 'condition)))
           (eval-error
            (string-append operation " expected a debugger condition")))
@@ -292,6 +322,9 @@
 
     (define (debugger-restart-id-name id)
       "Return ID as a debugger restart symbol."
+      #((parameters . ((id . "Restart id as a symbol or string.")))
+        (returns . "ID as a symbol.")
+        (effects . (error)))
       (cond
        ((symbol? id) id)
        ((string? id) (string->symbol id))
@@ -299,6 +332,10 @@
 
     (define (debugger-condition-datum condition context)
       "Build a Scheme-readable debugger condition datum."
+      #((parameters . ((condition . "Host or Agent Scheme condition value.")
+                       (context . "Evaluation context used for current frame and restart metadata.")))
+        (returns . "A `condition` datum for debugger and result consumers.")
+        (effects . (state-read)))
       (let* ((message (condition-message condition))
              (type (debugger-condition-type condition message))
              (frame-id 'f-0)
@@ -323,6 +360,10 @@
 
     (define (debugger-exception-datum exception context)
       "Build a debugger condition for a Scheme-raised EXCEPTION value."
+      #((parameters . ((exception . "Scheme value raised as an exception.")
+                       (context . "Evaluation context used for debugger metadata.")))
+        (returns . "A debugger condition datum that preserves EXCEPTION as a public result value.")
+        (effects . (state-read)))
       (append
        (debugger-condition-datum
         (make-agent-scheme-error-object
@@ -333,6 +374,10 @@
 
     (define (ok-result-datum value context)
       "Build a successful evaluation-result datum for VALUE."
+      #((parameters . ((value . "Runtime value returned by evaluation.")
+                       (context . "Evaluation context containing events and budget counters.")))
+        (returns . "An `evaluation-result` datum with status ok or values.")
+        (effects . (state-read)))
       (if (multiple-values? value)
           (list 'evaluation-result
                 (result-field 'status 'values)
@@ -350,6 +395,10 @@
 
     (define (condition-result-datum condition context)
       "Build an error evaluation-result datum for CONDITION."
+      #((parameters . ((condition . "Host or Agent Scheme condition value.")
+                       (context . "Evaluation context to update with the current debugger error.")))
+        (returns . "An `evaluation-result` datum with status error.")
+        (effects . (state-write)))
       (let ((debugger-condition
              (debugger-condition-datum condition context)))
         (set-context-current-error! context debugger-condition)
@@ -365,10 +414,16 @@
 
     (define (agent-scheme-result->external result)
       "Render an evaluation-result datum using the reader/writer external form."
+      #((parameters . ((result . "Public evaluation-result datum.")))
+        (returns . "External written text for RESULT.")
+        (effects . (pure)))
       (agent-scheme-datum->external result))
 
     (define (agent-scheme-value->external value)
       "Render runtime VALUE for diagnostics using stable external text."
+      #((parameters . ((value . "Runtime value to render.")))
+        (returns . "Stable external text suitable for tests, diagnostics, and logs.")
+        (effects . (pure)))
       (cond
        ((agent-scheme-unspecified? value)
         "#<unspecified>")

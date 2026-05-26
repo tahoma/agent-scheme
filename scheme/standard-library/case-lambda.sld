@@ -8,8 +8,8 @@
   (export case-lambda)
   (import (scheme base))
   (begin
-    ;; Report whether FORMALS can receive COUNT arguments.
     (define (%case-lambda-matches? formals count)
+      "Report whether FORMALS can receive COUNT arguments."
       (if (symbol? formals)
           #t
           (let loop ((cursor formals) (required 0))

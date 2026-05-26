@@ -41,16 +41,16 @@
       (lambda (form environment context syntax-environment)
         (eval-error "base syntax backend is not installed")))
 
-    ;; Install the evaluator backend hooks used for base bootstrapping.
     (define (agent-scheme-install-base-backend!
              primitive-resolver trampoline define-syntax)
+      "Install the evaluator backend hooks used for base bootstrapping."
       (set! base-primitive-resolver primitive-resolver)
       (set! base-trampoline trampoline)
       (set! base-define-syntax define-syntax)
       agent-scheme-unspecified)
 
-    ;; Resolve a registry implementation name through the installed backend.
     (define (base-primitive-implementation name)
+      "Resolve a registry implementation name through the installed backend."
       (base-primitive-resolver name))
 
     ;; Registry mapping primitive names to implementation identifiers and
@@ -252,8 +252,8 @@
         dynamic-wind error raise raise-continuable values
         with-exception-handler))
 
-    ;; Return the effect tier for primitive NAME.
     (define (primitive-effect-for-name name)
+      "Return the effect tier for primitive NAME."
       (cond
        ((memq name primitive-mutation-names) 'mutation)
        ((memq name primitive-port-io-names) 'port-io)
@@ -261,8 +261,8 @@
        ((eq? name 'make-parameter) 'dynamic-state)
        (else 'pure)))
 
-    ;; Return a future backend lowering hint for EFFECT.
     (define (primitive-emitter-hook-for-effect effect)
+      "Return a future backend lowering hint for EFFECT."
       (cond
        ((eq? effect 'mutation) 'runtime-mutation)
        ((eq? effect 'port-io) 'capability-port)
@@ -275,8 +275,8 @@
        ((eq? effect 'eval) 'runtime-eval)
        (else 'inline-or-call)))
 
-    ;; Return the shared backend execution path for EFFECT.
     (define (primitive-backend-effect-path-for-effect effect)
+      "Return the shared backend execution path for EFFECT."
       (cond
        ((eq? effect 'pure) 'direct-runtime)
        ((eq? effect 'mutation) 'runtime-mutation)
@@ -287,8 +287,8 @@
         'shared-capability-request)
        (else 'direct-runtime)))
 
-    ;; Return test category tags for NAME and EFFECT.
     (define (primitive-test-categories-for-name name effect)
+      "Return test category tags for NAME and EFFECT."
       (cond
        ((memq name '(vector vector? vector-ref vector-set! vector-length
                     vector-copy vector-copy! vector-fill! vector-append
@@ -307,8 +307,8 @@
        (else
         '(base))))
 
-    ;; Return canonical manifest metadata for one base primitive ENTRY.
     (define (base-primitive-manifest-spec entry)
+      "Return canonical manifest metadata for one base primitive ENTRY."
       (let* ((name (car entry))
              (effect (primitive-effect-for-name name)))
         (list (list 'name name)
@@ -329,13 +329,12 @@
               (list 'test-categories
                     (primitive-test-categories-for-name name effect)))))
 
-    ;; Primitive metadata is exported for tests and future conformance reports;
-    ;; it describes the kernel surface without exposing implementation closures.
     (define (agent-scheme-base-primitive-names)
+      "Primitive metadata is exported for tests and future conformance reports; it describes the kernel surface without exposing implementation closures."
       (map car base-primitive-registry))
 
-    ;; Public metadata accessor for kernel primitive arity and source specs.
     (define (agent-scheme-base-primitive-specs)
+      "Public metadata accessor for kernel primitive arity and source specs."
       (map (lambda (spec)
              (list (assq 'name spec)
                    (assq 'minimum-arity spec)
@@ -364,21 +363,20 @@
     ;; Cache for parsed syntax prelude forms shared across evaluation contexts.
     (define base-syntax-forms-cache #f)
 
-    ;; Read all characters from PORT into a string.
     (define (read-port-string port)
+      "Read all characters from PORT into a string."
       (let loop ((chars '()))
         (let ((char (read-char port)))
           (if (eof-object? char)
               (list->string (reverse chars))
               (loop (cons char chars))))))
 
-    ;; Read and parse all datums from PORT.
     (define (read-all-datums port)
+      "Read and parse all datums from PORT."
       (agent-scheme-read-all (read-port-string port)))
 
-    ;; Prelude forms are cached after reader validation; metadata extraction
-    ;; depends on each top-level form remaining one define.
     (define (base-prelude-forms)
+      "Prelude forms are cached after reader validation; metadata extraction depends on each top-level form remaining one define."
       (or base-prelude-forms-cache
           (let ((forms
                  (let try ((paths agent-scheme-base-prelude-load-paths))
@@ -392,9 +390,8 @@
             (set! base-prelude-forms-cache forms)
             forms)))
 
-    ;; Syntax prelude forms are cached separately because they install into the
-    ;; current syntax environment, not the value environment.
     (define (base-syntax-forms)
+      "Syntax prelude forms are cached separately because they install into the current syntax environment, not the value environment."
       (or base-syntax-forms-cache
           (let ((forms
                  (let try ((paths agent-scheme-base-syntax-load-paths))
@@ -408,8 +405,8 @@
             (set! base-syntax-forms-cache forms)
             forms)))
 
-    ;; Return minimum and maximum arity metadata for Scheme formals.
     (define (formals-arity formals)
+      "Return minimum and maximum arity metadata for Scheme formals."
       (cond
        ((symbol? formals)
         (cons 0 #f))
@@ -425,47 +422,28 @@
            (else
             (eval-error "prelude definition has invalid formals")))))))
 
-    ;; Report whether FORM is a definition-like body form for documentation
-    ;; prefix detection.
     (define (base-body-definition-form? form)
+      "Report whether FORM is a definition-like body form for documentation prefix detection."
       (and (pair? form)
            (or (eq? (car form) 'define)
                (eq? (car form) 'define-values)
                (eq? (car form) 'define-record-type))))
 
-    ;; Join simple string docstrings with the documented separator.
-    (define (base-join-documentation-strings strings)
-      (cond
-       ((null? strings) "")
-       ((null? (cdr strings)) (car strings))
-       (else
-        (string-append (car strings)
-                       "\n"
-                       (base-join-documentation-strings (cdr strings))))))
+    (define (base-body-documentation body . maybe-formals)
+      "Return documentation metadata from BODY and optional FORMALS, or #f."
+      (apply documentation-metadata-from-body
+             body
+             base-body-definition-form?
+             maybe-formals))
 
-    ;; Return simple string documentation metadata from BODY, or #f.
-    (define (base-body-documentation body)
-      (let skip-definitions ((cursor body))
-        (if (and (pair? cursor) (base-body-definition-form? (car cursor)))
-            (skip-definitions (cdr cursor))
-            (let collect ((rest cursor) (strings '()))
-              (cond
-               ((and (pair? rest) (string? (car rest)))
-                (collect (cdr rest) (cons (car rest) strings)))
-               ((and (pair? rest)
-                     (not (null? strings))
-                     (not (base-body-definition-form? (car rest))))
-                (base-join-documentation-strings (reverse strings)))
-               (else #f))))))
-
-    ;; Return an optional documentation field for metadata records.
     (define (base-documentation-field documentation)
+      "Return an optional documentation field for metadata records."
       (if documentation
           (list (list 'documentation documentation))
           '()))
 
-    ;; Extract name, arity, and source metadata from one prelude define.
     (define (prelude-definition-spec form)
+      "Extract name, arity, and source metadata from one prelude define."
       (if (not (and (pair? form)
                     (eq? (car form) 'define)
                     (pair? (cdr form))
@@ -489,7 +467,9 @@
                      (list 'maximum-arity (cdr arity))
                      (list 'source 'prelude))
                (base-documentation-field
-                (base-body-documentation (cdr (cdr initializer))))))))
+                (base-body-documentation
+                 (cdr (cdr initializer))
+                 (second initializer)))))))
          ((pair? target)
           (let ((arity (formals-arity (cdr target))))
             (append
@@ -498,25 +478,26 @@
                    (list 'maximum-arity (cdr arity))
                    (list 'source 'prelude))
              (base-documentation-field
-              (base-body-documentation (cdr (cdr form)))))))
+              (base-body-documentation
+               (cdr (cdr form))
+               (cdr target))))))
          (else
           (eval-error
            "prelude define target must be an identifier or function signature"
            form)))))
 
-    ;; Prelude binding specs identify derived procedures separately from kernel
-    ;; primitives so tests can catch accidental boundary movement.
     (define (agent-scheme-base-prelude-binding-specs)
+      "Prelude binding specs identify derived procedures separately from kernel primitives so tests can catch accidental boundary movement."
       (map prelude-definition-spec (base-prelude-forms)))
 
-    ;; Public metadata accessor for derived base prelude names.
     (define (agent-scheme-base-prelude-binding-names)
+      "Public metadata accessor for derived base prelude names."
       (map (lambda (spec)
              (second (assq 'name spec)))
            (agent-scheme-base-prelude-binding-specs)))
 
-    ;; Public metadata accessor for all base binding specs.
     (define (agent-scheme-base-binding-specs)
+      "Public metadata accessor for all base binding specs."
       (append (agent-scheme-base-primitive-specs)
               (agent-scheme-base-prelude-binding-specs)))
 
@@ -767,18 +748,18 @@
              (list 'policy 'grant)
              (list 'test-categories '(time policy clock)))))
 
-    ;; Add shared backend policy-path metadata to host-effecting standard specs.
     (define (standard-primitive-manifest-spec spec)
+      "Add shared backend policy-path metadata to host-effecting standard specs."
       (append spec
               (list (list 'backend-effect-path 'shared-capability-request)
                     (list 'policy-category 'standard-host-effect))))
 
-    ;; Return manifest metadata for standard-library primitive bindings.
     (define (standard-primitive-binding-specs)
+      "Return manifest metadata for standard-library primitive bindings."
       (map standard-primitive-manifest-spec standard-primitive-manifest-specs))
 
-    ;; Return manifest metadata for portable prelude SPEC.
     (define (prelude-manifest-spec spec)
+      "Return manifest metadata for portable prelude SPEC."
       (let* ((name (second (assq 'name spec)))
              (effect 'pure))
         (append spec
@@ -796,28 +777,27 @@
                              name
                              effect))))))
 
-    ;; Public manifest accessor shared by portable tests and future tools.
     (define (agent-scheme-primitive-manifest-binding-specs)
+      "Public manifest accessor shared by portable tests and future tools."
       (append (map base-primitive-manifest-spec base-primitive-registry)
               (map prelude-manifest-spec
                    (agent-scheme-base-prelude-binding-specs))
               (standard-primitive-binding-specs)))
 
-    ;; Install a primitive procedure binding into ENVIRONMENT.
     (define (define-primitive! environment
                                name
                                function
                                minimum-arity
                                maximum-arity)
+      "Install a primitive procedure binding into ENVIRONMENT."
       (environment-define!
        environment
        name
        (make-primitive-procedure
         name function minimum-arity maximum-arity)))
 
-    ;; The base environment installs primitive kernel bindings first, then
-    ;; evaluates derived Scheme definitions in the same environment.
     (define (agent-scheme-make-base-environment)
+      "The base environment installs primitive kernel bindings first, then evaluates derived Scheme definitions in the same environment."
       (let ((environment (agent-scheme-make-empty-environment)))
         (let loop ((rest base-primitive-registry))
           (if (null? rest)
@@ -837,8 +817,8 @@
                                    (fourth (car rest)))
                 (loop (cdr rest)))))))
 
-    ;; Install derived base syntax into CONTEXT once.
     (define (ensure-base-syntax! context environment)
+      "Install derived base syntax into CONTEXT once."
       (if (not (context-base-syntax-installed context))
           (begin
             (for-each
