@@ -192,7 +192,8 @@ The agent layer provides self-scripting facilities as Scheme-readable data:
 - `(agent rules)` behavior rules
 - `(agent patterns)` reusable workflow patterns
 - skill import/export and native skill manifests
-- replayable transcripts and helper libraries
+- replayable transcripts and helper libraries, described in
+  [Replayable Transcripts](transcripts.md)
 
 This layer should be usable from a shared REPL by both the user and the outer
 agent loop.
@@ -876,6 +877,7 @@ Likely Emacs Lisp bootstrap and adapter modules:
 - `lisp/agent-scheme-capability.el`
 - `lisp/agent-scheme-models.el`
 - `lisp/agent-scheme-repl.el`
+- `lisp/agent-scheme-transcript.el`
 - `lisp/agent-scheme-mcp.el`
 
 After the split, `agent-scheme-eval.el` can remain the public orchestration

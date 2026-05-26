@@ -132,7 +132,8 @@
         (agent models)
         (agent context)
         (agent reflect)
-        (agent redaction)))
+        (agent redaction)
+        (agent transcript)))
 
     ;; Checked-in Agent Scheme source libraries loaded by the portable
     ;; evaluator when a public agent library needs syntax definitions.
@@ -151,7 +152,10 @@
          "agent/network.sld")
         ((agent test)
          "scheme/agent/test.sld"
-         "agent/test.sld")))
+         "agent/test.sld")
+        ((agent transcript)
+         "scheme/agent/transcript.sld"
+         "agent/transcript.sld")))
 
     ;; Checked-in standard libraries loaded as portable Scheme source files.
     (define standard-source-library-load-paths
@@ -1157,6 +1161,12 @@
                                   2
                                   2))
          context))
+       ((equal? key '(agent transcript))
+        (if (not (library-registry-ref context key))
+            (register-source-library!
+             (agent-source-library-source key)
+             context
+             environment)))
        (else
         (eval-error "unknown agent library" key))))
 
