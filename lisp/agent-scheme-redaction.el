@@ -105,6 +105,13 @@
   "Return a Scheme-readable redaction field named NAME with VALUE."
   (list (agent-scheme-redaction--symbol name) value))
 
+(defun agent-scheme-redaction--field-entry-value (field)
+  "Return FIELD's value from a record field or dotted association."
+  (let ((rest (cdr field)))
+    (if (and (consp rest) (null (cdr rest)))
+        (car rest)
+      rest)))
+
 (defun agent-scheme-redaction--source-value (source)
   "Return SOURCE normalized for a redaction record."
   (if-let ((name (agent-scheme-redaction--symbol-name source)))
@@ -119,7 +126,8 @@
       (dolist (field fields value)
         (when (equal (agent-scheme-redaction--symbol-name (car field))
                      name)
-          (setq value (cadr field)))))))
+          (setq value
+                (agent-scheme-redaction--field-entry-value field)))))))
 
 (defun agent-scheme-redaction--field-values (datum)
   "Return field pairs from Scheme-readable DATUM."
@@ -230,7 +238,8 @@
   "Return non-nil when any string field in DATUM looks secret."
   (seq-some
    (lambda (field)
-     (agent-scheme-redaction--secret-string-p (cadr field)))
+     (agent-scheme-redaction--secret-string-p
+      (agent-scheme-redaction--field-entry-value field)))
    (agent-scheme-redaction--field-values datum)))
 
 (defun agent-scheme-redaction--self-secret-source-p (datum)

@@ -28,30 +28,33 @@
 
     (define (agent-scheme-make-approval-store)
       "Construct an empty approval store."
+      #((parameters . ())
+        (returns . "A mutable approval store with no records and the next generated id set to zero.")
+        (effects . (allocation)))
       (make-approval-store '() 0))
 
-    ;; Report whether VALUE is in LIST using eq?.
     (define (member-eq? value list)
+      "Report whether VALUE is in LIST using eq?."
       (cond
        ((null? list) #f)
        ((eq? value (car list)) #t)
        (else (member-eq? value (cdr list)))))
 
-    ;; Validate and return STATUS.
     (define (normalize-status status)
+      "Validate and return STATUS."
       (if (member-eq? status agent-scheme-approval-statuses)
           status
           (error "unknown approval status" status)))
 
-    ;; Generate a fresh approval id in STORE.
     (define (generated-id store)
+      "Generate a fresh approval id in STORE."
       (let ((next (+ (store-next-id store) 1)))
         (set-store-next-id! store next)
         (string->symbol
          (string-append "a-" (number->string next)))))
 
-    ;; Return field NAME from approval DATUM, or #f.
     (define (field-value datum name)
+      "Return field NAME from approval DATUM, or #f."
       (let loop ((fields (if (and (pair? datum)
                                   (eq? (car datum) 'approval-request))
                              (cdr datum)
@@ -63,14 +66,14 @@
           (cadr (car fields)))
          (else (loop (cdr fields))))))
 
-    ;; Build an optional FIELD list from VALUE.
     (define (optional-field name value)
+      "Build an optional FIELD list from VALUE."
       (if value
           (list (list name value))
           '()))
 
-    ;; Return a canonical approval request record for DATUM.
     (define (make-approval-record store datum)
+      "Return a canonical approval request record for DATUM."
       (let ((id (generated-id store)))
         (append
          (list 'approval-request
@@ -83,16 +86,16 @@
          (optional-field 'reason (field-value datum 'reason))
          (list (list 'status 'pending)))))
 
-    ;; Return RECORD's id field.
     (define (record-id record)
+      "Return RECORD's id field."
       (field-value record 'id))
 
-    ;; Return RECORD's status field.
     (define (record-status record)
+      "Return RECORD's status field."
       (field-value record 'status))
 
-    ;; Return STORE records without ID.
     (define (without-record store id)
+      "Return STORE records without ID."
       (let loop ((records (store-records store)) (result '()))
         (cond
          ((null? records) (reverse result))
@@ -101,8 +104,8 @@
          (else
           (loop (cdr records) (cons (car records) result))))))
 
-    ;; Store RECORD, replacing any previous record with the same id.
     (define (store-record! store record)
+      "Store RECORD, replacing any previous record with the same id."
       (set-store-records!
        store
        (append (without-record store (record-id record))
@@ -111,6 +114,10 @@
 
     (define (approval-ref store id)
       "Return approval record ID from STORE, or #f."
+      #((parameters . ((store . "Approval store to search.")
+                       (id . "Approval request id symbol.")))
+        (returns . "The matching approval request datum, or #f when ID is unknown.")
+        (effects . (state-read)))
       (let loop ((records (store-records store)))
         (cond
          ((null? records) #f)
@@ -119,17 +126,25 @@
 
     (define (approval-request! store datum)
       "Create an approval request from DATUM in STORE and return its id."
+      #((parameters . ((store . "Approval store to mutate.")
+                       (datum . "Requested effect or approval payload as Scheme-readable data.")))
+        (returns . "The generated approval id symbol.")
+        (effects . (state-write)))
       (let ((record (make-approval-record store datum)))
         (store-record! store record)
         (record-id record)))
 
     (define (approval-status store id)
       "Return approval ID status from STORE, or #f."
+      #((parameters . ((store . "Approval store to search.")
+                       (id . "Approval request id symbol.")))
+        (returns . "The approval status symbol, or #f when ID is unknown.")
+        (effects . (state-read)))
       (let ((record (approval-ref store id)))
         (if record (record-status record) #f)))
 
-    ;; Replace RECORD's status field with STATUS.
     (define (record-with-status record status)
+      "Replace RECORD's status field with STATUS."
       (let loop ((fields (cdr record)) (result '()))
         (cond
          ((null? fields)
@@ -143,6 +158,11 @@
 
     (define (approval-resolve! store id decision)
       "Resolve approval ID in STORE with DECISION and return the record."
+      #((parameters . ((store . "Approval store to mutate.")
+                       (id . "Approval request id symbol.")
+                       (decision . "Resolution status, either approved or denied.")))
+        (returns . "The resolved approval request datum.")
+        (effects . (state-write error)))
       (let ((status (normalize-status decision))
             (record (approval-ref store id)))
         (if (not (or (eq? status 'approved) (eq? status 'denied)))
@@ -153,6 +173,10 @@
 
     (define (approval-cancel! store id)
       "Cancel approval ID in STORE and return the record."
+      #((parameters . ((store . "Approval store to mutate.")
+                       (id . "Approval request id symbol.")))
+        (returns . "The canceled approval request datum.")
+        (effects . (state-write error)))
       (let ((record (approval-ref store id)))
         (if (not record)
             (error "unknown approval id" id))
@@ -162,6 +186,9 @@
 
     (define (approval-pending store)
       "Return pending approval records in creation order."
+      #((parameters . ((store . "Approval store to inspect.")))
+        (returns . "List of approval request datums whose status is pending.")
+        (effects . (state-read)))
       (let loop ((records (store-records store)) (result '()))
         (cond
          ((null? records) (reverse result))

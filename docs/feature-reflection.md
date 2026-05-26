@@ -125,9 +125,9 @@ Current procedures:
 - `(agent-scheme-version)` returns the canonical Agent Scheme runtime version
   datum, shaped as `(agent-scheme-version primary secondary tertiary)`.
   Components are exact non-negative integers. The initial value is
-  `(agent-scheme-version 0 14 8)`: primary version `0`, secondary version `14`
-  for the roadmap chunk, and tertiary version `8` for the issue's position in
-  that chunk. Strings such as `0.14.8` are derived presentation, not the canonical
+  `(agent-scheme-version 0 14 9)`: primary version `0`, secondary version `14`
+  for the roadmap chunk, and tertiary version `9` for the issue's position in
+  that chunk. Strings such as `0.14.9` are derived presentation, not the canonical
   value. This scheme is roadmap-derived for now and can change once Agent
   Scheme has an explicit release policy.
 - `(current-capabilities)` returns public `host-capability` records from the
@@ -135,10 +135,13 @@ Current procedures:
 - `(capability-info symbol-or-name)` returns one matching `host-capability`
   record, or `#f` if the capability is unavailable.
 - `(documentation subject)` returns a `documentation-metadata` record for a
-  documented procedure binding or procedure value, or `#f` when no simple string
-  docstring is attached. `subject` may be a binding symbol, binding name string,
-  or procedure value. The initial record exposes `(fields ((documentation
-  "...")))` and uses `(origin (body-literal string))`.
+  compound procedure binding or procedure value, or `#f` when the subject does
+  not resolve to a procedure with metadata. `subject` may be a binding symbol,
+  binding name string, or procedure value. The record exposes generated
+  signature metadata through `arguments` plus canonical body-literal fields
+  such as `documentation`, `parameters`, `returns`, `effects`, `examples`, and
+  `see-also`. Body-literal origin reports string, vector, or both literal forms;
+  argument-only metadata reports `(signature)`.
 - `(current-policy)` returns the active policy category actions and per-run
   overrides.
 - `(current-budget)` returns evaluator step, host-call, event, event-node, and
@@ -211,7 +214,7 @@ boundary remains Scheme-readable data.
 Current implemented pieces:
 
 - `(agent-scheme-version)` reports the roadmap-derived runtime version as
-  `(agent-scheme-version 0 14 8)`, and the Emacs host-adapter fixture points
+  `(agent-scheme-version 0 14 9)`, and the Emacs host-adapter fixture points
   at `scheme/agent-scheme/version.sld` as the single source of truth for the
   runtime version datum.
 - R7RS `cond-expand` library requirements are available for implemented

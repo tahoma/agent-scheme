@@ -55,11 +55,11 @@
       (lambda (context syntax-environment thunk)
         (eval-error "library syntax scope backend is not installed")))
 
-    ;; Install interpreter and macro callbacks used by library resolution.
     (define (agent-scheme-install-library-backend!
              primitive-resolver policy-denied trampoline
              make-empty-syntax-environment syntax-environment-ref
              with-syntax-environment)
+      "Install interpreter and macro callbacks used by library resolution."
       (set! library-primitive-resolver primitive-resolver)
       (set! library-policy-denied-primitive policy-denied)
       (set! library-trampoline trampoline)
@@ -68,12 +68,12 @@
       (set! library-with-syntax-environment with-syntax-environment)
       agent-scheme-unspecified)
 
-    ;; Resolve a primitive implementation identifier through the backend.
     (define (library-primitive-implementation name)
+      "Resolve a primitive implementation identifier through the backend."
       (library-primitive-resolver name))
 
-    ;; Construct a primitive spec from a backend implementation identifier.
     (define (library-primitive-spec name implementation minimum maximum)
+      "Construct a primitive spec from a backend implementation identifier."
       (list name
             (library-primitive-implementation implementation)
             minimum
@@ -172,16 +172,16 @@
     ;; Cache selected source path and contents by Agent library key.
     (define agent-source-library-source-cache '())
 
-    ;; Return DATUM's list elements, or #f when DATUM is not a proper list.
     (define (proper-list-elements/maybe datum)
+      "Return DATUM's list elements, or #f when DATUM is not a proper list."
       (let loop ((cursor datum) (elements '()))
         (cond
          ((null? cursor) (reverse elements))
          ((pair? cursor) (loop (cdr cursor) (cons (car cursor) elements)))
          (else #f))))
 
-    ;; Report whether DATUM is a proper R7RS library name.
     (define (proper-library-name? datum)
+      "Report whether DATUM is a proper R7RS library name."
       (and (pair? datum)
            (let ((parts (proper-list-elements/maybe datum)))
              (and parts
@@ -198,29 +198,28 @@
                       (loop (cdr rest)))
                      (else #f)))))))
 
-    ;; Validate and return NAME as a library registry key.
     (define (library-name-key name)
+      "Validate and return NAME as a library registry key."
       (if (proper-library-name? name)
           name
           (eval-error "invalid library name" name)))
 
-    ;; Search ALIST for KEY using equal? comparison.
     (define (assoc/equal key alist)
+      "Search ALIST for KEY using equal? comparison."
       (cond
        ((null? alist) #f)
        ((equal? key (caar alist)) (car alist))
        (else (assoc/equal key (cdr alist)))))
 
-    ;; Return the configured path candidates for source-backed standard library
-    ;; KEY.
     (define (standard-source-library-paths key)
+      "Return the configured path candidates for source-backed standard library KEY."
       (let ((entry (assoc/equal key standard-source-library-load-paths)))
         (if entry
             (cdr entry)
             (eval-error "standard source library is not available" key))))
 
-    ;; Read KEY's source from the first path that works in this host layout.
     (define (load-standard-source-library-source key)
+      "Read KEY's source from the first path that works in this host layout."
       (let try ((paths (standard-source-library-paths key)))
         (if (null? paths)
             (eval-error "unable to load standard source library" key)
@@ -232,9 +231,8 @@
                        read-port-string)))
                 (cons (car paths) source))))))
 
-    ;; Return cached source-file/source pair for source-backed standard library
-    ;; KEY.
     (define (standard-source-library-source-entry key)
+      "Return cached source-file/source pair for source-backed standard library KEY."
       (let ((cached (assoc/equal key standard-source-library-source-cache)))
         (if cached
             (cdr cached)
@@ -244,19 +242,19 @@
                           standard-source-library-source-cache))
               loaded))))
 
-    ;; Return KEY's portable source text.
     (define (standard-source-library-source key)
+      "Return KEY's portable source text."
       (cdr (standard-source-library-source-entry key)))
 
-    ;; Return configured source path candidates for Agent library KEY.
     (define (agent-source-library-paths key)
+      "Return configured source path candidates for Agent library KEY."
       (let ((entry (assoc/equal key agent-source-library-load-paths)))
         (if entry
             (cdr entry)
             (eval-error "agent source library is not available" key))))
 
-    ;; Read Agent library KEY's source from the first usable path.
     (define (load-agent-source-library-source key)
+      "Read Agent library KEY's source from the first usable path."
       (let try ((paths (agent-source-library-paths key)))
         (if (null? paths)
             (eval-error "unable to load agent source library" key)
@@ -268,8 +266,8 @@
                        read-port-string)))
                 (cons (car paths) source))))))
 
-    ;; Return cached source-file/source pair for Agent library KEY.
     (define (agent-source-library-source-entry key)
+      "Return cached source-file/source pair for Agent library KEY."
       (let ((cached (assoc/equal key agent-source-library-source-cache)))
         (if cached
             (cdr cached)
@@ -279,12 +277,12 @@
                           agent-source-library-source-cache))
               loaded))))
 
-    ;; Return KEY's Agent library source text.
     (define (agent-source-library-source key)
+      "Return KEY's Agent library source text."
       (cdr (agent-source-library-source-entry key)))
 
-    ;; Return the single define-library form read from KEY's source file.
     (define (standard-source-library-form key)
+      "Return the single define-library form read from KEY's source file."
       (let ((forms (agent-scheme-read-all
                     (standard-source-library-source key))))
         (if (not (= (length forms) 1))
@@ -303,8 +301,8 @@
                key))
           form)))
 
-    ;; Return external export names declared by source library FORM.
     (define (standard-source-library-export-names form)
+      "Return external export names declared by source library FORM."
       (apply append
              (map
               (lambda (declaration)
@@ -319,8 +317,8 @@
               (cddr
                (proper-list-elements form "standard source library")))))
 
-    ;; Public metadata accessor for standard libraries backed by source files.
     (define (agent-scheme-standard-source-library-specs)
+      "Public metadata accessor for standard libraries backed by source files."
       (map
        (lambda (entry)
          (let* ((key (car entry))
@@ -333,13 +331,13 @@
             (list 'source-file (car source-entry)))))
        standard-source-library-load-paths))
 
-    ;; Return the registered library for KEY in CONTEXT, or #f.
     (define (library-registry-ref context key)
+      "Return the registered library for KEY in CONTEXT, or #f."
       (let ((cell (assoc/equal key (context-libraries context))))
         (if cell (cdr cell) #f)))
 
-    ;; Store LIBRARY under KEY in CONTEXT's registry.
     (define (library-registry-set! context key library)
+      "Store LIBRARY under KEY in CONTEXT's registry."
       (let replace ((rest (context-libraries context)) (prefix '()))
         (cond
          ((null? rest)
@@ -354,42 +352,42 @@
          (else
           (replace (cdr rest) (cons (car rest) prefix))))))
 
-    ;; Return NAME's binding from SYNTAX-ENVIRONMENT's current frame only.
     (define (current-syntax-binding syntax-environment name)
+      "Return NAME's binding from SYNTAX-ENVIRONMENT's current frame only."
       (let ((cell (assq name (syntax-environment-frame syntax-environment))))
         (if cell (cdr cell) #f)))
 
-    ;; Report whether FORM is headed by identifier NAME.
     (define (form-named? form name)
+      "Report whether FORM is headed by identifier NAME."
       (and (pair? form) (identifier-named? (car form) name)))
 
-    ;; Report whether FORM is an import declaration.
     (define (import-form? form)
+      "Report whether FORM is an import declaration."
       (form-named? form 'import))
 
-    ;; Report whether FORM is a define-library declaration.
     (define (define-library-form? form)
+      "Report whether FORM is a define-library declaration."
       (form-named? form 'define-library))
 
-    ;; Return BINDING under exported NAME while preserving its target object.
     (define (library-binding-with-name binding name)
+      "Return BINDING under exported NAME while preserving its target object."
       (make-library-binding
        name
        (library-binding-kind binding)
        (library-binding-object binding)
        (library-binding-library-key binding)))
 
-    ;; Report whether two library bindings refer to the same exported object.
     (define (same-library-binding? left right)
+      "Report whether two library bindings refer to the same exported object."
       (and (library-binding? left)
            (library-binding? right)
            (eq? (library-binding-kind left) (library-binding-kind right))
            (eq? (library-binding-object left)
                 (library-binding-object right))))
 
-    ;; Snapshot current value and syntax frames as exports for LIBRARY-KEY.
     (define (snapshot-library-bindings value-environment syntax-environment
                                        library-key)
+      "Snapshot current value and syntax frames as exports for LIBRARY-KEY."
       (append
        (map (lambda (entry)
               (make-library-binding
@@ -406,8 +404,8 @@
                library-key))
             (syntax-environment-frame syntax-environment))))
 
-    ;; Register `(scheme base)' from the active or freshly built base state.
     (define (register-scheme-base-library! context environment)
+      "Register `(scheme base)' from the active or freshly built base state."
       (if (not (library-registry-ref context scheme-base-library-key))
           (let* ((use-current-environment?
                   (environment-cell environment '+))
@@ -438,8 +436,8 @@
                 base-environment
                 base-syntax-environment))))))
 
-    ;; Register an intentionally empty capability library for KEY.
     (define (register-empty-emacs-capability-library! key context)
+      "Register an intentionally empty capability library for KEY."
       (if (not (library-registry-ref context key))
           (let ((value-environment (agent-scheme-make-empty-environment))
                 (syntax-environment (library-make-empty-syntax-environment #f)))
@@ -448,8 +446,8 @@
              key
              (make-library key key '() value-environment syntax-environment)))))
 
-    ;; Read and evaluate a define-library form from SOURCE.
     (define (register-source-library! source context environment)
+      "Read and evaluate a define-library form from SOURCE."
       (let ((forms (agent-scheme-read-all source)))
         (if (not (= (length forms) 1))
             (eval-error "source library must contain exactly one form"))
@@ -458,15 +456,15 @@
          environment
          context)))
 
-    ;; Return NAME's binding from EXPORTS, or #f when absent.
     (define (find-library-export name exports)
+      "Return NAME's binding from EXPORTS, or #f when absent."
       (cond
        ((null? exports) #f)
        ((eq? name (library-binding-name (car exports))) (car exports))
        (else (find-library-export name (cdr exports)))))
 
-    ;; Register KEY as a subset of `(scheme base)' exports.
     (define (register-subset-library! key export-names context environment)
+      "Register KEY as a subset of `(scheme base)' exports."
       (if (not (library-registry-ref context key))
           (let* ((base-library
                   (resolve-library scheme-base-library-key
@@ -491,8 +489,8 @@
               (library-value-environment base-library)
               (library-syntax-environment base-library))))))
 
-    ;; Register KEY as a library populated from primitive specs.
     (define (register-primitive-library! key primitive-specs context)
+      "Register KEY as a library populated from primitive specs."
       (if (not (library-registry-ref context key))
           (let ((value-environment (agent-scheme-make-empty-environment))
                 (syntax-environment (library-make-empty-syntax-environment #f)))
@@ -518,8 +516,8 @@
               value-environment
               syntax-environment)))))
 
-    ;; Return primitive specs for `(scheme char)'.
     (define (char-library-specs)
+      "Return primitive specs for `(scheme char)'."
       (list
        (library-primitive-spec 'char-alphabetic? 'primitive-char-alphabetic? 1 1)
        (library-primitive-spec 'char-ci<=? 'primitive-char-ci<=? 2 #f)
@@ -554,9 +552,8 @@
         caaaar caaadr caadar caaddr cadaar cadadr caddar cadddr
         cdaaar cdaadr cdadar cdaddr cddaar cddadr cdddar cddddr))
 
-    ;; Implement the `cxr-function` primitive with argument validation and
-    ;; Agent Scheme values.
     (define (primitive-cxr-function name)
+      "Implement the `cxr-function` primitive with argument validation and Agent Scheme values."
       (let ((text (symbol->string name)))
         (lambda (arguments context)
           (let loop ((index (- (string-length text) 2))
@@ -573,14 +570,14 @@
                          (else
                           (eval-error "invalid cxr name" name))))))))))
 
-    ;; Return primitive specs for generated cxr selectors.
     (define (cxr-library-specs)
+      "Return primitive specs for generated cxr selectors."
       (map (lambda (name)
              (list name (primitive-cxr-function name) 1 1))
            cxr-library-extra-names))
 
-    ;; Register `(scheme cxr)' from base selectors and generated selectors.
     (define (register-cxr-library! key context environment)
+      "Register `(scheme cxr)' from base selectors and generated selectors."
       (if (not (library-registry-ref context key))
           (let* ((base-library
                   (resolve-library scheme-base-library-key
@@ -621,8 +618,8 @@
               value-environment
               syntax-environment)))))
 
-    ;; Return primitive specs for `(scheme inexact)'.
     (define (inexact-library-specs)
+      "Return primitive specs for `(scheme inexact)'."
       (list
        (library-primitive-spec 'acos 'primitive-acos 1 1)
        (library-primitive-spec 'asin 'primitive-asin 1 1)
@@ -637,12 +634,12 @@
        (library-primitive-spec 'sqrt 'primitive-sqrt 1 1)
        (library-primitive-spec 'tan 'primitive-tan 1 1)))
 
-    ;; Return a primitive spec that always raises a policy-denied error.
     (define (policy-denied-spec name)
+      "Return a primitive spec that always raises a policy-denied error."
       (list name (library-policy-denied-primitive (symbol->string name)) 0 #f))
 
-    ;; Register `(scheme r5rs)' with R5RS aliases for exact/inexact conversion.
     (define (register-r5rs-library! key context environment)
+      "Register `(scheme r5rs)' with R5RS aliases for exact/inexact conversion."
       (if (not (library-registry-ref context key))
           (let* ((base-library
                   (resolve-library scheme-base-library-key
@@ -675,8 +672,8 @@
               (library-value-environment base-library)
               (library-syntax-environment base-library))))))
 
-    ;; Register a supported standard library by KEY.
     (define (register-standard-library! key context environment)
+      "Register a supported standard library by KEY."
       (cond
        ((equal? key '(scheme case-lambda))
         (register-source-library!
@@ -799,8 +796,8 @@
        (else
         (eval-error "unknown standard library" key))))
 
-    ;; Register a supported Agent Scheme interaction library by KEY.
     (define (register-agent-library! key context environment)
+      "Register a supported Agent Scheme interaction library by KEY."
       (cond
        ((equal? key '(agent io))
         (register-primitive-library!
@@ -1198,8 +1195,8 @@
        (else
         (eval-error "unknown agent library" key))))
 
-    ;; Report whether NAME is a known or already registered library.
     (define (library-available? name context environment)
+      "Report whether NAME is a known or already registered library."
       (let ((key (library-name-key name)))
         (or (equal? key scheme-base-library-key)
             (member key standard-library-keys)
@@ -1207,8 +1204,8 @@
             (member key empty-emacs-capability-library-keys)
             (and (library-registry-ref context key) #t))))
 
-    ;; Resolve NAME to a library, registering lazy standard libraries as needed.
     (define (resolve-library name context environment)
+      "Resolve NAME to a library, registering lazy standard libraries as needed."
       (let ((key (library-name-key name)))
         (cond
          ((equal? key scheme-base-library-key)
@@ -1222,15 +1219,15 @@
         (or (library-registry-ref context key)
             (eval-error "unknown library" key))))
 
-    ;; Return NAME's import binding from BINDINGS, or #f.
     (define (find-import-binding name bindings)
+      "Return NAME's import binding from BINDINGS, or #f."
       (cond
        ((null? bindings) #f)
        ((eq? name (library-binding-name (car bindings))) (car bindings))
        (else (find-import-binding name (cdr bindings)))))
 
-    ;; Reject import modifiers naming exports that are absent from BINDINGS.
     (define (ensure-import-names-present names bindings description)
+      "Reject import modifiers naming exports that are absent from BINDINGS."
       (for-each
        (lambda (name)
          (if (not (find-import-binding name bindings))
@@ -1239,8 +1236,8 @@
               name)))
        names))
 
-    ;; Merge duplicate compatible imports and reject conflicting imports.
     (define (ensure-compatible-import-bindings bindings)
+      "Merge duplicate compatible imports and reject conflicting imports."
       (let loop ((rest bindings) (seen '()) (result '()))
         (if (null? rest)
             (reverse result)
@@ -1259,12 +1256,12 @@
                  "conflicting imports for identifier"
                  name)))))))
 
-    ;; Validate import modifier operands as symbols.
     (define (import-modifier-identifiers forms description)
+      "Validate import modifier operands as symbols."
       (map (lambda (form) (expect-symbol form description)) forms))
 
-    ;; Resolve an import set, applying only/except/prefix/rename modifiers.
     (define (resolve-import-set import-set context environment)
+      "Resolve an import set, applying only/except/prefix/rename modifiers."
       (cond
        ((proper-library-name? import-set)
         (library-exports
@@ -1356,9 +1353,9 @@
        (else
         (eval-error "invalid import set" import-set))))
 
-    ;; Install one imported value or syntax binding into the target frames.
     (define (install-imported-binding! binding value-environment
                                        syntax-environment)
+      "Install one imported value or syntax binding into the target frames."
       (let ((name (library-binding-name binding))
             (kind (library-binding-kind binding))
             (object (library-binding-object binding))
@@ -1410,9 +1407,9 @@
          (else
           (eval-error "unsupported library binding kind" kind)))))
 
-    ;; Resolve IMPORT-SET and install all compatible imported bindings.
     (define (install-import-set! import-set value-environment
                                  syntax-environment context)
+      "Resolve IMPORT-SET and install all compatible imported bindings."
       (for-each
        (lambda (binding)
          (install-imported-binding! binding
@@ -1421,8 +1418,8 @@
        (ensure-compatible-import-bindings
         (resolve-import-set import-set context value-environment))))
 
-    ;; Evaluate an import declaration into the active value and syntax frames.
     (define (eval-import form environment context)
+      "Evaluate an import declaration into the active value and syntax frames."
       (let ((parts (proper-list-elements form "import declaration")))
         (if (< (length parts) 2)
             (eval-error "import requires at least one import set"))
@@ -1436,8 +1433,8 @@
          (cdr parts))
         agent-scheme-unspecified))
 
-    ;; Parse export clauses into internal-name/external-name pairs.
     (define (export-specs forms)
+      "Parse export clauses into internal-name/external-name pairs."
       (let loop ((rest forms) (specs '()))
         (if (null? rest)
             (reverse specs)
@@ -1465,8 +1462,8 @@
                (else
                 (eval-error "invalid export spec" form)))))))
 
-    ;; Report whether a cond-expand feature requirement is satisfied.
     (define (feature-requirement-satisfied? requirement context environment)
+      "Report whether a cond-expand feature requirement is satisfied."
       (cond
        ((identifier-datum? requirement)
         (eq? (identifier-datum-name requirement) 'r7rs))
@@ -1507,8 +1504,8 @@
            (else #f))))
        (else #f)))
 
-    ;; Select declarations from the first satisfied library cond-expand clause.
     (define (expand-library-cond-expand clauses context environment)
+      "Select declarations from the first satisfied library cond-expand clause."
       (let loop ((rest clauses))
         (if (null? rest)
             (eval-error "unfulfilled library cond-expand")
@@ -1522,8 +1519,8 @@
                   (cdr parts)
                   (loop (cdr rest)))))))
 
-    ;; Expand library declaration wrappers such as cond-expand and includes.
     (define (expand-library-declaration declaration context environment)
+      "Expand library declaration wrappers such as cond-expand and includes."
       (cond
        ((form-named? declaration 'cond-expand)
         (apply append
@@ -1544,8 +1541,8 @@
        (else
         (list declaration))))
 
-    ;; Return string literal filenames from an include-style declaration.
     (define (include-filenames declaration)
+      "Return string literal filenames from an include-style declaration."
       (let* ((parts (proper-list-elements declaration "include declaration"))
              (operator (identifier-datum-name (car parts))))
         (if (null? (cdr parts))
@@ -1558,8 +1555,8 @@
            filename)
          (cdr parts))))
 
-    ;; Test whether TEXT begins with PREFIX.
     (define (string-prefix? prefix string)
+      "Test whether TEXT begins with PREFIX."
       (let ((prefix-length (string-length prefix))
             (string-length-value (string-length string)))
         (and (<= prefix-length string-length-value)
@@ -1569,15 +1566,15 @@
                                 (string-ref string index))
                         (loop (+ index 1))))))))
 
-    ;; Remove a single trailing slash from PATH for policy-prefix checks.
     (define (strip-trailing-slash path)
+      "Remove a single trailing slash from PATH for policy-prefix checks."
       (if (and (> (string-length path) 0)
                (char=? (string-ref path (- (string-length path) 1)) #\/))
           (substring path 0 (- (string-length path) 1))
           path))
 
-    ;; Report whether PATH is exactly allowed or inside an allowed directory.
     (define (path-policy-allows-file? path allowed-paths)
+      "Report whether PATH is exactly allowed or inside an allowed directory."
       (let loop ((rest allowed-paths))
         (and (not (null? rest))
              (let* ((allowed (strip-trailing-slash (car rest)))
@@ -1586,12 +1583,12 @@
                    (string-prefix? allowed-directory path)
                    (loop (cdr rest)))))))
 
-    ;; Report whether PATH satisfies the current include allow-list policy.
     (define (include-policy-allows-file? path context)
+      "Report whether PATH satisfies the current include allow-list policy."
       (path-policy-allows-file? path (context-include-paths context)))
 
-    ;; Resolve FILENAME against the include directory and enforce file policy.
     (define (resolve-include-file filename context operation binding)
+      "Resolve FILENAME against the include directory and enforce file policy."
       (let* ((authorization
               (authorize-file-capability
                filename
@@ -1611,8 +1608,8 @@
         (audit-file-capability-result! context authorization 'read #f)
         path))
 
-    ;; Return PATH's directory component without the trailing slash.
     (define (path-directory path)
+      "Return PATH's directory component without the trailing slash."
       (let loop ((index (- (string-length path) 1)))
         (cond
          ((< index 0) "")
@@ -1620,8 +1617,8 @@
           (substring path 0 index))
          (else (loop (- index 1))))))
 
-    ;; Read PATH into a string using the Scheme file API.
     (define (read-file-string path)
+      "Read PATH into a string using the Scheme file API."
       (call-with-input-file
        path
        (lambda (port)
@@ -1631,8 +1628,8 @@
                  (list->string (reverse chars))
                  (loop (cons char chars))))))))
 
-    ;; Run THUNK with CONTEXT's include directory temporarily set.
     (define (with-include-directory context directory thunk)
+      "Run THUNK with CONTEXT's include directory temporarily set."
       (let ((previous-directory (context-include-directory context)))
         (dynamic-wind
           (lambda ()
@@ -1645,9 +1642,8 @@
              context
              previous-directory)))))
 
-    ;; Read and parse all forms from an include file, returning forms and
-    ;; directory.
     (define (read-include-file-forms filename context fold-case? operation)
+      "Read and parse all forms from an include file, returning forms and directory."
       (let* ((path (resolve-include-file
                     filename
                     context
@@ -1665,8 +1661,8 @@
               source))
          (path-directory path))))
 
-    ;; Return all body forms read by an include or include-ci declaration.
     (define (library-include-body-forms declaration context fold-case?)
+      "Return all body forms read by an include or include-ci declaration."
       (apply append
              (map (lambda (filename)
                     (car (read-include-file-forms
@@ -1676,9 +1672,9 @@
                           (if fold-case? 'include-ci 'include))))
                   (include-filenames declaration))))
 
-    ;; Read include-library-declarations files and expand their declarations.
     (define (expand-include-library-declarations declaration context
                                                  environment)
+      "Read include-library-declarations files and expand their declarations."
       (apply
        append
        (map
@@ -1706,9 +1702,9 @@
                  forms))))))
         (include-filenames declaration))))
 
-    ;; Resolve one export spec to a value or syntax library binding.
     (define (library-export-binding spec library-key value-environment
                                     syntax-environment)
+      "Resolve one export spec to a value or syntax library binding."
       (let* ((internal-name (car spec))
              (external-name (cdr spec))
              (cell (environment-cell value-environment internal-name))
@@ -1729,9 +1725,9 @@
          (else
           (eval-error "exported identifier is not bound" internal-name)))))
 
-    ;; Build checked library exports from parsed export specs.
     (define (library-exports-from-specs specs library-key value-environment
                                         syntax-environment)
+      "Build checked library exports from parsed export specs."
       (ensure-distinct-names (map cdr specs) "library exports")
       (ensure-compatible-import-bindings
        (map (lambda (spec)
@@ -1741,9 +1737,9 @@
                                       syntax-environment))
             specs)))
 
-    ;; Evaluate library body forms under the library syntax environment.
     (define (eval-library-begin forms value-environment
                                 syntax-environment context)
+      "Evaluate library body forms under the library syntax environment."
       (library-with-syntax-environment
        context
        syntax-environment
@@ -1753,8 +1749,8 @@
           value-environment
           context))))
 
-    ;; Evaluate a define-library form and register its exported bindings.
     (define (eval-define-library form environment context)
+      "Evaluate a define-library form and register its exported bindings."
       (let ((parts (proper-list-elements form "define-library form")))
         (if (< (length parts) 2)
             (eval-error "define-library requires a library name"))

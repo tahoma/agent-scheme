@@ -82,23 +82,26 @@
 
     (define (agent-scheme-make-session-store)
       "Construct an empty portable session store."
+      #((parameters . ())
+        (returns . "A mutable session store with no durable sessions and fresh id counters.")
+        (effects . (allocation)))
       (make-session-store '() 0 0))
 
-    ;; Report whether VALUE is in LIST using equal?.
     (define (member-equal? value list)
+      "Report whether VALUE is in LIST using equal?."
       (cond
        ((null? list) #f)
        ((equal? value (car list)) #t)
        (else (member-equal? value (cdr list)))))
 
-    ;; Validate and return SCOPE.
     (define (normalize-scope scope)
+      "Validate and return SCOPE."
       (if (member-equal? scope agent-scheme-session-scopes)
           scope
           (error "unknown session scope" scope)))
 
-    ;; Return KEY from OPTIONS, or DEFAULT if absent.
     (define (option-ref options key default)
+      "Return KEY from OPTIONS, or DEFAULT if absent."
       (let ((cell (assq key options)))
         (if cell
             (let ((value (cdr cell)))
@@ -115,20 +118,20 @@
                         "-"
                         (number->string next)))))
 
-    ;; Generate a fresh snapshot id in STORE.
     (define (generated-snapshot-id store)
+      "Generate a fresh snapshot id in STORE."
       (let ((next (+ (store-next-snapshot-number store) 1)))
         (set-store-next-snapshot-number! store next)
         (string->symbol
          (string-append "snapshot-" (number->string next)))))
 
-    ;; Return the session object named ID from STORE, or #f.
     (define (find-session store id)
+      "Return the session object named ID from STORE, or #f."
       (let ((cell (assq id (store-sessions store))))
         (if cell (cdr cell) #f)))
 
-    ;; Add SESSION to STORE unless a durable session with the same id exists.
     (define (store-session! store session)
+      "Add SESSION to STORE unless a durable session with the same id exists."
       (if (not (eq? (session-scope session) 'fresh))
           (begin
             (if (find-session store (session-id session))
@@ -138,8 +141,8 @@
              (cons (cons (session-id session) session)
                    (store-sessions store))))))
 
-    ;; Return SESSION as a Scheme-readable datum.
     (define (session->datum session)
+      "Return SESSION as a Scheme-readable datum."
       (append
        (list 'session
              (list 'id (session-id session))
@@ -166,10 +169,18 @@
 
     (define (session-datum-id session-datum)
       "Return the id field from a public SESSION-DATUM."
+      #((parameters . ((session-datum . "Public session datum.")))
+        (returns . "The session id field.")
+        (effects . (pure)))
       (cadr (cadr session-datum)))
 
     (define (session-create! store scope options)
       "Create a session in STORE for SCOPE using OPTIONS."
+      #((parameters . ((store . "Session store to mutate.")
+                       (scope . "Session scope symbol.")
+                       (options . "Association list overriding id and initial construction fields.")))
+        (returns . "The created public session datum.")
+        (effects . (state-write error)))
       (let* ((normalized-scope (normalize-scope scope))
              (id (option-ref options
                              'id
@@ -196,11 +207,19 @@
 
     (define (session-ref store id)
       "Return a session datum by ID from STORE, or #f."
+      #((parameters . ((store . "Session store to search.")
+                       (id . "Session id symbol.")))
+        (returns . "The public session datum, or #f when ID is unknown.")
+        (effects . (state-read)))
       (let ((session (find-session store id)))
         (if session (session->datum session) #f)))
 
     (define (session-list store . maybe-scope)
       "Return session datums from STORE, optionally filtered by SCOPE."
+      #((parameters . ((store . "Session store to inspect.")
+                       (maybe-scope . "Optional session scope symbol.")))
+        (returns . "List of public session datums in creation order.")
+        (effects . (state-read error)))
       (let ((scope (if (null? maybe-scope)
                        #f
                        (normalize-scope (car maybe-scope)))))
@@ -213,15 +232,15 @@
            (else
             (loop (cdr sessions) result))))))
 
-    ;; Return the session object named ID from STORE or raise an error.
     (define (require-session store id)
+      "Return the session object named ID from STORE or raise an error."
       (let ((session (find-session store id)))
         (if session
             session
             (error "unknown session" id))))
 
-    ;; Move SESSION to STATUS and return its public datum.
     (define (transition! session status)
+      "Move SESSION to STATUS and return its public datum."
       (if (not (member-equal? status agent-scheme-session-states))
           (error "unknown session status" status))
       (set-session-status! session status)
@@ -229,14 +248,22 @@
 
     (define (session-suspend! store id)
       "Suspend session ID in STORE."
+      #((parameters . ((store . "Session store to mutate.")
+                       (id . "Session id symbol.")))
+        (returns . "The suspended public session datum.")
+        (effects . (state-write error)))
       (transition! (require-session store id) 'suspended))
 
     (define (session-resume! store id)
       "Resume session ID in STORE."
+      #((parameters . ((store . "Session store to mutate.")
+                       (id . "Session id symbol.")))
+        (returns . "The active public session datum.")
+        (effects . (state-write error)))
       (transition! (require-session store id) 'active))
 
-    ;; Build a snapshot record for SESSION using SNAPSHOT-ID.
     (define (snapshot-datum session snapshot-id)
+      "Build a snapshot record for SESSION using SNAPSHOT-ID."
       (list 'session-snapshot
             (list 'id snapshot-id)
             (list 'source-session (session-id session))
@@ -256,6 +283,11 @@
 
     (define (session-snapshot! store id options)
       "Snapshot session ID in STORE using OPTIONS."
+      #((parameters . ((store . "Session store to mutate.")
+                       (id . "Session id symbol.")
+                       (options . "Association list overriding the generated snapshot id.")))
+        (returns . "A `session-snapshot` datum.")
+        (effects . (state-write error)))
       (let* ((session (require-session store id))
              (snapshot-id
               (option-ref options 'id (generated-snapshot-id store)))
@@ -267,6 +299,11 @@
 
     (define (session-fork! store id options)
       "Fork session ID in STORE using OPTIONS and return the fork datum."
+      #((parameters . ((store . "Session store to mutate.")
+                       (id . "Source session id symbol.")
+                       (options . "Association list overriding the generated fork id.")))
+        (returns . "The forked public session datum.")
+        (effects . (state-write error)))
       (let* ((source (require-session store id))
              (fork-id
               (option-ref options
@@ -292,6 +329,10 @@
 
     (define (session-retire! store id)
       "Retire session ID in STORE and return its datum."
+      #((parameters . ((store . "Session store to mutate.")
+                       (id . "Session id symbol.")))
+        (returns . "The retired public session datum with live handles cleared.")
+        (effects . (state-write error)))
       (let ((session (require-session store id)))
         (set-session-handles! session '())
         (transition! session 'retired)))))

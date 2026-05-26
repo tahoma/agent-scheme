@@ -33,10 +33,13 @@
 
     (define (agent-scheme-make-helper-store)
       "Construct an empty helper store."
+      #((parameters . ())
+        (returns . "A mutable helper store with no helpers, no artifacts, and the next generated id set to zero.")
+        (effects . (allocation)))
       (make-helper-store '() '() 0))
 
-    ;; Return a copy of DATUM so public records do not share nested list cells.
     (define (copy-datum datum)
+      "Return a copy of DATUM so public records do not share nested list cells."
       (cond
        ((pair? datum)
         (cons (copy-datum (car datum))
@@ -45,32 +48,32 @@
         (list->vector (map copy-datum (vector->list datum))))
        (else datum)))
 
-    ;; Report whether VALUE appears in LIST using equal?.
     (define (member-equal? value list)
+      "Report whether VALUE appears in LIST using equal?."
       (cond
        ((null? list) #f)
        ((equal? value (car list)) #t)
        (else (member-equal? value (cdr list)))))
 
-    ;; Validate and return SCOPE.
     (define (normalize-scope scope)
+      "Validate and return SCOPE."
       (let ((normalized (if (eq? scope 'project) 'project-private scope)))
         (if (member-equal? normalized agent-scheme-helper-scopes)
             normalized
             (error "unknown helper scope" scope))))
 
-    ;; Increment STORE's sequence and return the new value.
     (define (next-sequence! store)
+      "Increment STORE's sequence and return the new value."
       (let ((next (+ (store-next-id store) 1)))
         (set-store-next-id! store next)
         next))
 
-    ;; Return SEQUENCE as an Agent Scheme exact integer datum.
     (define (integer-datum sequence)
+      "Return SEQUENCE as an Agent Scheme exact integer datum."
       (agent-scheme-make-canonical-integer sequence))
 
-    ;; Return FIELD from RECORD or #f.
     (define (field-value record field)
+      "Return FIELD from RECORD or #f."
       (let loop ((fields (cdr record)))
         (cond
          ((null? fields) #f)
@@ -81,14 +84,20 @@
 
     (define (helper-record-name record)
       "Return RECORD's helper library name."
+      #((parameters . ((record . "Helper record datum.")))
+        (returns . "The helper library name field.")
+        (effects . (pure)))
       (field-value record 'name))
 
     (define (helper-record-forms record)
       "Return RECORD's helper source forms."
+      #((parameters . ((record . "Helper record datum.")))
+        (returns . "The helper source forms field.")
+        (effects . (pure)))
       (field-value record 'forms))
 
-    ;; Return #t when DATUM is a valid helper library name.
     (define (library-name? datum)
+      "Return #t when DATUM is a valid helper library name."
       (and (pair? datum)
            (let loop ((parts datum))
              (cond
@@ -100,14 +109,14 @@
                (loop (cdr parts)))
               (else #f)))))
 
-    ;; Validate and return helper LIBRARY-NAME.
     (define (normalize-library-name library-name)
+      "Validate and return helper LIBRARY-NAME."
       (if (library-name? library-name)
           library-name
           (error "invalid helper library name" library-name)))
 
-    ;; Return helper records from STORE belonging to SCOPE, newest first.
     (define (scope-helpers store scope)
+      "Return helper records from STORE belonging to SCOPE, newest first."
       (let ((normalized-scope (normalize-scope scope)))
         (let loop ((records (store-helpers store)) (result '()))
           (cond
@@ -116,8 +125,8 @@
             (loop (cdr records) (cons (car records) result)))
            (else (loop (cdr records) result))))))
 
-    ;; Return STORE helper records with NAME removed from SCOPE.
     (define (without-helper store scope name)
+      "Return STORE helper records with NAME removed from SCOPE."
       (let ((normalized-scope (normalize-scope scope)))
         (let loop ((records (store-helpers store)) (result '()))
           (cond
@@ -129,6 +138,11 @@
 
     (define (helper-ref store scope library-name)
       "Return a helper record from STORE by SCOPE and LIBRARY-NAME, or #f."
+      #((parameters . ((store . "Helper store to search.")
+                       (scope . "Helper scope symbol.")
+                       (library-name . "Scheme library name for the helper.")))
+        (returns . "The matching helper record datum, or #f.")
+        (effects . (state-read error)))
       (let ((name (normalize-library-name library-name)))
         (let loop ((records (scope-helpers store scope)))
           (cond
@@ -138,10 +152,14 @@
 
     (define (helper-list store scope)
       "Return helper records in SCOPE."
+      #((parameters . ((store . "Helper store to inspect.")
+                       (scope . "Helper scope symbol.")))
+        (returns . "Helper record datums in SCOPE, newest first.")
+        (effects . (state-read error)))
       (scope-helpers store scope))
 
-    ;; Build a canonical helper library record.
     (define (make-helper-record store scope library-name forms source existing)
+      "Build a canonical helper library record."
       (let* ((sequence (next-sequence! store))
              (created-at (if existing
                              (field-value existing 'created-at)
@@ -156,6 +174,13 @@
 
     (define (helper-save! store scope library-name forms source)
       "Store FORMS as helper LIBRARY-NAME in SCOPE and return its record."
+      #((parameters . ((store . "Helper store to mutate.")
+                       (scope . "Helper scope symbol.")
+                       (library-name . "Scheme library name for the helper.")
+                       (forms . "Helper source forms as Scheme-readable data.")
+                       (source . "Source metadata describing where the helper came from.")))
+        (returns . "The stored helper record datum.")
+        (effects . (state-write error)))
       (let* ((normalized-scope (normalize-scope scope))
              (name (normalize-library-name library-name))
              (existing (helper-ref store normalized-scope name))
@@ -170,8 +195,8 @@
          (cons record (without-helper store normalized-scope name)))
         record))
 
-    ;; Return STORE artifact records with NAME removed from SCOPE.
     (define (without-artifact store scope name)
+      "Return STORE artifact records with NAME removed from SCOPE."
       (let ((normalized-scope (normalize-scope scope)))
         (let loop ((records (store-artifacts store)) (result '()))
           (cond
@@ -181,8 +206,8 @@
             (loop (cdr records) result))
            (else (loop (cdr records) (cons (car records) result)))))))
 
-    ;; Build a canonical helper artifact record.
     (define (make-artifact-record store scope name datum source existing)
+      "Build a canonical helper artifact record."
       (let* ((sequence (next-sequence! store))
              (created-at (if existing
                              (field-value existing 'created-at)
@@ -197,6 +222,13 @@
 
     (define (artifact-save! store scope name datum source)
       "Store artifact NAME with DATUM in SCOPE and return its record."
+      #((parameters . ((store . "Helper store to mutate.")
+                       (scope . "Helper artifact scope symbol.")
+                       (name . "Artifact name symbol or string.")
+                       (datum . "Artifact payload as Scheme-readable data.")
+                       (source . "Source metadata describing where the artifact came from.")))
+        (returns . "The stored artifact record datum.")
+        (effects . (state-write error)))
       (let* ((normalized-scope (normalize-scope scope))
              (existing #f)
              (record (make-artifact-record store
@@ -210,8 +242,8 @@
          (cons record (without-artifact store normalized-scope name)))
         record))
 
-    ;; Return KEY from OPTIONS, or DEFAULT if absent.
     (define (option-ref options key default)
+      "Return KEY from OPTIONS, or DEFAULT if absent."
       (let ((entry (assq key options)))
         (if entry
             (let ((value (cdr entry)))
@@ -220,8 +252,8 @@
                   value))
             default)))
 
-    ;; Return a candidate name for HELPER-RECORD using OPTIONS.
     (define (candidate-name helper-record options)
+      "Return a candidate name for HELPER-RECORD using OPTIONS."
       (option-ref options
                   'name
                   (let loop ((parts (helper-record-name helper-record))
@@ -235,8 +267,8 @@
                             (string-append result "-"
                                            (symbol->string (car parts)))))))))
 
-    ;; Build optional skill candidate resource fields from OPTIONS.
     (define (candidate-resource-fields options)
+      "Build optional skill candidate resource fields from OPTIONS."
       (let ((examples (option-ref options 'examples #f))
             (references (option-ref options 'references #f))
             (tests (option-ref options 'tests #f))
@@ -249,6 +281,11 @@
 
     (define (helper-promote-to-skill helper-record options)
       "Promote HELPER-RECORD into a native skill candidate datum."
+      #((parameters . ((helper-record . "Helper record datum to promote.")
+                       (options . "Association list overriding name, description, resources, tests, and tags.")))
+        (returns . "An `agent-skill-candidate` datum derived from HELPER-RECORD.")
+        (effects . (pure))
+        (see-also . (helper-save! helper-record-name helper-record-forms)))
       (let ((name (candidate-name helper-record options))
             (library-name (helper-record-name helper-record)))
         (append
