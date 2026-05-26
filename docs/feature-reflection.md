@@ -125,9 +125,9 @@ Current procedures:
 - `(agent-scheme-version)` returns the canonical Agent Scheme runtime version
   datum, shaped as `(agent-scheme-version primary secondary tertiary)`.
   Components are exact non-negative integers. The initial value is
-  `(agent-scheme-version 0 14 7)`: primary version `0`, secondary version `14`
-  for the roadmap chunk, and tertiary version `7` for the issue's position in
-  that chunk. Strings such as `0.14.7` are derived presentation, not the canonical
+  `(agent-scheme-version 0 14 8)`: primary version `0`, secondary version `14`
+  for the roadmap chunk, and tertiary version `8` for the issue's position in
+  that chunk. Strings such as `0.14.8` are derived presentation, not the canonical
   value. This scheme is roadmap-derived for now and can change once Agent
   Scheme has an explicit release policy.
 - `(current-capabilities)` returns public `host-capability` records from the
@@ -211,7 +211,7 @@ boundary remains Scheme-readable data.
 Current implemented pieces:
 
 - `(agent-scheme-version)` reports the roadmap-derived runtime version as
-  `(agent-scheme-version 0 14 7)`, and the Emacs host-adapter fixture points
+  `(agent-scheme-version 0 14 8)`, and the Emacs host-adapter fixture points
   at `scheme/agent-scheme/version.sld` as the single source of truth for the
   runtime version datum.
 - R7RS `cond-expand` library requirements are available for implemented

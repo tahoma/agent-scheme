@@ -44,7 +44,7 @@
               (map exact-integer? (cdr version))
               (map (lambda (component) (>= component 0))
                    (cdr version))))")
-    "((agent-scheme-version 0 14 7) (#t #t #t) (#t #t #t))")))
+    "((agent-scheme-version 0 14 8) (#t #t #t) (#t #t #t))")))
 
 (ert-deftest agent-scheme-reflect-test-simple-string-docstrings ()
   "Expose simple procedure docstrings through `(agent reflect)'."
@@ -101,6 +101,34 @@
             (doc-string (documentation 'no-doc))
             (doc-string (documentation 'missing)))")
     "(\"First line.\\nSecond line.\" 5 \"Use the local definition.\" \"result\" #f #f #f)")))
+
+(ert-deftest agent-scheme-reflect-test-source-library-docstrings ()
+  "Reflect docstrings from checked-in source library bindings."
+  (agent-scheme-reflect-test--reset)
+  (should
+   (equal
+    (agent-scheme-reflect-test--eval-value-string
+     "(import (scheme base)
+              (scheme lazy)
+              (agent reflect)
+              (agent diff)
+              (agent network)
+              (agent vcs)
+              (agent transcript))
+      (define (field datum name)
+        (cadr (assq name (cdr datum))))
+      (define (doc-string name)
+        (let ((datum (documentation name)))
+          (if datum
+              (cadr (assq 'documentation (field datum 'fields)))
+              #f)))
+      (list (doc-string 'length)
+            (doc-string 'force)
+            (doc-string 'diff-render-unified)
+            (doc-string 'make-network-request)
+            (doc-string 'vcs-authorize-capability-request)
+            (doc-string 'transcript-event->fixture-case))")
+    "(\"Return the number of pairs in LIST.\" \"Return PROMISE's value, evaluating and memoizing delayed thunks once.\" \"Render DIFF to deterministic unified-diff text for humans.\" \"Return a host-adapter request datum for one network operation.\" \"Return a fail-closed authorization decision for REQUEST.\" \"Generate a shared fixture case from EVENT when replay permits it.\")")))
 
 (ert-deftest agent-scheme-reflect-test-capability-budget-and-imports ()
   "Inspect capability metadata, active budget limits, imports, and session ids."

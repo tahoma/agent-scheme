@@ -46,8 +46,8 @@
       (records store-records set-store-records!)
       (next-id store-next-id set-store-next-id!))
 
-    ;; Construct an empty plan store.
     (define (agent-scheme-make-plan-store)
+      "Construct an empty plan store."
       (make-plan-store '() 0))
 
     ;; Report whether VALUE appears in LIST using equal?.
@@ -120,29 +120,29 @@
     (define (touch-plan store record)
       (replace-field record 'updated-at (integer-datum (next-sequence! store))))
 
-    ;; Return canonical id field from a plan RECORD.
     (define (plan-record-id record)
+      "Return canonical id field from a plan RECORD."
       (field-value record 'id))
 
-    ;; Return RECORD's scope field.
     (define (plan-record-scope record)
+      "Return RECORD's scope field."
       (field-value record 'scope))
 
-    ;; Return RECORD's step list.
     (define (plan-record-steps record)
+      "Return RECORD's step list."
       (let ((steps (field-value record 'steps)))
         (if steps steps '())))
 
-    ;; Return STEP's id field.
     (define (plan-step-id step)
+      "Return STEP's id field."
       (field-value step 'id))
 
-    ;; Return STEP's status field.
     (define (plan-step-status step)
+      "Return STEP's status field."
       (field-value step 'status))
 
-    ;; Return #t when DATUM requests memory summarization.
     (define (plan-memory-important? datum)
+      "Return #t when DATUM requests memory summarization."
       (let ((memory (field-value (payload-fields datum) 'memory)))
         (or (eq? memory 'important)
             (eq? memory 'persist)
@@ -158,16 +158,16 @@
             (loop (cdr records) (cons (car records) result)))
            (else (loop (cdr records) result))))))
 
-    ;; Return a plan record from STORE by ID, or #f.
     (define (plan-ref store id)
+      "Return a plan record from STORE by ID, or #f."
       (let loop ((records (store-records store)))
         (cond
          ((null? records) #f)
          ((equal? (plan-record-id (car records)) id) (car records))
          (else (loop (cdr records))))))
 
-    ;; Return all plans in SCOPE.
     (define (plan-list store scope)
+      "Return all plans in SCOPE."
       (scope-records store scope))
 
     ;; Return STORE records with any plan matching ID removed.
@@ -263,8 +263,8 @@
               (plan-field 'created-at created-at)
               (plan-field 'updated-at (integer-datum sequence)))))
 
-    ;; Create or replace a plan from DATUM and return its canonical record.
     (define (plan-create! store datum)
+      "Create or replace a plan from DATUM and return its canonical record."
       (let* ((id (field-value (payload-fields datum) 'id))
              (existing (and id (plan-ref store id)))
              (record (make-plan-record store datum existing)))
@@ -273,8 +273,8 @@
          (cons record (without-plan store (plan-record-id record))))
         record))
 
-    ;; Add STEP-DATUM to plan ID and return the updated plan.
     (define (plan-step-add! store id step-datum)
+      "Add STEP-DATUM to plan ID and return the updated plan."
       (let ((record (plan-ref store id)))
         (if (not record)
             (error "unknown plan" id))
@@ -293,8 +293,8 @@
            (cons updated (without-plan store id)))
           updated)))
 
-    ;; Set plan ID step STEP-ID to STATUS and return the updated plan.
     (define (plan-step-status! store id step-id status)
+      "Set plan ID step STEP-ID to STATUS and return the updated plan."
       (let ((record (plan-ref store id))
             (normalized-status
              (normalize-status status
@@ -323,8 +323,8 @@
            (cons updated (without-plan store id)))
           updated)))
 
-    ;; Set plan ID to STATUS and return the updated plan.
     (define (plan-status! store id status)
+      "Set plan ID to STATUS and return the updated plan."
       (let ((record (plan-ref store id))
             (normalized-status
              (normalize-status status

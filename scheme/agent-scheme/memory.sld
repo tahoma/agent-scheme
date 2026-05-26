@@ -32,8 +32,8 @@
       (records store-records set-store-records!)
       (next-id store-next-id set-store-next-id!))
 
-    ;; Construct an empty memory store.
     (define (agent-scheme-make-memory-store)
+      "Construct an empty memory store."
       (make-memory-store '() 0))
 
     ;; Report whether VALUE appears in LIST using equal?.
@@ -87,8 +87,8 @@
           (cadr (car fields)))
          (else (loop (cdr fields))))))
 
-    ;; Return canonical id field from a memory RECORD.
     (define (memory-record-id record)
+      "Return canonical id field from a memory RECORD."
       (field-value record 'id))
 
     ;; Return RECORD's key field.
@@ -128,8 +128,8 @@
             (loop (cdr records) (cons (car records) result)))
            (else (loop (cdr records) result))))))
 
-    ;; Return a memory record from STORE by SCOPE and KEY, or #f.
     (define (memory-ref store scope key)
+      "Return a memory record from STORE by SCOPE and KEY, or #f."
       (let loop ((records (scope-records store scope)))
         (cond
          ((null? records) #f)
@@ -174,8 +174,8 @@
               (list 'created-at created-at)
               (list 'updated-at (integer-datum sequence)))))
 
-    ;; Store DATUM under KEY in SCOPE and return its memory record.
     (define (memory-put! store scope key datum)
+      "Store DATUM under KEY in SCOPE and return its memory record."
       (let* ((normalized-scope (normalize-scope scope))
              (existing (memory-ref store normalized-scope key))
              (record (make-memory-record store
@@ -189,8 +189,8 @@
          (cons record (without-record store normalized-scope key)))
         record))
 
-    ;; Delete memory KEY in SCOPE and return the deleted record, or #f.
     (define (memory-delete! store scope key)
+      "Delete memory KEY in SCOPE and return the deleted record, or #f."
       (let* ((normalized-scope (normalize-scope scope))
              (record (memory-ref store normalized-scope key)))
         (if record
@@ -199,8 +199,8 @@
              (without-record store normalized-scope key)))
         record))
 
-    ;; Add DATUM as generated KIND memory in SCOPE and return the record.
     (define (memory-add! store scope kind datum)
+      "Add DATUM as generated KIND memory in SCOPE and return the record."
       (let* ((normalized-scope (normalize-scope scope))
              (sequence (+ (store-next-id store) 1))
              (id (generated-id sequence))
@@ -226,8 +226,8 @@
                               (symbol->string query))))
        (else (equal? query record))))
 
-    ;; Return SCOPE records matching QUERY.
     (define (memory-find store scope query)
+      "Return SCOPE records matching QUERY."
       (let loop ((records (scope-records store scope)) (result '()))
         (cond
          ((null? records) (reverse result))
@@ -235,8 +235,8 @@
           (loop (cdr records) (cons (car records) result)))
          (else (loop (cdr records) result)))))
 
-    ;; Return SCOPE records tagged with TAG.
     (define (memory-by-tag store scope tag)
+      "Return SCOPE records tagged with TAG."
       (let loop ((records (scope-records store scope)) (result '()))
         (cond
          ((null? records) (reverse result))
@@ -250,6 +250,6 @@
           '()
           (cons (car records) (take (cdr records) (- count 1)))))
 
-    ;; Return COUNT newest memory records in SCOPE.
     (define (memory-recent store scope count)
+      "Return COUNT newest memory records in SCOPE."
       (take (scope-records store scope) (integer-value count)))))

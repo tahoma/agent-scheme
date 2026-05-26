@@ -23,13 +23,12 @@
           (agent-scheme reader)
           (agent-scheme runtime))
   (begin
-    ;; Construct a named field for public result datums.
     (define (result-field name . values)
+      "Construct a named field for public result datums."
       (cons name values))
 
-    ;; Result datums are the public reporting surface: they preserve useful
-    ;; Scheme data while reducing procedures, ports, and host objects to handles.
     (define (value->result-datum value . maybe-seen)
+      "Return VALUE converted to a public result datum."
       (let ((seen (if (null? maybe-seen) '() (car maybe-seen))))
         (cond
          ((or (boolean? value)
@@ -99,8 +98,8 @@
          (list 'host-object
                 (result-field 'printed "#<host-object>"))))))
 
-    ;; Remove hygienic identifier wrappers from VALUE for readable output.
     (define (strip-identifiers value . maybe-seen)
+      "Remove hygienic identifier wrappers from VALUE for readable output."
       (let ((seen (if (null? maybe-seen) '() (car maybe-seen))))
         (cond
          ((identifier? value)
@@ -123,8 +122,8 @@
           value)
          (else value))))
 
-    ;; Build the budget field for a public evaluation-result datum.
     (define (budget-result-field context)
+      "Build the budget field for a public evaluation-result datum."
       (result-field
        'budget
        (result-field
@@ -258,8 +257,8 @@
             (result-field 'policy policy)
             (result-field 'status 'available)))
 
-    ;; Return debugger restarts that are always safe to advertise.
     (define (debugger-default-restarts)
+      "Return debugger restarts that are always safe to advertise."
       (list
        (debugger-restart-record 'abort 'abort 'pure-r7rs)
        (debugger-restart-record 'retry 'retry 'debugger-recovery)
@@ -274,32 +273,32 @@
        (debugger-restart-record
         'request-user-input 'request-user-input 'approval-resolution)))
 
-    ;; Return values for FIELD from a debugger datum.
     (define (debugger-field-values datum field)
+      "Return values for FIELD from a debugger datum."
       (let ((entry (and (pair? datum) (assq field (cdr datum)))))
         (if entry (cdr entry) '())))
 
-    ;; Return the first value for FIELD from a debugger datum.
     (define (debugger-field-value datum field)
+      "Return the first value for FIELD from a debugger datum."
       (let ((values (debugger-field-values datum field)))
         (if (null? values) #f (car values))))
 
-    ;; Return DATUM or raise when OPERATION expected a debugger condition.
     (define (debugger-expect-condition datum operation)
+      "Return DATUM or raise when OPERATION expected a debugger condition."
       (if (not (and (pair? datum) (eq? (car datum) 'condition)))
           (eval-error
            (string-append operation " expected a debugger condition")))
       datum)
 
-    ;; Return ID as a debugger restart symbol.
     (define (debugger-restart-id-name id)
+      "Return ID as a debugger restart symbol."
       (cond
        ((symbol? id) id)
        ((string? id) (string->symbol id))
        (else (eval-error "restart id must be a symbol or string"))))
 
-    ;; Build a Scheme-readable debugger condition datum.
     (define (debugger-condition-datum condition context)
+      "Build a Scheme-readable debugger condition datum."
       (let* ((message (condition-message condition))
              (type (debugger-condition-type condition message))
              (frame-id 'f-0)
@@ -322,8 +321,8 @@
           (result-field 'environment environment-frame)
           (result-field 'restarts (debugger-default-restarts))))))
 
-    ;; Build a debugger condition for a Scheme-raised EXCEPTION value.
     (define (debugger-exception-datum exception context)
+      "Build a debugger condition for a Scheme-raised EXCEPTION value."
       (append
        (debugger-condition-datum
         (make-agent-scheme-error-object
@@ -332,8 +331,8 @@
         context)
        (list (result-field 'value (value->result-datum exception)))))
 
-    ;; Build a successful evaluation-result datum for VALUE.
     (define (ok-result-datum value context)
+      "Build a successful evaluation-result datum for VALUE."
       (if (multiple-values? value)
           (list 'evaluation-result
                 (result-field 'status 'values)
@@ -349,8 +348,8 @@
                 (result-field 'events (context-events context))
                 (budget-result-field context))))
 
-    ;; Build an error evaluation-result datum for CONDITION.
     (define (condition-result-datum condition context)
+      "Build an error evaluation-result datum for CONDITION."
       (let ((debugger-condition
              (debugger-condition-datum condition context)))
         (set-context-current-error! context debugger-condition)
@@ -364,13 +363,12 @@
               (result-field 'events (context-events context))
               (budget-result-field context))))
 
-    ;; Render an evaluation-result datum using the reader/writer external form.
     (define (agent-scheme-result->external result)
+      "Render an evaluation-result datum using the reader/writer external form."
       (agent-scheme-datum->external result))
 
-    ;; Render runtime values for diagnostics while keeping non-datum values
-    ;; opaque and stripping macro identifier wrappers from datum-like results.
     (define (agent-scheme-value->external value)
+      "Render runtime VALUE for diagnostics using stable external text."
       (cond
        ((agent-scheme-unspecified? value)
         "#<unspecified>")

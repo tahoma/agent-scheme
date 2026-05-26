@@ -277,8 +277,8 @@
       (let ((entry (assoc name registered-tests)))
         (if entry (cdr entry) #f)))
 
-    ;; Return a group or result for NAME-OR-LIBRARY.
     (define (test-run name-or-library)
+      "Return a registered test group or result for NAME-OR-LIBRARY."
       (cond
        ((or (test-result? name-or-library)
             (test-group? name-or-library))
@@ -312,8 +312,8 @@
                             failures)))))
        (else '())))
 
-    ;; Yield failed tests as one structured Agent Scheme event.
     (define (test-yield-failures result)
+      "Yield failed tests from RESULT as one structured Agent Scheme event."
       (let ((run (test-run result)))
         (let ((failures (result-failures run)))
           (if (not (null? failures))
@@ -460,8 +460,8 @@
                (without-skill-tests skill-name))))
       result)
 
-    ;; Run and register TEST-DATUM for SKILL-NAME.
     (define (skill-test skill-name test-datum)
+      "Run and register TEST-DATUM for SKILL-NAME."
       (register-skill-test!
        skill-name
        (run-skill-test-datum skill-name test-datum)))
@@ -486,8 +486,8 @@
               (skill-datum-tests skill-datum))
          'skill)))
 
-    ;; Run registered tests for SKILL-NAME, or tests declared by a skill datum.
     (define (skill-test-run skill-name)
+      "Run registered tests for SKILL-NAME, or tests declared by a skill datum."
       (cond
        ((or (record-kind? skill-name 'agent-skill)
             (record-kind? skill-name 'agent-skill-candidate))

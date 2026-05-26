@@ -31,8 +31,8 @@
       (artifacts store-artifacts set-store-artifacts!)
       (next-id store-next-id set-store-next-id!))
 
-    ;; Construct an empty helper store.
     (define (agent-scheme-make-helper-store)
+      "Construct an empty helper store."
       (make-helper-store '() '() 0))
 
     ;; Return a copy of DATUM so public records do not share nested list cells.
@@ -79,12 +79,12 @@
           (cadr (car fields)))
          (else (loop (cdr fields))))))
 
-    ;; Return RECORD's helper library name.
     (define (helper-record-name record)
+      "Return RECORD's helper library name."
       (field-value record 'name))
 
-    ;; Return RECORD's helper source forms.
     (define (helper-record-forms record)
+      "Return RECORD's helper source forms."
       (field-value record 'forms))
 
     ;; Return #t when DATUM is a valid helper library name.
@@ -127,8 +127,8 @@
             (loop (cdr records) result))
            (else (loop (cdr records) (cons (car records) result)))))))
 
-    ;; Return a helper record from STORE by SCOPE and LIBRARY-NAME, or #f.
     (define (helper-ref store scope library-name)
+      "Return a helper record from STORE by SCOPE and LIBRARY-NAME, or #f."
       (let ((name (normalize-library-name library-name)))
         (let loop ((records (scope-helpers store scope)))
           (cond
@@ -136,8 +136,8 @@
            ((equal? (helper-record-name (car records)) name) (car records))
            (else (loop (cdr records)))))))
 
-    ;; Return helper records in SCOPE.
     (define (helper-list store scope)
+      "Return helper records in SCOPE."
       (scope-helpers store scope))
 
     ;; Build a canonical helper library record.
@@ -154,8 +154,8 @@
               (list 'created-at created-at)
               (list 'updated-at (integer-datum sequence)))))
 
-    ;; Store FORMS as helper LIBRARY-NAME in SCOPE and return its record.
     (define (helper-save! store scope library-name forms source)
+      "Store FORMS as helper LIBRARY-NAME in SCOPE and return its record."
       (let* ((normalized-scope (normalize-scope scope))
              (name (normalize-library-name library-name))
              (existing (helper-ref store normalized-scope name))
@@ -195,8 +195,8 @@
               (list 'created-at created-at)
               (list 'updated-at (integer-datum sequence)))))
 
-    ;; Store artifact NAME with DATUM in SCOPE and return its record.
     (define (artifact-save! store scope name datum source)
+      "Store artifact NAME with DATUM in SCOPE and return its record."
       (let* ((normalized-scope (normalize-scope scope))
              (existing #f)
              (record (make-artifact-record store
@@ -247,8 +247,8 @@
          (if tests (list (list 'tests (copy-datum tests))) '())
          (if resources (list (list 'resources (copy-datum resources))) '()))))
 
-    ;; Promote HELPER-RECORD into a native skill candidate datum.
     (define (helper-promote-to-skill helper-record options)
+      "Promote HELPER-RECORD into a native skill candidate datum."
       (let ((name (candidate-name helper-record options))
             (library-name (helper-record-name helper-record)))
         (append

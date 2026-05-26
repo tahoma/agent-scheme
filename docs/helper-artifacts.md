@@ -19,7 +19,9 @@ The public Scheme surface is `(agent helper)`:
 
 (agent-helper-save!
  '(agent helpers math)
- '((define (double x) (+ x x))))
+ '((define (double x)
+     "Return X multiplied by two."
+     (+ x x))))
 
 (agent-helper-load '(agent helpers math))
 (double 21)
@@ -60,7 +62,9 @@ Helper records are ordinary Scheme-readable data:
 (agent-helper-library
   (name (agent helpers math))
   (scope project-private)
-  (forms ((define (double x) (+ x x))))
+  (forms ((define (double x)
+            "Return X multiplied by two."
+            (+ x x))))
   (source (project-root "/project/"))
   (created-at 1)
   (updated-at 1))
@@ -118,7 +122,9 @@ batch test execution:
 
 (agent-helper-save!
  '(agent helpers math)
- '((define (double x) (+ x x))))
+ '((define (double x)
+     "Return X multiplied by two."
+     (+ x x))))
 
 (agent-helper-load '(agent helpers math))
 

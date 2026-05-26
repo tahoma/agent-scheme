@@ -112,6 +112,7 @@ ordinary Scheme code when the host enables them:
            expression))))
 
     (define (summarize-buffer)
+      "Return the current buffer name as external Scheme text."
       (with-default
        "buffer access denied by policy"
        (let ((out (open-output-string)))
