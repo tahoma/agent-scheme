@@ -1135,6 +1135,10 @@
                                   'primitive-capability-info
                                   1
                                   1)
+          (library-primitive-spec 'documentation
+                                  'primitive-documentation
+                                  1
+                                  1)
           (library-primitive-spec 'macroexpand
                                   'primitive-macroexpand
                                   1

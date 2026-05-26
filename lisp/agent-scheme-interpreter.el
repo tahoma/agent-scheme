@@ -365,6 +365,27 @@ Return a cons cell (NAME . INITIALIZER-EXPRESSION)."
       (agent-scheme--eval-error "body must contain at least one expression"))
     (cons (nreverse definitions) cursor)))
 
+(defun agent-scheme--join-documentation-strings (strings)
+  "Return STRINGS joined as one documentation string."
+  (mapconcat #'identity strings "\n"))
+
+(defun agent-scheme--body-documentation (body)
+  "Return simple string documentation metadata from BODY, or nil.
+Only a non-final leading run of strings after internal definitions
+is metadata.  The body itself is left unchanged for ordinary R7RS
+evaluation."
+  (let ((cursor body)
+        strings)
+    (while (and cursor (agent-scheme--body-definition-form-p (car cursor)))
+      (setq cursor (cdr cursor)))
+    (while (and cursor (stringp (car cursor)))
+      (push (car cursor) strings)
+      (setq cursor (cdr cursor)))
+    (when (and strings
+               cursor
+               (not (agent-scheme--body-definition-form-p (car cursor))))
+      (agent-scheme--join-documentation-strings (nreverse strings)))))
+
 (declare-function agent-scheme--eval-expression "agent-scheme-eval")
 (declare-function agent-scheme--eval-sequence "agent-scheme-eval")
 
@@ -1043,12 +1064,13 @@ each initializer."
 	             (agent-scheme--special-operator-active-p operator environment))
 	        (unless (>= (length parts) 3)
 	          (agent-scheme--eval-error "lambda requires formals and a body"))
-	        (agent-scheme--continue
+        (agent-scheme--continue
                  continuation
                  (agent-scheme--make-procedure
 	          (agent-scheme--parse-formals (cadr parts))
 	          (cddr parts)
-	          environment)))
+	          environment
+                  (agent-scheme--body-documentation (cddr parts)))))
 	       ((and (agent-scheme--symbol-named-p operator "if")
 	             (agent-scheme--special-operator-active-p operator environment))
 	        (agent-scheme--eval-if parts environment context tailp continuation))

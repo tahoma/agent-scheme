@@ -125,15 +125,20 @@ Current procedures:
 - `(agent-scheme-version)` returns the canonical Agent Scheme runtime version
   datum, shaped as `(agent-scheme-version primary secondary tertiary)`.
   Components are exact non-negative integers. The initial value is
-  `(agent-scheme-version 0 14 6)`: primary version `0`, secondary version `14`
-  for the roadmap chunk, and tertiary version `6` for the issue's position in
-  that chunk. Strings such as `0.14.6` are derived presentation, not the canonical
+  `(agent-scheme-version 0 14 7)`: primary version `0`, secondary version `14`
+  for the roadmap chunk, and tertiary version `7` for the issue's position in
+  that chunk. Strings such as `0.14.7` are derived presentation, not the canonical
   value. This scheme is roadmap-derived for now and can change once Agent
   Scheme has an explicit release policy.
 - `(current-capabilities)` returns public `host-capability` records from the
   primitive manifest.
 - `(capability-info symbol-or-name)` returns one matching `host-capability`
   record, or `#f` if the capability is unavailable.
+- `(documentation subject)` returns a `documentation-metadata` record for a
+  documented procedure binding or procedure value, or `#f` when no simple string
+  docstring is attached. `subject` may be a binding symbol, binding name string,
+  or procedure value. The initial record exposes `(fields ((documentation
+  "...")))` and uses `(origin (body-literal string))`.
 - `(current-policy)` returns the active policy category actions and per-run
   overrides.
 - `(current-budget)` returns evaluator step, host-call, event, event-node, and
@@ -167,9 +172,16 @@ snapshot:
 
 (define file-metadata (capability-info 'file-exists?))
 
+(define (snapshot-note)
+  "Return whether file metadata is visible in this runtime."
+  (if file-metadata #t #f))
+
+(define doc-metadata (documentation 'snapshot-note))
+
 (agent-yield
  (list 'runtime-snapshot
-       (list 'file-metadata-available (if file-metadata #t #f))
+       (list 'file-metadata-available (snapshot-note))
+       (list 'snapshot-note-doc doc-metadata)
        (current-budget)
        (current-imports)
        (recent-policy-decisions)))
@@ -199,7 +211,7 @@ boundary remains Scheme-readable data.
 Current implemented pieces:
 
 - `(agent-scheme-version)` reports the roadmap-derived runtime version as
-  `(agent-scheme-version 0 14 6)`, and the Emacs host-adapter fixture points
+  `(agent-scheme-version 0 14 7)`, and the Emacs host-adapter fixture points
   at `scheme/agent-scheme/version.sld` as the single source of truth for the
   runtime version datum.
 - R7RS `cond-expand` library requirements are available for implemented
@@ -209,8 +221,9 @@ Current implemented pieces:
 - Emacs capability libraries are registered under `(emacs ...)` names.
 - The Emacs host-adapter declaration and capability manifest fixture is checked
   in as `fixtures/host-adapters/emacs.scm`.
-- `(agent reflect)` exposes capability, policy, budget, import, session, macro
-  expansion, recent yield, recent error, and recent policy-decision snapshots.
+- `(agent reflect)` exposes capability, documentation, policy, budget, import,
+  session, macro expansion, recent yield, recent error, and recent
+  policy-decision snapshots.
 
 Tracked follow-up work:
 

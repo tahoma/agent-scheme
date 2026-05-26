@@ -425,6 +425,45 @@
            (else
             (eval-error "prelude definition has invalid formals")))))))
 
+    ;; Report whether FORM is a definition-like body form for documentation
+    ;; prefix detection.
+    (define (base-body-definition-form? form)
+      (and (pair? form)
+           (or (eq? (car form) 'define)
+               (eq? (car form) 'define-values)
+               (eq? (car form) 'define-record-type))))
+
+    ;; Join simple string docstrings with the documented separator.
+    (define (base-join-documentation-strings strings)
+      (cond
+       ((null? strings) "")
+       ((null? (cdr strings)) (car strings))
+       (else
+        (string-append (car strings)
+                       "\n"
+                       (base-join-documentation-strings (cdr strings))))))
+
+    ;; Return simple string documentation metadata from BODY, or #f.
+    (define (base-body-documentation body)
+      (let skip-definitions ((cursor body))
+        (if (and (pair? cursor) (base-body-definition-form? (car cursor)))
+            (skip-definitions (cdr cursor))
+            (let collect ((rest cursor) (strings '()))
+              (cond
+               ((and (pair? rest) (string? (car rest)))
+                (collect (cdr rest) (cons (car rest) strings)))
+               ((and (pair? rest)
+                     (not (null? strings))
+                     (not (base-body-definition-form? (car rest))))
+                (base-join-documentation-strings (reverse strings)))
+               (else #f))))))
+
+    ;; Return an optional documentation field for metadata records.
+    (define (base-documentation-field documentation)
+      (if documentation
+          (list (list 'documentation documentation))
+          '()))
+
     ;; Extract name, arity, and source metadata from one prelude define.
     (define (prelude-definition-spec form)
       (if (not (and (pair? form)
@@ -444,16 +483,22 @@
                 (eval-error
                  "prelude variable definition must initialize a lambda"))
             (let ((arity (formals-arity (second initializer))))
-              (list (list 'name target)
-                    (list 'minimum-arity (car arity))
-                    (list 'maximum-arity (cdr arity))
-                    (list 'source 'prelude)))))
+              (append
+               (list (list 'name target)
+                     (list 'minimum-arity (car arity))
+                     (list 'maximum-arity (cdr arity))
+                     (list 'source 'prelude))
+               (base-documentation-field
+                (base-body-documentation (cdr (cdr initializer))))))))
          ((pair? target)
           (let ((arity (formals-arity (cdr target))))
-            (list (list 'name (car target))
-                  (list 'minimum-arity (car arity))
-                  (list 'maximum-arity (cdr arity))
-                  (list 'source 'prelude))))
+            (append
+             (list (list 'name (car target))
+                   (list 'minimum-arity (car arity))
+                   (list 'maximum-arity (cdr arity))
+                   (list 'source 'prelude))
+             (base-documentation-field
+              (base-body-documentation (cdr (cdr form)))))))
          (else
           (eval-error
            "prelude define target must be an identifier or function signature"

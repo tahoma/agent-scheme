@@ -78,6 +78,31 @@ The documentation field for `sum` is:
 "Return the arithmetic sum of XS.\nXS must be a list of numbers."
 ```
 
+The live reflection surface exposes the same simple string through
+`(documentation subject)` in `(agent reflect)`. `subject` can be a binding
+symbol, binding name string, or procedure value:
+
+```scheme
+(import (scheme base) (agent reflect))
+
+(define (sum xs)
+  "Return the arithmetic sum of XS."
+  (let loop ((rest xs) (total 0))
+    (if (null? rest)
+        total
+        (loop (cdr rest) (+ total (car rest))))))
+
+(documentation 'sum)
+;; =>
+(documentation-metadata
+  (subject (binding sum))
+  (kind procedure)
+  (library #f)
+  (source #f)
+  (origin (body-literal string))
+  (fields ((documentation "Return the arithmetic sum of XS."))))
+```
+
 No metadata is also valid:
 
 ```scheme
@@ -174,7 +199,7 @@ Field values are ordinary Scheme-readable data. The initial field set is:
 - `effects`: list of effect symbols, such as `(pure)` or `(file-read)`
 - `examples`: list of source/result example records
 - `see-also`: list of related binding, library, issue, or document references
-- `since`: version datum such as `(agent-scheme-version 0 14 6)`
+- `since`: version datum such as `(agent-scheme-version 0 14 7)`
 - `deprecated`: `#f` or a string explaining the replacement
 - `stability`: symbol such as `experimental`, `stable`, or `internal`
 
@@ -211,8 +236,19 @@ span by file, line, and column. When source information is unavailable, use
 
 ## Implementation Status
 
-This document defines the convention. It does not require runtime extraction in
-the same change.
+Simple string docstrings are implemented for the Emacs Lisp bootstrap and the
+portable R7RS path. A leading non-final run of strings after internal
+definitions attaches the joined `documentation` field to compound procedures
+and can be queried through `(documentation subject)` from `(agent reflect)`.
+Procedure shorthand `define`, explicit `lambda`, top-level bindings whose
+initializer is a `lambda`, and internal bindings with lambda initializers share
+the same body-literal extraction rule.
+
+The current `(scheme case-lambda)` library is a portable macro that lowers each
+clause through an internal `lambda`, so ordinary evaluation still preserves the
+body string semantics, but the runtime does not yet expose durable
+clause-level documentation metadata for a `case-lambda` procedure value. That
+representation work is left to a later reflection/metadata slice.
 
 - #300 defines the public convention.
 - #301 implements simple string docstrings for the initial runtime and
