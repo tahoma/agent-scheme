@@ -32,6 +32,20 @@
   (agent-scheme-session-clear!)
   (agent-scheme-audit-clear))
 
+(ert-deftest agent-scheme-reflect-test-runtime-version-is-canonical-triple ()
+  "Expose the Agent Scheme runtime version through `(agent reflect)'."
+  (agent-scheme-reflect-test--reset)
+  (should
+   (equal
+    (agent-scheme-reflect-test--eval-value-string
+     "(import (scheme base) (agent reflect))
+      (let ((version (agent-scheme-version)))
+        (list version
+              (map exact-integer? (cdr version))
+              (map (lambda (component) (>= component 0))
+                   (cdr version))))")
+    "((agent-scheme-version 0 14 1) (#t #t #t) (#t #t #t))")))
+
 (ert-deftest agent-scheme-reflect-test-capability-budget-and-imports ()
   "Inspect capability metadata, active budget limits, imports, and session ids."
   (agent-scheme-reflect-test--reset)

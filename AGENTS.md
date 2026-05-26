@@ -23,6 +23,14 @@ Repository conventions override generic workflow defaults. In particular:
   the issue description and in GitHub Issues' relationship metadata.
 - Commits must use the Conventional Commits form documented in
   `docs/contributing.md`.
+- Every issue branch must update the canonical runtime version in
+  `scheme/agent-scheme/version.sld` to match the roadmap-derived version for
+  the issue being advanced. Use #53's flat chunk map as the source: primary
+  version `0` until the project adopts an explicit release policy, secondary
+  version equal to the roadmap chunk number, and tertiary version equal to the
+  issue's one-based position inside that chunk. If the issue is not placed in
+  #53, update or clarify the roadmap placement before calling the issue work
+  complete.
 - The portable R7RS implementation is a first-class peer, not a secondary
   mirror of the Emacs Lisp bootstrap. For semantic changes, evaluator pass
   boundaries, public runtime behavior, standard libraries, fixtures, or tests,

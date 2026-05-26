@@ -37,6 +37,81 @@
   :type 'integer
   :group 'agent-scheme)
 
+(defconst agent-scheme--version-source-file
+  (expand-file-name
+   "../scheme/agent-scheme/version.sld"
+   (file-name-directory (or load-file-name buffer-file-name default-directory)))
+  "Canonical Scheme-readable Agent Scheme version source file.")
+
+(defun agent-scheme--version-symbol-named-p (value name)
+  "Return non-nil when VALUE is an Agent Scheme symbol named NAME."
+  (and (agent-scheme-symbol-p value)
+       (equal (agent-scheme-symbol-name value) name)))
+
+(defun agent-scheme--version-definition-value (form)
+  "Return the quoted version datum from version source FORM."
+  (let ((parts (and (consp form) form)))
+    (when (and (= (length parts) 3)
+               (agent-scheme--version-symbol-named-p (car parts) "define")
+               (agent-scheme--version-symbol-named-p
+                (cadr parts) "agent-scheme-version-datum"))
+      (let ((value-form (caddr parts)))
+        (when (and (consp value-form)
+                   (= (length value-form) 2)
+                   (agent-scheme--version-symbol-named-p
+                    (car value-form) "quote"))
+          (cadr value-form))))))
+
+(defun agent-scheme--version-find-definition-value (form)
+  "Return the quoted version datum found anywhere under FORM."
+  (or (agent-scheme--version-definition-value form)
+      (when (consp form)
+        (catch 'found
+          (dolist (element form)
+            (let ((datum (agent-scheme--version-find-definition-value element)))
+              (when datum
+                (throw 'found datum))))))))
+
+(defun agent-scheme--read-version-datum ()
+  "Read and validate the canonical Agent Scheme version datum."
+  (let* ((forms (agent-scheme-read-all
+                 (with-temp-buffer
+                   (insert-file-contents agent-scheme--version-source-file)
+                   (buffer-string))))
+         (datum (and (= (length forms) 1)
+                     (agent-scheme--version-find-definition-value
+                      (car forms)))))
+    (unless (and (consp datum)
+                 (= (length datum) 4)
+                 (agent-scheme--version-symbol-named-p
+                  (car datum) "agent-scheme-version")
+                 (cl-every
+                  (lambda (component)
+                    (and (agent-scheme-number-p component)
+                         (eq (agent-scheme-number-kind component) 'integer)
+                         (eq (agent-scheme-number-exactness component) 'exact)
+                         (>= (agent-scheme-number-value component) 0)))
+                  (cdr datum)))
+      (error "Invalid Agent Scheme version source: %s"
+             agent-scheme--version-source-file))
+    datum))
+
+(defconst agent-scheme--version-datum
+  (agent-scheme--read-version-datum)
+  "Canonical Agent Scheme version datum.")
+
+(defun agent-scheme-version-components ()
+  "Return the Agent Scheme version as exact non-negative host integers."
+  (mapcar #'agent-scheme-number-value (cdr agent-scheme--version-datum)))
+
+(defun agent-scheme-version ()
+  "Return the canonical Scheme-readable Agent Scheme version datum."
+  (copy-tree agent-scheme--version-datum))
+
+(defun agent-scheme-version-string ()
+  "Return the Agent Scheme version as a derived presentation string."
+  (mapconcat #'number-to-string (agent-scheme-version-components) "."))
+
 (define-error 'agent-scheme-eval-error
   "Agent Scheme evaluation error")
 

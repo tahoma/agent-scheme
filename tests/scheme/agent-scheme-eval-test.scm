@@ -12,6 +12,8 @@
               audit-network-capability-result!
               authorize-process-capability
               authorize-network-capability
+              agent-scheme-version
+              agent-scheme-version-components
               context-audit-events
               network-capability-handle
               network-port-capability-handle
@@ -61,6 +63,14 @@
          (agent-scheme-result->external
           (agent-scheme-eval-source-result source))
          expected))
+
+(check 'runtime-version-components
+       (agent-scheme-version-components)
+       '(0 14 1))
+
+(check 'runtime-version-datum
+       (agent-scheme-result->external (agent-scheme-version))
+       "(agent-scheme-version 0 14 1)")
 
 ;; Report whether TEXT starts with PREFIX.
 (define (string-prefix? prefix text)

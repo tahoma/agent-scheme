@@ -9,6 +9,69 @@
 ;;; Code:
 
 (require 'ert)
+(require 'agent-scheme-result)
+
+(defconst agent-scheme-runtime-test--version-source
+  "scheme/agent-scheme/version.sld"
+  "Repository-relative canonical Agent Scheme version source.")
+
+(ert-deftest agent-scheme-runtime-test-version-components-are-canonical ()
+  "Expose the runtime version as host components and a Scheme datum."
+  (should (equal (agent-scheme-version-components) '(0 14 1)))
+  (should (equal (agent-scheme-value->external (agent-scheme-version))
+                 "(agent-scheme-version 0 14 1)"))
+  (should (equal (agent-scheme-version-string) "0.14.1")))
+
+(ert-deftest agent-scheme-runtime-test-version-comes-from-shared-source ()
+  "Keep the version number in one Scheme-readable source file."
+  (let* ((path (expand-file-name
+                agent-scheme-runtime-test--version-source
+                agent-scheme--test-root))
+         (forms (agent-scheme-read-all
+                 (with-temp-buffer
+                   (insert-file-contents path)
+                   (buffer-string)))))
+    (should (= (length forms) 1))
+    (should
+     (string-match-p
+      "(define-library (agent-scheme version)"
+      (with-temp-buffer
+        (insert-file-contents path)
+        (buffer-string))))
+    (should
+     (string-match-p
+      "(export agent-scheme-version-datum)"
+      (with-temp-buffer
+        (insert-file-contents path)
+        (buffer-string))))
+    (should
+     (equal (agent-scheme-value->external (agent-scheme-version))
+            "(agent-scheme-version 0 14 1)"))
+    (should
+     (string-match-p
+      "single source of truth"
+      (with-temp-buffer
+        (insert-file-contents path)
+        (buffer-string))))))
+
+(ert-deftest agent-scheme-runtime-test-version-literal-is-not-duplicated ()
+  "Keep runtime implementation sources from repeating the version number."
+  (let ((canonical (expand-file-name
+                    agent-scheme-runtime-test--version-source
+                    agent-scheme--test-root))
+        matches)
+    (dolist (directory '("lisp" "scheme" "fixtures"))
+      (dolist (file (directory-files-recursively
+                     (expand-file-name directory agent-scheme--test-root)
+                     "\\.\\(el\\|scm\\|sld\\)\\'"))
+        (unless (equal file canonical)
+          (with-temp-buffer
+            (insert-file-contents file)
+            (when (re-search-forward
+                   "\\(agent-scheme-version 0 14 1\\|0\\.14\\.1\\|'(0 14 1\\|(list 0 14 1\\)"
+                   nil t)
+              (push file matches))))))
+    (should-not matches)))
 
 (defun agent-scheme-runtime-test--emacs-command ()
   "Return the current Emacs executable for runtime module subprocess checks."
@@ -62,6 +125,9 @@
                    (require 'agent-scheme-runtime)
                    (when (featurep 'agent-scheme-eval)
                      (error \"runtime loaded evaluator\"))
+                   (unless (equal (agent-scheme-version-components)
+                                  '(0 14 1))
+                     (kill-emacs 6))
                    (let ((context
                           (agent-scheme--new-eval-context
                            '(:max-steps 1))))

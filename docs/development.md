@@ -375,6 +375,8 @@ Until those paths exist, avoid committing:
 Before opening a PR:
 
 - Confirm the branch only contains the intended issue work.
+- Confirm `scheme/agent-scheme/version.sld` matches the issue's
+  roadmap-derived version from #53.
 - Run the available verification commands.
 - Check public docs for stale personal-config or historical-repo references.
 - Use a Conventional Commits message for each commit.

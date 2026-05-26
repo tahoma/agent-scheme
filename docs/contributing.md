@@ -12,9 +12,12 @@ Workflow:
 
 1. Pick or file a GitHub issue.
 2. Create a branch for that issue.
-3. Make the smallest coherent change that advances the issue.
-4. Open a pull request back to `main`.
-5. Merge through the pull request after review and verification.
+3. Confirm the issue's roadmap chunk placement in #53.
+4. Make the smallest coherent change that advances the issue.
+5. Update the canonical runtime version in `scheme/agent-scheme/version.sld`
+   to match the roadmap-derived version for that issue.
+6. Open a pull request back to `main`.
+7. Merge through the pull request after review and verification.
 
 Branch names must include the issue number. Multiple branches may target the
 same issue as long as each branch identifies the issue it belongs to.
@@ -37,9 +40,30 @@ Pull requests should:
 - target `main`
 - reference the issue they advance
 - describe the verification that was run
+- include the roadmap-derived version bump for the issue being advanced
 - call out any follow-up work left for the issue
 - avoid bundling unrelated issue work into the same branch
 - use plain project titles without assistant, tool, vendor, or workflow branding
+
+## Runtime Versioning
+
+Every issue branch updates the canonical runtime version source at
+`scheme/agent-scheme/version.sld`. The version remains roadmap-derived until
+Agent Scheme adopts an explicit release policy.
+
+Derive the version from #53's flat chunk map:
+
+- primary version: `0`
+- secondary version: the roadmap chunk number
+- tertiary version: the issue's one-based position inside that chunk
+
+For example, the first issue in chunk 14 is version `0.14.1`, represented by
+the canonical Scheme datum `(agent-scheme-version 0 14 1)`.
+
+If the issue is missing from #53, resolve the roadmap placement before opening
+the pull request. If a branch must advance more than one issue, prefer splitting
+the branch; otherwise use the latest roadmap position advanced by the PR and
+explain that choice in the PR body.
 
 ## Commit Messages
 
