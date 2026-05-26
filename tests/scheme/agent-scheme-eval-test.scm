@@ -2536,6 +2536,62 @@
 
 (let* ((result
         (agent-scheme-eval-source-result
+         "(import (scheme base) (agent helper))
+          (agent-helper-save!
+           '(agent helpers portable)
+           '((define (portable-helper x) (+ x 1)))
+           '((scope project-private)))
+          (agent-helper-load '(agent helpers portable)
+                             '((scope project-private)))
+          (list (portable-helper 41)
+                (agent-helper-list 'project-private))"))
+       (value (field-value result 'value)))
+  (check 'agent-helper-save-list-load
+         (and (equal? (field-value result 'status) 'ok)
+              (string-contains?
+               (agent-scheme-value->external value)
+               "(42 ((agent-helper-library")
+              (string-contains?
+               (agent-scheme-value->external value)
+               "(name (agent helpers portable))")
+              #t)
+         #t))
+
+(let* ((result
+        (agent-scheme-eval-source-result
+         "(import (scheme base) (agent helper))
+          (agent-artifact
+           'example
+           '(example (source \"(portable-helper 41)\") (expect \"42\")))
+          (agent-helper-save!
+           '(agent helpers candidate)
+           '((define (portable-candidate) 'ok))
+           '((scope project-private)))
+          (agent-helper-promote-to-skill
+           '(agent helpers candidate)
+           '((scope project-private)
+             (name \"portable-candidate\")
+             (examples ((example (source \"(portable-candidate)\")
+                                 (expect \"ok\"))))
+             (references ((r7rs \"docs/r7rs-small-report.md\")))
+             (tests (((source \"(portable-candidate)\")
+                      (expect \"ok\"))))))"))
+       (events (field-value result 'events))
+       (value (field-value result 'value)))
+  (check 'agent-helper-artifact-and-skill-candidate
+         (and (equal? (field-value result 'status) 'ok)
+              (equal? (car value) 'agent-skill-candidate)
+              (string-contains?
+               (agent-scheme-value->external value)
+               "(name \"portable-candidate\")")
+              (string-contains?
+               (agent-scheme-result->external (list 'events events))
+               "(yield (agent-artifact")
+              #t)
+         #t))
+
+(let* ((result
+        (agent-scheme-eval-source-result
          "(import (scheme base) (agent plan))
           (plan-create!
            '(plan

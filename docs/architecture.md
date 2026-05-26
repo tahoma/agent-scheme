@@ -182,6 +182,7 @@ The agent layer provides self-scripting facilities as Scheme-readable data:
 - `(agent task)` task lifecycle records and state transitions
 - `(agent memory)` scoped memory
 - `(agent plan)` plans
+- `(agent helper)` helper libraries and artifacts
 - `(agent approval)` approval requests
 - `(agent job)` long-running work, cancellation, and streaming yields
 - `(agent debugger)` condition, stack, environment, and restart datums
@@ -411,6 +412,10 @@ memory, and pending approvals as Scheme data.
 The concrete lifecycle, snapshot, fork, and cleanup contract is recorded in
 [Session Lifecycle and Snapshots](session-lifecycle.md).
 
+Reusable helper libraries, helper artifacts, skill candidate promotion, and
+their storage and policy boundaries are recorded in
+[Helper Libraries and Artifacts](helper-artifacts.md).
+
 ## Library Namespaces
 
 R7RS standard libraries use R7RS names:
@@ -438,6 +443,7 @@ Agent interaction libraries live under `agent`:
 ```scheme
 (agent io)
 (agent memory)
+(agent helper)
 (agent plan)
 (agent approval)
 (agent job)
