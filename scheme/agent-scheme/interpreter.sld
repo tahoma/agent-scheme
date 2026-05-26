@@ -5090,6 +5090,53 @@
             (eval-error "unknown helper library" helper-or-name))
         (helper-model:helper-promote-to-skill record options)))
 
+    ;; Budget option names accepted by source-string self-tests.
+    (define agent-test-budget-option-keys
+      '(max-steps
+        max-non-tail-steps
+        max-value-nodes
+        max-host-callbacks
+        max-events
+        max-event-nodes))
+
+    ;; Return #t when KEY names an allowed self-test budget option.
+    (define (agent-test-budget-option? key)
+      (memq key agent-test-budget-option-keys))
+
+    ;; Return one normalized evaluator option entry, or #f for unknown keys.
+    (define (agent-test-option-entry entry)
+      (let ((elements (proper-list-elements entry "agent test option")))
+        (if (and (= (length elements) 2)
+                 (agent-test-budget-option? (car elements)))
+            (cons (car elements)
+                  (exact-integer->host
+                   (second elements)
+                   "agent test budget option"))
+            #f)))
+
+    ;; Return OPTIONS restricted to budget controls for nested source tests.
+    (define (agent-test-options options)
+      (let loop ((rest (proper-list-elements options "agent test options"))
+                 (result '()))
+        (cond
+         ((null? rest) (reverse result))
+         ((agent-test-option-entry (car rest))
+          => (lambda (entry)
+               (loop (cdr rest) (cons entry result))))
+         (else
+          (loop (cdr rest) result)))))
+
+    ;; Evaluate one declared source-string test under normal evaluator policy.
+    (define (primitive-agent-test-eval-source-result arguments context)
+      (let ((source (expect-string
+                     (car arguments)
+                     "agent-test-eval-source-result source"))
+            (options (if (pair? (cdr arguments)) (second arguments) '())))
+        (agent-scheme-eval-source-result
+         source
+         #f
+         (agent-test-options options))))
+
     ;; Return the memory scope corresponding to PLAN-SCOPE.
     (define (plan-memory-scope plan-scope)
       (if (eq? plan-scope 'fresh)
@@ -7232,6 +7279,8 @@
        (cons 'primitive-agent-helper-ref primitive-agent-helper-ref)
        (cons 'primitive-agent-helper-promote-to-skill
              primitive-agent-helper-promote-to-skill)
+       (cons 'primitive-agent-test-eval-source-result
+             primitive-agent-test-eval-source-result)
        (cons 'primitive-plan-create! primitive-plan-create!)
        (cons 'primitive-plan-ref primitive-plan-ref)
        (cons 'primitive-plan-list primitive-plan-list)
