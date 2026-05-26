@@ -27,6 +27,7 @@
 (require 'agent-scheme-redaction)
 (require 'agent-scheme-reflect)
 (require 'agent-scheme-session)
+(require 'agent-scheme-test)
 (require 'agent-scheme-policy)
 
 (defconst agent-scheme--library-source-directory
@@ -78,12 +79,14 @@
     "(agent debugger)"
     "(agent helper)"
     "(agent job)"
+    "(agent test)"
     "(agent diagnostics)"
     "(agent diff)"
     "(agent vcs)"
     "(agent network)"
     "(agent capability)"
     "(agent capability primitive)"
+    "(agent test primitive)"
     "(agent task)"
     "(agent memory)"
     "(agent plan)"
@@ -106,7 +109,9 @@
     ("(agent network)"
      . "../scheme/agent/network.sld")
     ("(agent task)"
-     . "../scheme/agent/task.sld"))
+     . "../scheme/agent/task.sld")
+    ("(agent test)"
+     . "../scheme/agent/test.sld"))
   "Checked-in portable Agent Scheme libraries loaded as Scheme source.")
 
 ;; Bootstrap libraries are registered lazily into the current evaluation
@@ -373,6 +378,10 @@
       key
       (agent-scheme-job-primitive-specs)
       context))
+    ("(agent test)"
+     (unless (gethash key (agent-scheme--eval-context-libraries context))
+       (agent-scheme--register-source-library
+        (agent-scheme--agent-source-library-source key) context environment)))
     ("(agent capability)"
      (unless (gethash key (agent-scheme--eval-context-libraries context))
        (agent-scheme--register-source-library
@@ -401,6 +410,11 @@
      (agent-scheme--register-primitive-library
       key
       (agent-scheme-capability-primitive-specs)
+      context))
+    ("(agent test primitive)"
+     (agent-scheme--register-primitive-library
+      key
+      (agent-scheme-test-primitive-specs)
       context))
     ("(agent memory)"
      (agent-scheme--register-primitive-library

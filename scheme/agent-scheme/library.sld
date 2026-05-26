@@ -120,11 +120,13 @@
         (agent debugger)
         (agent helper)
         (agent job)
+        (agent test)
         (agent diff)
         (agent vcs)
         (agent network)
         (agent capability)
         (agent capability primitive)
+        (agent test primitive)
         (agent memory)
         (agent plan)
         (agent models)
@@ -146,7 +148,10 @@
          "agent/vcs.sld")
         ((agent network)
          "scheme/agent/network.sld"
-         "agent/network.sld")))
+         "agent/network.sld")
+        ((agent test)
+         "scheme/agent/test.sld"
+         "agent/test.sld")))
 
     ;; Checked-in standard libraries loaded as portable Scheme source files.
     (define standard-source-library-load-paths
@@ -904,6 +909,12 @@
           (library-primitive-spec 'job-yields 'primitive-job-yields 1 2)
           (library-primitive-spec 'job-status 'primitive-job-status 1 1))
          context))
+       ((equal? key '(agent test))
+        (if (not (library-registry-ref context key))
+            (register-source-library!
+             (agent-source-library-source key)
+             context
+             environment)))
        ((equal? key '(agent capability))
         (if (not (library-registry-ref context key))
             (register-source-library!
@@ -955,6 +966,15 @@
           (library-primitive-spec 'call-with-capability-grant
                                   'primitive-call-with-capability-grant
                                   2
+                                  2))
+         context))
+       ((equal? key '(agent test primitive))
+        (register-primitive-library!
+         key
+         (list
+          (library-primitive-spec 'agent-test-eval-source-result
+                                  'primitive-agent-test-eval-source-result
+                                  1
                                   2))
          context))
        ((equal? key '(agent memory))

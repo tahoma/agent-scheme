@@ -102,6 +102,84 @@ references, tests, resources, and a `SKILL.scm` payload suitable for later
 native skill packaging. Writing candidate files is separate and uses the
 `helper-skill-candidate-write` policy gate.
 
+## Self-Tests
+
+Helpers and skills can use `(agent test)` for lightweight checks that run in the
+same Scheme session as the helper code. Results are Scheme-readable datums with
+`pass`, `fail`, `error`, `skipped`, and `budget-exhausted` statuses.
+
+A helper library can load its forms and run tests from the REPL without Emacs
+batch test execution:
+
+```scheme
+(import (scheme base)
+        (agent helper)
+        (agent test))
+
+(agent-helper-save!
+ '(agent helpers math)
+ '((define (double x) (+ x x))))
+
+(agent-helper-load '(agent helpers math))
+
+(test-run
+ (test-group '(agent helpers math)
+   (test-case 'double-small (double 21) 42)
+   (test-error 'double-type-error
+               (error "expected number" 'double)
+               error-object?)))
+```
+
+Native skill manifests and exported skill packages can carry source tests as
+datums. `skill-test-run` evaluates those source strings through normal Agent
+Scheme evaluation, so the usual sandbox policy and budget limits still apply:
+
+```scheme
+(import (scheme base)
+        (agent test))
+
+(define skill
+  '(agent-skill
+    (name "math-helper")
+    (tests (((name double-source)
+             (source "(import (scheme base)) (+ 21 21)")
+             (expect "42")
+             (options ((max-steps 200))))))))
+
+(skill-test-run skill)
+```
+
+Vendored SRFI 64-style results can be adapted into the same result shape. This
+keeps SRFI compatibility at the reporting layer now, while leaving SRFI 252
+property testing for a later compatibility layer:
+
+```scheme
+(import (scheme base)
+        (agent test))
+
+(skill-test
+ 'vendored-srfi
+ '(srfi-64
+   (test-name append-empty)
+   (result pass)
+   (expected (1 2))
+   (actual (1 2))))
+
+(skill-test-run 'vendored-srfi)
+```
+
+Failed results can be yielded back to the agent:
+
+```scheme
+(import (scheme base)
+        (agent io)
+        (agent test))
+
+(test-yield-failures
+ (test-group 'math
+   (test-case 'wrong-sum (+ 1 1) 3)))
+```
+
 ## Boundaries
 
 Helper libraries differ from R7RS standard libraries. R7RS standard libraries

@@ -2592,6 +2592,89 @@
 
 (let* ((result
         (agent-scheme-eval-source-result
+         "(import (scheme base) (agent test))
+          (define run
+            (test-group 'portable-arithmetic
+              (test-case 'passes (+ 1 1) 2)
+              (test-case 'fails (+ 1 1) 3)
+              (test-error 'expected-error (error \"boom\") error-object?)))
+          (test-run 'portable-arithmetic)"))
+       (value (field-value result 'value)))
+  (check 'agent-test-group-results
+         (and (equal? (field-value result 'status) 'ok)
+              (equal? (car value) 'agent-test-group)
+              (string-contains?
+               (agent-scheme-value->external value)
+               "(summary (total 3) (pass 2) (fail 1) (error 0) (skipped 0) (budget-exhausted 0))")
+              #t)
+         #t))
+
+(let* ((result
+        (agent-scheme-eval-source-result
+         "(import (scheme base) (agent test) (agent io))
+          (define run
+            (test-group 'portable-yield
+              (test-case 'bad (+ 1 1) 3)))
+          (test-yield-failures run)
+          'done"))
+       (events (field-value result 'events)))
+  (check 'agent-test-yield-failures
+         (and (equal? (field-value result 'status) 'ok)
+              (string-contains?
+               (agent-scheme-result->external (list 'events events))
+               "(yield (agent-test-failures")
+              #t)
+         #t))
+
+(let* ((result
+        (agent-scheme-eval-source-result
+         "(import (scheme base) (agent test))
+          (skill-test
+           'portable-skill
+           '((name source-pass)
+             (source \"(import (scheme base)) (+ 20 22)\")
+             (expect \"42\")))
+          (skill-test
+           'portable-skill
+           '(srfi-64 (test-name srfi-pass) (result pass)))
+          (skill-test-run 'portable-skill)"))
+       (value (field-value result 'value)))
+  (check 'agent-test-skill-and-srfi64
+         (and (equal? (field-value result 'status) 'ok)
+              (equal? (car value) 'agent-test-group)
+              (string-contains?
+               (agent-scheme-value->external value)
+               "(kind skill)")
+              (string-contains?
+               (agent-scheme-value->external value)
+               "(summary (total 2) (pass 2) (fail 0) (error 0) (skipped 0) (budget-exhausted 0))")
+              #t)
+         #t))
+
+(let* ((result
+        (agent-scheme-eval-source-result
+         "(import (scheme base) (agent test))
+          (skill-test
+           'portable-budget
+           '((name budgeted-loop)
+             (source \"(define (loop) (loop)) (loop)\")
+             (expect ok)
+             (options ((max-steps 20)))))
+          (skill-test-run 'portable-budget)"))
+       (value (field-value result 'value)))
+  (check 'agent-test-budget-exhaustion-status
+         (and (equal? (field-value result 'status) 'ok)
+              (string-contains?
+               (agent-scheme-value->external value)
+               "(status budget-exhausted)")
+              (string-contains?
+               (agent-scheme-value->external value)
+               "(summary (total 1) (pass 0) (fail 0) (error 0) (skipped 0) (budget-exhausted 1))")
+              #t)
+         #t))
+
+(let* ((result
+        (agent-scheme-eval-source-result
          "(import (scheme base) (agent plan))
           (plan-create!
            '(plan
