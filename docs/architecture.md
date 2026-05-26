@@ -489,6 +489,7 @@ batch mode unless tests or callers install an explicit confirmation function.
 | `window-session` | `confirm` | `(emacs buffer)` and `(emacs window)` expose `buffer-switch!`, `window-select!`, `window-split!`, and safe `window-delete!`; mutating session capabilities require matching grants by default. |
 | `command-process` | `confirm` | `(emacs command)` exposes `command-call!` for user-customizable whitelisted commands, and `(emacs project)` exposes compile helpers; direct shell/process launch remains out of scope unless a whitelisted capability and policy decision allow it. |
 | `standard-host-effect` | `allow` | Host-effecting standard Scheme procedures still require their narrower path or session policy, such as `:file-paths`; without that grant they deny and audit. |
+| `debugger-recovery` | `confirm` | Emacs debugger restarts that retry, provide a value, define a binding, or import a library require host policy before they mutate session state or retry work. |
 | `raw-emacs-lisp` | `deny` | Raw host evaluation stays unavailable; no raw Emacs Lisp evaluation surface is registered. |
 | `approval-resolution` | `deny` | Scheme code can create and observe approval records, but resolving approvals is host-side by default unless automation policy explicitly allows it. |
 | `skill-discovery-activation` | `confirm` | Skill discovery and activation require an approval callback by default. |

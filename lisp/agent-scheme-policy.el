@@ -29,6 +29,7 @@
     window-session
     command-process
     standard-host-effect
+    debugger-recovery
     raw-emacs-lisp
     approval-resolution
     skill-discovery-activation
@@ -57,6 +58,7 @@
     (window-session . confirm)
     (command-process . confirm)
     (standard-host-effect . allow)
+    (debugger-recovery . confirm)
     (raw-emacs-lisp . deny)
     (approval-resolution . deny)
     (skill-discovery-activation . confirm)
