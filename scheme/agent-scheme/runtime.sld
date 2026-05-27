@@ -47,6 +47,7 @@
           formals?
           formals-required
           formals-rest
+          make-documentation-metadata
           documentation-metadata?
           documentation-metadata-fields
           documentation-metadata-origins
