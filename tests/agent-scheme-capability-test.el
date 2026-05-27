@@ -313,6 +313,82 @@
       (should
        (string-match-p "stale buffer handle" (cadr condition))))))
 
+(ert-deftest agent-scheme-capability-test-handle-lifecycle-metadata ()
+  "Expose inspectable lifecycle metadata for opaque handles."
+  (agent-scheme-session-clear!)
+  (let ((buffer (generate-new-buffer "agent-scheme-capability-lifecycle")))
+    (unwind-protect
+        (progn
+          (agent-scheme-session-create! 'named '(:id "handle-lifecycle"))
+          (with-current-buffer buffer
+            (let ((external
+                   (agent-scheme-capability-test--value-external
+                    (agent-scheme-session-eval-source
+                     "handle-lifecycle"
+                     "(import (scheme base) (agent capability) (emacs buffer))
+                      (define saved (emacs-current-buffer))
+                      (list (handle-live? saved)
+                            (handle-kind saved)
+                            (handle-ref saved)
+                            (handle-revalidate saved))"))))
+              (should (string-match-p (regexp-quote "(#t buffer") external))
+              (should (string-match-p "(handle (id h-[0-9]+)" external))
+              (should
+               (string-match-p (regexp-quote "(kind buffer)") external))
+              (should
+               (string-match-p (regexp-quote "(status live)") external))
+              (should
+               (string-match-p
+                (regexp-quote "(owner session handle-lifecycle)")
+                external))
+              (should
+               (string-match-p
+                (regexp-quote "(created-by \"emacs-current-buffer\")")
+                external))
+              (should
+               (string-match-p
+                (regexp-quote
+                 "(source (buffer-name \"agent-scheme-capability-lifecycle\")")
+                external))
+              (should
+               (string-match-p (regexp-quote "(last-validated") external)))))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer))
+      (agent-scheme-session-clear!))))
+
+(ert-deftest agent-scheme-capability-test-handle-revalidate-and-release ()
+  "Revalidate stale handles and release them through public primitives."
+  (agent-scheme-session-clear!)
+  (let ((buffer (generate-new-buffer "agent-scheme-capability-release")))
+    (unwind-protect
+        (progn
+          (agent-scheme-session-create! 'named '(:id "handle-release"))
+          (with-current-buffer buffer
+            (agent-scheme-session-eval-source
+             "handle-release"
+             "(import (scheme base) (agent capability) (emacs buffer))
+              (define saved (emacs-current-buffer))
+              saved"))
+          (kill-buffer buffer)
+          (setq buffer nil)
+          (let ((external
+                 (agent-scheme-capability-test--value-external
+                  (agent-scheme-session-eval-source
+                   "handle-release"
+                   "(import (scheme base) (agent capability))
+                    (list (handle-live? saved)
+                          (handle-revalidate saved)
+                          (handle-release! saved)
+                          (handle-ref saved))"))))
+            (should (string-match-p (regexp-quote "(#f") external))
+            (should (string-match-p (regexp-quote "(status stale)") external))
+            (should (string-match-p
+                     (regexp-quote "(status released)") external))
+            (should (string-match-p (regexp-quote "#f)") external))))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer))
+      (agent-scheme-session-clear!))))
+
 (ert-deftest agent-scheme-capability-test-success-outcomes-are-audited ()
   "Audit successful capability outcomes separately from policy decisions."
   (agent-scheme-audit-clear)

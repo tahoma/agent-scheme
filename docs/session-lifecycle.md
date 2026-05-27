@@ -86,6 +86,7 @@ The `(agent session)` library exposes lifecycle procedures:
 (session-snapshot! id options)
 (session-fork! id options)
 (session-retire! id)
+(session-handles session-or-id)
 ```
 
 `options` is a Scheme association list. Common fields are:
@@ -106,6 +107,70 @@ handles before a host capability can use them.
 The Emacs bootstrap also exposes matching `agent-scheme-session-*` functions
 and `agent-scheme-session-eval-source` for evaluating source inside a durable
 session.
+
+## Handle Lifetime
+
+Opaque handles are live references to adapter-owned host resources. The handle
+value is intentionally small, such as `(handle buffer h-17)`, and can only be
+used by passing it back to a capability that knows how to revalidate that
+resource. Scheme code can inspect the lifecycle record through `(agent
+capability)`:
+
+```scheme
+(handle-ref handle-or-id)
+(handle-live? handle-or-id)
+(handle-kind handle-or-id)
+(handle-revalidate handle-or-id)
+(handle-release! handle-or-id)
+```
+
+`handle-ref` and `handle-revalidate` return a Scheme-readable metadata record
+when the handle is still known:
+
+```scheme
+(handle
+  (id h-17)
+  (kind buffer)
+  (status live)
+  (owner session project-main)
+  (created-by "emacs-current-buffer")
+  (created-at "2026-05-27T00:00:00-0700")
+  (last-validated "2026-05-27T00:00:00-0700")
+  (source (buffer-name "notes.scm") (file "/repo/notes.scm"))
+  (durable-reference (buffer-name "notes.scm") (file "/repo/notes.scm")))
+```
+
+The public statuses are `live`, `stale`, and `released`. Capability calls must
+revalidate a handle immediately before they observe or mutate host state. A
+stale handle fails closed with an Agent Scheme condition instead of falling
+back to a similarly named buffer, window, process, file, project, or stream.
+`handle-release!` removes the live registry entry and returns the final
+released metadata record; later `handle-ref` returns `#f`.
+
+Staleness rules are adapter-specific but conservative:
+
+- killed buffers, deleted windows, deleted frames, exited processes, closed
+  network streams, and removed file-backed resources become `stale`; file
+  handles for `metadata`, `create`, `write`, and `delete` operations remain
+  path-scoped authorization records because those operations may legitimately
+  target paths that do not exist at revalidation time
+- project handles are valid only while their local project root still resolves
+  to a directory
+- TRAMP and other remote buffers can be observed through read-only metadata but
+  remain blocked from mutation unless a future remote-capability grant names
+  that authority explicitly
+- retired sessions release the handles they own and clear the public
+  `handles` field
+- snapshots and forks preserve handle references only after revalidation; stale
+  entries move to `stale-handles` or are downgraded to durable references
+
+Helper scripts, memory records, transcripts, and persisted artifacts should not
+store live handles as durable state. Store durable references instead, such as
+file paths, buffer names, project roots, process command records, transcript
+ids, or explicit helper artifact ids. On resume or restore, reacquire a fresh
+handle through the relevant capability and check `handle-live?` before using
+it. A stored handle is acceptable only inside the owning live session, and only
+as a short-lived capability argument.
 
 Foreground calls to `agent-scheme-session-eval-source` run to completion before
 the caller regains control.  Background work uses `(agent job)` and locks the

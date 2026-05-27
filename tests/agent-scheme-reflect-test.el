@@ -44,7 +44,7 @@
               (map exact-integer? (cdr version))
               (map (lambda (component) (>= component 0))
                    (cdr version))))")
-    "((agent-scheme-version 0 14 11) (#t #t #t) (#t #t #t))")))
+    "((agent-scheme-version 0 14 12) (#t #t #t) (#t #t #t))")))
 
 (ert-deftest agent-scheme-reflect-test-simple-string-docstrings ()
   "Expose simple procedure docstrings through `(agent reflect)'."
@@ -206,7 +206,7 @@
           (examples . (((source . \"(rich cfg)\")
                         (result . (session cfg)))))
           (see-also . (current-context session-snapshot))
-          (since . (agent-scheme-version 0 14 11))
+          (since . (agent-scheme-version 0 14 12))
           (deprecated . #f)
           (stability . experimental)
           (authority-review . \"local only\"))
@@ -273,7 +273,7 @@
             (metadata-field 'rest-parameter 'parameters)
             (final-rich)
             (metadata-fields 'final-rich))")
-    "((session cfg) \"Create an Agent Scheme session from CONFIG.\\nThe session is represented as a datum.\" (config) \"Open an Agent Scheme session.\" ((config . \"Session configuration datum.\")) \"A session record.\" (pure) (((source . \"(rich cfg)\") (result session cfg))) (current-context session-snapshot) (agent-scheme-version 0 14 11) #f experimental \"local only\" \"Line one.\\nLine two.\\nLine three.\" (x) (((source . \"first\")) ((source . \"second\"))) (alpha beta) ((tag . kept)) \"Valid documentation.\" \"First result.\" #f ((arguments (x))) ((arguments (x))) ((arguments (x))) ((head . \"Required argument.\") (tail . \"Rest arguments.\")) #((returns . \"ordinary result\")) ((arguments ())))")))
+    "((session cfg) \"Create an Agent Scheme session from CONFIG.\\nThe session is represented as a datum.\" (config) \"Open an Agent Scheme session.\" ((config . \"Session configuration datum.\")) \"A session record.\" (pure) (((source . \"(rich cfg)\") (result session cfg))) (current-context session-snapshot) (agent-scheme-version 0 14 12) #f experimental \"local only\" \"Line one.\\nLine two.\\nLine three.\" (x) (((source . \"first\")) ((source . \"second\"))) (alpha beta) ((tag . kept)) \"Valid documentation.\" \"First result.\" #f ((arguments (x))) ((arguments (x))) ((arguments (x))) ((head . \"Required argument.\") (tail . \"Rest arguments.\")) #((returns . \"ordinary result\")) ((arguments ())))")))
 
 (ert-deftest agent-scheme-reflect-test-source-library-docstrings ()
   "Reflect docstrings from checked-in source library bindings."

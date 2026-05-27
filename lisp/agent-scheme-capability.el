@@ -237,13 +237,29 @@ TAI scale.  Hosts can update this value when leap-second policy changes."
                (:constructor agent-scheme--make-handle-entry (kind object))
                (:copier nil))
   "Private host object registered behind an opaque Agent Scheme handle."
-  kind object)
+  kind
+  object
+  id
+  (status 'live)
+  owner
+  created-by
+  created-at
+  last-validated
+  source
+  durable-reference
+  released-at)
 
 (defvar agent-scheme--handle-registry (make-hash-table :test #'equal)
   "Private table from opaque handle ids to live host objects.")
 
 (defvar agent-scheme--next-handle-number 0
   "Next numeric suffix for generated opaque handle ids.")
+
+(defvar agent-scheme--handle-registration-context nil
+  "Eval context used to annotate handles created by capability calls.")
+
+(defvar agent-scheme--handle-registration-created-by nil
+  "Capability binding currently creating a handle, or nil.")
 
 (defvar agent-scheme--emacs-capability-preauthorized nil
   "Non-nil while a wrapped Emacs capability has already passed policy.")
@@ -3483,9 +3499,12 @@ OPERATION defaults to BINDING and may be a symbol or string."
                        :source source
                        :grant grant-id
                        :status 'live)))
-    (puthash id
-             (agent-scheme--make-handle-entry 'network-stream object)
-             agent-scheme--handle-registry)
+    (puthash
+     id
+     (agent-scheme--initialize-handle-entry!
+      (agent-scheme--make-handle-entry 'network-stream object)
+      id 'network-stream object)
+     agent-scheme--handle-registry)
     (agent-scheme-audit-record
      'capability-handle
      `((handle . ,(agent-scheme--network-stream-handle-datum
@@ -4129,6 +4148,31 @@ synthetic file grant so existing callers share the capability vocabulary."
       (setf (agent-scheme--eval-context-active-capability-grants context)
             active))))
 
+(defun agent-scheme--primitive-handle-ref (arguments _context)
+  "Primitive handle-ref over ARGUMENTS."
+  (or (agent-scheme-capability-handle-ref (car arguments))
+      agent-scheme-false))
+
+(defun agent-scheme--primitive-handle-live? (arguments _context)
+  "Primitive handle-live? over ARGUMENTS."
+  (agent-scheme--scheme-boolean-value
+   (agent-scheme-capability-handle-live-p (car arguments))))
+
+(defun agent-scheme--primitive-handle-kind (arguments _context)
+  "Primitive handle-kind over ARGUMENTS."
+  (or (agent-scheme-capability-handle-kind (car arguments))
+      agent-scheme-false))
+
+(defun agent-scheme--primitive-handle-revalidate (arguments _context)
+  "Primitive handle-revalidate over ARGUMENTS."
+  (or (agent-scheme-capability-revalidate-handle (car arguments))
+      agent-scheme-false))
+
+(defun agent-scheme--primitive-handle-release! (arguments _context)
+  "Primitive handle-release! over ARGUMENTS."
+  (or (agent-scheme-capability-release-handle-datum (car arguments))
+      agent-scheme-false))
+
 (defun agent-scheme-capability-primitive-specs ()
   "Return primitive specs for the private `(agent capability primitive)' library."
   `(("grant-capability!" ,#'agent-scheme--primitive-grant-capability 1 1)
@@ -4137,7 +4181,12 @@ synthetic file grant so existing callers share the capability vocabulary."
     ("grant-attenuate" ,#'agent-scheme--primitive-grant-attenuate 2 2)
     ("grant-revoke!" ,#'agent-scheme--primitive-grant-revoke 1 1)
     ("call-with-capability-grant"
-     ,#'agent-scheme--primitive-call-with-capability-grant 2 2)))
+     ,#'agent-scheme--primitive-call-with-capability-grant 2 2)
+    ("handle-ref" ,#'agent-scheme--primitive-handle-ref 1 1)
+    ("handle-live?" ,#'agent-scheme--primitive-handle-live? 1 1)
+    ("handle-kind" ,#'agent-scheme--primitive-handle-kind 1 1)
+    ("handle-revalidate" ,#'agent-scheme--primitive-handle-revalidate 1 1)
+    ("handle-release!" ,#'agent-scheme--primitive-handle-release! 1 1)))
 
 (defun agent-scheme--authorize-emacs-capability
     (name arguments context)
@@ -4194,7 +4243,9 @@ synthetic file grant so existing callers share the capability vocabulary."
     (condition-case condition
         (let ((result
                (let ((agent-scheme--emacs-capability-preauthorized t))
-                 (funcall function arguments context))))
+                 (let ((agent-scheme--handle-registration-context context)
+                       (agent-scheme--handle-registration-created-by name))
+                   (funcall function arguments context)))))
           (agent-scheme--audit-emacs-capability-result
            name
            arguments
@@ -4218,12 +4269,136 @@ synthetic file grant so existing callers share the capability vocabulary."
   (lambda (arguments context)
     (agent-scheme--call-emacs-capability name function arguments context)))
 
+(defun agent-scheme--handle-timestamp ()
+  "Return a public timestamp for handle metadata."
+  (format-time-string "%Y-%m-%dT%H:%M:%S%z"))
+
+(defun agent-scheme--handle-symbol (name)
+  "Return NAME as an Agent Scheme metadata symbol."
+  (agent-scheme--intern-symbol
+   (cond
+    ((agent-scheme-symbol-p name)
+     (agent-scheme-symbol-name name))
+    ((symbolp name)
+     (symbol-name name))
+    ((stringp name)
+     name)
+    (t
+     (format "%S" name)))))
+
+(defun agent-scheme--handle-field (name &rest values)
+  "Return a Scheme-readable handle metadata field."
+  (cons (agent-scheme--handle-symbol name) values))
+
+(defun agent-scheme--handle-owner-from-context (context)
+  "Return the owner metadata for a handle created in CONTEXT."
+  (when-let ((session-id
+              (and context
+                   (agent-scheme--eval-context-session-id context))))
+    (list (agent-scheme--handle-symbol "session")
+          (agent-scheme--handle-symbol session-id))))
+
+(defun agent-scheme--safe-project-root (project)
+  "Return PROJECT's root as a directory string, or nil."
+  (condition-case nil
+      (when project
+        (file-name-as-directory (expand-file-name (project-root project))))
+    (error nil)))
+
+(defun agent-scheme--handle-source-for (kind object)
+  "Return Scheme-readable source metadata for host OBJECT of KIND."
+  (pcase kind
+    ('buffer
+     (list
+      (agent-scheme--handle-field
+       "buffer-name"
+       (if (buffer-live-p object) (buffer-name object) agent-scheme-false))
+      (agent-scheme--handle-field
+       "file"
+       (if (and (buffer-live-p object)
+                (buffer-local-value 'buffer-file-name object))
+           (buffer-local-value 'buffer-file-name object)
+         agent-scheme-false))))
+    ('window
+     (list
+      (agent-scheme--handle-field
+       "window-buffer"
+       (if (window-live-p object)
+           (buffer-name (window-buffer object))
+         agent-scheme-false))))
+    ('frame
+     (list
+      (agent-scheme--handle-field
+       "frame-name"
+       (if (frame-live-p object)
+           (or (frame-parameter object 'name)
+               agent-scheme-false)
+         agent-scheme-false))))
+    ('project
+     (list
+      (agent-scheme--handle-field
+       "project-root"
+       (or (agent-scheme--safe-project-root object)
+           agent-scheme-false))))
+    ('file
+     (list
+      (agent-scheme--handle-field
+       "path"
+       (or (plist-get object :path) agent-scheme-false))
+      (agent-scheme--handle-field
+       "resolved-path"
+       (or (plist-get object :resolved-path) agent-scheme-false))))
+    ('process
+     (list
+      (agent-scheme--handle-field
+       "process-name"
+       (or (agent-scheme--process-object-name object)
+           agent-scheme-false))
+      (agent-scheme--handle-field
+       "command"
+       (or (agent-scheme--process-object-command object)
+           agent-scheme-false))))
+    ('network-stream
+     (list
+      (agent-scheme--handle-field
+       "url"
+       (or (plist-get object :url) agent-scheme-false))))
+    (_ nil)))
+
+(defun agent-scheme--handle-durable-reference-for (kind source)
+  "Return durable-reference metadata for KIND and SOURCE."
+  (pcase kind
+    ((or 'buffer 'project 'file)
+     source)
+    (_ nil)))
+
+(defun agent-scheme--initialize-handle-entry! (entry id kind object)
+  "Populate lifecycle metadata on ENTRY for handle ID, KIND, and OBJECT."
+  (let* ((timestamp (agent-scheme--handle-timestamp))
+         (source (agent-scheme--handle-source-for kind object)))
+    (setf (agent-scheme--handle-entry-id entry) id)
+    (setf (agent-scheme--handle-entry-status entry) 'live)
+    (setf (agent-scheme--handle-entry-owner entry)
+          (agent-scheme--handle-owner-from-context
+           agent-scheme--handle-registration-context))
+    (setf (agent-scheme--handle-entry-created-by entry)
+          agent-scheme--handle-registration-created-by)
+    (setf (agent-scheme--handle-entry-created-at entry) timestamp)
+    (setf (agent-scheme--handle-entry-last-validated entry) timestamp)
+    (setf (agent-scheme--handle-entry-source entry) source)
+    (setf (agent-scheme--handle-entry-durable-reference entry)
+          (agent-scheme--handle-durable-reference-for kind source))
+    entry))
+
 (defun agent-scheme--register-handle (kind object)
   "Register live host OBJECT of KIND and return an opaque Scheme handle."
   (let ((id (format "h-%d" (cl-incf agent-scheme--next-handle-number))))
-    (puthash id
-             (agent-scheme--make-handle-entry kind object)
-             agent-scheme--handle-registry)
+    (puthash
+     id
+     (agent-scheme--initialize-handle-entry!
+      (agent-scheme--make-handle-entry kind object)
+      id kind object)
+     agent-scheme--handle-registry)
     (agent-scheme--make-handle kind id)))
 
 (defun agent-scheme--scheme-boolean-value (value)
@@ -4683,43 +4858,190 @@ synthetic file grant so existing callers share the capability vocabulary."
 
 (defun agent-scheme-capability--entry-live-p (entry)
   "Return non-nil when ENTRY still points at a live host object."
-  (pcase (agent-scheme--handle-entry-kind entry)
-    ('buffer
-     (buffer-live-p (agent-scheme--handle-entry-object entry)))
-    ('window
-     (window-live-p (agent-scheme--handle-entry-object entry)))
-    ('frame
-     (frame-live-p (agent-scheme--handle-entry-object entry)))
-    ('process
-     (agent-scheme--process-object-live-p
-      (agent-scheme--handle-entry-object entry)))
-    ('network-stream
-     (agent-scheme--network-stream-object-live-p
-      (agent-scheme--handle-entry-object entry)))
-    ('project
-     t)
-    (_
-     t)))
+  (and (not (memq (agent-scheme--handle-entry-status entry)
+                  '(closed stale expired revoked released)))
+       (pcase (agent-scheme--handle-entry-kind entry)
+         ('buffer
+          (buffer-live-p (agent-scheme--handle-entry-object entry)))
+         ('window
+          (window-live-p (agent-scheme--handle-entry-object entry)))
+         ('frame
+          (frame-live-p (agent-scheme--handle-entry-object entry)))
+         ('process
+          (agent-scheme--process-object-live-p
+           (agent-scheme--handle-entry-object entry)))
+         ('network-stream
+          (agent-scheme--network-stream-object-live-p
+           (agent-scheme--handle-entry-object entry)))
+         ('file
+          (let* ((object (agent-scheme--handle-entry-object entry))
+                 (operation (plist-get object :operation))
+                 (status (plist-get object :status))
+                 (path (or (plist-get object :resolved-path)
+                           (plist-get object :path))))
+            (and (not (memq status '(closed stale expired revoked released)))
+                 (or (memq operation '(create write delete metadata))
+                     (and path (file-exists-p path))))))
+         ('project
+          (let ((root (agent-scheme--safe-project-root
+                       (agent-scheme--handle-entry-object entry))))
+            (and root
+                 (not (file-remote-p root))
+                 (file-directory-p root))))
+         (_
+          t))))
+
+(defun agent-scheme-capability--revalidate-entry! (entry)
+  "Refresh ENTRY lifecycle status and return ENTRY."
+  (let ((live (agent-scheme-capability--entry-live-p entry))
+        (timestamp (agent-scheme--handle-timestamp)))
+    (setf (agent-scheme--handle-entry-status entry)
+          (if live 'live 'stale))
+    (setf (agent-scheme--handle-entry-last-validated entry) timestamp)
+    (when live
+      (let* ((kind (agent-scheme--handle-entry-kind entry))
+             (source (agent-scheme--handle-source-for
+                      kind
+                      (agent-scheme--handle-entry-object entry))))
+        (setf (agent-scheme--handle-entry-source entry) source)
+        (setf (agent-scheme--handle-entry-durable-reference entry)
+              (agent-scheme--handle-durable-reference-for kind source))))
+    entry))
+
+(defun agent-scheme-capability--release-entry! (entry)
+  "Mark ENTRY released and return it."
+  (let ((timestamp (agent-scheme--handle-timestamp)))
+    (setf (agent-scheme--handle-entry-status entry) 'released)
+    (setf (agent-scheme--handle-entry-last-validated entry) timestamp)
+    (setf (agent-scheme--handle-entry-released-at entry) timestamp)
+    entry))
+
+(defun agent-scheme-capability--handle-id (value description)
+  "Return handle id string from VALUE for DESCRIPTION."
+  (cond
+   ((agent-scheme-handle-p value)
+    (agent-scheme-handle-id value))
+   ((agent-scheme-symbol-p value)
+    (agent-scheme-symbol-name value))
+   ((symbolp value)
+    (symbol-name value))
+   ((stringp value)
+    value)
+   (t
+    (agent-scheme--eval-error
+     "%s expected a handle id or handle, got %s"
+     description
+     (agent-scheme-value->external value)))))
+
+(defun agent-scheme-capability--handle-entry (value description)
+  "Return registry entry named by VALUE, or nil when absent."
+  (gethash
+   (agent-scheme-capability--handle-id value description)
+   agent-scheme--handle-registry))
+
+(defun agent-scheme-capability-handle-metadata (entry)
+  "Return ENTRY as an inspectable Scheme-readable handle record."
+  (append
+   (list
+    (agent-scheme--handle-symbol "handle")
+    (agent-scheme--handle-field
+     "id" (agent-scheme--handle-symbol
+           (agent-scheme--handle-entry-id entry)))
+    (agent-scheme--handle-field
+     "kind" (agent-scheme--handle-symbol
+             (agent-scheme--handle-entry-kind entry)))
+    (agent-scheme--handle-field
+     "status" (agent-scheme--handle-symbol
+               (agent-scheme--handle-entry-status entry))))
+   (when (agent-scheme--handle-entry-owner entry)
+     (list
+      (apply #'agent-scheme--handle-field
+             "owner"
+             (agent-scheme--handle-entry-owner entry))))
+   (when (agent-scheme--handle-entry-created-by entry)
+     (list
+      (agent-scheme--handle-field
+       "created-by"
+       (agent-scheme--handle-entry-created-by entry))))
+   (when (agent-scheme--handle-entry-created-at entry)
+     (list
+      (agent-scheme--handle-field
+       "created-at"
+       (agent-scheme--handle-entry-created-at entry))))
+   (when (agent-scheme--handle-entry-last-validated entry)
+     (list
+      (agent-scheme--handle-field
+       "last-validated"
+       (agent-scheme--handle-entry-last-validated entry))))
+   (when (agent-scheme--handle-entry-source entry)
+     (list
+      (apply #'agent-scheme--handle-field
+             "source"
+             (agent-scheme--handle-entry-source entry))))
+   (when (agent-scheme--handle-entry-durable-reference entry)
+     (list
+      (apply #'agent-scheme--handle-field
+             "durable-reference"
+             (agent-scheme--handle-entry-durable-reference entry))))
+   (when (agent-scheme--handle-entry-released-at entry)
+     (list
+      (agent-scheme--handle-field
+       "released-at"
+       (agent-scheme--handle-entry-released-at entry))))))
+
+;;;###autoload
+(defun agent-scheme-capability-handle-ref (handle-or-id)
+  "Return lifecycle metadata for HANDLE-OR-ID, or nil when absent."
+  (when-let ((entry (agent-scheme-capability--handle-entry
+                     handle-or-id "handle-ref")))
+    (agent-scheme-capability-handle-metadata
+     (agent-scheme-capability--revalidate-entry! entry))))
+
+;;;###autoload
+(defun agent-scheme-capability-handle-kind (handle-or-id)
+  "Return HANDLE-OR-ID's kind symbol, or nil when it is unknown."
+  (cond
+   ((agent-scheme-handle-p handle-or-id)
+    (agent-scheme--handle-symbol (agent-scheme-handle-kind handle-or-id)))
+   ((agent-scheme-capability--handle-entry handle-or-id "handle-kind")
+    (agent-scheme--handle-symbol
+     (agent-scheme--handle-entry-kind
+      (agent-scheme-capability--handle-entry handle-or-id "handle-kind"))))
+   (t nil)))
+
+;;;###autoload
+(defun agent-scheme-capability-revalidate-handle (handle-or-id)
+  "Revalidate HANDLE-OR-ID and return lifecycle metadata, or nil."
+  (when-let ((entry (agent-scheme-capability--handle-entry
+                     handle-or-id "handle-revalidate")))
+    (agent-scheme-capability-handle-metadata
+     (agent-scheme-capability--revalidate-entry! entry))))
 
 ;;;###autoload
 (defun agent-scheme-capability-handle-live-p (handle)
   "Return non-nil when HANDLE names a currently live host object."
-  (and (agent-scheme-handle-p handle)
-       (let ((entry (gethash (agent-scheme-handle-id handle)
-                             agent-scheme--handle-registry)))
-         (and entry
-              (agent-scheme-capability--entry-live-p entry)))))
+  (when-let ((entry (agent-scheme-capability--handle-entry
+                     handle "handle-live?")))
+    (eq (agent-scheme--handle-entry-status
+         (agent-scheme-capability--revalidate-entry! entry))
+        'live)))
+
+;;;###autoload
+(defun agent-scheme-capability-release-handle-datum (handle-or-id)
+  "Release HANDLE-OR-ID and return released lifecycle metadata, or nil."
+  (let* ((id (agent-scheme-capability--handle-id
+              handle-or-id "handle-release!"))
+         (entry (gethash id agent-scheme--handle-registry)))
+    (when entry
+      (agent-scheme-capability--release-entry! entry)
+      (remhash id agent-scheme--handle-registry)
+      (agent-scheme-capability-handle-metadata entry))))
 
 ;;;###autoload
 (defun agent-scheme-capability-release-handle (handle)
   "Release HANDLE from the private registry.
 Return non-nil when a registry entry was removed."
-  (when (agent-scheme-handle-p handle)
-    (let* ((id (agent-scheme-handle-id handle))
-           (present (gethash id agent-scheme--handle-registry)))
-      (when present
-        (remhash id agent-scheme--handle-registry)
-        t))))
+  (and (agent-scheme-capability-release-handle-datum handle) t))
 
 ;;;###autoload
 (defun agent-scheme-capability-release-handles (handles)
@@ -4731,9 +5053,9 @@ Return non-nil when a registry entry was removed."
 
 (defun agent-scheme--live-buffer-for-handle (value description)
   "Return live Emacs buffer for handle VALUE."
-  (let ((buffer
-         (agent-scheme--handle-entry-object
-          (agent-scheme--handle-entry-for value 'buffer description))))
+  (let* ((entry (agent-scheme--handle-entry-for value 'buffer description))
+         (buffer (agent-scheme--handle-entry-object entry)))
+    (agent-scheme-capability--revalidate-entry! entry)
     (unless (buffer-live-p buffer)
       (agent-scheme--eval-error
        "stale buffer handle: %s" (agent-scheme-handle-id value)))
@@ -4741,9 +5063,9 @@ Return non-nil when a registry entry was removed."
 
 (defun agent-scheme--live-window-for-handle (value description)
   "Return live Emacs window for handle VALUE."
-  (let ((window
-         (agent-scheme--handle-entry-object
-          (agent-scheme--handle-entry-for value 'window description))))
+  (let* ((entry (agent-scheme--handle-entry-for value 'window description))
+         (window (agent-scheme--handle-entry-object entry)))
+    (agent-scheme-capability--revalidate-entry! entry)
     (unless (window-live-p window)
       (agent-scheme--eval-error
        "stale window handle: %s" (agent-scheme-handle-id value)))
@@ -4751,9 +5073,9 @@ Return non-nil when a registry entry was removed."
 
 (defun agent-scheme--live-frame-for-handle (value description)
   "Return live Emacs frame for handle VALUE."
-  (let ((frame
-         (agent-scheme--handle-entry-object
-          (agent-scheme--handle-entry-for value 'frame description))))
+  (let* ((entry (agent-scheme--handle-entry-for value 'frame description))
+         (frame (agent-scheme--handle-entry-object entry)))
+    (agent-scheme-capability--revalidate-entry! entry)
     (unless (frame-live-p frame)
       (agent-scheme--eval-error
        "stale frame handle: %s" (agent-scheme-handle-id value)))
@@ -4761,14 +5083,19 @@ Return non-nil when a registry entry was removed."
 
 (defun agent-scheme--project-for-handle (value description)
   "Return registered Emacs project for handle VALUE."
-  (agent-scheme--handle-entry-object
-   (agent-scheme--handle-entry-for value 'project description)))
+  (let ((entry (agent-scheme--handle-entry-for value 'project description)))
+    (unless (eq (agent-scheme--handle-entry-status
+                 (agent-scheme-capability--revalidate-entry! entry))
+                'live)
+      (agent-scheme--eval-error
+       "stale project handle: %s" (agent-scheme-handle-id value)))
+    (agent-scheme--handle-entry-object entry)))
 
 (defun agent-scheme--live-process-for-handle (value description)
   "Return live private process object for handle VALUE."
-  (let ((object
-         (agent-scheme--handle-entry-object
-          (agent-scheme--handle-entry-for value 'process description))))
+  (let* ((entry (agent-scheme--handle-entry-for value 'process description))
+         (object (agent-scheme--handle-entry-object entry)))
+    (agent-scheme-capability--revalidate-entry! entry)
     (unless (agent-scheme--process-object-live-p object)
       (agent-scheme--eval-error
        "stale process handle: %s" (agent-scheme-handle-id value)))

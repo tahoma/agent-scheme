@@ -967,7 +967,27 @@
           (library-primitive-spec 'call-with-capability-grant
                                   'primitive-call-with-capability-grant
                                   2
-                                  2))
+                                  2)
+          (library-primitive-spec 'handle-ref
+                                  'primitive-handle-ref
+                                  1
+                                  1)
+          (library-primitive-spec 'handle-live?
+                                  'primitive-handle-live?
+                                  1
+                                  1)
+          (library-primitive-spec 'handle-kind
+                                  'primitive-handle-kind
+                                  1
+                                  1)
+          (library-primitive-spec 'handle-revalidate
+                                  'primitive-handle-revalidate
+                                  1
+                                  1)
+          (library-primitive-spec 'handle-release!
+                                  'primitive-handle-release!
+                                  1
+                                  1))
          context))
        ((equal? key '(agent test primitive))
         (register-primitive-library!
