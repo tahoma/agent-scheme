@@ -131,7 +131,8 @@ Current procedures:
   not the canonical value. This scheme is roadmap-derived for now and can
   change once Agent Scheme has an explicit release policy.
 - `(current-capabilities)` returns public `host-capability` records from the
-  primitive manifest.
+  primitive manifest. Capability records expose operational metadata; callers
+  use `(documentation subject)` for the corresponding user-facing help text.
 - `(capability-info symbol-or-name)` returns one matching `host-capability`
   record, or `#f` if the capability is unavailable.
 - `(documentation subject)` returns a `documentation-metadata` record for a
@@ -140,11 +141,13 @@ Current procedures:
   symbol, binding name string, or procedure value. The record exposes generated
   signature metadata through `arguments` plus canonical body-literal fields
   such as `documentation`, `parameters`, `returns`, `effects`, `examples`, and
-  `see-also`. Primitive procedures first use manifest `documentation` metadata
-  when present, then fall back to registered implementation procedure
-  docstrings. Body-literal origin reports string, vector, or both literal
-  forms; primitive implementation fallback reports `(implementation-procedure
-  string)`; argument-only metadata reports `(signature)`.
+  `see-also`. Public primitive manifest entries carry manifest
+  `documentation` metadata with origin `(primitive-manifest string)`;
+  implementation docstrings remain a fallback for implementation-only or
+  generated primitive hooks. Body-literal origin reports string, vector, or
+  both literal forms; primitive implementation fallback reports
+  `(implementation-procedure string)`; argument-only metadata reports
+  `(signature)`.
 - `(current-policy)` returns the active policy category actions and per-run
   overrides.
 - `(current-budget)` returns evaluator step, host-call, event, event-node, and

@@ -191,9 +191,10 @@ subject from procedure-value documentation.
 Primitive bindings are not read as ordinary procedure bodies. Kernel
 primitives, standard host-effecting bindings, Agent primitive libraries, and
 host capability primitives therefore use the primitive manifest as their
-runtime documentation source. When a manifest record carries explicit
-`documentation` metadata, reflection uses that metadata first. When the
-manifest lacks explicit documentation, the bootstrap may derive a documentation
+runtime documentation source. Public primitive manifest entries should carry
+explicit `documentation` metadata with origin `(primitive-manifest string)`;
+tests guard that surface. When an implementation-only or generated manifest
+entry lacks explicit documentation, the bootstrap may derive a documentation
 field from the registered implementation procedure's own docstring. Reflected
 fallback metadata reports `(origin (implementation-procedure string))` instead
 of `(origin (body-literal string))` so tools can distinguish source body
@@ -242,9 +243,10 @@ Manifest-backed primitive documentation uses the same record shape:
   (kind procedure)
   (library (scheme base))
   (source kernel)
-  (origin (implementation-procedure string))
+  (origin (primitive-manifest string))
   (fields
-    ((documentation "Primitive + over ARGUMENTS."))))
+    ((documentation
+      "Return the sum of all numeric arguments, or 0 when called with no arguments."))))
 ```
 
 Field values are ordinary Scheme-readable data. The initial field set is:
@@ -312,11 +314,12 @@ records share one field record with the signature metadata. Procedure shorthand
 body-literal extraction rule.
 
 Primitive bindings can also be queried through the same reflection procedure.
-Explicit manifest documentation wins when present; otherwise the bootstrap
-falls back to registered implementation procedure docstrings where the host can
-provide them. The portable R7RS path records equivalent implementation
-documentation for representative primitive hooks because standard R7RS does not
-provide a procedure-docstring reflection API for implementation procedures.
+Explicit manifest documentation is required for public primitive manifest
+entries and wins over implementation fallback. The fallback remains available
+for implementation-only or generated primitive hooks where the host can provide
+a procedure docstring. The portable R7RS path uses manifest metadata for public
+primitive help because standard R7RS does not provide a procedure-docstring
+reflection API for implementation procedures.
 
 The current `(scheme case-lambda)` library is a portable macro that lowers each
 clause through an internal `lambda`, so ordinary evaluation still preserves the

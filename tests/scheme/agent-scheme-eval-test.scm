@@ -15,6 +15,8 @@
               agent-scheme-version
               agent-scheme-version-components
               context-audit-events
+              documentation-metadata?
+              documentation-metadata-fields
               network-capability-handle
               network-port-capability-handle
               new-eval-context
@@ -122,7 +124,7 @@
                        (symbol? (metadata-field 'variadic 'arguments)))"
                 "((first second) (head . tail) all () (#t #t) #t)")
 
-(check-external 'primitive-implementation-docstring-reflection
+(check-external 'primitive-manifest-docstring-reflection
                 "(import (scheme base) (scheme time) (agent reflect))
                  (define (field datum name)
                    (cadr (assq name (cdr datum))))
@@ -143,7 +145,7 @@
                        (field (documentation 'current-second) 'source)
                        (field (documentation 'current-second) 'origin)
                        (metadata-field 'current-second 'documentation))"
-                "((binding +) (scheme base) kernel (implementation-procedure string) \"Implement the `+' primitive over any number of numeric arguments.\" (procedure) \"Implement the `+' primitive over any number of numeric arguments.\" (scheme time) host-capability (implementation-procedure string) \"Implement R7RS `current-second` through a policy-gated clock read.\")")
+                "((binding +) (scheme base) kernel (primitive-manifest string) \"Return the sum of all numeric arguments, or 0 when called with no arguments.\" (procedure) \"Return the sum of all numeric arguments, or 0 when called with no arguments.\" (scheme time) host-capability (primitive-manifest string) \"Return the current time as a real number of seconds since the Unix epoch, subject to the clock capability policy.\")")
 
 (check-external 'docstring-edge-cases
                 "(import (scheme base) (agent reflect))
@@ -413,6 +415,21 @@
    ((equal? (cadr (assq 'name (car specs))) name) (car specs))
    (else (find-source-library-spec name (cdr specs)))))
 
+;; Return #t when SPEC carries public manifest documentation metadata.
+(define (manifest-spec-documented? spec)
+  (let ((entry (assq 'documentation spec)))
+    (if (and entry
+             (documentation-metadata? (cadr entry)))
+        (let ((field
+               (assq 'documentation
+                     (documentation-metadata-fields (cadr entry)))))
+          (if (and field
+                   (string? (cdr field))
+                   (> (string-length (cdr field)) 0))
+              #t
+              #f))
+        #f)))
+
 ;; Return #t when THUNK raises any portable Scheme condition.
 (define (raises? thunk)
   (guard (condition
@@ -560,6 +577,13 @@
                     (cadr (assq 'policy current-second))))
          '(host-time clock shared-capability-request
            standard-host-effect grant))
+  (let loop ((rest manifest-specs))
+    (if (not (null? rest))
+        (begin
+          (check 'primitive-manifest-public-docs
+                 (manifest-spec-documented? (car rest))
+                 #t)
+          (loop (cdr rest)))))
   (let ((read-char
          (find-manifest-spec '(scheme base) 'read-char manifest-specs)))
     (check 'primitive-manifest-port-runtime-path

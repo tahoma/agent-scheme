@@ -107,8 +107,8 @@
             (symbol? (metadata-field 'variadic 'arguments)))")
     "((first second) (head . tail) all () (#t #t) #t)")))
 
-(ert-deftest agent-scheme-reflect-test-primitive-implementation-docstrings ()
-  "Reflect primitive docs derived from registered implementation procedures."
+(ert-deftest agent-scheme-reflect-test-primitive-manifest-docstrings ()
+  "Reflect primitive docs supplied by manifest metadata."
   (agent-scheme-reflect-test--reset)
   (should
    (equal
@@ -133,7 +133,7 @@
             (field (documentation 'current-second) 'source)
             (field (documentation 'current-second) 'origin)
             (metadata-field 'current-second 'documentation))")
-    "((binding +) (scheme base) kernel (implementation-procedure string) \"Primitive + over ARGUMENTS.\" (procedure) \"Primitive + over ARGUMENTS.\" (scheme time) host-capability (implementation-procedure string) \"Primitive current-second over _ARGUMENTS.\")")))
+    "((binding +) (scheme base) kernel (primitive-manifest string) \"Return the sum of all numeric arguments, or 0 when called with no arguments.\" (procedure) \"Return the sum of all numeric arguments, or 0 when called with no arguments.\" (scheme time) host-capability (primitive-manifest string) \"Return the current time as a real number of seconds since the Unix epoch, subject to the clock capability policy.\")")))
 
 (ert-deftest agent-scheme-reflect-test-docstring-edge-cases ()
   "Reflect adjacent docstrings and preserve final-string body semantics."
