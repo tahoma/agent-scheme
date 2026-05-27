@@ -137,11 +137,12 @@
                             (caar datum)))
                       datum
                     (cdr datum))))
-      (seq-filter
-       (lambda (field)
-         (and (consp field)
-              (agent-scheme-redaction--symbol-name (car field))))
-       fields))))
+      (when (agent-scheme--proper-list-p fields)
+        (seq-filter
+         (lambda (field)
+           (and (consp field)
+                (agent-scheme-redaction--symbol-name (car field))))
+         fields)))))
 
 (defun agent-scheme-redaction--record-head (datum)
   "Return DATUM's record head name, or nil."

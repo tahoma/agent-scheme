@@ -135,28 +135,147 @@ evaluation context.")
   "Return a redacted printable representation of VALUE."
   (agent-scheme-redact (agent-scheme-value->external value) 'debugger))
 
-(defun agent-scheme-debugger--binding-record (name)
-  "Return a safe debugger binding record for NAME.
+(defun agent-scheme-debugger--documentation-datumize (value)
+  "Return VALUE as a Scheme-readable documentation datum."
+  (cond
+   ((or (eq value agent-scheme-true)
+        (eq value agent-scheme-false)
+        (agent-scheme-symbol-p value)
+        (agent-scheme-character-p value)
+        (agent-scheme-number-p value)
+        (agent-scheme-bytevector-p value)
+        (agent-scheme-record-p value)
+        (agent-scheme-record-type-p value)
+        (agent-scheme-handle-p value))
+    value)
+   ((eq value t)
+    agent-scheme-true)
+   ((null value)
+    nil)
+   ((symbolp value)
+    (agent-scheme-debugger--symbol value))
+   ((stringp value)
+    value)
+   ((integerp value)
+    (agent-scheme--make-canonical-integer value))
+   ((consp value)
+    (cons (agent-scheme-debugger--documentation-datumize (car value))
+          (agent-scheme-debugger--documentation-datumize (cdr value))))
+   ((vectorp value)
+    (vconcat
+     (mapcar #'agent-scheme-debugger--documentation-datumize
+             (append value nil))))
+   (t
+    (agent-scheme-value->external value))))
+
+(defun agent-scheme-debugger--documentation-origin (documentation)
+  "Return Scheme-readable origin data for DOCUMENTATION."
+  (let ((origins
+         (agent-scheme--documentation-metadata-origins documentation)))
+    (cond
+     ((null origins)
+      (list (agent-scheme-debugger--symbol "signature")))
+     ((equal origins '("implementation-procedure-string"))
+      (list (agent-scheme-debugger--symbol "implementation-procedure")
+            (agent-scheme-debugger--symbol "string")))
+     ((equal origins '("primitive-manifest-string"))
+      (list (agent-scheme-debugger--symbol "primitive-manifest")
+            (agent-scheme-debugger--symbol "string")))
+     (t
+      (cons (agent-scheme-debugger--symbol "body-literal")
+            (mapcar #'agent-scheme-debugger--symbol origins))))))
+
+(defun agent-scheme-debugger--documentation-fields (documentation)
+  "Return Scheme-readable field data for DOCUMENTATION."
+  (mapcar
+   (lambda (field)
+     (list (agent-scheme-debugger--symbol (car field))
+           (agent-scheme-debugger--documentation-datumize (cdr field))))
+   (agent-scheme--documentation-metadata-fields documentation)))
+
+(defun agent-scheme-debugger--documentation-metadata (documentation)
+  "Return a procedure-value documentation metadata datum."
+  (list
+   (agent-scheme-debugger--symbol "documentation-metadata")
+   (agent-scheme-debugger--field
+    "subject" (list (agent-scheme-debugger--symbol "procedure")))
+   (agent-scheme-debugger--field
+    "kind" (agent-scheme-debugger--symbol "procedure"))
+   (agent-scheme-debugger--field "library" agent-scheme-false)
+   (agent-scheme-debugger--field "source" agent-scheme-false)
+   (agent-scheme-debugger--field
+    "origin" (agent-scheme-debugger--documentation-origin documentation))
+   (agent-scheme-debugger--field
+    "fields" (agent-scheme-debugger--documentation-fields documentation))))
+
+(defun agent-scheme-debugger--procedure-documentation (value)
+  "Return debugger documentation for compound procedure VALUE, or nil."
+  (when (agent-scheme-procedure-p value)
+    (let* ((documentation (agent-scheme-procedure-documentation value))
+           (fields
+            (and documentation
+                 (agent-scheme--documentation-metadata-fields documentation))))
+      (when (assoc "documentation" fields)
+        (agent-scheme-redact
+         (agent-scheme-debugger--documentation-metadata documentation)
+         'debugger)))))
+
+(defun agent-scheme-debugger--binding-record (name &optional cell)
+  "Return a safe debugger binding record for NAME and optional CELL.
 Debugger environment frames intentionally expose binding names rather than
 binding values.  Values can contain closures, host handles, or large object
 graphs that are unsuitable for the stable public result datum."
-  (list
-   (agent-scheme-debugger--symbol "binding")
-   (agent-scheme-debugger--field
-    "name" (agent-scheme-debugger--symbol name))))
+  (append
+   (list
+    (agent-scheme-debugger--symbol "binding")
+    (agent-scheme-debugger--field
+     "name" (agent-scheme-debugger--symbol name)))
+   (when-let* ((value (and cell (agent-scheme--cell-value cell)))
+               (documentation
+                (agent-scheme-debugger--procedure-documentation value)))
+     (list
+      (agent-scheme-debugger--field
+       "procedure-documentation" documentation)))))
+
+(defun agent-scheme-debugger--binding-has-procedure-documentation-p (binding)
+  "Return non-nil when BINDING carries debugger procedure documentation."
+  (agent-scheme-debugger--field-value binding "procedure-documentation"))
+
+(defun agent-scheme-debugger--binding-name< (left right)
+  "Return non-nil when binding record LEFT sorts before RIGHT by name."
+  (string<
+   (or (agent-scheme-debugger--symbol-name
+        (agent-scheme-debugger--field-value left "name"))
+       "")
+   (or (agent-scheme-debugger--symbol-name
+        (agent-scheme-debugger--field-value right "name"))
+       "")))
 
 (defun agent-scheme-debugger--frame-bindings (environment)
   "Return safe current-frame bindings for ENVIRONMENT."
-  (let (names)
+  (let (bindings)
     (when environment
       (maphash
-       (lambda (name _cell)
-         (push name names))
+       (lambda (name cell)
+         (push (agent-scheme-debugger--binding-record name cell) bindings))
        (agent-scheme--environment-bindings environment)))
-    (mapcar
-     #'agent-scheme-debugger--binding-record
-     (seq-take (sort names #'string<)
-               agent-scheme-debugger--maximum-frame-bindings))))
+    (let* ((documented
+            (sort
+             (seq-filter
+              #'agent-scheme-debugger--binding-has-procedure-documentation-p
+              bindings)
+             #'agent-scheme-debugger--binding-name<))
+           (plain
+            (sort
+             (seq-remove
+              #'agent-scheme-debugger--binding-has-procedure-documentation-p
+              bindings)
+             #'agent-scheme-debugger--binding-name<))
+           (plain-limit
+            (max 0
+                 (- agent-scheme-debugger--maximum-frame-bindings
+                    (length documented)))))
+      (append documented (seq-take plain plain-limit)))))
 
 (defun agent-scheme-debugger--environment-frame (environment frame-id)
   "Return a safe debugger environment frame for ENVIRONMENT and FRAME-ID."

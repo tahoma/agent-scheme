@@ -36,6 +36,29 @@ The current environment snapshot is intentionally shallow. It exposes binding
 names, the frame id, and whether the frame was truncated. It does not expose
 binding values, closures, ports, handles, or host objects.
 
+When a binding's reachable value is a compound procedure with body-literal
+documentation, the binding record can also include `procedure-documentation`.
+That field is debugger metadata about the procedure value:
+
+```scheme
+(binding
+  (name private-helper)
+  (procedure-documentation
+    (documentation-metadata
+      (subject (procedure))
+      (kind procedure)
+      (library #f)
+      (source #f)
+      (origin (body-literal string))
+      (fields
+        ((arguments (x))
+         (documentation "Explain the private helper."))))))
+```
+
+This is a debugging aid for procedures already reachable from the inspected
+environment frame. It is not a private library index, and it does not change
+the normal public/exported documentation path through `(agent reflect)`.
+
 ## Library
 
 Programs can import `(agent debugger)` beside `(scheme base)`:
@@ -78,7 +101,8 @@ than introducing a separate UI protocol.  The buffer shows:
 
 - the condition summary
 - stack frame records
-- the shallow environment snapshot
+- the shallow environment snapshot, including procedure-value docstrings when
+  reachable
 - recent debugger, yield, log, and restart events
 - restart buttons built from the Scheme-readable restart datums
 
