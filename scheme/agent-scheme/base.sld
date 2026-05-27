@@ -319,7 +319,7 @@
               (list 'effect effect)
               (list 'required-capability #f)
               (list 'emacs-hook #f)
-              (list 'portable-hook #f)
+              (list 'portable-hook (second entry))
               (list 'backend-effect-path
                     (primitive-backend-effect-path-for-effect effect))
               (list 'emitter-hook

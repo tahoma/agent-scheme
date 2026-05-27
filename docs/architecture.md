@@ -311,12 +311,15 @@ the same manifest records as Scheme-readable association lists.
 
 Each manifest record identifies the public binding name, library, minimum and
 maximum arity, source boundary, effect tier, required capability if any,
-interpreter hook names, future emitter hint, policy posture, and test
-categories. The `source` field keeps kernel primitives, portable prelude
-bindings, portable source libraries, and host capabilities distinguishable.
-The `effect` and `policy` fields are advisory metadata today, but they are the
-contract future policy checks, fixture selection, documentation, and compiler
-lowering should consume.
+interpreter hook names, future emitter hint, policy posture, documentation
+metadata, and test categories. The `source` field keeps kernel primitives,
+portable prelude bindings, portable source libraries, and host capabilities
+distinguishable. The `effect` and `policy` fields are advisory metadata today,
+but they are the contract future policy checks, fixture selection,
+documentation, and compiler lowering should consume. When a primitive manifest
+does not yet carry explicit public documentation, runtime reflection can derive
+fallback documentation from the registered implementation procedure docstring
+and marks that origin separately from body-literal source docstrings.
 
 Compiler backends should treat `emitter-hook` as a dispatch hint, not as an
 authorization decision. Pure bindings can be inlined or emitted as ordinary

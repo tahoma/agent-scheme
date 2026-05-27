@@ -4284,16 +4284,45 @@
           (car specs))
          (else (loop (cdr specs))))))
 
+    ;; Best-effort public documentation for primitive implementation hooks
+    ;; where standard R7RS gives no way to reflect host procedure docstrings.
+    (define primitive-implementation-documentation-specs
+      (list
+       (cons 'primitive+
+             "Implement the `+' primitive over any number of numeric arguments.")
+       (cons 'primitive-current-second
+             "Implement R7RS `current-second` through a policy-gated clock read.")))
+
+    (define (reflect-implementation-documentation hook)
+      "Return documentation metadata derived from implementation HOOK."
+      (let ((entry (and hook
+                        (assq hook
+                              primitive-implementation-documentation-specs))))
+        (and entry
+             (make-documentation-metadata
+              (list (cons 'documentation (cdr entry)))
+              '(implementation-procedure-string)))))
+
+    (define (reflect-primitive-documentation spec)
+      "Return manifest or implementation documentation for primitive SPEC."
+      (or (reflect-field-value spec 'documentation #f)
+          (reflect-implementation-documentation
+           (reflect-field-value spec 'portable-hook #f))))
+
+    (define (reflect-primitive-procedure-spec value)
+      "Return primitive manifest metadata for primitive procedure VALUE."
+      (and (agent-scheme-primitive-procedure? value)
+           (reflect-manifest-spec-for-name
+            (primitive-procedure-name value))))
+
     (define (reflect-procedure-documentation value)
       "Return documentation metadata attached to callable VALUE, or #f."
       (cond
        ((agent-scheme-procedure? value)
         (procedure-documentation value))
        ((agent-scheme-primitive-procedure? value)
-        (let ((spec
-               (reflect-manifest-spec-for-name
-                (primitive-procedure-name value))))
-          (and spec (reflect-field-value spec 'documentation #f))))
+        (let ((spec (reflect-primitive-procedure-spec value)))
+          (and spec (reflect-primitive-documentation spec))))
        (else #f)))
 
     (define (reflect-documentation-origin documentation)
@@ -4304,9 +4333,15 @@
               ((documentation-metadata? documentation)
                (documentation-metadata-origins documentation))
               (else '()))))
-        (if (null? origins)
-            '(signature)
-            (cons 'body-literal origins))))
+        (cond
+         ((null? origins)
+          '(signature))
+         ((equal? origins '(implementation-procedure-string))
+          '(implementation-procedure string))
+         ((equal? origins '(primitive-manifest-string))
+          '(primitive-manifest string))
+         (else
+          (cons 'body-literal origins)))))
 
     (define (reflect-documentation-fields documentation)
       "Return documentation field data for reflection."
@@ -4319,17 +4354,24 @@
              (documentation-metadata-fields documentation))
             (else '()))))
 
-    (define (reflect-documentation-record subject documentation)
+    (define (reflect-documentation-record subject documentation . maybe-spec)
       "Return a Scheme-readable documentation metadata record."
-      (list 'documentation-metadata
-            (result-field 'subject subject)
-            (result-field 'kind 'procedure)
-            (result-field 'library #f)
-            (result-field 'source #f)
-            (result-field 'origin
-                          (reflect-documentation-origin documentation))
-            (result-field 'fields
-                          (reflect-documentation-fields documentation))))
+      (let ((spec (if (null? maybe-spec) #f (car maybe-spec))))
+        (list 'documentation-metadata
+              (result-field 'subject subject)
+              (result-field 'kind 'procedure)
+              (result-field 'library
+                            (if spec
+                                (reflect-field-value spec 'library #f)
+                                #f))
+              (result-field 'source
+                            (if spec
+                                (reflect-field-value spec 'source #f)
+                                #f))
+              (result-field 'origin
+                            (reflect-documentation-origin documentation))
+              (result-field 'fields
+                            (reflect-documentation-fields documentation)))))
 
     (define (reflect-binding-name symbol-or-name)
       "Return SYMBOL-OR-NAME as a binding symbol, or #f."
@@ -4343,15 +4385,17 @@
       (cond
        ((or (agent-scheme-procedure? subject)
             (agent-scheme-primitive-procedure? subject))
-        (let ((documentation (reflect-procedure-documentation subject)))
+        (let ((documentation (reflect-procedure-documentation subject))
+              (spec (reflect-primitive-procedure-spec subject)))
           (if documentation
-              (reflect-documentation-record '(procedure) documentation)
+              (reflect-documentation-record '(procedure) documentation spec)
               #f)))
        (else
         (let* ((name (reflect-binding-name subject))
                (environment (context-interaction-environment context))
                (cell (and name environment (environment-cell environment name)))
                (value (and cell (cell-value cell)))
+               (spec (reflect-primitive-procedure-spec value))
                (documentation
                 (and value
                      (not (undefined? value))
@@ -4359,7 +4403,8 @@
           (if documentation
               (reflect-documentation-record
                (list 'binding name)
-               documentation)
+               documentation
+               spec)
               #f)))))
 
     (define (reflect-current-budget context)

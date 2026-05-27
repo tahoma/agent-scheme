@@ -188,6 +188,17 @@ frontend or reference generator. If the same procedure value is stored in
 multiple bindings, binding-specific documentation remains a separate metadata
 subject from procedure-value documentation.
 
+Primitive bindings are not read as ordinary procedure bodies. Kernel
+primitives, standard host-effecting bindings, Agent primitive libraries, and
+host capability primitives therefore use the primitive manifest as their
+runtime documentation source. When a manifest record carries explicit
+`documentation` metadata, reflection uses that metadata first. When the
+manifest lacks explicit documentation, the bootstrap may derive a documentation
+field from the registered implementation procedure's own docstring. Reflected
+fallback metadata reports `(origin (implementation-procedure string))` instead
+of `(origin (body-literal string))` so tools can distinguish source body
+docstrings from host or bootstrap implementation docs.
+
 This convention does not make simple string docstrings for these surfaces:
 
 - `define-syntax` and macro exports
@@ -221,6 +232,21 @@ runtimes should expose one Scheme-readable record shape:
      (effects (pure)))))
 ```
 
+Manifest-backed primitive documentation uses the same record shape:
+
+```scheme
+(documentation '+)
+;; =>
+(documentation-metadata
+  (subject (binding +))
+  (kind procedure)
+  (library (scheme base))
+  (source kernel)
+  (origin (implementation-procedure string))
+  (fields
+    ((documentation "Primitive + over ARGUMENTS."))))
+```
+
 Field values are ordinary Scheme-readable data. The initial field set is:
 
 - `arguments`: the procedure formals as Scheme-readable data using the
@@ -233,7 +259,7 @@ Field values are ordinary Scheme-readable data. The initial field set is:
 - `effects`: list of effect symbols, such as `(pure)` or `(file-read)`
 - `examples`: list of source/result example records
 - `see-also`: list of related binding, library, issue, or document references
-- `since`: version datum such as `(agent-scheme-version 0 14 9)`
+- `since`: version datum such as `(agent-scheme-version 0 14 10)`
 - `deprecated`: `#f` or a string explaining the replacement
 - `stability`: symbol such as `experimental`, `stable`, or `internal`
 
@@ -285,6 +311,13 @@ records share one field record with the signature metadata. Procedure shorthand
 `lambda`, and internal bindings with lambda initializers share the same
 body-literal extraction rule.
 
+Primitive bindings can also be queried through the same reflection procedure.
+Explicit manifest documentation wins when present; otherwise the bootstrap
+falls back to registered implementation procedure docstrings where the host can
+provide them. The portable R7RS path records equivalent implementation
+documentation for representative primitive hooks because standard R7RS does not
+provide a procedure-docstring reflection API for implementation procedures.
+
 The current `(scheme case-lambda)` library is a portable macro that lowers each
 clause through an internal `lambda`, so ordinary evaluation still preserves the
 body string semantics, but the runtime does not yet expose durable
@@ -296,6 +329,8 @@ representation work is left to a later reflection/metadata slice.
   reflection slice.
 - #302 adopts simple docstrings in checked-in libraries after extraction works.
 - #303 implements rich documentation property records.
+- #344 adds manifest-backed primitive documentation with implementation
+  procedure fallback.
 - #304 preserves documentation metadata across compiled and reference runtimes.
 - #338 supplies syntax datum source metadata that can improve doc metadata
   source locations.

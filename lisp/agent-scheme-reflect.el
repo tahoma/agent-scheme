@@ -202,26 +202,56 @@
      (equal (plist-get candidate :name) name))
    (agent-scheme-primitive-manifest-binding-specs)))
 
+(defun agent-scheme-reflect--implementation-documentation (spec)
+  "Return documentation metadata derived from SPEC's implementation hook."
+  (let* ((hook (plist-get spec :emacs-hook))
+         (documentation
+          (and (symbolp hook)
+               (fboundp hook)
+               (documentation hook t))))
+    (when (and (stringp documentation)
+               (> (length documentation) 0))
+      (agent-scheme--make-documentation-metadata
+       (list (cons "documentation" documentation))
+       '("implementation-procedure-string")))))
+
+(defun agent-scheme-reflect--manifest-documentation (spec)
+  "Return manifest or implementation documentation for primitive SPEC."
+  (or (plist-get spec :documentation)
+      (agent-scheme-reflect--implementation-documentation spec)))
+
+(defun agent-scheme-reflect--primitive-procedure-spec (value)
+  "Return primitive manifest metadata for primitive procedure VALUE."
+  (and (agent-scheme-primitive-procedure-p value)
+       (agent-scheme-reflect--manifest-spec-for-name
+        (agent-scheme-primitive-procedure-name value))))
+
 (defun agent-scheme-reflect--procedure-documentation (value)
   "Return documentation metadata attached to callable VALUE, or nil."
   (cond
    ((agent-scheme-procedure-p value)
     (agent-scheme-procedure-documentation value))
    ((agent-scheme-primitive-procedure-p value)
-    (plist-get
-     (agent-scheme-reflect--manifest-spec-for-name
-      (agent-scheme-primitive-procedure-name value))
-     :documentation))
+    (let ((spec (agent-scheme-reflect--primitive-procedure-spec value)))
+      (and spec (agent-scheme-reflect--manifest-documentation spec))))
    (t nil)))
 
 (defun agent-scheme-reflect--documentation-origin (documentation)
   "Return the Scheme-readable origin for DOCUMENTATION metadata."
   (let ((origins
          (agent-scheme--documentation-metadata-origins documentation)))
-    (if origins
-        (cons (agent-scheme-reflect--symbol "body-literal")
-              (mapcar #'agent-scheme-reflect--symbol origins))
-      (list (agent-scheme-reflect--symbol "signature")))))
+    (cond
+     ((null origins)
+      (list (agent-scheme-reflect--symbol "signature")))
+     ((equal origins '("implementation-procedure-string"))
+      (list (agent-scheme-reflect--symbol "implementation-procedure")
+            (agent-scheme-reflect--symbol "string")))
+     ((equal origins '("primitive-manifest-string"))
+      (list (agent-scheme-reflect--symbol "primitive-manifest")
+            (agent-scheme-reflect--symbol "string")))
+     (t
+      (cons (agent-scheme-reflect--symbol "body-literal")
+            (mapcar #'agent-scheme-reflect--symbol origins))))))
 
 (defun agent-scheme-reflect--documentation-fields (documentation)
   "Return Scheme-readable fields for DOCUMENTATION metadata."
@@ -231,15 +261,24 @@
            (agent-scheme-reflect--datumize (cdr field))))
    (agent-scheme--documentation-metadata-fields documentation)))
 
-(defun agent-scheme-reflect--documentation-metadata (subject documentation)
+(defun agent-scheme-reflect--documentation-metadata
+    (subject documentation &optional spec)
   "Return a Scheme-readable documentation record for SUBJECT."
   (list
    (agent-scheme-reflect--symbol "documentation-metadata")
    (agent-scheme-reflect--field "subject" subject)
    (agent-scheme-reflect--field "kind"
                                 (agent-scheme-reflect--symbol "procedure"))
-   (agent-scheme-reflect--field "library" agent-scheme-false)
-   (agent-scheme-reflect--field "source" agent-scheme-false)
+   (agent-scheme-reflect--field
+    "library"
+    (if spec
+        (agent-scheme-reflect--library-datum (plist-get spec :library))
+      agent-scheme-false))
+   (agent-scheme-reflect--field
+    "source"
+    (if spec
+        (agent-scheme-reflect--datumize (plist-get spec :source))
+      agent-scheme-false))
    (agent-scheme-reflect--field
     "origin"
     (agent-scheme-reflect--documentation-origin documentation))
@@ -253,12 +292,14 @@ SUBJECT may be a binding symbol/name or a procedure value."
   (cond
    ((or (agent-scheme-procedure-p subject)
         (agent-scheme-primitive-procedure-p subject))
-    (let ((documentation
-           (agent-scheme-reflect--procedure-documentation subject)))
+    (let* ((spec (agent-scheme-reflect--primitive-procedure-spec subject))
+           (documentation
+            (agent-scheme-reflect--procedure-documentation subject)))
       (if documentation
           (agent-scheme-reflect--documentation-metadata
            (list (agent-scheme-reflect--symbol "procedure"))
-           documentation)
+           documentation
+           spec)
         agent-scheme-false)))
    (t
     (let* ((name (agent-scheme-reflect--binding-name subject))
@@ -269,6 +310,7 @@ SUBJECT may be a binding symbol/name or a procedure value."
                       environment
                       (agent-scheme--environment-cell environment name)))
            (value (and cell (agent-scheme--cell-value cell)))
+           (spec (agent-scheme-reflect--primitive-procedure-spec value))
            (documentation
             (and value
                  (not (agent-scheme--undefined-p value))
@@ -277,7 +319,8 @@ SUBJECT may be a binding symbol/name or a procedure value."
           (agent-scheme-reflect--documentation-metadata
            (list (agent-scheme-reflect--symbol "binding")
                  (agent-scheme-reflect--symbol name))
-           documentation)
+           documentation
+           spec)
         agent-scheme-false)))))
 
 (defun agent-scheme-reflect-current-budget (context)

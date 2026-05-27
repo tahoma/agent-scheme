@@ -137,6 +137,11 @@ body form supports them. Do not keep a leading `;;` comment that only restates
 the docstring. Simple string docstrings do not document macros, record fields,
 library forms, renamed exports, or plain data bindings; those surfaces need
 future metadata records rather than a placeholder procedure docstring.
+Primitive bindings do not have reader-visible bodies, so public primitive
+documentation belongs in their manifest metadata when wording must be
+user-facing. If explicit manifest documentation is absent, live reflection may
+fall back to the registered implementation procedure docstring and mark the
+origin as `(implementation-procedure string)`.
 
 ## Test Layout
 
