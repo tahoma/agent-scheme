@@ -261,7 +261,7 @@ Field values are ordinary Scheme-readable data. The initial field set is:
 - `effects`: list of effect symbols, such as `(pure)` or `(file-read)`
 - `examples`: list of source/result example records
 - `see-also`: list of related binding, library, issue, or document references
-- `since`: version datum such as `(agent-scheme-version 0 14 10)`
+- `since`: version datum such as `(agent-scheme-version 0 14 11)`
 - `deprecated`: `#f` or a string explaining the replacement
 - `stability`: symbol such as `experimental`, `stable`, or `internal`
 

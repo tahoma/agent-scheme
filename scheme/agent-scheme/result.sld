@@ -233,18 +233,90 @@
           '()
           (cons (car items) (take (cdr items) (- count 1)))))
 
-    (define (debugger-binding-record name)
-      "Return a safe binding record for NAME."
-      (list 'binding
-            (result-field 'name
-                          (if (symbol? name) name 'unknown-binding))))
+    (define (debugger-documentation-field fields name)
+      "Return documentation metadata field NAME from FIELDS, or #f."
+      (assq name fields))
+
+    (define (debugger-documentation-origin documentation)
+      "Return debugger documentation origin data."
+      (let ((origins (documentation-metadata-origins documentation)))
+        (cond
+         ((null? origins) '(signature))
+         ((equal? origins '(implementation-procedure-string))
+          '(implementation-procedure string))
+         ((equal? origins '(primitive-manifest-string))
+          '(primitive-manifest string))
+         (else (cons 'body-literal origins)))))
+
+    (define (debugger-documentation-fields documentation)
+      "Return Scheme-readable documentation fields for DOCUMENTATION."
+      (map (lambda (field)
+             (list (car field) (value->result-datum (cdr field))))
+           (documentation-metadata-fields documentation)))
+
+    (define (debugger-documentation-metadata documentation)
+      "Return procedure-value documentation metadata for debugger output."
+      (list 'documentation-metadata
+            (result-field 'subject '(procedure))
+            (result-field 'kind 'procedure)
+            (result-field 'library #f)
+            (result-field 'source #f)
+            (result-field 'origin
+                          (debugger-documentation-origin documentation))
+            (result-field 'fields
+                          (debugger-documentation-fields documentation))))
+
+    (define (debugger-procedure-documentation value)
+      "Return debugger documentation for compound procedure VALUE, or #f."
+      (and (agent-scheme-procedure? value)
+           (let ((documentation (procedure-documentation value)))
+             (and documentation
+                  (debugger-documentation-field
+                   (documentation-metadata-fields documentation)
+                   'documentation)
+                  (debugger-documentation-metadata documentation)))))
+
+    (define (debugger-binding-record entry)
+      "Return a safe binding record for frame ENTRY."
+      (let* ((name (car entry))
+             (cell (cdr entry))
+             (value (cell-value cell))
+             (documentation (debugger-procedure-documentation value)))
+        (append
+         (list 'binding
+               (result-field 'name
+                             (if (symbol? name) name 'unknown-binding)))
+         (if documentation
+             (list (result-field 'procedure-documentation documentation))
+             '()))))
+
+    (define (debugger-binding-documented? binding)
+      "Return #t when BINDING carries debugger procedure documentation."
+      (if (debugger-field-value binding 'procedure-documentation) #t #f))
+
+    (define (debugger-select-frame-bindings bindings)
+      "Return BINDINGS with documented procedures preserved before truncation."
+      (let loop ((rest bindings) (documented '()) (plain '()))
+        (cond
+         ((null? rest)
+          (let* ((documented-bindings (reverse documented))
+                 (plain-bindings (reverse plain))
+                 (plain-limit
+                  (- debugger-maximum-frame-bindings
+                     (length documented-bindings))))
+            (append documented-bindings
+                    (take plain-bindings
+                          (if (< plain-limit 0) 0 plain-limit)))))
+         ((debugger-binding-documented? (car rest))
+          (loop (cdr rest) (cons (car rest) documented) plain))
+         (else
+          (loop (cdr rest) documented (cons (car rest) plain))))))
 
     (define (debugger-frame-bindings environment)
       "Return binding-name records for ENVIRONMENT's current frame."
       (if environment
-          (map debugger-binding-record
-               (take (map car (environment-frame environment))
-                     debugger-maximum-frame-bindings))
+          (debugger-select-frame-bindings
+           (map debugger-binding-record (environment-frame environment)))
           '()))
 
     (define (debugger-environment-frame environment frame-id)

@@ -68,11 +68,11 @@
 
 (check 'runtime-version-components
        (agent-scheme-version-components)
-       '(0 14 10))
+       '(0 14 11))
 
 (check 'runtime-version-datum
        (agent-scheme-result->external (agent-scheme-version))
-       "(agent-scheme-version 0 14 10)")
+       "(agent-scheme-version 0 14 11)")
 
 (check-external 'simple-string-docstring-reflection
                 "(import (scheme base) (agent reflect))
@@ -208,7 +208,7 @@
                      (examples . (((source . \"(rich cfg)\")
                                    (result . (session cfg)))))
                      (see-also . (current-context session-snapshot))
-                     (since . (agent-scheme-version 0 14 10))
+                     (since . (agent-scheme-version 0 14 11))
                      (deprecated . #f)
                      (stability . experimental)
                      (authority-review . \"local only\"))
@@ -275,7 +275,7 @@
                        (metadata-field 'rest-parameter 'parameters)
                        (final-rich)
                        (metadata-fields 'final-rich))"
-                "((session cfg) \"Create an Agent Scheme session from CONFIG.\\nThe session is represented as a datum.\" (config) \"Open an Agent Scheme session.\" ((config . \"Session configuration datum.\")) \"A session record.\" (pure) (((source . \"(rich cfg)\") (result session cfg))) (current-context session-snapshot) (agent-scheme-version 0 14 10) #f experimental \"local only\" \"Line one.\\nLine two.\\nLine three.\" (x) (((source . \"first\")) ((source . \"second\"))) (alpha beta) ((tag . kept)) \"Valid documentation.\" \"First result.\" #f ((arguments (x))) ((arguments (x))) ((arguments (x))) ((head . \"Required argument.\") (tail . \"Rest arguments.\")) #((returns . \"ordinary result\")) ((arguments ())))")
+                "((session cfg) \"Create an Agent Scheme session from CONFIG.\\nThe session is represented as a datum.\" (config) \"Open an Agent Scheme session.\" ((config . \"Session configuration datum.\")) \"A session record.\" (pure) (((source . \"(rich cfg)\") (result session cfg))) (current-context session-snapshot) (agent-scheme-version 0 14 11) #f experimental \"local only\" \"Line one.\\nLine two.\\nLine three.\" (x) (((source . \"first\")) ((source . \"second\"))) (alpha beta) ((tag . kept)) \"Valid documentation.\" \"First result.\" #f ((arguments (x))) ((arguments (x))) ((arguments (x))) ((head . \"Required argument.\") (tail . \"Rest arguments.\")) #((returns . \"ordinary result\")) ((arguments ())))")
 
 (check-external 'source-library-docstring-reflection
                 "(import (scheme base)
@@ -747,6 +747,16 @@
                          "(stack ((frame (id f-0)"
                          "(environment ((frame f-0)"
                          "(restarts ((restart (id abort)"))
+
+(check-result-contains 'debugger-private-procedure-docstring-result
+                       "(define (private-helper x)
+                          \"Explain the private helper for debugger inspection.\"
+                          x)
+                        missing"
+                       '("(binding (name private-helper) (procedure-documentation"
+                         "(subject (procedure))"
+                         "(origin (body-literal string))"
+                         "(documentation \"Explain the private helper for debugger inspection.\")"))
 
 (check-result-contains 'debugger-current-error-restarts
                        "(import (scheme base) (agent debugger))
