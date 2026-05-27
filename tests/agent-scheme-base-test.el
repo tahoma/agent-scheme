@@ -24,6 +24,13 @@
           (equal (plist-get spec :name) name)))
    (agent-scheme-primitive-manifest-binding-specs)))
 
+(defun agent-scheme-base-test--documentation-text (spec)
+  "Return SPEC's public documentation text, or nil."
+  (let* ((documentation (plist-get spec :documentation))
+         (fields (agent-scheme--documentation-metadata-fields documentation))
+         (entry (assoc "documentation" fields)))
+    (and entry (cdr entry))))
+
 (ert-deftest agent-scheme-base-test-registry-is-discoverable ()
   "Expose kernel and prelude binding metadata from Emacs."
   (let ((names (agent-scheme-base-primitive-names))
@@ -113,6 +120,18 @@
     (should (eq (plist-get current-second :policy-category)
                 'standard-host-effect))
     (should (eq (plist-get current-second :policy) 'grant))))
+
+(ert-deftest agent-scheme-base-test-public-manifest-bindings-have-docs ()
+  "Public primitive manifest entries carry user-facing documentation."
+  (dolist (spec (agent-scheme-primitive-manifest-binding-specs))
+    (let ((documentation (agent-scheme-base-test--documentation-text spec)))
+      (should (stringp documentation))
+      (should (> (length documentation) 0))
+      (when (memq (plist-get spec :source) '(kernel host-capability))
+        (should
+         (member "primitive-manifest-string"
+                 (agent-scheme--documentation-metadata-origins
+                  (plist-get spec :documentation))))))))
 
 (ert-deftest agent-scheme-base-test-effectful-manifest-has-backend-policy-path ()
   "Effectful manifest entries identify the shared backend policy path."

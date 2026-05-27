@@ -574,6 +574,18 @@ proper list."
         :fields fields
         :origins origins))
 
+(defun agent-scheme--primitive-manifest-documentation (documentation)
+  "Return normalized manifest documentation metadata for DOCUMENTATION."
+  (agent-scheme--make-documentation-metadata
+   (list (cons "documentation" documentation))
+   '("primitive-manifest-string")))
+
+(defun agent-scheme--primitive-manifest-documentation-properties (documentation)
+  "Return an optional `:documentation' plist for DOCUMENTATION."
+  (when documentation
+    (list :documentation
+          (agent-scheme--primitive-manifest-documentation documentation))))
+
 (defun agent-scheme--documentation-metadata-fields (metadata)
   "Return normalized documentation field alist from METADATA."
   (cond
