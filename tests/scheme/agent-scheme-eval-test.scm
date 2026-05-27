@@ -68,11 +68,11 @@
 
 (check 'runtime-version-components
        (agent-scheme-version-components)
-       '(0 14 11))
+       '(0 14 12))
 
 (check 'runtime-version-datum
        (agent-scheme-result->external (agent-scheme-version))
-       "(agent-scheme-version 0 14 11)")
+       "(agent-scheme-version 0 14 12)")
 
 (check-external 'simple-string-docstring-reflection
                 "(import (scheme base) (agent reflect))
@@ -208,7 +208,7 @@
                      (examples . (((source . \"(rich cfg)\")
                                    (result . (session cfg)))))
                      (see-also . (current-context session-snapshot))
-                     (since . (agent-scheme-version 0 14 11))
+                     (since . (agent-scheme-version 0 14 12))
                      (deprecated . #f)
                      (stability . experimental)
                      (authority-review . \"local only\"))
@@ -275,7 +275,7 @@
                        (metadata-field 'rest-parameter 'parameters)
                        (final-rich)
                        (metadata-fields 'final-rich))"
-                "((session cfg) \"Create an Agent Scheme session from CONFIG.\\nThe session is represented as a datum.\" (config) \"Open an Agent Scheme session.\" ((config . \"Session configuration datum.\")) \"A session record.\" (pure) (((source . \"(rich cfg)\") (result session cfg))) (current-context session-snapshot) (agent-scheme-version 0 14 11) #f experimental \"local only\" \"Line one.\\nLine two.\\nLine three.\" (x) (((source . \"first\")) ((source . \"second\"))) (alpha beta) ((tag . kept)) \"Valid documentation.\" \"First result.\" #f ((arguments (x))) ((arguments (x))) ((arguments (x))) ((head . \"Required argument.\") (tail . \"Rest arguments.\")) #((returns . \"ordinary result\")) ((arguments ())))")
+                "((session cfg) \"Create an Agent Scheme session from CONFIG.\\nThe session is represented as a datum.\" (config) \"Open an Agent Scheme session.\" ((config . \"Session configuration datum.\")) \"A session record.\" (pure) (((source . \"(rich cfg)\") (result session cfg))) (current-context session-snapshot) (agent-scheme-version 0 14 12) #f experimental \"local only\" \"Line one.\\nLine two.\\nLine three.\" (x) (((source . \"first\")) ((source . \"second\"))) (alpha beta) ((tag . kept)) \"Valid documentation.\" \"First result.\" #f ((arguments (x))) ((arguments (x))) ((arguments (x))) ((head . \"Required argument.\") (tail . \"Rest arguments.\")) #((returns . \"ordinary result\")) ((arguments ())))")
 
 (check-external 'source-library-docstring-reflection
                 "(import (scheme base)
@@ -1925,6 +1925,32 @@
               (equal? (field-value decision 'grant) 'none)
               #t)
          #t))
+
+(check-external 'portable-handle-lifecycle-primitives
+                "(import (scheme base) (agent capability))
+                 (define process-handle
+                   '(handle
+                     (id h-portable-1)
+                     (kind process-job)
+                     (domain process)
+                     (status live)))
+                 (define port-handle
+                   '(port-capability
+                     (id p-portable-1)
+                     (kind textual-input)
+                     (backing process)
+                     (operations read close)
+                     (grant portable-process-grant)
+                     (limits)
+                     (path h-portable-1)
+                     (status open)))
+                 (list (handle-live? process-handle)
+                       (handle-kind process-handle)
+                       (handle-ref process-handle)
+                       (handle-revalidate port-handle)
+                       (handle-release! process-handle)
+                       (handle-ref 'missing))"
+                "(#t process-job (handle (id h-portable-1) (kind process-job) (domain process) (status live)) (port-capability (id p-portable-1) (kind textual-input) (backing process) (operations read close) (grant portable-process-grant) (limits) (path h-portable-1) (status open)) (handle (id h-portable-1) (kind process-job) (domain process) (status released)) #f)")
 
 (check 'portable-process-capability-handle-datums
        (list

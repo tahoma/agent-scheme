@@ -4940,6 +4940,154 @@
                 (eval-error "unknown capability grant")))
         (apply-procedure thunk '() context #f)))
 
+    (define (portable-handle-datum? value)
+      "Return true when VALUE is a Scheme-readable handle datum."
+      (and (pair? value)
+           (or (eq? (car value) 'handle)
+               (eq? (car value) 'port-capability))))
+
+    (define (portable-handle-field datum field)
+      "Return FIELD from portable handle DATUM, or #f."
+      (let loop ((fields (if (pair? datum) (cdr datum) '())))
+        (cond
+         ((null? fields) #f)
+         ((and (pair? (car fields)) (eq? (caar fields) field))
+          (car fields))
+         (else (loop (cdr fields))))))
+
+    (define (portable-handle-field-value datum field)
+      "Return FIELD's first value from portable handle DATUM, or #f."
+      (let ((entry (portable-handle-field datum field)))
+        (if entry (second entry) #f)))
+
+    (define (portable-port-kind port)
+      "Return PORT's portable capability kind."
+      (cond
+       ((and (agent-scheme-port-input? port)
+             (agent-scheme-port-textual? port))
+        'textual-input)
+       ((and (agent-scheme-port-input? port)
+             (agent-scheme-port-binary? port))
+        'binary-input)
+       ((and (agent-scheme-port-output? port)
+             (agent-scheme-port-textual? port))
+        'textual-output)
+       ((and (agent-scheme-port-output? port)
+             (agent-scheme-port-binary? port))
+        'binary-output)
+       (else 'port)))
+
+    (define (portable-port-handle-metadata port)
+      "Return Scheme-readable lifecycle metadata for host-backed PORT."
+      (if (and (agent-scheme-port? port)
+               (agent-scheme-port-backing-domain port))
+          (port-capability-datum
+           (agent-scheme-port-handle port)
+           (portable-port-kind port)
+           (agent-scheme-port-backing-domain port)
+           (agent-scheme-port-operations port)
+           (agent-scheme-port-grant port)
+           (agent-scheme-port-limits port)
+           (agent-scheme-port-status port)
+           (agent-scheme-port-path port))
+          #f))
+
+    (define (portable-port-live? port context)
+      "Return true when host-backed PORT is open and its grant is active."
+      (and (agent-scheme-port? port)
+           (agent-scheme-port-backing-domain port)
+           (agent-scheme-port-open? port)
+           (eq? (agent-scheme-port-status port) 'open)
+           (let ((grant
+                  (and context
+                       (capability-grant-find
+                        (context-capability-grants context)
+                        (agent-scheme-port-grant port)))))
+             (and grant
+                  (eq? (capability-grant-status grant) 'active)))))
+
+    (define (portable-handle-live? value context)
+      "Return true when VALUE describes a portable live handle."
+      (cond
+       ((agent-scheme-port? value)
+        (portable-port-live? value context))
+       ((portable-handle-datum? value)
+        (let ((status (portable-handle-field-value value 'status)))
+          (or (eq? status 'live)
+              (eq? status 'open))))
+       (else #f)))
+
+    (define (portable-handle-replace-status datum status)
+      "Return portable handle DATUM with STATUS replacing its status field."
+      (let loop ((fields (cdr datum)) (seen? #f))
+        (cond
+         ((null? fields)
+          (if seen?
+              (list (car datum))
+              (list (car datum) (list 'status status))))
+         ((and (pair? (car fields)) (eq? (caar fields) 'status))
+          (cons (car datum)
+                (cons (list 'status status)
+                      (cdr fields))))
+         (else
+          (cons (car datum)
+                (cons (car fields)
+                      (cdr (loop (cdr fields) seen?))))))))
+
+    (define (primitive-handle-ref arguments context)
+      "Return portable lifecycle metadata for a handle datum or port."
+      (let ((value (car arguments)))
+        (cond
+         ((agent-scheme-port? value)
+          (portable-port-handle-metadata value))
+         ((portable-handle-datum? value) value)
+         (else #f))))
+
+    (define (primitive-handle-live? arguments context)
+      "Return true when the portable handle is live."
+      (portable-handle-live? (car arguments) context))
+
+    (define (primitive-handle-kind arguments context)
+      "Return the portable handle kind, or #f when unknown."
+      (let ((value (car arguments)))
+        (cond
+         ((agent-scheme-port? value)
+          (portable-port-kind value))
+         ((portable-handle-datum? value)
+          (portable-handle-field-value value 'kind))
+         (else #f))))
+
+    (define (primitive-handle-revalidate arguments context)
+      "Revalidate a portable handle and return metadata when known."
+      (let ((value (car arguments)))
+        (cond
+         ((agent-scheme-port? value)
+          (let ((metadata (portable-port-handle-metadata value)))
+            (if (and metadata (not (portable-port-live? value context)))
+                (portable-handle-replace-status metadata 'stale)
+                metadata)))
+         ((portable-handle-datum? value)
+          (if (portable-handle-live? value context)
+              value
+              (portable-handle-replace-status value 'stale)))
+         (else #f))))
+
+    (define (primitive-handle-release! arguments context)
+      "Return released portable lifecycle metadata when VALUE is known."
+      (let ((value (car arguments)))
+        (cond
+         ((agent-scheme-port? value)
+          (let ((metadata (portable-port-handle-metadata value)))
+            (if metadata
+                (begin
+                  (set-agent-scheme-port-open?! value #f)
+                  (set-agent-scheme-port-status! value 'released)
+                  (portable-handle-replace-status metadata 'released))
+                #f)))
+         ((portable-handle-datum? value)
+          (portable-handle-replace-status value 'released))
+         (else #f))))
+
     (define (primitive-memory-put! arguments context)
       "Store a keyed memory record in the portable interpreter memory store."
       (memory-model:memory-put! interpreter-memory-store
@@ -7204,6 +7352,11 @@
        (cons 'primitive-grant-revoke! primitive-grant-revoke!)
        (cons 'primitive-call-with-capability-grant
              primitive-call-with-capability-grant)
+       (cons 'primitive-handle-ref primitive-handle-ref)
+       (cons 'primitive-handle-live? primitive-handle-live?)
+       (cons 'primitive-handle-kind primitive-handle-kind)
+       (cons 'primitive-handle-revalidate primitive-handle-revalidate)
+       (cons 'primitive-handle-release! primitive-handle-release!)
        (cons 'primitive-memory-put! primitive-memory-put!)
        (cons 'primitive-memory-ref primitive-memory-ref)
        (cons 'primitive-memory-delete! primitive-memory-delete!)

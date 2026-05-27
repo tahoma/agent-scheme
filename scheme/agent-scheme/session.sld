@@ -21,6 +21,7 @@
           session-snapshot!
           session-fork!
           session-retire!
+          session-handles
           session-datum-id)
   (import (scheme base))
   (begin
@@ -73,7 +74,7 @@
       (definitions session-definitions set-session-definitions!)
       (macros session-macros set-session-macros!)
       (memory session-memory set-session-memory!)
-      (handles session-handles set-session-handles!)
+      (handles session-record-handles set-session-record-handles!)
       (transcript session-transcript set-session-transcript!)
       (recent-events session-recent-events set-session-recent-events!)
       (snapshots session-snapshots set-session-snapshots!)
@@ -159,7 +160,7 @@
         (list 'definitions (session-definitions session))
         (list 'macros (session-macros session))
         (list 'memory (session-memory session))
-        (list 'handles (session-handles session))
+        (list 'handles (session-record-handles session))
         (list 'transcript (session-transcript session))
         (list 'recent-events (session-recent-events session))
         (list 'snapshots
@@ -173,6 +174,22 @@
         (returns . "The session id field.")
         (effects . (pure)))
       (cadr (cadr session-datum)))
+
+    (define (session-datum-field session-datum name)
+      "Return NAME from public SESSION-DATUM, or #f."
+      (let loop ((fields (cdr session-datum)))
+        (cond
+         ((null? fields) #f)
+         ((eq? (caar fields) name) (car fields))
+         (else (loop (cdr fields))))))
+
+    (define (session-handles session-datum)
+      "Return handle references recorded in public SESSION-DATUM."
+      #((parameters . ((session-datum . "Public session datum.")))
+        (returns . "The session datum's `handles` field.")
+        (effects . (pure)))
+      (let ((field (session-datum-field session-datum 'handles)))
+        (if field (cadr field) '())))
 
     (define (session-create! store scope options)
       "Create a session in STORE for SCOPE using OPTIONS."
@@ -273,7 +290,7 @@
             (list 'definitions (session-definitions session))
             (list 'macros (session-macros session))
             (list 'memory (session-memory session))
-            (list 'handles (session-handles session))
+            (list 'handles (session-record-handles session))
             (list 'stale-handles '())
             (list 'transcript (session-transcript session))
             (list 'recent-events (session-recent-events session))
@@ -318,7 +335,7 @@
                             (session-definitions source)
                             (session-macros source)
                             (session-memory source)
-                            (session-handles source)
+                            (session-record-handles source)
                             (session-transcript source)
                             (session-recent-events source)
                             '()
@@ -334,5 +351,5 @@
         (returns . "The retired public session datum with live handles cleared.")
         (effects . (state-write error)))
       (let ((session (require-session store id)))
-        (set-session-handles! session '())
+        (set-session-record-handles! session '())
         (transition! session 'retired)))))
