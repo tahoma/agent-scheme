@@ -97,6 +97,12 @@
     (should (string-match-p "#f)" external))
     (should-not (string-match-p "sk-scheme" external))))
 
+(ert-deftest agent-scheme-redaction-test-dotted-list-datums-remain-walkable ()
+  "Redaction walks dotted Scheme datums without treating them as records."
+  (let* ((datum (agent-scheme-read "(procedure first . rest-arguments)"))
+         (redacted (agent-scheme-redact datum 'debugger)))
+    (should (equal redacted datum))))
+
 (ert-deftest agent-scheme-redaction-test-auth-source-and-local-only-context ()
   "Auth-source stubs redact, and local-only context is unsafe for providers."
   (agent-scheme-redaction-test--reset)

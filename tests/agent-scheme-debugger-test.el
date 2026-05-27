@@ -66,6 +66,32 @@
     (should (string-match-p (regexp-quote "(restarts ((restart (id abort)")
                             result))))
 
+(ert-deftest agent-scheme-debugger-test-private-procedure-docstring-in-environment ()
+  "Debugger environment records expose reachable procedure-value docs."
+  (let ((result
+         (agent-scheme-debugger-test--result-external
+          "(define (private-helper x)
+             \"Explain the private helper for debugger inspection.\"
+             x)
+           missing")))
+    (should
+     (string-match-p
+      (regexp-quote "(binding (name private-helper) (procedure-documentation")
+      result))
+    (should
+     (string-match-p
+      (regexp-quote "(subject (procedure))")
+      result))
+    (should
+     (string-match-p
+      (regexp-quote "(origin (body-literal string))")
+      result))
+    (should
+     (string-match-p
+      (regexp-quote
+       "(documentation \"Explain the private helper for debugger inspection.\")")
+      result))))
+
 (ert-deftest agent-scheme-debugger-test-current-error-exposes-restarts ()
   "Exception handlers can inspect the current debugger condition restarts."
   (let ((result
