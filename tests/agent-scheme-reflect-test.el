@@ -44,7 +44,7 @@
               (map exact-integer? (cdr version))
               (map (lambda (component) (>= component 0))
                    (cdr version))))")
-    "((agent-scheme-version 0 14 9) (#t #t #t) (#t #t #t))")))
+    "((agent-scheme-version 0 14 10) (#t #t #t) (#t #t #t))")))
 
 (ert-deftest agent-scheme-reflect-test-simple-string-docstrings ()
   "Expose simple procedure docstrings through `(agent reflect)'."
@@ -106,6 +106,34 @@
             (map symbol? (metadata-field 'proper 'arguments))
             (symbol? (metadata-field 'variadic 'arguments)))")
     "((first second) (head . tail) all () (#t #t) #t)")))
+
+(ert-deftest agent-scheme-reflect-test-primitive-implementation-docstrings ()
+  "Reflect primitive docs derived from registered implementation procedures."
+  (agent-scheme-reflect-test--reset)
+  (should
+   (equal
+    (agent-scheme-reflect-test--eval-value-string
+     "(import (scheme base) (scheme time) (agent reflect))
+      (define (field datum name)
+        (cadr (assq name (cdr datum))))
+      (define (metadata-field subject name)
+        (let ((datum (documentation subject)))
+          (if datum
+              (let ((entry (assq name (field datum 'fields))))
+                (if entry (cadr entry) #f))
+            #f)))
+      (list (field (documentation '+) 'subject)
+            (field (documentation '+) 'library)
+            (field (documentation '+) 'source)
+            (field (documentation '+) 'origin)
+            (metadata-field '+ 'documentation)
+            (field (documentation +) 'subject)
+            (metadata-field + 'documentation)
+            (field (documentation 'current-second) 'library)
+            (field (documentation 'current-second) 'source)
+            (field (documentation 'current-second) 'origin)
+            (metadata-field 'current-second 'documentation))")
+    "((binding +) (scheme base) kernel (implementation-procedure string) \"Primitive + over ARGUMENTS.\" (procedure) \"Primitive + over ARGUMENTS.\" (scheme time) host-capability (implementation-procedure string) \"Primitive current-second over _ARGUMENTS.\")")))
 
 (ert-deftest agent-scheme-reflect-test-docstring-edge-cases ()
   "Reflect adjacent docstrings and preserve final-string body semantics."
@@ -178,7 +206,7 @@
           (examples . (((source . \"(rich cfg)\")
                         (result . (session cfg)))))
           (see-also . (current-context session-snapshot))
-          (since . (agent-scheme-version 0 14 9))
+          (since . (agent-scheme-version 0 14 10))
           (deprecated . #f)
           (stability . experimental)
           (authority-review . \"local only\"))
@@ -245,7 +273,7 @@
             (metadata-field 'rest-parameter 'parameters)
             (final-rich)
             (metadata-fields 'final-rich))")
-    "((session cfg) \"Create an Agent Scheme session from CONFIG.\\nThe session is represented as a datum.\" (config) \"Open an Agent Scheme session.\" ((config . \"Session configuration datum.\")) \"A session record.\" (pure) (((source . \"(rich cfg)\") (result session cfg))) (current-context session-snapshot) (agent-scheme-version 0 14 9) #f experimental \"local only\" \"Line one.\\nLine two.\\nLine three.\" (x) (((source . \"first\")) ((source . \"second\"))) (alpha beta) ((tag . kept)) \"Valid documentation.\" \"First result.\" #f ((arguments (x))) ((arguments (x))) ((arguments (x))) ((head . \"Required argument.\") (tail . \"Rest arguments.\")) #((returns . \"ordinary result\")) ((arguments ())))")))
+    "((session cfg) \"Create an Agent Scheme session from CONFIG.\\nThe session is represented as a datum.\" (config) \"Open an Agent Scheme session.\" ((config . \"Session configuration datum.\")) \"A session record.\" (pure) (((source . \"(rich cfg)\") (result session cfg))) (current-context session-snapshot) (agent-scheme-version 0 14 10) #f experimental \"local only\" \"Line one.\\nLine two.\\nLine three.\" (x) (((source . \"first\")) ((source . \"second\"))) (alpha beta) ((tag . kept)) \"Valid documentation.\" \"First result.\" #f ((arguments (x))) ((arguments (x))) ((arguments (x))) ((head . \"Required argument.\") (tail . \"Rest arguments.\")) #((returns . \"ordinary result\")) ((arguments ())))")))
 
 (ert-deftest agent-scheme-reflect-test-source-library-docstrings ()
   "Reflect docstrings from checked-in source library bindings."

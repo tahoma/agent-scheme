@@ -70,13 +70,16 @@
                  "(origin (signature))"
                  "(origin (body-literal string))"
                  "(origin (body-literal string vector))"
+                 "(origin (implementation-procedure string))"
                  "`arguments`: the procedure formals"
+                 "manifest-backed primitive documentation"
                  "Every `parameters` key must be present"
                  "`malformed-documentation-metadata`"
                  "Guile's procedure-property"
                  "influence, but the fields"
                  "#301 implements simple string docstrings"
                  "#303 implements rich documentation property records"
+                 "#344 adds manifest-backed primitive documentation"
                  "#304 preserves documentation metadata"))
         (should (string-match-p (regexp-quote needle) doc))))))
 

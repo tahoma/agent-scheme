@@ -66,11 +66,11 @@
 
 (check 'runtime-version-components
        (agent-scheme-version-components)
-       '(0 14 9))
+       '(0 14 10))
 
 (check 'runtime-version-datum
        (agent-scheme-result->external (agent-scheme-version))
-       "(agent-scheme-version 0 14 9)")
+       "(agent-scheme-version 0 14 10)")
 
 (check-external 'simple-string-docstring-reflection
                 "(import (scheme base) (agent reflect))
@@ -121,6 +121,29 @@
                        (map symbol? (metadata-field 'proper 'arguments))
                        (symbol? (metadata-field 'variadic 'arguments)))"
                 "((first second) (head . tail) all () (#t #t) #t)")
+
+(check-external 'primitive-implementation-docstring-reflection
+                "(import (scheme base) (scheme time) (agent reflect))
+                 (define (field datum name)
+                   (cadr (assq name (cdr datum))))
+                 (define (metadata-field subject name)
+                   (let ((datum (documentation subject)))
+                     (if datum
+                         (let ((entry (assq name (field datum 'fields))))
+                           (if entry (cadr entry) #f))
+                       #f)))
+                 (list (field (documentation '+) 'subject)
+                       (field (documentation '+) 'library)
+                       (field (documentation '+) 'source)
+                       (field (documentation '+) 'origin)
+                       (metadata-field '+ 'documentation)
+                       (field (documentation +) 'subject)
+                       (metadata-field + 'documentation)
+                       (field (documentation 'current-second) 'library)
+                       (field (documentation 'current-second) 'source)
+                       (field (documentation 'current-second) 'origin)
+                       (metadata-field 'current-second 'documentation))"
+                "((binding +) (scheme base) kernel (implementation-procedure string) \"Implement the `+' primitive over any number of numeric arguments.\" (procedure) \"Implement the `+' primitive over any number of numeric arguments.\" (scheme time) host-capability (implementation-procedure string) \"Implement R7RS `current-second` through a policy-gated clock read.\")")
 
 (check-external 'docstring-edge-cases
                 "(import (scheme base) (agent reflect))
@@ -183,7 +206,7 @@
                      (examples . (((source . \"(rich cfg)\")
                                    (result . (session cfg)))))
                      (see-also . (current-context session-snapshot))
-                     (since . (agent-scheme-version 0 14 9))
+                     (since . (agent-scheme-version 0 14 10))
                      (deprecated . #f)
                      (stability . experimental)
                      (authority-review . \"local only\"))
@@ -250,7 +273,7 @@
                        (metadata-field 'rest-parameter 'parameters)
                        (final-rich)
                        (metadata-fields 'final-rich))"
-                "((session cfg) \"Create an Agent Scheme session from CONFIG.\\nThe session is represented as a datum.\" (config) \"Open an Agent Scheme session.\" ((config . \"Session configuration datum.\")) \"A session record.\" (pure) (((source . \"(rich cfg)\") (result session cfg))) (current-context session-snapshot) (agent-scheme-version 0 14 9) #f experimental \"local only\" \"Line one.\\nLine two.\\nLine three.\" (x) (((source . \"first\")) ((source . \"second\"))) (alpha beta) ((tag . kept)) \"Valid documentation.\" \"First result.\" #f ((arguments (x))) ((arguments (x))) ((arguments (x))) ((head . \"Required argument.\") (tail . \"Rest arguments.\")) #((returns . \"ordinary result\")) ((arguments ())))")
+                "((session cfg) \"Create an Agent Scheme session from CONFIG.\\nThe session is represented as a datum.\" (config) \"Open an Agent Scheme session.\" ((config . \"Session configuration datum.\")) \"A session record.\" (pure) (((source . \"(rich cfg)\") (result session cfg))) (current-context session-snapshot) (agent-scheme-version 0 14 10) #f experimental \"local only\" \"Line one.\\nLine two.\\nLine three.\" (x) (((source . \"first\")) ((source . \"second\"))) (alpha beta) ((tag . kept)) \"Valid documentation.\" \"First result.\" #f ((arguments (x))) ((arguments (x))) ((arguments (x))) ((head . \"Required argument.\") (tail . \"Rest arguments.\")) #((returns . \"ordinary result\")) ((arguments ())))")
 
 (check-external 'source-library-docstring-reflection
                 "(import (scheme base)

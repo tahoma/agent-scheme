@@ -56,7 +56,7 @@
               (insert "(import (scheme base)\n")
               (insert "        (agent-scheme runtime))\n")
               (insert "(unless (equal? (agent-scheme-version-components)\n")
-              (insert "                '(0 14 9))\n")
+              (insert "                '(0 14 10))\n")
               (insert "  (error \"unexpected Agent Scheme version\"))\n"))
             (let ((status
                    (process-file
