@@ -1,6 +1,7 @@
 EMACS ?= emacs
 AGENT_SCHEME_TEST_RUNNER = $(EMACS) -Q --batch --load tests/agent-scheme-test-runner.el
 AGENT_SCHEME_PARALLEL_MAKE = $(MAKE) --no-print-directory
+AGENT_SCHEME_ELISP_SOURCES := $(sort $(wildcard lisp/*.el))
 AGENT_SCHEME_PORTABLE_TEST_SELECTOR ?= "agent-scheme-scheme-.*"
 AGENT_SCHEME_PORTABLE_EVAL_TEST_SELECTOR ?= "^agent-scheme-scheme-eval-test-r7rs-suite$$"
 AGENT_SCHEME_PORTABLE_REST_TEST_SELECTOR ?= (and "agent-scheme-scheme-.*" (not "^agent-scheme-scheme-eval-test-r7rs-suite$$"))
@@ -20,11 +21,13 @@ AGENT_SCHEME_TEST_JOBS ?= $(words $(AGENT_SCHEME_TEST_SHARD_TARGETS))
 
 .DEFAULT_GOAL := help
 
-.PHONY: help test test-portable test-portable-eval test-portable-rest test-emacs-hosted test-emacs-core test-emacs-library test-emacs-capabilities test-emacs-tools test-live-model-ci test-live-model conformance-oracle
+.PHONY: help clean compile-elisp test test-portable test-portable-eval test-portable-rest test-emacs-hosted test-emacs-core test-emacs-library test-emacs-capabilities test-emacs-tools test-live-model-ci test-live-model conformance-oracle
 
 help:
 	@printf '%s\n' 'Agent Scheme top-level actions:'
 	@printf '  %-26s %s\n' 'help' 'Show this help.'
+	@printf '  %-26s %s\n' 'clean' 'Remove generated Elisp bytecode.'
+	@printf '  %-26s %s\n' 'compile-elisp' 'Byte-compile checked-in Elisp sources.'
 	@printf '  %-26s %s\n' 'test' 'Run the project test suite across local shards.'
 	@printf '  %-26s %s\n' 'test-portable' 'Run the portable Chibi-backed ERT shards.'
 	@printf '  %-26s %s\n' 'test-portable-eval' 'Run the portable Chibi-backed evaluator shard.'
@@ -65,6 +68,12 @@ help:
 	@printf '  %-40s %s\n' 'AGENT_SCHEME_ORACLE_REFERENCES=a,b' 'Optional comma-separated oracle reference filter.'
 	@printf '  %-40s %s\n' 'AGENT_SCHEME_ORACLE_STATUSES=a,b' 'Optional comma-separated oracle report status filter.'
 	@printf '  %-40s %s\n' 'AGENT_SCHEME_ORACLE_SUMMARY=1' 'Print an oracle status summary before report lines.'
+
+clean:
+	find lisp -name '*.elc' -exec rm -f {} +
+
+compile-elisp:
+	$(EMACS) -Q --batch -L lisp --eval "(setq load-prefer-newer t)" -f batch-byte-compile $(AGENT_SCHEME_ELISP_SOURCES)
 
 ifneq ($(strip $(AGENT_SCHEME_TEST_SELECTOR)),)
 test:
