@@ -606,6 +606,42 @@ Return the stale handles that were removed."
                     (string< (agent-scheme-session-id left)
                              (agent-scheme-session-id right)))))))
 
+(defun agent-scheme-session--datum-field-value (datum name)
+  "Return field NAME from public session DATUM, or nil."
+  (when (and (consp datum)
+             (agent-scheme-symbol-p (car datum))
+             (equal (agent-scheme-symbol-name (car datum)) "session"))
+    (cadr
+     (seq-find
+      (lambda (field)
+        (and (consp field)
+             (agent-scheme-symbol-p (car field))
+             (equal (agent-scheme-symbol-name (car field)) name)))
+      (cdr datum)))))
+
+(defun agent-scheme-session--datum-p (datum)
+  "Return non-nil when DATUM is a public session record."
+  (and (consp datum)
+       (agent-scheme-symbol-p (car datum))
+       (equal (agent-scheme-symbol-name (car datum)) "session")))
+
+;;;###autoload
+(defun agent-scheme-session-handle-list (session-or-id)
+  "Return handles owned by SESSION-OR-ID after stale cleanup."
+  (cond
+   ((agent-scheme-session-p session-or-id)
+    (unless (memq (agent-scheme-session-status session-or-id)
+                  '(retired collectable))
+      (agent-scheme-session--cleanup-handles session-or-id))
+    (agent-scheme-session-handles session-or-id))
+   ((agent-scheme-session--datum-p session-or-id)
+    (agent-scheme-session--datum-field-value session-or-id "handles"))
+   (t
+    (let ((session (agent-scheme-session--require session-or-id)))
+      (unless (memq (agent-scheme-session-status session) '(retired collectable))
+        (agent-scheme-session--cleanup-handles session))
+      (agent-scheme-session-handles session)))))
+
 ;;;###autoload
 (defun agent-scheme-session-suspend! (id)
   "Suspend session ID and return its updated datum."
@@ -1102,6 +1138,10 @@ Return the stale handles that were removed."
       (agent-scheme-session-list (car arguments))
     (agent-scheme-session-list)))
 
+(defun agent-scheme-session--primitive-handles (arguments _context)
+  "Primitive session-handles over ARGUMENTS."
+  (agent-scheme-session-handle-list (car arguments)))
+
 (defun agent-scheme-session--primitive-suspend (arguments _context)
   "Primitive session-suspend! over ARGUMENTS."
   (agent-scheme-session-suspend! (car arguments)))
@@ -1136,6 +1176,7 @@ Return the stale handles that were removed."
   `(("session-create!" ,#'agent-scheme-session--primitive-create 1 2)
     ("session-ref" ,#'agent-scheme-session--primitive-ref 1 1)
     ("session-list" ,#'agent-scheme-session--primitive-list 0 1)
+    ("session-handles" ,#'agent-scheme-session--primitive-handles 1 1)
     ("session-suspend!" ,#'agent-scheme-session--primitive-suspend 1 1)
     ("session-resume!" ,#'agent-scheme-session--primitive-resume 1 1)
     ("session-snapshot!" ,#'agent-scheme-session--primitive-snapshot 1 2)

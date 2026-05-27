@@ -9,6 +9,11 @@
           grant-ref
           grant-attenuate
           grant-revoke!
+          handle-ref
+          handle-live?
+          handle-kind
+          handle-revalidate
+          handle-release!
           call-with-capability-grant
           with-capability-grant)
   (import (scheme base)

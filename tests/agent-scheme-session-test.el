@@ -165,4 +165,32 @@
       (when (buffer-live-p buffer)
         (kill-buffer buffer)))))
 
+(ert-deftest agent-scheme-session-test-session-handles-primitive ()
+  "Expose session-owned handle references through `(agent session)'."
+  (agent-scheme-session-test--reset)
+  (let ((buffer (generate-new-buffer "agent-scheme-session-handles")))
+    (unwind-protect
+        (progn
+          (agent-scheme-session-create! 'named '(:id "handle-list"))
+          (with-current-buffer buffer
+            (let ((external
+                   (agent-scheme-session-test--value-external
+                    (agent-scheme-session-eval-source
+                     "handle-list"
+                     "(import (scheme base) (agent session) (emacs buffer))
+                      (define saved (emacs-current-buffer))
+                      (session-handles 'handle-list)"))))
+              (should
+               (string-match-p "\\`((handle buffer h-[0-9]+))\\'" external))))
+          (let ((retired
+                 (agent-scheme-session-test--value-external
+                  (agent-scheme-session-eval-source
+                   "handle-list"
+                   "(import (scheme base) (agent session))
+                    (session-retire! 'handle-list)
+                    (session-handles 'handle-list)"))))
+            (should (equal retired "()"))))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer)))))
+
 ;;; agent-scheme-session-test.el ends here
