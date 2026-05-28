@@ -216,10 +216,9 @@
       "Build one Scheme-readable source metadata field."
       (list name value))
 
-    (define (reader-line-column reader offset)
-      "Return one-based (LINE . COLUMN) in READER at OFFSET."
-      (let* ((starts (reader-line-starts reader))
-             (count (vector-length starts)))
+    (define (line-starts-line-column starts offset)
+      "Return one-based (LINE . COLUMN) from STARTS at OFFSET."
+      (let ((count (vector-length starts)))
         (let loop ((low 0) (high (- count 1)) (best 0))
           (if (> low high)
               (let ((line-start (vector-ref starts best)))
@@ -231,24 +230,46 @@
                     (loop (+ middle 1) high middle)
                     (loop low (- middle 1) best)))))))
 
-    (define (source-record reader start end)
-      "Return a Scheme-readable source record for READER between START and END."
+    (define (reader-line-column reader offset)
+      "Return one-based (LINE . COLUMN) in READER at OFFSET."
+      (line-starts-line-column (reader-line-starts reader) offset))
+
+    (define (source-note reader start end)
+      "Return compact source metadata for READER between START and END."
       (let ((line-column (reader-line-column reader start)))
-        (list 'source
-              (source-field 'origin 'source)
-              (source-field 'source-id (reader-source-id reader))
-              (source-field 'line
-                            (agent-scheme-make-canonical-integer
-                             (car line-column)))
-              (source-field 'column
-                            (agent-scheme-make-canonical-integer
-                             (cdr line-column)))
-              (source-field 'offset
-                            (agent-scheme-make-canonical-integer start))
-              (source-field 'span
-                            (agent-scheme-make-canonical-integer
-                             (max 0 (- end start))))
-              (source-field 'phase 'read))))
+        (vector 'source-note
+                (reader-source-id reader)
+                (car line-column)
+                (cdr line-column)
+                start
+                (max 0 (- end start)))))
+
+    (define (source-note? datum)
+      "Report whether DATUM is compact source metadata."
+      (and (vector? datum)
+           (= (vector-length datum) 6)
+           (eq? (vector-ref datum 0) 'source-note)))
+
+    (define (source-metadata->record metadata)
+      "Return Scheme-readable source metadata for METADATA."
+      (if (source-note? metadata)
+          (list 'source
+                (source-field 'origin 'source)
+                (source-field 'source-id (vector-ref metadata 1))
+                (source-field 'line
+                              (agent-scheme-make-canonical-integer
+                               (vector-ref metadata 2)))
+                (source-field 'column
+                              (agent-scheme-make-canonical-integer
+                               (vector-ref metadata 3)))
+                (source-field 'offset
+                              (agent-scheme-make-canonical-integer
+                               (vector-ref metadata 4)))
+                (source-field 'span
+                              (agent-scheme-make-canonical-integer
+                               (vector-ref metadata 5)))
+                (source-field 'phase 'read))
+          metadata))
 
     (define (source-attachable? datum)
       "Report whether DATUM has stable identity for source metadata."
@@ -279,16 +300,21 @@
     (define (agent-scheme-datum-source datum)
       "Return source metadata attached to DATUM, or #f when absent."
       (let ((cell (assq datum agent-scheme-source-metadata)))
+        (if cell (source-metadata->record (cdr cell)) #f)))
+
+    (define (datum-source-metadata datum)
+      "Return raw source metadata attached to DATUM, or #f when absent."
+      (let ((cell (assq datum agent-scheme-source-metadata)))
         (if cell (cdr cell) #f)))
 
     (define (agent-scheme-copy-datum-source! target source . maybe-overwrite)
       "Copy source metadata from SOURCE to TARGET, preserving existing metadata by default."
-      (let ((metadata (agent-scheme-datum-source source))
+      (let ((metadata (datum-source-metadata source))
             (overwrite? (and (not (null? maybe-overwrite))
                              (car maybe-overwrite))))
         (if (and metadata
                  (or overwrite?
-                     (not (agent-scheme-datum-source target))))
+                     (not (datum-source-metadata target))))
             (agent-scheme-datum-source-set! target metadata))
         target))
 
@@ -1623,7 +1649,7 @@
                    datum)))))
           (agent-scheme-datum-source-set!
            datum
-           (source-record reader start (reader-position reader))))))
+           (source-note reader start (reader-position reader))))))
 
     (define (options-from-rest maybe-options)
       "Normalize optional argument lists to an options association list."
