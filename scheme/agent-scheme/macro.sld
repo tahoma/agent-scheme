@@ -1286,7 +1286,8 @@
             (macro-field 'index (agent-scheme-make-canonical-integer index))
             (macro-field 'macro macro-name)
             (macro-field 'input (strip-identifiers input))
-            (macro-field 'output (strip-identifiers output))))
+            (macro-field 'output (strip-identifiers output))
+            (macro-field 'source (agent-scheme-datum-source input))))
 
     (define (macro-option-name datum)
       "Return NAME as a supported macro expansion option name."
@@ -1381,6 +1382,7 @@
         (let* ((macro-name (macro-active-name current environment context))
                (expanded (expand-expression current environment context))
                (visible-expanded (macro-visible-expanded expanded)))
+          (agent-scheme-copy-datum-source! visible-expanded current)
           (if (not (eq? expanded current))
               (let ((name (or macro-name 'syntax))
                     (step-index (+ index 1)))
@@ -1431,7 +1433,7 @@
                          (if expanded (strip-identifiers expanded) #f))
             (macro-field 'steps steps)
             (macro-field 'macros macros)
-            (macro-field 'source #f)
+            (macro-field 'source (agent-scheme-datum-source original))
             (macro-field 'warnings '())
             (macro-field 'errors errors)))
 
@@ -1490,7 +1492,7 @@
 
     (define (agent-scheme-syntax-source datum)
       "Return source metadata for DATUM, or #f when none is attached."
-      #f)
+      (agent-scheme-datum-source datum))
 
     (define (macro-library-record status library-name macros errors)
       "Build a Scheme-readable macro library introspection record."
