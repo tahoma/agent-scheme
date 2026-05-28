@@ -14,6 +14,15 @@
   (agent-scheme-value->external
    (agent-scheme-eval-source source nil options)))
 
+(ert-deftest agent-scheme-macro-test-syntax-source-reports-reader-metadata ()
+  "Return a bounded Scheme-readable source record for a read syntax datum."
+  (let* ((datum (agent-scheme-read "\n  (twice 21)\n"))
+         (source (agent-scheme-syntax-source datum)))
+    (should
+     (equal
+      (agent-scheme-value->external source)
+      "(source (origin source) (source-id #f) (line 2) (column 3) (offset 3) (span 10) (phase read))"))))
+
 (ert-deftest agent-scheme-macro-test-define-syntax-expands-ellipsis ()
   "Expand a top-level syntax-rules macro with a repeated body template."
   (should
@@ -235,6 +244,9 @@
              external))
     (should (string-match-p
              (regexp-quote "(step (index 1) (macro my-unless)")
+             external))
+    (should (string-match-p
+             (regexp-quote "(source (origin source)")
              external))))
 
 (ert-deftest agent-scheme-macro-test-macroexpand-does-not-evaluate-expanded-form ()
@@ -284,8 +296,8 @@
     (should (string-match-p (regexp-quote "(phase macro-expansion)")
                             external))))
 
-(ert-deftest agent-scheme-macro-test-macro-binding-info-and-source-placeholders ()
-  "Expose macro binding metadata and explicit absent source metadata."
+(ert-deftest agent-scheme-macro-test-macro-binding-info-and-source-metadata ()
+  "Expose macro binding metadata, read source metadata, and absent metadata."
   (should
    (equal
     (agent-scheme-macro-test--external
@@ -295,8 +307,12 @@
           ((twice value) (+ value value))))
       (list (macro-binding-info 'twice)
             (macro-binding-info 'missing)
-            (syntax-source '(twice 21)))")
-    "((macro-binding (identifier twice) (status bound) (kind syntax-rules) (library #f)) #f #f)")))
+            (let ((source (syntax-source '(twice 21))))
+              (list (cadr (assq 'origin (cdr source)))
+                    (cadr (assq 'phase (cdr source)))))
+            (syntax-source (list 'twice 21))
+            (equal? '(twice 21) (list 'twice 21)))")
+    "((macro-binding (identifier twice) (status bound) (kind syntax-rules) (library #f)) #f (source read) #f #t)")))
 
 (ert-deftest agent-scheme-macro-test-macroexpand-library-lists-syntax-exports ()
   "Inspect library macro exports without evaluating a macro use."

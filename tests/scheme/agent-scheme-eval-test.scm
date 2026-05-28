@@ -7,6 +7,11 @@
         (scheme file)
         (scheme write)
         (agent-scheme eval)
+        (only (agent-scheme macro)
+              agent-scheme-syntax-source)
+        (only (agent-scheme reader)
+              agent-scheme-datum->external
+              agent-scheme-read)
         (only (agent-scheme runtime)
               audit-process-capability-result!
               audit-network-capability-result!
@@ -68,11 +73,17 @@
 
 (check 'runtime-version-components
        (agent-scheme-version-components)
-       '(0 14 12))
+       '(0 14 13))
 
 (check 'runtime-version-datum
        (agent-scheme-result->external (agent-scheme-version))
-       "(agent-scheme-version 0 14 12)")
+       "(agent-scheme-version 0 14 13)")
+
+(check 'reader-source-metadata
+       (agent-scheme-datum->external
+        (agent-scheme-syntax-source
+         (agent-scheme-read "\n  (twice 21)\n")))
+       "(source (origin source) (source-id #f) (line 2) (column 3) (offset 3) (span 10) (phase read))")
 
 (check-external 'simple-string-docstring-reflection
                 "(import (scheme base) (agent reflect))
@@ -208,7 +219,7 @@
                      (examples . (((source . \"(rich cfg)\")
                                    (result . (session cfg)))))
                      (see-also . (current-context session-snapshot))
-                     (since . (agent-scheme-version 0 14 12))
+                     (since . (agent-scheme-version 0 14 13))
                      (deprecated . #f)
                      (stability . experimental)
                      (authority-review . \"local only\"))
@@ -275,7 +286,7 @@
                        (metadata-field 'rest-parameter 'parameters)
                        (final-rich)
                        (metadata-fields 'final-rich))"
-                "((session cfg) \"Create an Agent Scheme session from CONFIG.\\nThe session is represented as a datum.\" (config) \"Open an Agent Scheme session.\" ((config . \"Session configuration datum.\")) \"A session record.\" (pure) (((source . \"(rich cfg)\") (result session cfg))) (current-context session-snapshot) (agent-scheme-version 0 14 12) #f experimental \"local only\" \"Line one.\\nLine two.\\nLine three.\" (x) (((source . \"first\")) ((source . \"second\"))) (alpha beta) ((tag . kept)) \"Valid documentation.\" \"First result.\" #f ((arguments (x))) ((arguments (x))) ((arguments (x))) ((head . \"Required argument.\") (tail . \"Rest arguments.\")) #((returns . \"ordinary result\")) ((arguments ())))")
+                "((session cfg) \"Create an Agent Scheme session from CONFIG.\\nThe session is represented as a datum.\" (config) \"Open an Agent Scheme session.\" ((config . \"Session configuration datum.\")) \"A session record.\" (pure) (((source . \"(rich cfg)\") (result session cfg))) (current-context session-snapshot) (agent-scheme-version 0 14 13) #f experimental \"local only\" \"Line one.\\nLine two.\\nLine three.\" (x) (((source . \"first\")) ((source . \"second\"))) (alpha beta) ((tag . kept)) \"Valid documentation.\" \"First result.\" #f ((arguments (x))) ((arguments (x))) ((arguments (x))) ((head . \"Required argument.\") (tail . \"Rest arguments.\")) #((returns . \"ordinary result\")) ((arguments ())))")
 
 (check-external 'source-library-docstring-reflection
                 "(import (scheme base)
@@ -1080,14 +1091,20 @@
                     (else 'missing)))"
                 "(ok base)")
 
-(check-external 'macroexpand-one-step-record
-                "(import (scheme base) (agent reflect))
-                 (define-syntax my-unless
-                   (syntax-rules ()
-                     ((my-unless test body ...)
-                      (if test #f (begin body ...)))))
-                 (macroexpand-1 '(my-unless #f 42))"
-                "(macro-expansion (status ok) (mode one-step) (original (my-unless #f 42)) (expanded (if #f #f (begin 42))) (steps ((step (index 1) (macro my-unless) (input (my-unless #f 42)) (output (if #f #f (begin 42)))))) (macros (my-unless)) (source #f) (warnings ()) (errors ()))")
+(check-result-contains 'macroexpand-one-step-record
+                       "(import (scheme base) (agent reflect))
+                        (define-syntax my-unless
+                          (syntax-rules ()
+                            ((my-unless test body ...)
+                             (if test #f (begin body ...)))))
+                        (macroexpand-1 '(my-unless #f 42))"
+                       '("(macro-expansion"
+                         "(status ok)"
+                         "(mode one-step)"
+                         "(original (my-unless #f 42))"
+                         "(expanded (if #f #f (begin 42)))"
+                         "(step (index 1) (macro my-unless)"
+                         "(source (origin source)"))
 
 (check-external 'macroexpand-does-not-evaluate-expanded-form
                 "(import (scheme base) (agent reflect))
@@ -1130,8 +1147,12 @@
                      ((twice value) (+ value value))))
                  (list (macro-binding-info 'twice)
                        (macro-binding-info 'missing)
-                       (syntax-source '(twice 21)))"
-                "((macro-binding (identifier twice) (status bound) (kind syntax-rules) (library #f)) #f #f)")
+                       (let ((source (syntax-source '(twice 21))))
+                         (list (cadr (assq 'origin (cdr source)))
+                               (cadr (assq 'phase (cdr source)))))
+                       (syntax-source (list 'twice 21))
+                       (equal? '(twice 21) (list 'twice 21)))"
+                "((macro-binding (identifier twice) (status bound) (kind syntax-rules) (library #f)) #f (source read) #f #t)")
 
 (check 'import-scheme-base-into-empty-environment
        (agent-scheme-value->external

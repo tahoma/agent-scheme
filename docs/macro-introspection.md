@@ -33,9 +33,24 @@ The result is a `macro-expansion` datum with stable fields:
             (index 1)
             (macro my-unless)
             (input (my-unless #f 42))
-            (output (if #f #f (begin 42))))))
+            (output (if #f #f (begin 42)))
+            (source (source
+                      (origin source)
+                      (source-id #f)
+                      (line 10)
+                      (column 17)
+                      (offset 159)
+                      (span 24)
+                      (phase read))))))
   (macros (my-unless))
-  (source #f)
+  (source (source
+            (origin source)
+            (source-id #f)
+            (line 10)
+            (column 17)
+            (offset 159)
+            (span 24)
+            (phase read)))
   (warnings ())
   (errors ()))
 ```
@@ -66,8 +81,27 @@ available library:
 (macroexpand-library '(scheme base))
 ```
 
-`(syntax-source datum)` currently returns `#f`; it is reserved for future source
-location metadata without changing the macro-expansion record shape.
+`(syntax-source datum)` returns source metadata when the datum came from Agent
+Scheme reader input, and `#f` when no source is attached. Source metadata is
+ordinary Scheme-readable data and does not affect datum equality:
+
+```scheme
+(syntax-source '(twice 21))
+;; => (source
+;;      (origin source)
+;;      (source-id #f)
+;;      (line 1)
+;;      (column 16)
+;;      (offset 15)
+;;      (span 10)
+;;      (phase read))
+```
+
+The current source record fields are `origin`, `source-id`, `line`, `column`,
+`offset`, `span`, and `phase`. Line and column numbers are one-based, offsets
+and spans count characters in the reader's source snapshot, and `source-id` is
+`#f` unless the caller provides a host-neutral source identifier such as a
+buffer or session name.
 
 `(macroexpand-yield form options)` returns the same expansion record as
 `macroexpand` and also records a `macroexpand` event in the current evaluation
