@@ -750,6 +750,13 @@
                           (char<=? (string-ref text index) #\9)
                           (loop (+ index 1)))))))))
 
+    (define (terminal-dot-decimal-text? text)
+      "Report whether TEXT is a host decimal spelling that ends with a dot."
+      (let ((length (string-length text)))
+        (and (> length 1)
+             (char=? (string-ref text (- length 1)) #\.)
+             (integer-decimal-text? (substring text 0 (- length 1))))))
+
     (define (agent-scheme-number->external number)
       "Public renderer for Agent Scheme number records."
       (cond
@@ -765,9 +772,10 @@
            (agent-scheme-integer->radix-string (cdr value) 10))))
        ((eq? (agent-scheme-number-kind number) 'decimal)
         (let ((text (number->string (agent-scheme-number-value number))))
-          (if (integer-decimal-text? text)
-              (string-append text ".0")
-              text)))
+          (cond
+           ((integer-decimal-text? text) (string-append text ".0"))
+           ((terminal-dot-decimal-text? text) (string-append text "0"))
+           (else text))))
        ((eq? (agent-scheme-number-kind number) 'infnan)
         (cond
          ((string=? (agent-scheme-number-value number) "+inf.0") "+inf.0")

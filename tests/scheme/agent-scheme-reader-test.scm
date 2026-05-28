@@ -98,6 +98,10 @@
 (check-external 'hex-integer "#x2a" "42")
 (check-external 'rational "3/4" "3/4")
 (check-external 'decimal "1.5" "1.5")
+(check 'decimal-integer-external-form
+       (agent-scheme-datum->external
+        (agent-scheme-make-canonical-decimal 3.0))
+       "3.0")
 (check-external 'reduced-rational "6/10" "3/5")
 (check-external 'exact-decimal "#e1.5" "3/2")
 (check-external 'inexact-rational "#i3/2" "1.5")

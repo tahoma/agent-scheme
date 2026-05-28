@@ -23,17 +23,16 @@
     (skip-unless runner)
     (let ((output-buffer (generate-new-buffer " *agent-scheme-r7rs-fixtures*")))
       (unwind-protect
-          (let ((status
-                 (process-file
-                  runner
-                  nil
-                  output-buffer
-                  nil
-                  "-A"
-                  (expand-file-name "scheme" agent-scheme--test-root)
-                  (expand-file-name
-                   "tests/scheme/agent-scheme-fixture-test.scm"
-                   agent-scheme--test-root))))
+          (let* ((default-directory agent-scheme--test-root)
+                 (status
+                  (process-file
+                   runner
+                   nil
+                   output-buffer
+                   nil
+                   "-A"
+                   (agent-scheme--test-target-library-directory)
+                   "tests/scheme/agent-scheme-fixture-test.scm")))
             (unless (equal status 0)
               (ert-fail
                (with-current-buffer output-buffer

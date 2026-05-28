@@ -180,13 +180,15 @@ must not replace the R7RS-small user contract.
 | --- | --- | --- | --- | --- |
 | Emacs Lisp adapter | First host and bootstrap adapter | Native editor UX, ERT, project buffers, policy prompts | Host-specific objects and dynamic editor state must stay behind handles | `make test` through ERT |
 | Chibi Scheme | First external R7RS validation path | Small R7RS implementation, `.sld` support, useful for CI-style portability checks | Optional on developer machines; validates the portable product path but is not itself the product host | `AGENT_SCHEME_CHIBI=chibi-scheme make test` |
-| Gauche, Gambit, or Cyclone | R7RS compatibility probes | Broader implementation diversity and performance signals | Library/import behavior and extensions differ by implementation | Additional portable test runners and opt-in oracle adapters |
+| Gauche, Gambit, or Cyclone | R7RS compatibility probes | Broader implementation diversity and performance signals | Library/import behavior and extensions differ by implementation | Gambit CI shard plus additional portable test runners and opt-in oracle adapters |
 | Chez or another R6RS backend | Possible optimized backend | Mature compiler and runtime, strong performance story | R6RS is not the Agent Scheme language contract | R7RS compatibility adapter plus conformance fixtures |
 | Future compiled backend | Long-term runtime strategy | Fast startup or embedding in non-editor hosts | Must preserve inspectable datums, policy, and library semantics | Same core fixture suite |
 | Non-Emacs UI shell | Future UX host | CLI, web, IDE, or editor surfaces can share the core | Needs its own policy, handles, and persistence adapter | Mock or real host-adapter suite |
 
 The first concrete non-Emacs path is a Chibi-backed portable test path for
-reader, evaluator, and library code. A later non-Emacs host can start as a
+reader, evaluator, and library code. A Gambit-backed CI shard also runs the
+portable Scheme suite to keep an independent host timing signal visible while
+compiled host work remains future scope. A later non-Emacs host can start as a
 command-line adapter with mock capability libraries before gaining real UI,
 process, provider, or persistence authority.
 

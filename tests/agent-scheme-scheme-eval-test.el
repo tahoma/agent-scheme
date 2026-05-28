@@ -23,7 +23,7 @@
     (insert-file-contents
      (expand-file-name
       "scheme/agent-scheme/eval.sld"
-      agent-scheme--test-root))
+      agent-scheme--test-target-root))
     (goto-char (point-min))
     (should-not
      (re-search-forward
@@ -37,21 +37,21 @@
     (skip-unless runner)
     (let ((output-buffer (generate-new-buffer " *agent-scheme-r7rs-eval*")))
       (unwind-protect
-          (let ((status
-                 (process-file
-                  runner
-                  nil
-                  output-buffer
-                  nil
-                  "-A"
-                  (expand-file-name "scheme" agent-scheme--test-root)
-                  (expand-file-name
-                   "tests/scheme/agent-scheme-eval-test.scm"
-                   agent-scheme--test-root))))
+          (let* ((default-directory agent-scheme--test-root)
+                 (status
+                  (process-file
+                   runner
+                   nil
+                   output-buffer
+                   nil
+                   "-A"
+                   (agent-scheme--test-target-library-directory)
+                   "tests/scheme/agent-scheme-eval-test.scm")))
             (unless (equal status 0)
               (ert-fail
                (with-current-buffer output-buffer
-                 (buffer-string)))))
+                 (buffer-string))))
+            (agent-scheme--test-emit-ci-check-timings output-buffer))
         (kill-buffer output-buffer)))))
 
 ;;; agent-scheme-scheme-eval-test.el ends here

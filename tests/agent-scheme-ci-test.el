@@ -27,11 +27,13 @@
                 "\n"
                 "Ran 3 tests, 2 results as expected, 1 unexpected, 1 skipped "
                 "(2026-05-25 13:00:02-0700, 1.280000 sec)\n"
+                "AGENT_SCHEME_CI_CHECK_SECONDS=source-library-docstring-reflection 6.800\n"
                 "AGENT_SCHEME_CI_SHARD_NAME=Emacs-hosted ERT\n"
                 "AGENT_SCHEME_CI_SHARD_SELECTOR=(not \"agent-scheme-scheme-.*\")\n"
                 "AGENT_SCHEME_CI_WALL_SECONDS=2\n")))
          (shard (agent-scheme-ci-parse-log-file log))
-         (slowest (agent-scheme-ci-shard-slowest-tests shard 2)))
+         (slowest (agent-scheme-ci-shard-slowest-tests shard 2))
+         (check-timings (plist-get shard :check-timings)))
     (unwind-protect
         (progn
           (should (equal (plist-get shard :name) "Emacs-hosted ERT"))
@@ -43,6 +45,10 @@
           (should (= (plist-get shard :skipped) 1))
           (should (= (plist-get shard :ert-seconds) 1.28))
           (should (= (plist-get shard :wall-seconds) 2.0))
+          (should (= (length check-timings) 1))
+          (should (equal (plist-get (car check-timings) :name)
+                         "source-library-docstring-reflection"))
+          (should (= (plist-get (car check-timings) :seconds) 6.8))
           (should (equal (mapcar (lambda (test) (plist-get test :name))
                                  slowest)
                          '("agent-scheme-reader-test-slow"
@@ -73,6 +79,7 @@
             "\n"
             "Ran 3 tests, 3 results as expected, 0 unexpected "
             "(2026-05-25 13:00:01-0700, 0.310000 sec)\n"
+            "AGENT_SCHEME_CI_CHECK_SECONDS=standard-inexact-transcendentals 0.700\n"
             "AGENT_SCHEME_CI_SHARD_NAME=Portable Chibi-backed ERT\n"
             "AGENT_SCHEME_CI_SHARD_SELECTOR=\"agent-scheme-scheme-.*\"\n"
             "AGENT_SCHEME_CI_WALL_SECONDS=1\n")))
@@ -90,6 +97,10 @@
                                   markdown))
           (should (string-match-p
                    "| Fixture/conformance | 1 / 0\\.500s | 1 / 0\\.080s |"
+                   markdown))
+          (should (string-match-p "## Slow Portable Checks" markdown))
+          (should (string-match-p
+                   "| Portable Chibi-backed ERT | `standard-inexact-transcendentals` | 0\\.700s |"
                    markdown)))
       (delete-file emacs-log)
       (delete-file portable-log))))
@@ -147,6 +158,15 @@
                                       :ert-seconds 1.0
                                       :wall-seconds 1.0
                                       :tests nil))
+         (portable-gambit-shard '(:name "Portable Gambit-backed suite"
+                                        :selector "portable-gambit"
+                                        :ran 1
+                                        :expected 1
+                                        :unexpected 0
+                                        :skipped 0
+                                        :ert-seconds 1.0
+                                        :wall-seconds 1.0
+                                        :tests nil))
          (portable-eval-shard '(:name "Portable Chibi-backed eval"
                                       :selector "portable-eval"
                                       :ran 1
@@ -158,10 +178,13 @@
                                       :tests nil))
          (markdown
           (agent-scheme-ci-render-pr-markdown-summary
-           (list tools-shard portable-rest-shard portable-eval-shard))))
+           (list tools-shard
+                 portable-gambit-shard
+                 portable-rest-shard
+                 portable-eval-shard))))
     (should
      (string-match-p
-      "| Portable Chibi-backed eval |.*\n| Portable Chibi-backed rest |.*\n| Emacs tools/docs/integration |"
+      "| Portable Chibi-backed eval |.*\n| Portable Chibi-backed rest |.*\n| Portable Gambit-backed suite |.*\n| Emacs tools/docs/integration |"
       markdown))))
 
 (provide 'agent-scheme-ci-test)
