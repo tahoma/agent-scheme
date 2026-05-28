@@ -324,9 +324,11 @@ test-portable` remains available as the local aggregate for the portable ERT
 bridge tests, split between the Chibi-backed evaluator suite, the remaining
 Chibi-backed tests, and the Gambit-backed host shard. The Gambit shard runs the
 same portable Scheme test files through `gsi -:r7rs,search=scheme` when Gambit
-is available, and CI installs Ubuntu's `gambc` package so the shard contributes
-required host timing data. The Emacs-hosted shards split the non-portable ERT
-suite into core language/runtime, library/conformance, capability/policy, and
+is available. CI builds and caches Gambit 4.9.7 because Ubuntu 24.04's
+`gambc` package is 4.9.3 and does not accept the `-:r7rs` runtime option needed
+for the portable library search path. The shard contributes required host
+timing data. The Emacs-hosted shards split the non-portable ERT suite into core
+language/runtime, library/conformance, capability/policy, and
 tools/docs/integration groups. `make test-emacs-hosted` remains available as
 the local aggregate for all non-portable ERT tests with
 `(not "agent-scheme-scheme-.*")`.
