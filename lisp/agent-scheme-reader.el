@@ -241,10 +241,9 @@ per-run resource limits."
   "Return a source metadata field named NAME with VALUE."
   (list (agent-scheme--intern-symbol name) value))
 
-(defun agent-scheme--reader-line-column (reader offset)
-  "Return one-based (LINE . COLUMN) in READER at OFFSET."
-  (let* ((starts (agent-scheme--reader-line-starts reader))
-         (low 0)
+(defun agent-scheme--line-starts-line-column (starts offset)
+  "Return one-based (LINE . COLUMN) from STARTS at OFFSET."
+  (let* ((low 0)
          (high (1- (length starts)))
          (best 0))
     (while (<= low high)
@@ -258,26 +257,48 @@ per-run resource limits."
       (cons (1+ best)
             (1+ (- offset line-start))))))
 
-(defun agent-scheme--source-record (reader start end)
-  "Return a Scheme-readable source record for READER between START and END."
-  (let* ((line-column (agent-scheme--reader-line-column reader start))
-         (source-id (agent-scheme--reader-source-id reader)))
-    (list
-     (agent-scheme--intern-symbol "source")
-     (agent-scheme--source-field "origin"
-                                 (agent-scheme--intern-symbol "source"))
-     (agent-scheme--source-field "source-id"
-                                 (or source-id agent-scheme-false))
-     (agent-scheme--source-field
-      "line" (agent-scheme--make-canonical-integer (car line-column)))
-     (agent-scheme--source-field
-      "column" (agent-scheme--make-canonical-integer (cdr line-column)))
-     (agent-scheme--source-field
-      "offset" (agent-scheme--make-canonical-integer start))
-     (agent-scheme--source-field
-      "span" (agent-scheme--make-canonical-integer (max 0 (- end start))))
-     (agent-scheme--source-field "phase"
-                                 (agent-scheme--intern-symbol "read")))))
+(defun agent-scheme--reader-line-column (reader offset)
+  "Return one-based (LINE . COLUMN) in READER at OFFSET."
+  (agent-scheme--line-starts-line-column
+   (agent-scheme--reader-line-starts reader)
+   offset))
+
+(defun agent-scheme--source-note (reader start end)
+  "Return compact source metadata for READER between START and END."
+  (let ((line-column (agent-scheme--reader-line-column reader start)))
+    (vector 'agent-scheme--source-note
+            (agent-scheme--reader-source-id reader)
+            (car line-column)
+            (cdr line-column)
+            start
+            (max 0 (- end start)))))
+
+(defun agent-scheme--source-note-p (metadata)
+  "Return non-nil when METADATA is a compact source note."
+  (and (vectorp metadata)
+       (= (length metadata) 6)
+       (eq (aref metadata 0) 'agent-scheme--source-note)))
+
+(defun agent-scheme--source-metadata-record (metadata)
+  "Return a Scheme-readable source record for METADATA."
+  (if (agent-scheme--source-note-p metadata)
+      (list
+       (agent-scheme--intern-symbol "source")
+       (agent-scheme--source-field "origin"
+                                   (agent-scheme--intern-symbol "source"))
+       (agent-scheme--source-field "source-id"
+                                   (or (aref metadata 1) agent-scheme-false))
+       (agent-scheme--source-field
+        "line" (agent-scheme--make-canonical-integer (aref metadata 2)))
+       (agent-scheme--source-field
+        "column" (agent-scheme--make-canonical-integer (aref metadata 3)))
+       (agent-scheme--source-field
+        "offset" (agent-scheme--make-canonical-integer (aref metadata 4)))
+       (agent-scheme--source-field
+        "span" (agent-scheme--make-canonical-integer (aref metadata 5)))
+       (agent-scheme--source-field "phase"
+                                   (agent-scheme--intern-symbol "read")))
+    metadata))
 
 (defun agent-scheme--source-attachable-p (datum)
   "Return non-nil if DATUM can carry identity-based source metadata."
@@ -299,17 +320,22 @@ per-run resource limits."
 
 (defun agent-scheme-datum-source (datum)
   "Return source metadata attached to DATUM, or `agent-scheme-false'."
-  (or (gethash datum agent-scheme--datum-source-table)
-      agent-scheme-false))
+  (let ((metadata (gethash datum agent-scheme--datum-source-table)))
+    (if metadata
+        (agent-scheme--source-metadata-record metadata)
+      agent-scheme-false)))
+
+(defun agent-scheme--datum-source-metadata (datum)
+  "Return raw source metadata attached to DATUM, or nil when absent."
+  (gethash datum agent-scheme--datum-source-table))
 
 (defun agent-scheme--copy-datum-source (target source &optional overwrite)
   "Copy source metadata from SOURCE to TARGET.
 When OVERWRITE is nil, keep TARGET's existing source metadata."
-  (let ((metadata (agent-scheme-datum-source source)))
-    (when (and (not (eq metadata agent-scheme-false))
+  (let ((metadata (agent-scheme--datum-source-metadata source)))
+    (when (and metadata
                (or overwrite
-                   (eq (agent-scheme-datum-source target)
-                       agent-scheme-false)))
+                   (not (agent-scheme--datum-source-metadata target))))
       (agent-scheme--set-datum-source target metadata)))
   target)
 
@@ -1388,7 +1414,7 @@ Signal if the sequence exceeds MAXIMUM-LENGTH."
               (agent-scheme--note-node reader)))))
     (agent-scheme--set-datum-source
      datum
-     (agent-scheme--source-record
+     (agent-scheme--source-note
       reader start (agent-scheme--reader-position reader)))))
 
 ;;;###autoload
