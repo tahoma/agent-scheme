@@ -37,7 +37,8 @@
                   (jiffies-per-second host-jiffies-per-second))
           (scheme write)
           (agent-scheme reader)
-          (agent-scheme runtime)
+          (rename (agent-scheme runtime)
+                  (make-parameter make-agent-scheme-parameter))
           (agent-scheme result)
           (agent-scheme base)
           (agent-scheme library)
@@ -5983,23 +5984,10 @@
       "Implement the `open-output-file` primitive with capability checks."
       (let* ((filename (expect-string (car arguments) "open-output-file"))
              (authorization
-              (resolve-output-file-policy-path
+             (resolve-output-file-policy-path
                filename
                context
-               "open-output-file"))
-             (path (file-authorization-path authorization))
-             (directory (path-directory path)))
-        (if (and (not (string=? directory ""))
-                 (not (file-exists? directory)))
-            (begin
-              (audit-file-capability-result!
-               context
-               authorization
-               "open-output-file parent directory is not writable"
-               #t)
-              (eval-error
-               "open-output-file parent directory is not writable"
-               filename)))
+               "open-output-file")))
         (audit-file-capability-result! context authorization 'opened #f)
         (make-file-output-port context authorization)))
 
@@ -6025,23 +6013,10 @@
       (let* ((filename
               (expect-string (car arguments) "open-binary-output-file"))
              (authorization
-              (resolve-output-file-policy-path
+             (resolve-output-file-policy-path
                filename
                context
-               "open-binary-output-file"))
-             (path (file-authorization-path authorization))
-             (directory (path-directory path)))
-        (if (and (not (string=? directory ""))
-                 (not (file-exists? directory)))
-            (begin
-              (audit-file-capability-result!
-               context
-               authorization
-               "open-binary-output-file parent directory is not writable"
-               #t)
-              (eval-error
-               "open-binary-output-file parent directory is not writable"
-               filename)))
+               "open-binary-output-file")))
         (audit-file-capability-result! context authorization 'opened #f)
         (make-binary-file-output-port context authorization)))
 
@@ -6603,10 +6578,10 @@
                (lambda (converted)
                  (continue
                   continuation
-                  (make-parameter
+                  (make-agent-scheme-parameter
                    (single-value converted "make-parameter converter")
                    converter)))))
-            (continue continuation (make-parameter initial #f)))))
+            (continue continuation (make-agent-scheme-parameter initial #f)))))
 
     (define (primitive-apply/k arguments context continuation)
       "Continuation-aware implementation of the `apply` primitive for trampoline evaluation."

@@ -16,24 +16,24 @@ env:
 
 jobs:
   test-portable:
-    name: portable Chibi-backed (${{ matrix.label }})
+    name: portable R7RS / Chibi (${{ matrix.label }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         include:
           - shard: portable-eval
-            label: evaluator
+            label: evaluator subset
             make_target: test-portable-eval
             log_file: portable-eval.log
-            summary_name: Portable Chibi-backed eval
+            summary_name: Portable R7RS Chibi evaluator subset
             selector: '"^agent-scheme-scheme-eval-test-r7rs-suite$"'
           - shard: portable-rest
-            label: remaining
+            label: non-evaluator subset
             make_target: test-portable-rest
             log_file: portable-rest.log
-            summary_name: Portable Chibi-backed rest
-            selector: '(and "agent-scheme-scheme-.*" (not "^agent-scheme-scheme-eval-test-r7rs-suite$") (not "^agent-scheme-scheme-gambit-test-r7rs-suite$"))'
+            summary_name: Portable R7RS Chibi non-evaluator subset
+            selector: '(and "agent-scheme-scheme-.*" (not "^agent-scheme-scheme-eval-test-r7rs-suite$") (not "^agent-scheme-scheme-.*-host-test-r7rs-suite$"))'
 
     steps:
       - name: Check out repository
@@ -44,7 +44,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y emacs-nox chibi-scheme
 
-      - name: Run portable Chibi-backed shard
+      - name: Run portable R7RS Chibi shard
         shell: bash
         run: |
           mkdir -p ci-logs
@@ -78,7 +78,7 @@ jobs:
           fi
 
   test-portable-gambit:
-    name: portable Gambit-backed
+    name: portable R7RS / Gambit full suite
     runs-on: ubuntu-latest
     env:
       AGENT_SCHEME_GAMBIT_VERSION: "4.9.7"
@@ -120,7 +120,7 @@ jobs:
           "${gambit_prefix}/bin/gsi" -v
           "${gambit_prefix}/bin/gsi" -:r7rs -e '(import (scheme base) (scheme write)) (write (+ 1 2)) (newline)'
 
-      - name: Run portable Gambit-backed shard
+      - name: Run portable R7RS Gambit shard
         shell: bash
         run: |
           mkdir -p ci-logs
@@ -130,8 +130,8 @@ jobs:
           status=${PIPESTATUS[0]}
           wall=$((SECONDS - started))
           {
-            printf 'AGENT_SCHEME_CI_SHARD_NAME=%s\n' 'Portable Gambit-backed suite'
-            printf 'AGENT_SCHEME_CI_SHARD_SELECTOR=%s\n' '"^agent-scheme-scheme-gambit-test-r7rs-suite$"'
+            printf 'AGENT_SCHEME_CI_SHARD_NAME=%s\n' 'Portable R7RS Gambit full suite'
+            printf 'AGENT_SCHEME_CI_SHARD_SELECTOR=%s\n' '"^agent-scheme-scheme-gambit-host-test-r7rs-suite$"'
             printf 'AGENT_SCHEME_CI_WALL_SECONDS=%s\n' "$wall"
           } >> ci-logs/portable-gambit.log
           exit "$status"
@@ -151,6 +151,92 @@ jobs:
             emacs -Q --batch -L lisp \
               --eval "(require 'agent-scheme-ci)" \
               --eval "(agent-scheme-ci-write-summary '(\"ci-logs/portable-gambit.log\") (getenv \"GITHUB_STEP_SUMMARY\"))"
+          fi
+
+  test-portable-extra-hosts:
+    name: portable R7RS / ${{ matrix.host_name }} full suite
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - host: racket
+            host_name: Racket
+            apt_package: racket
+            make_target: test-portable-racket
+            log_file: portable-racket.log
+            artifact: portable-racket
+            summary_name: Portable R7RS Racket full suite
+            selector: '"^agent-scheme-scheme-racket-host-test-r7rs-suite$"'
+          - host: gauche
+            host_name: Gauche
+            apt_package: gauche
+            make_target: test-portable-gauche
+            log_file: portable-gauche.log
+            artifact: portable-gauche
+            summary_name: Portable R7RS Gauche full suite
+            selector: '"^agent-scheme-scheme-gauche-host-test-r7rs-suite$"'
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Cache Racket R7RS package
+        if: matrix.host == 'racket'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.local/share/racket
+            ~/.cache/racket
+          key: ${{ runner.os }}-racket-r7rs-v1
+
+      - name: Install portable R7RS host
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y emacs-nox "${{ matrix.apt_package }}"
+
+          case "${{ matrix.host }}" in
+            racket)
+              raco pkg install --batch --auto --skip-installed --no-docs r7rs
+              racket -I r7rs -e '(import (scheme base) (scheme write)) (write (+ 1 2)) (newline)'
+              ;;
+            gauche)
+              gosh -r7 -e '(import (scheme base) (scheme write)) (write (+ 1 2)) (newline)'
+              ;;
+          esac
+
+      - name: Run portable R7RS host shard
+        shell: bash
+        run: |
+          mkdir -p ci-logs
+          started=$SECONDS
+          set +e
+          make "${{ matrix.make_target }}" 2>&1 | tee "ci-logs/${{ matrix.log_file }}"
+          status=${PIPESTATUS[0]}
+          wall=$((SECONDS - started))
+          {
+            printf 'AGENT_SCHEME_CI_SHARD_NAME=%s\n' '${{ matrix.summary_name }}'
+            printf 'AGENT_SCHEME_CI_SHARD_SELECTOR=%s\n' '${{ matrix.selector }}'
+            printf 'AGENT_SCHEME_CI_WALL_SECONDS=%s\n' "$wall"
+          } >> "ci-logs/${{ matrix.log_file }}"
+          exit "$status"
+
+      - name: Upload portable R7RS host shard log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-log-${{ matrix.artifact }}
+          path: ci-logs/${{ matrix.log_file }}
+          if-no-files-found: warn
+
+      - name: Render portable R7RS host shard timing summary
+        if: always()
+        run: |
+          if [ -f "ci-logs/${{ matrix.log_file }}" ]; then
+            emacs -Q --batch -L lisp \
+              --eval "(require 'agent-scheme-ci)" \
+              --eval "(agent-scheme-ci-write-summary '(\"ci-logs/${{ matrix.log_file }}\") (getenv \"GITHUB_STEP_SUMMARY\"))"
           fi
 
   test-emacs-hosted:
@@ -232,6 +318,7 @@ jobs:
     needs:
       - test-portable
       - test-portable-gambit
+      - test-portable-extra-hosts
       - test-emacs-hosted
     if: always()
 

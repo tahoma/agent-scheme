@@ -80,7 +80,7 @@
             "Ran 3 tests, 3 results as expected, 0 unexpected "
             "(2026-05-25 13:00:01-0700, 0.310000 sec)\n"
             "AGENT_SCHEME_CI_CHECK_SECONDS=standard-inexact-transcendentals 0.700\n"
-            "AGENT_SCHEME_CI_SHARD_NAME=Portable Chibi-backed ERT\n"
+            "AGENT_SCHEME_CI_SHARD_NAME=Portable R7RS Chibi evaluator subset\n"
             "AGENT_SCHEME_CI_SHARD_SELECTOR=\"agent-scheme-scheme-.*\"\n"
             "AGENT_SCHEME_CI_WALL_SECONDS=1\n")))
          (markdown
@@ -89,7 +89,7 @@
                    (list portable-log emacs-log)))))
     (unwind-protect
         (progn
-          (should (string-match-p "| Portable Chibi-backed ERT |" markdown))
+          (should (string-match-p "| Portable R7RS Chibi evaluator subset |" markdown))
           (should (string-match-p "| Emacs-hosted ERT |" markdown))
           (should (string-match-p "| Reader | 1 / 0\\.040s | 1 / 0\\.030s |"
                                   markdown))
@@ -100,7 +100,7 @@
                    markdown))
           (should (string-match-p "## Slow Portable Checks" markdown))
           (should (string-match-p
-                   "| Portable Chibi-backed ERT | `standard-inexact-transcendentals` | 0\\.700s |"
+                   "| Portable R7RS Chibi evaluator subset | `standard-inexact-transcendentals` | 0\\.700s |"
                    markdown)))
       (delete-file emacs-log)
       (delete-file portable-log))))
@@ -149,7 +149,7 @@
                               :ert-seconds 1.0
                               :wall-seconds 1.0
                               :tests nil))
-         (portable-rest-shard '(:name "Portable Chibi-backed rest"
+         (portable-rest-shard '(:name "Portable R7RS Chibi non-evaluator subset"
                                       :selector "portable-rest"
                                       :ran 1
                                       :expected 1
@@ -158,7 +158,7 @@
                                       :ert-seconds 1.0
                                       :wall-seconds 1.0
                                       :tests nil))
-         (portable-gambit-shard '(:name "Portable Gambit-backed suite"
+         (portable-gambit-shard '(:name "Portable R7RS Gambit full suite"
                                         :selector "portable-gambit"
                                         :ran 1
                                         :expected 1
@@ -167,7 +167,25 @@
                                         :ert-seconds 1.0
                                         :wall-seconds 1.0
                                         :tests nil))
-         (portable-eval-shard '(:name "Portable Chibi-backed eval"
+         (portable-racket-shard '(:name "Portable R7RS Racket full suite"
+                                        :selector "portable-racket"
+                                        :ran 1
+                                        :expected 1
+                                        :unexpected 0
+                                        :skipped 0
+                                        :ert-seconds 1.0
+                                        :wall-seconds 1.0
+                                        :tests nil))
+         (portable-gauche-shard '(:name "Portable R7RS Gauche full suite"
+                                        :selector "portable-gauche"
+                                        :ran 1
+                                        :expected 1
+                                        :unexpected 0
+                                        :skipped 0
+                                        :ert-seconds 1.0
+                                        :wall-seconds 1.0
+                                        :tests nil))
+         (portable-eval-shard '(:name "Portable R7RS Chibi evaluator subset"
                                       :selector "portable-eval"
                                       :ran 1
                                       :expected 1
@@ -179,12 +197,14 @@
          (markdown
           (agent-scheme-ci-render-pr-markdown-summary
            (list tools-shard
+                 portable-gauche-shard
+                 portable-racket-shard
                  portable-gambit-shard
                  portable-rest-shard
                  portable-eval-shard))))
     (should
      (string-match-p
-      "| Portable Chibi-backed eval |.*\n| Portable Chibi-backed rest |.*\n| Portable Gambit-backed suite |.*\n| Emacs tools/docs/integration |"
+      "| Portable R7RS Chibi evaluator subset |.*\n| Portable R7RS Chibi non-evaluator subset |.*\n| Portable R7RS Gambit full suite |.*\n| Portable R7RS Racket full suite |.*\n| Portable R7RS Gauche full suite |.*\n| Emacs tools/docs/integration |"
       markdown))))
 
 (provide 'agent-scheme-ci-test)

@@ -43,14 +43,19 @@
   "Hidden marker used to update the pull request timing comment.")
 
 (defconst agent-scheme-ci--shard-order
-  '(("Portable Chibi-backed eval" . 0)
-    ("Portable Chibi-backed rest" . 1)
-    ("Portable Chibi-backed ERT" . 1)
-    ("Portable Gambit-backed suite" . 2)
-    ("Emacs core language/runtime" . 3)
-    ("Emacs library/conformance" . 4)
-    ("Emacs capabilities/policy" . 5)
-    ("Emacs tools/docs/integration" . 6))
+  '(("Portable R7RS Chibi evaluator subset" . 0)
+    ("Portable R7RS Chibi non-evaluator subset" . 1)
+    ("Portable R7RS Gambit full suite" . 2)
+    ("Portable R7RS Racket full suite" . 3)
+    ("Portable R7RS Gauche full suite" . 4)
+    ("Portable Chibi-backed eval" . 10)
+    ("Portable Chibi-backed rest" . 11)
+    ("Portable Chibi-backed ERT" . 11)
+    ("Portable Gambit-backed suite" . 12)
+    ("Emacs core language/runtime" . 20)
+    ("Emacs library/conformance" . 21)
+    ("Emacs capabilities/policy" . 22)
+    ("Emacs tools/docs/integration" . 23))
   "Preferred display order for CI shard summaries.")
 
 (defun agent-scheme-ci--file-string (path)
@@ -266,8 +271,8 @@ durations, and optional wall-clock seconds recorded by the workflow."
       "\n")
      "\n\n"
      "## Paired Validation Surfaces\n\n"
-     "Portable Chibi-backed rows are reported beside their Emacs-hosted counterparts where the suite already has paired coverage.\n\n"
-     "| Surface | Emacs-hosted tests / ERT time | Portable Chibi-backed tests / ERT time |\n"
+     "Portable R7RS rows are reported beside their Emacs-hosted counterparts where the suite already has paired coverage.\n\n"
+     "| Surface | Emacs-hosted tests / ERT time | Portable R7RS tests / ERT time |\n"
      "| --- | ---: | ---: |\n"
      (mapconcat
       (lambda (group)

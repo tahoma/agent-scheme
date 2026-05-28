@@ -1,0 +1,27 @@
+;;; agent-scheme-scheme-full-host-test.el --- Full portable R7RS host suites  -*- lexical-binding: t; -*-
+
+;;; Commentary:
+
+;; ERT bridges for running the portable R7RS Scheme tests under additional
+;; R7RS hosts.  Chibi remains split across narrower shards for CI timing.
+
+;;; Code:
+
+(require 'ert)
+(require 'agent-scheme-scheme-host)
+
+(ert-deftest agent-scheme-scheme-gambit-host-test-r7rs-suite ()
+  "Run the full portable R7RS suite with Gambit Scheme."
+  (agent-scheme--scheme-host-run-suite 'gambit "gambit"))
+
+(ert-deftest agent-scheme-scheme-racket-host-test-r7rs-suite ()
+  "Run the full portable R7RS suite with Racket's R7RS package."
+  (agent-scheme--scheme-host-run-suite 'racket "racket"))
+
+(ert-deftest agent-scheme-scheme-gauche-host-test-r7rs-suite ()
+  "Run the full portable R7RS suite with Gauche Scheme."
+  (agent-scheme--scheme-host-run-suite 'gauche "gauche"))
+
+(provide 'agent-scheme-scheme-full-host-test)
+
+;;; agent-scheme-scheme-full-host-test.el ends here

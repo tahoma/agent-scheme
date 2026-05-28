@@ -186,11 +186,11 @@ must not replace the R7RS-small user contract.
 | Non-Emacs UI shell | Future UX host | CLI, web, IDE, or editor surfaces can share the core | Needs its own policy, handles, and persistence adapter | Mock or real host-adapter suite |
 
 The first concrete non-Emacs path is a Chibi-backed portable test path for
-reader, evaluator, and library code. A Gambit-backed CI shard also runs the
-portable Scheme suite to keep an independent host timing signal visible while
-compiled host work remains future scope. A later non-Emacs host can start as a
-command-line adapter with mock capability libraries before gaining real UI,
-process, provider, or persistence authority.
+reader, evaluator, and library code. Full-suite Gambit, Racket, and Gauche CI
+shards also run the portable Scheme suite to keep independent host timing
+signals visible while compiled host work remains future scope. A later
+non-Emacs host can start as a command-line adapter with mock capability
+libraries before gaining real UI, process, provider, or persistence authority.
 
 ## Portable Test Strategy
 
