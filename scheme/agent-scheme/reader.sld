@@ -62,7 +62,7 @@
     (define-record-type <reader>
       ;; Reader state is mutable only for cursor position, fold-case mode, and
       ;; node count.  SOURCE remains the immutable snapshot of input text.
-      (make-reader source position length fold-case node-count datum-labels
+      (make-reader source position length line-starts fold-case node-count datum-labels
                    maximum-depth maximum-list-length maximum-vector-length
                    maximum-bytevector-length maximum-string-size
                    maximum-total-nodes source-id)
@@ -70,6 +70,7 @@
       (source reader-source)
       (position reader-position set-reader-position!)
       (length reader-length)
+      (line-starts reader-line-starts)
       (fold-case reader-fold-case set-reader-fold-case!)
       (node-count reader-node-count set-reader-node-count!)
       (datum-labels reader-datum-labels set-reader-datum-labels!)
@@ -174,6 +175,18 @@
       (let ((cell (assq key options)))
         (if cell (cdr cell) default)))
 
+    (define (source-line-starts source)
+      "Return a vector of zero-based offsets where each source line starts."
+      (let ((length (string-length source)))
+        (let loop ((index 0) (starts '(0)))
+          (if (= index length)
+              (list->vector (reverse starts))
+              (loop (+ index 1)
+                    (if (and (char=? (string-ref source index) #\newline)
+                             (< (+ index 1) length))
+                        (cons (+ index 1) starts)
+                        starts))))))
+
     (define (reader-from-source source options)
       "Create a reader state object from SOURCE and per-run option overrides."
       (if (not (string? source))
@@ -181,6 +194,7 @@
           (make-reader source
                        0
                        (string-length source)
+                       (source-line-starts source)
                        #f
                        0
                        '()
@@ -204,14 +218,18 @@
 
     (define (reader-line-column reader offset)
       "Return one-based (LINE . COLUMN) in READER at OFFSET."
-      (let ((source (reader-source reader)))
-        (let loop ((index 0) (line 1) (column 1))
-          (cond
-           ((= index offset) (cons line column))
-           ((char=? (string-ref source index) #\newline)
-            (loop (+ index 1) (+ line 1) 1))
-           (else
-            (loop (+ index 1) line (+ column 1)))))))
+      (let* ((starts (reader-line-starts reader))
+             (count (vector-length starts)))
+        (let loop ((low 0) (high (- count 1)) (best 0))
+          (if (> low high)
+              (let ((line-start (vector-ref starts best)))
+                (cons (+ best 1)
+                      (+ (- offset line-start) 1)))
+              (let* ((middle (quotient (+ low high) 2))
+                     (line-start (vector-ref starts middle)))
+                (if (<= line-start offset)
+                    (loop (+ middle 1) high middle)
+                    (loop low (- middle 1) best)))))))
 
     (define (source-record reader start end)
       "Return a Scheme-readable source record for READER between START and END."

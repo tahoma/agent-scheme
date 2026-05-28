@@ -134,6 +134,7 @@ per-run resource limits."
   source
   (position 0)
   length
+  line-starts
   fold-case
   (node-count 0)
   datum-labels
@@ -195,12 +196,25 @@ per-run resource limits."
       (and (bufferp source)
            (buffer-name source))))
 
+(defun agent-scheme--source-line-starts (source)
+  "Return a vector of zero-based offsets where each line in SOURCE starts."
+  (let ((starts '(0))
+        (index 0)
+        (length (length source)))
+    (while (< index length)
+      (when (and (= (aref source index) ?\n)
+                 (< (1+ index) length))
+        (push (1+ index) starts))
+      (setq index (1+ index)))
+    (vconcat (nreverse starts))))
+
 (defun agent-scheme--new-reader (source options)
   "Return a reader state over SOURCE using OPTIONS."
   (let ((text (agent-scheme--source-string source)))
     (agent-scheme--make-reader
      :source text
      :length (length text)
+     :line-starts (agent-scheme--source-line-starts text)
      :datum-labels (make-hash-table :test #'equal)
      :maximum-depth
      (agent-scheme--option options :max-depth
@@ -229,17 +243,20 @@ per-run resource limits."
 
 (defun agent-scheme--reader-line-column (reader offset)
   "Return one-based (LINE . COLUMN) in READER at OFFSET."
-  (let ((source (agent-scheme--reader-source reader))
-        (line 1)
-        (column 1)
-        (index 0))
-    (while (< index offset)
-      (if (= (aref source index) ?\n)
-          (setq line (1+ line)
-                column 1)
-        (setq column (1+ column)))
-      (setq index (1+ index)))
-    (cons line column)))
+  (let* ((starts (agent-scheme--reader-line-starts reader))
+         (low 0)
+         (high (1- (length starts)))
+         (best 0))
+    (while (<= low high)
+      (let* ((middle (/ (+ low high) 2))
+             (line-start (aref starts middle)))
+        (if (<= line-start offset)
+            (setq best middle
+                  low (1+ middle))
+          (setq high (1- middle)))))
+    (let ((line-start (aref starts best)))
+      (cons (1+ best)
+            (1+ (- offset line-start))))))
 
 (defun agent-scheme--source-record (reader start end)
   "Return a Scheme-readable source record for READER between START and END."
