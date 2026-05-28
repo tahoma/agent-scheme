@@ -1246,7 +1246,8 @@ When RECURSIVE is non-nil, transformer specs see the new bindings."
    (agent-scheme--macro-field
     "input" (agent-scheme--strip-identifiers input))
    (agent-scheme--macro-field
-    "output" (agent-scheme--strip-identifiers output))))
+    "output" (agent-scheme--strip-identifiers output))
+   (agent-scheme--macro-field "source" (agent-scheme-datum-source input))))
 
 (defun agent-scheme--macro-visible-expanded (expanded)
   "Return EXPANDED in the readable shape used by expansion records."
@@ -1290,6 +1291,7 @@ ONE-STEP stops after the first macro expansion."
               (agent-scheme--expand-expression current environment context))
              (visible-expanded
               (agent-scheme--macro-visible-expanded expanded)))
+        (agent-scheme--copy-datum-source visible-expanded current)
         (if (not (eq expanded current))
             (progn
               (setq target expanded)
@@ -1333,7 +1335,7 @@ ONE-STEP stops after the first macro expansion."
    (agent-scheme--macro-field "steps" steps)
    (agent-scheme--macro-field
     "macros" (mapcar #'agent-scheme--macro-symbol macros))
-   (agent-scheme--macro-field "source" agent-scheme-false)
+   (agent-scheme--macro-field "source" (agent-scheme-datum-source original))
    (agent-scheme--macro-field "warnings" nil)
    (agent-scheme--macro-field "errors" errors)))
 
@@ -1415,9 +1417,9 @@ ONE-STEP stops after the first macro expansion."
          (agent-scheme--macro-field "library" agent-scheme-false))
       agent-scheme-false)))
 
-(defun agent-scheme-syntax-source (_datum)
+(defun agent-scheme-syntax-source (datum)
   "Return source metadata for DATUM, or #f when none is attached."
-  agent-scheme-false)
+  (agent-scheme-datum-source datum))
 
 (defun agent-scheme--macro-library-record
     (status library-name macros errors)

@@ -11,6 +11,9 @@
           agent-scheme-read-from-string-at
           agent-scheme-read-eof
           agent-scheme-read-eof?
+          agent-scheme-datum-source
+          agent-scheme-datum-source-set!
+          agent-scheme-copy-datum-source!
           agent-scheme-validate-datum
           agent-scheme-datum->external
           agent-scheme-number?
@@ -62,7 +65,7 @@
       (make-reader source position length fold-case node-count datum-labels
                    maximum-depth maximum-list-length maximum-vector-length
                    maximum-bytevector-length maximum-string-size
-                   maximum-total-nodes)
+                   maximum-total-nodes source-id)
       reader?
       (source reader-source)
       (position reader-position set-reader-position!)
@@ -75,7 +78,8 @@
       (maximum-vector-length reader-maximum-vector-length)
       (maximum-bytevector-length reader-maximum-bytevector-length)
       (maximum-string-size reader-maximum-string-size)
-      (maximum-total-nodes reader-maximum-total-nodes))
+      (maximum-total-nodes reader-maximum-total-nodes)
+      (source-id reader-source-id))
 
     ;; Validation records own the post-read resource budget for host datums.
     (define-record-type <validation>
@@ -95,6 +99,18 @@
     ;; Singleton EOF sentinel returned by incremental reader calls at end of
     ;; input.
     (define agent-scheme-read-eof (make-agent-scheme-read-eof))
+
+    ;; Identity side table for source metadata.  It keeps metadata auxiliary so
+    ;; ordinary datum equality and external writing remain R7RS datums.
+    (define agent-scheme-source-metadata '())
+
+    ;; Conservative cap for the portable source side table.  Portable R7RS has
+    ;; no weak hash table, so very large or long-lived sessions trade old source
+    ;; lookups for bounded metadata retention.
+    (define agent-scheme-source-metadata-limit 100000)
+
+    ;; Current number of retained source metadata entries in the portable table.
+    (define agent-scheme-source-metadata-count 0)
 
     ;; Agent-owned numbers preserve lexical exactness, radix, and special
     ;; values instead of trusting the host Scheme's numeric tower to round-trip.
@@ -179,7 +195,84 @@
                        (option-ref options 'max-string-size
                                    agent-scheme-default-maximum-string-size)
                        (option-ref options 'max-total-nodes
-                                   agent-scheme-default-maximum-total-nodes))))
+                                   agent-scheme-default-maximum-total-nodes)
+                       (option-ref options 'source-id #f))))
+
+    (define (source-field name value)
+      "Build one Scheme-readable source metadata field."
+      (list name value))
+
+    (define (reader-line-column reader offset)
+      "Return one-based (LINE . COLUMN) in READER at OFFSET."
+      (let ((source (reader-source reader)))
+        (let loop ((index 0) (line 1) (column 1))
+          (cond
+           ((= index offset) (cons line column))
+           ((char=? (string-ref source index) #\newline)
+            (loop (+ index 1) (+ line 1) 1))
+           (else
+            (loop (+ index 1) line (+ column 1)))))))
+
+    (define (source-record reader start end)
+      "Return a Scheme-readable source record for READER between START and END."
+      (let ((line-column (reader-line-column reader start)))
+        (list 'source
+              (source-field 'origin 'source)
+              (source-field 'source-id (reader-source-id reader))
+              (source-field 'line
+                            (agent-scheme-make-canonical-integer
+                             (car line-column)))
+              (source-field 'column
+                            (agent-scheme-make-canonical-integer
+                             (cdr line-column)))
+              (source-field 'offset
+                            (agent-scheme-make-canonical-integer start))
+              (source-field 'span
+                            (agent-scheme-make-canonical-integer
+                             (max 0 (- end start))))
+              (source-field 'phase 'read))))
+
+    (define (source-attachable? datum)
+      "Report whether DATUM has stable identity for source metadata."
+      (or (pair? datum)
+          (vector? datum)
+          (string? datum)
+          (bytevector? datum)
+          (agent-scheme-number? datum)
+          (agent-scheme-record? datum)
+          (agent-scheme-record-type? datum)))
+
+    (define (agent-scheme-datum-source-set! datum source)
+      "Attach SOURCE metadata to DATUM when DATUM has stable identity."
+      (if (and source (source-attachable? datum))
+          (begin
+            (if (> agent-scheme-source-metadata-count
+                   agent-scheme-source-metadata-limit)
+                (begin
+                  (set! agent-scheme-source-metadata '())
+                  (set! agent-scheme-source-metadata-count 0)))
+            (set! agent-scheme-source-metadata
+                  (cons (cons datum source)
+                        agent-scheme-source-metadata))
+            (set! agent-scheme-source-metadata-count
+                  (+ agent-scheme-source-metadata-count 1))))
+      datum)
+
+    (define (agent-scheme-datum-source datum)
+      "Return source metadata attached to DATUM, or #f when absent."
+      (let ((cell (assq datum agent-scheme-source-metadata)))
+        (if cell (cdr cell) #f)))
+
+    (define (agent-scheme-copy-datum-source! target source . maybe-overwrite)
+      "Copy source metadata from SOURCE to TARGET, preserving existing metadata by default."
+      (let ((metadata (agent-scheme-datum-source source))
+            (overwrite? (and (not (null? maybe-overwrite))
+                             (car maybe-overwrite))))
+        (if (and metadata
+                 (or overwrite?
+                     (not (agent-scheme-datum-source target))))
+            (agent-scheme-datum-source-set! target metadata))
+        target))
 
     (define (reader-error reader message . irritants)
       "Raise a reader error annotated with the current source offset."
@@ -1457,54 +1550,62 @@
       (skip-intertoken-space! reader depth)
       (if (eof? reader)
           (reader-error reader "unexpected end of input"))
-      (let ((char (peek reader)))
-        (cond
-         ((char=? char #\() (read-list reader (+ depth 1)))
-         ((char=? char #\))
-          (reader-error reader "unexpected closing parenthesis"))
-         ((char=? char #\")
-          (let ((datum (read-string-literal reader)))
-            (note-node! reader)
-            datum))
-         ((char=? char #\|)
-          (let ((datum
-                 (string->symbol (read-vertical-symbol-name reader))))
-            (note-node! reader)
-            datum))
-         ((char=? char #\')
-          (advance! reader)
-          (let ((datum (quote-datum "quote"
-                                    (read-datum reader (+ depth 1)))))
-            (note-node! reader)
-            datum))
-         ((char=? char #\`)
-          (advance! reader)
-          (let ((datum (quote-datum "quasiquote"
-                                    (read-datum reader (+ depth 1)))))
-            (note-node! reader)
-            datum))
-         ((char=? char #\,)
-          (advance! reader)
-          (if (and (peek reader) (char=? (peek reader) #\@))
-              (begin
-                (advance! reader)
-                (let ((datum
-                       (quote-datum "unquote-splicing"
-                                    (read-datum reader (+ depth 1)))))
-                  (note-node! reader)
-                  datum))
-              (let ((datum (quote-datum "unquote"
-                                        (read-datum reader (+ depth 1)))))
-                (note-node! reader)
-                datum)))
-         ((char=? char #\#)
-          (let ((datum (read-dispatch reader (+ depth 1))))
-            (note-node! reader)
-            datum))
-         (else
-          (let ((datum (classify-token reader (read-token reader))))
-            (note-node! reader)
-            datum)))))
+      (let ((start (reader-position reader))
+            (char (peek reader)))
+        (let ((datum
+               (cond
+                ((char=? char #\() (read-list reader (+ depth 1)))
+                ((char=? char #\))
+                 (reader-error reader "unexpected closing parenthesis"))
+                ((char=? char #\")
+                 (let ((datum (read-string-literal reader)))
+                   (note-node! reader)
+                   datum))
+                ((char=? char #\|)
+                 (let ((datum
+                        (string->symbol (read-vertical-symbol-name reader))))
+                   (note-node! reader)
+                   datum))
+                ((char=? char #\')
+                 (advance! reader)
+                 (let ((datum (quote-datum "quote"
+                                           (read-datum reader (+ depth 1)))))
+                   (note-node! reader)
+                   datum))
+                ((char=? char #\`)
+                 (advance! reader)
+                 (let ((datum (quote-datum "quasiquote"
+                                           (read-datum reader (+ depth 1)))))
+                   (note-node! reader)
+                   datum))
+                ((char=? char #\,)
+                 (advance! reader)
+                 (if (and (peek reader) (char=? (peek reader) #\@))
+                     (begin
+                       (advance! reader)
+                       (let ((datum
+                              (quote-datum
+                               "unquote-splicing"
+                               (read-datum reader (+ depth 1)))))
+                         (note-node! reader)
+                         datum))
+                     (let ((datum
+                            (quote-datum
+                             "unquote"
+                             (read-datum reader (+ depth 1)))))
+                       (note-node! reader)
+                       datum)))
+                ((char=? char #\#)
+                 (let ((datum (read-dispatch reader (+ depth 1))))
+                   (note-node! reader)
+                   datum))
+                (else
+                 (let ((datum (classify-token reader (read-token reader))))
+                   (note-node! reader)
+                   datum)))))
+          (agent-scheme-datum-source-set!
+           datum
+           (source-record reader start (reader-position reader))))))
 
     (define (options-from-rest maybe-options)
       "Normalize optional argument lists to an options association list."
