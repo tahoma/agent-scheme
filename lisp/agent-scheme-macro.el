@@ -1106,7 +1106,7 @@ When RECURSIVE is non-nil, transformer specs see the new bindings."
                               (agent-scheme-make-base-environment))))
     (agent-scheme--ensure-base-syntax context eval-environment)
     (agent-scheme--expand-sequence-forms
-     (agent-scheme-read-all source)
+     (agent-scheme-read-all source options)
      eval-environment
      context
      t)))
