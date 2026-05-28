@@ -80,15 +80,45 @@ jobs:
   test-portable-gambit:
     name: portable Gambit-backed
     runs-on: ubuntu-latest
+    env:
+      AGENT_SCHEME_GAMBIT_VERSION: "4.9.7"
+      AGENT_SCHEME_GAMBIT_SHA256: "0da7c9772a2186dab1fba6bf6c777afe7424f40beacadf1b117d5cc825fe2db3"
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
 
+      - name: Cache Gambit
+        id: cache-gambit
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.tool_cache }}/gambit/${{ env.AGENT_SCHEME_GAMBIT_VERSION }}
+          key: ${{ runner.os }}-gambit-${{ env.AGENT_SCHEME_GAMBIT_VERSION }}
+
       - name: Install Gambit
         run: |
           sudo apt-get update
-          sudo apt-get install -y emacs-nox gambc
+          sudo apt-get install -y emacs-nox build-essential ca-certificates curl libssl-dev
+
+          gambit_prefix="${RUNNER_TOOL_CACHE}/gambit/${AGENT_SCHEME_GAMBIT_VERSION}"
+          if [ ! -x "${gambit_prefix}/bin/gsi" ]; then
+            curl -fsSL \
+              "https://github.com/gambit/gambit/archive/refs/tags/v${AGENT_SCHEME_GAMBIT_VERSION}.tar.gz" \
+              -o /tmp/gambit.tar.gz
+            printf '%s  %s\n' "${AGENT_SCHEME_GAMBIT_SHA256}" /tmp/gambit.tar.gz | sha256sum -c -
+
+            rm -rf /tmp/gambit-src
+            mkdir -p /tmp/gambit-src "${gambit_prefix}"
+            tar -xzf /tmp/gambit.tar.gz -C /tmp/gambit-src --strip-components=1
+            cd /tmp/gambit-src
+            ./configure --prefix="${gambit_prefix}" --enable-single-host --enable-openssl
+            make -j"$(nproc)"
+            make install
+          fi
+
+          echo "${gambit_prefix}/bin" >> "$GITHUB_PATH"
+          "${gambit_prefix}/bin/gsi" -v
+          "${gambit_prefix}/bin/gsi" -:r7rs -e '(import (scheme base) (scheme write)) (write (+ 1 2)) (newline)'
 
       - name: Run portable Gambit-backed shard
         shell: bash
