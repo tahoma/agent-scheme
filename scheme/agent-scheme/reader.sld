@@ -105,10 +105,11 @@
     ;; ordinary datum equality and external writing remain R7RS datums.
     (define agent-scheme-source-metadata '())
 
-    ;; Conservative cap for the portable source side table.  Portable R7RS has
-    ;; no weak hash table, so very large or long-lived sessions trade old source
-    ;; lookups for bounded metadata retention.
-    (define agent-scheme-source-metadata-limit 100000)
+    ;; Cap for the portable source side table.  Portable R7RS has no weak hash
+    ;; table, so long-lived sessions trade older source lookups for bounded
+    ;; metadata scans.  Keep this above ordinary form size so one read does not
+    ;; evict its own active source metadata.
+    (define agent-scheme-source-metadata-limit 1000)
 
     ;; Current number of retained source metadata entries in the portable table.
     (define agent-scheme-source-metadata-count 0)
