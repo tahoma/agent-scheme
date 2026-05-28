@@ -18,6 +18,10 @@
   "^Ran \\([0-9]+\\) tests, \\([0-9]+\\) results as expected, \\([0-9]+\\) unexpected\\(?:, \\([0-9]+\\) skipped\\)? .*, \\([0-9.]+\\) sec)"
   "Regexp matching the final ERT batch summary line.")
 
+(defconst agent-scheme-ci--check-timing-regexp
+  "^AGENT_SCHEME_CI_CHECK_SECONDS=\\([^[:space:]]+\\)[[:space:]]+\\([+-]?\\(?:[0-9]+\\(?:\\.[0-9]*\\)?\\|\\.[0-9]+\\)\\(?:[eE][+-]?[0-9]+\\)?\\)$"
+  "Regexp matching one portable Scheme fine-grained timing line.")
+
 (defconst agent-scheme-ci--surface-groups
   '((:name "Reader"
      :emacs ("agent-scheme-reader-test-")
@@ -42,10 +46,11 @@
   '(("Portable Chibi-backed eval" . 0)
     ("Portable Chibi-backed rest" . 1)
     ("Portable Chibi-backed ERT" . 1)
-    ("Emacs core language/runtime" . 2)
-    ("Emacs library/conformance" . 3)
-    ("Emacs capabilities/policy" . 4)
-    ("Emacs tools/docs/integration" . 5))
+    ("Portable Gambit-backed suite" . 2)
+    ("Emacs core language/runtime" . 3)
+    ("Emacs library/conformance" . 4)
+    ("Emacs capabilities/policy" . 5)
+    ("Emacs tools/docs/integration" . 6))
   "Preferred display order for CI shard summaries.")
 
 (defun agent-scheme-ci--file-string (path)
@@ -86,18 +91,28 @@ Markers use the shell-friendly shape KEY=value on their own line."
           :skipped (agent-scheme-ci--number-or-zero (match-string 4 line))
           :ert-seconds (string-to-number (match-string 5 line)))))
 
+(defun agent-scheme-ci--parse-check-timing-line (line)
+  "Parse LINE as one portable Scheme check timing plist, or nil."
+  (when (string-match agent-scheme-ci--check-timing-regexp line)
+    (list :name (match-string 1 line)
+          :seconds (string-to-number (match-string 2 line)))))
+
 (defun agent-scheme-ci-parse-log-file (path)
   "Parse an Agent Scheme CI shard log at PATH.
 The returned plist includes shard metadata, ERT result counts, test
 durations, and optional wall-clock seconds recorded by the workflow."
   (let* ((contents (agent-scheme-ci--file-string path))
          (tests nil)
+         (check-timings nil)
          (summary nil))
     (dolist (line (split-string contents "\n"))
       (let ((test (agent-scheme-ci--parse-test-line line))
-            (line-summary (agent-scheme-ci--parse-summary-line line)))
+            (line-summary (agent-scheme-ci--parse-summary-line line))
+            (check-timing (agent-scheme-ci--parse-check-timing-line line)))
         (when test
           (push test tests))
+        (when check-timing
+          (push check-timing check-timings))
         (when line-summary
           (setq summary line-summary))))
     (append
@@ -106,13 +121,14 @@ durations, and optional wall-clock seconds recorded by the workflow."
                       contents "AGENT_SCHEME_CI_SHARD_NAME")
                      (file-name-base path))
            :selector (or (agent-scheme-ci--metadata-value
-                          contents "AGENT_SCHEME_CI_SHARD_SELECTOR")
+                         contents "AGENT_SCHEME_CI_SHARD_SELECTOR")
                          "unknown")
            :wall-seconds (let ((value (agent-scheme-ci--metadata-value
                                        contents
                                        "AGENT_SCHEME_CI_WALL_SECONDS")))
                            (when value
                              (string-to-number value)))
+           :check-timings (nreverse check-timings)
            :tests (nreverse tests))
      (or summary
          '(:ran 0 :expected 0 :unexpected 0 :skipped 0 :ert-seconds 0.0)))))
@@ -175,6 +191,44 @@ durations, and optional wall-clock seconds recorded by the workflow."
           (plist-get stats :count)
           (agent-scheme-ci--format-seconds (plist-get stats :seconds))))
 
+(defun agent-scheme-ci--slowest-check-timings (shards limit)
+  "Return up to LIMIT slowest fine-grained check timings from SHARDS."
+  (let (rows)
+    (dolist (shard shards)
+      (dolist (timing (plist-get shard :check-timings))
+        (push (list :shard (plist-get shard :name)
+                    :name (plist-get timing :name)
+                    :seconds (plist-get timing :seconds))
+              rows)))
+    (cl-subseq
+     (sort rows
+           (lambda (left right)
+             (> (plist-get left :seconds)
+                (plist-get right :seconds))))
+     0
+     (min limit (length rows)))))
+
+(defun agent-scheme-ci--render-slow-check-timings (shards)
+  "Return Markdown for fine-grained portable check timings in SHARDS."
+  (let ((rows (agent-scheme-ci--slowest-check-timings shards 10)))
+    (when rows
+      (concat
+       "\n\n"
+       "## Slow Portable Checks\n\n"
+       "Fine-grained portable Scheme timings are diagnostic details from runners that emit them; shard-level timing remains the primary CI signal.\n\n"
+       "| Shard | Check | Seconds |\n"
+       "| --- | --- | ---: |\n"
+       (mapconcat
+        (lambda (row)
+          (format "| %s | `%s` | %s |"
+                  (agent-scheme-ci--markdown-cell (plist-get row :shard))
+                  (agent-scheme-ci--markdown-cell (plist-get row :name))
+                  (agent-scheme-ci--format-seconds
+                   (plist-get row :seconds))))
+        rows
+        "\n")
+       "\n"))))
+
 (defun agent-scheme-ci--shard-sort-key (shard)
   "Return display sort key for SHARD."
   (or (cdr (assoc (plist-get shard :name) agent-scheme-ci--shard-order))
@@ -229,7 +283,8 @@ durations, and optional wall-clock seconds recorded by the workflow."
                   (agent-scheme-ci--format-surface-stats portable))))
       agent-scheme-ci--surface-groups
       "\n")
-     "\n")))
+     "\n"
+     (or (agent-scheme-ci--render-slow-check-timings shards) ""))))
 
 (defun agent-scheme-ci--render-compact-shard-row (shard)
   "Render SHARD as one compact Markdown table row."

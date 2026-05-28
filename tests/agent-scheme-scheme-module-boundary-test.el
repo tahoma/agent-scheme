@@ -17,6 +17,22 @@
      (t
       (executable-find "chibi-scheme")))))
 
+(defun agent-scheme--scheme-module-boundary-target-version-components ()
+  "Return the portable runtime version components from the target root."
+  (with-temp-buffer
+    (insert-file-contents
+     (agent-scheme--test-target-file "scheme/agent-scheme/version.sld"))
+    (goto-char (point-min))
+    (unless (re-search-forward
+             "'(agent-scheme-version[[:space:]]+\\([0-9]+\\)[[:space:]]+\\([0-9]+\\)[[:space:]]+\\([0-9]+\\))"
+             nil
+             t)
+      (error "Could not read target Agent Scheme version datum"))
+    (format "'(%s %s %s)"
+            (match-string 1)
+            (match-string 2)
+            (match-string 3))))
+
 (ert-deftest agent-scheme-scheme-module-boundary-test-r7rs-suite ()
   "Run the portable R7RS module-boundary tests."
   (let ((runner (agent-scheme--scheme-module-boundary-runner)))
@@ -24,17 +40,16 @@
     (let ((output-buffer
            (generate-new-buffer " *agent-scheme-r7rs-module-boundary*")))
       (unwind-protect
-          (let ((status
-                 (process-file
-                  runner
-                  nil
-                  output-buffer
-                  nil
-                  "-A"
-                  (expand-file-name "scheme" agent-scheme--test-root)
-                  (expand-file-name
-                   "tests/scheme/agent-scheme-module-boundary-test.scm"
-                   agent-scheme--test-root))))
+          (let* ((default-directory agent-scheme--test-root)
+                 (status
+                  (process-file
+                   runner
+                   nil
+                   output-buffer
+                   nil
+                   "-A"
+                   (agent-scheme--test-target-library-directory)
+                   "tests/scheme/agent-scheme-module-boundary-test.scm")))
             (unless (equal status 0)
               (ert-fail
                (with-current-buffer output-buffer
@@ -56,7 +71,10 @@
               (insert "(import (scheme base)\n")
               (insert "        (agent-scheme runtime))\n")
               (insert "(unless (equal? (agent-scheme-version-components)\n")
-              (insert "                '(0 14 13))\n")
+              (insert "                ")
+              (insert
+               (agent-scheme--scheme-module-boundary-target-version-components))
+              (insert ")\n")
               (insert "  (error \"unexpected Agent Scheme version\"))\n"))
             (let ((status
                    (process-file
@@ -65,7 +83,7 @@
                     output-buffer
                     nil
                     "-A"
-                    (expand-file-name "scheme" agent-scheme--test-root)
+                    (agent-scheme--test-target-library-directory-absolute)
                     program-file)))
               (unless (equal status 0)
                 (ert-fail

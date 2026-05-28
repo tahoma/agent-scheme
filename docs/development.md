@@ -297,12 +297,22 @@ The default local verification command is:
 make test
 ```
 
+Set `AGENT_SCHEME_TEST_TARGET_ROOT` to keep the current checkout's Makefile and
+ERT harness while pointing portable Scheme host commands at another checkout or
+archive's `scheme/` directory. This is useful for historical timing sweeps that
+replay a newer harness against an older reader/evaluator implementation:
+
+```sh
+AGENT_SCHEME_TEST_TARGET_ROOT=/tmp/agent-scheme-old make test-portable-eval
+```
+
 CI runs the aggregate suite as host/runtime-oriented shards so timing and
 failures stay visible by architectural path:
 
 ```sh
 AGENT_SCHEME_CHIBI=chibi-scheme make test-portable-eval
 AGENT_SCHEME_CHIBI=chibi-scheme make test-portable-rest
+AGENT_SCHEME_GAMBIT=gsi make test-portable-gambit
 make test-emacs-core
 make test-emacs-library
 make test-emacs-capabilities
@@ -310,9 +320,12 @@ make test-emacs-tools
 ```
 
 `make test` runs those shard targets in parallel by default. `make
-test-portable` remains available as the local aggregate for the portable
-Chibi-backed ERT bridge tests, split between the evaluator suite and the
-remaining portable tests. The Emacs-hosted shards split the non-portable ERT
+test-portable` remains available as the local aggregate for the portable ERT
+bridge tests, split between the Chibi-backed evaluator suite, the remaining
+Chibi-backed tests, and the Gambit-backed host shard. The Gambit shard runs the
+same portable Scheme test files through `gsi -:r7rs,search=scheme` when Gambit
+is available, and CI installs Ubuntu's `gambc` package so the shard contributes
+required host timing data. The Emacs-hosted shards split the non-portable ERT
 suite into core language/runtime, library/conformance, capability/policy, and
 tools/docs/integration groups. `make test-emacs-hosted` remains available as
 the local aggregate for all non-portable ERT tests with
@@ -328,7 +341,10 @@ AGENT_SCHEME_TEST_SELECTOR='agent-scheme-smoke-test-harness-runs' make test
 Each shard uploads a `test-log-*` artifact and writes a job summary. On pull
 requests, the combined timing job also updates one PR comment with a compact
 shard timing table and a collapsible detail section so reviewers can see timing
-at a glance from the PR conversation.
+at a glance from the PR conversation. Portable Scheme runners may also emit
+fine-grained `AGENT_SCHEME_CI_CHECK_SECONDS` diagnostics for slow checks; the
+combined summary keeps those details below the fold and treats shard wall time
+as the primary signal.
 
 Live local model tests require an OpenAI-compatible local model endpoint. Run
 the CI smoke selector with:

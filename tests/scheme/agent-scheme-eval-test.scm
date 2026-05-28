@@ -5,6 +5,7 @@
 
 (import (scheme base)
         (scheme file)
+        (scheme time)
         (scheme write)
         (agent-scheme eval)
         (only (agent-scheme macro)
@@ -34,6 +35,42 @@
 
 (define failures 0)
 
+;; Minimum check duration emitted as a fine-grained CI timing diagnostic.
+(define agent-scheme-ci-check-minimum-milliseconds 10)
+
+;; Return MILLISECONDS as three digits for fixed seconds output.
+(define (milliseconds-fragment milliseconds)
+  (let ((text (number->string milliseconds)))
+    (cond
+     ((< milliseconds 10) (string-append "00" text))
+     ((< milliseconds 100) (string-append "0" text))
+     (else text))))
+
+;; Render MILLISECONDS as a fixed decimal seconds value.
+(define (display-check-seconds milliseconds)
+  (display (quotient milliseconds 1000))
+  (display ".")
+  (display (milliseconds-fragment (remainder milliseconds 1000))))
+
+;; Emit one fine-grained timing line for CI diagnostics without changing the
+;; shard-level timing table into a per-check report.
+(define (record-check-timing name thunk)
+  (let ((started (current-jiffy)))
+    (let ((result (thunk)))
+      (let ((milliseconds
+             (quotient
+              (+ (* (- (current-jiffy) started) 1000)
+                 (quotient (jiffies-per-second) 2))
+              (jiffies-per-second))))
+        (if (>= milliseconds agent-scheme-ci-check-minimum-milliseconds)
+            (begin
+              (display "AGENT_SCHEME_CI_CHECK_SECONDS=")
+              (write name)
+              (display " ")
+              (display-check-seconds milliseconds)
+              (newline))))
+      result)))
+
 ;; Record one failed portable evaluator check and keep running the rest of the
 ;; suite so failures report together.
 (define (record-failure name expected actual)
@@ -47,9 +84,18 @@
   (newline))
 
 ;; Compare ACTUAL and EXPECTED using R7RS equal? and record a named failure.
-(define (check name actual expected)
+(define (check-value name actual expected)
   (if (not (equal? actual expected))
       (record-failure name expected actual)))
+
+;; Time one evaluator check and then compare its value.
+(define-syntax check
+  (syntax-rules ()
+    ((_ name actual expected)
+     (record-check-timing
+      name
+      (lambda ()
+        (check-value name actual expected))))))
 
 ;; Evaluate SOURCE and compare the stable external value representation.
 (define (check-external name source expected)
@@ -73,11 +119,11 @@
 
 (check 'runtime-version-components
        (agent-scheme-version-components)
-       '(0 14 13))
+       '(0 14 14))
 
 (check 'runtime-version-datum
        (agent-scheme-result->external (agent-scheme-version))
-       "(agent-scheme-version 0 14 13)")
+       "(agent-scheme-version 0 14 14)")
 
 (check 'reader-source-metadata-default-disabled
        (agent-scheme-datum->external
@@ -226,7 +272,7 @@
                      (examples . (((source . \"(rich cfg)\")
                                    (result . (session cfg)))))
                      (see-also . (current-context session-snapshot))
-                     (since . (agent-scheme-version 0 14 13))
+                     (since . (agent-scheme-version 0 14 14))
                      (deprecated . #f)
                      (stability . experimental)
                      (authority-review . \"local only\"))
@@ -293,7 +339,7 @@
                        (metadata-field 'rest-parameter 'parameters)
                        (final-rich)
                        (metadata-fields 'final-rich))"
-                "((session cfg) \"Create an Agent Scheme session from CONFIG.\\nThe session is represented as a datum.\" (config) \"Open an Agent Scheme session.\" ((config . \"Session configuration datum.\")) \"A session record.\" (pure) (((source . \"(rich cfg)\") (result session cfg))) (current-context session-snapshot) (agent-scheme-version 0 14 13) #f experimental \"local only\" \"Line one.\\nLine two.\\nLine three.\" (x) (((source . \"first\")) ((source . \"second\"))) (alpha beta) ((tag . kept)) \"Valid documentation.\" \"First result.\" #f ((arguments (x))) ((arguments (x))) ((arguments (x))) ((head . \"Required argument.\") (tail . \"Rest arguments.\")) #((returns . \"ordinary result\")) ((arguments ())))")
+                "((session cfg) \"Create an Agent Scheme session from CONFIG.\\nThe session is represented as a datum.\" (config) \"Open an Agent Scheme session.\" ((config . \"Session configuration datum.\")) \"A session record.\" (pure) (((source . \"(rich cfg)\") (result session cfg))) (current-context session-snapshot) (agent-scheme-version 0 14 14) #f experimental \"local only\" \"Line one.\\nLine two.\\nLine three.\" (x) (((source . \"first\")) ((source . \"second\"))) (alpha beta) ((tag . kept)) \"Valid documentation.\" \"First result.\" #f ((arguments (x))) ((arguments (x))) ((arguments (x))) ((head . \"Required argument.\") (tail . \"Rest arguments.\")) #((returns . \"ordinary result\")) ((arguments ())))")
 
 (check-external 'source-library-docstring-reflection
                 "(import (scheme base)
@@ -352,18 +398,21 @@
 
 ;; Evaluate SOURCE as a result datum and require each substring.
 (define (check-result-contains name source needles . maybe-options)
-  (let ((actual
-         (agent-scheme-result->external
-          (agent-scheme-eval-source-result
-           source
-           #f
-           (if (null? maybe-options) '() (car maybe-options))))))
-    (let loop ((rest needles))
-      (if (not (null? rest))
-          (begin
-            (if (not (string-contains? actual (car rest)))
-                (record-failure name (car rest) actual))
-            (loop (cdr rest)))))))
+  (record-check-timing
+   name
+   (lambda ()
+     (let ((actual
+            (agent-scheme-result->external
+             (agent-scheme-eval-source-result
+              source
+              #f
+              (if (null? maybe-options) '() (car maybe-options))))))
+       (let loop ((rest needles))
+         (if (not (null? rest))
+             (begin
+               (if (not (string-contains? actual (car rest)))
+                   (record-failure name (car rest) actual))
+               (loop (cdr rest)))))))))
 
 ;; Replace PATH with CONTENTS using the host Scheme runtime.
 (define (write-host-test-file path contents)

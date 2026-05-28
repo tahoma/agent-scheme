@@ -101,6 +101,11 @@
     (should (equal (agent-scheme-number-value rational) '(3 . 4)))
     (should (eq (agent-scheme-number-kind decimal) 'decimal))
     (should (= (agent-scheme-number-value decimal) 1.5)))
+  (should
+   (equal
+    (agent-scheme-datum->external
+     (agent-scheme--make-canonical-decimal 3.0))
+    "3.0"))
   (should-error (agent-scheme-read "1/0")
                 :type 'agent-scheme-reader-error))
 
