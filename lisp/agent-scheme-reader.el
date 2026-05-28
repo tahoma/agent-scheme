@@ -144,7 +144,8 @@ per-run resource limits."
   maximum-bytevector-length
   maximum-string-size
   maximum-total-nodes
-  source-id)
+  source-id
+  source-metadata)
 
 (defvar agent-scheme--symbol-table (make-hash-table :test #'equal)
   "Intern table for Scheme symbol datums.")
@@ -210,11 +211,14 @@ per-run resource limits."
 
 (defun agent-scheme--new-reader (source options)
   "Return a reader state over SOURCE using OPTIONS."
-  (let ((text (agent-scheme--source-string source)))
+  (let* ((text (agent-scheme--source-string source))
+         (source-metadata
+          (agent-scheme--option options :source-metadata nil)))
     (agent-scheme--make-reader
      :source text
      :length (length text)
-     :line-starts (agent-scheme--source-line-starts text)
+     :line-starts (and source-metadata
+                       (agent-scheme--source-line-starts text))
      :datum-labels (make-hash-table :test #'equal)
      :maximum-depth
      (agent-scheme--option options :max-depth
@@ -235,7 +239,9 @@ per-run resource limits."
      (agent-scheme--option options :max-total-nodes
                            agent-scheme-reader-maximum-total-nodes)
      :source-id
-     (agent-scheme--source-id source options))))
+     (and source-metadata
+          (agent-scheme--source-id source options))
+     :source-metadata source-metadata)))
 
 (defun agent-scheme--source-field (name value)
   "Return a source metadata field named NAME with VALUE."
@@ -1412,10 +1418,12 @@ Signal if the sequence exceeds MAXIMUM-LENGTH."
             (prog1 (agent-scheme--classify-token
                     reader (agent-scheme--read-token reader))
               (agent-scheme--note-node reader)))))
-    (agent-scheme--set-datum-source
-     datum
-     (agent-scheme--source-note
-      reader start (agent-scheme--reader-position reader)))))
+    (when (agent-scheme--reader-source-metadata reader)
+      (agent-scheme--set-datum-source
+       datum
+       (agent-scheme--source-note
+        reader start (agent-scheme--reader-position reader))))
+    datum))
 
 ;;;###autoload
 (defun agent-scheme-read (source &optional options)

@@ -1257,7 +1257,7 @@
       "Read and expand a source body, preserving top-level definition structure for tests and future compiler/backend passes."
       (let ((context (new-eval-context (macro-rest-options rest)))
             (environment (macro-rest-environment rest))
-            (forms (agent-scheme-read-all source)))
+            (forms (agent-scheme-read-all source (macro-rest-options rest))))
         (ensure-base-syntax! context environment)
         (expand-sequence-forms forms environment context #t)))
 

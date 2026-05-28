@@ -79,10 +79,17 @@
        (agent-scheme-result->external (agent-scheme-version))
        "(agent-scheme-version 0 14 13)")
 
-(check 'reader-source-metadata
+(check 'reader-source-metadata-default-disabled
        (agent-scheme-datum->external
         (agent-scheme-syntax-source
          (agent-scheme-read "\n  (twice 21)\n")))
+       "#f")
+
+(check 'reader-source-metadata-opt-in
+       (agent-scheme-datum->external
+        (agent-scheme-syntax-source
+         (agent-scheme-read "\n  (twice 21)\n"
+                            '((source-metadata . #t)))))
        "(source (origin source) (source-id #f) (line 2) (column 3) (offset 3) (span 10) (phase read))")
 
 (check-external 'simple-string-docstring-reflection
@@ -344,10 +351,13 @@
                (loop (+ index 1)))))))
 
 ;; Evaluate SOURCE as a result datum and require each substring.
-(define (check-result-contains name source needles)
+(define (check-result-contains name source needles . maybe-options)
   (let ((actual
          (agent-scheme-result->external
-          (agent-scheme-eval-source-result source))))
+          (agent-scheme-eval-source-result
+           source
+           #f
+           (if (null? maybe-options) '() (car maybe-options))))))
     (let loop ((rest needles))
       (if (not (null? rest))
           (begin
@@ -1104,7 +1114,8 @@
                          "(original (my-unless #f 42))"
                          "(expanded (if #f #f (begin 42)))"
                          "(step (index 1) (macro my-unless)"
-                         "(source (origin source)"))
+                         "(source (origin source)")
+                       '((source-metadata . #t)))
 
 (check-external 'macroexpand-does-not-evaluate-expanded-form
                 "(import (scheme base) (agent reflect))
@@ -1147,11 +1158,24 @@
                      ((twice value) (+ value value))))
                  (list (macro-binding-info 'twice)
                        (macro-binding-info 'missing)
+                       (syntax-source '(twice 21))
+                       (syntax-source (list 'twice 21))
+                       (equal? '(twice 21) (list 'twice 21)))"
+                "((macro-binding (identifier twice) (status bound) (kind syntax-rules) (library #f)) #f #f #f #t)")
+
+(check-external/options 'macro-binding-info-and-syntax-source-opt-in
+                "(import (scheme base) (agent reflect))
+                 (define-syntax twice
+                   (syntax-rules ()
+                     ((twice value) (+ value value))))
+                 (list (macro-binding-info 'twice)
+                       (macro-binding-info 'missing)
                        (let ((source (syntax-source '(twice 21))))
                          (list (cadr (assq 'origin (cdr source)))
                                (cadr (assq 'phase (cdr source)))))
                        (syntax-source (list 'twice 21))
                        (equal? '(twice 21) (list 'twice 21)))"
+                '((source-metadata . #t))
                 "((macro-binding (identifier twice) (status bound) (kind syntax-rules) (library #f)) #f (source read) #f #t)")
 
 (check 'import-scheme-base-into-empty-environment

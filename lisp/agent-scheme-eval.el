@@ -103,7 +103,7 @@ is the result of the last command or definition."
         (progn
           (agent-scheme-policy-authorize
            'pure-r7rs "evaluate" `((input-form . ,input-form)) context)
-          (let* ((forms (agent-scheme-read-all source))
+          (let* ((forms (agent-scheme-read-all source options))
                  (sequence (agent-scheme--make-sequence forms t)))
             (agent-scheme--ensure-base-syntax context eval-environment)
             (let ((value
@@ -161,7 +161,7 @@ agent events, and handle references across calls."
             (let ((agent-scheme--memory-current-session session)
                   (agent-scheme--approval-current-session
                    (agent-scheme-session-id session)))
-              (let* ((forms (agent-scheme-read-all source))
+              (let* ((forms (agent-scheme-read-all source options))
                      (sequence (agent-scheme--make-sequence forms t)))
                 (agent-scheme--ensure-base-syntax context environment)
                 (unless base-syntax-installed
@@ -229,7 +229,7 @@ agent events, and handle references across calls."
         (progn
           (agent-scheme-policy-authorize
            'pure-r7rs "evaluate" `((input-form . ,input-form)) context)
-          (let* ((forms (agent-scheme-read-all source))
+          (let* ((forms (agent-scheme-read-all source options))
                  (sequence (agent-scheme--make-sequence forms t)))
             (agent-scheme--ensure-base-syntax context eval-environment)
             (let ((value

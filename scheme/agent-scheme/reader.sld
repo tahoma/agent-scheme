@@ -65,7 +65,7 @@
       (make-reader source position length line-starts fold-case node-count datum-labels
                    maximum-depth maximum-list-length maximum-vector-length
                    maximum-bytevector-length maximum-string-size
-                   maximum-total-nodes source-id)
+                   maximum-total-nodes source-id source-metadata)
       reader?
       (source reader-source)
       (position reader-position set-reader-position!)
@@ -80,7 +80,8 @@
       (maximum-bytevector-length reader-maximum-bytevector-length)
       (maximum-string-size reader-maximum-string-size)
       (maximum-total-nodes reader-maximum-total-nodes)
-      (source-id reader-source-id))
+      (source-id reader-source-id)
+      (source-metadata reader-source-metadata))
 
     ;; Validation records own the post-read resource budget for host datums.
     (define-record-type <validation>
@@ -192,26 +193,31 @@
       "Create a reader state object from SOURCE and per-run option overrides."
       (if (not (string? source))
           (error "agent-scheme reader source must be a string" source)
-          (make-reader source
-                       0
-                       (string-length source)
-                       (source-line-starts source)
-                       #f
-                       0
-                       '()
-                       (option-ref options 'max-depth
-                                   agent-scheme-default-maximum-depth)
-                       (option-ref options 'max-list-length
-                                   agent-scheme-default-maximum-list-length)
-                       (option-ref options 'max-vector-length
-                                   agent-scheme-default-maximum-vector-length)
-                       (option-ref options 'max-bytevector-length
-                                   agent-scheme-default-maximum-bytevector-length)
-                       (option-ref options 'max-string-size
-                                   agent-scheme-default-maximum-string-size)
-                       (option-ref options 'max-total-nodes
-                                   agent-scheme-default-maximum-total-nodes)
-                       (option-ref options 'source-id #f))))
+          (let ((source-metadata
+                 (option-ref options 'source-metadata #f)))
+            (make-reader source
+                         0
+                         (string-length source)
+                         (if source-metadata (source-line-starts source) #f)
+                         #f
+                         0
+                         '()
+                         (option-ref options 'max-depth
+                                     agent-scheme-default-maximum-depth)
+                         (option-ref options 'max-list-length
+                                     agent-scheme-default-maximum-list-length)
+                         (option-ref options 'max-vector-length
+                                     agent-scheme-default-maximum-vector-length)
+                         (option-ref options 'max-bytevector-length
+                                     agent-scheme-default-maximum-bytevector-length)
+                         (option-ref options 'max-string-size
+                                     agent-scheme-default-maximum-string-size)
+                         (option-ref options 'max-total-nodes
+                                     agent-scheme-default-maximum-total-nodes)
+                         (if source-metadata
+                             (option-ref options 'source-id #f)
+                             #f)
+                         source-metadata))))
 
     (define (source-field name value)
       "Build one Scheme-readable source metadata field."
@@ -1648,9 +1654,11 @@
                  (let ((datum (classify-token reader (read-token reader))))
                    (note-node! reader)
                    datum)))))
-          (agent-scheme-datum-source-set!
-           datum
-           (source-note reader start (reader-position reader))))))
+          (if (reader-source-metadata reader)
+              (agent-scheme-datum-source-set!
+               datum
+               (source-note reader start (reader-position reader)))
+              datum))))
 
     (define (options-from-rest maybe-options)
       "Normalize optional argument lists to an options association list."

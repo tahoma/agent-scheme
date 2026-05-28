@@ -7628,7 +7628,7 @@
       "Read and evaluate a source body as a sequence that may contain definitions, imports, libraries, and expressions."
       (let ((context (new-eval-context (rest-options rest)))
             (environment (rest-environment rest))
-            (forms (agent-scheme-read-all source)))
+            (forms (agent-scheme-read-all source (rest-options rest))))
         (set-context-interaction-environment! context environment)
         (ensure-base-syntax! context environment)
         (trampoline (make-sequence forms #t) environment context)))
@@ -7656,7 +7656,7 @@
         (ensure-base-syntax! context environment)
         (guard (condition
                 (else (condition-result-datum condition context)))
-          (let ((forms (agent-scheme-read-all source)))
+          (let ((forms (agent-scheme-read-all source (rest-options rest))))
             (ok-result-datum
              (trampoline (make-sequence forms #t) environment context)
              context)))))
