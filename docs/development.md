@@ -313,6 +313,8 @@ failures stay visible by architectural path:
 AGENT_SCHEME_CHIBI=chibi-scheme make test-portable-eval
 AGENT_SCHEME_CHIBI=chibi-scheme make test-portable-rest
 AGENT_SCHEME_GAMBIT=gsi make test-portable-gambit
+AGENT_SCHEME_RACKET=racket make test-portable-racket
+AGENT_SCHEME_GAUCHE=gosh make test-portable-gauche
 make test-emacs-core
 make test-emacs-library
 make test-emacs-capabilities
@@ -321,13 +323,17 @@ make test-emacs-tools
 
 `make test` runs those shard targets in parallel by default. `make
 test-portable` remains available as the local aggregate for the portable ERT
-bridge tests, split between the Chibi-backed evaluator suite, the remaining
-Chibi-backed tests, and the Gambit-backed host shard. The Gambit shard runs the
-same portable Scheme test files through `gsi -:r7rs,search=scheme` when Gambit
-is available. CI builds and caches Gambit 4.9.7 because Ubuntu 24.04's
-`gambc` package is 4.9.3 and does not accept the `-:r7rs` runtime option needed
-for the portable library search path. The shard contributes required host
-timing data. The Emacs-hosted shards split the non-portable ERT suite into core
+bridge tests. CI keeps Chibi split into evaluator and non-evaluator subset
+shards for timing continuity, then runs full portable-suite host shards under
+Gambit, Racket with its `r7rs` package, and Gauche. The full-suite host shards
+run the same portable Scheme test files so their timing rows compare host
+behavior rather than different test scopes. The Racket bridge generates
+temporary `#lang r7rs` collection wrappers for checked-in `.sld` libraries
+because Racket's R7RS package resolves imports as Racket collection modules.
+CI builds and caches Gambit 4.9.7 because Ubuntu 24.04's `gambc` package is
+4.9.3 and does not accept the `-:r7rs` runtime option needed for the portable
+library search path. These shards contribute required host timing data. The
+Emacs-hosted shards split the non-portable ERT suite into core
 language/runtime, library/conformance, capability/policy, and
 tools/docs/integration groups. `make test-emacs-hosted` remains available as
 the local aggregate for all non-portable ERT tests with

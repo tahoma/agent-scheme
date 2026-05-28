@@ -4222,7 +4222,6 @@ Advance when ADVANCEP is non-nil.  Signal errors using DESCRIPTION."
          (authorization
           (agent-scheme--resolve-output-file-policy-path
            filename context "open-output-file"))
-         (path (plist-get authorization :path))
          (port
           (agent-scheme--make-port
            :medium 'file
@@ -4230,13 +4229,6 @@ Advance when ADVANCEP is non-nil.  Signal errors using DESCRIPTION."
            :textualp t
            :contents "")))
     (agent-scheme-capability-revalidate-file-authorization authorization)
-    (unless (file-directory-p (file-name-directory path))
-      (agent-scheme-capability-audit-file-result
-       authorization
-       "open-output-file parent directory is not writable"
-       t)
-      (agent-scheme--eval-error
-       "open-output-file parent directory is not writable: %s" filename))
     (agent-scheme-capability-audit-file-result authorization 'opened)
     (agent-scheme-capability-register-file-port
      port 'textual-output authorization '(write flush close))))
@@ -4248,7 +4240,6 @@ Advance when ADVANCEP is non-nil.  Signal errors using DESCRIPTION."
          (authorization
           (agent-scheme--resolve-output-file-policy-path
            filename context "open-binary-output-file"))
-         (path (plist-get authorization :path))
          (port
           (agent-scheme--make-port
            :medium 'file
@@ -4256,14 +4247,6 @@ Advance when ADVANCEP is non-nil.  Signal errors using DESCRIPTION."
            :binaryp t
            :contents nil)))
     (agent-scheme-capability-revalidate-file-authorization authorization)
-    (unless (file-directory-p (file-name-directory path))
-      (agent-scheme-capability-audit-file-result
-       authorization
-       "open-binary-output-file parent directory is not writable"
-       t)
-      (agent-scheme--eval-error
-       "open-binary-output-file parent directory is not writable: %s"
-       filename))
     (agent-scheme-capability-audit-file-result authorization 'opened)
     (agent-scheme-capability-register-file-port
      port 'binary-output authorization '(write flush close))))

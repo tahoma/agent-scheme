@@ -280,7 +280,7 @@
           environment-set-identifier!
           ensure-distinct-names
           parse-formals)
-  (import (scheme base)
+  (import (except (scheme base) make-parameter)
           (scheme char)
           (agent-scheme version)
           (agent-scheme reader)
