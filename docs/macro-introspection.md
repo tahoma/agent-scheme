@@ -82,10 +82,11 @@ available library:
 ```
 
 `(syntax-source datum)` returns source metadata when the datum came from an
-Agent Scheme reader call that explicitly enabled source metadata, and `#f` when
-no source is attached. Ordinary evaluation leaves source tracking disabled so
-normal read/eval paths do not pay the metadata cost. Source metadata is
-ordinary Scheme-readable data and does not affect datum equality:
+Agent Scheme reader call with source metadata enabled, and `#f` when no source
+is attached. Ordinary read/eval and macro expansion source paths enable source
+metadata by default so diagnostic records can point back to the syntax that
+produced them. Source metadata is ordinary Scheme-readable data and does not
+affect datum equality:
 
 ```scheme
 (syntax-source '(twice 21))
@@ -103,9 +104,10 @@ The current source record fields are `origin`, `source-id`, `line`, `column`,
 `offset`, `span`, and `phase`. Line and column numbers are one-based, offsets
 and spans count characters in the reader's source snapshot, and `source-id` is
 `#f` unless the caller provides a host-neutral source identifier such as a
-buffer or session name. Host callers opt in with the reader/evaluator
-`source-metadata` option, such as `:source-metadata t` in the Emacs Lisp host
-or `(source-metadata . #t)` in the portable Scheme option alist.
+buffer or session name. Host callers can disable source metadata for a specific
+read/eval path with the `source-metadata` option, such as `:source-metadata nil`
+in the Emacs Lisp host or `(source-metadata . #f)` in the portable Scheme
+option alist.
 
 `(macroexpand-yield form options)` returns the same expansion record as
 `macroexpand` and also records a `macroexpand` event in the current evaluation
