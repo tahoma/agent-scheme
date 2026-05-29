@@ -213,7 +213,7 @@ per-run resource limits."
   "Return a reader state over SOURCE using OPTIONS."
   (let* ((text (agent-scheme--source-string source))
          (source-metadata
-          (agent-scheme--option options :source-metadata nil)))
+          (agent-scheme--option options :source-metadata t)))
     (agent-scheme--make-reader
      :source text
      :length (length text)

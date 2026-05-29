@@ -15,20 +15,20 @@
    (agent-scheme-eval-source source nil options)))
 
 (ert-deftest agent-scheme-macro-test-syntax-source-reports-reader-metadata ()
-  "Return reader source metadata only when source tracking is requested."
+  "Return reader source metadata by default with an explicit opt-out."
   (let* ((default-datum (agent-scheme-read "\n  (twice 21)\n"))
-         (datum (agent-scheme-read "\n  (twice 21)\n"
-                                   '(:source-metadata t)))
-         (source (agent-scheme-syntax-source datum)))
-    (should
-     (equal
-      (agent-scheme-value->external
-       (agent-scheme-syntax-source default-datum))
-      "#f"))
+         (disabled-datum (agent-scheme-read "\n  (twice 21)\n"
+                                            '(:source-metadata nil)))
+         (source (agent-scheme-syntax-source default-datum)))
     (should
      (equal
       (agent-scheme-value->external source)
-      "(source (origin source) (source-id #f) (line 2) (column 3) (offset 3) (span 10) (phase read))"))))
+      "(source (origin source) (source-id #f) (line 2) (column 3) (offset 3) (span 10) (phase read))"))
+    (should
+     (equal
+      (agent-scheme-value->external
+       (agent-scheme-syntax-source disabled-datum))
+      "#f"))))
 
 (ert-deftest agent-scheme-macro-test-define-syntax-expands-ellipsis ()
   "Expand a top-level syntax-rules macro with a repeated body template."
@@ -239,8 +239,7 @@
              (syntax-rules ()
                ((my-unless test body ...)
                 (if test #f (begin body ...)))))
-           (macroexpand-1 '(my-unless #f 42))"
-          '(:source-metadata t))))
+           (macroexpand-1 '(my-unless #f 42))")))
     (should (string-match-p (regexp-quote "(macro-expansion") external))
     (should (string-match-p (regexp-quote "(status ok)") external))
     (should (string-match-p (regexp-quote "(mode one-step)") external))
@@ -305,20 +304,7 @@
                             external))))
 
 (ert-deftest agent-scheme-macro-test-macro-binding-info-and-source-metadata ()
-  "Expose macro binding metadata, read source metadata, and absent metadata."
-  (should
-   (equal
-    (agent-scheme-macro-test--external
-     "(import (scheme base) (agent reflect))
-      (define-syntax twice
-        (syntax-rules ()
-          ((twice value) (+ value value))))
-      (list (macro-binding-info 'twice)
-            (macro-binding-info 'missing)
-            (syntax-source '(twice 21))
-            (syntax-source (list 'twice 21))
-            (equal? '(twice 21) (list 'twice 21)))")
-    "((macro-binding (identifier twice) (status bound) (kind syntax-rules) (library #f)) #f #f #f #t)"))
+  "Expose macro binding metadata, default source metadata, and opt-out."
   (should
    (equal
     (agent-scheme-macro-test--external
@@ -332,9 +318,22 @@
               (list (cadr (assq 'origin (cdr source)))
                     (cadr (assq 'phase (cdr source)))))
             (syntax-source (list 'twice 21))
+            (equal? '(twice 21) (list 'twice 21)))")
+    "((macro-binding (identifier twice) (status bound) (kind syntax-rules) (library #f)) #f (source read) #f #t)"))
+  (should
+   (equal
+    (agent-scheme-macro-test--external
+     "(import (scheme base) (agent reflect))
+      (define-syntax twice
+        (syntax-rules ()
+          ((twice value) (+ value value))))
+      (list (macro-binding-info 'twice)
+            (macro-binding-info 'missing)
+            (syntax-source '(twice 21))
+            (syntax-source (list 'twice 21))
             (equal? '(twice 21) (list 'twice 21)))"
-     '(:source-metadata t))
-    "((macro-binding (identifier twice) (status bound) (kind syntax-rules) (library #f)) #f (source read) #f #t)")))
+     '(:source-metadata nil))
+    "((macro-binding (identifier twice) (status bound) (kind syntax-rules) (library #f)) #f #f #f #t)")))
 
 (ert-deftest agent-scheme-macro-test-macroexpand-library-lists-syntax-exports ()
   "Inspect library macro exports without evaluating a macro use."

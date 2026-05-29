@@ -194,7 +194,7 @@
       (if (not (string? source))
           (error "agent-scheme reader source must be a string" source)
           (let ((source-metadata
-                 (option-ref options 'source-metadata #f)))
+                 (option-ref options 'source-metadata #t)))
             (make-reader source
                          0
                          (string-length source)
