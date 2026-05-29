@@ -43,12 +43,13 @@
   "Hidden marker used to update the pull request timing comment.")
 
 (defconst agent-scheme-ci--shard-order
-  '(("Portable R7RS Chibi evaluator subset" . 0)
-    ("Portable R7RS Chibi non-evaluator subset" . 1)
-    ("Portable R7RS Gambit full suite" . 2)
-    ("Portable R7RS Racket full suite" . 3)
-    ("Portable R7RS Guile full suite" . 4)
-    ("Portable R7RS Gauche full suite" . 5)
+  '(("Portable R7RS Chibi full suite" . 0)
+    ("Portable R7RS Chibi evaluator subset" . 1)
+    ("Portable R7RS Chibi non-evaluator subset" . 2)
+    ("Portable R7RS Gambit full suite" . 3)
+    ("Portable R7RS Racket full suite" . 4)
+    ("Portable R7RS Guile full suite" . 5)
+    ("Portable R7RS Gauche full suite" . 6)
     ("Portable Chibi-backed eval" . 10)
     ("Portable Chibi-backed rest" . 11)
     ("Portable Chibi-backed ERT" . 11)
@@ -58,6 +59,14 @@
     ("Emacs capabilities/policy" . 22)
     ("Emacs tools/docs/integration" . 23))
   "Preferred display order for CI shard summaries.")
+
+(defconst agent-scheme-ci--portable-host-order
+  '(("Chibi" . 0)
+    ("Gambit" . 1)
+    ("Racket" . 2)
+    ("Guile" . 3)
+    ("Gauche" . 4))
+  "Preferred display order for portable host timing summaries.")
 
 (defun agent-scheme-ci--file-string (path)
   "Return the contents of PATH as a string."
@@ -247,6 +256,132 @@ durations, and optional wall-clock seconds recorded by the workflow."
           (< (agent-scheme-ci--shard-sort-key left)
              (agent-scheme-ci--shard-sort-key right)))))
 
+(defun agent-scheme-ci--find-shard-named (shards names)
+  "Return the first shard in SHARDS whose name appears in NAMES."
+  (cl-find-if
+   (lambda (shard)
+     (member (plist-get shard :name) names))
+   shards))
+
+(defun agent-scheme-ci--sum-shard-field (shards field)
+  "Return the numeric sum of FIELD across SHARDS."
+  (let ((total 0))
+    (dolist (shard shards total)
+      (cl-incf total (or (plist-get shard field) 0)))))
+
+(defun agent-scheme-ci--chibi-portable-host-row (shards)
+  "Return an aggregate Chibi portable host row from split SHARDS."
+  (let ((eval-shard
+         (agent-scheme-ci--find-shard-named
+          shards
+          '("Portable R7RS Chibi evaluator subset"
+            "Portable Chibi-backed eval")))
+        (rest-shard
+         (agent-scheme-ci--find-shard-named
+          shards
+          '("Portable R7RS Chibi non-evaluator subset"
+            "Portable Chibi-backed rest"
+            "Portable Chibi-backed ERT"))))
+    (when (and eval-shard rest-shard)
+      (let ((chibi-shards (list eval-shard rest-shard)))
+        (list :host "Chibi"
+              :coverage "full suite (2 CI shards)"
+              :unexpected (agent-scheme-ci--sum-shard-field
+                           chibi-shards :unexpected)
+              :skipped (agent-scheme-ci--sum-shard-field
+                        chibi-shards :skipped)
+              :ert-seconds (agent-scheme-ci--sum-shard-field
+                            chibi-shards :ert-seconds)
+              :wall-seconds (agent-scheme-ci--sum-shard-field
+                             chibi-shards :wall-seconds))))))
+
+(defun agent-scheme-ci--portable-full-suite-host (shard)
+  "Return the portable host name for full-suite SHARD, or nil."
+  (let ((name (plist-get shard :name)))
+    (cond
+     ((string-match "\\`Portable R7RS \\(.+\\) full suite\\'" name)
+      (match-string 1 name))
+     ((string= name "Portable Gambit-backed suite")
+      "Gambit")
+     (t nil))))
+
+(defun agent-scheme-ci--portable-host-row (shard)
+  "Return a compact portable host timing row for SHARD, or nil."
+  (let ((host (agent-scheme-ci--portable-full-suite-host shard)))
+    (when host
+      (list :host host
+            :coverage "full suite"
+            :unexpected (plist-get shard :unexpected)
+            :skipped (plist-get shard :skipped)
+            :ert-seconds (plist-get shard :ert-seconds)
+            :wall-seconds (plist-get shard :wall-seconds)))))
+
+(defun agent-scheme-ci--portable-host-row-sort-key (row)
+  "Return display sort key for portable host ROW."
+  (or (cdr (assoc (plist-get row :host)
+                  agent-scheme-ci--portable-host-order))
+      99))
+
+(defun agent-scheme-ci--portable-host-rows (shards)
+  "Return comparable portable host timing rows for SHARDS."
+  (let ((chibi-row (agent-scheme-ci--chibi-portable-host-row shards))
+        rows)
+    (when chibi-row
+      (push chibi-row rows))
+    (dolist (shard shards)
+      (let ((row (agent-scheme-ci--portable-host-row shard)))
+        (when (and row
+                   (not (and chibi-row
+                             (string= (plist-get row :host) "Chibi"))))
+          (push row rows))))
+    (sort rows
+          (lambda (left right)
+            (< (agent-scheme-ci--portable-host-row-sort-key left)
+               (agent-scheme-ci--portable-host-row-sort-key right))))))
+
+(defun agent-scheme-ci--render-portable-host-row (row)
+  "Render portable host timing ROW as one Markdown table row."
+  (format "| %s | %s | %d | %d | %s | %s |"
+          (agent-scheme-ci--markdown-cell (plist-get row :host))
+          (agent-scheme-ci--markdown-cell (plist-get row :coverage))
+          (plist-get row :unexpected)
+          (plist-get row :skipped)
+          (agent-scheme-ci--format-seconds
+           (plist-get row :ert-seconds))
+          (agent-scheme-ci--format-seconds
+           (plist-get row :wall-seconds))))
+
+(defun agent-scheme-ci--render-portable-host-summary (shards)
+  "Return a top-level portable host timing comparison for SHARDS."
+  (let ((rows (agent-scheme-ci--portable-host-rows shards)))
+    (when rows
+      (concat
+       "## Portable Host Timing\n\n"
+       "Chibi is split across CI shards; this table aggregates those shards for host-to-host timing comparison.\n\n"
+       "| Host | Coverage | Unexpected | Skipped | ERT time | Wall time |\n"
+       "| --- | --- | ---: | ---: | ---: | ---: |\n"
+       (mapconcat #'agent-scheme-ci--render-portable-host-row rows "\n")
+       "\n\n"))))
+
+(defun agent-scheme-ci--emacs-shard-p (shard)
+  "Return non-nil when SHARD is an Emacs-hosted timing shard."
+  (string-prefix-p "Emacs " (plist-get shard :name)))
+
+(defun agent-scheme-ci--render-compact-emacs-summary (shards)
+  "Return compact Markdown for Emacs-hosted timing SHARDS."
+  (let ((emacs-shards (cl-remove-if-not
+                       #'agent-scheme-ci--emacs-shard-p
+                       (agent-scheme-ci--sort-shards shards))))
+    (when emacs-shards
+      (concat
+       "## Emacs Shard Timing\n\n"
+       "| Shard | Ran | Unexpected | Skipped | ERT time | Wall time |\n"
+       "| --- | ---: | ---: | ---: | ---: | ---: |\n"
+       (mapconcat #'agent-scheme-ci--render-compact-shard-row
+                  emacs-shards
+                  "\n")
+       "\n\n"))))
+
 (defun agent-scheme-ci-render-markdown-summary (shards)
   "Render SHARDS as a GitHub Actions Markdown summary."
   (let ((shards (agent-scheme-ci--sort-shards shards)))
@@ -312,15 +447,12 @@ summary."
     (concat
      agent-scheme-ci-pr-summary-marker
      "\n\n"
-     "## Test Shard Timing\n\n"
      (when (and run-url (not (string-empty-p run-url)))
        (format "Latest run: [GitHub Actions](%s).\n\n" run-url))
-     "| Shard | Ran | Unexpected | Skipped | ERT time | Wall time |\n"
-     "| --- | ---: | ---: | ---: | ---: | ---: |\n"
-     (mapconcat #'agent-scheme-ci--render-compact-shard-row shards "\n")
-     "\n\n"
+     (or (agent-scheme-ci--render-portable-host-summary shards) "")
+     (or (agent-scheme-ci--render-compact-emacs-summary shards) "")
      "<details>\n"
-     "<summary>Slowest tests and paired validation surfaces</summary>\n\n"
+     "<summary>Physical CI shards, slowest tests, and paired validation surfaces</summary>\n\n"
      (agent-scheme-ci-render-markdown-summary shards)
      "\n</details>\n")))
 
