@@ -70,10 +70,11 @@
   "Debugger environment records expose reachable procedure-value docs."
   (let ((result
          (agent-scheme-debugger-test--result-external
-          "(define (private-helper x)
+         "(define (private-helper x)
              \"Explain the private helper for debugger inspection.\"
              x)
-           missing")))
+           missing"
+          '(:docstring-retention full))))
     (should
      (string-match-p
       (regexp-quote "(binding (name private-helper) (procedure-documentation")

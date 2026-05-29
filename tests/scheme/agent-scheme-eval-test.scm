@@ -4,10 +4,19 @@
 ;;; evaluator library without loading the Emacs host adapter.
 
 (import (scheme base)
+        (scheme char)
         (scheme file)
+        (scheme process-context)
         (scheme time)
         (scheme write)
-        (agent-scheme eval)
+        (rename (agent-scheme eval)
+                (agent-scheme-eval raw-agent-scheme-eval)
+                (agent-scheme-eval-source raw-agent-scheme-eval-source)
+                (agent-scheme-eval-string raw-agent-scheme-eval-string)
+                (agent-scheme-expand raw-agent-scheme-expand)
+                (agent-scheme-expand-source raw-agent-scheme-expand-source)
+                (agent-scheme-eval-result raw-agent-scheme-eval-result)
+                (agent-scheme-eval-source-result raw-agent-scheme-eval-source-result))
         (only (agent-scheme macro)
               agent-scheme-syntax-source)
         (only (agent-scheme reader)
@@ -20,6 +29,7 @@
               authorize-network-capability
               agent-scheme-version
               agent-scheme-version-components
+              agent-scheme-procedure?
               context-audit-events
               documentation-metadata?
               documentation-metadata-fields
@@ -27,7 +37,8 @@
               network-port-capability-handle
               new-eval-context
               process-capability-handle
-              process-port-capability-handle))
+              process-port-capability-handle
+              procedure-body))
 
 ;; Shared evaluator behavior runs through agent-scheme-fixture-test.scm. This
 ;; file keeps portable evaluator API and bootstrap invariants close to the R7RS
@@ -37,6 +48,131 @@
 
 ;; Minimum check duration emitted as a fine-grained CI timing diagnostic.
 (define agent-scheme-ci-check-minimum-milliseconds 10)
+
+;; Unique marker for unset CI matrix defaults.
+(define agent-scheme-test-option-unset (list 'unset))
+
+;; Return #t when VALUE is the unset marker.
+(define (agent-scheme-test-option-unset? value)
+  (eq? value agent-scheme-test-option-unset))
+
+;; Parse NAME's environment value as the CI source metadata default.
+(define (agent-scheme-test-source-metadata-default name)
+  (let ((value (get-environment-variable name)))
+    (cond
+     ((or (not value) (= (string-length value) 0))
+      agent-scheme-test-option-unset)
+     ((or (string-ci=? value "on")
+          (string-ci=? value "true")
+          (string-ci=? value "t")
+          (string-ci=? value "yes")
+          (string=? value "1"))
+      #t)
+     ((or (string-ci=? value "off")
+          (string-ci=? value "false")
+          (string-ci=? value "nil")
+          (string-ci=? value "no")
+          (string=? value "0"))
+      #f)
+     (else
+      (error "AGENT_SCHEME_TEST_SOURCE_METADATA must be on or off" value)))))
+
+;; Parse NAME's environment value as the CI docstring retention default.
+(define (agent-scheme-test-docstring-retention-default name)
+  (let ((value (get-environment-variable name)))
+    (cond
+     ((or (not value) (= (string-length value) 0))
+      agent-scheme-test-option-unset)
+     ((string-ci=? value "full")
+      'full)
+     ((string-ci=? value "simple")
+      'simple)
+     ((or (string-ci=? value "none")
+          (string-ci=? value "nil")
+          (string-ci=? value "off")
+          (string-ci=? value "false")
+          (string=? value "0"))
+      #f)
+     (else
+      (error "AGENT_SCHEME_TEST_DOCSTRING_RETENTION must be full, simple, or none"
+             value)))))
+
+;; Return CI matrix defaults as evaluator options.
+(define (agent-scheme-test-default-options)
+  (let ((source-metadata
+         (agent-scheme-test-source-metadata-default
+          "AGENT_SCHEME_TEST_SOURCE_METADATA"))
+        (docstring-retention
+         (agent-scheme-test-docstring-retention-default
+          "AGENT_SCHEME_TEST_DOCSTRING_RETENTION")))
+    (append
+     (if (agent-scheme-test-option-unset? source-metadata)
+         '()
+         (list (cons 'source-metadata source-metadata)))
+     (if (agent-scheme-test-option-unset? docstring-retention)
+         '()
+         (list (cons 'docstring-retention docstring-retention))))))
+
+;; Return OPTIONS with missing CI matrix defaults appended.
+(define (agent-scheme-test-merge-options options)
+  (let loop ((defaults (agent-scheme-test-default-options))
+             (merged (if options options '())))
+    (if (null? defaults)
+        merged
+        (let ((entry (car defaults)))
+          (loop (cdr defaults)
+                (if (assq (car entry) merged)
+                    merged
+                    (append merged (list entry))))))))
+
+;; Return the optional environment argument from REST.
+(define (agent-scheme-test-rest-environment rest)
+  (if (null? rest) #f (car rest)))
+
+;; Return the optional evaluator options argument from REST.
+(define (agent-scheme-test-rest-options rest)
+  (if (or (null? rest) (null? (cdr rest)))
+      '()
+      (cadr rest)))
+
+;; Evaluator wrappers apply CI matrix defaults while preserving explicit tests.
+(define (agent-scheme-eval expression . rest)
+  (raw-agent-scheme-eval
+   expression
+   (agent-scheme-test-rest-environment rest)
+   (agent-scheme-test-merge-options (agent-scheme-test-rest-options rest))))
+
+(define (agent-scheme-eval-source source . rest)
+  (raw-agent-scheme-eval-source
+   source
+   (agent-scheme-test-rest-environment rest)
+   (agent-scheme-test-merge-options (agent-scheme-test-rest-options rest))))
+
+(define agent-scheme-eval-string agent-scheme-eval-source)
+
+(define (agent-scheme-expand expression . rest)
+  (raw-agent-scheme-expand
+   expression
+   (agent-scheme-test-rest-environment rest)
+   (agent-scheme-test-merge-options (agent-scheme-test-rest-options rest))))
+
+(define (agent-scheme-expand-source source . rest)
+  (raw-agent-scheme-expand-source
+   source
+   (agent-scheme-test-rest-environment rest)
+   (agent-scheme-test-merge-options (agent-scheme-test-rest-options rest))))
+
+(define (agent-scheme-eval-result expression . rest)
+  (raw-agent-scheme-eval-result
+   expression
+   (agent-scheme-test-rest-environment rest)
+   (agent-scheme-test-merge-options (agent-scheme-test-rest-options rest))))
+
+(define (agent-scheme-eval-source-result source . rest)
+  (raw-agent-scheme-eval-source-result
+   source
+   (agent-scheme-test-rest-environment rest)
+   (agent-scheme-test-merge-options (agent-scheme-test-rest-options rest))))
 
 ;; Return MILLISECONDS as three digits for fixed seconds output.
 (define (milliseconds-fragment milliseconds)
@@ -110,6 +246,12 @@
           (agent-scheme-eval-source source #f options))
          expected))
 
+;; Return a procedure's stored body expressions as stable external strings.
+(define (procedure-body-external procedure)
+  (if (agent-scheme-procedure? procedure)
+      (map agent-scheme-value->external (procedure-body procedure))
+      #f))
+
 ;; Evaluate SOURCE as an evaluation-result datum and compare its external form.
 (define (check-result-external name source expected)
   (check name
@@ -119,11 +261,11 @@
 
 (check 'runtime-version-components
        (agent-scheme-version-components)
-       '(0 14 14))
+       '(0 14 15))
 
 (check 'runtime-version-datum
        (agent-scheme-result->external (agent-scheme-version))
-       "(agent-scheme-version 0 14 14)")
+       "(agent-scheme-version 0 14 15)")
 
 (check 'reader-source-metadata-default-enabled
        (agent-scheme-datum->external
@@ -145,7 +287,7 @@
                             '((source-metadata . #t)))))
        "(source (origin source) (source-id #f) (line 2) (column 3) (offset 3) (span 10) (phase read))")
 
-(check-external 'simple-string-docstring-reflection
+(check-external/options 'simple-string-docstring-reflection
                 "(import (scheme base) (agent reflect))
                  (define (field datum name)
                    (cadr (assq name (cdr datum))))
@@ -166,9 +308,10 @@
                        (field (documentation documented) 'subject)
                        (arguments (documentation documented))
                        (doc-string (documentation documented)))"
+                '((docstring-retention . full))
                 "(5 (binding documented) (x) \"Return X plus one.\" (procedure) (x) \"Return X plus one.\")")
 
-(check-external 'documentation-arguments-metadata
+(check-external/options 'documentation-arguments-metadata
                 "(import (scheme base) (agent reflect))
                  (define (field datum name)
                    (cadr (assq name (cdr datum))))
@@ -193,6 +336,7 @@
                        (metadata-field 'empty 'arguments)
                        (map symbol? (metadata-field 'proper 'arguments))
                        (symbol? (metadata-field 'variadic 'arguments)))"
+                '((docstring-retention . full))
                 "((first second) (head . tail) all () (#t #t) #t)")
 
 (check-external 'primitive-manifest-docstring-reflection
@@ -218,7 +362,7 @@
                        (metadata-field 'current-second 'documentation))"
                 "((binding +) (scheme base) kernel (primitive-manifest string) \"Return the sum of all numeric arguments, or 0 when called with no arguments.\" (procedure) \"Return the sum of all numeric arguments, or 0 when called with no arguments.\" (scheme time) host-capability (primitive-manifest string) \"Return the current time as a real number of seconds since the Unix epoch, subject to the clock capability policy.\")")
 
-(check-external 'docstring-edge-cases
+(check-external/options 'docstring-edge-cases
                 "(import (scheme base) (agent reflect))
                  (define (field datum name)
                    (cadr (assq name (cdr datum))))
@@ -252,9 +396,10 @@
                        (doc-string (documentation 'no-doc))
                        (arguments (documentation 'no-doc))
                        (doc-string (documentation 'missing)))"
+                '((docstring-retention . full))
                 "(\"First line.\\nSecond line.\" (x) 5 \"Use the local definition.\" (x) \"result\" #f () #f (x) #f)")
 
-(check-external 'rich-documentation-metadata
+(check-external/options 'rich-documentation-metadata
                 "(import (scheme base) (agent reflect))
                  (define (field datum name)
                    (cadr (assq name (cdr datum))))
@@ -279,7 +424,7 @@
                      (examples . (((source . \"(rich cfg)\")
                                    (result . (session cfg)))))
                      (see-also . (current-context session-snapshot))
-                     (since . (agent-scheme-version 0 14 14))
+                     (since . (agent-scheme-version 0 14 15))
                      (deprecated . #f)
                      (stability . experimental)
                      (authority-review . \"local only\"))
@@ -346,9 +491,80 @@
                        (metadata-field 'rest-parameter 'parameters)
                        (final-rich)
                        (metadata-fields 'final-rich))"
-                "((session cfg) \"Create an Agent Scheme session from CONFIG.\\nThe session is represented as a datum.\" (config) \"Open an Agent Scheme session.\" ((config . \"Session configuration datum.\")) \"A session record.\" (pure) (((source . \"(rich cfg)\") (result session cfg))) (current-context session-snapshot) (agent-scheme-version 0 14 14) #f experimental \"local only\" \"Line one.\\nLine two.\\nLine three.\" (x) (((source . \"first\")) ((source . \"second\"))) (alpha beta) ((tag . kept)) \"Valid documentation.\" \"First result.\" #f ((arguments (x))) ((arguments (x))) ((arguments (x))) ((head . \"Required argument.\") (tail . \"Rest arguments.\")) #((returns . \"ordinary result\")) ((arguments ())))")
+                '((docstring-retention . full))
+                "((session cfg) \"Create an Agent Scheme session from CONFIG.\\nThe session is represented as a datum.\" (config) \"Open an Agent Scheme session.\" ((config . \"Session configuration datum.\")) \"A session record.\" (pure) (((source . \"(rich cfg)\") (result session cfg))) (current-context session-snapshot) (agent-scheme-version 0 14 15) #f experimental \"local only\" \"Line one.\\nLine two.\\nLine three.\" (x) (((source . \"first\")) ((source . \"second\"))) (alpha beta) ((tag . kept)) \"Valid documentation.\" \"First result.\" #f ((arguments (x))) ((arguments (x))) ((arguments (x))) ((head . \"Required argument.\") (tail . \"Rest arguments.\")) #((returns . \"ordinary result\")) ((arguments ())))")
 
-(check-external 'source-library-docstring-reflection
+(check-external/options 'docstring-retention-simple
+                "(import (scheme base) (agent reflect))
+                 (define (field datum name)
+                   (cadr (assq name (cdr datum))))
+                 (define (metadata-field subject name)
+                   (let ((datum (documentation subject)))
+                     (if datum
+                         (let ((entry (assq name (field datum 'fields))))
+                           (if entry (cadr entry) #f))
+                       #f)))
+                 (define (documented x)
+                   \"Return X plus one.\"
+                   #((summary . \"Increment.\")
+                     (returns . \"A number.\"))
+                   (+ x 1))
+                 (list (documented 4)
+                       (metadata-field 'documented 'documentation)
+                       (metadata-field 'documented 'arguments)
+                       (metadata-field 'documented 'summary)
+                       (metadata-field 'documented 'returns)
+                       (if (documentation '+) 'primitive-kept 'primitive-missing))"
+                '((docstring-retention . simple))
+                "(5 \"Return X plus one.\" (x) #f #f primitive-kept)")
+
+(check-external/options 'docstring-retention-none
+                "(import (scheme base) (agent reflect))
+                 (define (documented x)
+                   \"Return X plus one.\"
+                   #((summary . \"Increment.\")
+                     (returns . \"A number.\"))
+                   (+ x 1))
+                 (list (documented 4)
+                       (documentation 'documented)
+                       (documentation documented)
+                       (if (documentation '+) 'primitive-kept 'primitive-missing))"
+                '((docstring-retention . #f))
+                "(5 #f #f primitive-kept)")
+
+(check 'docstring-retention-strips-body
+       (procedure-body-external
+        (agent-scheme-eval-source
+         "(define (documented x)
+            \"Return X plus one.\"
+            #((returns . \"A number.\"))
+            (+ x 1))
+          documented"))
+       '("(+ x 1)"))
+
+(check 'docstring-retention-none-strips-body
+       (procedure-body-external
+        (agent-scheme-eval-source
+         "(define (documented x)
+            \"Return X plus one.\"
+            #((returns . \"A number.\"))
+            (+ x 1))
+          documented"
+         #f
+         '((docstring-retention . #f))))
+       '("(+ x 1)"))
+
+(check 'docstring-retention-none-keeps-final-string-body
+       (procedure-body-external
+        (agent-scheme-eval-source
+         "(define (final-string)
+            \"result\")
+          final-string"
+         #f
+         '((docstring-retention . #f))))
+       '("\"result\""))
+
+(check-external/options 'source-library-docstring-reflection
                 "(import (scheme base)
                          (scheme lazy)
                          (agent reflect)
@@ -381,6 +597,7 @@
                        (metadata-field 'diff-render-unified 'returns)
                        (metadata-field 'make-network-request 'parameters)
                        (metadata-field 'make-network-request 'returns))"
+                '((docstring-retention . full))
                 "(\"Return the number of pairs in LIST.\" \"Return PROMISE's value, evaluating and memoizing delayed thunks once.\" \"Render DIFF to deterministic unified-diff text for humans.\" \"Return a host-adapter request datum for one network operation.\" \"Return a fail-closed authorization decision for REQUEST.\" \"Generate a shared fixture case from EVENT when replay permits it.\" ((promise . \"Promise record or ordinary value to force.\")) \"PROMISE's memoized value, or PROMISE unchanged when it is not a promise.\" ((diff . \"Canonical diff datum.\")) \"Unified-diff text, or the empty string when DIFF has no changes.\" ((id . \"Stable request id assigned by the caller or host adapter.\") (operation . \"Network operation symbol such as request or stream.\") (resource . \"Association list describing scheme, host, port, method, headers, payload, response, redirect, timeout, and stream limits.\")) \"A `network-capability-request` datum ready for policy evaluation.\")")
 
 ;; Report whether TEXT starts with PREFIX.
@@ -837,7 +1054,8 @@
                        '("(binding (name private-helper) (procedure-documentation"
                          "(subject (procedure))"
                          "(origin (body-literal string))"
-                         "(documentation \"Explain the private helper for debugger inspection.\")"))
+                         "(documentation \"Explain the private helper for debugger inspection.\")")
+                       '((docstring-retention . full)))
 
 (check-result-contains 'debugger-current-error-restarts
                        "(import (scheme base) (agent debugger))
@@ -1174,7 +1392,8 @@
                          "(original (my-unless #f 42))"
                          "(expanded (if #f #f (begin 42)))"
                          "(step (index 1) (macro my-unless)"
-                         "(source (origin source)"))
+                         "(source (origin source)")
+                       '((source-metadata . #t)))
 
 (check-external 'macroexpand-does-not-evaluate-expanded-form
                 "(import (scheme base) (agent reflect))
@@ -1210,7 +1429,7 @@
                          (cadr (assq 'macros (cdr expansion)))))"
                 "((begin (+ 21 21)) (let-syntax))")
 
-(check-external 'macro-binding-info-and-syntax-source
+(check-external/options 'macro-binding-info-and-syntax-source
                 "(import (scheme base) (agent reflect))
                  (define-syntax twice
                    (syntax-rules ()
@@ -1222,6 +1441,7 @@
                                (cadr (assq 'phase (cdr source)))))
                        (syntax-source (list 'twice 21))
                        (equal? '(twice 21) (list 'twice 21)))"
+                '((source-metadata . #t))
                 "((macro-binding (identifier twice) (status bound) (kind syntax-rules) (library #f)) #f (source read) #f #t)")
 
 (check-external/options 'macro-binding-info-and-syntax-source-opt-out

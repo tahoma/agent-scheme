@@ -52,6 +52,7 @@
           documentation-metadata-fields
           documentation-metadata-origins
           documentation-metadata-from-body
+          documentation-body-result
           make-procedure
           agent-scheme-procedure?
           procedure-formals
@@ -151,6 +152,7 @@
           context-include-directory
           set-context-include-directory!
           context-file-paths
+          context-docstring-retention
           context-policy-actions
           context-policy-confirmation-function
           context-capability-grants
@@ -527,6 +529,7 @@
                          maximum-value-nodes host-callbacks
                          maximum-host-callbacks syntax-environment libraries
                          include-paths include-directory file-paths
+                         docstring-retention
                          policy-actions policy-confirmation-function
                          capability-grants active-capability-grants
                          event-count maximum-events maximum-event-nodes
@@ -556,6 +559,7 @@
       (include-directory context-include-directory
                          set-context-include-directory!)
       (file-paths context-file-paths)
+      (docstring-retention context-docstring-retention)
       (policy-actions context-policy-actions)
       (policy-confirmation-function context-policy-confirmation-function)
       (capability-grants context-capability-grants
@@ -654,6 +658,17 @@
       (apply error
              (string-append "agent-scheme budget error: " message)
              irritants))
+
+    (define (normalize-docstring-retention value)
+      "Return the normalized docstring retention mode for VALUE."
+      (cond
+       ((eq? value #t) 'full)
+       ((eq? value #f) 'none)
+       ((memq value '(full simple none)) value)
+       (else
+        (eval-error
+         "docstring-retention must be full, simple, none, or #f"
+         value))))
 
     (define (normalize-include-directory directory)
       "Normalize include-directory options to a stable prefix form."
@@ -2187,6 +2202,8 @@
        (normalize-include-paths
         (option-ref options 'file-paths '())
         include-directory)
+       (normalize-docstring-retention
+        (option-ref options 'docstring-retention 'full))
        (option-ref options 'policy-actions '())
        (option-ref options 'policy-confirmation-function #f)
        (option-ref options 'capability-grants '())
@@ -2609,52 +2626,96 @@
                (documentation-metadata-origins metadata)
                'vector)))))
 
-    (define (documentation-metadata-from-body
-             body body-definition-form? . maybe-formals)
-      "Return metadata from BODY using BODY-DEFINITION-FORM? to skip internal definitions.  The body itself is left unchanged for ordinary R7RS evaluation."
-      (let ((base-metadata
-             (if (null? maybe-formals)
-                 (make-documentation-metadata '() '())
-                 (documentation-metadata-from-formals (car maybe-formals)))))
-        (define (finish cursor saw-metadata metadata)
-          (cond
-           ((and (pair? cursor)
-                 (not (body-definition-form? (car cursor)))
-                 (or saw-metadata
-                     (documentation-metadata-fields-present? base-metadata)))
-            metadata)
-           ((documentation-metadata-fields-present? base-metadata)
-            base-metadata)
-           (else #f)))
-        (let skip-definitions ((cursor body))
+    (define (documentation-base-metadata retention maybe-formals)
+      "Return generated base metadata for RETENTION and MAYBE-FORMALS."
+      (if (and (pair? maybe-formals) (not (eq? retention 'none)))
+          (documentation-metadata-from-formals (car maybe-formals))
+          (make-documentation-metadata '() '())))
+
+    (define (documentation-body-result
+             body body-definition-form? retention . maybe-formals)
+      "Return `(metadata . body)' after reading documentation literals from BODY."
+      (let* ((retention (normalize-docstring-retention retention))
+             (retained-base
+              (documentation-base-metadata retention maybe-formals))
+             (validation-base
+              (if (null? maybe-formals)
+                  (make-documentation-metadata '() '())
+                  (documentation-metadata-from-formals (car maybe-formals)))))
+        (let skip-definitions ((cursor body) (definitions '()))
           (if (and (pair? cursor) (body-definition-form? (car cursor)))
-              (skip-definitions (cdr cursor))
+              (skip-definitions (cdr cursor) (cons (car cursor) definitions))
               (let scan ((rest cursor)
-                         (metadata base-metadata)
+                         (validation-metadata validation-base)
+                         (retained-metadata retained-base)
                          (saw-metadata #f))
+                (define (finish final-rest final-retained-metadata)
+                  (let* ((has-remaining-expression
+                          (and (pair? final-rest)
+                               (not (body-definition-form?
+                                     (car final-rest)))))
+                         (metadata
+                          (cond
+                           ((and has-remaining-expression
+                                 (documentation-metadata-fields-present?
+                                  final-retained-metadata))
+                            final-retained-metadata)
+                           ((documentation-metadata-fields-present?
+                             retained-base)
+                            retained-base)
+                           (else #f)))
+                         (rewritten-body
+                          (if (and has-remaining-expression saw-metadata)
+                              (append (reverse definitions) final-rest)
+                              body)))
+                    (cons metadata rewritten-body)))
                 (cond
                  ((not (pair? rest))
-                  (finish rest saw-metadata metadata))
+                  (finish rest retained-metadata))
                  ((string? (car rest))
                   (let collect ((cursor rest) (strings '()))
                     (if (and (pair? cursor) (string? (car cursor)))
                         (collect (cdr cursor) (cons (car cursor) strings))
-                        (let ((merged
-                               (documentation-merge-string-run
-                                metadata
-                                (reverse strings))))
-                          (if merged
-                              (scan cursor merged #t)
-                              (finish cursor saw-metadata metadata))))))
+                        (let* ((ordered-strings (reverse strings))
+                               (merged-validation
+                                (documentation-merge-string-run
+                                 validation-metadata
+                                 ordered-strings)))
+                          (if merged-validation
+                              (scan
+                               cursor
+                               merged-validation
+                               (if (memq retention '(full simple))
+                                   (documentation-merge-string-run
+                                    retained-metadata
+                                    ordered-strings)
+                                   retained-metadata)
+                               #t)
+                              (finish cursor retained-metadata))))))
                  ((vector? (car rest))
-                  (let ((merged
-                         (documentation-merge-rich-vector metadata
-                                                          (car rest))))
-                    (if merged
-                        (scan (cdr rest) merged #t)
-                        (finish rest saw-metadata metadata))))
+                  (let ((merged-validation
+                         (documentation-merge-rich-vector
+                          validation-metadata
+                          (car rest))))
+                    (if merged-validation
+                        (scan (cdr rest)
+                              merged-validation
+                              (if (eq? retention 'full)
+                                  merged-validation
+                                  retained-metadata)
+                              #t)
+                        (finish rest retained-metadata))))
                  (else
-                  (finish rest saw-metadata metadata))))))))
+                  (finish rest retained-metadata))))))))
+
+    (define (documentation-metadata-from-body
+             body body-definition-form? . maybe-formals)
+      "Return full documentation metadata from BODY."
+      (car (apply documentation-body-result
+                  body
+                  body-definition-form?
+                  'full
+                  maybe-formals)))
 
     (define (second list)
       "Return the second element of LIST for parser helpers."

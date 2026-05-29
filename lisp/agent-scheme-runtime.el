@@ -339,7 +339,8 @@ base syntax prelude has already been installed."
   interaction-environment
   base-syntax-installed
   exception-handlers
-  dynamic-winds)
+  dynamic-winds
+  docstring-retention)
 
 (defconst agent-scheme--missing-cell (make-symbol "agent-scheme-missing-cell")
   "Sentinel used when looking up environment cells.")
@@ -373,6 +374,27 @@ MESSAGE and ARGS are passed to `format'."
           ":include-paths entries must be strings"))
        (expand-file-name path directory))
      paths)))
+
+(defun agent-scheme--normalize-docstring-retention (value)
+  "Return normalized docstring retention mode for VALUE."
+  (cond
+   ((eq value t) 'full)
+   ((null value) 'none)
+   ((memq value '(full simple none)) value)
+   (t
+    (agent-scheme--eval-error
+     ":docstring-retention must be `full', `simple', `none', or nil"))))
+
+(defun agent-scheme--eval-context-docstring-retention-mode (context)
+  "Return CONTEXT docstring retention, defaulting old contexts to `full'."
+  (let ((value
+         (and context
+              (condition-case nil
+                  (agent-scheme--eval-context-docstring-retention context)
+                (args-out-of-range nil)))))
+    (if value
+        (agent-scheme--normalize-docstring-retention value)
+      'full)))
 
 (defun agent-scheme--new-eval-context (options)
   "Return an evaluator context using OPTIONS."
@@ -421,6 +443,9 @@ MESSAGE and ARGS are passed to `format'."
      (agent-scheme--normalize-include-paths
       (agent-scheme--eval-option options :file-paths nil)
       include-directory)
+     :docstring-retention
+     (agent-scheme--normalize-docstring-retention
+      (agent-scheme--eval-option options :docstring-retention 'full))
      :policy-actions
      (agent-scheme--eval-option options :policy-actions nil)
      :policy-confirmation-function
@@ -475,7 +500,13 @@ MESSAGE and ARGS are passed to `format'."
             (plist-get options :project-context)))
     (when (plist-member options :conversation-summary)
       (setf (agent-scheme--eval-context-conversation-summary context)
-            (plist-get options :conversation-summary))))
+            (plist-get options :conversation-summary)))
+    (when (plist-member options :docstring-retention)
+      (condition-case nil
+          (setf (agent-scheme--eval-context-docstring-retention context)
+                (agent-scheme--normalize-docstring-retention
+                 (plist-get options :docstring-retention)))
+        (args-out-of-range nil))))
   context)
 
 (defun agent-scheme-make-empty-environment (&optional parent)
@@ -860,23 +891,37 @@ are Scheme identifiers and whose keys do not repeat."
           merged-fields
           (agent-scheme--documentation-add-origin origins "vector")))))
 
-(defun agent-scheme--documentation-metadata-from-body
-    (body definition-form-predicate &rest maybe-formals)
-  "Return documentation metadata from BODY, or nil.
+(defun agent-scheme--documentation-base-metadata (retention maybe-formals)
+  "Return generated base metadata for RETENTION and MAYBE-FORMALS."
+  (if (and maybe-formals (not (eq retention 'none)))
+      (agent-scheme--documentation-metadata-from-formals (car maybe-formals))
+    (agent-scheme--make-documentation-metadata nil nil)))
+
+(defun agent-scheme--documentation-body-result
+    (body definition-form-predicate retention &rest maybe-formals)
+  "Return `(:metadata METADATA :body BODY)' for documentation in BODY.
 DEFINITION-FORM-PREDICATE recognizes body-leading internal
 definitions.  Metadata literals are recognized only in the
-non-final leading metadata prefix after those definitions; BODY is
-not rewritten.  When FORMALS is supplied, include generated
-procedure argument metadata before body-literal fields."
-  (let* ((base-metadata
+non-final leading metadata prefix after those definitions.  The
+returned body removes recognized metadata literals when a
+non-metadata expression remains.  RETENTION controls the metadata
+fields retained: `full' keeps rich and simple docstrings, `simple'
+keeps simple string docstrings and generated argument metadata,
+and `none' keeps no body-derived metadata."
+  (let* ((retention (agent-scheme--normalize-docstring-retention retention))
+         (retained-base
+          (agent-scheme--documentation-base-metadata retention maybe-formals))
+         (validation-metadata
           (if maybe-formals
               (agent-scheme--documentation-metadata-from-formals
                (car maybe-formals))
             (agent-scheme--make-documentation-metadata nil nil)))
+         (retained-metadata retained-base)
          (cursor body)
-         (metadata base-metadata)
-        saw-metadata)
+         definitions
+         saw-metadata)
     (while (and cursor (funcall definition-form-predicate (car cursor)))
+      (push (car cursor) definitions)
       (setq cursor (cdr cursor)))
     (catch 'done
       (while cursor
@@ -886,34 +931,61 @@ procedure argument metadata before body-literal fields."
             (while (and cursor (stringp (car cursor)))
               (push (car cursor) strings)
               (setq cursor (cdr cursor)))
+            (setq strings (nreverse strings))
             (let ((merged
                    (agent-scheme--documentation-merge-string-run
-                    metadata (nreverse strings))))
+                    validation-metadata strings)))
               (unless merged
                 (throw 'done nil))
-              (setq metadata merged
-                    saw-metadata t))))
+              (setq validation-metadata merged)
+              (when (memq retention '(full simple))
+                (setq retained-metadata
+                      (agent-scheme--documentation-merge-string-run
+                       retained-metadata strings)))
+              (setq saw-metadata t))))
          ((vectorp (car cursor))
           (let ((merged
                  (agent-scheme--documentation-merge-rich-vector
-                  metadata (car cursor))))
+                  validation-metadata (car cursor))))
             (unless merged
               (throw 'done nil))
-            (setq metadata merged
-                  saw-metadata t
+            (setq validation-metadata merged)
+            (when (eq retention 'full)
+              (setq retained-metadata merged))
+            (setq saw-metadata t
                   cursor (cdr cursor))))
          (t
           (throw 'done nil)))))
-    (cond
-     ((and cursor
-           (not (funcall definition-form-predicate (car cursor)))
-           (or saw-metadata
-               (agent-scheme--documentation-metadata-fields-present-p
-                base-metadata)))
-      metadata)
-     ((agent-scheme--documentation-metadata-fields-present-p base-metadata)
-      base-metadata)
-     (t nil))))
+    (let* ((has-remaining-expression
+            (and cursor
+                 (not (funcall definition-form-predicate (car cursor)))))
+           (metadata
+            (cond
+             ((and has-remaining-expression
+                   (agent-scheme--documentation-metadata-fields-present-p
+                    retained-metadata))
+              retained-metadata)
+             ((agent-scheme--documentation-metadata-fields-present-p
+               retained-base)
+              retained-base)
+             (t nil)))
+           (rewritten-body
+            (if (and has-remaining-expression saw-metadata)
+                (append (nreverse definitions) cursor)
+              body)))
+      (list :metadata metadata :body rewritten-body))))
+
+(defun agent-scheme--documentation-metadata-from-body
+    (body definition-form-predicate &rest maybe-formals)
+  "Return full documentation metadata from BODY, or nil."
+  (plist-get
+   (apply
+    #'agent-scheme--documentation-body-result
+    body
+    definition-form-predicate
+    'full
+    maybe-formals)
+   :metadata))
 
 (defun agent-scheme--identifier-key (identifier)
   "Return the lexical binding key for IDENTIFIER."

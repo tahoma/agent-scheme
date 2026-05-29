@@ -239,7 +239,8 @@
              (syntax-rules ()
                ((my-unless test body ...)
                 (if test #f (begin body ...)))))
-           (macroexpand-1 '(my-unless #f 42))")))
+           (macroexpand-1 '(my-unless #f 42))"
+          '(:source-metadata t))))
     (should (string-match-p (regexp-quote "(macro-expansion") external))
     (should (string-match-p (regexp-quote "(status ok)") external))
     (should (string-match-p (regexp-quote "(mode one-step)") external))
@@ -318,7 +319,8 @@
               (list (cadr (assq 'origin (cdr source)))
                     (cadr (assq 'phase (cdr source)))))
             (syntax-source (list 'twice 21))
-            (equal? '(twice 21) (list 'twice 21)))")
+            (equal? '(twice 21) (list 'twice 21)))"
+     '(:source-metadata t))
     "((macro-binding (identifier twice) (status bound) (kind syntax-rules) (library #f)) #f (source read) #f #t)"))
   (should
    (equal

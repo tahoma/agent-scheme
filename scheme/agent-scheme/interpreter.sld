@@ -389,6 +389,14 @@
              body-definition-form?
              maybe-formals))
 
+    (define (body-documentation-result body context . maybe-formals)
+      "Return `(metadata . body)' for BODY using CONTEXT retention settings."
+      (apply documentation-body-result
+             body
+             body-definition-form?
+             (context-docstring-retention context)
+             maybe-formals))
+
     (define (prepare-body-environment body environment context)
       "Allocate and initialize an internal-definition environment for BODY."
       (let* ((split (split-body body))
@@ -1076,12 +1084,15 @@
                 (eval-error "lambda requires formals and a body" parts))
             (let ((formals (second parts))
                   (body (cddr parts)))
-              (continue
-               continuation
-               (make-procedure (parse-formals formals)
-                               body
-                               environment
-                               (body-documentation body formals)))))
+              (let* ((parsed-formals (parse-formals formals))
+                     (documentation-result
+                      (body-documentation-result body context parsed-formals)))
+                (continue
+                 continuation
+                 (make-procedure parsed-formals
+                                 (cdr documentation-result)
+                                 environment
+                                 (car documentation-result))))))
            ((and (identifier-named? operator 'if)
                  (special-operator-active? operator environment))
             (eval-if parts environment context tail? continuation))
