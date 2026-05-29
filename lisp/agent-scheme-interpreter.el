@@ -373,6 +373,15 @@ Return a cons cell (NAME . INITIALIZER-EXPRESSION)."
    #'agent-scheme--body-definition-form-p
    maybe-formals))
 
+(defun agent-scheme--body-documentation-result (body context &rest maybe-formals)
+  "Return documentation metadata and rewritten BODY for CONTEXT."
+  (apply
+   #'agent-scheme--documentation-body-result
+   body
+   #'agent-scheme--body-definition-form-p
+   (agent-scheme--eval-context-docstring-retention-mode context)
+   maybe-formals))
+
 (declare-function agent-scheme--eval-expression "agent-scheme-eval")
 (declare-function agent-scheme--eval-sequence "agent-scheme-eval")
 
@@ -1053,13 +1062,17 @@ each initializer."
 	          (agent-scheme--eval-error "lambda requires formals and a body"))
 	        (let ((formals (cadr parts))
 	              (body (cddr parts)))
-	          (agent-scheme--continue
-                   continuation
-                   (agent-scheme--make-procedure
-	            (agent-scheme--parse-formals formals)
-	            body
-	            environment
-                    (agent-scheme--body-documentation body formals)))))
+                  (let* ((parsed-formals (agent-scheme--parse-formals formals))
+                         (documentation-result
+                          (agent-scheme--body-documentation-result
+                           body context parsed-formals)))
+	            (agent-scheme--continue
+                     continuation
+                     (agent-scheme--make-procedure
+	              parsed-formals
+	              (plist-get documentation-result :body)
+	              environment
+                      (plist-get documentation-result :metadata))))))
 	       ((and (agent-scheme--symbol-named-p operator "if")
 	             (agent-scheme--special-operator-active-p operator environment))
 	        (agent-scheme--eval-if parts environment context tailp continuation))

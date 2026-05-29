@@ -850,7 +850,9 @@ Return the stale handles that were removed."
           :base-syntax-installed
           (agent-scheme--eval-context-base-syntax-installed context)
           :exception-handlers nil
-          :dynamic-winds nil)))
+          :dynamic-winds nil
+          :docstring-retention
+          (agent-scheme--eval-context-docstring-retention-mode context))))
     copy))
 
 (defun agent-scheme-session--sync-capability-grants! (session)

@@ -56,6 +56,8 @@ help:
 	@printf '\n%s\n' 'Variables:'
 	@printf '  %-50s %s\n' 'EMACS=emacs' 'Emacs command used by make test.'
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_TEST_TARGET_ROOT=DIR' 'Optional portable Scheme implementation root for the current harness.'
+	@printf '  %-50s %s\n' 'AGENT_SCHEME_TEST_SOURCE_METADATA=on|off' 'Default source metadata mode injected by CI matrix shards.'
+	@printf '  %-50s %s\n' 'AGENT_SCHEME_TEST_DOCSTRING_RETENTION=full|simple|none' 'Default docstring retention mode injected by CI matrix shards.'
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_TEST_JOBS=N' 'Parallel jobs used by make test.'
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_TEST_SHARD_TARGETS=a b' 'Shard targets run by make test.'
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_OPTIONAL_PORTABLE_TEST_SHARD_TARGETS=a b' 'Optional portable shard targets run by make test-portable-chibi.'

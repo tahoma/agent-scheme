@@ -79,8 +79,12 @@ against an older checkout or archive extracted elsewhere.")
 (agent-scheme--test-add-load-path "lisp")
 (agent-scheme--test-add-load-path "tests")
 
+(require 'agent-scheme-test-options)
+
 (dolist (test-file (agent-scheme--test-files))
   (load test-file nil t))
+
+(agent-scheme-test-options-install-advice)
 
 (ert-run-tests-batch-and-exit (agent-scheme--test-selector))
 

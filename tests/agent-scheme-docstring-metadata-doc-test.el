@@ -62,6 +62,10 @@
                  "procedure shorthand `define`"
                  "`lambda` expressions"
                  "`case-lambda` clause body"
+                 "`docstring-retention` option"
+                 "`full` is the default"
+                 "`simple` keeps generated `arguments`"
+                 "`none`, Emacs Lisp `nil`, and Scheme `#f`"
                  "`define-syntax` and macro exports"
                  "`define-record-type` and record fields"
                  "`define-library` forms"
@@ -81,7 +85,8 @@
                  "#301 implements simple string docstrings"
                  "#303 implements rich documentation property records"
                  "#344 adds manifest-backed primitive documentation"
-                 "#304 preserves documentation metadata"))
+                 "#304 preserves documentation metadata"
+                 "#325 adds evaluator docstring retention modes"))
         (should (string-match-p (regexp-quote needle) doc))))))
 
 ;;; agent-scheme-docstring-metadata-doc-test.el ends here

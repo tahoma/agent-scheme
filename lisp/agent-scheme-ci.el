@@ -299,18 +299,31 @@ durations, and optional wall-clock seconds recorded by the workflow."
   "Return the portable host name for full-suite SHARD, or nil."
   (let ((name (plist-get shard :name)))
     (cond
-     ((string-match "\\`Portable R7RS \\(.+\\) full suite\\'" name)
+     ((string-match
+       "\\`Portable R7RS \\(.+\\) full suite\\(?: / .*\\)?\\'"
+       name)
       (match-string 1 name))
      ((string= name "Portable Gambit-backed suite")
       "Gambit")
      (t nil))))
+
+(defun agent-scheme-ci--portable-full-suite-coverage (shard)
+  "Return compact coverage text for portable full-suite SHARD."
+  (let ((name (plist-get shard :name)))
+    (if (string-match
+         "\\`Portable R7RS .+ full suite\\(?: / \\(.*\\)\\)?\\'"
+         name)
+        (if-let ((variant (match-string 1 name)))
+            (concat "full suite, " (string-replace " / " ", " variant))
+          "full suite")
+      "full suite")))
 
 (defun agent-scheme-ci--portable-host-row (shard)
   "Return a compact portable host timing row for SHARD, or nil."
   (let ((host (agent-scheme-ci--portable-full-suite-host shard)))
     (when host
       (list :host host
-            :coverage "full suite"
+            :coverage (agent-scheme-ci--portable-full-suite-coverage shard)
             :unexpected (plist-get shard :unexpected)
             :skipped (plist-get shard :skipped)
             :ert-seconds (plist-get shard :ert-seconds)

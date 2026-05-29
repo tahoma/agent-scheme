@@ -44,7 +44,7 @@
               (map exact-integer? (cdr version))
               (map (lambda (component) (>= component 0))
                    (cdr version))))")
-    "((agent-scheme-version 0 14 14) (#t #t #t) (#t #t #t))")))
+    "((agent-scheme-version 0 14 15) (#t #t #t) (#t #t #t))")))
 
 (ert-deftest agent-scheme-reflect-test-simple-string-docstrings ()
   "Expose simple procedure docstrings through `(agent reflect)'."
@@ -70,7 +70,8 @@
                  (doc-string (documentation 'documented))
                  (field (documentation documented) 'subject)
                  (arguments (documentation documented))
-                 (doc-string (documentation documented)))")))
+                 (doc-string (documentation documented)))"
+          '(:docstring-retention full))))
     (should
      (equal external
             "(5 (binding documented) (x) \"Return X plus one.\" (procedure) (x) \"Return X plus one.\")"))))
@@ -104,7 +105,8 @@
             (metadata-field 'variadic 'arguments)
             (metadata-field 'empty 'arguments)
             (map symbol? (metadata-field 'proper 'arguments))
-            (symbol? (metadata-field 'variadic 'arguments)))")
+            (symbol? (metadata-field 'variadic 'arguments)))"
+     '(:docstring-retention full))
     "((first second) (head . tail) all () (#t #t) #t)")))
 
 (ert-deftest agent-scheme-reflect-test-primitive-manifest-docstrings ()
@@ -173,7 +175,8 @@
             (arguments (documentation 'final-string))
             (doc-string (documentation 'no-doc))
             (arguments (documentation 'no-doc))
-            (doc-string (documentation 'missing)))")
+            (doc-string (documentation 'missing)))"
+     '(:docstring-retention full))
     "(\"First line.\\nSecond line.\" (x) 5 \"Use the local definition.\" (x) \"result\" #f () #f (x) #f)")))
 
 (ert-deftest agent-scheme-reflect-test-rich-documentation-metadata ()
@@ -206,7 +209,7 @@
           (examples . (((source . \"(rich cfg)\")
                         (result . (session cfg)))))
           (see-also . (current-context session-snapshot))
-          (since . (agent-scheme-version 0 14 14))
+          (since . (agent-scheme-version 0 14 15))
           (deprecated . #f)
           (stability . experimental)
           (authority-review . \"local only\"))
@@ -272,8 +275,92 @@
             (metadata-fields 'unknown-parameter)
             (metadata-field 'rest-parameter 'parameters)
             (final-rich)
-            (metadata-fields 'final-rich))")
-    "((session cfg) \"Create an Agent Scheme session from CONFIG.\\nThe session is represented as a datum.\" (config) \"Open an Agent Scheme session.\" ((config . \"Session configuration datum.\")) \"A session record.\" (pure) (((source . \"(rich cfg)\") (result session cfg))) (current-context session-snapshot) (agent-scheme-version 0 14 14) #f experimental \"local only\" \"Line one.\\nLine two.\\nLine three.\" (x) (((source . \"first\")) ((source . \"second\"))) (alpha beta) ((tag . kept)) \"Valid documentation.\" \"First result.\" #f ((arguments (x))) ((arguments (x))) ((arguments (x))) ((head . \"Required argument.\") (tail . \"Rest arguments.\")) #((returns . \"ordinary result\")) ((arguments ())))")))
+            (metadata-fields 'final-rich))"
+     '(:docstring-retention full))
+    "((session cfg) \"Create an Agent Scheme session from CONFIG.\\nThe session is represented as a datum.\" (config) \"Open an Agent Scheme session.\" ((config . \"Session configuration datum.\")) \"A session record.\" (pure) (((source . \"(rich cfg)\") (result session cfg))) (current-context session-snapshot) (agent-scheme-version 0 14 15) #f experimental \"local only\" \"Line one.\\nLine two.\\nLine three.\" (x) (((source . \"first\")) ((source . \"second\"))) (alpha beta) ((tag . kept)) \"Valid documentation.\" \"First result.\" #f ((arguments (x))) ((arguments (x))) ((arguments (x))) ((head . \"Required argument.\") (tail . \"Rest arguments.\")) #((returns . \"ordinary result\")) ((arguments ())))")))
+
+(ert-deftest agent-scheme-reflect-test-docstring-retention-options ()
+  "Allow callers to step down or disable procedure body doc retention."
+  (agent-scheme-reflect-test--reset)
+  (let ((source
+         "(import (scheme base) (agent reflect))
+          (define (field datum name)
+            (cadr (assq name (cdr datum))))
+          (define (metadata-field subject name)
+            (let ((datum (documentation subject)))
+              (if datum
+                  (let ((entry (assq name (field datum 'fields))))
+                    (if entry (cadr entry) #f))
+                #f)))
+          (define (documented x)
+            \"Return X plus one.\"
+            #((summary . \"Increment.\")
+              (returns . \"A number.\"))
+            (+ x 1))
+          (list (documented 4)
+                (metadata-field 'documented 'documentation)
+                (metadata-field 'documented 'arguments)
+                (metadata-field 'documented 'summary)
+                (metadata-field 'documented 'returns)
+                (documentation documented)
+                (if (documentation '+) 'primitive-kept 'primitive-missing))"))
+    (should
+     (equal
+      (agent-scheme-reflect-test--eval-value-string
+       source
+       '(:docstring-retention simple))
+      "(5 \"Return X plus one.\" (x) #f #f (documentation-metadata (subject (procedure)) (kind procedure) (library #f) (source #f) (origin (body-literal string)) (fields ((arguments (x)) (documentation \"Return X plus one.\")))) primitive-kept)"))
+    (should
+     (equal
+      (agent-scheme-reflect-test--eval-value-string
+       source
+       '(:docstring-retention nil))
+      "(5 #f #f #f #f #f primitive-kept)"))))
+
+(ert-deftest agent-scheme-reflect-test-docstring-retention-strips-procedure-body ()
+  "Avoid retaining recognized body doc literals in procedure bodies."
+  (agent-scheme-reflect-test--reset)
+  (let ((procedure
+         (agent-scheme-eval-source
+          "(define (documented x)
+             \"Return X plus one.\"
+             #((returns . \"A number.\"))
+             (+ x 1))
+           documented")))
+    (should (agent-scheme-procedure-p procedure))
+    (should
+     (equal
+      (mapcar #'agent-scheme-value->external
+              (agent-scheme-procedure-body procedure))
+      '("(+ x 1)"))))
+  (let ((procedure
+         (agent-scheme-eval-source
+          "(define (documented x)
+             \"Return X plus one.\"
+             #((returns . \"A number.\"))
+             (+ x 1))
+           documented"
+          nil
+          '(:docstring-retention nil))))
+    (should (agent-scheme-procedure-p procedure))
+    (should
+     (equal
+      (mapcar #'agent-scheme-value->external
+              (agent-scheme-procedure-body procedure))
+      '("(+ x 1)"))))
+  (let ((procedure
+         (agent-scheme-eval-source
+          "(define (final-string)
+             \"result\")
+           final-string"
+          nil
+          '(:docstring-retention nil))))
+    (should (agent-scheme-procedure-p procedure))
+    (should
+     (equal
+      (mapcar #'agent-scheme-value->external
+              (agent-scheme-procedure-body procedure))
+      '("\"result\"")))))
 
 (ert-deftest agent-scheme-reflect-test-source-library-docstrings ()
   "Reflect docstrings from checked-in source library bindings."
@@ -312,7 +399,8 @@
             (metadata-field 'diff-render-unified 'parameters)
             (metadata-field 'diff-render-unified 'returns)
             (metadata-field 'make-network-request 'parameters)
-            (metadata-field 'make-network-request 'returns))")
+            (metadata-field 'make-network-request 'returns))"
+     '(:docstring-retention full))
     "(\"Return the number of pairs in LIST.\" \"Return PROMISE's value, evaluating and memoizing delayed thunks once.\" \"Render DIFF to deterministic unified-diff text for humans.\" \"Return a host-adapter request datum for one network operation.\" \"Return a fail-closed authorization decision for REQUEST.\" \"Generate a shared fixture case from EVENT when replay permits it.\" ((promise . \"Promise record or ordinary value to force.\")) \"PROMISE's memoized value, or PROMISE unchanged when it is not a promise.\" ((diff . \"Canonical diff datum.\")) \"Unified-diff text, or the empty string when DIFF has no changes.\" ((id . \"Stable request id assigned by the caller or host adapter.\") (operation . \"Network operation symbol such as request or stream.\") (resource . \"Association list describing scheme, host, port, method, headers, payload, response, redirect, timeout, and stream limits.\")) \"A `network-capability-request` datum ready for policy evaluation.\")")))
 
 (ert-deftest agent-scheme-reflect-test-capability-budget-and-imports ()

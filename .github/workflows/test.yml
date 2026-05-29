@@ -16,11 +16,20 @@ env:
 
 jobs:
   test-portable-gambit:
-    name: portable R7RS / Gambit full suite
+    name: portable R7RS / Gambit full suite / syntax ${{ matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention }}
     runs-on: ubuntu-latest
     env:
       AGENT_SCHEME_GAMBIT_VERSION: "4.9.7"
       AGENT_SCHEME_GAMBIT_SHA256: "0da7c9772a2186dab1fba6bf6c777afe7424f40beacadf1b117d5cc825fe2db3"
+      AGENT_SCHEME_TEST_SOURCE_METADATA: ${{ matrix.source_metadata }}
+      AGENT_SCHEME_TEST_DOCSTRING_RETENTION: ${{ matrix.docstring_retention }}
+      AGENT_SCHEME_CI_LOG_FILE: portable-gambit-${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}.log
+      AGENT_SCHEME_CI_SHARD_SUMMARY_NAME: Portable R7RS Gambit full suite / source metadata ${{ matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention }}
+    strategy:
+      fail-fast: false
+      matrix:
+        source_metadata: ["on", "off"]
+        docstring_retention: ["full", "simple", "none"]
 
     steps:
       - name: Check out repository
@@ -64,65 +73,65 @@ jobs:
           mkdir -p ci-logs
           started=$SECONDS
           set +e
-          make test-portable-gambit 2>&1 | tee ci-logs/portable-gambit.log
+          make test-portable-gambit 2>&1 | tee "ci-logs/${AGENT_SCHEME_CI_LOG_FILE}"
           status=${PIPESTATUS[0]}
           wall=$((SECONDS - started))
           {
-            printf 'AGENT_SCHEME_CI_SHARD_NAME=%s\n' 'Portable R7RS Gambit full suite'
+            printf 'AGENT_SCHEME_CI_SHARD_NAME=%s\n' "${AGENT_SCHEME_CI_SHARD_SUMMARY_NAME}"
             printf 'AGENT_SCHEME_CI_SHARD_SELECTOR=%s\n' '"^agent-scheme-scheme-gambit-host-test-r7rs-suite$"'
             printf 'AGENT_SCHEME_CI_WALL_SECONDS=%s\n' "$wall"
-          } >> ci-logs/portable-gambit.log
+          } >> "ci-logs/${AGENT_SCHEME_CI_LOG_FILE}"
           exit "$status"
 
       - name: Upload portable Gambit shard log
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: test-log-portable-gambit
-          path: ci-logs/portable-gambit.log
+          name: test-log-portable-gambit-${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}
+          path: ci-logs/${{ env.AGENT_SCHEME_CI_LOG_FILE }}
           if-no-files-found: warn
 
       - name: Render portable Gambit shard timing summary
         if: always()
         run: |
-          if [ -f ci-logs/portable-gambit.log ]; then
+          if [ -f "ci-logs/${AGENT_SCHEME_CI_LOG_FILE}" ]; then
             emacs -Q --batch -L lisp \
               --eval "(require 'agent-scheme-ci)" \
-              --eval "(agent-scheme-ci-write-summary '(\"ci-logs/portable-gambit.log\") (getenv \"GITHUB_STEP_SUMMARY\"))"
+              --eval "(agent-scheme-ci-write-summary (list (expand-file-name (getenv \"AGENT_SCHEME_CI_LOG_FILE\") \"ci-logs\")) (getenv \"GITHUB_STEP_SUMMARY\"))"
           fi
 
   test-portable-extra-hosts:
-    name: portable R7RS / ${{ matrix.host_name }} full suite
+    name: portable R7RS / ${{ matrix.host.host_name }} full suite / syntax ${{ matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention }}
     runs-on: ubuntu-latest
     container: ubuntu:26.04
     env:
       DEBIAN_FRONTEND: noninteractive
+      AGENT_SCHEME_TEST_SOURCE_METADATA: ${{ matrix.source_metadata }}
+      AGENT_SCHEME_TEST_DOCSTRING_RETENTION: ${{ matrix.docstring_retention }}
+      AGENT_SCHEME_CI_LOG_FILE: portable-${{ matrix.host.host }}-${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}.log
+      AGENT_SCHEME_CI_SHARD_SUMMARY_NAME: ${{ matrix.host.summary_name }} / source metadata ${{ matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention }}
     strategy:
       fail-fast: false
       matrix:
-        include:
+        source_metadata: ["on", "off"]
+        docstring_retention: ["full", "simple", "none"]
+        host:
           - host: racket
             host_name: Racket
             apt_package: racket
             make_target: test-portable-racket
-            log_file: portable-racket.log
-            artifact: portable-racket
             summary_name: Portable R7RS Racket full suite
             selector: '"^agent-scheme-scheme-racket-host-test-r7rs-suite$"'
           - host: guile
             host_name: Guile
             apt_package: guile-3.0
             make_target: test-portable-guile
-            log_file: portable-guile.log
-            artifact: portable-guile
             summary_name: Portable R7RS Guile full suite
             selector: '"^agent-scheme-scheme-guile-host-test-r7rs-suite$"'
           - host: gauche
             host_name: Gauche
             apt_package: gauche
             make_target: test-portable-gauche
-            log_file: portable-gauche.log
-            artifact: portable-gauche
             summary_name: Portable R7RS Gauche full suite
             selector: '"^agent-scheme-scheme-gauche-host-test-r7rs-suite$"'
 
@@ -137,7 +146,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Cache Racket R7RS package
-        if: matrix.host == 'racket'
+        if: matrix.host.host == 'racket'
         uses: actions/cache@v4
         with:
           path: |
@@ -148,9 +157,9 @@ jobs:
       - name: Install portable R7RS host
         shell: bash
         run: |
-          apt-get install -y make emacs-nox "${{ matrix.apt_package }}"
+          apt-get install -y make emacs-nox "${{ matrix.host.apt_package }}"
 
-          case "${{ matrix.host }}" in
+          case "${{ matrix.host.host }}" in
             racket)
               raco pkg install --batch --auto --skip-installed --no-docs r7rs
               racket -I r7rs -e '(import (scheme base) (scheme write)) (write (+ 1 2)) (newline)'
@@ -169,62 +178,65 @@ jobs:
           mkdir -p ci-logs
           started=$SECONDS
           set +e
-          make "${{ matrix.make_target }}" 2>&1 | tee "ci-logs/${{ matrix.log_file }}"
+          make "${{ matrix.host.make_target }}" 2>&1 | tee "ci-logs/${AGENT_SCHEME_CI_LOG_FILE}"
           status=${PIPESTATUS[0]}
           wall=$((SECONDS - started))
           {
-            printf 'AGENT_SCHEME_CI_SHARD_NAME=%s\n' '${{ matrix.summary_name }}'
-            printf 'AGENT_SCHEME_CI_SHARD_SELECTOR=%s\n' '${{ matrix.selector }}'
+            printf 'AGENT_SCHEME_CI_SHARD_NAME=%s\n' "${AGENT_SCHEME_CI_SHARD_SUMMARY_NAME}"
+            printf 'AGENT_SCHEME_CI_SHARD_SELECTOR=%s\n' '${{ matrix.host.selector }}'
             printf 'AGENT_SCHEME_CI_WALL_SECONDS=%s\n' "$wall"
-          } >> "ci-logs/${{ matrix.log_file }}"
+          } >> "ci-logs/${AGENT_SCHEME_CI_LOG_FILE}"
           exit "$status"
 
       - name: Upload portable R7RS host shard log
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: test-log-${{ matrix.artifact }}
-          path: ci-logs/${{ matrix.log_file }}
+          name: test-log-portable-${{ matrix.host.host }}-${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}
+          path: ci-logs/${{ env.AGENT_SCHEME_CI_LOG_FILE }}
           if-no-files-found: warn
 
       - name: Render portable R7RS host shard timing summary
         if: always()
         run: |
-          if [ -f "ci-logs/${{ matrix.log_file }}" ]; then
+          if [ -f "ci-logs/${AGENT_SCHEME_CI_LOG_FILE}" ]; then
             emacs -Q --batch -L lisp \
               --eval "(require 'agent-scheme-ci)" \
-              --eval "(agent-scheme-ci-write-summary '(\"ci-logs/${{ matrix.log_file }}\") (getenv \"GITHUB_STEP_SUMMARY\"))"
+              --eval "(agent-scheme-ci-write-summary (list (expand-file-name (getenv \"AGENT_SCHEME_CI_LOG_FILE\") \"ci-logs\")) (getenv \"GITHUB_STEP_SUMMARY\"))"
           fi
 
   test-emacs-hosted:
-    name: Emacs-hosted ERT (${{ matrix.label }})
+    name: Emacs-hosted ERT (${{ matrix.shard.label }}; syntax ${{ matrix.source_metadata }}; docstrings ${{ matrix.docstring_retention }})
     runs-on: ubuntu-latest
+    env:
+      AGENT_SCHEME_TEST_SOURCE_METADATA: ${{ matrix.source_metadata }}
+      AGENT_SCHEME_TEST_DOCSTRING_RETENTION: ${{ matrix.docstring_retention }}
+      AGENT_SCHEME_CI_LOG_FILE: emacs-${{ matrix.shard.shard }}-${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}.log
+      AGENT_SCHEME_CI_SHARD_SUMMARY_NAME: ${{ matrix.shard.summary_name }} / source metadata ${{ matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention }}
     strategy:
       fail-fast: false
       matrix:
-        include:
+        source_metadata: ["on", "off"]
+        docstring_retention: ["full", "simple", "none"]
+        shard:
           - shard: emacs-core
             label: core language/runtime
             make_target: test-emacs-core
-            log_file: emacs-core.log
             summary_name: Emacs core language/runtime
             selector: '(or "agent-scheme-base.*" "agent-scheme-eval.*" "agent-scheme-interpreter-module.*" "agent-scheme-macro.*" "agent-scheme-reader.*" "agent-scheme-result.*" "agent-scheme-runtime.*")'
           - shard: emacs-library
             label: library/conformance
             make_target: test-emacs-library
-            log_file: emacs-library.log
             summary_name: Emacs library/conformance
             selector: '(or "agent-scheme-conformance.*" "agent-scheme-fixture.*" "agent-scheme-host-adapter-fixture.*" "agent-scheme-library.*" "agent-scheme-oracle.*")'
           - shard: emacs-capabilities
             label: capabilities/policy
             make_target: test-emacs-capabilities
-            log_file: emacs-capabilities.log
             summary_name: Emacs capabilities/policy
             selector: '(or "agent-scheme-agent-io.*" "agent-scheme-approval.*" "agent-scheme-capability.*" "agent-scheme-context.*" "agent-scheme-memory.*" "agent-scheme-models.*" "agent-scheme-network.*" "agent-scheme-policy.*" "agent-scheme-redaction.*" "agent-scheme-session.*")'
           - shard: emacs-tools
             label: tools/docs/integration
             make_target: test-emacs-tools
-            log_file: emacs-tools.log
             summary_name: Emacs tools/docs/integration
             selector: '(or "agent-scheme-ci.*" "agent-scheme-compile.*" "agent-scheme-control-loop-doc.*" "agent-scheme-debugger.*" "agent-scheme-diagnostics.*" "agent-scheme-diff.*" "agent-scheme-feature-reflection-doc.*" "agent-scheme-job.*" "agent-scheme-native-cli-daemon-doc.*" "agent-scheme-reflect.*" "agent-scheme-repl.*" "agent-scheme-skill.*" "agent-scheme-smoke.*" "agent-scheme-vcs.*")'
     steps:
@@ -242,31 +254,31 @@ jobs:
           mkdir -p ci-logs
           started=$SECONDS
           set +e
-          make "${{ matrix.make_target }}" 2>&1 | tee "ci-logs/${{ matrix.log_file }}"
+          make "${{ matrix.shard.make_target }}" 2>&1 | tee "ci-logs/${AGENT_SCHEME_CI_LOG_FILE}"
           status=${PIPESTATUS[0]}
           wall=$((SECONDS - started))
           {
-            printf 'AGENT_SCHEME_CI_SHARD_NAME=%s\n' '${{ matrix.summary_name }}'
-            printf 'AGENT_SCHEME_CI_SHARD_SELECTOR=%s\n' '${{ matrix.selector }}'
+            printf 'AGENT_SCHEME_CI_SHARD_NAME=%s\n' "${AGENT_SCHEME_CI_SHARD_SUMMARY_NAME}"
+            printf 'AGENT_SCHEME_CI_SHARD_SELECTOR=%s\n' '${{ matrix.shard.selector }}'
             printf 'AGENT_SCHEME_CI_WALL_SECONDS=%s\n' "$wall"
-          } >> "ci-logs/${{ matrix.log_file }}"
+          } >> "ci-logs/${AGENT_SCHEME_CI_LOG_FILE}"
           exit "$status"
 
       - name: Upload Emacs-hosted shard log
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: test-log-${{ matrix.shard }}
-          path: ci-logs/${{ matrix.log_file }}
+          name: test-log-${{ matrix.shard.shard }}-${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}
+          path: ci-logs/${{ env.AGENT_SCHEME_CI_LOG_FILE }}
           if-no-files-found: warn
 
       - name: Render Emacs-hosted shard timing summary
         if: always()
         run: |
-          if [ -f "ci-logs/${{ matrix.log_file }}" ]; then
+          if [ -f "ci-logs/${AGENT_SCHEME_CI_LOG_FILE}" ]; then
             emacs -Q --batch -L lisp \
               --eval "(require 'agent-scheme-ci)" \
-              --eval "(agent-scheme-ci-write-summary '(\"ci-logs/${{ matrix.log_file }}\") (getenv \"GITHUB_STEP_SUMMARY\"))"
+              --eval "(agent-scheme-ci-write-summary (list (expand-file-name (getenv \"AGENT_SCHEME_CI_LOG_FILE\") \"ci-logs\")) (getenv \"GITHUB_STEP_SUMMARY\"))"
           fi
 
   test-summary:
