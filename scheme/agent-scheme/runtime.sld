@@ -64,7 +64,7 @@
           primitive-procedure-function
           primitive-procedure-minimum-arity
           primitive-procedure-maximum-arity
-          make-parameter
+          make-agent-scheme-parameter
           agent-scheme-parameter?
           parameter-value
           set-parameter-value!
@@ -280,7 +280,7 @@
           environment-set-identifier!
           ensure-distinct-names
           parse-formals)
-  (import (except (scheme base) make-parameter)
+  (import (scheme base)
           (scheme char)
           (agent-scheme version)
           (agent-scheme reader)
@@ -413,7 +413,7 @@
     ;; Record type for parameter procedure state and optional conversion
     ;; function.
     (define-record-type <agent-scheme-parameter>
-      (make-parameter value converter)
+      (make-agent-scheme-parameter value converter)
       agent-scheme-parameter?
       (value parameter-value set-parameter-value!)
       (converter parameter-converter))
