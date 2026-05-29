@@ -132,11 +132,58 @@
                    "| Emacs core language/runtime | 1 | 0 | 0 | 0\\.040s | 1\\.000s |"
                    markdown))
           (should (string-match-p
-                   "<summary>Slowest tests and paired validation surfaces</summary>"
+                   "<summary>Physical CI shards, slowest tests, and paired validation surfaces</summary>"
                    markdown))
           (should (string-match-p "`agent-scheme-reader-test-booleans` 0\\.040s"
                                   markdown)))
       (delete-file log))))
+
+(ert-deftest agent-scheme-ci-test-pr-summary-aggregates-chibi-host-timing ()
+  "Aggregate split Chibi shards in the top-level portable host comparison."
+  (let* ((portable-eval-shard '(:name "Portable R7RS Chibi evaluator subset"
+                                      :selector "portable-eval"
+                                      :ran 1
+                                      :expected 1
+                                      :unexpected 0
+                                      :skipped 0
+                                      :ert-seconds 94.0
+                                      :wall-seconds 95.0
+                                      :tests nil))
+         (portable-rest-shard '(:name "Portable R7RS Chibi non-evaluator subset"
+                                      :selector "portable-rest"
+                                      :ran 16
+                                      :expected 16
+                                      :unexpected 0
+                                      :skipped 0
+                                      :ert-seconds 18.0
+                                      :wall-seconds 18.0
+                                      :tests nil))
+         (portable-gambit-shard '(:name "Portable R7RS Gambit full suite"
+                                        :selector "portable-gambit"
+                                        :ran 1
+                                        :expected 1
+                                        :unexpected 0
+                                        :skipped 0
+                                        :ert-seconds 14.0
+                                        :wall-seconds 14.0
+                                        :tests nil))
+         (markdown
+          (agent-scheme-ci-render-pr-markdown-summary
+           (list portable-gambit-shard
+                 portable-rest-shard
+                 portable-eval-shard)))
+         (above-fold (car (split-string markdown "\n<details>" t))))
+    (should (string-match-p "## Portable Host Timing" above-fold))
+    (should (string-match-p
+             "| Chibi | full suite (2 CI shards) | 0 | 0 | 112\\.000s | 113\\.000s |"
+             above-fold))
+    (should (string-match-p
+             "| Gambit | full suite | 0 | 0 | 14\\.000s | 14\\.000s |"
+             above-fold))
+    (should-not
+     (string-match-p "Portable R7RS Chibi evaluator subset" above-fold))
+    (should
+     (string-match-p "Portable R7RS Chibi evaluator subset" markdown))))
 
 (ert-deftest agent-scheme-ci-test-pr-summary-uses-stable-shard-order ()
   "Render pull request timing rows in the intended shard display order."
