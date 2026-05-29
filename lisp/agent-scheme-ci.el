@@ -355,13 +355,19 @@ durations, and optional wall-clock seconds recorded by the workflow."
   "Return a top-level portable host timing comparison for SHARDS."
   (let ((rows (agent-scheme-ci--portable-host-rows shards)))
     (when rows
-      (concat
-       "## Portable Host Timing\n\n"
-       "Chibi is split across CI shards; this table aggregates those shards for host-to-host timing comparison.\n\n"
-       "| Host | Coverage | Unexpected | Skipped | ERT time | Wall time |\n"
-       "| --- | --- | ---: | ---: | ---: | ---: |\n"
-       (mapconcat #'agent-scheme-ci--render-portable-host-row rows "\n")
-       "\n\n"))))
+      (let ((chibi-present
+             (cl-some
+              (lambda (row)
+                (string= (plist-get row :host) "Chibi"))
+              rows)))
+        (concat
+         "## Portable Host Timing\n\n"
+         (when chibi-present
+           "Chibi is split across CI shards; this table aggregates those shards for host-to-host timing comparison.\n\n")
+         "| Host | Coverage | Unexpected | Skipped | ERT time | Wall time |\n"
+         "| --- | --- | ---: | ---: | ---: | ---: |\n"
+         (mapconcat #'agent-scheme-ci--render-portable-host-row rows "\n")
+         "\n\n")))))
 
 (defun agent-scheme-ci--emacs-shard-p (shard)
   "Return non-nil when SHARD is an Emacs-hosted timing shard."

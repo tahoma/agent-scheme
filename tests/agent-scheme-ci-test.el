@@ -16,6 +16,15 @@
       (insert contents))
     path))
 
+(defun agent-scheme-ci-test--repo-file-string (relative-path)
+  "Return RELATIVE-PATH from the repository root as a string."
+  (let ((root (if (boundp 'agent-scheme--test-root)
+                  agent-scheme--test-root
+                default-directory)))
+    (with-temp-buffer
+      (insert-file-contents (expand-file-name relative-path root))
+      (buffer-string))))
+
 (ert-deftest agent-scheme-ci-test-parses-result-counts-and-slowest-tests ()
   "Parse ERT shard output plus CI wall-clock metadata."
   (let* ((log (agent-scheme-ci-test--write-log
@@ -184,6 +193,61 @@
      (string-match-p "Portable R7RS Chibi evaluator subset" above-fold))
     (should
      (string-match-p "Portable R7RS Chibi evaluator subset" markdown))))
+
+(ert-deftest agent-scheme-ci-test-pr-summary-renders-without-chibi-host ()
+  "Render portable host comparison cleanly when Chibi is absent."
+  (let* ((portable-gambit-shard '(:name "Portable R7RS Gambit full suite"
+                                        :selector "portable-gambit"
+                                        :ran 1
+                                        :expected 1
+                                        :unexpected 0
+                                        :skipped 0
+                                        :ert-seconds 14.0
+                                        :wall-seconds 14.0
+                                        :tests nil))
+         (portable-racket-shard '(:name "Portable R7RS Racket full suite"
+                                        :selector "portable-racket"
+                                        :ran 1
+                                        :expected 1
+                                        :unexpected 0
+                                        :skipped 0
+                                        :ert-seconds 12.0
+                                        :wall-seconds 13.0
+                                        :tests nil))
+         (markdown
+          (agent-scheme-ci-render-pr-markdown-summary
+           (list portable-racket-shard portable-gambit-shard)))
+         (above-fold (car (split-string markdown "\n<details>" t))))
+    (should (string-match-p "## Portable Host Timing" above-fold))
+    (should (string-match-p
+             "| Gambit | full suite | 0 | 0 | 14\\.000s | 14\\.000s |"
+             above-fold))
+    (should (string-match-p
+             "| Racket | full suite | 0 | 0 | 12\\.000s | 13\\.000s |"
+             above-fold))
+    (should-not (string-match-p "Chibi is split" above-fold))
+    (should-not (string-match-p "| Chibi |" above-fold))))
+
+(ert-deftest agent-scheme-ci-test-default-ci-omits-chibi-shards ()
+  "Keep Chibi as an explicit optional target, not a default CI shard."
+  (let ((workflow (agent-scheme-ci-test--repo-file-string
+                   ".github/workflows/test.yml"))
+        (makefile (agent-scheme-ci-test--repo-file-string "Makefile")))
+    (should-not (string-match-p "name: portable R7RS / Chibi" workflow))
+    (should-not (string-match-p "[[:space:]]+- test-portable\n" workflow))
+    (should-not (string-match-p
+                 "AGENT_SCHEME_PORTABLE_TEST_SHARD_TARGETS \\?=.*test-portable-eval"
+                 makefile))
+    (should-not (string-match-p
+                 "AGENT_SCHEME_PORTABLE_TEST_SHARD_TARGETS \\?=.*test-portable-rest"
+                 makefile))
+    (should (string-match-p
+             "AGENT_SCHEME_OPTIONAL_PORTABLE_TEST_SHARD_TARGETS \\?=.*test-portable-eval"
+             makefile))
+    (should (string-match-p
+             "AGENT_SCHEME_OPTIONAL_PORTABLE_TEST_SHARD_TARGETS \\?=.*test-portable-rest"
+             makefile))
+    (should (string-match-p "^test-portable-chibi:" makefile))))
 
 (ert-deftest agent-scheme-ci-test-pr-summary-uses-stable-shard-order ()
   "Render pull request timing rows in the intended shard display order."
