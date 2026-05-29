@@ -156,6 +156,9 @@ jobs:
   test-portable-extra-hosts:
     name: portable R7RS / ${{ matrix.host_name }} full suite
     runs-on: ubuntu-latest
+    container: ubuntu:26.04
+    env:
+      DEBIAN_FRONTEND: noninteractive
     strategy:
       fail-fast: false
       matrix:
@@ -168,6 +171,14 @@ jobs:
             artifact: portable-racket
             summary_name: Portable R7RS Racket full suite
             selector: '"^agent-scheme-scheme-racket-host-test-r7rs-suite$"'
+          - host: guile
+            host_name: Guile
+            apt_package: guile-3.0
+            make_target: test-portable-guile
+            log_file: portable-guile.log
+            artifact: portable-guile
+            summary_name: Portable R7RS Guile full suite
+            selector: '"^agent-scheme-scheme-guile-host-test-r7rs-suite$"'
           - host: gauche
             host_name: Gauche
             apt_package: gauche
@@ -178,6 +189,12 @@ jobs:
             selector: '"^agent-scheme-scheme-gauche-host-test-r7rs-suite$"'
 
     steps:
+      - name: Install checkout tools
+        shell: bash
+        run: |
+          apt-get update
+          apt-get install -y ca-certificates git tar zstd
+
       - name: Check out repository
         uses: actions/checkout@v6
 
@@ -193,13 +210,15 @@ jobs:
       - name: Install portable R7RS host
         shell: bash
         run: |
-          sudo apt-get update
-          sudo apt-get install -y emacs-nox "${{ matrix.apt_package }}"
+          apt-get install -y make emacs-nox "${{ matrix.apt_package }}"
 
           case "${{ matrix.host }}" in
             racket)
               raco pkg install --batch --auto --skip-installed --no-docs r7rs
               racket -I r7rs -e '(import (scheme base) (scheme write)) (write (+ 1 2)) (newline)'
+              ;;
+            guile)
+              guile --no-auto-compile --r7rs -c '(import (scheme base) (scheme write)) (write (+ 1 2)) (newline)'
               ;;
             gauche)
               gosh -r7 -e '(import (scheme base) (scheme write)) (write (+ 1 2)) (newline)'

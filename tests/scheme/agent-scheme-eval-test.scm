@@ -502,10 +502,14 @@
 
 ;; Return #t when THUNK raises any portable Scheme condition.
 (define (raises? thunk)
-  (guard (condition
-          (else #t))
-    (thunk)
-    #f))
+  (call/cc
+   (lambda (return)
+     (with-exception-handler
+      (lambda (condition)
+        (return #t))
+      (lambda ()
+        (thunk)
+        #f)))))
 
 (check-external 'literal-number "42" "42")
 (check 'literal-number-is-agent-owned
