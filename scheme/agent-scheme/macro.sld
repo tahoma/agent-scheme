@@ -43,7 +43,7 @@
   (import (scheme base)
           (scheme char)
           (agent-scheme reader)
-          (except (agent-scheme runtime) make-parameter)
+          (agent-scheme runtime)
           (agent-scheme result)
           (agent-scheme base)
           (agent-scheme library))

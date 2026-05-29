@@ -21,7 +21,7 @@
           agent-scheme-value->external)
   (import (scheme base)
           (agent-scheme reader)
-          (except (agent-scheme runtime) make-parameter))
+          (agent-scheme runtime))
   (begin
     (define (result-field name . values)
       "Construct a named field for public result datums."
