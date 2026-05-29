@@ -23,7 +23,7 @@
   (import (scheme base)
           (scheme file)
           (agent-scheme reader)
-          (except (agent-scheme runtime) make-parameter))
+          (agent-scheme runtime))
   (begin
     ;; Registry key for the required R7RS `(scheme base)' library.
     (define scheme-base-library-key '(scheme base))

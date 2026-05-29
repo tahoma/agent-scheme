@@ -26,7 +26,7 @@
           (scheme char)
           (scheme file)
           (agent-scheme reader)
-          (except (agent-scheme runtime) make-parameter)
+          (agent-scheme runtime)
           (agent-scheme base))
   (begin
 
