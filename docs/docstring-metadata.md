@@ -125,6 +125,31 @@ metadata:
   (fields ((arguments (x)))))
 ```
 
+## Retention Options
+
+Evaluation accepts a `docstring-retention` option for callers that need to
+trade reflection detail for lower runtime retention cost. The Emacs Lisp host
+uses the plist key `:docstring-retention`; the portable Scheme host uses the
+option alist key `docstring-retention`.
+
+- `full` is the default. It retains generated `arguments`, simple string
+  docstrings, and rich property records.
+- `simple` keeps generated `arguments` and simple string docstrings, but drops
+  rich property fields after using them only to recognize the metadata prefix.
+- `none`, Emacs Lisp `nil`, and Scheme `#f` drop all body-derived procedure
+  documentation metadata, including generated `arguments`.
+
+Recognized leading non-final docstring literals are removed from stored
+compound procedure bodies after metadata extraction when a non-metadata body
+expression remains. This avoids retaining and re-evaluating source
+documentation literals as procedure body data. A final string or rich vector
+literal remains ordinary Scheme code and is not removed.
+
+The `none` mode intentionally does not promise generated signature metadata.
+R7RS specifies procedure calling behavior and lexical binding semantics, but it
+does not require procedure values or later compiled representations to retain
+the source text of formal parameter names for reflection.
+
 ## Rich Property Records
 
 Rich documentation metadata uses a literal vector of pairs in the same leading
@@ -261,7 +286,7 @@ Field values are ordinary Scheme-readable data. The initial field set is:
 - `effects`: list of effect symbols, such as `(pure)` or `(file-read)`
 - `examples`: list of source/result example records
 - `see-also`: list of related binding, library, issue, or document references
-- `since`: version datum such as `(agent-scheme-version 0 14 14)`
+- `since`: version datum such as `(agent-scheme-version 0 14 15)`
 - `deprecated`: `#f` or a string explaining the replacement
 - `stability`: symbol such as `experimental`, `stable`, or `internal`
 
@@ -311,7 +336,9 @@ metadata from their lambda formals, so simple docstrings and rich property
 records share one field record with the signature metadata. Procedure shorthand
 `define`, explicit `lambda`, top-level bindings whose initializer is a
 `lambda`, and internal bindings with lambda initializers share the same
-body-literal extraction rule.
+body-literal extraction rule. Callers may select `full`, `simple`, or `none`
+docstring retention when evaluating source; recognized metadata literals are
+stripped from stored procedure bodies when they are not final return values.
 
 Primitive bindings can also be queried through the same reflection procedure.
 Explicit manifest documentation is required for public primitive manifest
@@ -337,3 +364,4 @@ representation work is left to a later reflection/metadata slice.
 - #304 preserves documentation metadata across compiled and reference runtimes.
 - #338 supplies syntax datum source metadata that can improve doc metadata
   source locations.
+- #325 adds evaluator docstring retention modes for CI performance work.

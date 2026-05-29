@@ -228,6 +228,40 @@
     (should-not (string-match-p "Chibi is split" above-fold))
     (should-not (string-match-p "| Chibi |" above-fold))))
 
+(ert-deftest agent-scheme-ci-test-pr-summary-renders-option-variant-host-rows ()
+  "Keep option-matrix portable shards comparable above the fold."
+  (let* ((portable-gambit-shard
+          '(:name "Portable R7RS Gambit full suite / source metadata off / docstrings none"
+            :selector "portable-gambit"
+            :ran 1
+            :expected 1
+            :unexpected 0
+            :skipped 0
+            :ert-seconds 11.0
+            :wall-seconds 12.0
+            :tests nil))
+         (portable-racket-shard
+          '(:name "Portable R7RS Racket full suite / source metadata on / docstrings simple"
+            :selector "portable-racket"
+            :ran 1
+            :expected 1
+            :unexpected 0
+            :skipped 0
+            :ert-seconds 7.0
+            :wall-seconds 8.0
+            :tests nil))
+         (markdown
+          (agent-scheme-ci-render-pr-markdown-summary
+           (list portable-racket-shard portable-gambit-shard)))
+         (above-fold (car (split-string markdown "\n<details>" t))))
+    (should (string-match-p "## Portable Host Timing" above-fold))
+    (should (string-match-p
+             "| Gambit | full suite, source metadata off, docstrings none | 0 | 0 | 11\\.000s | 12\\.000s |"
+             above-fold))
+    (should (string-match-p
+             "| Racket | full suite, source metadata on, docstrings simple | 0 | 0 | 7\\.000s | 8\\.000s |"
+             above-fold))))
+
 (ert-deftest agent-scheme-ci-test-default-ci-omits-chibi-shards ()
   "Keep Chibi as an explicit optional target, not a default CI shard."
   (let ((workflow (agent-scheme-ci-test--repo-file-string
@@ -248,6 +282,30 @@
              "AGENT_SCHEME_OPTIONAL_PORTABLE_TEST_SHARD_TARGETS \\?=.*test-portable-rest"
              makefile))
     (should (string-match-p "^test-portable-chibi:" makefile))))
+
+(ert-deftest agent-scheme-ci-test-workflow-matrixes-host-option-variants ()
+  "Deal out CI shards across host, syntax metadata, and docstring retention."
+  (let ((workflow (agent-scheme-ci-test--repo-file-string
+                   ".github/workflows/test.yml")))
+    (should (string-match-p "source_metadata: \\[\"on\", \"off\"\\]" workflow))
+    (should (string-match-p
+             "docstring_retention: \\[\"full\", \"simple\", \"none\"\\]"
+             workflow))
+    (should (string-match-p
+             "AGENT_SCHEME_TEST_SOURCE_METADATA: \\${{ matrix.source_metadata }}"
+             workflow))
+    (should (string-match-p
+             "AGENT_SCHEME_TEST_DOCSTRING_RETENTION: \\${{ matrix.docstring_retention }}"
+             workflow))
+    (should (string-match-p
+             "portable-gambit-\\${{ matrix.source_metadata }}-docstrings-\\${{ matrix.docstring_retention }}\\.log"
+             workflow))
+    (should (string-match-p
+             "portable-\\${{ matrix.host.host }}-\\${{ matrix.source_metadata }}-docstrings-\\${{ matrix.docstring_retention }}\\.log"
+             workflow))
+    (should (string-match-p
+             "emacs-\\${{ matrix.shard.shard }}-\\${{ matrix.source_metadata }}-docstrings-\\${{ matrix.docstring_retention }}\\.log"
+             workflow))))
 
 (ert-deftest agent-scheme-ci-test-pr-summary-uses-stable-shard-order ()
   "Render pull request timing rows in the intended shard display order."

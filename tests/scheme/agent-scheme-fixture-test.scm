@@ -5,14 +5,162 @@
 ;;; the Emacs host adapter.
 
 (import (scheme base)
+        (scheme char)
         (scheme file)
+        (scheme process-context)
         (scheme read)
         (scheme write)
-        (agent-scheme reader)
-        (agent-scheme eval))
+        (rename (agent-scheme reader)
+                (agent-scheme-read raw-agent-scheme-read)
+                (agent-scheme-read-all raw-agent-scheme-read-all))
+        (rename (agent-scheme eval)
+                (agent-scheme-eval raw-agent-scheme-eval)
+                (agent-scheme-eval-source raw-agent-scheme-eval-source)
+                (agent-scheme-eval-string raw-agent-scheme-eval-string)
+                (agent-scheme-expand raw-agent-scheme-expand)
+                (agent-scheme-expand-source raw-agent-scheme-expand-source)
+                (agent-scheme-eval-result raw-agent-scheme-eval-result)
+                (agent-scheme-eval-source-result raw-agent-scheme-eval-source-result)))
 
 ;; Count failed checks so the portable runner can report all fixture mismatches.
 (define failures 0)
+
+;; Unique marker for unset CI matrix defaults.
+(define agent-scheme-test-option-unset (list 'unset))
+
+;; Return #t when VALUE is the unset marker.
+(define (agent-scheme-test-option-unset? value)
+  (eq? value agent-scheme-test-option-unset))
+
+;; Parse NAME's environment value as the CI source metadata default.
+(define (agent-scheme-test-source-metadata-default name)
+  (let ((value (get-environment-variable name)))
+    (cond
+     ((or (not value) (= (string-length value) 0))
+      agent-scheme-test-option-unset)
+     ((or (string-ci=? value "on")
+          (string-ci=? value "true")
+          (string-ci=? value "t")
+          (string-ci=? value "yes")
+          (string=? value "1"))
+      #t)
+     ((or (string-ci=? value "off")
+          (string-ci=? value "false")
+          (string-ci=? value "nil")
+          (string-ci=? value "no")
+          (string=? value "0"))
+      #f)
+     (else
+      (error "AGENT_SCHEME_TEST_SOURCE_METADATA must be on or off" value)))))
+
+;; Parse NAME's environment value as the CI docstring retention default.
+(define (agent-scheme-test-docstring-retention-default name)
+  (let ((value (get-environment-variable name)))
+    (cond
+     ((or (not value) (= (string-length value) 0))
+      agent-scheme-test-option-unset)
+     ((string-ci=? value "full")
+      'full)
+     ((string-ci=? value "simple")
+      'simple)
+     ((or (string-ci=? value "none")
+          (string-ci=? value "nil")
+          (string-ci=? value "off")
+          (string-ci=? value "false")
+          (string=? value "0"))
+      #f)
+     (else
+      (error "AGENT_SCHEME_TEST_DOCSTRING_RETENTION must be full, simple, or none"
+             value)))))
+
+;; Return CI matrix defaults as evaluator options.
+(define (agent-scheme-test-default-options)
+  (let ((source-metadata
+         (agent-scheme-test-source-metadata-default
+          "AGENT_SCHEME_TEST_SOURCE_METADATA"))
+        (docstring-retention
+         (agent-scheme-test-docstring-retention-default
+          "AGENT_SCHEME_TEST_DOCSTRING_RETENTION")))
+    (append
+     (if (agent-scheme-test-option-unset? source-metadata)
+         '()
+         (list (cons 'source-metadata source-metadata)))
+     (if (agent-scheme-test-option-unset? docstring-retention)
+         '()
+         (list (cons 'docstring-retention docstring-retention))))))
+
+;; Return OPTIONS with missing CI matrix defaults appended.
+(define (agent-scheme-test-merge-options options)
+  (let loop ((defaults (agent-scheme-test-default-options))
+             (merged (if options options '())))
+    (if (null? defaults)
+        merged
+        (let ((entry (car defaults)))
+          (loop (cdr defaults)
+                (if (assq (car entry) merged)
+                    merged
+                    (append merged (list entry))))))))
+
+;; Return the optional environment argument from REST.
+(define (agent-scheme-test-rest-environment rest)
+  (if (null? rest) #f (car rest)))
+
+;; Return the optional evaluator options argument from REST.
+(define (agent-scheme-test-rest-options rest)
+  (if (or (null? rest) (null? (cdr rest)))
+      '()
+      (cadr rest)))
+
+;; Reader and evaluator wrappers apply CI matrix defaults.
+(define (agent-scheme-read source . maybe-options)
+  (raw-agent-scheme-read
+   source
+   (agent-scheme-test-merge-options
+    (if (null? maybe-options) '() (car maybe-options)))))
+
+(define (agent-scheme-read-all source . maybe-options)
+  (raw-agent-scheme-read-all
+   source
+   (agent-scheme-test-merge-options
+    (if (null? maybe-options) '() (car maybe-options)))))
+
+(define (agent-scheme-eval expression . rest)
+  (raw-agent-scheme-eval
+   expression
+   (agent-scheme-test-rest-environment rest)
+   (agent-scheme-test-merge-options (agent-scheme-test-rest-options rest))))
+
+(define (agent-scheme-eval-source source . rest)
+  (raw-agent-scheme-eval-source
+   source
+   (agent-scheme-test-rest-environment rest)
+   (agent-scheme-test-merge-options (agent-scheme-test-rest-options rest))))
+
+(define agent-scheme-eval-string agent-scheme-eval-source)
+
+(define (agent-scheme-expand expression . rest)
+  (raw-agent-scheme-expand
+   expression
+   (agent-scheme-test-rest-environment rest)
+   (agent-scheme-test-merge-options (agent-scheme-test-rest-options rest))))
+
+(define (agent-scheme-expand-source source . rest)
+  (raw-agent-scheme-expand-source
+   source
+   (agent-scheme-test-rest-environment rest)
+   (agent-scheme-test-merge-options (agent-scheme-test-rest-options rest))))
+
+(define (agent-scheme-eval-result expression . rest)
+  (raw-agent-scheme-eval-result
+   expression
+   (agent-scheme-test-rest-environment rest)
+   (agent-scheme-test-merge-options (agent-scheme-test-rest-options rest))))
+
+(define (agent-scheme-eval-source-result source . rest)
+  (raw-agent-scheme-eval-source-result
+   source
+   (agent-scheme-test-rest-environment rest)
+   (agent-scheme-test-merge-options (agent-scheme-test-rest-options rest))))
 
 ;; Fixture kinds identify whether a case is conformance, project-specific, or a
 ;; regression for a previously observed bug.
