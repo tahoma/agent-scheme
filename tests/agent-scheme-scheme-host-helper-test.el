@@ -19,6 +19,20 @@
      "tests/scheme/agent-scheme-reader-test.scm")
     '("-I" "scheme" "-r7" "tests/scheme/agent-scheme-reader-test.scm"))))
 
+(ert-deftest agent-scheme-portable-host-helper-test-builds-guile-arguments ()
+  "Build Guile R7RS arguments with auto-compilation disabled."
+  (should
+   (equal
+    (agent-scheme--scheme-host-arguments
+     'guile
+     "scheme"
+     "tests/scheme/agent-scheme-reader-test.scm")
+    '("--no-auto-compile"
+      "--r7rs"
+      "-L"
+      "scheme"
+      "tests/scheme/agent-scheme-reader-test.scm"))))
+
 (ert-deftest agent-scheme-portable-host-helper-test-builds-racket-collection ()
   "Generate Racket collection wrappers from portable `.sld' libraries."
   (let* ((source-root (make-temp-file "agent-scheme-racket-source-" t))

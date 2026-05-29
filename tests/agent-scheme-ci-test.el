@@ -176,6 +176,15 @@
                                         :ert-seconds 1.0
                                         :wall-seconds 1.0
                                         :tests nil))
+         (portable-guile-shard '(:name "Portable R7RS Guile full suite"
+                                       :selector "portable-guile"
+                                       :ran 1
+                                       :expected 1
+                                       :unexpected 0
+                                       :skipped 0
+                                       :ert-seconds 1.0
+                                       :wall-seconds 1.0
+                                       :tests nil))
          (portable-gauche-shard '(:name "Portable R7RS Gauche full suite"
                                         :selector "portable-gauche"
                                         :ran 1
@@ -198,13 +207,14 @@
           (agent-scheme-ci-render-pr-markdown-summary
            (list tools-shard
                  portable-gauche-shard
+                 portable-guile-shard
                  portable-racket-shard
                  portable-gambit-shard
                  portable-rest-shard
                  portable-eval-shard))))
     (should
      (string-match-p
-      "| Portable R7RS Chibi evaluator subset |.*\n| Portable R7RS Chibi non-evaluator subset |.*\n| Portable R7RS Gambit full suite |.*\n| Portable R7RS Racket full suite |.*\n| Portable R7RS Gauche full suite |.*\n| Emacs tools/docs/integration |"
+      "| Portable R7RS Chibi evaluator subset |.*\n| Portable R7RS Chibi non-evaluator subset |.*\n| Portable R7RS Gambit full suite |.*\n| Portable R7RS Racket full suite |.*\n| Portable R7RS Guile full suite |.*\n| Portable R7RS Gauche full suite |.*\n| Emacs tools/docs/integration |"
       markdown))))
 
 (provide 'agent-scheme-ci-test)

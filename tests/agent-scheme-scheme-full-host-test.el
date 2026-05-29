@@ -18,6 +18,10 @@
   "Run the full portable R7RS suite with Racket's R7RS package."
   (agent-scheme--scheme-host-run-suite 'racket "racket"))
 
+(ert-deftest agent-scheme-scheme-guile-host-test-r7rs-suite ()
+  "Run the full portable R7RS suite with Guile Scheme."
+  (agent-scheme--scheme-host-run-suite 'guile "guile"))
+
 (ert-deftest agent-scheme-scheme-gauche-host-test-r7rs-suite ()
   "Run the full portable R7RS suite with Gauche Scheme."
   (agent-scheme--scheme-host-run-suite 'gauche "gauche"))

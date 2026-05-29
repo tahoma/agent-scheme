@@ -192,12 +192,14 @@
 
     (define (condition-irritants condition)
       "Return CONDITION's portable irritants when they are available."
-      (cond
-       ((error-object? condition)
-        (error-object-irritants condition))
-       ((agent-scheme-error-object? condition)
-        (agent-scheme-error-object-irritants condition))
-       (else '())))
+      (let ((irritants
+             (cond
+              ((error-object? condition)
+               (error-object-irritants condition))
+              ((agent-scheme-error-object? condition)
+               (agent-scheme-error-object-irritants condition))
+              (else '()))))
+        (if (list? irritants) irritants '())))
 
     (define (debugger-condition-type condition message)
       "Return a debugger condition type derived from CONDITION and MESSAGE."

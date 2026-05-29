@@ -314,6 +314,7 @@ AGENT_SCHEME_CHIBI=chibi-scheme make test-portable-eval
 AGENT_SCHEME_CHIBI=chibi-scheme make test-portable-rest
 AGENT_SCHEME_GAMBIT=gsi make test-portable-gambit
 AGENT_SCHEME_RACKET=racket make test-portable-racket
+AGENT_SCHEME_GUILE=guile make test-portable-guile
 AGENT_SCHEME_GAUCHE=gosh make test-portable-gauche
 make test-emacs-core
 make test-emacs-library
@@ -325,14 +326,16 @@ make test-emacs-tools
 test-portable` remains available as the local aggregate for the portable ERT
 bridge tests. CI keeps Chibi split into evaluator and non-evaluator subset
 shards for timing continuity, then runs full portable-suite host shards under
-Gambit, Racket with its `r7rs` package, and Gauche. The full-suite host shards
+Gambit, Racket with its `r7rs` package, Guile, and Gauche. The full-suite host shards
 run the same portable Scheme test files so their timing rows compare host
 behavior rather than different test scopes. The Racket bridge generates
 temporary `#lang r7rs` collection wrappers for checked-in `.sld` libraries
 because Racket's R7RS package resolves imports as Racket collection modules.
 CI builds and caches Gambit 4.9.7 because Ubuntu 24.04's `gambc` package is
 4.9.3 and does not accept the `-:r7rs` runtime option needed for the portable
-library search path. These shards contribute required host timing data. The
+library search path. The extra R7RS host matrix runs inside an Ubuntu 26.04
+container because Ubuntu 24.04 does not ship the Gauche package used by that
+shard. These shards contribute required host timing data. The
 Emacs-hosted shards split the non-portable ERT suite into core
 language/runtime, library/conformance, capability/policy, and
 tools/docs/integration groups. `make test-emacs-hosted` remains available as
