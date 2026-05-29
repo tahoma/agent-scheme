@@ -7611,17 +7611,27 @@
     ;; String evaluation is an alias kept for callers that name the source kind.
     (define agent-scheme-eval-string agent-scheme-eval-source)
 
+    (define (call-with-result-condition-handler context thunk)
+      "Call THUNK, converting any raised condition to an evaluation-result datum."
+      (call/cc
+       (lambda (return)
+         (with-exception-handler
+          (lambda (condition)
+            (return (condition-result-datum condition context)))
+          thunk))))
+
     (define (agent-scheme-eval-result expression . rest)
       "Result-producing evaluation catches conditions and returns an inspectable Scheme-readable evaluation-result datum instead of raising to the host."
       (let ((context (new-eval-context (rest-options rest)))
             (environment (rest-environment rest)))
         (set-context-interaction-environment! context environment)
         (ensure-base-syntax! context environment)
-        (guard (condition
-                (else (condition-result-datum condition context)))
-          (ok-result-datum
-           (trampoline expression environment context)
-           context))))
+        (call-with-result-condition-handler
+         context
+         (lambda ()
+           (ok-result-datum
+            (trampoline expression environment context)
+            context)))))
 
     (define (agent-scheme-eval-source-result source . rest)
       "Source result evaluation combines reader, evaluator, condition capture, and budget reporting for REPL and protocol-boundary callers."
@@ -7629,11 +7639,12 @@
             (environment (rest-environment rest)))
         (set-context-interaction-environment! context environment)
         (ensure-base-syntax! context environment)
-        (guard (condition
-                (else (condition-result-datum condition context)))
-          (let ((forms (agent-scheme-read-all source (rest-options rest))))
-            (ok-result-datum
-             (trampoline (make-sequence forms #t) environment context)
-             context)))))
+        (call-with-result-condition-handler
+         context
+         (lambda ()
+           (let ((forms (agent-scheme-read-all source (rest-options rest))))
+             (ok-result-datum
+              (trampoline (make-sequence forms #t) environment context)
+              context))))))
 
     ))

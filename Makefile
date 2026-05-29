@@ -9,6 +9,7 @@ AGENT_SCHEME_PORTABLE_EVAL_TEST_SELECTOR ?= "^agent-scheme-scheme-eval-test-r7rs
 AGENT_SCHEME_PORTABLE_REST_TEST_SELECTOR ?= (and "agent-scheme-scheme-.*" (not "^agent-scheme-scheme-eval-test-r7rs-suite$$") (not "^agent-scheme-scheme-.*-host-test-r7rs-suite$$"))
 AGENT_SCHEME_PORTABLE_GAMBIT_TEST_SELECTOR ?= "^agent-scheme-scheme-gambit-host-test-r7rs-suite$$"
 AGENT_SCHEME_PORTABLE_RACKET_TEST_SELECTOR ?= "^agent-scheme-scheme-racket-host-test-r7rs-suite$$"
+AGENT_SCHEME_PORTABLE_GUILE_TEST_SELECTOR ?= "^agent-scheme-scheme-guile-host-test-r7rs-suite$$"
 AGENT_SCHEME_PORTABLE_GAUCHE_TEST_SELECTOR ?= "^agent-scheme-scheme-gauche-host-test-r7rs-suite$$"
 AGENT_SCHEME_EMACS_HOSTED_TEST_SELECTOR ?= (not "agent-scheme-scheme-.*")
 AGENT_SCHEME_EMACS_CORE_TEST_SELECTOR ?= (or "agent-scheme-base.*" "agent-scheme-eval.*" "agent-scheme-interpreter-module.*" "agent-scheme-macro.*" "agent-scheme-reader.*" "agent-scheme-result.*" "agent-scheme-runtime.*")
@@ -17,7 +18,7 @@ AGENT_SCHEME_EMACS_CAPABILITY_TEST_SELECTOR ?= (or "agent-scheme-agent-io.*" "ag
 AGENT_SCHEME_EMACS_TOOLS_TEST_SELECTOR ?= (or "agent-scheme-ci.*" "agent-scheme-compile.*" "agent-scheme-control-loop-doc.*" "agent-scheme-debugger.*" "agent-scheme-diagnostics.*" "agent-scheme-diff.*" "agent-scheme-docstring-metadata-doc.*" "agent-scheme-feature-reflection-doc.*" "agent-scheme-job.*" "agent-scheme-native-cli-daemon-doc.*" "agent-scheme-reflect.*" "agent-scheme-repl.*" "agent-scheme-skill.*" "agent-scheme-smoke.*" "agent-scheme-vcs.*")
 AGENT_SCHEME_LIVE_MODEL_CI_SELECTOR ?= agent-scheme-models-test-live-local-openai-compatible-completion
 AGENT_SCHEME_LIVE_MODEL_SELECTOR ?= "agent-scheme-models-test-live-local-.*"
-AGENT_SCHEME_PORTABLE_TEST_SHARD_TARGETS ?= test-portable-eval test-portable-rest test-portable-gambit test-portable-racket test-portable-gauche
+AGENT_SCHEME_PORTABLE_TEST_SHARD_TARGETS ?= test-portable-eval test-portable-rest test-portable-gambit test-portable-racket test-portable-guile test-portable-gauche
 AGENT_SCHEME_EMACS_TEST_SHARD_TARGETS ?= test-emacs-core test-emacs-library test-emacs-capabilities test-emacs-tools
 AGENT_SCHEME_TEST_SHARD_TARGETS ?= $(AGENT_SCHEME_PORTABLE_TEST_SHARD_TARGETS) $(AGENT_SCHEME_EMACS_TEST_SHARD_TARGETS)
 AGENT_SCHEME_PORTABLE_TEST_JOBS ?= $(words $(AGENT_SCHEME_PORTABLE_TEST_SHARD_TARGETS))
@@ -26,7 +27,7 @@ AGENT_SCHEME_TEST_JOBS ?= $(words $(AGENT_SCHEME_TEST_SHARD_TARGETS))
 
 .DEFAULT_GOAL := help
 
-.PHONY: help clean compile-elisp test test-portable test-portable-eval test-portable-rest test-portable-gambit test-portable-racket test-portable-gauche test-emacs-hosted test-emacs-core test-emacs-library test-emacs-capabilities test-emacs-tools test-live-model-ci test-live-model conformance-oracle
+.PHONY: help clean compile-elisp test test-portable test-portable-eval test-portable-rest test-portable-gambit test-portable-racket test-portable-guile test-portable-gauche test-emacs-hosted test-emacs-core test-emacs-library test-emacs-capabilities test-emacs-tools test-live-model-ci test-live-model conformance-oracle
 
 help:
 	@printf '%s\n' 'Agent Scheme top-level actions:'
@@ -39,6 +40,7 @@ help:
 	@printf '  %-26s %s\n' 'test-portable-rest' 'Run the portable R7RS Chibi non-evaluator subset shard.'
 	@printf '  %-26s %s\n' 'test-portable-gambit' 'Run the portable R7RS Gambit full-suite host shard.'
 	@printf '  %-26s %s\n' 'test-portable-racket' 'Run the portable R7RS Racket full-suite host shard.'
+	@printf '  %-26s %s\n' 'test-portable-guile' 'Run the portable R7RS Guile full-suite host shard.'
 	@printf '  %-26s %s\n' 'test-portable-gauche' 'Run the portable R7RS Gauche full-suite host shard.'
 	@printf '  %-26s %s\n' 'test-emacs-hosted' 'Run all non-portable Emacs-hosted ERT tests.'
 	@printf '  %-26s %s\n' 'test-emacs-core' 'Run the Emacs-hosted core language/runtime shard.'
@@ -59,6 +61,7 @@ help:
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_PORTABLE_REST_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-rest.'
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_PORTABLE_GAMBIT_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-gambit.'
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_PORTABLE_RACKET_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-racket.'
+	@printf '  %-50s %s\n' 'AGENT_SCHEME_PORTABLE_GUILE_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-guile.'
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_PORTABLE_GAUCHE_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-gauche.'
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_EMACS_HOSTED_TEST_SELECTOR=SEL' 'ERT selector used by make test-emacs-hosted.'
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_EMACS_CORE_TEST_SELECTOR=SEL' 'ERT selector used by make test-emacs-core.'
@@ -114,6 +117,9 @@ test-portable-gambit:
 
 test-portable-racket:
 	AGENT_SCHEME_TEST_SELECTOR='$(AGENT_SCHEME_PORTABLE_RACKET_TEST_SELECTOR)' $(AGENT_SCHEME_TEST_RUNNER_COMMAND)
+
+test-portable-guile:
+	AGENT_SCHEME_TEST_SELECTOR='$(AGENT_SCHEME_PORTABLE_GUILE_TEST_SELECTOR)' $(AGENT_SCHEME_TEST_RUNNER_COMMAND)
 
 test-portable-gauche:
 	AGENT_SCHEME_TEST_SELECTOR='$(AGENT_SCHEME_PORTABLE_GAUCHE_TEST_SELECTOR)' $(AGENT_SCHEME_TEST_RUNNER_COMMAND)
