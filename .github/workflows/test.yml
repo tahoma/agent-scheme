@@ -15,68 +15,6 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
-  test-portable:
-    name: portable R7RS / Chibi (${{ matrix.label }})
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - shard: portable-eval
-            label: evaluator subset
-            make_target: test-portable-eval
-            log_file: portable-eval.log
-            summary_name: Portable R7RS Chibi evaluator subset
-            selector: '"^agent-scheme-scheme-eval-test-r7rs-suite$"'
-          - shard: portable-rest
-            label: non-evaluator subset
-            make_target: test-portable-rest
-            log_file: portable-rest.log
-            summary_name: Portable R7RS Chibi non-evaluator subset
-            selector: '(and "agent-scheme-scheme-.*" (not "^agent-scheme-scheme-eval-test-r7rs-suite$") (not "^agent-scheme-scheme-.*-host-test-r7rs-suite$"))'
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v6
-
-      - name: Install Emacs
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y emacs-nox chibi-scheme
-
-      - name: Run portable R7RS Chibi shard
-        shell: bash
-        run: |
-          mkdir -p ci-logs
-          started=$SECONDS
-          set +e
-          make "${{ matrix.make_target }}" 2>&1 | tee "ci-logs/${{ matrix.log_file }}"
-          status=${PIPESTATUS[0]}
-          wall=$((SECONDS - started))
-          {
-            printf 'AGENT_SCHEME_CI_SHARD_NAME=%s\n' '${{ matrix.summary_name }}'
-            printf 'AGENT_SCHEME_CI_SHARD_SELECTOR=%s\n' '${{ matrix.selector }}'
-            printf 'AGENT_SCHEME_CI_WALL_SECONDS=%s\n' "$wall"
-          } >> "ci-logs/${{ matrix.log_file }}"
-          exit "$status"
-
-      - name: Upload portable shard log
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: test-log-${{ matrix.shard }}
-          path: ci-logs/${{ matrix.log_file }}
-          if-no-files-found: warn
-
-      - name: Render portable shard timing summary
-        if: always()
-        run: |
-          if [ -f "ci-logs/${{ matrix.log_file }}" ]; then
-            emacs -Q --batch -L lisp \
-              --eval "(require 'agent-scheme-ci)" \
-              --eval "(agent-scheme-ci-write-summary '(\"ci-logs/${{ matrix.log_file }}\") (getenv \"GITHUB_STEP_SUMMARY\"))"
-          fi
-
   test-portable-gambit:
     name: portable R7RS / Gambit full suite
     runs-on: ubuntu-latest
@@ -296,7 +234,7 @@ jobs:
       - name: Install Emacs
         run: |
           sudo apt-get update
-          sudo apt-get install -y emacs-nox chibi-scheme
+          sudo apt-get install -y emacs-nox
 
       - name: Run Emacs-hosted ERT shard
         shell: bash
@@ -335,7 +273,6 @@ jobs:
     name: test shard timing summary
     runs-on: ubuntu-latest
     needs:
-      - test-portable
       - test-portable-gambit
       - test-portable-extra-hosts
       - test-emacs-hosted

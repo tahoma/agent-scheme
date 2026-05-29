@@ -14,8 +14,8 @@ small and will grow as implementation tickets land.
 
 Optional but useful:
 
-- Chibi Scheme, `chibi-scheme`, for running portable R7RS bootstrap tests
-  and the reference implementation oracle runner
+- Chibi Scheme, `chibi-scheme`, for optional portable R7RS Chibi checks and
+  the reference implementation oracle runner
 - Gauche, `gosh`, for additional reference implementation oracle coverage
 - Guile, `guile`, and Sagittarius, `sagittarius`, for broader optional oracle
   comparison coverage
@@ -164,10 +164,11 @@ Future R7RS conformance fixtures should plug into `make test` through the same
 test command instead of adding a second top-level verification path.
 
 Portable R7RS tests live under `tests/scheme/` and are launched by ERT. The
-current portable reader harness uses Chibi Scheme when `chibi-scheme` is on
-`PATH`, or the command named by `AGENT_SCHEME_CHIBI`. If Chibi is unavailable,
-the ERT test is skipped so a minimal Emacs-only checkout can still run the
-bootstrap suite.
+default portable shards run the full suite under Gambit, Racket with its `r7rs`
+package, Guile, and Gauche. Chibi remains available as an optional host through
+`make test-portable-chibi`, `make test-portable-eval`, and `make
+test-portable-rest`; those targets use `chibi-scheme` on `PATH`, or the command
+named by `AGENT_SCHEME_CHIBI`, and skip when Chibi is unavailable.
 
 Core runtime, reader, evaluator, macro, library, and standard-library changes
 should normally add or update portable tests alongside the Emacs Lisp tests.
@@ -227,7 +228,7 @@ not affect the default `make test` command.
 
 | Adapter | Role | Environment override | Discovered command | Notes |
 | --- | --- | --- | --- | --- |
-| Chibi Scheme | default | `AGENT_SCHEME_CHIBI` | `chibi-scheme` | Also used by portable bootstrap tests when available. |
+| Chibi Scheme | default | `AGENT_SCHEME_CHIBI` | `chibi-scheme` | Also used by optional portable Chibi checks when available. |
 | Sagittarius | default | `AGENT_SCHEME_SAGITTARIUS` | `sagittarius` | Runs with `-r 7` for R7RS mode. |
 | Gauche | opt-in comparison | `AGENT_SCHEME_GAUCHE` | `gosh` | Useful for library and writer behavior comparisons. |
 | Guile | opt-in comparison | `AGENT_SCHEME_GUILE` | `guile` | Runs with `--no-auto-compile --r7rs`. |
@@ -310,8 +311,6 @@ CI runs the aggregate suite as host/runtime-oriented shards so timing and
 failures stay visible by architectural path:
 
 ```sh
-AGENT_SCHEME_CHIBI=chibi-scheme make test-portable-eval
-AGENT_SCHEME_CHIBI=chibi-scheme make test-portable-rest
 AGENT_SCHEME_GAMBIT=gsi make test-portable-gambit
 AGENT_SCHEME_RACKET=racket make test-portable-racket
 AGENT_SCHEME_GUILE=guile make test-portable-guile
@@ -323,12 +322,18 @@ make test-emacs-tools
 ```
 
 `make test` runs those shard targets in parallel by default. `make
-test-portable` remains available as the local aggregate for the portable ERT
-bridge tests. CI keeps Chibi split into evaluator and non-evaluator subset
-shards for timing continuity, then runs full portable-suite host shards under
-Gambit, Racket with its `r7rs` package, Guile, and Gauche. The full-suite host shards
-run the same portable Scheme test files so their timing rows compare host
-behavior rather than different test scopes. The Racket bridge generates
+test-portable` remains available as the local aggregate for the default
+portable R7RS host shards. CI runs full portable-suite host shards under
+Gambit, Racket with its `r7rs` package, Guile, and Gauche. Optional Chibi shard
+targets remain available for manual timing and compatibility checks:
+
+```sh
+AGENT_SCHEME_CHIBI=chibi-scheme make test-portable-chibi
+```
+
+The full-suite host shards run the same portable Scheme test files so their
+timing rows compare host behavior rather than different test scopes. The Racket
+bridge generates
 temporary `#lang r7rs` collection wrappers for checked-in `.sld` libraries
 because Racket's R7RS package resolves imports as Racket collection modules.
 CI builds and caches Gambit 4.9.7 because Ubuntu 24.04's `gambc` package is

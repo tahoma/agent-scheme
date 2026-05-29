@@ -18,7 +18,8 @@ Install the core development tools:
 
 Optional Scheme implementations improve portable and oracle coverage:
 
-- Chibi Scheme, `chibi-scheme`, for portable R7RS tests and default oracle use
+- Chibi Scheme, `chibi-scheme`, for optional portable R7RS Chibi checks and
+  default oracle use
 - Sagittarius, `sagittarius`, for default oracle comparisons
 - Gauche, Guile, Racket with the `r7rs` package, and CHICKEN with the `r7rs`
   egg for additional developer-only oracle comparisons
@@ -443,10 +444,10 @@ The `rg` command should normally return no matches. If documentation changes
 include the repository skill bundle, also scan `skills/` with the same pattern.
 
 Optional portable and oracle checks use installed R7RS implementations. Chibi
-Scheme is used by portable R7RS tests when available:
+checks can be run explicitly when Chibi Scheme is available:
 
 ```sh
-AGENT_SCHEME_CHIBI=chibi-scheme make test
+AGENT_SCHEME_CHIBI=chibi-scheme make test-portable-chibi
 ```
 
 Pure shared fixtures can be compared against reference implementations:
@@ -484,7 +485,7 @@ Inspect `*Agent Audit: PROJECT*` and `*Agent Approvals: PROJECT*` to see the
 request and decision records, then add the smallest explicit grant or policy
 change needed for the experiment.
 
-If portable R7RS tests are skipped, install Chibi Scheme or set
+If optional Chibi checks are skipped, install Chibi Scheme or set
 `AGENT_SCHEME_CHIBI` to the executable path. Missing optional reference
 implementations are reported as unsupported references for oracle work and do
 not make the default `make test` command fail.

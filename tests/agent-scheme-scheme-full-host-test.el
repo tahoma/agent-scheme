@@ -3,7 +3,8 @@
 ;;; Commentary:
 
 ;; ERT bridges for running the portable R7RS Scheme tests under additional
-;; R7RS hosts.  Chibi remains split across narrower shards for CI timing.
+;; R7RS hosts.  Chibi remains split across optional narrower shards for manual
+;; timing.
 
 ;;; Code:
 

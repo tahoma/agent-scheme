@@ -18,16 +18,18 @@ AGENT_SCHEME_EMACS_CAPABILITY_TEST_SELECTOR ?= (or "agent-scheme-agent-io.*" "ag
 AGENT_SCHEME_EMACS_TOOLS_TEST_SELECTOR ?= (or "agent-scheme-ci.*" "agent-scheme-compile.*" "agent-scheme-control-loop-doc.*" "agent-scheme-debugger.*" "agent-scheme-diagnostics.*" "agent-scheme-diff.*" "agent-scheme-docstring-metadata-doc.*" "agent-scheme-feature-reflection-doc.*" "agent-scheme-job.*" "agent-scheme-native-cli-daemon-doc.*" "agent-scheme-reflect.*" "agent-scheme-repl.*" "agent-scheme-skill.*" "agent-scheme-smoke.*" "agent-scheme-vcs.*")
 AGENT_SCHEME_LIVE_MODEL_CI_SELECTOR ?= agent-scheme-models-test-live-local-openai-compatible-completion
 AGENT_SCHEME_LIVE_MODEL_SELECTOR ?= "agent-scheme-models-test-live-local-.*"
-AGENT_SCHEME_PORTABLE_TEST_SHARD_TARGETS ?= test-portable-eval test-portable-rest test-portable-gambit test-portable-racket test-portable-guile test-portable-gauche
+AGENT_SCHEME_PORTABLE_TEST_SHARD_TARGETS ?= test-portable-gambit test-portable-racket test-portable-guile test-portable-gauche
+AGENT_SCHEME_OPTIONAL_PORTABLE_TEST_SHARD_TARGETS ?= test-portable-eval test-portable-rest
 AGENT_SCHEME_EMACS_TEST_SHARD_TARGETS ?= test-emacs-core test-emacs-library test-emacs-capabilities test-emacs-tools
 AGENT_SCHEME_TEST_SHARD_TARGETS ?= $(AGENT_SCHEME_PORTABLE_TEST_SHARD_TARGETS) $(AGENT_SCHEME_EMACS_TEST_SHARD_TARGETS)
 AGENT_SCHEME_PORTABLE_TEST_JOBS ?= $(words $(AGENT_SCHEME_PORTABLE_TEST_SHARD_TARGETS))
+AGENT_SCHEME_OPTIONAL_PORTABLE_TEST_JOBS ?= $(words $(AGENT_SCHEME_OPTIONAL_PORTABLE_TEST_SHARD_TARGETS))
 AGENT_SCHEME_EMACS_TEST_JOBS ?= $(words $(AGENT_SCHEME_EMACS_TEST_SHARD_TARGETS))
 AGENT_SCHEME_TEST_JOBS ?= $(words $(AGENT_SCHEME_TEST_SHARD_TARGETS))
 
 .DEFAULT_GOAL := help
 
-.PHONY: help clean compile-elisp test test-portable test-portable-eval test-portable-rest test-portable-gambit test-portable-racket test-portable-guile test-portable-gauche test-emacs-hosted test-emacs-core test-emacs-library test-emacs-capabilities test-emacs-tools test-live-model-ci test-live-model conformance-oracle
+.PHONY: help clean compile-elisp test test-portable test-portable-chibi test-portable-eval test-portable-rest test-portable-gambit test-portable-racket test-portable-guile test-portable-gauche test-emacs-hosted test-emacs-core test-emacs-library test-emacs-capabilities test-emacs-tools test-live-model-ci test-live-model conformance-oracle
 
 help:
 	@printf '%s\n' 'Agent Scheme top-level actions:'
@@ -35,9 +37,10 @@ help:
 	@printf '  %-26s %s\n' 'clean' 'Remove generated Elisp bytecode.'
 	@printf '  %-26s %s\n' 'compile-elisp' 'Byte-compile checked-in Elisp sources.'
 	@printf '  %-26s %s\n' 'test' 'Run the project test suite across local shards.'
-	@printf '  %-26s %s\n' 'test-portable' 'Run the portable R7RS host shards.'
-	@printf '  %-26s %s\n' 'test-portable-eval' 'Run the portable R7RS Chibi evaluator subset shard.'
-	@printf '  %-26s %s\n' 'test-portable-rest' 'Run the portable R7RS Chibi non-evaluator subset shard.'
+	@printf '  %-26s %s\n' 'test-portable' 'Run the default portable R7RS host shards.'
+	@printf '  %-26s %s\n' 'test-portable-chibi' 'Run the optional portable R7RS Chibi shards.'
+	@printf '  %-26s %s\n' 'test-portable-eval' 'Run the optional portable R7RS Chibi evaluator subset shard.'
+	@printf '  %-26s %s\n' 'test-portable-rest' 'Run the optional portable R7RS Chibi non-evaluator subset shard.'
 	@printf '  %-26s %s\n' 'test-portable-gambit' 'Run the portable R7RS Gambit full-suite host shard.'
 	@printf '  %-26s %s\n' 'test-portable-racket' 'Run the portable R7RS Racket full-suite host shard.'
 	@printf '  %-26s %s\n' 'test-portable-guile' 'Run the portable R7RS Guile full-suite host shard.'
@@ -55,6 +58,8 @@ help:
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_TEST_TARGET_ROOT=DIR' 'Optional portable Scheme implementation root for the current harness.'
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_TEST_JOBS=N' 'Parallel jobs used by make test.'
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_TEST_SHARD_TARGETS=a b' 'Shard targets run by make test.'
+	@printf '  %-50s %s\n' 'AGENT_SCHEME_OPTIONAL_PORTABLE_TEST_SHARD_TARGETS=a b' 'Optional portable shard targets run by make test-portable-chibi.'
+	@printf '  %-50s %s\n' 'AGENT_SCHEME_OPTIONAL_PORTABLE_TEST_JOBS=N' 'Parallel jobs used by make test-portable-chibi.'
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_TEST_SELECTOR=SEL' 'Optional ERT selector for make test.'
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_PORTABLE_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable.'
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_PORTABLE_EVAL_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-eval.'
@@ -72,7 +77,7 @@ help:
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_LIVE_MODEL_SELECTOR=SEL' 'ERT selector used by make test-live-model.'
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_LIVE_MODEL_ENDPOINT=URL' 'OpenAI-compatible endpoint for live local model tests.'
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_LIVE_MODEL_ID=ID' 'Model id used by the live local smoke test.'
-	@printf '  %-50s %s\n' 'AGENT_SCHEME_CHIBI=chibi-scheme' 'Optional Chibi Scheme command for portable R7RS tests and oracle runs.'
+	@printf '  %-50s %s\n' 'AGENT_SCHEME_CHIBI=chibi-scheme' 'Optional Chibi Scheme command for Chibi portable checks and oracle runs.'
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_GAUCHE=gosh' 'Optional Gauche command for oracle runs.'
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_GUILE=guile' 'Optional Guile command for oracle runs.'
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_SAGITTARIUS=sagittarius' 'Optional Sagittarius command for oracle runs.'
@@ -105,6 +110,9 @@ else
 test-portable:
 	$(AGENT_SCHEME_PARALLEL_MAKE) -j$(AGENT_SCHEME_PORTABLE_TEST_JOBS) $(AGENT_SCHEME_PORTABLE_TEST_SHARD_TARGETS)
 endif
+
+test-portable-chibi:
+	$(AGENT_SCHEME_PARALLEL_MAKE) -j$(AGENT_SCHEME_OPTIONAL_PORTABLE_TEST_JOBS) $(AGENT_SCHEME_OPTIONAL_PORTABLE_TEST_SHARD_TARGETS)
 
 test-portable-eval:
 	AGENT_SCHEME_TEST_SELECTOR='$(AGENT_SCHEME_PORTABLE_EVAL_TEST_SELECTOR)' $(AGENT_SCHEME_TEST_RUNNER_COMMAND)

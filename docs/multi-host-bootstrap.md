@@ -47,7 +47,10 @@ Example adapter declaration shape:
      (mutation confirmation-gated)
      (process confirmation-gated)))
   (validation
-    ((portable-suite chibi)
+    ((portable-suite gambit)
+     (portable-suite racket)
+     (portable-suite guile)
+     (portable-suite gauche)
      (host-suite ert))))
 ```
 
@@ -179,17 +182,18 @@ must not replace the R7RS-small user contract.
 | Target | Role | Strengths | Constraints | Validation target |
 | --- | --- | --- | --- | --- |
 | Emacs Lisp adapter | First host and bootstrap adapter | Native editor UX, ERT, project buffers, policy prompts | Host-specific objects and dynamic editor state must stay behind handles | `make test` through ERT |
-| Chibi Scheme | First external R7RS validation path | Small R7RS implementation, `.sld` support, useful for CI-style portability checks | Optional on developer machines; validates the portable product path but is not itself the product host | `AGENT_SCHEME_CHIBI=chibi-scheme make test` |
-| Gauche, Gambit, or Cyclone | R7RS compatibility probes | Broader implementation diversity and performance signals | Library/import behavior and extensions differ by implementation | Gambit CI shard plus additional portable test runners and opt-in oracle adapters |
+| Chibi Scheme | Optional external R7RS validation path | Small R7RS implementation, `.sld` support, useful for portability spot checks | Optional on developer machines; validates the portable product path but is not itself the product host | `AGENT_SCHEME_CHIBI=chibi-scheme make test-portable-chibi` |
+| Gauche, Gambit, Racket, Guile, or Cyclone | R7RS compatibility probes | Broader implementation diversity and performance signals | Library/import behavior and extensions differ by implementation | Default portable CI shards plus opt-in oracle adapters |
 | Chez or another R6RS backend | Possible optimized backend | Mature compiler and runtime, strong performance story | R6RS is not the Agent Scheme language contract | R7RS compatibility adapter plus conformance fixtures |
 | Future compiled backend | Long-term runtime strategy | Fast startup or embedding in non-editor hosts | Must preserve inspectable datums, policy, and library semantics | Same core fixture suite |
 | Non-Emacs UI shell | Future UX host | CLI, web, IDE, or editor surfaces can share the core | Needs its own policy, handles, and persistence adapter | Mock or real host-adapter suite |
 
-The first concrete non-Emacs path is a Chibi-backed portable test path for
-reader, evaluator, and library code. Full-suite Gambit, Racket, Guile, and
-Gauche CI shards also run the portable Scheme suite to keep independent host
-timing signals visible while compiled host work remains future scope. A later
-non-Emacs host can start as a command-line adapter with mock capability
+The first concrete non-Emacs path was a Chibi-backed portable test path for
+reader, evaluator, and library code; it remains available as an optional manual
+check. Full-suite Gambit, Racket, Guile, and Gauche CI shards run the portable
+Scheme suite by default to keep independent host timing signals visible while
+compiled host work remains future scope. A later non-Emacs host can start as a
+command-line adapter with mock capability
 libraries before gaining real UI, process, provider, or persistence authority.
 
 ## Portable Test Strategy
@@ -200,8 +204,8 @@ the feature can be expressed through R7RS libraries and data alone.
 Current examples:
 
 - `tests/agent-scheme-scheme-reader-test.el` runs
-  `tests/scheme/agent-scheme-reader-test.scm` with an external Scheme when
-  `chibi-scheme` or `AGENT_SCHEME_CHIBI` is available.
+  `tests/scheme/agent-scheme-reader-test.scm` with the configured external
+  Scheme host for the selected portable shard.
 - `tests/agent-scheme-scheme-eval-test.el` runs
   `tests/scheme/agent-scheme-eval-test.scm` the same way and also guards a
   bootstrap invariant around explicit continuations.
