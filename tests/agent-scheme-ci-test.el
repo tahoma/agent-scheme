@@ -141,7 +141,7 @@
                    "| Emacs core language/runtime | 1 | 0 | 0 | 0\\.040s | 1\\.000s |"
                    markdown))
           (should (string-match-p
-                   "<summary>Physical CI shards, slowest tests, and paired validation surfaces</summary>"
+                   "<summary>Detailed shard timings and diagnostic timings</summary>"
                    markdown))
           (should (string-match-p "`agent-scheme-reader-test-booleans` 0\\.040s"
                                   markdown)))
@@ -229,7 +229,7 @@
     (should-not (string-match-p "| Chibi |" above-fold))))
 
 (ert-deftest agent-scheme-ci-test-pr-summary-renders-option-variant-host-rows ()
-  "Keep option-matrix portable shards comparable above the fold."
+  "Pivot option-matrix portable shards so host comparisons are scannable."
   (let* ((portable-gambit-shard
           '(:name "Portable R7RS Gambit full suite / source metadata off / docstrings none"
             :selector "portable-gambit"
@@ -256,11 +256,95 @@
          (above-fold (car (split-string markdown "\n<details>" t))))
     (should (string-match-p "## Portable Host Timing" above-fold))
     (should (string-match-p
-             "| Gambit | full suite, source metadata off, docstrings none | 0 | 0 | 11\\.000s | 12\\.000s |"
+             "| Syntax metadata | Docstrings | Gambit | Racket |"
              above-fold))
     (should (string-match-p
-             "| Racket | full suite, source metadata on, docstrings simple | 0 | 0 | 7\\.000s | 8\\.000s |"
-             above-fold))))
+             "| on | simple | n/a | 7\\.000s (8\\.000s wall) |"
+             above-fold))
+    (should (string-match-p
+             "| off | none | 11\\.000s (12\\.000s wall) | n/a |"
+             above-fold))
+    (should-not
+     (string-match-p "full suite, source metadata" above-fold))))
+
+(ert-deftest agent-scheme-ci-test-pr-summary-renders-emacs-option-matrix ()
+  "Pivot Emacs option-matrix shards by logical shard."
+  (let* ((core-full-shard
+          '(:name "Emacs core language/runtime / source metadata on / docstrings full"
+            :selector "core"
+            :ran 73
+            :expected 73
+            :unexpected 0
+            :skipped 0
+            :ert-seconds 52.0
+            :wall-seconds 53.0
+            :tests nil))
+         (core-none-shard
+          '(:name "Emacs core language/runtime / source metadata off / docstrings none"
+            :selector "core"
+            :ran 73
+            :expected 73
+            :unexpected 0
+            :skipped 0
+            :ert-seconds 49.0
+            :wall-seconds 50.0
+            :tests nil))
+         (library-full-shard
+          '(:name "Emacs library/conformance / source metadata on / docstrings full"
+            :selector "library"
+            :ran 94
+            :expected 87
+            :unexpected 0
+            :skipped 7
+            :ert-seconds 51.0
+            :wall-seconds 52.0
+            :tests nil))
+         (markdown
+          (agent-scheme-ci-render-pr-markdown-summary
+           (list library-full-shard core-none-shard core-full-shard)))
+         (above-fold (car (split-string markdown "\n<details>" t))))
+    (should (string-match-p "## Emacs Shard Timing" above-fold))
+    (should (string-match-p
+             "| Shard | Ran | Skipped | on/full | on/simple | on/none | off/full | off/simple | off/none |"
+             above-fold))
+    (should (string-match-p
+             "| Emacs core language/runtime | 73 | 0 | 52\\.000s (53\\.000s wall) | n/a | n/a | n/a | n/a | 49\\.000s (50\\.000s wall) |"
+             above-fold))
+    (should (string-match-p
+             "| Emacs library/conformance | 94 | 7 | 51\\.000s (52\\.000s wall) | n/a | n/a | n/a | n/a | n/a |"
+             above-fold))
+    (should-not
+     (string-match-p "Emacs core language/runtime / source metadata" above-fold))))
+
+(ert-deftest agent-scheme-ci-test-pr-summary-omits-empty-paired-surfaces ()
+  "Avoid showing zero portable paired-surface rows for whole-suite hosts."
+  (let* ((portable-gambit-shard
+          '(:name "Portable R7RS Gambit full suite / source metadata on / docstrings full"
+            :selector "portable-gambit"
+            :ran 1
+            :expected 1
+            :unexpected 0
+            :skipped 0
+            :ert-seconds 14.0
+            :wall-seconds 15.0
+            :tests ((:name "agent-scheme-scheme-gambit-host-test-r7rs-suite"
+                     :seconds 14.0))))
+         (emacs-shard
+          '(:name "Emacs core language/runtime / source metadata on / docstrings full"
+            :selector "core"
+            :ran 73
+            :expected 73
+            :unexpected 0
+            :skipped 0
+            :ert-seconds 52.0
+            :wall-seconds 53.0
+            :tests ((:name "agent-scheme-reader-test-booleans"
+                     :seconds 0.040))))
+         (markdown
+          (agent-scheme-ci-render-pr-markdown-summary
+           (list emacs-shard portable-gambit-shard))))
+    (should-not (string-match-p "## Paired Validation Surfaces" markdown))
+    (should (string-match-p "## Test Shard Timing" markdown))))
 
 (ert-deftest agent-scheme-ci-test-default-ci-omits-chibi-shards ()
   "Keep Chibi as an explicit optional target, not a default CI shard."

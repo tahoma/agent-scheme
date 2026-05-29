@@ -68,6 +68,26 @@
     ("Gauche" . 4))
   "Preferred display order for portable host timing summaries.")
 
+(defconst agent-scheme-ci--source-metadata-order
+  '(("on" . 0)
+    ("off" . 1))
+  "Preferred display order for source metadata timing variants.")
+
+(defconst agent-scheme-ci--docstring-retention-order
+  '(("full" . 0)
+    ("simple" . 1)
+    ("none" . 2))
+  "Preferred display order for docstring retention timing variants.")
+
+(defconst agent-scheme-ci--option-variants
+  '(("on" . "full")
+    ("on" . "simple")
+    ("on" . "none")
+    ("off" . "full")
+    ("off" . "simple")
+    ("off" . "none"))
+  "Canonical source metadata/docstring timing variant order.")
+
 (defun agent-scheme-ci--file-string (path)
   "Return the contents of PATH as a string."
   (with-temp-buffer
@@ -244,17 +264,89 @@ durations, and optional wall-clock seconds recorded by the workflow."
         "\n")
        "\n"))))
 
+(defun agent-scheme-ci--split-option-variant-name (name)
+  "Return plist for NAME split into base name and option variant fields."
+  (if (string-match
+       "\\`\\(.+\\) / source metadata \\([^ /]+\\) / docstrings \\([^ /]+\\)\\'"
+       name)
+      (list :base (match-string 1 name)
+            :source-metadata (match-string 2 name)
+            :docstrings (match-string 3 name))
+    (list :base name)))
+
+(defun agent-scheme-ci--shard-base-name (shard)
+  "Return SHARD's name without option-variant suffixes."
+  (plist-get
+   (agent-scheme-ci--split-option-variant-name (plist-get shard :name))
+   :base))
+
+(defun agent-scheme-ci--option-variant (shard)
+  "Return SHARD's source metadata/docstring variant as a cons, or nil."
+  (let ((parts (agent-scheme-ci--split-option-variant-name
+                (plist-get shard :name))))
+    (when (plist-get parts :source-metadata)
+      (cons (plist-get parts :source-metadata)
+            (plist-get parts :docstrings)))))
+
+(defun agent-scheme-ci--option-variant-sort-key (variant)
+  "Return numeric display order for source metadata/docstring VARIANT."
+  (+ (* 10 (or (cdr (assoc (car variant)
+                           agent-scheme-ci--source-metadata-order))
+               9))
+     (or (cdr (assoc (cdr variant)
+                     agent-scheme-ci--docstring-retention-order))
+         9)))
+
+(defun agent-scheme-ci--option-variant-label (variant)
+  "Return compact display label for source metadata/docstring VARIANT."
+  (format "%s/%s" (car variant) (cdr variant)))
+
+(defun agent-scheme-ci--render-timing-cell (row &optional omit-skipped)
+  "Return compact timing text for ROW.
+OMIT-SKIPPED suppresses skipped-count annotations for tables that already show
+skipped totals separately."
+  (if row
+      (let (notes)
+        (when (> (or (plist-get row :unexpected) 0) 0)
+          (push (format "%d unexpected" (plist-get row :unexpected)) notes))
+        (when (and (not omit-skipped)
+                   (> (or (plist-get row :skipped) 0) 0))
+          (push (format "%d skipped" (plist-get row :skipped)) notes))
+        (concat
+         (format "%s (%s wall)"
+                 (agent-scheme-ci--format-seconds
+                  (plist-get row :ert-seconds))
+                 (agent-scheme-ci--format-seconds
+                  (plist-get row :wall-seconds)))
+         (when notes
+           (concat "; " (mapconcat #'identity (nreverse notes) "; ")))))
+    "n/a"))
+
 (defun agent-scheme-ci--shard-sort-key (shard)
   "Return display sort key for SHARD."
-  (or (cdr (assoc (plist-get shard :name) agent-scheme-ci--shard-order))
+  (or (cdr (assoc (agent-scheme-ci--shard-base-name shard)
+                  agent-scheme-ci--shard-order))
       99))
+
+(defun agent-scheme-ci--shard-less-p (left right)
+  "Return non-nil when LEFT should display before RIGHT."
+  (let ((left-key (agent-scheme-ci--shard-sort-key left))
+        (right-key (agent-scheme-ci--shard-sort-key right))
+        (left-variant (agent-scheme-ci--option-variant left))
+        (right-variant (agent-scheme-ci--option-variant right)))
+    (cond
+     ((/= left-key right-key)
+      (< left-key right-key))
+     ((and left-variant right-variant)
+      (< (agent-scheme-ci--option-variant-sort-key left-variant)
+         (agent-scheme-ci--option-variant-sort-key right-variant)))
+     (left-variant nil)
+     (right-variant t)
+     (t (string< (plist-get left :name) (plist-get right :name))))))
 
 (defun agent-scheme-ci--sort-shards (shards)
   "Return SHARDS in stable report display order."
-  (sort (copy-sequence shards)
-        (lambda (left right)
-          (< (agent-scheme-ci--shard-sort-key left)
-             (agent-scheme-ci--shard-sort-key right)))))
+  (sort (copy-sequence shards) #'agent-scheme-ci--shard-less-p))
 
 (defun agent-scheme-ci--find-shard-named (shards names)
   "Return the first shard in SHARDS whose name appears in NAMES."
@@ -322,18 +414,40 @@ durations, and optional wall-clock seconds recorded by the workflow."
   "Return a compact portable host timing row for SHARD, or nil."
   (let ((host (agent-scheme-ci--portable-full-suite-host shard)))
     (when host
-      (list :host host
-            :coverage (agent-scheme-ci--portable-full-suite-coverage shard)
-            :unexpected (plist-get shard :unexpected)
-            :skipped (plist-get shard :skipped)
-            :ert-seconds (plist-get shard :ert-seconds)
-            :wall-seconds (plist-get shard :wall-seconds)))))
+      (let ((variant (agent-scheme-ci--option-variant shard)))
+        (list :host host
+              :coverage (agent-scheme-ci--portable-full-suite-coverage shard)
+              :source-metadata (car variant)
+              :docstrings (cdr variant)
+              :unexpected (plist-get shard :unexpected)
+              :skipped (plist-get shard :skipped)
+              :ert-seconds (plist-get shard :ert-seconds)
+              :wall-seconds (plist-get shard :wall-seconds))))))
 
 (defun agent-scheme-ci--portable-host-row-sort-key (row)
   "Return display sort key for portable host ROW."
   (or (cdr (assoc (plist-get row :host)
                   agent-scheme-ci--portable-host-order))
       99))
+
+(defun agent-scheme-ci--portable-host-row-less-p (left right)
+  "Return non-nil when LEFT should display before RIGHT."
+  (let ((left-host (agent-scheme-ci--portable-host-row-sort-key left))
+        (right-host (agent-scheme-ci--portable-host-row-sort-key right))
+        (left-variant (cons (plist-get left :source-metadata)
+                            (plist-get left :docstrings)))
+        (right-variant (cons (plist-get right :source-metadata)
+                             (plist-get right :docstrings))))
+    (cond
+     ((/= left-host right-host)
+      (< left-host right-host))
+     ((and (car left-variant) (car right-variant))
+      (< (agent-scheme-ci--option-variant-sort-key left-variant)
+         (agent-scheme-ci--option-variant-sort-key right-variant)))
+     ((car left-variant) nil)
+     ((car right-variant) t)
+     (t (string< (plist-get left :coverage)
+                 (plist-get right :coverage))))))
 
 (defun agent-scheme-ci--portable-host-rows (shards)
   "Return comparable portable host timing rows for SHARDS."
@@ -347,10 +461,7 @@ durations, and optional wall-clock seconds recorded by the workflow."
                    (not (and chibi-row
                              (string= (plist-get row :host) "Chibi"))))
           (push row rows))))
-    (sort rows
-          (lambda (left right)
-            (< (agent-scheme-ci--portable-host-row-sort-key left)
-               (agent-scheme-ci--portable-host-row-sort-key right))))))
+    (sort rows #'agent-scheme-ci--portable-host-row-less-p)))
 
 (defun agent-scheme-ci--render-portable-host-row (row)
   "Render portable host timing ROW as one Markdown table row."
@@ -364,42 +475,253 @@ durations, and optional wall-clock seconds recorded by the workflow."
           (agent-scheme-ci--format-seconds
            (plist-get row :wall-seconds))))
 
+(defun agent-scheme-ci--portable-variant-row-p (row)
+  "Return non-nil when ROW is one source metadata/docstring timing variant."
+  (and (plist-get row :source-metadata)
+       (plist-get row :docstrings)))
+
+(defun agent-scheme-ci--sorted-portable-hosts (rows)
+  "Return unique portable host names from ROWS in display order."
+  (let (hosts)
+    (dolist (row rows)
+      (let ((host (plist-get row :host)))
+        (unless (member host hosts)
+          (push host hosts))))
+    (sort hosts
+          (lambda (left right)
+            (< (or (cdr (assoc left agent-scheme-ci--portable-host-order)) 99)
+               (or (cdr (assoc right agent-scheme-ci--portable-host-order)) 99))))))
+
+(defun agent-scheme-ci--find-portable-variant-row (rows host variant)
+  "Return ROWS entry for HOST and source metadata/docstring VARIANT."
+  (cl-find-if
+   (lambda (row)
+     (and (string= (plist-get row :host) host)
+          (string= (plist-get row :source-metadata) (car variant))
+          (string= (plist-get row :docstrings) (cdr variant))))
+   rows))
+
+(defun agent-scheme-ci--render-portable-host-matrix (rows)
+  "Return Markdown matrix for portable host timing variant ROWS."
+  (let ((hosts (agent-scheme-ci--sorted-portable-hosts rows)))
+    (concat
+     "Host cells show ERT time with CI wall-clock time in parentheses.\n\n"
+     "| Syntax metadata | Docstrings | "
+     (mapconcat #'agent-scheme-ci--markdown-cell hosts " | ")
+     " |\n"
+     "| --- | --- | "
+     (mapconcat (lambda (_host) "---:") hosts " | ")
+     " |\n"
+     (mapconcat
+      (lambda (variant)
+        (concat
+         "| "
+         (agent-scheme-ci--markdown-cell (car variant))
+         " | "
+         (agent-scheme-ci--markdown-cell (cdr variant))
+         " | "
+         (mapconcat
+          (lambda (host)
+            (agent-scheme-ci--render-timing-cell
+             (agent-scheme-ci--find-portable-variant-row rows host variant)))
+          hosts
+          " | ")
+         " |"))
+      agent-scheme-ci--option-variants
+      "\n")
+     "\n\n")))
+
+(defun agent-scheme-ci--render-portable-host-table (rows &optional chibi-present)
+  "Return Markdown table for non-matrix portable host timing ROWS.
+CHIBI-PRESENT adds a note explaining aggregate Chibi rows."
+  (concat
+   (when chibi-present
+     "Chibi is split across CI shards; this table aggregates those shards for host-to-host timing comparison.\n\n")
+   "| Host | Coverage | Unexpected | Skipped | ERT time | Wall time |\n"
+   "| --- | --- | ---: | ---: | ---: | ---: |\n"
+   (mapconcat #'agent-scheme-ci--render-portable-host-row rows "\n")
+   "\n\n"))
+
 (defun agent-scheme-ci--render-portable-host-summary (shards)
   "Return a top-level portable host timing comparison for SHARDS."
   (let ((rows (agent-scheme-ci--portable-host-rows shards)))
     (when rows
-      (let ((chibi-present
-             (cl-some
-              (lambda (row)
-                (string= (plist-get row :host) "Chibi"))
-              rows)))
+      (let* ((variant-rows (cl-remove-if-not
+                            #'agent-scheme-ci--portable-variant-row-p
+                            rows))
+             (plain-rows (cl-remove-if
+                          #'agent-scheme-ci--portable-variant-row-p
+                          rows))
+             (chibi-present
+              (cl-some
+               (lambda (row)
+                 (string= (plist-get row :host) "Chibi"))
+               plain-rows)))
         (concat
          "## Portable Host Timing\n\n"
-         (when chibi-present
-           "Chibi is split across CI shards; this table aggregates those shards for host-to-host timing comparison.\n\n")
-         "| Host | Coverage | Unexpected | Skipped | ERT time | Wall time |\n"
-         "| --- | --- | ---: | ---: | ---: | ---: |\n"
-         (mapconcat #'agent-scheme-ci--render-portable-host-row rows "\n")
-         "\n\n")))))
+         (when variant-rows
+           (agent-scheme-ci--render-portable-host-matrix variant-rows))
+         (when plain-rows
+           (agent-scheme-ci--render-portable-host-table
+            plain-rows
+            chibi-present)))))))
 
 (defun agent-scheme-ci--emacs-shard-p (shard)
   "Return non-nil when SHARD is an Emacs-hosted timing shard."
   (string-prefix-p "Emacs " (plist-get shard :name)))
 
+(defun agent-scheme-ci--variant-shard-p (shard)
+  "Return non-nil when SHARD has source metadata/docstring variant metadata."
+  (not (null (agent-scheme-ci--option-variant shard))))
+
+(defun agent-scheme-ci--unique-emacs-base-names (shards)
+  "Return unique Emacs logical shard names from SHARDS in display order."
+  (let (names)
+    (dolist (shard (agent-scheme-ci--sort-shards shards))
+      (let ((name (agent-scheme-ci--shard-base-name shard)))
+        (unless (member name names)
+          (push name names))))
+    (nreverse names)))
+
+(defun agent-scheme-ci--find-emacs-variant-shard (shards base-name variant)
+  "Return Emacs SHARDS entry matching BASE-NAME and option VARIANT."
+  (cl-find-if
+   (lambda (shard)
+     (let ((shard-variant (agent-scheme-ci--option-variant shard)))
+       (and (string= (agent-scheme-ci--shard-base-name shard) base-name)
+            shard-variant
+            (string= (car shard-variant) (car variant))
+            (string= (cdr shard-variant) (cdr variant)))))
+   shards))
+
+(defun agent-scheme-ci--field-range-text (shards field)
+  "Return compact FIELD value text for SHARDS."
+  (let* ((values (sort (delete-dups
+                        (mapcar (lambda (shard)
+                                  (or (plist-get shard field) 0))
+                                shards))
+                       #'<))
+         (first (car values))
+         (last (car (last values))))
+    (if (= first last)
+        (format "%d" first)
+      (format "%d-%d" first last))))
+
+(defun agent-scheme-ci--render-emacs-variant-row (base-name shards)
+  "Return one Emacs timing matrix row for BASE-NAME across SHARDS."
+  (let ((base-shards
+         (cl-remove-if-not
+          (lambda (shard)
+            (string= (agent-scheme-ci--shard-base-name shard) base-name))
+          shards)))
+    (concat
+     "| "
+     (agent-scheme-ci--markdown-cell base-name)
+     " | "
+     (agent-scheme-ci--field-range-text base-shards :ran)
+     " | "
+     (agent-scheme-ci--field-range-text base-shards :skipped)
+     " | "
+     (mapconcat
+      (lambda (variant)
+        (agent-scheme-ci--render-timing-cell
+         (agent-scheme-ci--find-emacs-variant-shard
+          base-shards
+          base-name
+          variant)
+         t))
+      agent-scheme-ci--option-variants
+      " | ")
+     " |")))
+
+(defun agent-scheme-ci--render-emacs-variant-summary (shards)
+  "Return pivoted Markdown for Emacs option-matrix timing SHARDS."
+  (concat
+   "Option columns use `source metadata/docstrings`; cells show ERT time with CI wall-clock time in parentheses.\n\n"
+   "| Shard | Ran | Skipped | "
+   (mapconcat #'agent-scheme-ci--option-variant-label
+              agent-scheme-ci--option-variants
+              " | ")
+   " |\n"
+   "| --- | ---: | ---: | "
+   (mapconcat (lambda (_variant) "---:") agent-scheme-ci--option-variants " | ")
+   " |\n"
+   (mapconcat
+    (lambda (base-name)
+      (agent-scheme-ci--render-emacs-variant-row base-name shards))
+    (agent-scheme-ci--unique-emacs-base-names shards)
+    "\n")
+   "\n\n"))
+
+(defun agent-scheme-ci--render-emacs-plain-summary (shards)
+  "Return compact Markdown for non-matrix Emacs-hosted timing SHARDS."
+  (concat
+   "| Shard | Ran | Unexpected | Skipped | ERT time | Wall time |\n"
+   "| --- | ---: | ---: | ---: | ---: | ---: |\n"
+   (mapconcat #'agent-scheme-ci--render-compact-shard-row
+              shards
+              "\n")
+   "\n\n"))
+
 (defun agent-scheme-ci--render-compact-emacs-summary (shards)
   "Return compact Markdown for Emacs-hosted timing SHARDS."
-  (let ((emacs-shards (cl-remove-if-not
-                       #'agent-scheme-ci--emacs-shard-p
-                       (agent-scheme-ci--sort-shards shards))))
+  (let* ((emacs-shards (cl-remove-if-not
+                        #'agent-scheme-ci--emacs-shard-p
+                        (agent-scheme-ci--sort-shards shards)))
+         (variant-shards (cl-remove-if-not
+                          #'agent-scheme-ci--variant-shard-p
+                          emacs-shards))
+         (plain-shards (cl-remove-if
+                        #'agent-scheme-ci--variant-shard-p
+                        emacs-shards)))
     (when emacs-shards
       (concat
        "## Emacs Shard Timing\n\n"
-       "| Shard | Ran | Unexpected | Skipped | ERT time | Wall time |\n"
-       "| --- | ---: | ---: | ---: | ---: | ---: |\n"
-       (mapconcat #'agent-scheme-ci--render-compact-shard-row
-                  emacs-shards
-                  "\n")
-       "\n\n"))))
+       (when variant-shards
+         (agent-scheme-ci--render-emacs-variant-summary variant-shards))
+       (when plain-shards
+         (agent-scheme-ci--render-emacs-plain-summary plain-shards))))))
+
+(defun agent-scheme-ci--paired-surface-rows (shards)
+  "Return paired validation surface rows for SHARDS."
+  (mapcar
+   (lambda (group)
+     (let ((emacs (agent-scheme-ci--surface-stats
+                   shards
+                   (plist-get group :emacs)))
+           (portable (agent-scheme-ci--surface-stats
+                      shards
+                      (plist-get group :portable))))
+       (list :name (plist-get group :name)
+             :emacs emacs
+             :portable portable)))
+   agent-scheme-ci--surface-groups))
+
+(defun agent-scheme-ci--render-paired-validation-surfaces (shards)
+  "Return Markdown for paired validation surfaces in SHARDS, or nil.
+The table is omitted when portable surface timings are not available, which is
+the case for whole-suite portable host shards."
+  (let ((rows (agent-scheme-ci--paired-surface-rows shards)))
+    (when (cl-some
+           (lambda (row)
+             (> (plist-get (plist-get row :portable) :count) 0))
+           rows)
+      (concat
+       "## Paired Validation Surfaces\n\n"
+       "Portable R7RS rows are reported beside their Emacs-hosted counterparts where the suite already has paired coverage.\n\n"
+       "| Surface | Emacs-hosted tests / ERT time | Portable R7RS tests / ERT time |\n"
+       "| --- | ---: | ---: |\n"
+       (mapconcat
+        (lambda (row)
+          (format "| %s | %s | %s |"
+                  (agent-scheme-ci--markdown-cell (plist-get row :name))
+                  (agent-scheme-ci--format-surface-stats
+                   (plist-get row :emacs))
+                  (agent-scheme-ci--format-surface-stats
+                   (plist-get row :portable))))
+        rows
+        "\n")
+       "\n"))))
 
 (defun agent-scheme-ci-render-markdown-summary (shards)
   "Render SHARDS as a GitHub Actions Markdown summary."
@@ -425,25 +747,7 @@ durations, and optional wall-clock seconds recorded by the workflow."
       shards
       "\n")
      "\n\n"
-     "## Paired Validation Surfaces\n\n"
-     "Portable R7RS rows are reported beside their Emacs-hosted counterparts where the suite already has paired coverage.\n\n"
-     "| Surface | Emacs-hosted tests / ERT time | Portable R7RS tests / ERT time |\n"
-     "| --- | ---: | ---: |\n"
-     (mapconcat
-      (lambda (group)
-        (let ((emacs (agent-scheme-ci--surface-stats
-                      shards
-                      (plist-get group :emacs)))
-              (portable (agent-scheme-ci--surface-stats
-                         shards
-                         (plist-get group :portable))))
-          (format "| %s | %s | %s |"
-                  (agent-scheme-ci--markdown-cell (plist-get group :name))
-                  (agent-scheme-ci--format-surface-stats emacs)
-                  (agent-scheme-ci--format-surface-stats portable))))
-      agent-scheme-ci--surface-groups
-      "\n")
-     "\n"
+     (or (agent-scheme-ci--render-paired-validation-surfaces shards) "")
      (or (agent-scheme-ci--render-slow-check-timings shards) ""))))
 
 (defun agent-scheme-ci--render-compact-shard-row (shard)
@@ -471,7 +775,7 @@ summary."
      (or (agent-scheme-ci--render-portable-host-summary shards) "")
      (or (agent-scheme-ci--render-compact-emacs-summary shards) "")
      "<details>\n"
-     "<summary>Physical CI shards, slowest tests, and paired validation surfaces</summary>\n\n"
+     "<summary>Detailed shard timings and diagnostic timings</summary>\n\n"
      (agent-scheme-ci-render-markdown-summary shards)
      "\n</details>\n")))
 
