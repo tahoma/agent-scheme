@@ -22,45 +22,61 @@ bootstrap stance is recorded in
 of related issues. Umbrella and sub-issue relationships are tracked in a
 separate index in #53 so broad topics do not nest inside the chunk map.
 
+Chunks are numbered `Chunk <major>.<minor>` (for example `Chunk 0.15`).
+Completed chunks migrate out of #53 into [release notes](release-notes.md) once
+all of their issues have shipped, so #53 keeps only the live and future chunks.
+
 The current chunk bands are:
 
-- Chunks 00-06 frame project process, conformance, the reader, evaluator,
-  `(scheme base)`, shared fixtures, macros, library/frontend boundaries, and
-  core R7RS-small completion.
-- Chunks 07-12 build the first host safety substrate: read-only Emacs handles,
-  policy, sessions, approvals, grants, redaction, file/port/process/network
-  effects, VCS records, basic Emacs capabilities, and host reflection.
-- Chunks 13-15 cover agent-facing workflow foundations: task lifecycle design,
-  planning, helper libraries, transcripts, debugger UX, package and skill
-  interop, rules, collaboration UX, and user-facing custom library docs.
-- Chunks 16-25 collect optional SRFI work, starting with import naming and
-  R7RS-overlap shims, then portable data, text, collection, test, pattern,
+- Completed chunks `0.00`-`0.14` framed project process and conformance, the
+  reader, evaluator, `(scheme base)`, macros, libraries, core R7RS-small
+  completion, the first host safety substrate (handles, policy, sessions,
+  approvals, grants, redaction, file/port/process/network effects, VCS records,
+  basic Emacs capabilities, host reflection), and agent-facing workflow
+  foundations (task lifecycle, planning, helpers, transcripts, debugger UX,
+  docstring metadata). Their shipped issues are recorded in
+  [release notes](release-notes.md).
+- Chunk `0.15` ships host-compiled portable executables (`make compile` plus the
+  Racket CS and Gambit slices) and this roadmap maintenance pass.
+- Chunks `0.16`-`0.17` cover portable bootstrap ownership follow-ups and
+  package, skills, rules, and collaboration work.
+- Chunks `0.18`-`0.27` collect optional SRFI work, starting with import naming
+  and R7RS-overlap shims, then portable data, text, collection, test, pattern,
   port, restart, and binary-block libraries.
-- Chunks 26-27 cover external evaluation and references, model/provider
+- Chunks `0.28`-`0.29` cover external evaluation and references, model/provider
   capabilities, budgets, persistence, outward protocols, and task control-loop
   proof fixtures.
-- Chunks 28-30 introduce compiler backends through Agent Scheme LLIR, native
-  emission and compiled effects, and the Emacs Lisp byte-code backend.
-- Chunks 31-37 plan native CLI and daemon contracts, host-compiled portable
-  executables, host adapter harnesses, host reflection and search, host adapter
-  conformance, CLI-compatible Emacs slices, and future editor, browser,
-  notebook, WASI, and JVM host contracts.
+- Chunks `0.30`-`0.32` introduce compiler backends through Agent Scheme LLIR,
+  native emission and compiled effects, and the Emacs Lisp byte-code backend.
+- Chunks `0.33`-`0.40` plan native CLI and daemon harnesses, host adapter
+  reflection, search, and contract conformance, CLI-compatible Emacs slices,
+  future editor, browser, notebook, WASI, and JVM host contracts, orphan
+  cleanup, and capability-hardening follow-ups such as network grant path
+  scoping.
 
 ## Runtime Version Mapping
 
-Agent Scheme runtime versions are derived from #53 until the project adopts an
-explicit release policy. Every issue branch updates
-`scheme/agent-scheme/version.sld` so the public runtime version reports the
-roadmap position of the issue being advanced.
+Agent Scheme runtime versions are derived from #53's flat chunk map. Every issue
+branch updates `scheme/agent-scheme/version.sld` so the public runtime version
+reports the roadmap position of the issue being advanced.
 
-Use the version shape `0.<chunk>.<ordinal>`:
+Use the version shape `<major>.<minor>.<ordinal>`:
 
-- `0` is the primary version during the pre-release roadmap phase.
-- `<chunk>` is the issue's chunk number in #53's flat chunk map.
+- `<major>` and `<minor>` are the chunk's dotted number (`Chunk 0.15` → `0.15`).
+  The major component is no longer hardcoded to `0`; a future `Chunk 1.0`,
+  `Chunk 1.1`, ... line sculpts the `1.x` major release series.
 - `<ordinal>` is the issue's one-based position inside that chunk.
 
-For example, the first issue in chunk 14 maps to `0.14.1`, represented in
-source as `(agent-scheme-version 0 14 1)`.
+For example, the first issue in `Chunk 0.14` maps to `0.14.1`, represented in
+source as `(agent-scheme-version 0 14 1)`; a first issue in a future `Chunk 1.0`
+would map to `1.0.1`. The datum shape
+`(agent-scheme-version <major> <minor> <ordinal>)` is unchanged.
+
+Completed chunks migrate from #53 into [release notes](release-notes.md), which
+records each shipped issue's final `<major>.<minor>.<ordinal>` version. The
+ordinals for chunks before runtime versioning existed (chunks `0.00`-`0.13`) are
+synthesized from merge order; from `Chunk 0.14` onward they are the versions
+actually committed to `version.sld`.
 
 ## Roadmap Areas
 
@@ -68,12 +84,13 @@ The roadmap currently emphasizes these durable work areas. Some have completed
 seed slices that later chunks depend on; #53 remains the authority for exact
 open or closed status and ordering.
 
-- Onboarding and planning hygiene:
-  [#264](https://github.com/tahoma/agent-scheme/issues/264) tracks getting
+- Onboarding and planning hygiene (completed seed slices):
+  [#264](https://github.com/tahoma/agent-scheme/issues/264) delivered getting
   started documentation, [#294](https://github.com/tahoma/agent-scheme/issues/294)
-  tracks this roadmap summary, and
-  [#295](https://github.com/tahoma/agent-scheme/issues/295) tracks label,
-  sub-issue, dependency, and chunk-placement cleanup.
+  delivered this roadmap summary, and
+  [#295](https://github.com/tahoma/agent-scheme/issues/295) delivered label,
+  sub-issue, dependency, and chunk-placement cleanup; see
+  [release notes](release-notes.md) for their shipped versions.
 - CI visibility and shard feedback:
   [#322](https://github.com/tahoma/agent-scheme/issues/322) splits CI tests and
   reports timing by Emacs-hosted and portable R7RS validation path, and
@@ -132,13 +149,13 @@ open or closed status and ordering.
   separation, process events and handles, cancellation and budget behavior, and
   session/audit/handle liveness.
 - Native CLI, daemon, and host-compiled executables:
-  [#136](https://github.com/tahoma/agent-scheme/issues/136) defines the native
-  CLI daemon adapter contract,
-  [#270](https://github.com/tahoma/agent-scheme/issues/270) tracks
-  host-compiled portable executable packaging, and
-  [#272](https://github.com/tahoma/agent-scheme/issues/272) and
-  [#273](https://github.com/tahoma/agent-scheme/issues/273) track Racket CS and
-  Gambit executable slices.
+  [#136](https://github.com/tahoma/agent-scheme/issues/136) defined the native
+  CLI daemon adapter contract, and the Chunk 0.15 host-compiled executable line
+  shipped portable packaging via
+  [#270](https://github.com/tahoma/agent-scheme/issues/270) (`make compile`),
+  [#272](https://github.com/tahoma/agent-scheme/issues/272) (Racket CS), and
+  [#273](https://github.com/tahoma/agent-scheme/issues/273) (Gambit). See
+  [release notes](release-notes.md) for their shipped versions.
 - Compiler backends:
   [#115](https://github.com/tahoma/agent-scheme/issues/115) defines Agent
   Scheme LLIR, [#116](https://github.com/tahoma/agent-scheme/issues/116)
@@ -180,9 +197,9 @@ When adding or revising roadmap issues:
 - keep GitHub labels aligned with [GitHub issue taxonomy](issue-taxonomy.md):
   one `surface:*` label, useful risk/host/size/review/documentation labels, and
   current placement in the chunk map
-- do not add new `phase:*` labels; existing `phase:*` labels are legacy metadata
-  from the old roadmap model and should be retired through
-  [#295](https://github.com/tahoma/agent-scheme/issues/295)
+- do not add new `phase:*` labels; the legacy `phase:*` labels from the old
+  roadmap model have been retired from open issues during the roadmap
+  maintenance pass ([#364](https://github.com/tahoma/agent-scheme/issues/364))
 
 Documentation-only roadmap changes should still run the verification command
 documented in [Development Setup](development.md) and report the result.

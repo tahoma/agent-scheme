@@ -48,17 +48,28 @@ Pull requests should:
 ## Runtime Versioning
 
 Every issue branch updates the canonical runtime version source at
-`scheme/agent-scheme/version.sld`. The version remains roadmap-derived until
-Agent Scheme adopts an explicit release policy.
+`scheme/agent-scheme/version.sld`. The version is roadmap-derived from #53's
+flat chunk map.
 
-Derive the version from #53's flat chunk map:
+Each chunk is numbered `Chunk <major>.<minor>` (for example `Chunk 0.15`).
+Derive the version `<major>.<minor>.<ordinal>` as:
 
-- primary version: `0`
-- secondary version: the roadmap chunk number
-- tertiary version: the issue's one-based position inside that chunk
+- major and minor versions: the chunk's dotted number (`Chunk 0.15` → `0.15`)
+- ordinal version: the issue's one-based position inside that chunk
 
-For example, the first issue in chunk 14 is version `0.14.1`, represented by
-the canonical Scheme datum `(agent-scheme-version 0 14 1)`.
+The major component is no longer hardcoded to `0`. Future major releases are
+sculpted by adding `Chunk 1.0`, `Chunk 1.1`, ... to the chunk map, which yields
+the `1.x` version series. The `version.sld` datum shape
+`(agent-scheme-version <major> <minor> <ordinal>)` is unchanged.
+
+For example, the first issue in `Chunk 0.14` is version `0.14.1`, represented by
+the canonical Scheme datum `(agent-scheme-version 0 14 1)`; the first issue in a
+future `Chunk 1.0` would be `1.0.1`, or `(agent-scheme-version 1 0 1)`.
+
+Completed chunks migrate from #53 into `docs/release-notes.md`. Migrate a full
+chunk when starting the first issue of the next chunk (not opportunistically
+mid-chunk), so every still-open issue keeps its `<major>.<minor>.<ordinal>`
+position in #53 until its whole chunk has shipped.
 
 If the issue is missing from #53, resolve the roadmap placement before opening
 the pull request. If a branch must advance more than one issue, prefer splitting
