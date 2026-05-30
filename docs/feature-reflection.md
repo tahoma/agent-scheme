@@ -123,13 +123,15 @@ choosing what to do next.
 Current procedures:
 
 - `(agent-scheme-version)` returns the canonical Agent Scheme runtime version
-  datum, shaped as `(agent-scheme-version primary secondary tertiary)`.
-  Components are exact non-negative integers. The initial value is
-  `(agent-scheme-version 0 15 2)`: primary version `0`, secondary version
-  `15` for the roadmap chunk, and tertiary version `2` for the issue's
-  position in that chunk. Strings such as `0.15.2` are derived presentation,
-  not the canonical value. This scheme is roadmap-derived for now and can
-  change once Agent Scheme has an explicit release policy.
+  datum, shaped as `(agent-scheme-version major minor ordinal)`.
+  Components are exact non-negative integers. The current value is
+  `(agent-scheme-version 0 15 4)`: the `major` and `minor` components come from
+  the roadmap chunk's dotted number (`Chunk 0.15` → `0.15`), and `ordinal` is
+  the issue's one-based position in that chunk. The major component is no longer
+  hardcoded to `0`; a future `Chunk 1.x` line yields `1.x.x` versions while the
+  datum shape stays the same. Strings such as `0.15.4` are derived presentation,
+  not the canonical value. This scheme is roadmap-derived from #53, with
+  completed chunks recorded in `docs/release-notes.md`.
 - `(current-capabilities)` returns public `host-capability` records from the
   primitive manifest. Capability records expose operational metadata; callers
   use `(documentation subject)` for the corresponding user-facing help text.
@@ -220,7 +222,7 @@ boundary remains Scheme-readable data.
 Current implemented pieces:
 
 - `(agent-scheme-version)` reports the roadmap-derived runtime version as
-  `(agent-scheme-version 0 15 2)`, and the Emacs host-adapter fixture points
+  `(agent-scheme-version 0 15 4)`, and the Emacs host-adapter fixture points
   at `scheme/agent-scheme/version.sld` as the single source of truth for the
   runtime version datum.
 - R7RS `cond-expand` library requirements are available for implemented
