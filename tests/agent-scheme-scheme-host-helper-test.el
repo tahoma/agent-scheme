@@ -47,6 +47,35 @@
     (agent-scheme--scheme-host-probe-arguments 'compiled "scheme")
     '("--eval" "(+ 1 2)"))))
 
+(ert-deftest agent-scheme-portable-host-helper-test-builds-gambit-native-arguments ()
+  "Build Gambit native runner arguments for R7RS test files."
+  (should
+   (equal
+    (agent-scheme--scheme-host-arguments
+     'gambit-native
+     "scheme"
+     "tests/scheme/agent-scheme-reader-test.scm")
+    '("--script" "tests/scheme/agent-scheme-reader-test.scm")))
+  (should
+   (equal
+    (agent-scheme--scheme-host-probe-arguments 'gambit-native "scheme")
+    '("--eval" "(+ 1 2)"))))
+
+(ert-deftest agent-scheme-portable-host-helper-test-expands-gambit-native-runner-path ()
+  "Expand repository-relative configured Gambit native runner paths."
+  (let ((prior (getenv "AGENT_SCHEME_GAMBIT_NATIVE"))
+        (agent-scheme--test-root "/tmp/agent-scheme-root/"))
+    (unwind-protect
+        (progn
+          (setenv
+           "AGENT_SCHEME_GAMBIT_NATIVE"
+           "build/compile/gambit/bin/agent-scheme")
+          (should
+           (equal
+            (agent-scheme--scheme-host-command 'gambit-native)
+            "/tmp/agent-scheme-root/build/compile/gambit/bin/agent-scheme")))
+      (setenv "AGENT_SCHEME_GAMBIT_NATIVE" prior))))
+
 (ert-deftest agent-scheme-portable-host-helper-test-expands-compiled-runner-path ()
   "Expand repository-relative configured compiled runner paths."
   (let ((prior (getenv "AGENT_SCHEME_COMPILED"))

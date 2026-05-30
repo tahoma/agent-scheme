@@ -42,6 +42,15 @@
   (pcase host
     ('gambit
      (agent-scheme--scheme-host-configured-command "AGENT_SCHEME_GAMBIT" "gsi"))
+    ('gambit-native
+     (or (agent-scheme--scheme-host-configured-command
+          "AGENT_SCHEME_GAMBIT_NATIVE"
+          "agent-scheme")
+         (let ((runner
+                (expand-file-name
+                 "build/compile/gambit/bin/agent-scheme"
+                 agent-scheme--test-root)))
+           (and (file-executable-p runner) runner))))
     ('racket
      (agent-scheme--scheme-host-configured-command "AGENT_SCHEME_RACKET" "racket"))
     ('gauche
@@ -86,6 +95,9 @@ RACKET-COLLECTION-ROOT is required when HOST is `racket'."
      (list
       (format "-:r7rs,search=%s" library-directory)
       test-file))
+    ('gambit-native
+     (ignore library-directory racket-collection-root)
+     (list "--script" test-file))
     ('racket
      (unless racket-collection-root
        (error "Racket collection root is required"))
@@ -110,6 +122,9 @@ RACKET-COLLECTION-ROOT is accepted for API symmetry with test arguments."
       (format "-:r7rs,search=%s" library-directory)
       "-e"
       "(import (scheme base) (scheme write)) (write (+ 1 2)) (newline)"))
+    ('gambit-native
+     (ignore library-directory racket-collection-root)
+     (list "--eval" "(+ 1 2)"))
     ('racket
      (ignore racket-collection-root)
      (list
