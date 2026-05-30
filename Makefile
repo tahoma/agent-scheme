@@ -196,7 +196,18 @@ test-portable-gauche:
 	AGENT_SCHEME_TEST_SELECTOR='$(AGENT_SCHEME_PORTABLE_GAUCHE_TEST_SELECTOR)' $(AGENT_SCHEME_TEST_RUNNER_COMMAND)
 
 test-portable-cyclone:
-	AGENT_SCHEME_TEST_SELECTOR='$(AGENT_SCHEME_PORTABLE_CYCLONE_TEST_SELECTOR)' $(AGENT_SCHEME_TEST_RUNNER_COMMAND)
+	@if command -v '$(AGENT_SCHEME_CYCLONE)' >/dev/null 2>&1 && command -v '$(AGENT_SCHEME_CYCLONE_COMPILER)' >/dev/null 2>&1; then \
+		AGENT_SCHEME_COMPILE_HOST=cyclone $(AGENT_SCHEME_PARALLEL_MAKE) compile; \
+	else \
+		printf '%s\n' 'Cyclone compile prerequisites are not available; Cyclone interpreter shard will skip if no runner exists.'; \
+	fi
+	@if [ -f '$(AGENT_SCHEME_COMPILE_BUILD_DIR)/cyclone/logs/compile.log' ]; then cat '$(AGENT_SCHEME_COMPILE_BUILD_DIR)/cyclone/logs/compile.log'; fi
+	@if [ -f '$(AGENT_SCHEME_COMPILE_BUILD_DIR)/cyclone/logs/smoke.log' ]; then cat '$(AGENT_SCHEME_COMPILE_BUILD_DIR)/cyclone/logs/smoke.log'; fi
+	@if [ -d '$(AGENT_SCHEME_COMPILE_BUILD_DIR)/cyclone/src/scheme' ]; then \
+		AGENT_SCHEME_TEST_TARGET_ROOT='$(abspath $(AGENT_SCHEME_COMPILE_BUILD_DIR)/cyclone/src)' AGENT_SCHEME_TEST_SELECTOR='$(AGENT_SCHEME_PORTABLE_CYCLONE_TEST_SELECTOR)' $(AGENT_SCHEME_TEST_RUNNER_COMMAND); \
+	else \
+		AGENT_SCHEME_CYCLONE=/no/such/icyc AGENT_SCHEME_TEST_SELECTOR='$(AGENT_SCHEME_PORTABLE_CYCLONE_TEST_SELECTOR)' $(AGENT_SCHEME_TEST_RUNNER_COMMAND); \
+	fi
 
 test-portable-cyclone-native:
 	@if command -v '$(AGENT_SCHEME_CYCLONE)' >/dev/null 2>&1 && command -v '$(AGENT_SCHEME_CYCLONE_COMPILER)' >/dev/null 2>&1; then \

@@ -435,8 +435,11 @@ temporary `#lang r7rs` collection wrappers for checked-in `.sld` libraries
 because Racket's R7RS package resolves imports as Racket collection modules.
 The Racket compiled host shard runs `make compile` first, then executes that
 same full-suite file list through
-`build/compile/racket/bin/agent-scheme --script`. The Gambit-native shard runs
-`AGENT_SCHEME_COMPILE_HOST=gambit make compile`, emits the build tree's
+`build/compile/racket/bin/agent-scheme --script`. The Cyclone interpreter shard
+prepares `build/compile/cyclone/src/scheme` with Cyclone-generated shared
+libraries before invoking `icyc`, because Cyclone's interpreter loads imported
+libraries from `.so` files beside their `.sld` sources. The Gambit-native shard
+runs `AGENT_SCHEME_COMPILE_HOST=gambit make compile`, emits the build tree's
 `logs/compile.log` and `logs/smoke.log` timing datums, and executes the same
 file list through `build/compile/gambit/bin/agent-scheme --script`. The
 Cyclone-native shard follows the same shape with

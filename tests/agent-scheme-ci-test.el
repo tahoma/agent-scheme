@@ -434,6 +434,20 @@
              "emacs-\\${{ matrix.shard.shard }}-\\${{ matrix.source_metadata }}-docstrings-\\${{ matrix.docstring_retention }}\\.log"
              workflow))))
 
+(ert-deftest agent-scheme-ci-test-cyclone-shard-uses-compiled-library-root ()
+  "Keep Cyclone interpreter CI pointed at libraries prepared by cyclone."
+  (let ((makefile (agent-scheme-ci-test--repo-file-string "Makefile")))
+    (should (string-match-p "^test-portable-cyclone:" makefile))
+    (should (string-match-p
+             "AGENT_SCHEME_COMPILE_HOST=cyclone"
+             makefile))
+    (should (string-match-p
+             "AGENT_SCHEME_TEST_TARGET_ROOT="
+             makefile))
+    (should (string-match-p
+             "/cyclone/src"
+             makefile))))
+
 (ert-deftest agent-scheme-ci-test-pr-summary-uses-stable-shard-order ()
   "Render pull request timing rows in the intended shard display order."
   (let* ((tools-shard '(:name "Emacs tools/docs/integration"

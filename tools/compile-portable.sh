@@ -661,6 +661,7 @@ compile_cyclone() {
 
   host_root="$build_dir/cyclone"
   src_dir="$host_root/src"
+  library_dir="$src_dir/scheme"
   bin_dir="$host_root/bin"
   logs_dir="$host_root/logs"
   main_file="$src_dir/agent-scheme.scm"
@@ -671,10 +672,10 @@ compile_cyclone() {
 
   [ -n "$version" ] || die "could not read Agent Scheme version from $version_file"
 
-  mkdir -p "$src_dir" "$bin_dir" "$logs_dir"
-  copy_portable_sources "$src_dir"
+  mkdir -p "$src_dir" "$library_dir" "$bin_dir" "$logs_dir"
+  copy_portable_sources "$library_dir"
 
-  "$icyc" -I "$scheme_dir" -p "(+ 1 2)" \
+  "$icyc" -I "$library_dir" -p "(+ 1 2)" \
     >"$logs_dir/icyc-r7rs-probe.log" 2>&1 \
     || die "Cyclone icyc does not accept R7RS mode with the Agent Scheme library search path; see $logs_dir/icyc-r7rs-probe.log"
 
@@ -682,7 +683,7 @@ compile_cyclone() {
   write_manifest "$host_root" cyclone "$version"
 
   compile_started=$(date +%s)
-  "$cyclone" -I "$src_dir" "$main_file" \
+  "$cyclone" -I "$library_dir" "$main_file" \
     >"$logs_dir/cyclone.log" 2>&1 \
     || die "cyclone failed while compiling the Cyclone main program; see $logs_dir/cyclone.log"
   compile_finished=$(date +%s)
