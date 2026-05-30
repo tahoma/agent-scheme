@@ -399,9 +399,16 @@
              "portable-gambit-\\${{ matrix.source_metadata }}-docstrings-\\${{ matrix.docstring_retention }}\\.log"
              workflow))
     (should (string-match-p
+             "portable-gambit-native-\\${{ matrix.source_metadata }}-docstrings-\\${{ matrix.docstring_retention }}\\.log"
+             workflow))
+    (should (string-match-p
              "portable-\\${{ matrix.host.host }}-\\${{ matrix.source_metadata }}-docstrings-\\${{ matrix.docstring_retention }}\\.log"
              workflow))
     (should (string-match-p "host: compiled" workflow))
+    (should (string-match-p "make test-portable-gambit-native" workflow))
+    (should (string-match-p
+             "Portable R7RS Gambit native Agent Scheme full suite"
+             workflow))
     (should (string-match-p "make_target: test-portable-compiled" workflow))
     (should (string-match-p
              "Portable R7RS Compiled Agent Scheme full suite"
@@ -439,6 +446,16 @@
                                         :ert-seconds 1.0
                                         :wall-seconds 1.0
                                         :tests nil))
+         (portable-gambit-native-shard
+          '(:name "Portable R7RS Gambit native Agent Scheme full suite"
+            :selector "portable-gambit-native"
+            :ran 1
+            :expected 1
+            :unexpected 0
+            :skipped 0
+            :ert-seconds 1.0
+            :wall-seconds 1.0
+            :tests nil))
          (portable-racket-shard '(:name "Portable R7RS Racket full suite"
                                         :selector "portable-racket"
                                         :ran 1
@@ -491,12 +508,13 @@
                  portable-guile-shard
                  portable-compiled-shard
                  portable-racket-shard
+                 portable-gambit-native-shard
                  portable-gambit-shard
                  portable-rest-shard
                  portable-eval-shard))))
     (should
      (string-match-p
-      "| Portable R7RS Chibi evaluator subset |.*\n| Portable R7RS Chibi non-evaluator subset |.*\n| Portable R7RS Gambit full suite |.*\n| Portable R7RS Racket full suite |.*\n| Portable R7RS Compiled Agent Scheme full suite |.*\n| Portable R7RS Guile full suite |.*\n| Portable R7RS Gauche full suite |.*\n| Emacs tools/docs/integration |"
+      "| Portable R7RS Chibi evaluator subset |.*\n| Portable R7RS Chibi non-evaluator subset |.*\n| Portable R7RS Gambit full suite |.*\n| Portable R7RS Gambit native Agent Scheme full suite |.*\n| Portable R7RS Racket full suite |.*\n| Portable R7RS Compiled Agent Scheme full suite |.*\n| Portable R7RS Guile full suite |.*\n| Portable R7RS Gauche full suite |.*\n| Emacs tools/docs/integration |"
       markdown))))
 
 (provide 'agent-scheme-ci-test)

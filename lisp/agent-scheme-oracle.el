@@ -78,7 +78,7 @@ AGENT_SCHEME_GAMBIT and then PATH for gsi."
   :group 'agent-scheme-oracle)
 
 (defcustom agent-scheme-oracle-gambit-compiler-command nil
-  "Optional Gambit Scheme compiler executable for future compile checks.
+  "Optional Gambit Scheme compiler executable for compile checks.
 When nil, `agent-scheme-oracle-gambit-compiler-executable' consults
 AGENT_SCHEME_GAMBIT_COMPILER and then PATH for gsc."
   :type '(choice (const :tag "Discover automatically" nil) string)

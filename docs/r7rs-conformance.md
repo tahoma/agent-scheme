@@ -24,8 +24,8 @@ comparing candidate reference sets. Racket can also be selected as a developer
 comparison adapter when `racket` and the Racket `r7rs` package are installed;
 CHICKEN can be selected the same way when `csi` and the `r7rs` egg are
 installed. Gambit can be selected when `gsi` is available; the adapter runs
-`gsi -:r7rs,search=$REPO/scheme` so future compile-path work preserves the
-same R7RS library search behavior.
+`gsi -:r7rs,search=$REPO/scheme`, and the Gambit-native compile shard preserves
+that same R7RS library search behavior.
 
 Oracle `implementation-variant` rows are expected to stay visible when they
 reflect genuine reference diversity, such as exactness choices, case-folding

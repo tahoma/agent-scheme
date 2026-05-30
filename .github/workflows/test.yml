@@ -24,7 +24,9 @@ jobs:
       AGENT_SCHEME_TEST_SOURCE_METADATA: ${{ matrix.source_metadata }}
       AGENT_SCHEME_TEST_DOCSTRING_RETENTION: ${{ matrix.docstring_retention }}
       AGENT_SCHEME_CI_LOG_FILE: portable-gambit-${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}.log
+      AGENT_SCHEME_CI_NATIVE_LOG_FILE: portable-gambit-native-${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}.log
       AGENT_SCHEME_CI_SHARD_SUMMARY_NAME: Portable R7RS Gambit full suite / source metadata ${{ matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention }}
+      AGENT_SCHEME_CI_NATIVE_SHARD_SUMMARY_NAME: Portable R7RS Gambit native Agent Scheme full suite / source metadata ${{ matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention }}
     strategy:
       fail-fast: false
       matrix:
@@ -65,6 +67,7 @@ jobs:
 
           echo "${gambit_prefix}/bin" >> "$GITHUB_PATH"
           "${gambit_prefix}/bin/gsi" -v
+          "${gambit_prefix}/bin/gsc" -v
           "${gambit_prefix}/bin/gsi" -:r7rs -e '(import (scheme base) (scheme write)) (write (+ 1 2)) (newline)'
 
       - name: Run portable R7RS Gambit shard
@@ -83,6 +86,22 @@ jobs:
           } >> "ci-logs/${AGENT_SCHEME_CI_LOG_FILE}"
           exit "$status"
 
+      - name: Run portable R7RS Gambit native shard
+        shell: bash
+        run: |
+          mkdir -p ci-logs
+          started=$SECONDS
+          set +e
+          make test-portable-gambit-native 2>&1 | tee "ci-logs/${AGENT_SCHEME_CI_NATIVE_LOG_FILE}"
+          status=${PIPESTATUS[0]}
+          wall=$((SECONDS - started))
+          {
+            printf 'AGENT_SCHEME_CI_SHARD_NAME=%s\n' "${AGENT_SCHEME_CI_NATIVE_SHARD_SUMMARY_NAME}"
+            printf 'AGENT_SCHEME_CI_SHARD_SELECTOR=%s\n' '"^agent-scheme-scheme-gambit-native-host-test-r7rs-suite$"'
+            printf 'AGENT_SCHEME_CI_WALL_SECONDS=%s\n' "$wall"
+          } >> "ci-logs/${AGENT_SCHEME_CI_NATIVE_LOG_FILE}"
+          exit "$status"
+
       - name: Upload portable Gambit shard log
         if: always()
         uses: actions/upload-artifact@v7
@@ -91,13 +110,29 @@ jobs:
           path: ci-logs/${{ env.AGENT_SCHEME_CI_LOG_FILE }}
           if-no-files-found: warn
 
+      - name: Upload portable Gambit native shard log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-log-portable-gambit-native-${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}
+          path: ci-logs/${{ env.AGENT_SCHEME_CI_NATIVE_LOG_FILE }}
+          if-no-files-found: warn
+
       - name: Render portable Gambit shard timing summary
         if: always()
+        shell: bash
         run: |
+          logs=()
           if [ -f "ci-logs/${AGENT_SCHEME_CI_LOG_FILE}" ]; then
+            logs+=("ci-logs/${AGENT_SCHEME_CI_LOG_FILE}")
+          fi
+          if [ -f "ci-logs/${AGENT_SCHEME_CI_NATIVE_LOG_FILE}" ]; then
+            logs+=("ci-logs/${AGENT_SCHEME_CI_NATIVE_LOG_FILE}")
+          fi
+          if [ "${#logs[@]}" -gt 0 ]; then
             emacs -Q --batch -L lisp \
               --eval "(require 'agent-scheme-ci)" \
-              --eval "(agent-scheme-ci-write-summary (list (expand-file-name (getenv \"AGENT_SCHEME_CI_LOG_FILE\") \"ci-logs\")) (getenv \"GITHUB_STEP_SUMMARY\"))"
+              --funcall agent-scheme-ci-summary-batch-main -- "${logs[@]}"
           fi
 
   test-portable-extra-hosts:

@@ -342,7 +342,7 @@
                                    agent-scheme-oracle-root-directory))))))))
 
 (ert-deftest agent-scheme-oracle-test-gambit-compiler-uses-environment ()
-  "Discover the future Gambit compiler path from AGENT_SCHEME_GAMBIT_COMPILER."
+  "Discover the Gambit compiler path from AGENT_SCHEME_GAMBIT_COMPILER."
   (let ((process-environment
          (cons "AGENT_SCHEME_GAMBIT_COMPILER=/example/bin/gsc"
                process-environment))

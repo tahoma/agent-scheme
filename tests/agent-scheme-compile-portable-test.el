@@ -174,6 +174,90 @@ Return a plist containing :status and :output."
       (when (file-directory-p build-dir)
         (delete-directory build-dir t)))))
 
+(ert-deftest agent-scheme-compile-portable-test-gambit-missing-tools-fail ()
+  "Fail explicit Gambit compile requests with setup guidance."
+  (let* ((build-dir
+          (make-temp-file "agent-scheme-compile-missing-gambit-" t))
+         (result
+          (agent-scheme-compile-portable-test--run-make
+           "-s"
+           (format "AGENT_SCHEME_COMPILE_BUILD_DIR=%s" build-dir)
+           "AGENT_SCHEME_COMPILE_HOST=gambit"
+           "AGENT_SCHEME_GAMBIT=/no/such/gsi"
+           "AGENT_SCHEME_GAMBIT_COMPILER=/no/such/gsc"
+           "compile")))
+    (unwind-protect
+        (progn
+          (should-not (equal (agent-scheme-compile-portable-test--status result)
+                             0))
+          (should
+           (string-match-p
+            "Gambit compile prerequisites are missing"
+            (agent-scheme-compile-portable-test--output result))))
+      (when (file-directory-p build-dir)
+        (delete-directory build-dir t)))))
+
+(ert-deftest agent-scheme-compile-portable-test-gambit-builds-runner ()
+  "Build a Gambit-hosted portable executable and run smoke commands."
+  (let ((gsi
+         (agent-scheme-compile-portable-test--command
+          "AGENT_SCHEME_GAMBIT" "gsi"))
+        (gsc
+         (agent-scheme-compile-portable-test--command
+          "AGENT_SCHEME_GAMBIT_COMPILER" "gsc")))
+    (unless (and gsi gsc)
+      (ert-skip "Gambit gsi and gsc are not available"))
+    (let* ((build-dir
+            (make-temp-file "agent-scheme-compile-gambit-" t))
+           (result
+            (agent-scheme-compile-portable-test--run-make
+             "-s"
+             (format "AGENT_SCHEME_COMPILE_BUILD_DIR=%s" build-dir)
+             "AGENT_SCHEME_COMPILE_HOST=gambit"
+             (format "AGENT_SCHEME_GAMBIT=%s" gsi)
+             (format "AGENT_SCHEME_GAMBIT_COMPILER=%s" gsc)
+             "compile"))
+           (host-root (expand-file-name "gambit" build-dir))
+           (runner (expand-file-name "bin/agent-scheme" host-root))
+           (manifest (expand-file-name "manifest.scm" host-root))
+           (smoke-log (expand-file-name "logs/smoke.log" host-root))
+           (version-string
+            (agent-scheme-compile-portable-test--version-string)))
+      (unwind-protect
+          (progn
+            (should
+             (equal (agent-scheme-compile-portable-test--status result) 0))
+            (should (file-executable-p runner))
+            (should (file-exists-p manifest))
+            (should (file-exists-p smoke-log))
+            (should
+             (file-directory-p
+              (expand-file-name "src" host-root)))
+            (should
+             (string-match-p
+              "(compile-host gambit)"
+              (with-temp-buffer
+                (insert-file-contents manifest)
+                (buffer-string))))
+            (should
+             (equal
+              (agent-scheme-compile-portable-test--run-executable
+               runner "--version")
+              (list :status 0
+                    :output (format "Agent Scheme %s\n" version-string))))
+            (should
+             (equal
+              (agent-scheme-compile-portable-test--run-executable
+               runner "--eval" "(+ 1 2)")
+              '(:status 0 :output "3\n")))
+            (should
+             (equal
+              (agent-scheme-compile-portable-test--run-executable
+               runner "--script" "tests/scheme/agent-scheme-reader-test.scm")
+              '(:status 0 :output "Scheme reader tests passed\n"))))
+        (when (file-directory-p build-dir)
+          (delete-directory build-dir t))))))
+
 (provide 'agent-scheme-compile-portable-test)
 
 ;;; agent-scheme-compile-portable-test.el ends here
