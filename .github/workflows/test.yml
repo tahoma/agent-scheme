@@ -122,6 +122,12 @@ jobs:
             make_target: test-portable-racket
             summary_name: Portable R7RS Racket full suite
             selector: '"^agent-scheme-scheme-racket-host-test-r7rs-suite$"'
+          - host: compiled
+            host_name: Compiled Agent Scheme
+            apt_package: racket
+            make_target: test-portable-compiled
+            summary_name: Portable R7RS Compiled Agent Scheme full suite
+            selector: '"^agent-scheme-scheme-compiled-host-test-r7rs-suite$"'
           - host: guile
             host_name: Guile
             apt_package: guile-3.0
@@ -146,7 +152,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Cache Racket R7RS package
-        if: matrix.host.host == 'racket'
+        if: matrix.host.host == 'racket' || matrix.host.host == 'compiled'
         uses: actions/cache@v4
         with:
           path: |
@@ -160,7 +166,7 @@ jobs:
           apt-get install -y make emacs-nox "${{ matrix.host.apt_package }}"
 
           case "${{ matrix.host.host }}" in
-            racket)
+            racket|compiled)
               raco pkg install --batch --auto --skip-installed --no-docs r7rs
               racket -I r7rs -e '(import (scheme base) (scheme write)) (write (+ 1 2)) (newline)'
               ;;
