@@ -23,10 +23,10 @@ Optional but useful:
   install the package with `raco pkg install --auto r7rs`
 - CHICKEN Scheme, `csi`, plus its `r7rs` egg for developer oracle comparisons;
   install the egg with `chicken-install r7rs`
-- Gambit Scheme, `gsi` and `gsc`, for developer oracle comparisons and future
+- Gambit Scheme, `gsi` and `gsc`, for developer oracle comparisons and
   compile-path checks; Homebrew packages it as `gambit-scheme`
 - Cyclone Scheme, `icyc` and `cyclone`, for tertiary R7RS host checks and
-  future compile-path investigation; upstream documents Homebrew tap, Docker,
+  compile-path checks; upstream documents Homebrew tap, Docker,
   distribution package, and source bootstrap install paths
 - ShellCheck or other local lint tools for future scripts
 
@@ -252,10 +252,9 @@ interpreter and compiler setup aligned.
 
 Cyclone has a separate Scheme-to-C compiler command, `cyclone`, and an
 interpreter command, `icyc`. Set `AGENT_SCHEME_CYCLONE_COMPILER` to choose a
-specific `cyclone` executable for future compile-path probes; issue #274 keeps
-Cyclone out of the default `make compile` host list while recording that the
-compiler path is plausible enough to split into a later focused target. Upstream
-installation guidance includes Docker, a Homebrew tap named
+specific `cyclone` executable for compile-path probes and the
+Cyclone-native shard. Upstream installation guidance includes Docker, a
+Homebrew tap named
 `cyclone-scheme/cyclone`, Arch AUR and Gentoo packages, and source bootstrap via
 `cyclone-bootstrap`; on machines without a package path, bootstrap/source
 installation is expected before local checks can run.
@@ -326,6 +325,7 @@ Select a host explicitly with `AGENT_SCHEME_COMPILE_HOST`:
 ```sh
 AGENT_SCHEME_COMPILE_HOST=racket make compile
 AGENT_SCHEME_COMPILE_HOST=gambit make compile
+AGENT_SCHEME_COMPILE_HOST=cyclone make compile
 ```
 
 The Racket path requires both `racket` and `raco`; override discovery with:
@@ -340,11 +340,17 @@ The Gambit path requires both `gsi` and `gsc`; override discovery with:
 AGENT_SCHEME_GAMBIT=gsi AGENT_SCHEME_GAMBIT_COMPILER=gsc AGENT_SCHEME_COMPILE_HOST=gambit make compile
 ```
 
+The Cyclone path requires both `icyc` and `cyclone`; override discovery with:
+
+```sh
+AGENT_SCHEME_CYCLONE=icyc AGENT_SCHEME_CYCLONE_COMPILER=cyclone AGENT_SCHEME_COMPILE_HOST=cyclone make compile
+```
+
 Generated outputs stay under `build/compile/<host>/` by default:
 
 - `bin/agent-scheme`: the host-compiled executable artifact
-- `src/`: generated host wrapper sources and, for Gambit, the mirrored
-  portable `.sld` sources plus generated C files used for linking
+- `src/`: generated host wrapper sources and, for Gambit and Cyclone, the
+  mirrored portable `.sld` sources plus generated native compiler outputs
 - `collections/`: generated host dependency wrappers when a host needs them,
   currently the Racket path
 - `manifest.scm`: Scheme-readable artifact manifest
@@ -397,6 +403,8 @@ AGENT_SCHEME_RACKET=racket make test-portable-racket
 make test-portable-compiled
 AGENT_SCHEME_GUILE=guile make test-portable-guile
 AGENT_SCHEME_GAUCHE=gosh make test-portable-gauche
+AGENT_SCHEME_CYCLONE=icyc make test-portable-cyclone
+AGENT_SCHEME_CYCLONE=icyc AGENT_SCHEME_CYCLONE_COMPILER=cyclone make test-portable-cyclone-native
 make test-emacs-core
 make test-emacs-library
 make test-emacs-capabilities
@@ -407,15 +415,17 @@ make test-emacs-tools
 test-portable` remains available as the local aggregate for the default
 portable R7RS host shards. CI runs full portable-suite host shards under
 Gambit, the Gambit-native compiled Agent Scheme runner, Racket with its `r7rs`
-package, the Racket-built compiled Agent Scheme runner, Guile, and Gauche.
+package, the Racket-built compiled Agent Scheme runner, Guile, Gauche,
+Cyclone's `icyc` interpreter, and the Cyclone-built native Agent Scheme runner.
 Optional Chibi shard targets remain available for manual timing and
-compatibility checks. Cyclone is also available as an explicit tertiary
-interpreter shard when `icyc` is installed, but it is not part of the default
-local or CI shard set:
+compatibility checks. Cyclone remains an explicit tertiary local target when
+`icyc` and `cyclone` are installed, rather than part of the default local
+`make test` fan-out:
 
 ```sh
 AGENT_SCHEME_CHIBI=chibi-scheme make test-portable-chibi
 AGENT_SCHEME_CYCLONE=icyc make test-portable-cyclone
+AGENT_SCHEME_CYCLONE=icyc AGENT_SCHEME_CYCLONE_COMPILER=cyclone make test-portable-cyclone-native
 ```
 
 The full-suite host shards run the same portable Scheme test files so their
@@ -428,7 +438,10 @@ same full-suite file list through
 `build/compile/racket/bin/agent-scheme --script`. The Gambit-native shard runs
 `AGENT_SCHEME_COMPILE_HOST=gambit make compile`, emits the build tree's
 `logs/compile.log` and `logs/smoke.log` timing datums, and executes the same
-file list through `build/compile/gambit/bin/agent-scheme --script`.
+file list through `build/compile/gambit/bin/agent-scheme --script`. The
+Cyclone-native shard follows the same shape with
+`AGENT_SCHEME_COMPILE_HOST=cyclone make compile` and
+`build/compile/cyclone/bin/agent-scheme --script`.
 CI builds and caches Gambit 4.9.7 because Ubuntu 24.04's `gambc` package is
 4.9.3 and does not accept the `-:r7rs` runtime option needed for the portable
 library search path. The extra R7RS host matrix runs inside an Ubuntu 26.04

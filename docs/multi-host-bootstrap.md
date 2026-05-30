@@ -184,16 +184,17 @@ must not replace the R7RS-small user contract.
 | Emacs Lisp adapter | First host and bootstrap adapter | Native editor UX, ERT, project buffers, policy prompts | Host-specific objects and dynamic editor state must stay behind handles | `make test` through ERT |
 | Chibi Scheme | Optional external R7RS validation path | Small R7RS implementation, `.sld` support, useful for portability spot checks | Optional on developer machines; validates the portable product path but is not itself the product host | `AGENT_SCHEME_CHIBI=chibi-scheme make test-portable-chibi` |
 | Gauche, Gambit, Racket, or Guile | R7RS compatibility probes | Broader implementation diversity and performance signals | Library/import behavior and extensions differ by implementation | Default portable CI shards plus opt-in oracle adapters |
-| Cyclone Scheme | Tertiary R7RS compatibility and future compile probe | Provides both the `icyc` interpreter and the `cyclone` Scheme-to-C compiler | Optional local installation; compile target needs separate packaging work before joining `make compile` | Opt-in oracle adapter and explicit `make test-portable-cyclone` shard |
+| Cyclone Scheme | Tertiary R7RS compatibility and compile-host diversity | Provides both the `icyc` interpreter and the `cyclone` Scheme-to-C compiler | Optional local installation; CI bootstraps Cyclone from source for interpreted and native shards | Opt-in oracle adapter plus explicit `make test-portable-cyclone` and `make test-portable-cyclone-native` shards |
 | Chez or another R6RS backend | Possible optimized backend | Mature compiler and runtime, strong performance story | R6RS is not the Agent Scheme language contract | R7RS compatibility adapter plus conformance fixtures |
 | Future compiled backend | Long-term runtime strategy | Fast startup or embedding in non-editor hosts | Must preserve inspectable datums, policy, and library semantics | Same core fixture suite |
 | Non-Emacs UI shell | Future UX host | CLI, web, IDE, or editor surfaces can share the core | Needs its own policy, handles, and persistence adapter | Mock or real host-adapter suite |
 
 The first concrete non-Emacs path was a Chibi-backed portable test path for
 reader, evaluator, and library code; it remains available as an optional manual
-check. Full-suite Gambit, Racket, Guile, and Gauche CI shards run the portable
-Scheme suite by default to keep independent host timing signals visible while
-compiled host work remains future scope. A later non-Emacs host can start as a
+check. Full-suite Gambit, Racket, Guile, Gauche, and Cyclone CI shards run the
+portable Scheme suite to keep independent host timing signals visible, and the
+Gambit-native, Racket-compiled, and Cyclone-native shards exercise current
+host-compiled packaging paths. A later non-Emacs host can start as a
 command-line adapter with mock capability
 libraries before gaining real UI, process, provider, or persistence authority.
 

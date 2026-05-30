@@ -88,7 +88,7 @@ Return a plist containing :status and :output."
                              0))
           (should
            (string-match-p
-            "AGENT_SCHEME_COMPILE_HOST must be one of: racket, gambit"
+            "AGENT_SCHEME_COMPILE_HOST must be one of: racket, gambit, cyclone"
             (agent-scheme-compile-portable-test--output result))))
       (when (file-directory-p build-dir)
         (delete-directory build-dir t)))))
@@ -236,6 +236,90 @@ Return a plist containing :status and :output."
             (should
              (string-match-p
               "(compile-host gambit)"
+              (with-temp-buffer
+                (insert-file-contents manifest)
+                (buffer-string))))
+            (should
+             (equal
+              (agent-scheme-compile-portable-test--run-executable
+               runner "--version")
+              (list :status 0
+                    :output (format "Agent Scheme %s\n" version-string))))
+            (should
+             (equal
+              (agent-scheme-compile-portable-test--run-executable
+               runner "--eval" "(+ 1 2)")
+              '(:status 0 :output "3\n")))
+            (should
+             (equal
+              (agent-scheme-compile-portable-test--run-executable
+               runner "--script" "tests/scheme/agent-scheme-reader-test.scm")
+              '(:status 0 :output "Scheme reader tests passed\n"))))
+        (when (file-directory-p build-dir)
+          (delete-directory build-dir t))))))
+
+(ert-deftest agent-scheme-compile-portable-test-cyclone-missing-tools-fail ()
+  "Fail explicit Cyclone compile requests with setup guidance."
+  (let* ((build-dir
+          (make-temp-file "agent-scheme-compile-missing-cyclone-" t))
+         (result
+          (agent-scheme-compile-portable-test--run-make
+           "-s"
+           (format "AGENT_SCHEME_COMPILE_BUILD_DIR=%s" build-dir)
+           "AGENT_SCHEME_COMPILE_HOST=cyclone"
+           "AGENT_SCHEME_CYCLONE=/no/such/icyc"
+           "AGENT_SCHEME_CYCLONE_COMPILER=/no/such/cyclone"
+           "compile")))
+    (unwind-protect
+        (progn
+          (should-not (equal (agent-scheme-compile-portable-test--status result)
+                             0))
+          (should
+           (string-match-p
+            "Cyclone compile prerequisites are missing"
+            (agent-scheme-compile-portable-test--output result))))
+      (when (file-directory-p build-dir)
+        (delete-directory build-dir t)))))
+
+(ert-deftest agent-scheme-compile-portable-test-cyclone-builds-runner ()
+  "Build a Cyclone-hosted portable executable and run smoke commands."
+  (let ((icyc
+         (agent-scheme-compile-portable-test--command
+          "AGENT_SCHEME_CYCLONE" "icyc"))
+        (cyclone
+         (agent-scheme-compile-portable-test--command
+          "AGENT_SCHEME_CYCLONE_COMPILER" "cyclone")))
+    (unless (and icyc cyclone)
+      (ert-skip "Cyclone icyc and cyclone are not available"))
+    (let* ((build-dir
+            (make-temp-file "agent-scheme-compile-cyclone-" t))
+           (result
+            (agent-scheme-compile-portable-test--run-make
+             "-s"
+             (format "AGENT_SCHEME_COMPILE_BUILD_DIR=%s" build-dir)
+             "AGENT_SCHEME_COMPILE_HOST=cyclone"
+             (format "AGENT_SCHEME_CYCLONE=%s" icyc)
+             (format "AGENT_SCHEME_CYCLONE_COMPILER=%s" cyclone)
+             "compile"))
+           (host-root (expand-file-name "cyclone" build-dir))
+           (runner (expand-file-name "bin/agent-scheme" host-root))
+           (manifest (expand-file-name "manifest.scm" host-root))
+           (smoke-log (expand-file-name "logs/smoke.log" host-root))
+           (version-string
+            (agent-scheme-compile-portable-test--version-string)))
+      (unwind-protect
+          (progn
+            (should
+             (equal (agent-scheme-compile-portable-test--status result) 0))
+            (should (file-executable-p runner))
+            (should (file-exists-p manifest))
+            (should (file-exists-p smoke-log))
+            (should
+             (file-directory-p
+              (expand-file-name "src" host-root)))
+            (should
+             (string-match-p
+              "(compile-host cyclone)"
               (with-temp-buffer
                 (insert-file-contents manifest)
                 (buffer-string))))

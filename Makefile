@@ -22,6 +22,7 @@ AGENT_SCHEME_PORTABLE_COMPILED_TEST_SELECTOR ?= "^agent-scheme-scheme-compiled-h
 AGENT_SCHEME_PORTABLE_GUILE_TEST_SELECTOR ?= "^agent-scheme-scheme-guile-host-test-r7rs-suite$$"
 AGENT_SCHEME_PORTABLE_GAUCHE_TEST_SELECTOR ?= "^agent-scheme-scheme-gauche-host-test-r7rs-suite$$"
 AGENT_SCHEME_PORTABLE_CYCLONE_TEST_SELECTOR ?= "^agent-scheme-scheme-cyclone-host-test-r7rs-suite$$"
+AGENT_SCHEME_PORTABLE_CYCLONE_NATIVE_TEST_SELECTOR ?= "^agent-scheme-scheme-cyclone-native-host-test-r7rs-suite$$"
 AGENT_SCHEME_EMACS_HOSTED_TEST_SELECTOR ?= (not "agent-scheme-scheme-.*")
 AGENT_SCHEME_EMACS_CORE_TEST_SELECTOR ?= (or "agent-scheme-base.*" "agent-scheme-eval.*" "agent-scheme-interpreter-module.*" "agent-scheme-macro.*" "agent-scheme-reader.*" "agent-scheme-result.*" "agent-scheme-runtime.*")
 AGENT_SCHEME_EMACS_LIBRARY_TEST_SELECTOR ?= (or "agent-scheme-conformance.*" "agent-scheme-fixture.*" "agent-scheme-host-adapter-fixture.*" "agent-scheme-library.*" "agent-scheme-oracle.*")
@@ -40,7 +41,7 @@ AGENT_SCHEME_TEST_JOBS ?= $(words $(AGENT_SCHEME_TEST_SHARD_TARGETS))
 
 .DEFAULT_GOAL := help
 
-.PHONY: help clean clean-compile compile compile-elisp test test-portable test-portable-chibi test-portable-eval test-portable-rest test-portable-gambit test-portable-gambit-native test-portable-racket test-portable-compiled test-portable-guile test-portable-gauche test-portable-cyclone test-emacs-hosted test-emacs-core test-emacs-library test-emacs-capabilities test-emacs-tools test-live-model-ci test-live-model conformance-oracle
+.PHONY: help clean clean-compile compile compile-elisp test test-portable test-portable-chibi test-portable-eval test-portable-rest test-portable-gambit test-portable-gambit-native test-portable-racket test-portable-compiled test-portable-guile test-portable-gauche test-portable-cyclone test-portable-cyclone-native test-emacs-hosted test-emacs-core test-emacs-library test-emacs-capabilities test-emacs-tools test-live-model-ci test-live-model conformance-oracle
 
 help:
 	@printf '%s\n' 'Agent Scheme top-level actions:'
@@ -61,6 +62,7 @@ help:
 	@printf '  %-26s %s\n' 'test-portable-guile' 'Run the portable R7RS Guile full-suite host shard.'
 	@printf '  %-26s %s\n' 'test-portable-gauche' 'Run the portable R7RS Gauche full-suite host shard.'
 	@printf '  %-26s %s\n' 'test-portable-cyclone' 'Run the optional portable R7RS Cyclone interpreter host shard.'
+	@printf '  %-26s %s\n' 'test-portable-cyclone-native' 'Build and run the Cyclone-native Agent Scheme full-suite host shard.'
 	@printf '  %-26s %s\n' 'test-emacs-hosted' 'Run all non-portable Emacs-hosted ERT tests.'
 	@printf '  %-26s %s\n' 'test-emacs-core' 'Run the Emacs-hosted core language/runtime shard.'
 	@printf '  %-26s %s\n' 'test-emacs-library' 'Run the Emacs-hosted library/conformance shard.'
@@ -71,7 +73,7 @@ help:
 	@printf '  %-26s %s\n' 'conformance-oracle' 'Compare pure shared fixtures with reference R7RS implementations.'
 	@printf '\n%s\n' 'Variables:'
 	@printf '  %-50s %s\n' 'EMACS=emacs' 'Emacs command used by make test.'
-	@printf '  %-50s %s\n' 'AGENT_SCHEME_COMPILE_HOST=racket|gambit' 'Host compiler path selected by make compile.'
+	@printf '  %-50s %s\n' 'AGENT_SCHEME_COMPILE_HOST=racket|gambit|cyclone' 'Host compiler path selected by make compile.'
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_COMPILE_BUILD_DIR=build/compile' 'Output tree used by make compile.'
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_TEST_TARGET_ROOT=DIR' 'Optional portable Scheme implementation root for the current harness.'
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_TEST_SOURCE_METADATA=on|off' 'Default source metadata mode injected by CI matrix shards.'
@@ -91,6 +93,7 @@ help:
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_PORTABLE_GUILE_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-guile.'
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_PORTABLE_GAUCHE_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-gauche.'
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_PORTABLE_CYCLONE_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-cyclone.'
+	@printf '  %-50s %s\n' 'AGENT_SCHEME_PORTABLE_CYCLONE_NATIVE_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-cyclone-native.'
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_EMACS_HOSTED_TEST_SELECTOR=SEL' 'ERT selector used by make test-emacs-hosted.'
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_EMACS_CORE_TEST_SELECTOR=SEL' 'ERT selector used by make test-emacs-core.'
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_EMACS_LIBRARY_TEST_SELECTOR=SEL' 'ERT selector used by make test-emacs-library.'
@@ -110,8 +113,9 @@ help:
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_GAMBIT=gsi' 'Optional Gambit command for oracle runs and compile checks.'
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_GAMBIT_COMPILER=gsc' 'Optional Gambit compiler command for compile checks.'
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_CYCLONE=icyc' 'Optional Cyclone interpreter command for oracle runs and portable checks.'
-	@printf '  %-50s %s\n' 'AGENT_SCHEME_CYCLONE_COMPILER=cyclone' 'Optional Cyclone compiler command for future compile probes.'
+	@printf '  %-50s %s\n' 'AGENT_SCHEME_CYCLONE_COMPILER=cyclone' 'Optional Cyclone compiler command for compile checks.'
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_GAMBIT_NATIVE=agent-scheme' 'Optional Gambit-native compiled runner for tests.'
+	@printf '  %-50s %s\n' 'AGENT_SCHEME_CYCLONE_NATIVE=agent-scheme' 'Optional Cyclone-native compiled runner for tests.'
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_ORACLE_REFERENCES=a,b' 'Optional comma-separated oracle reference filter.'
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_ORACLE_STATUSES=a,b' 'Optional comma-separated oracle report status filter.'
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_ORACLE_SUMMARY=1' 'Print an oracle status summary before report lines.'
@@ -129,6 +133,8 @@ compile:
 	AGENT_SCHEME_RACO='$(AGENT_SCHEME_RACO)' \
 	AGENT_SCHEME_GAMBIT='$(AGENT_SCHEME_GAMBIT)' \
 	AGENT_SCHEME_GAMBIT_COMPILER='$(AGENT_SCHEME_GAMBIT_COMPILER)' \
+	AGENT_SCHEME_CYCLONE='$(AGENT_SCHEME_CYCLONE)' \
+	AGENT_SCHEME_CYCLONE_COMPILER='$(AGENT_SCHEME_CYCLONE_COMPILER)' \
 	tools/compile-portable.sh
 
 compile-elisp:
@@ -191,6 +197,16 @@ test-portable-gauche:
 
 test-portable-cyclone:
 	AGENT_SCHEME_TEST_SELECTOR='$(AGENT_SCHEME_PORTABLE_CYCLONE_TEST_SELECTOR)' $(AGENT_SCHEME_TEST_RUNNER_COMMAND)
+
+test-portable-cyclone-native:
+	@if command -v '$(AGENT_SCHEME_CYCLONE)' >/dev/null 2>&1 && command -v '$(AGENT_SCHEME_CYCLONE_COMPILER)' >/dev/null 2>&1; then \
+		AGENT_SCHEME_COMPILE_HOST=cyclone $(AGENT_SCHEME_PARALLEL_MAKE) compile; \
+	else \
+		printf '%s\n' 'Cyclone compile prerequisites are not available; Cyclone native host shard will skip if no runner exists.'; \
+	fi
+	@if [ -f '$(AGENT_SCHEME_COMPILE_BUILD_DIR)/cyclone/logs/compile.log' ]; then cat '$(AGENT_SCHEME_COMPILE_BUILD_DIR)/cyclone/logs/compile.log'; fi
+	@if [ -f '$(AGENT_SCHEME_COMPILE_BUILD_DIR)/cyclone/logs/smoke.log' ]; then cat '$(AGENT_SCHEME_COMPILE_BUILD_DIR)/cyclone/logs/smoke.log'; fi
+	AGENT_SCHEME_CYCLONE_NATIVE='$(abspath $(AGENT_SCHEME_COMPILE_BUILD_DIR)/cyclone/bin/agent-scheme)' AGENT_SCHEME_TEST_SELECTOR='$(AGENT_SCHEME_PORTABLE_CYCLONE_NATIVE_TEST_SELECTOR)' $(AGENT_SCHEME_TEST_RUNNER_COMMAND)
 
 ifneq ($(filter environment command line override,$(origin AGENT_SCHEME_EMACS_HOSTED_TEST_SELECTOR)),)
 test-emacs-hosted:

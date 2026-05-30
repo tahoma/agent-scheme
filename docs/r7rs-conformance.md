@@ -27,8 +27,9 @@ installed. Gambit can be selected when `gsi` is available; the adapter runs
 `gsi -:r7rs,search=$REPO/scheme`, and the Gambit-native compile shard preserves
 that same R7RS library search behavior. Cyclone can be selected as a tertiary
 adapter when `icyc` is available; the adapter runs generated programs with
-`icyc -I $REPO/scheme -s` and leaves any `cyclone` compiler target to later
-host-compiled executable work.
+`icyc -I $REPO/scheme -s`. The Cyclone-hosted CI path also uses the `cyclone`
+Scheme-to-C compiler to build a native Agent Scheme runner for the full
+portable suite.
 
 Oracle `implementation-variant` rows are expected to stay visible when they
 reflect genuine reference diversity, such as exactness choices, case-folding

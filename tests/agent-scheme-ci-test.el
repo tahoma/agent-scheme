@@ -413,6 +413,23 @@
     (should (string-match-p
              "Portable R7RS Compiled Agent Scheme full suite"
              workflow))
+    (should (string-match-p "test-portable-cyclone:" workflow))
+    (should (string-match-p
+             "portable-cyclone-\\${{ matrix.source_metadata }}-docstrings-\\${{ matrix.docstring_retention }}\\.log"
+             workflow))
+    (should (string-match-p "make test-portable-cyclone" workflow))
+    (should (string-match-p
+             "Portable R7RS Cyclone full suite"
+             workflow))
+    (should (string-match-p
+             "portable-cyclone-native-\\${{ matrix.source_metadata }}-docstrings-\\${{ matrix.docstring_retention }}\\.log"
+             workflow))
+    (should (string-match-p
+             "make test-portable-cyclone-native"
+             workflow))
+    (should (string-match-p
+             "Portable R7RS Cyclone native Agent Scheme full suite"
+             workflow))
     (should (string-match-p
              "emacs-\\${{ matrix.shard.shard }}-\\${{ matrix.source_metadata }}-docstrings-\\${{ matrix.docstring_retention }}\\.log"
              workflow))))
@@ -492,6 +509,25 @@
                                         :ert-seconds 1.0
                                         :wall-seconds 1.0
                                         :tests nil))
+         (portable-cyclone-shard '(:name "Portable R7RS Cyclone full suite"
+                                         :selector "portable-cyclone"
+                                         :ran 1
+                                         :expected 1
+                                         :unexpected 0
+                                         :skipped 0
+                                         :ert-seconds 1.0
+                                         :wall-seconds 1.0
+                                         :tests nil))
+         (portable-cyclone-native-shard
+          '(:name "Portable R7RS Cyclone native Agent Scheme full suite"
+            :selector "portable-cyclone-native"
+            :ran 1
+            :expected 1
+            :unexpected 0
+            :skipped 0
+            :ert-seconds 1.0
+            :wall-seconds 1.0
+            :tests nil))
          (portable-eval-shard '(:name "Portable R7RS Chibi evaluator subset"
                                       :selector "portable-eval"
                                       :ran 1
@@ -504,6 +540,8 @@
          (markdown
           (agent-scheme-ci-render-pr-markdown-summary
            (list tools-shard
+                 portable-cyclone-native-shard
+                 portable-cyclone-shard
                  portable-gauche-shard
                  portable-guile-shard
                  portable-compiled-shard
@@ -514,7 +552,7 @@
                  portable-eval-shard))))
     (should
      (string-match-p
-      "| Portable R7RS Chibi evaluator subset |.*\n| Portable R7RS Chibi non-evaluator subset |.*\n| Portable R7RS Gambit full suite |.*\n| Portable R7RS Gambit native Agent Scheme full suite |.*\n| Portable R7RS Racket full suite |.*\n| Portable R7RS Compiled Agent Scheme full suite |.*\n| Portable R7RS Guile full suite |.*\n| Portable R7RS Gauche full suite |.*\n| Emacs tools/docs/integration |"
+      "| Portable R7RS Chibi evaluator subset |.*\n| Portable R7RS Chibi non-evaluator subset |.*\n| Portable R7RS Gambit full suite |.*\n| Portable R7RS Gambit native Agent Scheme full suite |.*\n| Portable R7RS Racket full suite |.*\n| Portable R7RS Compiled Agent Scheme full suite |.*\n| Portable R7RS Guile full suite |.*\n| Portable R7RS Gauche full suite |.*\n| Portable R7RS Cyclone full suite |.*\n| Portable R7RS Cyclone native Agent Scheme full suite |.*\n| Emacs tools/docs/integration |"
       markdown))))
 
 (provide 'agent-scheme-ci-test)

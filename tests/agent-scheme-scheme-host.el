@@ -51,6 +51,15 @@
                  "build/compile/gambit/bin/agent-scheme"
                  agent-scheme--test-root)))
            (and (file-executable-p runner) runner))))
+    ('cyclone-native
+     (or (agent-scheme--scheme-host-configured-command
+          "AGENT_SCHEME_CYCLONE_NATIVE"
+          "agent-scheme")
+         (let ((runner
+                (expand-file-name
+                 "build/compile/cyclone/bin/agent-scheme"
+                 agent-scheme--test-root)))
+           (and (file-executable-p runner) runner))))
     ('racket
      (agent-scheme--scheme-host-configured-command "AGENT_SCHEME_RACKET" "racket"))
     ('gauche
@@ -100,6 +109,9 @@ RACKET-COLLECTION-ROOT is required when HOST is `racket'."
     ('gambit-native
      (ignore library-directory racket-collection-root)
      (list "--script" test-file))
+    ('cyclone-native
+     (ignore library-directory racket-collection-root)
+     (list "--script" test-file))
     ('racket
      (unless racket-collection-root
        (error "Racket collection root is required"))
@@ -127,6 +139,9 @@ RACKET-COLLECTION-ROOT is accepted for API symmetry with test arguments."
       "-e"
       "(import (scheme base) (scheme write)) (write (+ 1 2)) (newline)"))
     ('gambit-native
+     (ignore library-directory racket-collection-root)
+     (list "--eval" "(+ 1 2)"))
+    ('cyclone-native
      (ignore library-directory racket-collection-root)
      (list "--eval" "(+ 1 2)"))
     ('racket

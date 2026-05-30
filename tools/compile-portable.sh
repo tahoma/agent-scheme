@@ -202,14 +202,10 @@ write_racket_main() {
 EOF
 }
 
-write_gambit_main() {
-  main_file=$1
-  search_dir=$2
+write_native_r7rs_main_body() {
+  cat <<'EOF'
 
-  printf '#!gsi -:r7rs,search=%s\n' "$search_dir" > "$main_file"
-  cat >> "$main_file" <<'EOF'
-
-;; Gambit R7RS main program for the host-compiled Agent Scheme runner.
+;; R7RS main program for host-compiled Agent Scheme runners.
 
 (import (scheme base)
         (prefix (scheme case-lambda) agent-scheme-main:r7rs-case-lambda:)
@@ -326,6 +322,20 @@ write_gambit_main() {
 EOF
 }
 
+write_gambit_main() {
+  main_file=$1
+  search_dir=$2
+
+  printf '#!gsi -:r7rs,search=%s\n' "$search_dir" > "$main_file"
+  write_native_r7rs_main_body >> "$main_file"
+}
+
+write_cyclone_main() {
+  main_file=$1
+
+  write_native_r7rs_main_body > "$main_file"
+}
+
 generate_racket_collections() {
   collections_dir=$1
 
@@ -339,6 +349,19 @@ generate_racket_collections() {
       cat "$source"
     } > "$target"
   done
+}
+
+copy_portable_sources() {
+  target_dir=$1
+
+  find "$scheme_dir" -type f \( -name '*.sld' -o -name '*.scm' \) | sort |
+    while IFS= read -r source
+    do
+      relative=${source#"$scheme_dir/"}
+      target="$target_dir/$relative"
+      mkdir -p "$(dirname -- "$target")"
+      cp "$source" "$target"
+    done
 }
 
 run_smoke() {
@@ -630,6 +653,54 @@ EOF
   printf '%s\n' "$runner"
 }
 
+compile_cyclone() {
+  icyc=$(find_command AGENT_SCHEME_CYCLONE icyc) \
+    || die "Cyclone compile prerequisites are missing; set AGENT_SCHEME_CYCLONE to a runnable icyc executable."
+  cyclone=$(find_command AGENT_SCHEME_CYCLONE_COMPILER cyclone) \
+    || die "Cyclone compile prerequisites are missing; set AGENT_SCHEME_CYCLONE_COMPILER to a runnable cyclone executable."
+
+  host_root="$build_dir/cyclone"
+  src_dir="$host_root/src"
+  bin_dir="$host_root/bin"
+  logs_dir="$host_root/logs"
+  main_file="$src_dir/agent-scheme.scm"
+  compiled_program="$src_dir/agent-scheme"
+  runner="$bin_dir/agent-scheme"
+  smoke_log="$logs_dir/smoke.log"
+  version=$(version_components)
+
+  [ -n "$version" ] || die "could not read Agent Scheme version from $version_file"
+
+  mkdir -p "$src_dir" "$bin_dir" "$logs_dir"
+  copy_portable_sources "$src_dir"
+
+  "$icyc" -I "$scheme_dir" -p "(+ 1 2)" \
+    >"$logs_dir/icyc-r7rs-probe.log" 2>&1 \
+    || die "Cyclone icyc does not accept R7RS mode with the Agent Scheme library search path; see $logs_dir/icyc-r7rs-probe.log"
+
+  write_cyclone_main "$main_file"
+  write_manifest "$host_root" cyclone "$version"
+
+  compile_started=$(date +%s)
+  "$cyclone" -I "$src_dir" "$main_file" \
+    >"$logs_dir/cyclone.log" 2>&1 \
+    || die "cyclone failed while compiling the Cyclone main program; see $logs_dir/cyclone.log"
+  compile_finished=$(date +%s)
+
+  [ -f "$compiled_program" ] \
+    || die "cyclone did not create $compiled_program; see $logs_dir/cyclone.log"
+  cp "$compiled_program" "$runner"
+  chmod +x "$runner"
+  cat > "$logs_dir/compile.log" <<EOF
+(agent-scheme-compile-timing
+  (compile-host cyclone)
+  (compile-seconds $((compile_finished - compile_started))))
+EOF
+  run_smoke "$runner" "$smoke_log" "$version"
+
+  printf '%s\n' "$runner"
+}
+
 case "$compile_host" in
   racket)
     compile_racket
@@ -637,7 +708,10 @@ case "$compile_host" in
   gambit)
     compile_gambit
     ;;
+  cyclone)
+    compile_cyclone
+    ;;
   *)
-    die "AGENT_SCHEME_COMPILE_HOST must be one of: racket, gambit"
+    die "AGENT_SCHEME_COMPILE_HOST must be one of: racket, gambit, cyclone"
     ;;
 esac

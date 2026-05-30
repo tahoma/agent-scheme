@@ -37,6 +37,12 @@
   "Run the full portable R7RS suite with Cyclone Scheme's interpreter."
   (agent-scheme--scheme-host-run-suite 'cyclone "cyclone"))
 
+(ert-deftest agent-scheme-scheme-cyclone-native-host-test-r7rs-suite ()
+  "Run the full portable R7RS suite with the Cyclone native Agent Scheme runner."
+  (agent-scheme--scheme-host-run-suite
+   'cyclone-native
+   "Cyclone native Agent Scheme"))
+
 (ert-deftest agent-scheme-scheme-compiled-host-test-r7rs-suite ()
   "Run the full portable R7RS suite with the compiled Agent Scheme runner."
   (agent-scheme--scheme-host-run-suite 'compiled "compiled Agent Scheme"))
