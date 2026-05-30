@@ -683,9 +683,14 @@ compile_cyclone() {
   write_manifest "$host_root" cyclone "$version"
 
   compile_started=$(date +%s)
-  "$cyclone" -I "$library_dir" "$main_file" \
-    >"$logs_dir/cyclone.log" 2>&1 \
-    || die "cyclone failed while compiling the Cyclone main program; see $logs_dir/cyclone.log"
+  if ! (
+    cd "$src_dir"
+    "$cyclone" -I scheme "$(basename "$main_file")"
+  ) >"$logs_dir/cyclone.log" 2>&1
+  then
+    tail -n 120 "$logs_dir/cyclone.log" >&2 || true
+    die "cyclone failed while compiling the Cyclone main program; see $logs_dir/cyclone.log"
+  fi
   compile_finished=$(date +%s)
 
   [ -f "$compiled_program" ] \
