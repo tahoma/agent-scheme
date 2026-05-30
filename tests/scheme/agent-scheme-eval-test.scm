@@ -261,11 +261,11 @@
 
 (check 'runtime-version-components
        (agent-scheme-version-components)
-       '(0 15 2))
+       '(0 15 4))
 
 (check 'runtime-version-datum
        (agent-scheme-result->external (agent-scheme-version))
-       "(agent-scheme-version 0 15 2)")
+       "(agent-scheme-version 0 15 4)")
 
 (check 'reader-source-metadata-default-enabled
        (agent-scheme-datum->external
@@ -424,7 +424,7 @@
                      (examples . (((source . \"(rich cfg)\")
                                    (result . (session cfg)))))
                      (see-also . (current-context session-snapshot))
-                     (since . (agent-scheme-version 0 15 2))
+                     (since . (agent-scheme-version 0 15 4))
                      (deprecated . #f)
                      (stability . experimental)
                      (authority-review . \"local only\"))
@@ -492,7 +492,7 @@
                        (final-rich)
                        (metadata-fields 'final-rich))"
                 '((docstring-retention . full))
-                "((session cfg) \"Create an Agent Scheme session from CONFIG.\\nThe session is represented as a datum.\" (config) \"Open an Agent Scheme session.\" ((config . \"Session configuration datum.\")) \"A session record.\" (pure) (((source . \"(rich cfg)\") (result session cfg))) (current-context session-snapshot) (agent-scheme-version 0 15 2) #f experimental \"local only\" \"Line one.\\nLine two.\\nLine three.\" (x) (((source . \"first\")) ((source . \"second\"))) (alpha beta) ((tag . kept)) \"Valid documentation.\" \"First result.\" #f ((arguments (x))) ((arguments (x))) ((arguments (x))) ((head . \"Required argument.\") (tail . \"Rest arguments.\")) #((returns . \"ordinary result\")) ((arguments ())))")
+                "((session cfg) \"Create an Agent Scheme session from CONFIG.\\nThe session is represented as a datum.\" (config) \"Open an Agent Scheme session.\" ((config . \"Session configuration datum.\")) \"A session record.\" (pure) (((source . \"(rich cfg)\") (result session cfg))) (current-context session-snapshot) (agent-scheme-version 0 15 4) #f experimental \"local only\" \"Line one.\\nLine two.\\nLine three.\" (x) (((source . \"first\")) ((source . \"second\"))) (alpha beta) ((tag . kept)) \"Valid documentation.\" \"First result.\" #f ((arguments (x))) ((arguments (x))) ((arguments (x))) ((head . \"Required argument.\") (tail . \"Rest arguments.\")) #((returns . \"ordinary result\")) ((arguments ())))")
 
 (check-external/options 'docstring-retention-simple
                 "(import (scheme base) (agent reflect))
