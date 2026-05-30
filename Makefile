@@ -14,6 +14,7 @@ AGENT_SCHEME_PORTABLE_TEST_SELECTOR ?= "agent-scheme-scheme-.*"
 AGENT_SCHEME_PORTABLE_EVAL_TEST_SELECTOR ?= "^agent-scheme-scheme-eval-test-r7rs-suite$$"
 AGENT_SCHEME_PORTABLE_REST_TEST_SELECTOR ?= (and "agent-scheme-scheme-.*" (not "^agent-scheme-scheme-eval-test-r7rs-suite$$") (not "^agent-scheme-scheme-.*-host-test-r7rs-suite$$"))
 AGENT_SCHEME_PORTABLE_GAMBIT_TEST_SELECTOR ?= "^agent-scheme-scheme-gambit-host-test-r7rs-suite$$"
+AGENT_SCHEME_PORTABLE_GAMBIT_NATIVE_TEST_SELECTOR ?= "^agent-scheme-scheme-gambit-native-host-test-r7rs-suite$$"
 AGENT_SCHEME_PORTABLE_RACKET_TEST_SELECTOR ?= "^agent-scheme-scheme-racket-host-test-r7rs-suite$$"
 AGENT_SCHEME_PORTABLE_COMPILED_TEST_SELECTOR ?= "^agent-scheme-scheme-compiled-host-test-r7rs-suite$$"
 AGENT_SCHEME_PORTABLE_GUILE_TEST_SELECTOR ?= "^agent-scheme-scheme-guile-host-test-r7rs-suite$$"
@@ -25,7 +26,7 @@ AGENT_SCHEME_EMACS_CAPABILITY_TEST_SELECTOR ?= (or "agent-scheme-agent-io.*" "ag
 AGENT_SCHEME_EMACS_TOOLS_TEST_SELECTOR ?= (or "agent-scheme-ci.*" "agent-scheme-compile.*" "agent-scheme-control-loop-doc.*" "agent-scheme-debugger.*" "agent-scheme-diagnostics.*" "agent-scheme-diff.*" "agent-scheme-docstring-metadata-doc.*" "agent-scheme-feature-reflection-doc.*" "agent-scheme-job.*" "agent-scheme-native-cli-daemon-doc.*" "agent-scheme-reflect.*" "agent-scheme-repl.*" "agent-scheme-skill.*" "agent-scheme-smoke.*" "agent-scheme-vcs.*")
 AGENT_SCHEME_LIVE_MODEL_CI_SELECTOR ?= agent-scheme-models-test-live-local-openai-compatible-completion
 AGENT_SCHEME_LIVE_MODEL_SELECTOR ?= "agent-scheme-models-test-live-local-.*"
-AGENT_SCHEME_PORTABLE_TEST_SHARD_TARGETS ?= test-portable-gambit test-portable-racket test-portable-compiled test-portable-guile test-portable-gauche
+AGENT_SCHEME_PORTABLE_TEST_SHARD_TARGETS ?= test-portable-gambit test-portable-gambit-native test-portable-racket test-portable-compiled test-portable-guile test-portable-gauche
 AGENT_SCHEME_OPTIONAL_PORTABLE_TEST_SHARD_TARGETS ?= test-portable-eval test-portable-rest
 AGENT_SCHEME_EMACS_TEST_SHARD_TARGETS ?= test-emacs-core test-emacs-library test-emacs-capabilities test-emacs-tools
 AGENT_SCHEME_TEST_SHARD_TARGETS ?= $(AGENT_SCHEME_PORTABLE_TEST_SHARD_TARGETS) $(AGENT_SCHEME_EMACS_TEST_SHARD_TARGETS)
@@ -36,7 +37,7 @@ AGENT_SCHEME_TEST_JOBS ?= $(words $(AGENT_SCHEME_TEST_SHARD_TARGETS))
 
 .DEFAULT_GOAL := help
 
-.PHONY: help clean clean-compile compile compile-elisp test test-portable test-portable-chibi test-portable-eval test-portable-rest test-portable-gambit test-portable-racket test-portable-compiled test-portable-guile test-portable-gauche test-emacs-hosted test-emacs-core test-emacs-library test-emacs-capabilities test-emacs-tools test-live-model-ci test-live-model conformance-oracle
+.PHONY: help clean clean-compile compile compile-elisp test test-portable test-portable-chibi test-portable-eval test-portable-rest test-portable-gambit test-portable-gambit-native test-portable-racket test-portable-compiled test-portable-guile test-portable-gauche test-emacs-hosted test-emacs-core test-emacs-library test-emacs-capabilities test-emacs-tools test-live-model-ci test-live-model conformance-oracle
 
 help:
 	@printf '%s\n' 'Agent Scheme top-level actions:'
@@ -51,6 +52,7 @@ help:
 	@printf '  %-26s %s\n' 'test-portable-eval' 'Run the optional portable R7RS Chibi evaluator subset shard.'
 	@printf '  %-26s %s\n' 'test-portable-rest' 'Run the optional portable R7RS Chibi non-evaluator subset shard.'
 	@printf '  %-26s %s\n' 'test-portable-gambit' 'Run the portable R7RS Gambit full-suite host shard.'
+	@printf '  %-26s %s\n' 'test-portable-gambit-native' 'Build and run the Gambit-native Agent Scheme full-suite host shard.'
 	@printf '  %-26s %s\n' 'test-portable-racket' 'Run the portable R7RS Racket full-suite host shard.'
 	@printf '  %-26s %s\n' 'test-portable-compiled' 'Build and run the compiled Agent Scheme full-suite host shard.'
 	@printf '  %-26s %s\n' 'test-portable-guile' 'Run the portable R7RS Guile full-suite host shard.'
@@ -79,6 +81,7 @@ help:
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_PORTABLE_EVAL_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-eval.'
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_PORTABLE_REST_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-rest.'
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_PORTABLE_GAMBIT_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-gambit.'
+	@printf '  %-50s %s\n' 'AGENT_SCHEME_PORTABLE_GAMBIT_NATIVE_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-gambit-native.'
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_PORTABLE_RACKET_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-racket.'
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_PORTABLE_COMPILED_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-compiled.'
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_PORTABLE_GUILE_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-guile.'
@@ -99,8 +102,9 @@ help:
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_RACKET=racket' 'Optional Racket command for oracle runs and compile packaging.'
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_RACO=raco' 'Optional Racket raco command for compile packaging.'
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_CHICKEN=csi' 'Optional CHICKEN command for oracle runs with the r7rs egg.'
-	@printf '  %-50s %s\n' 'AGENT_SCHEME_GAMBIT=gsi' 'Optional Gambit command for oracle runs and future compile checks.'
-	@printf '  %-50s %s\n' 'AGENT_SCHEME_GAMBIT_COMPILER=gsc' 'Optional Gambit compiler command for future compile checks.'
+	@printf '  %-50s %s\n' 'AGENT_SCHEME_GAMBIT=gsi' 'Optional Gambit command for oracle runs and compile checks.'
+	@printf '  %-50s %s\n' 'AGENT_SCHEME_GAMBIT_COMPILER=gsc' 'Optional Gambit compiler command for compile checks.'
+	@printf '  %-50s %s\n' 'AGENT_SCHEME_GAMBIT_NATIVE=agent-scheme' 'Optional Gambit-native compiled runner for tests.'
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_ORACLE_REFERENCES=a,b' 'Optional comma-separated oracle reference filter.'
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_ORACLE_STATUSES=a,b' 'Optional comma-separated oracle report status filter.'
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_ORACLE_SUMMARY=1' 'Print an oracle status summary before report lines.'
@@ -150,6 +154,16 @@ test-portable-rest:
 
 test-portable-gambit:
 	AGENT_SCHEME_TEST_SELECTOR='$(AGENT_SCHEME_PORTABLE_GAMBIT_TEST_SELECTOR)' $(AGENT_SCHEME_TEST_RUNNER_COMMAND)
+
+test-portable-gambit-native:
+	@if command -v '$(AGENT_SCHEME_GAMBIT)' >/dev/null 2>&1 && command -v '$(AGENT_SCHEME_GAMBIT_COMPILER)' >/dev/null 2>&1; then \
+		AGENT_SCHEME_COMPILE_HOST=gambit $(AGENT_SCHEME_PARALLEL_MAKE) compile; \
+	else \
+		printf '%s\n' 'Gambit compile prerequisites are not available; Gambit native host shard will skip if no runner exists.'; \
+	fi
+	@if [ -f '$(AGENT_SCHEME_COMPILE_BUILD_DIR)/gambit/logs/compile.log' ]; then cat '$(AGENT_SCHEME_COMPILE_BUILD_DIR)/gambit/logs/compile.log'; fi
+	@if [ -f '$(AGENT_SCHEME_COMPILE_BUILD_DIR)/gambit/logs/smoke.log' ]; then cat '$(AGENT_SCHEME_COMPILE_BUILD_DIR)/gambit/logs/smoke.log'; fi
+	AGENT_SCHEME_GAMBIT_NATIVE='$(abspath $(AGENT_SCHEME_COMPILE_BUILD_DIR)/gambit/bin/agent-scheme)' AGENT_SCHEME_TEST_SELECTOR='$(AGENT_SCHEME_PORTABLE_GAMBIT_NATIVE_TEST_SELECTOR)' $(AGENT_SCHEME_TEST_RUNNER_COMMAND)
 
 test-portable-racket:
 	AGENT_SCHEME_TEST_SELECTOR='$(AGENT_SCHEME_PORTABLE_RACKET_TEST_SELECTOR)' $(AGENT_SCHEME_TEST_RUNNER_COMMAND)

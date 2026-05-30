@@ -202,6 +202,130 @@ write_racket_main() {
 EOF
 }
 
+write_gambit_main() {
+  main_file=$1
+  search_dir=$2
+
+  printf '#!gsi -:r7rs,search=%s\n' "$search_dir" > "$main_file"
+  cat >> "$main_file" <<'EOF'
+
+;; Gambit R7RS main program for the host-compiled Agent Scheme runner.
+
+(import (scheme base)
+        (prefix (scheme case-lambda) agent-scheme-main:r7rs-case-lambda:)
+        (prefix (scheme char) agent-scheme-main:r7rs-char:)
+        (prefix (scheme complex) agent-scheme-main:r7rs-complex:)
+        (prefix (scheme cxr) agent-scheme-main:r7rs-cxr:)
+        (prefix (scheme eval) agent-scheme-main:r7rs-eval:)
+        (prefix (scheme file) agent-scheme-main:r7rs-file:)
+        (prefix (scheme inexact) agent-scheme-main:r7rs-inexact:)
+        (prefix (scheme lazy) agent-scheme-main:r7rs-lazy:)
+        (scheme load)
+        (scheme process-context)
+        (prefix (scheme r5rs) agent-scheme-main:r7rs-r5rs:)
+        (prefix (scheme read) agent-scheme-main:r7rs-read:)
+        (prefix (scheme repl) agent-scheme-main:r7rs-repl:)
+        (prefix (scheme time) agent-scheme-main:r7rs-time:)
+        (scheme write)
+        (prefix (agent task) agent-scheme-main:agent-task:)
+        (prefix (agent transcript) agent-scheme-main:agent-transcript:)
+        (prefix (agent-scheme approval) agent-scheme-main:approval:)
+        (prefix (agent-scheme base) agent-scheme-main:base:)
+        (prefix (agent-scheme context) agent-scheme-main:context:)
+        (prefix (agent-scheme helper) agent-scheme-main:helper:)
+        (prefix (agent-scheme job) agent-scheme-main:job:)
+        (prefix (agent-scheme library) agent-scheme-main:library:)
+        (prefix (agent-scheme macro) agent-scheme-main:macro:)
+        (prefix (agent-scheme memory) agent-scheme-main:memory:)
+        (prefix (agent-scheme plan) agent-scheme-main:plan:)
+        (prefix (agent-scheme reader) agent-scheme-main:reader:)
+        (prefix (agent-scheme redaction) agent-scheme-main:redaction:)
+        (prefix (agent-scheme result) agent-scheme-main:result:)
+        (prefix (agent-scheme runtime) agent-scheme-main:runtime:)
+        (prefix (agent-scheme session) agent-scheme-main:session:)
+        (only (agent-scheme eval)
+              agent-scheme-eval-source
+              agent-scheme-value->external)
+        (only (agent-scheme version)
+              agent-scheme-version-datum))
+
+(define (agent-scheme-main-version-string)
+  (let ((primary (list-ref agent-scheme-version-datum 1))
+        (secondary (list-ref agent-scheme-version-datum 2))
+        (tertiary (list-ref agent-scheme-version-datum 3)))
+    (string-append
+     "Agent Scheme "
+     (number->string primary)
+     "."
+     (number->string secondary)
+     "."
+     (number->string tertiary))))
+
+(define (agent-scheme-main-help)
+  (display "Usage: agent-scheme [--help] [--version] [--eval SOURCE] [--script FILE]\n")
+  (display "\n")
+  (display "Commands:\n")
+  (display "  --help          Show this help.\n")
+  (display "  --version       Print the Agent Scheme runtime version.\n")
+  (display "  --eval SOURCE   Evaluate a pure Agent Scheme expression.\n")
+  (display "  --script FILE   Run an R7RS Scheme source file.\n"))
+
+(define (agent-scheme-main-error message)
+  (display "agent-scheme: " (current-error-port))
+  (display message (current-error-port))
+  (newline (current-error-port))
+  (exit 2))
+
+(define (agent-scheme-main-eval source)
+  (guard (condition
+          (else
+           (display "agent-scheme: evaluation failed" (current-error-port))
+           (display ": " (current-error-port))
+           (write condition (current-error-port))
+           (newline (current-error-port))
+           (exit 1)))
+    (display
+     (agent-scheme-value->external
+      (agent-scheme-eval-source source)))
+    (newline)))
+
+(define (agent-scheme-main-script path)
+  (guard (condition
+          (else
+           (display "agent-scheme: script failed" (current-error-port))
+           (display ": " (current-error-port))
+           (write condition (current-error-port))
+           (newline (current-error-port))
+           (exit 1)))
+    (load path)))
+
+(define (agent-scheme-main args)
+  (cond
+   ((null? args)
+    (agent-scheme-main-help))
+   ((string=? (car args) "--help")
+    (agent-scheme-main-help))
+   ((string=? (car args) "--version")
+    (display (agent-scheme-main-version-string))
+    (newline))
+   ((string=? (car args) "--eval")
+    (if (null? (cdr args))
+        (agent-scheme-main-error "--eval requires SOURCE")
+        (agent-scheme-main-eval (cadr args))))
+   ((string=? (car args) "--script")
+    (if (null? (cdr args))
+        (agent-scheme-main-error "--script requires FILE")
+        (agent-scheme-main-script (cadr args))))
+   (else
+    (agent-scheme-main-error
+     (string-append "unknown option " (car args))))))
+
+(let ((arguments (command-line)))
+  (agent-scheme-main
+   (if (null? arguments) '() (cdr arguments))))
+EOF
+}
+
 generate_racket_collections() {
   collections_dir=$1
 
@@ -221,11 +345,14 @@ run_smoke() {
   runner=$1
   log_file=$2
   expected_version=$3
+  smoke_started=$(date +%s)
 
   version_output=$("$runner" --version 2>"$log_file.version.err") \
     || die "compiled runner failed --version; see $log_file.version.err"
   eval_output=$("$runner" --eval "(+ 1 2)" 2>"$log_file.eval.err") \
     || die "compiled runner failed --eval; see $log_file.eval.err"
+  script_output=$("$runner" --script "$repo_root/tests/scheme/agent-scheme-reader-test.scm" 2>"$log_file.script.err") \
+    || die "compiled runner failed --script reader smoke; see $log_file.script.err"
 
   if [ "$version_output" != "Agent Scheme $expected_version" ]; then
     die "compiled runner --version returned '$version_output', expected 'Agent Scheme $expected_version'"
@@ -235,10 +362,17 @@ run_smoke() {
     die "compiled runner --eval returned '$eval_output', expected '3'"
   fi
 
+  if [ "$script_output" != "Scheme reader tests passed" ]; then
+    die "compiled runner --script returned '$script_output', expected 'Scheme reader tests passed'"
+  fi
+  smoke_finished=$(date +%s)
+
   cat > "$log_file" <<EOF
 (agent-scheme-compile-smoke
   (version-output "$version_output")
-  (eval-output "$eval_output"))
+  (eval-output "$eval_output")
+  (script-output "$script_output")
+  (run-seconds $((smoke_finished - smoke_started))))
 EOF
 }
 
@@ -279,7 +413,221 @@ compile_racket() {
 }
 
 compile_gambit() {
-  die "Gambit compile selection is reserved for issue #273; use AGENT_SCHEME_COMPILE_HOST=racket for the supported path in this slice."
+  gsi=$(find_command AGENT_SCHEME_GAMBIT gsi) \
+    || die "Gambit compile prerequisites are missing; set AGENT_SCHEME_GAMBIT to a runnable gsi executable."
+  gsc=$(find_command AGENT_SCHEME_GAMBIT_COMPILER gsc) \
+    || die "Gambit compile prerequisites are missing; set AGENT_SCHEME_GAMBIT_COMPILER to a runnable gsc executable."
+
+  host_root="$build_dir/gambit"
+  src_dir="$host_root/src"
+  bin_dir="$host_root/bin"
+  logs_dir="$host_root/logs"
+  main_file="$src_dir/agent-scheme-main.scm"
+  main_c="$src_dir/agent-scheme-main.c"
+  runner="$bin_dir/agent-scheme"
+  smoke_log="$logs_dir/smoke.log"
+  version=$(version_components)
+
+  [ -n "$version" ] || die "could not read Agent Scheme version from $version_file"
+
+  mkdir -p "$src_dir" "$bin_dir" "$logs_dir"
+
+  copy_gambit_source() {
+    source_file=$1
+    target_file=$2
+
+    mkdir -p "$(dirname -- "$target_file")"
+    cp "$source_file" "$target_file"
+  }
+
+  copy_gambit_source \
+    "$scheme_dir/agent-scheme/version.sld" \
+    "$src_dir/agent-scheme/version.sld"
+  copy_gambit_source \
+    "$scheme_dir/agent-scheme/reader.sld" \
+    "$src_dir/agent-scheme/reader.sld"
+  copy_gambit_source \
+    "$scheme_dir/agent-scheme/runtime.sld" \
+    "$src_dir/agent-scheme/runtime.sld"
+  copy_gambit_source \
+    "$scheme_dir/agent-scheme/base.sld" \
+    "$src_dir/agent-scheme/base.sld"
+  copy_gambit_source \
+    "$scheme_dir/agent-scheme/base-prelude.scm" \
+    "$src_dir/agent-scheme/base-prelude.scm"
+  copy_gambit_source \
+    "$scheme_dir/agent-scheme/base-syntax.scm" \
+    "$src_dir/agent-scheme/base-syntax.scm"
+  copy_gambit_source \
+    "$scheme_dir/agent-scheme/library.sld" \
+    "$src_dir/agent-scheme/library.sld"
+  copy_gambit_source \
+    "$scheme_dir/agent-scheme/result.sld" \
+    "$src_dir/agent-scheme/result.sld"
+  copy_gambit_source \
+    "$scheme_dir/agent-scheme/macro.sld" \
+    "$src_dir/agent-scheme/macro.sld"
+  copy_gambit_source \
+    "$scheme_dir/agent-scheme/approval.sld" \
+    "$src_dir/agent-scheme/approval.sld"
+  copy_gambit_source \
+    "$scheme_dir/agent-scheme/context.sld" \
+    "$src_dir/agent-scheme/context.sld"
+  copy_gambit_source \
+    "$scheme_dir/agent-scheme/helper.sld" \
+    "$src_dir/agent-scheme/helper.sld"
+  copy_gambit_source \
+    "$scheme_dir/agent-scheme/job.sld" \
+    "$src_dir/agent-scheme/job.sld"
+  copy_gambit_source \
+    "$scheme_dir/agent-scheme/memory.sld" \
+    "$src_dir/agent-scheme/memory.sld"
+  copy_gambit_source \
+    "$scheme_dir/agent-scheme/plan.sld" \
+    "$src_dir/agent-scheme/plan.sld"
+  copy_gambit_source \
+    "$scheme_dir/agent-scheme/redaction.sld" \
+    "$src_dir/agent-scheme/redaction.sld"
+  copy_gambit_source \
+    "$scheme_dir/agent-scheme/session.sld" \
+    "$src_dir/agent-scheme/session.sld"
+  copy_gambit_source \
+    "$scheme_dir/agent-scheme/interpreter.sld" \
+    "$src_dir/agent-scheme/interpreter.sld"
+  copy_gambit_source \
+    "$scheme_dir/agent-scheme/eval.sld" \
+    "$src_dir/agent-scheme/eval.sld"
+  copy_gambit_source \
+    "$scheme_dir/agent/task.sld" \
+    "$src_dir/agent/task.sld"
+  copy_gambit_source \
+    "$scheme_dir/agent/transcript.sld" \
+    "$src_dir/agent/transcript.sld"
+
+  "$gsi" -:r7rs,search="$scheme_dir" \
+    -e '(import (scheme base) (scheme write)) (write (+ 1 2)) (newline)' \
+    >"$logs_dir/gsi-r7rs-probe.log" 2>&1 \
+    || die "Gambit gsi does not accept R7RS mode with the Agent Scheme library search path; see $logs_dir/gsi-r7rs-probe.log"
+
+  write_gambit_main "$main_file" "$src_dir"
+  write_manifest "$host_root" gambit "$version"
+  : >"$logs_dir/gsc-modules.log"
+
+  compile_started=$(date +%s)
+  gambit_c_files=
+
+  compile_gambit_module() {
+    module_ref=$1
+    source_file=$2
+    target_file=$3
+
+    mkdir -p "$(dirname -- "$target_file")"
+    "$gsc" -:r7rs,search="$scheme_dir" \
+      -c -module-ref "$module_ref" -o "$target_file" "$source_file" \
+      >>"$logs_dir/gsc-modules.log" 2>&1 \
+      || die "gsc failed while compiling module $module_ref; see $logs_dir/gsc-modules.log"
+    gambit_c_files="$gambit_c_files $target_file"
+  }
+
+  compile_gambit_module \
+    agent-scheme/version \
+    "$scheme_dir/agent-scheme/version.sld" \
+    "$src_dir/agent-scheme/version.c"
+  compile_gambit_module \
+    agent-scheme/reader \
+    "$scheme_dir/agent-scheme/reader.sld" \
+    "$src_dir/agent-scheme/reader.c"
+  compile_gambit_module \
+    agent-scheme/runtime \
+    "$scheme_dir/agent-scheme/runtime.sld" \
+    "$src_dir/agent-scheme/runtime.c"
+  compile_gambit_module \
+    agent-scheme/base \
+    "$scheme_dir/agent-scheme/base.sld" \
+    "$src_dir/agent-scheme/base.c"
+  compile_gambit_module \
+    agent-scheme/library \
+    "$scheme_dir/agent-scheme/library.sld" \
+    "$src_dir/agent-scheme/library.c"
+  compile_gambit_module \
+    agent-scheme/result \
+    "$scheme_dir/agent-scheme/result.sld" \
+    "$src_dir/agent-scheme/result.c"
+  compile_gambit_module \
+    agent-scheme/macro \
+    "$scheme_dir/agent-scheme/macro.sld" \
+    "$src_dir/agent-scheme/macro.c"
+  compile_gambit_module \
+    agent-scheme/approval \
+    "$scheme_dir/agent-scheme/approval.sld" \
+    "$src_dir/agent-scheme/approval.c"
+  compile_gambit_module \
+    agent-scheme/context \
+    "$scheme_dir/agent-scheme/context.sld" \
+    "$src_dir/agent-scheme/context.c"
+  compile_gambit_module \
+    agent-scheme/helper \
+    "$scheme_dir/agent-scheme/helper.sld" \
+    "$src_dir/agent-scheme/helper.c"
+  compile_gambit_module \
+    agent-scheme/job \
+    "$scheme_dir/agent-scheme/job.sld" \
+    "$src_dir/agent-scheme/job.c"
+  compile_gambit_module \
+    agent-scheme/memory \
+    "$scheme_dir/agent-scheme/memory.sld" \
+    "$src_dir/agent-scheme/memory.c"
+  compile_gambit_module \
+    agent-scheme/plan \
+    "$scheme_dir/agent-scheme/plan.sld" \
+    "$src_dir/agent-scheme/plan.c"
+  compile_gambit_module \
+    agent-scheme/redaction \
+    "$scheme_dir/agent-scheme/redaction.sld" \
+    "$src_dir/agent-scheme/redaction.c"
+  compile_gambit_module \
+    agent-scheme/session \
+    "$scheme_dir/agent-scheme/session.sld" \
+    "$src_dir/agent-scheme/session.c"
+  compile_gambit_module \
+    agent/task \
+    "$scheme_dir/agent/task.sld" \
+    "$src_dir/agent/task.c"
+  compile_gambit_module \
+    agent/transcript \
+    "$scheme_dir/agent/transcript.sld" \
+    "$src_dir/agent/transcript.c"
+  compile_gambit_module \
+    agent-scheme/interpreter \
+    "$scheme_dir/agent-scheme/interpreter.sld" \
+    "$src_dir/agent-scheme/interpreter.c"
+  compile_gambit_module \
+    agent-scheme/eval \
+    "$scheme_dir/agent-scheme/eval.sld" \
+    "$src_dir/agent-scheme/eval.c"
+
+  "$gsc" -:r7rs,search="$scheme_dir" \
+    -c -o "$main_c" "$main_file" \
+    >>"$logs_dir/gsc-modules.log" 2>&1 \
+    || die "gsc failed while compiling the Gambit main program; see $logs_dir/gsc-modules.log"
+
+  # shellcheck disable=SC2086
+  "$gsc" -:r7rs,search="$scheme_dir" -exe -o "$runner" -nopreload $gambit_c_files "$main_c" \
+    >"$logs_dir/gsc-exe.log" 2>&1 \
+    || die "gsc -exe failed; see $logs_dir/gsc-exe.log"
+  compile_finished=$(date +%s)
+
+  [ -f "$runner" ] \
+    || die "gsc -exe did not create $runner; see $logs_dir/gsc-exe.log"
+  chmod +x "$runner"
+  cat > "$logs_dir/compile.log" <<EOF
+(agent-scheme-compile-timing
+  (compile-host gambit)
+  (compile-seconds $((compile_finished - compile_started))))
+EOF
+  run_smoke "$runner" "$smoke_log" "$version"
+
+  printf '%s\n' "$runner"
 }
 
 case "$compile_host" in

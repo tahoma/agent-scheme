@@ -15,6 +15,12 @@
   "Run the full portable R7RS suite with Gambit Scheme."
   (agent-scheme--scheme-host-run-suite 'gambit "gambit"))
 
+(ert-deftest agent-scheme-scheme-gambit-native-host-test-r7rs-suite ()
+  "Run the full portable R7RS suite with the Gambit native Agent Scheme runner."
+  (agent-scheme--scheme-host-run-suite
+   'gambit-native
+   "Gambit native Agent Scheme"))
+
 (ert-deftest agent-scheme-scheme-racket-host-test-r7rs-suite ()
   "Run the full portable R7RS suite with Racket's R7RS package."
   (agent-scheme--scheme-host-run-suite 'racket "racket"))
