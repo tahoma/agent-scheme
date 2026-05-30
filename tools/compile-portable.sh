@@ -333,7 +333,8 @@ write_gambit_main() {
 write_cyclone_main() {
   main_file=$1
 
-  write_native_r7rs_main_body > "$main_file"
+  write_native_r7rs_main_body |
+    sed '/(prefix (scheme r5rs)/d' > "$main_file"
 }
 
 generate_racket_collections() {
