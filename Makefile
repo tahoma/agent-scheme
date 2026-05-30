@@ -5,6 +5,8 @@ AGENT_SCHEME_RACKET ?= racket
 AGENT_SCHEME_RACO ?= raco
 AGENT_SCHEME_GAMBIT ?= gsi
 AGENT_SCHEME_GAMBIT_COMPILER ?= gsc
+AGENT_SCHEME_CYCLONE ?= icyc
+AGENT_SCHEME_CYCLONE_COMPILER ?= cyclone
 AGENT_SCHEME_TEST_RUNNER = $(EMACS) -Q --batch --load tests/agent-scheme-test-runner.el
 AGENT_SCHEME_TEST_ENV = $(if $(strip $(AGENT_SCHEME_TEST_TARGET_ROOT)),AGENT_SCHEME_TEST_TARGET_ROOT='$(AGENT_SCHEME_TEST_TARGET_ROOT)',)
 AGENT_SCHEME_TEST_RUNNER_COMMAND = $(AGENT_SCHEME_TEST_ENV) $(AGENT_SCHEME_TEST_RUNNER)
@@ -19,6 +21,7 @@ AGENT_SCHEME_PORTABLE_RACKET_TEST_SELECTOR ?= "^agent-scheme-scheme-racket-host-
 AGENT_SCHEME_PORTABLE_COMPILED_TEST_SELECTOR ?= "^agent-scheme-scheme-compiled-host-test-r7rs-suite$$"
 AGENT_SCHEME_PORTABLE_GUILE_TEST_SELECTOR ?= "^agent-scheme-scheme-guile-host-test-r7rs-suite$$"
 AGENT_SCHEME_PORTABLE_GAUCHE_TEST_SELECTOR ?= "^agent-scheme-scheme-gauche-host-test-r7rs-suite$$"
+AGENT_SCHEME_PORTABLE_CYCLONE_TEST_SELECTOR ?= "^agent-scheme-scheme-cyclone-host-test-r7rs-suite$$"
 AGENT_SCHEME_EMACS_HOSTED_TEST_SELECTOR ?= (not "agent-scheme-scheme-.*")
 AGENT_SCHEME_EMACS_CORE_TEST_SELECTOR ?= (or "agent-scheme-base.*" "agent-scheme-eval.*" "agent-scheme-interpreter-module.*" "agent-scheme-macro.*" "agent-scheme-reader.*" "agent-scheme-result.*" "agent-scheme-runtime.*")
 AGENT_SCHEME_EMACS_LIBRARY_TEST_SELECTOR ?= (or "agent-scheme-conformance.*" "agent-scheme-fixture.*" "agent-scheme-host-adapter-fixture.*" "agent-scheme-library.*" "agent-scheme-oracle.*")
@@ -37,7 +40,7 @@ AGENT_SCHEME_TEST_JOBS ?= $(words $(AGENT_SCHEME_TEST_SHARD_TARGETS))
 
 .DEFAULT_GOAL := help
 
-.PHONY: help clean clean-compile compile compile-elisp test test-portable test-portable-chibi test-portable-eval test-portable-rest test-portable-gambit test-portable-gambit-native test-portable-racket test-portable-compiled test-portable-guile test-portable-gauche test-emacs-hosted test-emacs-core test-emacs-library test-emacs-capabilities test-emacs-tools test-live-model-ci test-live-model conformance-oracle
+.PHONY: help clean clean-compile compile compile-elisp test test-portable test-portable-chibi test-portable-eval test-portable-rest test-portable-gambit test-portable-gambit-native test-portable-racket test-portable-compiled test-portable-guile test-portable-gauche test-portable-cyclone test-emacs-hosted test-emacs-core test-emacs-library test-emacs-capabilities test-emacs-tools test-live-model-ci test-live-model conformance-oracle
 
 help:
 	@printf '%s\n' 'Agent Scheme top-level actions:'
@@ -57,6 +60,7 @@ help:
 	@printf '  %-26s %s\n' 'test-portable-compiled' 'Build and run the compiled Agent Scheme full-suite host shard.'
 	@printf '  %-26s %s\n' 'test-portable-guile' 'Run the portable R7RS Guile full-suite host shard.'
 	@printf '  %-26s %s\n' 'test-portable-gauche' 'Run the portable R7RS Gauche full-suite host shard.'
+	@printf '  %-26s %s\n' 'test-portable-cyclone' 'Run the optional portable R7RS Cyclone interpreter host shard.'
 	@printf '  %-26s %s\n' 'test-emacs-hosted' 'Run all non-portable Emacs-hosted ERT tests.'
 	@printf '  %-26s %s\n' 'test-emacs-core' 'Run the Emacs-hosted core language/runtime shard.'
 	@printf '  %-26s %s\n' 'test-emacs-library' 'Run the Emacs-hosted library/conformance shard.'
@@ -86,6 +90,7 @@ help:
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_PORTABLE_COMPILED_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-compiled.'
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_PORTABLE_GUILE_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-guile.'
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_PORTABLE_GAUCHE_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-gauche.'
+	@printf '  %-50s %s\n' 'AGENT_SCHEME_PORTABLE_CYCLONE_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-cyclone.'
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_EMACS_HOSTED_TEST_SELECTOR=SEL' 'ERT selector used by make test-emacs-hosted.'
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_EMACS_CORE_TEST_SELECTOR=SEL' 'ERT selector used by make test-emacs-core.'
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_EMACS_LIBRARY_TEST_SELECTOR=SEL' 'ERT selector used by make test-emacs-library.'
@@ -104,6 +109,8 @@ help:
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_CHICKEN=csi' 'Optional CHICKEN command for oracle runs with the r7rs egg.'
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_GAMBIT=gsi' 'Optional Gambit command for oracle runs and compile checks.'
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_GAMBIT_COMPILER=gsc' 'Optional Gambit compiler command for compile checks.'
+	@printf '  %-50s %s\n' 'AGENT_SCHEME_CYCLONE=icyc' 'Optional Cyclone interpreter command for oracle runs and portable checks.'
+	@printf '  %-50s %s\n' 'AGENT_SCHEME_CYCLONE_COMPILER=cyclone' 'Optional Cyclone compiler command for future compile probes.'
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_GAMBIT_NATIVE=agent-scheme' 'Optional Gambit-native compiled runner for tests.'
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_ORACLE_REFERENCES=a,b' 'Optional comma-separated oracle reference filter.'
 	@printf '  %-50s %s\n' 'AGENT_SCHEME_ORACLE_STATUSES=a,b' 'Optional comma-separated oracle report status filter.'
@@ -182,6 +189,9 @@ test-portable-guile:
 test-portable-gauche:
 	AGENT_SCHEME_TEST_SELECTOR='$(AGENT_SCHEME_PORTABLE_GAUCHE_TEST_SELECTOR)' $(AGENT_SCHEME_TEST_RUNNER_COMMAND)
 
+test-portable-cyclone:
+	AGENT_SCHEME_TEST_SELECTOR='$(AGENT_SCHEME_PORTABLE_CYCLONE_TEST_SELECTOR)' $(AGENT_SCHEME_TEST_RUNNER_COMMAND)
+
 ifneq ($(filter environment command line override,$(origin AGENT_SCHEME_EMACS_HOSTED_TEST_SELECTOR)),)
 test-emacs-hosted:
 	AGENT_SCHEME_TEST_SELECTOR='$(AGENT_SCHEME_EMACS_HOSTED_TEST_SELECTOR)' $(AGENT_SCHEME_TEST_RUNNER_COMMAND)
@@ -209,4 +219,4 @@ test-live-model:
 	AGENT_SCHEME_LIVE_MODEL_TEST=1 AGENT_SCHEME_LIVE_MODEL_MATRIX=1 AGENT_SCHEME_TEST_SELECTOR='$(AGENT_SCHEME_LIVE_MODEL_SELECTOR)' $(AGENT_SCHEME_TEST_RUNNER_COMMAND)
 
 conformance-oracle:
-	$(EMACS) -Q --batch -L lisp --eval "(require 'agent-scheme-oracle)" --eval "(agent-scheme-oracle-batch-main)"
+	$(EMACS) -Q --batch -L lisp --eval "(setq load-prefer-newer t)" --eval "(require 'agent-scheme-oracle)" --eval "(agent-scheme-oracle-batch-main)"

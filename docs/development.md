@@ -25,6 +25,9 @@ Optional but useful:
   install the egg with `chicken-install r7rs`
 - Gambit Scheme, `gsi` and `gsc`, for developer oracle comparisons and future
   compile-path checks; Homebrew packages it as `gambit-scheme`
+- Cyclone Scheme, `icyc` and `cyclone`, for tertiary R7RS host checks and
+  future compile-path investigation; upstream documents Homebrew tap, Docker,
+  distribution package, and source bootstrap install paths
 - ShellCheck or other local lint tools for future scripts
 
 ## GitHub Access
@@ -210,21 +213,25 @@ make conformance-oracle
 ```
 
 The default reference adapters are Chibi Scheme and Sagittarius. Gauche, Guile,
-Racket, CHICKEN, and Gambit remain opt-in comparison adapters so contributors
-can inspect a wider implementation matrix before changing defaults. The runner
-uses `AGENT_SCHEME_CHIBI`, `AGENT_SCHEME_GAUCHE`, `AGENT_SCHEME_GUILE`,
-`AGENT_SCHEME_SAGITTARIUS`, `AGENT_SCHEME_RACKET`, `AGENT_SCHEME_CHICKEN`,
-and `AGENT_SCHEME_GAMBIT` when set, otherwise it searches for `chibi-scheme`,
-`gosh`, `guile`, `sagittarius`, `racket`, `csi`, and `gsi` on `PATH`. The
-Racket adapter requires Racket's separate `r7rs` package and wraps generated
-fixture programs with `#lang r7rs`. The CHICKEN adapter requires the `r7rs`
-egg and invokes `csi` with `-q -R r7rs -s`. The Gambit adapter invokes `gsi`
-with `-:r7rs,search=$REPO/scheme`, where `$REPO/scheme` is the repository's
-portable R7RS library directory. Each adapter writes eligible fixtures to a
-temporary R7RS program and invokes the reference implementation with that file
-as the command-line program argument. Missing reference implementations are
-reported as `unsupported-reference` in Scheme-readable oracle reports and do
-not affect the default `make test` command.
+Racket, CHICKEN, Gambit, and Cyclone remain opt-in comparison adapters so
+contributors can inspect a wider implementation matrix before changing
+defaults. The runner uses `AGENT_SCHEME_CHIBI`, `AGENT_SCHEME_GAUCHE`,
+`AGENT_SCHEME_GUILE`, `AGENT_SCHEME_SAGITTARIUS`, `AGENT_SCHEME_RACKET`,
+`AGENT_SCHEME_CHICKEN`, `AGENT_SCHEME_GAMBIT`, and `AGENT_SCHEME_CYCLONE`
+when set, otherwise it searches for `chibi-scheme`, `gosh`, `guile`,
+`sagittarius`, `racket`, `csi`, `gsi`, and `icyc` on `PATH`. The Racket
+adapter requires Racket's separate `r7rs` package and wraps generated fixture
+programs with `#lang r7rs`. The CHICKEN adapter requires the `r7rs` egg and
+invokes `csi` with `-q -R r7rs -s`. The Gambit adapter invokes `gsi` with
+`-:r7rs,search=$REPO/scheme`, where `$REPO/scheme` is the repository's portable
+R7RS library directory. The Cyclone adapter invokes `icyc -I $REPO/scheme -s`
+so the interpreter loads the generated oracle program as a script while seeing
+the same local library root used by portable host checks. Each adapter writes
+eligible fixtures to a temporary R7RS program and invokes the reference
+implementation with that file as the command-line program argument. Missing
+reference implementations are reported as `unsupported-reference` in
+Scheme-readable oracle reports and do not affect the default `make test`
+command.
 
 | Adapter | Role | Environment override | Discovered command | Notes |
 | --- | --- | --- | --- | --- |
@@ -235,12 +242,23 @@ not affect the default `make test` command.
 | Racket | developer-only comparison | `AGENT_SCHEME_RACKET` | `racket` | Requires the Racket `r7rs` package; generated programs are wrapped with `#lang r7rs`. |
 | CHICKEN Scheme | developer-only comparison | `AGENT_SCHEME_CHICKEN` | `csi` | Requires the `r7rs` egg; runs with `-q -R r7rs -s`. |
 | Gambit Scheme | developer-only comparison | `AGENT_SCHEME_GAMBIT` | `gsi` | Homebrew formula `gambit-scheme`; runs with `-:r7rs,search=$REPO/scheme`. |
+| Cyclone Scheme | tertiary comparison | `AGENT_SCHEME_CYCLONE` | `icyc` | R7RS mode is the implementation default; runs generated programs with `-I $REPO/scheme -s`. |
 
 The Gambit compile path uses the same R7RS mode and library search stance as
 the interpreter shard. Set `AGENT_SCHEME_GAMBIT_COMPILER` to choose a specific
 `gsc` executable; otherwise compile checks discover `gsc` on `PATH`. The
 oracle runner does not invoke `gsc`, but documenting both tools keeps
 interpreter and compiler setup aligned.
+
+Cyclone has a separate Scheme-to-C compiler command, `cyclone`, and an
+interpreter command, `icyc`. Set `AGENT_SCHEME_CYCLONE_COMPILER` to choose a
+specific `cyclone` executable for future compile-path probes; issue #274 keeps
+Cyclone out of the default `make compile` host list while recording that the
+compiler path is plausible enough to split into a later focused target. Upstream
+installation guidance includes Docker, a Homebrew tap named
+`cyclone-scheme/cyclone`, Arch AUR and Gentoo packages, and source bootstrap via
+`cyclone-bootstrap`; on machines without a package path, bootstrap/source
+installation is expected before local checks can run.
 
 Oracle reports identify each fixture by case id and classify the comparison as
 `portable-agree`, `implementation-variant`, `agent-mismatch`,
@@ -281,7 +299,7 @@ To compare a chosen reference implementation set, pass a comma-separated
 reference filter:
 
 ```sh
-AGENT_SCHEME_ORACLE_REFERENCES='chibi,gauche,guile,sagittarius,racket,chicken,gambit' make conformance-oracle
+AGENT_SCHEME_ORACLE_REFERENCES='chibi,gauche,guile,sagittarius,racket,chicken,gambit,cyclone' make conformance-oracle
 ```
 
 To print a compact status count before the report stream:
@@ -391,10 +409,13 @@ portable R7RS host shards. CI runs full portable-suite host shards under
 Gambit, the Gambit-native compiled Agent Scheme runner, Racket with its `r7rs`
 package, the Racket-built compiled Agent Scheme runner, Guile, and Gauche.
 Optional Chibi shard targets remain available for manual timing and
-compatibility checks:
+compatibility checks. Cyclone is also available as an explicit tertiary
+interpreter shard when `icyc` is installed, but it is not part of the default
+local or CI shard set:
 
 ```sh
 AGENT_SCHEME_CHIBI=chibi-scheme make test-portable-chibi
+AGENT_SCHEME_CYCLONE=icyc make test-portable-cyclone
 ```
 
 The full-suite host shards run the same portable Scheme test files so their

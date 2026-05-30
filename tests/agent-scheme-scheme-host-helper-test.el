@@ -33,6 +33,20 @@
       "scheme"
       "tests/scheme/agent-scheme-reader-test.scm"))))
 
+(ert-deftest agent-scheme-portable-host-helper-test-builds-cyclone-arguments ()
+  "Build Cyclone interpreter arguments with the local library path."
+  (should
+   (equal
+    (agent-scheme--scheme-host-arguments
+     'cyclone
+     "scheme"
+     "tests/scheme/agent-scheme-reader-test.scm")
+    '("-I" "scheme" "-s" "tests/scheme/agent-scheme-reader-test.scm")))
+  (should
+   (equal
+    (agent-scheme--scheme-host-probe-arguments 'cyclone "scheme")
+    '("-I" "scheme" "-p" "(+ 1 2)"))))
+
 (ert-deftest agent-scheme-portable-host-helper-test-builds-compiled-arguments ()
   "Build compiled Agent Scheme runner arguments for R7RS test files."
   (should

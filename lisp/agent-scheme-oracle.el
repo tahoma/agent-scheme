@@ -84,6 +84,20 @@ AGENT_SCHEME_GAMBIT_COMPILER and then PATH for gsc."
   :type '(choice (const :tag "Discover automatically" nil) string)
   :group 'agent-scheme-oracle)
 
+(defcustom agent-scheme-oracle-cyclone-command nil
+  "Optional Cyclone Scheme interpreter executable for oracle runs.
+When nil, `agent-scheme-oracle-cyclone-reference' consults
+AGENT_SCHEME_CYCLONE and then PATH for icyc."
+  :type '(choice (const :tag "Discover automatically" nil) string)
+  :group 'agent-scheme-oracle)
+
+(defcustom agent-scheme-oracle-cyclone-compiler-command nil
+  "Optional Cyclone Scheme compiler executable for compile checks.
+When nil, `agent-scheme-oracle-cyclone-compiler-executable' consults
+AGENT_SCHEME_CYCLONE_COMPILER and then PATH for cyclone."
+  :type '(choice (const :tag "Discover automatically" nil) string)
+  :group 'agent-scheme-oracle)
+
 (defconst agent-scheme-oracle--policy-gated-libraries
   '((scheme file)
     (scheme load)
@@ -102,7 +116,7 @@ AGENT_SCHEME_GAMBIT_COMPILER and then PATH for gsc."
   "Stable oracle report status order.")
 
 (defconst agent-scheme-oracle-reference-names
-  '(chibi gauche guile sagittarius racket chicken gambit)
+  '(chibi gauche guile sagittarius racket chicken gambit cyclone)
   "Stable oracle reference adapter name order.")
 
 (cl-defstruct (agent-scheme-oracle-reference
@@ -785,6 +799,17 @@ When STATUSES is nil, return REPORTS unchanged."
                    '("-e" "(import (scheme base) (scheme write)) (write (+ 1 2)) (newline)"))))
         (file-error nil)))))
 
+(defun agent-scheme-oracle--cyclone-library-search-directory ()
+  "Return the repository Scheme library directory for Cyclone."
+  (expand-file-name "scheme" agent-scheme-oracle-root-directory))
+
+(defun agent-scheme-oracle--cyclone-r7rs-arguments ()
+  "Return Cyclone interpreter arguments for local library search."
+  (list
+   "-I"
+   (agent-scheme-oracle--cyclone-library-search-directory)
+   "-s"))
+
 ;;;###autoload
 (defun agent-scheme-oracle-chibi-reference ()
   "Return the Chibi Scheme reference adapter."
@@ -875,6 +900,26 @@ When STATUSES is nil, return REPORTS unchanged."
     "gsi")
    :arguments (agent-scheme-oracle--gambit-r7rs-arguments)))
 
+;;;###autoload
+(defun agent-scheme-oracle-cyclone-compiler-executable ()
+  "Return the configured or discovered Cyclone compiler executable."
+  (agent-scheme-oracle--configured-command
+   agent-scheme-oracle-cyclone-compiler-command
+   "AGENT_SCHEME_CYCLONE_COMPILER"
+   "cyclone"))
+
+;;;###autoload
+(defun agent-scheme-oracle-cyclone-reference ()
+  "Return the Cyclone Scheme interpreter reference adapter."
+  (agent-scheme-oracle-reference
+   :name 'cyclone
+   :command
+   (agent-scheme-oracle--configured-command
+    agent-scheme-oracle-cyclone-command
+    "AGENT_SCHEME_CYCLONE"
+    "icyc")
+   :arguments (agent-scheme-oracle--cyclone-r7rs-arguments)))
+
 (defun agent-scheme-oracle--reference-builder (name)
   "Return the reference builder function for NAME."
   (pcase name
@@ -885,6 +930,7 @@ When STATUSES is nil, return REPORTS unchanged."
     ('racket #'agent-scheme-oracle-racket-reference)
     ('chicken #'agent-scheme-oracle-chicken-reference)
     ('gambit #'agent-scheme-oracle-gambit-reference)
+    ('cyclone #'agent-scheme-oracle-cyclone-reference)
     (_ (error "Unknown oracle reference: %S" name))))
 
 ;;;###autoload

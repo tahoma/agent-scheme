@@ -44,7 +44,7 @@
               (map exact-integer? (cdr version))
               (map (lambda (component) (>= component 0))
                    (cdr version))))")
-    "((agent-scheme-version 0 15 2) (#t #t #t) (#t #t #t))")))
+    "((agent-scheme-version 0 15 3) (#t #t #t) (#t #t #t))")))
 
 (ert-deftest agent-scheme-reflect-test-simple-string-docstrings ()
   "Expose simple procedure docstrings through `(agent reflect)'."
@@ -209,7 +209,7 @@
           (examples . (((source . \"(rich cfg)\")
                         (result . (session cfg)))))
           (see-also . (current-context session-snapshot))
-          (since . (agent-scheme-version 0 15 2))
+          (since . (agent-scheme-version 0 15 3))
           (deprecated . #f)
           (stability . experimental)
           (authority-review . \"local only\"))
@@ -277,7 +277,7 @@
             (final-rich)
             (metadata-fields 'final-rich))"
      '(:docstring-retention full))
-    "((session cfg) \"Create an Agent Scheme session from CONFIG.\\nThe session is represented as a datum.\" (config) \"Open an Agent Scheme session.\" ((config . \"Session configuration datum.\")) \"A session record.\" (pure) (((source . \"(rich cfg)\") (result session cfg))) (current-context session-snapshot) (agent-scheme-version 0 15 2) #f experimental \"local only\" \"Line one.\\nLine two.\\nLine three.\" (x) (((source . \"first\")) ((source . \"second\"))) (alpha beta) ((tag . kept)) \"Valid documentation.\" \"First result.\" #f ((arguments (x))) ((arguments (x))) ((arguments (x))) ((head . \"Required argument.\") (tail . \"Rest arguments.\")) #((returns . \"ordinary result\")) ((arguments ())))")))
+    "((session cfg) \"Create an Agent Scheme session from CONFIG.\\nThe session is represented as a datum.\" (config) \"Open an Agent Scheme session.\" ((config . \"Session configuration datum.\")) \"A session record.\" (pure) (((source . \"(rich cfg)\") (result session cfg))) (current-context session-snapshot) (agent-scheme-version 0 15 3) #f experimental \"local only\" \"Line one.\\nLine two.\\nLine three.\" (x) (((source . \"first\")) ((source . \"second\"))) (alpha beta) ((tag . kept)) \"Valid documentation.\" \"First result.\" #f ((arguments (x))) ((arguments (x))) ((arguments (x))) ((head . \"Required argument.\") (tail . \"Rest arguments.\")) #((returns . \"ordinary result\")) ((arguments ())))")))
 
 (ert-deftest agent-scheme-reflect-test-docstring-retention-options ()
   "Allow callers to step down or disable procedure body doc retention."

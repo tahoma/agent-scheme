@@ -57,6 +57,8 @@
      (agent-scheme--scheme-host-configured-command "AGENT_SCHEME_GAUCHE" "gosh"))
     ('guile
      (agent-scheme--scheme-host-configured-command "AGENT_SCHEME_GUILE" "guile"))
+    ('cyclone
+     (agent-scheme--scheme-host-configured-command "AGENT_SCHEME_CYCLONE" "icyc"))
     ('compiled
      (or (agent-scheme--scheme-host-configured-command
           "AGENT_SCHEME_COMPILED"
@@ -106,6 +108,8 @@ RACKET-COLLECTION-ROOT is required when HOST is `racket'."
      (list "-I" library-directory "-r7" test-file))
     ('guile
      (list "--no-auto-compile" "--r7rs" "-L" library-directory test-file))
+    ('cyclone
+     (list "-I" library-directory "-s" test-file))
     ('compiled
      (ignore library-directory racket-collection-root)
      (list "--script" test-file))
@@ -147,6 +151,8 @@ RACKET-COLLECTION-ROOT is accepted for API symmetry with test arguments."
       library-directory
       "-c"
       "(import (scheme base) (scheme write)) (write (+ 1 2)) (newline)"))
+    ('cyclone
+     (list "-I" library-directory "-p" "(+ 1 2)"))
     ('compiled
      (ignore library-directory racket-collection-root)
      (list "--eval" "(+ 1 2)"))

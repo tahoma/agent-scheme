@@ -341,6 +341,27 @@
                  (expand-file-name "scheme"
                                    agent-scheme-oracle-root-directory))))))))
 
+(ert-deftest agent-scheme-oracle-test-cyclone-reference-uses-environment ()
+  "Build the Cyclone interpreter adapter from AGENT_SCHEME_CYCLONE."
+  (let ((process-environment
+         (cons "AGENT_SCHEME_CYCLONE=/example/bin/icyc"
+               process-environment))
+        (agent-scheme-oracle-cyclone-command nil)
+        (agent-scheme-oracle-root-directory
+         (file-name-as-directory (expand-file-name "repo" temporary-file-directory))))
+    (let ((implementation (agent-scheme-oracle-cyclone-reference)))
+      (should (eq (agent-scheme-oracle-reference-name implementation)
+                  'cyclone))
+      (should (equal (agent-scheme-oracle-reference-command implementation)
+                     "/example/bin/icyc"))
+      (should
+       (equal
+        (agent-scheme-oracle-reference-arguments implementation)
+        (list
+         "-I"
+         (expand-file-name "scheme" agent-scheme-oracle-root-directory)
+         "-s"))))))
+
 (ert-deftest agent-scheme-oracle-test-gambit-compiler-uses-environment ()
   "Discover the Gambit compiler path from AGENT_SCHEME_GAMBIT_COMPILER."
   (let ((process-environment
@@ -351,6 +372,16 @@
      (equal (agent-scheme-oracle-gambit-compiler-executable)
             "/example/bin/gsc"))))
 
+(ert-deftest agent-scheme-oracle-test-cyclone-compiler-uses-environment ()
+  "Discover the Cyclone compiler path from AGENT_SCHEME_CYCLONE_COMPILER."
+  (let ((process-environment
+         (cons "AGENT_SCHEME_CYCLONE_COMPILER=/example/bin/cyclone"
+               process-environment))
+        (agent-scheme-oracle-cyclone-compiler-command nil))
+    (should
+     (equal (agent-scheme-oracle-cyclone-compiler-executable)
+            "/example/bin/cyclone"))))
+
 (ert-deftest agent-scheme-oracle-test-default-references-use-chibi-sagittarius ()
   "Use Chibi and Sagittarius as the default oracle reference set."
   (should
@@ -358,19 +389,27 @@
                   (agent-scheme-oracle-default-references))
           '(chibi sagittarius))))
 
-(ert-deftest agent-scheme-oracle-test-all-references-include-seven-candidates ()
+(ert-deftest agent-scheme-oracle-test-all-references-include-cyclone ()
+  "Keep Cyclone selectable without making it a default oracle reference."
+  (should (memq 'cyclone agent-scheme-oracle-reference-names))
+  (should
+   (equal (mapcar #'agent-scheme-oracle-reference-name
+                  (agent-scheme-oracle-selected-references '(cyclone)))
+          '(cyclone))))
+
+(ert-deftest agent-scheme-oracle-test-all-references-include-eight-candidates ()
   "Expose the full candidate set separately from defaults."
   (should
    (equal (mapcar #'agent-scheme-oracle-reference-name
                   (agent-scheme-oracle-all-references))
-          '(chibi gauche guile sagittarius racket chicken gambit))))
+          '(chibi gauche guile sagittarius racket chicken gambit cyclone))))
 
 (ert-deftest agent-scheme-oracle-test-parses-reference-filter ()
   "Parse comma-separated oracle reference names from batch environment text."
   (should
    (equal
-    (agent-scheme-oracle-parse-reference-filter "racket, gambit")
-    '(racket gambit)))
+    (agent-scheme-oracle-parse-reference-filter "racket, gambit, cyclone")
+    '(racket gambit cyclone)))
   (should-not (agent-scheme-oracle-parse-reference-filter nil))
   (should-error
    (agent-scheme-oracle-parse-reference-filter "unknown")
