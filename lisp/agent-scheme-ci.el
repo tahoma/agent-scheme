@@ -48,8 +48,9 @@
     ("Portable R7RS Chibi non-evaluator subset" . 2)
     ("Portable R7RS Gambit full suite" . 3)
     ("Portable R7RS Racket full suite" . 4)
-    ("Portable R7RS Guile full suite" . 5)
-    ("Portable R7RS Gauche full suite" . 6)
+    ("Portable R7RS Compiled Agent Scheme full suite" . 5)
+    ("Portable R7RS Guile full suite" . 6)
+    ("Portable R7RS Gauche full suite" . 7)
     ("Portable Chibi-backed eval" . 10)
     ("Portable Chibi-backed rest" . 11)
     ("Portable Chibi-backed ERT" . 11)
@@ -64,8 +65,9 @@
   '(("Chibi" . 0)
     ("Gambit" . 1)
     ("Racket" . 2)
-    ("Guile" . 3)
-    ("Gauche" . 4))
+    ("Compiled Agent Scheme" . 3)
+    ("Guile" . 4)
+    ("Gauche" . 5))
   "Preferred display order for portable host timing summaries.")
 
 (defconst agent-scheme-ci--source-metadata-order

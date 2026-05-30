@@ -290,6 +290,68 @@ To print a compact status count before the report stream:
 AGENT_SCHEME_ORACLE_SUMMARY=1 make conformance-oracle
 ```
 
+## Host-Compiled Portable Executables
+
+`make compile` builds executable artifacts from the portable R7RS runtime by
+using external Scheme host compiler toolchains. This path packages the current
+portable implementation through mature host compilers; it is not the future
+Agent Scheme LLIR/native compiler backend tracked by #115 through #121.
+
+The default compile host is Racket CS:
+
+```sh
+make compile
+```
+
+Select a host explicitly with `AGENT_SCHEME_COMPILE_HOST`:
+
+```sh
+AGENT_SCHEME_COMPILE_HOST=racket make compile
+AGENT_SCHEME_COMPILE_HOST=gambit make compile
+```
+
+The Racket path requires both `racket` and `raco`; override discovery with:
+
+```sh
+AGENT_SCHEME_RACKET=/path/to/racket AGENT_SCHEME_RACO=/path/to/raco make compile
+```
+
+The Gambit selection is reserved for the follow-up executable packaging issue
+and fails with setup guidance until that child path lands. Its command knobs
+are already named so the interface stays stable:
+
+```sh
+AGENT_SCHEME_GAMBIT=gsi AGENT_SCHEME_GAMBIT_COMPILER=gsc AGENT_SCHEME_COMPILE_HOST=gambit make compile
+```
+
+Generated outputs stay under `build/compile/<host>/` by default:
+
+- `bin/agent-scheme`: the host-compiled executable artifact
+- `src/`: generated host wrapper sources
+- `collections/`: generated host dependency wrappers when a host needs them
+- `manifest.scm`: Scheme-readable artifact manifest
+- `logs/`: compiler and smoke-test logs
+
+Use `AGENT_SCHEME_COMPILE_BUILD_DIR` to place those generated files elsewhere:
+
+```sh
+AGENT_SCHEME_COMPILE_BUILD_DIR=/tmp/agent-scheme-compile make compile
+```
+
+The build runs smoke commands against the executable before reporting success:
+
+```sh
+build/compile/racket/bin/agent-scheme --version
+build/compile/racket/bin/agent-scheme --eval '(+ 1 2)'
+build/compile/racket/bin/agent-scheme --script tests/scheme/agent-scheme-reader-test.scm
+```
+
+Remove generated compile artifacts with:
+
+```sh
+make clean-compile
+```
+
 ## Verification
 
 The default local verification command is:
@@ -313,6 +375,7 @@ failures stay visible by architectural path:
 ```sh
 AGENT_SCHEME_GAMBIT=gsi make test-portable-gambit
 AGENT_SCHEME_RACKET=racket make test-portable-racket
+make test-portable-compiled
 AGENT_SCHEME_GUILE=guile make test-portable-guile
 AGENT_SCHEME_GAUCHE=gosh make test-portable-gauche
 make test-emacs-core
@@ -324,8 +387,9 @@ make test-emacs-tools
 `make test` runs those shard targets in parallel by default. `make
 test-portable` remains available as the local aggregate for the default
 portable R7RS host shards. CI runs full portable-suite host shards under
-Gambit, Racket with its `r7rs` package, Guile, and Gauche. Optional Chibi shard
-targets remain available for manual timing and compatibility checks:
+Gambit, Racket with its `r7rs` package, the Racket-built compiled Agent Scheme
+runner, Guile, and Gauche. Optional Chibi shard targets remain available for
+manual timing and compatibility checks:
 
 ```sh
 AGENT_SCHEME_CHIBI=chibi-scheme make test-portable-chibi
@@ -336,6 +400,8 @@ timing rows compare host behavior rather than different test scopes. The Racket
 bridge generates
 temporary `#lang r7rs` collection wrappers for checked-in `.sld` libraries
 because Racket's R7RS package resolves imports as Racket collection modules.
+The compiled host shard runs `make compile` first, then executes that same
+full-suite file list through `build/compile/racket/bin/agent-scheme --script`.
 CI builds and caches Gambit 4.9.7 because Ubuntu 24.04's `gambc` package is
 4.9.3 and does not accept the `-:r7rs` runtime option needed for the portable
 library search path. The extra R7RS host matrix runs inside an Ubuntu 26.04

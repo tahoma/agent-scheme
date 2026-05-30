@@ -33,6 +33,35 @@
       "scheme"
       "tests/scheme/agent-scheme-reader-test.scm"))))
 
+(ert-deftest agent-scheme-portable-host-helper-test-builds-compiled-arguments ()
+  "Build compiled Agent Scheme runner arguments for R7RS test files."
+  (should
+   (equal
+    (agent-scheme--scheme-host-arguments
+     'compiled
+     "scheme"
+     "tests/scheme/agent-scheme-reader-test.scm")
+    '("--script" "tests/scheme/agent-scheme-reader-test.scm")))
+  (should
+   (equal
+    (agent-scheme--scheme-host-probe-arguments 'compiled "scheme")
+    '("--eval" "(+ 1 2)"))))
+
+(ert-deftest agent-scheme-portable-host-helper-test-expands-compiled-runner-path ()
+  "Expand repository-relative configured compiled runner paths."
+  (let ((prior (getenv "AGENT_SCHEME_COMPILED"))
+        (agent-scheme--test-root "/tmp/agent-scheme-root/"))
+    (unwind-protect
+        (progn
+          (setenv
+           "AGENT_SCHEME_COMPILED"
+           "build/compile/racket/bin/agent-scheme")
+          (should
+           (equal
+            (agent-scheme--scheme-host-command 'compiled)
+            "/tmp/agent-scheme-root/build/compile/racket/bin/agent-scheme")))
+      (setenv "AGENT_SCHEME_COMPILED" prior))))
+
 (ert-deftest agent-scheme-portable-host-helper-test-builds-racket-collection ()
   "Generate Racket collection wrappers from portable `.sld' libraries."
   (let* ((source-root (make-temp-file "agent-scheme-racket-source-" t))

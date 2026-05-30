@@ -17,12 +17,23 @@
     "tests/scheme/agent-scheme-eval-test.scm")
   "Portable Scheme test files exercised by full-suite host shards.")
 
+(defun agent-scheme--scheme-host-normalize-command (command)
+  "Return COMMAND with repository-relative executable paths expanded."
+  (if (and (string-match-p "/" command)
+           (not (file-name-absolute-p command)))
+      (expand-file-name
+       command
+       (if (boundp 'agent-scheme--test-root)
+           agent-scheme--test-root
+         default-directory))
+    command))
+
 (defun agent-scheme--scheme-host-configured-command (env-name executable)
   "Return ENV-NAME's command or discovered EXECUTABLE."
   (let ((configured (getenv env-name)))
     (cond
      ((and configured (> (length configured) 0))
-      configured)
+      (agent-scheme--scheme-host-normalize-command configured))
      (t
       (executable-find executable)))))
 
@@ -37,6 +48,15 @@
      (agent-scheme--scheme-host-configured-command "AGENT_SCHEME_GAUCHE" "gosh"))
     ('guile
      (agent-scheme--scheme-host-configured-command "AGENT_SCHEME_GUILE" "guile"))
+    ('compiled
+     (or (agent-scheme--scheme-host-configured-command
+          "AGENT_SCHEME_COMPILED"
+          "agent-scheme")
+         (let ((runner
+                (expand-file-name
+                 "build/compile/racket/bin/agent-scheme"
+                 agent-scheme--test-root)))
+           (and (file-executable-p runner) runner))))
     (_
      (error "Unknown portable Scheme host: %S" host))))
 
@@ -74,6 +94,9 @@ RACKET-COLLECTION-ROOT is required when HOST is `racket'."
      (list "-I" library-directory "-r7" test-file))
     ('guile
      (list "--no-auto-compile" "--r7rs" "-L" library-directory test-file))
+    ('compiled
+     (ignore library-directory racket-collection-root)
+     (list "--script" test-file))
     (_
      (error "Unknown portable Scheme host: %S" host))))
 
@@ -109,6 +132,9 @@ RACKET-COLLECTION-ROOT is accepted for API symmetry with test arguments."
       library-directory
       "-c"
       "(import (scheme base) (scheme write)) (write (+ 1 2)) (newline)"))
+    ('compiled
+     (ignore library-directory racket-collection-root)
+     (list "--eval" "(+ 1 2)"))
     (_
      (error "Unknown portable Scheme host: %S" host))))
 
