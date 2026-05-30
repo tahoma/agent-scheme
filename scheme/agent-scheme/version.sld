@@ -11,4 +11,4 @@
   (begin
     ;; Define the canonical Agent Scheme version datum.
     (define agent-scheme-version-datum
-      '(agent-scheme-version 0 14 15))))
+      '(agent-scheme-version 0 15 1))))

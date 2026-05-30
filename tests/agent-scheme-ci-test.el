@@ -214,9 +214,20 @@
                                         :ert-seconds 12.0
                                         :wall-seconds 13.0
                                         :tests nil))
+         (portable-compiled-shard '(:name "Portable R7RS Compiled Agent Scheme full suite"
+                                          :selector "portable-compiled"
+                                          :ran 1
+                                          :expected 1
+                                          :unexpected 0
+                                          :skipped 0
+                                          :ert-seconds 10.0
+                                          :wall-seconds 11.0
+                                          :tests nil))
          (markdown
           (agent-scheme-ci-render-pr-markdown-summary
-           (list portable-racket-shard portable-gambit-shard)))
+           (list portable-compiled-shard
+                 portable-racket-shard
+                 portable-gambit-shard)))
          (above-fold (car (split-string markdown "\n<details>" t))))
     (should (string-match-p "## Portable Host Timing" above-fold))
     (should (string-match-p
@@ -224,6 +235,9 @@
              above-fold))
     (should (string-match-p
              "| Racket | full suite | 0 | 0 | 12\\.000s | 13\\.000s |"
+             above-fold))
+    (should (string-match-p
+             "| Compiled Agent Scheme | full suite | 0 | 0 | 10\\.000s | 11\\.000s |"
              above-fold))
     (should-not (string-match-p "Chibi is split" above-fold))
     (should-not (string-match-p "| Chibi |" above-fold))))
@@ -387,6 +401,11 @@
     (should (string-match-p
              "portable-\\${{ matrix.host.host }}-\\${{ matrix.source_metadata }}-docstrings-\\${{ matrix.docstring_retention }}\\.log"
              workflow))
+    (should (string-match-p "host: compiled" workflow))
+    (should (string-match-p "make_target: test-portable-compiled" workflow))
+    (should (string-match-p
+             "Portable R7RS Compiled Agent Scheme full suite"
+             workflow))
     (should (string-match-p
              "emacs-\\${{ matrix.shard.shard }}-\\${{ matrix.source_metadata }}-docstrings-\\${{ matrix.docstring_retention }}\\.log"
              workflow))))
@@ -429,6 +448,15 @@
                                         :ert-seconds 1.0
                                         :wall-seconds 1.0
                                         :tests nil))
+         (portable-compiled-shard '(:name "Portable R7RS Compiled Agent Scheme full suite"
+                                          :selector "portable-compiled"
+                                          :ran 1
+                                          :expected 1
+                                          :unexpected 0
+                                          :skipped 0
+                                          :ert-seconds 1.0
+                                          :wall-seconds 1.0
+                                          :tests nil))
          (portable-guile-shard '(:name "Portable R7RS Guile full suite"
                                        :selector "portable-guile"
                                        :ran 1
@@ -461,13 +489,14 @@
            (list tools-shard
                  portable-gauche-shard
                  portable-guile-shard
+                 portable-compiled-shard
                  portable-racket-shard
                  portable-gambit-shard
                  portable-rest-shard
                  portable-eval-shard))))
     (should
      (string-match-p
-      "| Portable R7RS Chibi evaluator subset |.*\n| Portable R7RS Chibi non-evaluator subset |.*\n| Portable R7RS Gambit full suite |.*\n| Portable R7RS Racket full suite |.*\n| Portable R7RS Guile full suite |.*\n| Portable R7RS Gauche full suite |.*\n| Emacs tools/docs/integration |"
+      "| Portable R7RS Chibi evaluator subset |.*\n| Portable R7RS Chibi non-evaluator subset |.*\n| Portable R7RS Gambit full suite |.*\n| Portable R7RS Racket full suite |.*\n| Portable R7RS Compiled Agent Scheme full suite |.*\n| Portable R7RS Guile full suite |.*\n| Portable R7RS Gauche full suite |.*\n| Emacs tools/docs/integration |"
       markdown))))
 
 (provide 'agent-scheme-ci-test)
