@@ -696,6 +696,20 @@ candidate; filed + scheduled = deferred to its slot** — so #375 (type-identity
 spike) is deliberately left unscheduled to keep it "do next." #377 merging is the
 housekeeping that greens the dependent references.
 
+## Everything placed in the roadmap
+
+Per the operator's "everything goes somewhere in the roadmap": **#375** placed at
+**0.15.7** — immediately after the design issue #376 (0.15.6), shifting **#378** to
+**0.15.8** (renumber noted on #378). The three parked issues placed in their
+natural homes: **#380** (thin-agent tier) → chunk **0.39 Orphans and Unloved
+Issues** (the honest catch-all for a parked, doesn't-fit-a-theme decision);
+**#381** (environment-reflection meta-capability) and **#382** (provenance trust
+residuals) → chunk **0.40 Capability Hardening Follow-ups** (exact thematic fit).
+So nothing is unscheduled now. Note this *does* defer the parked items (scheduled =
+deferred, per the prior convention) to their late chunks, which is the intent;
+#375 is scheduled at the *front* (0.15.7), so it stays the "do-next" pull despite
+now being on the map.
+
 ## Where it landed
 
 The judgment-call forks are resolved (see the design note's "Resolved direction").
