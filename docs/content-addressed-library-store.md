@@ -587,6 +587,59 @@ cannot simply ride a message. This needs a distributed object-capability protoco
 (marshalable reference/ticket redeemed by message; the real handle stays home).
 Tracked as Open question #7.
 
+## Cross-process capability delegation (distributed ocap)
+
+*Direction for Open question #7.* How does the managed inter-agent bridge carry
+**authority**, given handles are non-marshalable and nonces linear? Not by "the
+worker asks the orchestrator to act" — that reintroduces **identity-based**
+authorization (the holder must decide whether *this* worker may ask), which defeats
+the ocap property (possession of the reference *is* the authorization). The answer
+is a **distributed object-capability protocol**, CapTP/E lineage:
+
+- **Vats.** Each runtime (orchestrator, each worker) is a vat — an isolated heap
+  with its own capability context (our shared-nothing actor). Capabilities stay
+  local; the real handle never leaves its vat.
+- **Tickets.** To delegate, the holder mints a **marshalable, unforgeable
+  reference** — `(capability-ref <vat> <ticket-id> <scope>)` — that carries *no*
+  authority by itself; it is a claim redeemable only at the issuing vat. The
+  holder keeps an **export table**: `ticket-id → (real handle, scope,
+  lease/nonce-count)`.
+- **Redemption by message.** The worker sends `(invoke <ticket-id> <op> args…)`;
+  the holder validates (exists, unspent, within lease, scope permits) and performs
+  the gated op **in its own context — real handle, monitor, audit** — returning the
+  result. The effect runs at the holder; the membrane stays intact across the
+  boundary.
+
+Two tensions resolve here:
+
+1. **Non-marshalable handle vs. delegation** — the handle stays home; the *ticket*
+   (a reference) crosses as ordinary structural data. The proxy respects the
+   invariant instead of breaking it.
+2. **Linear nonce vs. copyable message** — the ticket (token) is freely copyable
+   data; **linearity is enforced at the holder by atomic consume-on-redemption**
+   (a second redemption fails because the entry was consumed). So no linear wire
+   types are needed; locally a nonce is a linear handle, remotely it is a copyable
+   token with server-side single-use.
+
+And it names a principle: **authority is the dual of identity.** Content-addressing
+is for things you *want* anyone with the content to have (code, data, contexts);
+a capability ticket must be **unforgeable — deliberately not derivable from its
+content** — because possession must equal authority. So capabilities sit *outside*
+the content-addressing scheme by design; this is why handles are both
+non-marshalable and non-content-addressed.
+
+Supporting shape: **two delegation paths** — spawn-time local provisioning (real
+handles for the worker's job description; fast, heavy use) vs. runtime ticket
+delegation (ad-hoc, scoped, transient; favors coarse-grained authority since each
+redemption is a round-trip, which aligns with leases/nonces). **Promise
+pipelining** (E/CapTP) hides round-trip latency. **Leases double as distributed
+GC** — a leased/nonce ticket auto-expires, reclaiming its export-table entry, which
+solves most of CapTP's hard distributed-GC problem for free. Prior art: **E /
+CapTP** (vats, eventual-send, promise pipelining, sturdy-ref = leased/persistent
+ticket vs. live-ref = transient nonce) and **macaroons** (offline-attenuatable
+caveats for re-delegation). Open sub-parts: bridge transport security, re-delegation
+/ attenuation, and full GC for persistent caps.
+
 ## Resolved direction (this thread)
 
 - **Open by necessity.** The periphery is open because agents program; the core
@@ -767,12 +820,12 @@ Tracked as Open question #7.
    unchanged; frame-level hash memoization for efficiency) rather than native
    (persistent functional spine). Completes content-addressing across code, data,
    and runtime context. See Environment → "hash-addressed context spines."
-7. **Cross-process capability delegation (distributed ocap).** Capability handles
-   are opaque, non-marshalable, host-bound, and (for nonces) linear — yet the
-   two-runtime topology needs an orchestrator to delegate scoped authority to a
-   worker in another process, so authority cannot cross the bridge *as a handle*.
-   Likely shape: a distributed object-capability protocol where a delegated
-   capability is a *marshalable reference/ticket* redeemed by message to the holder
-   (the real handle never leaves its host context), à la the E language / CapTP and
-   the ocap-distributed-systems lineage. This is the gap that makes the managed
-   inter-agent bridge actually carry authority. See Deployment topology.
+7. **Cross-process capability delegation (distributed ocap).** *Direction
+   settled (this thread); spec sub-parts open.* Handles are non-marshalable and
+   nonces linear, yet the orchestrator must delegate scoped authority to a worker
+   in another process — so authority cannot cross *as a handle*. Direction:
+   distributed object-capability protocol, CapTP/E lineage (see "Cross-process
+   capability delegation" section). Open sub-parts: bridge transport security
+   (confidential/authenticated channel; cross-team needs #382), re-delegation /
+   attenuation (sub-worker narrowing — macaroon-style caveats or CapTP), and full
+   distributed GC for persistent (un-leased) caps.
