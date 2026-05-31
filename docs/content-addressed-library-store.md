@@ -261,6 +261,26 @@ in it means* — including rebinding a gated primitive to an ungated one. So
 the root that governs the integrity of all the others.** If it is ungated, every
 other gate dissolves.
 
+*Open idea — hash-addressed context spines (Open question #6).* The same
+by-name/by-hash duality used for libraries can be pushed one level down, into the
+environment substrate: make the (capability/dynamic) **context spine** an
+immutable, **hash-addressed** value layer with a **mutable symbolic resolution
+layer** on top — "mutation" (`set!`, grant, revoke) becomes a *functional update*
+(new immutable frame, new hash, rebind the symbolic pointer). The same structure
+is then viewable from either dimension by parameterizing lookup over the key type:
+*symbol*-keyed = the live/redefine-everywhere view; *hash*-keyed = the immutable,
+structurally-shared, snapshot-able view. Scope it to the **capability-context
+spine**, not the giant mutable global lexical env (which is a hashing-cost sink).
+Payoffs: hash-pin *the exact context code ran under* into the audit/transcript
+(immutable, verifiable); leases/revocation become functional updates → a sequence
+of context hashes (dovetails with the revocable grant cell); cheap
+snapshot/compare/share by hash. Implementation strengths: *projective* (freeze to
+a hash on demand; keep mutable cells; less invasive) vs *native* (the spine is a
+persistent hash-addressed structure; functional mutation; fuller payoff, changes
+the eval core). The unification it completes: content-addressing as the universal
+substrate property across **code** (libraries), **data** (s-expression messages),
+and **runtime context** (the capability spine).
+
 ## Identity: content-addressing
 
 Identity is the keystone. Once **identity = hash of the canonical source form**,
@@ -482,6 +502,21 @@ open shared-nothing periphery; the capability membrane is the gated core the
 adversarial threat model forces — the divergence *is* the open/sealed seam through
 the actor lens.
 
+*Refinement — BEAM-the-VM as an eventual compiler backend.* Beyond "host the
+interpreter," BEAM-the-VM is a plausible *eventual compiler target*, peer to
+LLVM-native — with **CPS as the pivot**. One normalized CPS IR feeds three modes:
+interpret (today), emit BEAM, emit LLVM-native. CPS *reifies continuations*, so it
+removes the need for host `call/cc` — which both unblocks BEAM (no native
+continuations) and is the classic lowering toward native — and it mirrors the
+existing CPS/trampoline interpreter, so the conceptual distance is near-zero.
+BEAM and LLVM-native are *complementary*, not redundant: BEAM targets the
+distribution/concurrency/hot-swap/GC'd-portable deployment, LLVM-native targets
+raw single-node performance. And "interpreter core + JIT at the edges" is not at
+odds with AOT backends — they are points on one continuum over the same CPS IR
+(interpret cold, JIT hot, AOT to a backend for a sealed artifact). So BEAM-the-VM
+moves from "rejected primary target" to "candidate eventual backend"; mining
+BEAM-the-model is unaffected.
+
 ## Resolved direction (this thread)
 
 - **Open by necessity.** The periphery is open because agents program; the core
@@ -640,3 +675,11 @@ the actor lens.
    contractual status relative to the exporting library, and it is unsettled
    whether export *names* and library-level metadata join the contract identity
    (likely yes). See Identity → "Two identities."
+6. **Hash-addressed context spines.** Should the (capability/dynamic) context
+   spine be an immutable hash-addressed value layer with a mutable symbolic
+   resolution layer on top (functional update + rebind on mutation), viewable from
+   either dimension by parameterizing lookup over the key type? High-value scope is
+   the capability-context spine (auditable hash-pinned contexts, leases/revocation
+   as context-hash sequences), not the global lexical env. Projective vs native
+   implementation. Completes content-addressing across code, data, and runtime
+   context. See Environment → "hash-addressed context spines."
