@@ -70,6 +70,25 @@ implementation techniques.
   shape but defines its own R7RS-compatible public behavior and
   Scheme-readable metadata records.
 
+### Related Systems and Prior Art
+
+These are non-Scheme (or Scheme-adjacent) systems whose designs recur as prior art
+for the content-addressed library store / inter-agent exchange work
+([design note](content-addressed-library-store.md)).
+
+- [GNU Guix](https://guix.gnu.org/) is a functional package manager written in
+  **Guile Scheme**, with a hash-addressed immutable store, profiles/generations as
+  a mutable name→store indirection, and atomic rollback. The closest OS-level
+  prior art to a Scheme content-addressed library system — and directly readable,
+  being Scheme. (Classic store paths are input-addressed; treat content-addressing
+  parallels accordingly.)
+- [Nix](https://nixos.org/) is Guix's sibling and origin of the functional /
+  hash-addressed-store model; useful for the OS-level "ended DLL hell" parallel
+  and for content-addressed derivations.
+- [Unison](https://www.unison-lang.org/) for content-addressed definitions
+  (hash = identity, alpha-normalized, references-by-hash) and the abilities
+  effect system — the closest semantic-level model for definition identity.
+
 ## Additional Candidates
 
 These are worth keeping in mind, but they should only become project references
