@@ -583,7 +583,12 @@ better than the strawman implies.)
    concrete fork is *structural* vs *nominal* identity — Erlang dodges
    fragmentation entirely via structural, copied data (see Granularity, above).
    **Spike filed: tahoma/agent-scheme#375** — the minimal record-crossing-a-
-   version-boundary experiment to prove or break this.
+   version-boundary experiment to prove or break this. Relatedly, inter-agent
+   *messages* are s-expression structural data — already structural and
+   fragmentation-free, the Erlang escape by construction — so the *message* layer
+   leans structural independently of the record question; making that sound
+   cross-agent depends on owning portable symbol identity (#346) and numeric
+   semantics (#350), the two halves of Scheme's lexical layer (both in chunk 0.16).
 2. **Environment reflection as root meta-capability.** How is the
    inspect/extend/rewrite-the-environment grant modeled and constrained? It
    governs the integrity of every other gate.
