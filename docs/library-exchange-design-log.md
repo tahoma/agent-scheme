@@ -708,7 +708,10 @@ residuals) → chunk **0.40 Capability Hardening Follow-ups** (exact thematic fi
 So nothing is unscheduled now. Note this *does* defer the parked items (scheduled =
 deferred, per the prior convention) to their late chunks, which is the intent;
 #375 is scheduled at the *front* (0.15.7), so it stays the "do-next" pull despite
-now being on the map.
+now being on the map. Convention clarified: the roadmap tracks *issues* (the
+work), not *PRs* (the delivery mechanism) — so **PR #377 has no roadmap slot**; it
+is the vehicle that delivers issue #376 (roadmap 0.15.6) and carries the matching
+version bump. Roadmap slot 0.15.6 = issue #376 = delivered by PR #377.
 
 ## Where it landed
 
