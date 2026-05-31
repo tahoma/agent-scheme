@@ -16,6 +16,12 @@
 > here and the design note rather than replaying the conversation. Decisions that
 > still need the operator live in the design note's **Open questions**, not as
 > chat prompts.
+>
+> Method: the conversation is intentionally **breadth-first** — threads are
+> fanned out as they arise rather than deferred (the value is in the edges between
+> threads, which deferral loses). This log is the raw fan-out in arrival order;
+> the design note is the synthesis target. Coherence is combed out of the log into
+> the note incrementally, per round, not reconstructed later from scratch.
 
 ## How it started
 
