@@ -656,10 +656,27 @@ s-expr exchange) organized as OTP-style supervision/worker trees ("trees of
 temporary task-lists"), with the durable side already in `job`/`plan`/`task`. The
 named idea: **promote-to-durable escalation** (ephemeral by default, persist on
 demand) — the same dial as chip→issue and lease-once→lease-persistent. The chip is
-a feature of the *shared* coding-agent harness (used by multiple backends incl.
-Codex), not Claude-specific. **Process:** the operator caught up on the backlog —
+a coding-agent harness feature, not a design artifact. **Process:** the operator
+caught up on the backlog —
 back in sync — so the no-trailing-questions constraint relaxes (interactive Q&A
 resumes); per-round checkpointing continues (now load-bearing for the issues/PR).
+
+## Thread survey post-sync; cross-process capability delegation (Open #7)
+
+With the backlog caught up, surveyed remaining threads. Highest-leverage empirical
+pull: run spike #375 (type identity, structural vs nominal) — it gates value
+exchange and everything downstream. Standout *unexplored* design thread, newly
+named as **Open question #7 — cross-process capability delegation (distributed
+ocap)**: handles are non-marshalable and nonces linear, yet the orchestrator must
+delegate scoped authority to a worker in another process, so authority cannot
+cross as a handle; likely shape is a marshalable reference/ticket redeemed by
+message to the holder (real handle stays home), à la the E language / CapTP
+lineage. Designed-but-underspecified threads ripe for a spec pass: the
+normalization dial (what is in each hash; underpins #1/#5) and the
+capability-context/lease/nonce/linear model. Parked by design: foreign plane
+(#379), thin-agent (#4), env-reflection meta-cap (#2), trust residuals (#3).
+Process: merging #377 greens the dependent-issue references. (Also trimmed an
+earlier misattribution from this log per operator.)
 
 ## Where it landed
 
