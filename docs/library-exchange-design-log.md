@@ -455,6 +455,18 @@ internal-doc change → nothing. Open edges: re-export/rename makes contractual
 status relative to the exporting library, not intrinsic; and whether export names
 + library-level metadata join the contract identity. Kept as Open question #5.
 
+## Tracked: issue #376, PR #377, roadmap 0.15.6
+
+The operator called the conversation past the point of needing real tracking.
+Filed the design/RFC umbrella **#376** (`surface:design` / `documentation` /
+`size:umbrella` / `host:agent-runtime` / `risk:medium`), inserted at "now" in the
+roadmap (#53) as chunk **0.15.6**, created branch
+`tahoma/issue-376/library-exchange-design`, bumped `version.sld` 0.15.4 → 0.15.6,
+committed both design docs, and opened **PR #377** targeting `main`. The spike
+**#375** now references #376 as its parent. #376 stays open as an umbrella
+coordinating the spikes and eventual implementation; the docs remain
+living/exploratory (committing preserves and tracks, it does not ratify).
+
 ## Where it landed
 
 The judgment-call forks are resolved (see the design note's "Resolved direction").
