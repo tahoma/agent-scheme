@@ -782,6 +782,19 @@ completion: every major thread is decided-and-captured, filed as an issue
 operational — publishing these doc changes to PR #377 and the operator's review +
 merge of it.
 
+## Drive-by: resolved graph invariants migrated out of #53
+
+At the operator's direction, slimmed the roadmap (#53) Graph Invariants section by
+migrating invariants whose referenced issues are **all closed** into a new
+`docs/resolved-graph-invariants.md`, mirroring the chunk-to-release-notes
+migration. Classification was scripted (closed-issue set vs. each invariant's issue
+references; conservative — any open or unknown reference retains the invariant):
+**76 of 100 migrated, 24 retained** (the retained set is the open/future cluster —
+LLIR/GC/byte-code backends, SRFI bundle, library resolution, license, external
+protocol, JVM contracts — plus the two standing structural rules). Done as an
+isolated commit on the #376/#377 branch per the operator's call (their review;
+roadmap-maintenance precedent #364 is closed).
+
 ## Where it landed
 
 The judgment-call forks are resolved (see the design note's "Resolved direction").
