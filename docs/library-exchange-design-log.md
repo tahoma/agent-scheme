@@ -767,6 +767,21 @@ so caps are reclaimed by lease-expiry or worker-death, leak-free by construction
 (avoids CapTP's hard distributed-GC problem; permanent cross-process authority is a
 security smell anyway). The GC lever captured into the design note.
 
+## Distributed-ocap sub-parts scoped; design conversation reaches completion
+
+Closing decisions on #383's sub-parts: **cross-team transport security is out of
+scope** for now (Byzantine threat) — intra-team only, on the spawn-controlled
+trusted channel; **re-delegation = attenuating forwarders** (option b, soft —
+revocation-propagating by construction; macaroons only if offline re-delegation is
+later needed); **distributed GC confirmed dissolved by constraint** (lease every
+cross-vat ticket + vat-death reclamation), so no GC follow-on issue is needed
+unless persistent un-leased cross-vat caps are ever permitted (then it gets its own
+issue). With these, the active design conversation has reached a natural
+completion: every major thread is decided-and-captured, filed as an issue
+(#375/#378/#379/#380/#381/#382/#383), or parked. The only remaining work is
+operational — publishing these doc changes to PR #377 and the operator's review +
+merge of it.
+
 ## Where it landed
 
 The judgment-call forks are resolved (see the design note's "Resolved direction").
