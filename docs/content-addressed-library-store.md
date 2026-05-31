@@ -632,13 +632,21 @@ Supporting shape: **two delegation paths** — spawn-time local provisioning (re
 handles for the worker's job description; fast, heavy use) vs. runtime ticket
 delegation (ad-hoc, scoped, transient; favors coarse-grained authority since each
 redemption is a round-trip, which aligns with leases/nonces). **Promise
-pipelining** (E/CapTP) hides round-trip latency. **Leases double as distributed
-GC** — a leased/nonce ticket auto-expires, reclaiming its export-table entry, which
-solves most of CapTP's hard distributed-GC problem for free. Prior art: **E /
-CapTP** (vats, eventual-send, promise pipelining, sturdy-ref = leased/persistent
-ticket vs. live-ref = transient nonce) and **macaroons** (offline-attenuatable
-caveats for re-delegation). Open sub-parts: bridge transport security, re-delegation
-/ attenuation, and full GC for persistent caps.
+pipelining** (E/CapTP) hides round-trip latency. **Distributed GC is dissolved by
+constraint:** require a lease on *every* cross-vat ticket (no persistent un-leased
+cross-vat caps) plus **vat-death reclamation** (a finished/dead worker's tickets
+are reclaimed by the holder) — so capabilities are reclaimed by lease-expiry or
+vat-death, leak-free by construction, avoiding CapTP's hard distributed-GC problem
+entirely. (Permanent cross-process authority is a security smell anyway.) Prior
+art: **E / CapTP** (vats, eventual-send, promise pipelining, sturdy-ref =
+leased/persistent ticket vs. live-ref = transient nonce) and **macaroons**
+(offline-attenuatable caveats for re-delegation). Remaining open sub-parts: bridge
+transport security (intra-team trusted; cross-team needs #382) and re-delegation /
+attenuation (attenuating forwarders vs. macaroon caveats; revocation propagation).
+
+*Filed as tahoma/agent-scheme#383 (roadmap 0.29.10, immediately before the
+cross-process control-loop cluster #57/#286/#289/#321 it is the authority substrate
+for; depends on the sound bridge, chunk 0.16).*
 
 ## Resolved direction (this thread)
 
@@ -825,7 +833,9 @@ caveats for re-delegation). Open sub-parts: bridge transport security, re-delega
    nonces linear, yet the orchestrator must delegate scoped authority to a worker
    in another process — so authority cannot cross *as a handle*. Direction:
    distributed object-capability protocol, CapTP/E lineage (see "Cross-process
-   capability delegation" section). Open sub-parts: bridge transport security
-   (confidential/authenticated channel; cross-team needs #382), re-delegation /
-   attenuation (sub-worker narrowing — macaroon-style caveats or CapTP), and full
-   distributed GC for persistent (un-leased) caps.
+   capability delegation" section). **Filed: tahoma/agent-scheme#383 (roadmap
+   0.29.10).** Remaining open sub-parts: bridge transport security
+   (confidential/authenticated channel; cross-team needs #382) and re-delegation /
+   attenuation (sub-worker narrowing — macaroon-style caveats or attenuating
+   forwarders). Distributed GC is dissolved by constraint (lease every cross-vat
+   ticket + vat-death reclamation).

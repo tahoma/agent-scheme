@@ -748,6 +748,25 @@ re-delegation/attenuation, full GC for persistent caps. Captured to the design n
 ("Cross-process capability delegation" section); Open #7 upgraded from gap to
 settled direction.
 
+## Distributed-ocap filed (#383); dependencies fix its position; sub-parts explained
+
+**Dependencies / placement:** the distributed-ocap work is clamped — *after* the
+sound two-runtime bridge (chunk 0.16: owned symbol #346 + numeric #350) and the
+local capability/lease/nonce model (#376); *before* the cross-process
+control-loop/protocol cluster in chunk 0.29 (#57, #286/#287, #289, #321), for which
+it is the authority substrate; independent of #379/#381; cross-team extension only
+depends on #382. Filed as **#383** and placed at **0.29.10**, immediately before
+#57. **Sub-parts explained:** (1) *bridge transport security* — tickets are bearer
+tokens, so the vat channel must be confidential + authenticated (intra-team
+trusted via spawn-controlled channel; cross-team needs #382; leaked tickets bounded
+by lease/nonce); (2) *re-delegation / attenuation* — sub-worker narrowing via
+attenuating forwarders (revocation-propagating) or macaroon-style offline caveats;
+(3) *distributed GC* — **dissolved by constraint**: require a lease on every
+cross-vat ticket (no persistent un-leased cross-vat caps) + vat-death reclamation,
+so caps are reclaimed by lease-expiry or worker-death, leak-free by construction
+(avoids CapTP's hard distributed-GC problem; permanent cross-process authority is a
+security smell anyway). The GC lever captured into the design note.
+
 ## Where it landed
 
 The judgment-call forks are resolved (see the design note's "Resolved direction").
