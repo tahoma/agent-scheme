@@ -460,6 +460,28 @@ there is no platonic "right" FFI — it is a perf-vs-isolation tradeoff; BEAM of
 both the safe out-of-process path and the dangerous in-process one, which is
 better than the strawman implies.)
 
+The **capability system is where Agent Scheme first diverges from BEAM**, and the
+divergence is rooted in the *threat model*. BEAM was built for fault tolerance
+among trusted-but-fallible code (ambient authority is fine when every process is
+yours); Agent Scheme assumes open, mutually-distrusting, possibly agent-authored
+code (malice/over-reach, not just crashes), which forbids ambient authority and
+forces the membrane BEAM never needed. The two isolations are orthogonal and
+*complementary* — fault isolation (integrity under failure) vs authority isolation
+(confinement under adversarial operation) — and BEAM's shared-nothing substrate,
+built for the former, is exactly what makes the latter clean (no shared mutable
+state to leak authority), so the divergence *extends* the model rather than
+fighting it ("mine the model" still holds). The new axis: BEAM reifies processes
+and messages but not authority; Agent Scheme reifies authority (capabilities,
+grants, leases, the gated environment) as a first-class scoped, revocable value.
+Honest tension: BEAM's *let-it-crash* and capability *deny* are different failure
+shapes — a denial is a recoverable refusal, not a fault, so naïve
+crash-and-supervise over denied operations would loop; Agent Scheme treats denials
+as handled conditions (approval statuses, eval-error-on-violation), so its failure
+model is crash-and-supervise *plus* deny-and-handle. In seam terms: BEAM is the
+open shared-nothing periphery; the capability membrane is the gated core the
+adversarial threat model forces — the divergence *is* the open/sealed seam through
+the actor lens.
+
 ## Resolved direction (this thread)
 
 - **Open by necessity.** The periphery is open because agents program; the core
