@@ -210,6 +210,20 @@ multi-caller capability-context policy (fixed-at-export vs per-authenticated-cal
 vs ambient) — everything else is imitation by necessity of what `main` already
 does.
 
+*Status (this thread).* The foreign-import generalization is ~90% present already,
+so it is now tracked as **tahoma/agent-scheme#379** — formalize the explicit
+declaration spec and make the built-in primitives *comply* as instances of it
+(behavior-neutral, closed-default preserved; arbitrary-native resolution remains
+later work). On the export side, the **irreducible foreign-export surface is the
+OS process boundary** — so lean in: *all foreign interaction is out-of-process; no
+in-process general foreign-export.* This is consistent with the deferral, the
+"foreign membrane = OS isolation" conclusion, and BEAM's ports-over-NIFs, and it
+is largely *already on the roadmap* — the POSIX / process-interface SRFIs
+(SRFI 170 and kin) plus the native CLI/daemon contract **are** that
+formalization, so it needs framing, not a new issue. The Emacs host adapter is the
+in-process exception, but it is runtime-author/TCB foreign-*import* (gated Emacs
+capabilities), not general foreign-export, so it does not break the rule.
+
 ## Open vs sealed: place the seam, don't pick a pole
 
 The deepest axis is **open vs sealed** (not interpreted vs compiled — SBCL and
@@ -532,6 +546,24 @@ odds with AOT backends — they are points on one continuum over the same CPS IR
 (interpret cold, JIT hot, AOT to a backend for a sealed artifact). So BEAM-the-VM
 moves from "rejected primary target" to "candidate eventual backend"; mining
 BEAM-the-model is unaffected.
+
+## Deployment topology (related consideration): two runtimes, one wire
+
+The s-expression exchange layer is the **narrow waist** of a two-runtime
+deployment: **Emacs-hosted orchestrator/interface agents** (interactive, local
+heap, inside the editor process — later other editors too) and
+**natively-compiled portable R7RS worker agents** (separate processes). They
+communicate by exchanging s-expressions. The narrow waist is what makes developing
+the two runtimes *in parallel* cost-effective — they need only agree on the wire
+(s-expression structure + owned symbol/numeric semantics), never on internals.
+Distinguish from the foreign plane: orchestrator↔worker is **managed** exchange
+(Scheme↔Scheme across processes — the core inter-agent design), not foreign-export
+(which is to non-Scheme); both cross a process boundary, but one is managed and one
+is foreign. Roadmap mapping: **chunk 0.15** (host-compiled executables, shipped)
+provides the worker runtime; **chunk 0.16** (own symbol identity #346 + numeric
+backend #350) makes the bridge *sound* — a message must mean *and hash* the same on
+both runtimes, which requires owning both lexical halves. That is why 0.16 is where
+bridge-ability becomes real.
 
 ## Resolved direction (this thread)
 

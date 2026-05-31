@@ -600,6 +600,31 @@ unified by the lease count: copyable standing/leased vs linear nonce. Edges:
 consume-on-success, atomic consumption, message-pass transfers ownership; spending
 a nonce is a recorded context-hash transition under Open #6.
 
+## Foreign-import formalization issue; foreign-export = process boundary; two-runtime topology
+
+Three threads. **Generalized foreign-import (#379):** the operator agreed we are
+~90% to a generalized foreign-import spec (it is the built-in primitive spec), so
+filed #379 to formalize the explicit declaration and make the primitives *comply*
+as instances of it — behavior-neutral, closed-default preserved, arbitrary-native
+resolution left as later foreign-plane work. Elegant shift (primitives become
+instances of the spec they implied; F1 becomes a small later step). Placement TBD
+(does not fit current chunk themes). **Foreign-export = OS process boundary:** the
+irreducible foreign-export surface is the process boundary, so lean in — *all
+foreign out-of-process; no in-process general foreign-export.* Consistent with the
+deferral + foreign-membrane-as-OS-isolation + BEAM ports-over-NIFs, and largely
+already on the roadmap (POSIX/process SRFIs + the native CLI/daemon contract) — so
+framing, not a new issue. Emacs host adapter is the in-process exception
+(runtime-author/TCB foreign-*import*, not general foreign-export). **Two-runtime
+topology:** Emacs-hosted orchestrator/interface agents (interactive, local heap,
+in the editor process) + natively-compiled portable R7RS worker agents (separate
+processes), exchanging s-expressions. The exchange layer is the narrow waist that
+makes parallel development of the two runtimes pay off (agree on the wire, not
+internals). Orchestrator↔worker is *managed* exchange (Scheme↔Scheme across
+processes), not foreign-export. Roadmap: chunk 0.15 (host-compiled executables)
+gives the worker runtime; chunk 0.16 (own symbol identity #346 + numeric backend
+#350) makes the bridge sound — same meaning *and hash* on both runtimes requires
+owning both lexical halves. That is why 0.16 is where bridge-ability gets real.
+
 ## Where it landed
 
 The judgment-call forks are resolved (see the design note's "Resolved direction").
