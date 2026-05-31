@@ -588,7 +588,8 @@ the actor lens.
   ⟺ managed-only*. It is present from the *first* library representation, not
   added later; concretely, the field to add to the `<library>` record
   (`make-library`, `runtime.sld`) now as a minimal default-`#f` boolean
-  (`foreign?`), widened to richer foreign-plane metadata when FFI lands. (b)
+  (`foreign?`), widened to richer foreign-plane metadata when FFI lands. **Filed
+  as tahoma/agent-scheme#378, scheduled sooner-than-later at roadmap 0.15.7.** (b)
   **Capability handles stay opaque and non-marshalable** — they are inherently
   properties of the host context and have no meaning migrated outside that world,
   so they can never cross `foreign-export`; the no-leak rule is therefore
