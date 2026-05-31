@@ -541,6 +541,18 @@ deny-and-handle. In seam terms: BEAM is the open shared-nothing periphery; the
 capability membrane is the gated core the threat model forces — the divergence
 *is* the open/sealed seam through the actor lens.
 
+## Foreignness-marker down payment filed as a real issue (#378)
+
+Correction/upgrade: the foreignness-marker "code down payment" had only been a
+`spawn_task` *chip* (a local worktree-spinoff, not tracked, dismissable, no
+roadmap trace) — which does not actually satisfy "make certain it is there now."
+The operator's reading is the right one: it should be a real issue scheduled
+sooner-than-later. Filed **#378** (Add universal foreignness marker to the
+`<library>` record; `surface:portable-core+adapter` / `host:agent-runtime` /
+`risk:low` / `size:weekend`), scheduled in the current chunk at **0.15.7**
+(adjacent to its parent #376), and commented on #376 to supersede the spawned
+chip. The decided invariant in the design note now points at #378.
+
 ## Where it landed
 
 The judgment-call forks are resolved (see the design note's "Resolved direction").
