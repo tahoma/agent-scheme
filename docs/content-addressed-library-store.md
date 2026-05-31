@@ -730,7 +730,7 @@ Tracked as Open question #7.
    semantics (#350), the two halves of Scheme's lexical layer (both in chunk 0.16).
 2. **Environment reflection as root meta-capability.** How is the
    inspect/extend/rewrite-the-environment grant modeled and constrained? It
-   governs the integrity of every other gate.
+   governs the integrity of every other gate. *Tracked (parked): #381.*
 3. **Trust residuals (now narrowed).** The root-of-trust split is settled in
    *shape* — intra-team trust roots in the orchestrator, external trust rides
    conventional PKI/code-signing — so neither regime invents a global trust
@@ -742,12 +742,12 @@ Tracked as Open question #7.
    pinned-publisher trust and of already-linked grants (future authority only,
    cannot un-run past effects); and closure-level admission UX (per-hash
    confirmation does not scale — needs origin-level or trust-on-first-use
-   aggregation).
+   aggregation). *Tracked (parked): #382.*
 4. **Thin-agent tier.** Does the community have participants too constrained to
    run the full macro expander? Only then is expanded-core worth defining as an
    interchange format. (The bootstrap/build path is settled — expander in the
    floor, source universal there; what remains is a possible constrained
-   *deployment* tier, defer-until-real.)
+   *deployment* tier, defer-until-real.) *Tracked (parked): #380.*
 5. **Export status as the contract-identity differentiator.** Should being
    *exported* be what lifts a definition's docstring into (library-API-level)
    contract identity, while internal definitions are behavioral-only? The
