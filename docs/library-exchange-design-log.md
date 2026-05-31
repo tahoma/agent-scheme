@@ -467,6 +467,26 @@ committed both design docs, and opened **PR #377** targeting `main`. The spike
 coordinating the spikes and eventual implementation; the docs remain
 living/exploratory (committing preserves and tracks, it does not ratify).
 
+## Generalizing the foreign axes from the existing limited basis
+
+The operator observed that both foreign axes are already implemented to a limited
+extent, and — because the problem space forced those forms — the limited basis
+pre-determines the core of any generalization ("imitation by necessity"). Useful
+refinement: separate the *necessary core* (generalizes) from the *incidental
+specifics* (do not). **Foreign-import:** the gated primitive already *is* a
+foreign-import declaration; the built-in primitive spec
+(name/impl/arity/effects/capability-domain/limits), backend-resolved and
+monitor-wrapped, is the generalized declaration's schema — so the schema is
+already written. New parts: only the F1 gate on who-may-declare and
+arbitrary-native-symbol resolution (ABI/OS linking); the hand-written wrapper is
+the incidental specific. **Foreign-export:** the CLI/daemon `main` already obeys,
+by necessity, context-at-boundary + marshal-not-handles + explicit-versioned-
+contract (the necessary core); text marshaling, single entry point, and CLI vocab
+are incidental specifics. Net: the existing basis *reduces* the foreign-export
+generalization to its one open sub-question — multi-caller capability-context
+policy. Analysis of the deferred plane, not a decision; captured as a forward note
+in the design note's FFI section.
+
 ## Where it landed
 
 The judgment-call forks are resolved (see the design note's "Resolved direction").
