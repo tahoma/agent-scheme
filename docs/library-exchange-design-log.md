@@ -513,6 +513,28 @@ identical structural equality of symbols and numbers everywhere (the same proper
 content-addressing needs). The bootstrap-ownership roadmap is already laying this
 ground, perhaps without having framed it as such.
 
+## Where the capability system diverges from BEAM
+
+The operator noted the capability system is where Agent Scheme first diverges from
+otherwise-aligned BEAM semantics. Analysis: up to capabilities the designs are
+strikingly convergent (shared-nothing, message passing, hot-swap, structural
+data); the divergence is rooted in the *threat model*. BEAM = fault tolerance
+among trusted-but-fallible code (ambient authority fine); Agent Scheme = open,
+mutually-distrusting, possibly agent-authored code (malice/over-reach), which
+forbids ambient authority and forces the capability membrane BEAM never needed.
+The two isolations are orthogonal and complementary — fault isolation (integrity
+under failure) vs authority isolation (confinement under adversarial operation) —
+and BEAM's shared-nothing substrate (built for fault isolation) is exactly what
+makes authority confinement clean, so the divergence extends the model rather than
+fighting it ("mine the model" still holds). Deeper: BEAM reifies processes and
+messages but not authority; Agent Scheme reifies authority as a first-class
+scoped, revocable value. Honest tension: let-it-crash vs deny-and-handle — a
+denial is a recoverable refusal, not a fault (naïve crash-and-supervise over
+denials would loop), so Agent Scheme's failure model is crash-and-supervise *plus*
+deny-and-handle. In seam terms: BEAM is the open shared-nothing periphery; the
+capability membrane is the gated core the threat model forces — the divergence
+*is* the open/sealed seam through the actor lens.
+
 ## Where it landed
 
 The judgment-call forks are resolved (see the design note's "Resolved direction").
