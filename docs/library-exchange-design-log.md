@@ -577,6 +577,29 @@ having continued (Scheme-written functional package manager, hash-addressed
 store). **BEAM's two FFIs** validate the out-of-process foreign-plane conclusion
 (ports/C-nodes safe; NIFs the labeled-dangerous in-process escape).
 
+## Docstrings-as-contract in agentic introspection; nonces as single-use leases
+
+**Docstrings-as-contract, agentic angle:** the operator noted that in an agentic
+environment the agent *introspects tool surfaces at decision time* for semantics,
+so the docstring is in-band — behavior is conditioned on it, a doc change can
+change behavior with identical code. That is the strongest justification that the
+docstring is contractual ("literate programming lifted into the contractual
+plane") and it independently justifies Open #5: the export surface = the
+introspection surface = the contract surface, three coinciding on one boundary.
+Riders recorded: the contract surface is a gradient (structured metadata ↔ prose,
+agent uses both); and doc integrity becomes part of the trust surface (a deceptive
+docstring misleads agent reasoning → admission/provenance vets the
+doc-bearing contract identity). **Nonces as single-use leases:** a nonce is a
+lease with count = 1 (the "once" corner), so it falls out of the lease abstraction
+for free — and it is the safe authority-delegation primitive for shared-nothing
+message passing (hand a nonce in a message → exactly one action, no standing grant,
+no replay). The gem: nonces require *linear (move-not-copy)* semantics, which
+reinforces and partly explains the non-marshalable handle invariant (copying a
+single-use cap would forge authority). Capabilities thus come in two flavors
+unified by the lease count: copyable standing/leased vs linear nonce. Edges:
+consume-on-success, atomic consumption, message-pass transfers ownership; spending
+a nonce is a recorded context-hash transition under Open #6.
+
 ## Where it landed
 
 The judgment-call forks are resolved (see the design note's "Resolved direction").
