@@ -570,6 +570,16 @@ backend #350) makes the bridge *sound* — a message must mean *and hash* the sa
 both runtimes, which requires owning both lexical halves. That is why 0.16 is where
 bridge-ability becomes real.
 
+Within this topology, "spawn an isolated sub-task" is not a new mechanism to
+build: it is the orchestrator-spawns-worker-actor pattern — an ephemeral worker
+actor (isolated heap/process, shared-nothing) for a sub-task, scoped authority via
+nonce/leased capabilities, s-expression exchange, organized as an OTP-style
+supervision/worker tree ("trees of temporary task-lists"). The durable side
+already exists in the `job`/`plan`/`task` stores. The one design idea worth naming
+is the **promote-to-durable escalation**: ephemeral by default, persisted on
+demand (worker result → a job/plan/transcript record) — the same dial as the
+harness's chip→issue and as lease-once→lease-persistent.
+
 ## Resolved direction (this thread)
 
 - **Open by necessity.** The periphery is open because agents program; the core
