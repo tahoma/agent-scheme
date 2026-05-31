@@ -714,7 +714,13 @@ is the vehicle that delivers issue #376 (roadmap 0.15.6) and carries the matchin
 version bump. Roadmap slot 0.15.6 = issue #376 = delivered by PR #377. (GitHub
 shares one number sequence across issues and PRs, so the PR opened right after the
 issue took the adjacent number — easy to mistake for a sibling issue. Convention:
-always write "issue #N" / "PR #N" explicitly to disambiguate.)
+always write "issue #N" / "PR #N" explicitly to disambiguate.) This leaves a
+**gap in the issue numbering at 377** (issues run …375, 376, _, 378…), and because
+a PR is-an-issue in GitHub's model, `gh issue view 377` even *returns* the PR — so
+the gap appears "filled" by the PR. This is a cosmetic GitHub-numbering artifact,
+**not a roadmap gap**: the version-bumping change is fully on the roadmap as issue
+#376 (0.15.6), which PR #377 delivers. #377 is the only PR in the #375–#382 range,
+so it is the only such gap.
 
 ## Where it landed
 
