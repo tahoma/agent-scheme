@@ -553,6 +553,30 @@ sooner-than-later. Filed **#378** (Add universal foreignness marker to the
 (adjacent to its parent #376), and commented on #376 to supersede the spawned
 chip. The decided invariant in the design note now points at #378.
 
+## Hash-addressed context spines; BEAM as compiler backend; Guix to references
+
+Several threads. **GitHub as design surface** — the operator confirmed that doing
+part of the design in GitHub (issues referencing in-progress docs) works for them;
+stop hedging, keep filing/referencing freely. **Hash-addressed context spines
+(new, Open question #6):** push the by-name/by-hash duality down from libraries to
+the environment substrate — the (capability/dynamic) context spine as an immutable
+hash-addressed value layer + a mutable symbolic resolution layer; mutation =
+functional update + rebind; same structure viewed by symbol-key (live) or
+hash-key (immutable) via key abstraction. Scope to the capability-context spine
+(auditable hash-pinned contexts; leases/revocation as context-hash sequences), not
+the global env. Completes content-addressing across code/data/context.
+**"Lisp-ish OTP":** precisely, OTP's model on a Scheme substrate plus the authority
+axis OTP omits. **BEAM-the-VM as compiler backend (refinement):** repositioned from
+rejected-primary-target to candidate eventual backend, peer to LLVM-native, with
+CPS as the pivot (one CPS IR → interpret / BEAM / native; CPS reifies
+continuations so it unblocks BEAM's missing `call/cc` and mirrors the existing
+CPS/trampoline interpreter). Interpreter-core + JIT-edges and AOT backends are
+points on one continuum over the same IR, not at odds. **Guix → references.md:**
+added (with Nix and Unison) under a new Related Systems section, the parallels
+having continued (Scheme-written functional package manager, hash-addressed
+store). **BEAM's two FFIs** validate the out-of-process foreign-plane conclusion
+(ports/C-nodes safe; NIFs the labeled-dangerous in-process escape).
+
 ## Where it landed
 
 The judgment-call forks are resolved (see the design note's "Resolved direction").
