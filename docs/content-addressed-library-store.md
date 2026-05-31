@@ -332,6 +332,22 @@ change the contract). Open edges: re-export/rename makes contractual status
 export *names* and library-level docs/metadata join the contract identity (likely
 yes).
 
+*Why this matters most in an agentic environment.* In a normal system a docstring
+is out-of-band human advice; in an agentic system the agent **introspects the tool
+surface at decision time** to learn how to use it, so the docstring is *in-band* —
+an input to the agent's reasoning, with behavior *conditioned on it*. A doc change
+can therefore change behavior with byte-identical code, which is the strongest
+justification that it is contractual ("literate programming lifted into the
+contractual plane" — the prose enters the execution loop). This also
+*independently* justifies the export differentiator: the **export surface is the
+introspection surface is the contract surface** — three coincide on one boundary.
+Two riders: (a) the contract surface is a *gradient* from structured metadata
+(effects/params/returns — reliably machine-consumable) to prose docstring (richer,
+less formal), and the agent uses both; (b) **doc integrity is part of the trust
+surface** — a deceptive docstring is an attack vector that misleads agent
+reasoning, so the contract identity (which includes the doc) is part of what
+admission/provenance vets.
+
 ## Granularity: library policy over definition identity
 
 The grain question forces a split, because two different concerns want two
@@ -562,7 +578,18 @@ BEAM-the-model is unaffected.
   long/broad* (lease); FFI grants take a short lease by default, never persistent.
   Enforcement rides existing session/task lifecycle and the clock; lease expiry
   mid-operation blocks new acquisition rather than aborting in-flight (grace
-  policy TBD).
+  policy TBD). **Leases subsume nonces** (count = 1, single-use) — the safe
+  primitive for delegating exactly one action through a message with no standing
+  grant and no replay (using it spends it). Nonces require **linear
+  (move-not-copy) capability semantics**, which reinforces *and partly explains*
+  the opaque/non-marshalable handle invariant: copying a single-use capability
+  would duplicate its one use, i.e. forge authority. So capabilities come in two
+  flavors unified by the lease count — **copyable standing/leased** (count > 1 /
+  persistent) and **linear nonce** (count = 1, move-only); passing a nonce in a
+  message *transfers* it. Edges: consume on *success* not attempt; consumption
+  atomic under concurrency. With hash-addressed context spines (Open #6), spending
+  a nonce is a functional context update → a recorded context-hash transition, so
+  single-use authority is auditable.
 - **Shared-nothing between agents.** No shared or observable mutable state flows
   through library instances — each agent links its own instance, so cross-agent
   state-sharing is structurally unreachable. Sharing is an *explicit, gated
