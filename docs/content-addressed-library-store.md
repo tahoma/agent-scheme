@@ -640,9 +640,13 @@ vat-death, leak-free by construction, avoiding CapTP's hard distributed-GC probl
 entirely. (Permanent cross-process authority is a security smell anyway.) Prior
 art: **E / CapTP** (vats, eventual-send, promise pipelining, sturdy-ref =
 leased/persistent ticket vs. live-ref = transient nonce) and **macaroons**
-(offline-attenuatable caveats for re-delegation). Remaining open sub-parts: bridge
-transport security (intra-team trusted; cross-team needs #382) and re-delegation /
-attenuation (attenuating forwarders vs. macaroon caveats; revocation propagation).
+(offline-attenuatable caveats for re-delegation). Sub-parts scoped: transport
+security is **intra-team only** — cross-team is *out of scope for now* (Byzantine
+threat), deferred to #382 if revisited; re-delegation is decided (soft) as
+**attenuating forwarders** (revocation-propagating; macaroons only if offline
+re-delegation is later needed). Distributed GC is dissolved by the lease-every-
+cross-vat-ticket + vat-death-reclamation constraint, so no GC follow-on is needed
+unless persistent un-leased cross-vat caps are ever permitted.
 
 *Filed as tahoma/agent-scheme#383 (roadmap 0.29.10, immediately before the
 cross-process control-loop cluster #57/#286/#289/#321 it is the authority substrate
@@ -834,8 +838,11 @@ for; depends on the sound bridge, chunk 0.16).*
    in another process — so authority cannot cross *as a handle*. Direction:
    distributed object-capability protocol, CapTP/E lineage (see "Cross-process
    capability delegation" section). **Filed: tahoma/agent-scheme#383 (roadmap
-   0.29.10).** Remaining open sub-parts: bridge transport security
-   (confidential/authenticated channel; cross-team needs #382) and re-delegation /
-   attenuation (sub-worker narrowing — macaroon-style caveats or attenuating
-   forwarders). Distributed GC is dissolved by constraint (lease every cross-vat
-   ticket + vat-death reclamation).
+   0.29.10).** Sub-parts now scoped: bridge transport security is **intra-team
+   only** (spawn-controlled trusted channel) — *cross-team is out of scope for now*
+   (Byzantine threat), deferred to #382 if ever revisited; re-delegation is decided
+   (soft) as **attenuating forwarders** (revocation-propagating by construction),
+   macaroons reconsidered only if offline re-delegation is later needed; and
+   **distributed GC is dissolved by constraint** (lease every cross-vat ticket +
+   vat-death reclamation) — no GC follow-on unless persistent un-leased cross-vat
+   caps are ever permitted.
