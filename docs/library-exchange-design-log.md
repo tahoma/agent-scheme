@@ -641,6 +641,26 @@ is dismissed), *not* a GitHub feature — ephemeral and untracked, which is why 
 did not satisfy "make certain it is there" (hence #378). "Lisp OTP + capabilities"
 adopted as the framing because it foregrounds capabilities as the novel plane.
 
+## #379 placement, PR hygiene, the chip pattern, and catching up
+
+**#379 placement:** the operator's sequencing — formalize foreign-import *before*
+the SRFI primitive wave so new primitives are born compliant. Placed at chunk
+**0.16.7** (before the SRFI surface at 0.18+; core-mechanism ownership fits 0.16),
+recorded in #53 and via a comment on #379. **PR hygiene:** adopt the convention
+that each PR description states safe merge order and the issue(s) it closes;
+applied to #377 as the first instance (added a Merge & dependent issues section
+covering #375/#378/#379). **The chip pattern:** the harness chip (capture-at-
+discovery, isolated worktree spinoff, ephemeral) maps onto Agent Scheme's own
+design — orchestrator-spawns-worker-actor (isolated heap, nonce/leased authority,
+s-expr exchange) organized as OTP-style supervision/worker trees ("trees of
+temporary task-lists"), with the durable side already in `job`/`plan`/`task`. The
+named idea: **promote-to-durable escalation** (ephemeral by default, persist on
+demand) — the same dial as chip→issue and lease-once→lease-persistent. The chip is
+a feature of the *shared* coding-agent harness (used by multiple backends incl.
+Codex), not Claude-specific. **Process:** the operator caught up on the backlog —
+back in sync — so the no-trailing-questions constraint relaxes (interactive Q&A
+resumes); per-round checkpointing continues (now load-bearing for the issues/PR).
+
 ## Where it landed
 
 The judgment-call forks are resolved (see the design note's "Resolved direction").
