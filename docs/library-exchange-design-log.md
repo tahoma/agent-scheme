@@ -722,6 +722,32 @@ the gap appears "filled" by the PR. This is a cosmetic GitHub-numbering artifact
 #376 (0.15.6), which PR #377 delivers. #377 is the only PR in the #375–#382 range,
 so it is the only such gap.
 
+## Cross-process capability delegation worked through (Open #7 direction)
+
+Pulled the marquee in-context design thread. Option A (workers just ask the
+orchestrator) rejected: it reintroduces identity-based authorization, defeating
+ocap (possession of the reference must *be* the authorization). Direction settled:
+a **distributed object-capability protocol, CapTP/E lineage** — vats (per-runtime
+isolated capability contexts), **tickets** (marshalable, unforgeable references;
+real handle stays home), **redemption by message** (op runs in the holder's
+context under its monitor/audit), holder-side **export tables**. Two dangling
+tensions resolved: (1) non-marshalable handle vs. delegation → ticket-proxy crosses,
+handle stays; (2) linear nonce vs. copyable message → token is copyable, linearity
+enforced at the holder by atomic **consume-on-redemption** (no linear wire types
+needed). New principle named: **authority is the dual of identity** —
+content-addressing is for things you want shared (code/data/context); capability
+tickets must be unforgeable, *not* content-derived; so capabilities sit outside the
+content-addressing scheme by design (explains non-marshalable + non-content-addressed
+handles). Supporting shape: two delegation paths (spawn-time local provisioning vs.
+runtime tickets, favoring coarse-grained authority); promise pipelining for latency;
+**leases double as distributed GC** (auto-reclaim export entries on expiry). Prior
+art: E/CapTP (vats, eventual-send, promise pipelining, sturdy-ref=leased ticket vs.
+live-ref=nonce) and macaroons (offline-attenuatable caveats for re-delegation). Open
+sub-parts: bridge transport security (intra-team trusted; cross-team needs #382),
+re-delegation/attenuation, full GC for persistent caps. Captured to the design note
+("Cross-process capability delegation" section); Open #7 upgraded from gap to
+settled direction.
+
 ## Where it landed
 
 The judgment-call forks are resolved (see the design note's "Resolved direction").
