@@ -487,6 +487,32 @@ generalization to its one open sub-question — multi-caller capability-context
 policy. Analysis of the deferred plane, not a decision; captured as a forward note
 in the design note's FFI section.
 
+## S-expressions as actor/message firmament
+
+The operator: s-expressions have always seemed a fertile substrate for actor-style
+systems, and structure is "half of what Scheme's lexical layer is about, numeric
+representations the other half." Affirmed and grounded. The two halves are
+accurate — the reader's *complexity* weight is the recursive s-expression
+structure plus the (disproportionately fiddly) numeric sublanguage;
+symbols/strings/chars are minor. Why s-expressions are fertile for actors:
+messages are structural data *for free* (`read`/`write` is the wire codec);
+structural (not nominal) data inherits Erlang's fragmentation escape — a message
+built by old code is consumable by new code with no nominal type to mismatch
+(directly the structural lean for open #1); symbols give Erlang's tagged-tuple
+idiom natively (`(request ,from ,payload)`). The deepest point: one substrate
+serves code, data, messages, *and* the content-addressing identity normal form —
+quadruple duty is the fertility. The sticky wicket: s-expressions give the
+*substrate* (structural, fragmentation-free messages), not the
+*contract/capability discipline* — structural messages are fragmentation-free
+*because* contract-free, so the contract layer (behavioral-vs-contract identity,
+the capability membrane) is grown on top. The firmament is fertile; it is not the
+crop. Grounded payoff: a *sound cross-agent* message substrate requires owning
+*both halves* — portable symbol identity (#346) and portable numeric semantics
+(#350), both already in chunk 0.16 — because "same message on every agent" demands
+identical structural equality of symbols and numbers everywhere (the same property
+content-addressing needs). The bootstrap-ownership roadmap is already laying this
+ground, perhaps without having framed it as such.
+
 ## Where it landed
 
 The judgment-call forks are resolved (see the design note's "Resolved direction").
