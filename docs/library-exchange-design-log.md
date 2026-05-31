@@ -625,6 +625,22 @@ gives the worker runtime; chunk 0.16 (own symbol identity #346 + numeric backend
 #350) makes the bridge sound — same meaning *and hash* on both runtimes requires
 owning both lexical halves. That is why 0.16 is where bridge-ability gets real.
 
+## Projective lean for hash-addressed context spines (Open #6)
+
+The operator leans **projective** over native for hash-addressed context spines,
+on the decisive ground of *not changing the language mutation model*. Recorded as
+the current lean on Open #6. Rationale captured: projective keeps
+`set!`/cells/redefine-everywhere untouched (hash-addressing is an additional view,
+not a replacement); the hash is a point-in-time snapshot computed on demand (no
+per-mutation cost on the live path); and **frame-level hash memoization** (each
+frame caches its content hash, invalidated on `set!`) recovers most of native's
+efficiency without touching the eval core. Also clarified this round (non-design):
+the "chip" mechanism is a coding-agent **harness/session feature** (`spawn_task` →
+a clickable UI chip that spins a side-task into an isolated worktree session, or
+is dismissed), *not* a GitHub feature — ephemeral and untracked, which is why it
+did not satisfy "make certain it is there" (hence #378). "Lisp OTP + capabilities"
+adopted as the framing because it foregrounds capabilities as the novel plane.
+
 ## Where it landed
 
 The judgment-call forks are resolved (see the design note's "Resolved direction").
