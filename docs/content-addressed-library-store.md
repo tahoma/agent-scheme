@@ -721,8 +721,9 @@ Tracked as Open question #7.
    finer grain than the library even while behavior stays library-grain. The
    concrete fork is *structural* vs *nominal* identity — Erlang dodges
    fragmentation entirely via structural, copied data (see Granularity, above).
-   **Spike filed: tahoma/agent-scheme#375** — the minimal record-crossing-a-
-   version-boundary experiment to prove or break this. Relatedly, inter-agent
+   **Spike filed: tahoma/agent-scheme#375** (scheduled 0.15.7, immediately after
+   the design) — the minimal record-crossing-a-version-boundary experiment to
+   prove or break this. Relatedly, inter-agent
    *messages* are s-expression structural data — already structural and
    fragmentation-free, the Erlang escape by construction — so the *message* layer
    leans structural independently of the record question; making that sound
