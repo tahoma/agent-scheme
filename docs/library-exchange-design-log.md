@@ -678,6 +678,24 @@ capability-context/lease/nonce/linear model. Parked by design: foreign plane
 Process: merging #377 greens the dependent-issue references. (Also trimmed an
 earlier misattribution from this log per operator.)
 
+## Working model clarified; parked open questions filed (#380–#382)
+
+Clarified the working model: **active design** stays in-context under #376 (and is
+captured to its docs); **implementation** gets its own issue/branch (#375/#378/#379
+pattern); **parked future-work** is filed as tracked issues so it is not lost.
+Applied: filed the three parked open-question follow-ups — **#380** thin-agent
+deployment tier (Open #4), **#381** environment-reflection meta-capability (Open
+#2), **#382** provenance trust residuals (Open #3) — all unscheduled/parked,
+referencing #376; the open-questions list now points at them. Decisions recorded:
+the active *design* threads — cross-process capability delegation (Open question
+#7, distributed ocap) and the spec-pass items (normalization dial; the
+capability/lease/nonce/linear model) — stay *in-context* under #376, with
+implementation issues to follow when concrete. The operator
+also noted the roadmap-scheduling convention: **filed + unscheduled = active/now
+candidate; filed + scheduled = deferred to its slot** — so #375 (type-identity
+spike) is deliberately left unscheduled to keep it "do next." #377 merging is the
+housekeeping that greens the dependent references.
+
 ## Where it landed
 
 The judgment-call forks are resolved (see the design note's "Resolved direction").
