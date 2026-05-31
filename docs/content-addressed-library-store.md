@@ -185,6 +185,31 @@ example: in-process foreign code that sacrifices the isolation making everything
 else safe (a bad NIF crashes the node) — itself an argument for keeping the
 foreign plane separate and likely out-of-process.
 
+*Forward note (generalizing from the existing limited basis).* Both foreign axes
+are already implemented to a *limited* extent, and because the problem space
+forced those forms, they pre-determine the *core* of any generalization — provided
+one separates the **necessary core** (forced by the problem; generalizes) from the
+**incidental specifics** (forced by the particular boundary; must not). *Foreign-
+import:* the gated primitive already *is* a foreign-import declaration — the
+built-in primitive spec (name, host implementation, arity bounds, declared
+effects, capability domain, limits), resolved through the backend and wrapped by
+the monitor/audit, *is* the generalized declaration's schema. New parts are only
+(a) the gate on *who* may declare one (the F1/runtime-author tier) and (b)
+resolving *arbitrary* native symbols rather than hand-written backend wrappers
+(the OS-linking / ABI-descriptor piece); the hand-written wrapper is the incidental
+specific, the declaration-schema-plus-gating the necessary core. *Foreign-export:*
+the host-adapter / CLI / daemon `main` already obeys, by necessity, the rules a
+general foreign-export needs — it establishes a capability context at the boundary,
+marshals arguments in and `value->external` out (never a live handle), and
+presents an explicit, versioned contract. Those generalize. The incidental
+specifics *not* to generalize: text/external marshaling (a shell artifact — a
+structured embedding would marshal structured data), the single entry point, and
+the CLI flag vocabulary. The payoff: the existing entry point *reduces* the
+foreign-export generalization to its one genuinely open sub-question — the
+multi-caller capability-context policy (fixed-at-export vs per-authenticated-caller
+vs ambient) — everything else is imitation by necessity of what `main` already
+does.
+
 ## Open vs sealed: place the seam, don't pick a pole
 
 The deepest axis is **open vs sealed** (not interpreted vs compiled — SBCL and
