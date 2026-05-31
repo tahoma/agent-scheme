@@ -1,7 +1,8 @@
 # Content-Addressed Library Store and Inter-Agent Exchange
 
 > Status: exploratory design note. This captures a design discussion, not a
-> ratified architecture. It has no implementing issue yet. Treat it as the
+> ratified architecture. It is tracked under tahoma/agent-scheme#376 (design/RFC;
+> roadmap chunk 0.15.6) and landed via PR #377. Treat it as the
 > shared vocabulary and the set of open decisions for a future library-exchange
 > facility, to be reconciled with [Architecture and threat
 > model](architecture.md) and [Capability Environment and Effect
