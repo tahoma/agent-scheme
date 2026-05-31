@@ -291,9 +291,14 @@ of context hashes (dovetails with the revocable grant cell); cheap
 snapshot/compare/share by hash. Implementation strengths: *projective* (freeze to
 a hash on demand; keep mutable cells; less invasive) vs *native* (the spine is a
 persistent hash-addressed structure; functional mutation; fuller payoff, changes
-the eval core). The unification it completes: content-addressing as the universal
-substrate property across **code** (libraries), **data** (s-expression messages),
-and **runtime context** (the capability spine).
+the eval core). *Current lean: **projective*** — preserve the language's mutation
+model (`set!`/cells/redefine-everywhere untouched); the hash is a point-in-time
+snapshot computed on demand (so the live path pays nothing per mutation), and
+**frame-level hash memoization** (each frame caches its content hash, invalidated
+on `set!`) recovers most of native's efficiency without changing the eval core.
+The unification it completes: content-addressing as the universal substrate
+property across **code** (libraries), **data** (s-expression messages), and
+**runtime context** (the capability spine).
 
 ## Identity: content-addressing
 
@@ -739,6 +744,8 @@ bridge-ability becomes real.
    resolution layer on top (functional update + rebind on mutation), viewable from
    either dimension by parameterizing lookup over the key type? High-value scope is
    the capability-context spine (auditable hash-pinned contexts, leases/revocation
-   as context-hash sequences), not the global lexical env. Projective vs native
-   implementation. Completes content-addressing across code, data, and runtime
-   context. See Environment → "hash-addressed context spines."
+   as context-hash sequences), not the global lexical env. **Current lean:
+   projective** (compute the hash on demand; keep the language mutation model
+   unchanged; frame-level hash memoization for efficiency) rather than native
+   (persistent functional spine). Completes content-addressing across code, data,
+   and runtime context. See Environment → "hash-addressed context spines."
