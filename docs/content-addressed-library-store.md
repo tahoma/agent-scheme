@@ -580,6 +580,13 @@ is the **promote-to-durable escalation**: ephemeral by default, persisted on
 demand (worker result → a job/plan/transcript record) — the same dial as the
 harness's chip→issue and as lease-once→lease-persistent.
 
+One unresolved gap this topology exposes: **how does authority cross the bridge?**
+Capability handles are non-marshalable (and nonces linear), yet an orchestrator
+wants to delegate scoped authority to a worker in another process — so a handle
+cannot simply ride a message. This needs a distributed object-capability protocol
+(marshalable reference/ticket redeemed by message; the real handle stays home).
+Tracked as Open question #7.
+
 ## Resolved direction (this thread)
 
 - **Open by necessity.** The periphery is open because agents program; the core
@@ -759,3 +766,12 @@ harness's chip→issue and as lease-once→lease-persistent.
    unchanged; frame-level hash memoization for efficiency) rather than native
    (persistent functional spine). Completes content-addressing across code, data,
    and runtime context. See Environment → "hash-addressed context spines."
+7. **Cross-process capability delegation (distributed ocap).** Capability handles
+   are opaque, non-marshalable, host-bound, and (for nonces) linear — yet the
+   two-runtime topology needs an orchestrator to delegate scoped authority to a
+   worker in another process, so authority cannot cross the bridge *as a handle*.
+   Likely shape: a distributed object-capability protocol where a delegated
+   capability is a *marshalable reference/ticket* redeemed by message to the holder
+   (the real handle never leaves its host context), à la the E language / CapTP and
+   the ocap-distributed-systems lineage. This is the gap that makes the managed
+   inter-agent bridge actually carry authority. See Deployment topology.
