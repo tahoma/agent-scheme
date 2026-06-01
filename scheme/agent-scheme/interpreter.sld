@@ -6689,7 +6689,8 @@ escapes leave the checkpoint untouched."
               (make-continuation
                continuation
                (append (context-dynamic-winds context) '())
-               (append (context-exception-handlers context) '()))))
+               (append (context-exception-handlers context) '())
+               (context-current-error context))))
         (apply-procedure
          procedure
          (list captured)
@@ -6705,6 +6706,9 @@ escapes leave the checkpoint untouched."
       (set-context-exception-handlers!
        context
        (append (continuation-exception-handlers continuation) '()))
+      (set-context-current-error!
+       context
+       (continuation-current-error continuation))
       (continue
        (continuation-procedure continuation)
        (continuation-value arguments)))
