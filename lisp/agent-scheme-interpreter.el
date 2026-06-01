@@ -1310,29 +1310,58 @@ top-level definition forms within the sequence."
                     (step rest nil)))))))))
       (step forms t))))
 
+(defun agent-scheme--capture-handler-state (context)
+  "Return a checkpoint of CONTEXT's exception-handler and current-error state."
+  (cons (agent-scheme--eval-context-exception-handlers context)
+        (agent-scheme--eval-context-current-error context)))
+
+(defun agent-scheme--restore-handler-state (context checkpoint)
+  "Restore CONTEXT's exception-handler and current-error state from CHECKPOINT."
+  (setf (agent-scheme--eval-context-exception-handlers context)
+        (car checkpoint))
+  (setf (agent-scheme--eval-context-current-error context)
+        (cdr checkpoint)))
+
 (defun agent-scheme--drain-state (state context)
-  "Run trampoline bounces in STATE under CONTEXT."
-  (while (agent-scheme--bounce-p state)
-    (let ((syntax-environment
-           (or (agent-scheme--bounce-syntax-environment state)
-               (agent-scheme--eval-context-syntax-environment context)))
-          (continuation
-           (or (agent-scheme--bounce-continuation state)
-               #'agent-scheme--identity-continuation)))
-      ;; A bounce carries the value environment, syntax environment, and
-      ;; evaluator continuation needed for the next tail step.
-      (setq state
-            (agent-scheme--with-syntax-environment
-             context
-             syntax-environment
-             (lambda ()
-               (agent-scheme--eval-expression
-                (agent-scheme--bounce-expression state)
-                (agent-scheme--bounce-environment state)
-                context
-                t
-                continuation))))))
-  state)
+  "Run trampoline bounces in STATE under CONTEXT.
+The CPS handler primitives restore `exception-handlers' and
+`current-error' from inside their success continuation, which never runs
+when an invoked handler escapes via an Emacs Lisp `signal' (an unhandled
+or non-continuable raise).  Checkpoint that state on entry and restore it
+should the trampoline unwind before producing a final value, so the CPS
+path is unwind-safe like the direct `unwind-protect' path.  Normal return
+and reified-continuation escapes leave the checkpoint untouched."
+  (let ((checkpoint (agent-scheme--capture-handler-state context))
+        (completed nil))
+    (unwind-protect
+        (prog1
+            (progn
+              (while (agent-scheme--bounce-p state)
+                (let ((syntax-environment
+                       (or (agent-scheme--bounce-syntax-environment state)
+                           (agent-scheme--eval-context-syntax-environment
+                            context)))
+                      (continuation
+                       (or (agent-scheme--bounce-continuation state)
+                           #'agent-scheme--identity-continuation)))
+                  ;; A bounce carries the value environment, syntax
+                  ;; environment, and evaluator continuation needed for the
+                  ;; next tail step.
+                  (setq state
+                        (agent-scheme--with-syntax-environment
+                         context
+                         syntax-environment
+                         (lambda ()
+                           (agent-scheme--eval-expression
+                            (agent-scheme--bounce-expression state)
+                            (agent-scheme--bounce-environment state)
+                            context
+                            t
+                            continuation))))))
+              state)
+          (setq completed t))
+      (unless completed
+        (agent-scheme--restore-handler-state context checkpoint)))))
 
 (defun agent-scheme--trampoline (expression environment context)
   "Evaluate EXPRESSION in ENVIRONMENT using CONTEXT's trampoline."
