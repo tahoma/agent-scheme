@@ -4939,7 +4939,8 @@ When KEEP-RESULTS is non-nil, return the collected values."
            (copy-sequence
             (agent-scheme--eval-context-dynamic-winds context))
            (copy-sequence
-            (agent-scheme--eval-context-exception-handlers context)))))
+            (agent-scheme--eval-context-exception-handlers context))
+           (agent-scheme--eval-context-current-error context))))
     (agent-scheme--apply-procedure
      procedure
      (list captured)
@@ -4956,6 +4957,8 @@ When KEEP-RESULTS is non-nil, return the collected values."
   (setf (agent-scheme--eval-context-exception-handlers context)
         (copy-sequence
          (agent-scheme--continuation-exception-handlers continuation)))
+  (setf (agent-scheme--eval-context-current-error context)
+        (agent-scheme--continuation-current-error continuation))
   (agent-scheme--continue
    (agent-scheme--continuation-procedure continuation)
    (agent-scheme--continuation-value arguments)))

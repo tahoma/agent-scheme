@@ -430,4 +430,55 @@ restored that state only inside its success continuation."
     (should (eq (agent-scheme--eval-context-current-error context)
                 baseline-error))))
 
+(ert-deftest agent-scheme-eval-test-current-error-restored-after-escape ()
+  "Escaping a handler resets `current-error' to its capture-time value.
+A continuation escape (`guard' or `call/cc') reinstates the dynamic state
+snapshotted with the continuation, so `current-error' must not leak the
+handled condition past the escape -- the continuation-escape companion to
+the CPS handler-stack unwind-safety guarantee.  A live, non-escaping
+handler must still observe the condition so the debugger inspection path
+keeps working."
+  ;; A guard escape clears the handled condition afterward.
+  (should
+   (equal (agent-scheme-eval-test--external
+           "(import (scheme base) (agent debugger))
+            (guard (exn (else 'caught)) (raise 'boom))
+            (current-error)")
+          "#f"))
+  ;; A call/cc escape out of a handler clears it too.
+  (should
+   (equal (agent-scheme-eval-test--external
+           "(import (scheme base) (agent debugger))
+            (call/cc
+             (lambda (k)
+               (with-exception-handler
+                (lambda (condition) (k 'escaped))
+                (lambda () (raise 'boom)))))
+            (current-error)")
+          "#f"))
+  ;; A non-escaping handler still observes the live condition.
+  (should
+   (equal (agent-scheme-eval-test--external
+           "(import (scheme base) (agent debugger))
+            (with-exception-handler
+             (lambda (condition)
+               (if (current-error) 'sees-condition 'blank))
+             (lambda () (raise-continuable 'boom)))")
+          "sees-condition")))
+
+(ert-deftest agent-scheme-eval-test-dynamic-wind-after-runs-on-raise ()
+  "A `dynamic-wind' after thunk runs when a raise unwinds to an outer guard.
+Companion to the call/cc-escape dynamic-wind coverage: an exception escape
+must run pending after thunks while unwinding to the handler."
+  (should
+   (equal (agent-scheme-eval-test--external
+           "(let ((log '()))
+              (define (add tag) (set! log (cons tag log)))
+              (guard (exn (else (add 'caught) (reverse log)))
+                (dynamic-wind
+                 (lambda () (add 'before))
+                 (lambda () (add 'during) (raise 'x))
+                 (lambda () (add 'after)))))")
+          "(before during after caught)")))
+
 ;;; agent-scheme-eval-test.el ends here

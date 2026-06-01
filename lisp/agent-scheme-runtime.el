@@ -221,13 +221,14 @@ new values before they are installed."
 
 (cl-defstruct (agent-scheme--continuation
                (:constructor agent-scheme--make-continuation
-                             (procedure dynamic-winds exception-handlers))
+                             (procedure dynamic-winds exception-handlers
+                              current-error))
                (:copier nil))
   "A re-enterable continuation captured by call/cc.
 PROCEDURE is the evaluator continuation to receive a value, and
-DYNAMIC-WINDS and EXCEPTION-HANDLERS are the dynamic state active at
-capture time."
-  procedure dynamic-winds exception-handlers)
+DYNAMIC-WINDS, EXCEPTION-HANDLERS, and CURRENT-ERROR are the dynamic state
+active at capture time."
+  procedure dynamic-winds exception-handlers current-error)
 
 (cl-defstruct (agent-scheme--dynamic-wind-frame
                (:constructor agent-scheme--make-dynamic-wind-frame
