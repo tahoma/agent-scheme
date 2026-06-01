@@ -1351,23 +1351,51 @@
                      (step remaining))))))))
         (step forms)))
 
+    (define (capture-handler-state context)
+      "Return a checkpoint of CONTEXT's exception-handler and current-error state."
+      (cons (context-exception-handlers context)
+            (context-current-error context)))
+
+    (define (restore-handler-state context checkpoint)
+      "Restore CONTEXT's exception-handler and current-error state from CHECKPOINT."
+      (set-context-exception-handlers! context (car checkpoint))
+      (set-context-current-error! context (cdr checkpoint)))
+
     (define (drain-state state context)
-      "Run bounce states until evaluation produces a final value."
-      (let loop ((state state))
-        (if (bounce? state)
-            ;; A bounce carries the value environment, syntax environment, and
-            ;; evaluator continuation needed by the next tail step.
-            (loop
-             (with-syntax-environment
-              context
-              (bounce-syntax-environment state)
-              (lambda ()
-                (eval-expression (bounce-expression state)
-                                 (bounce-environment state)
-                                 context
-                                 #t
-                                 (bounce-continuation state)))))
-            state)))
+      "Run bounce states until evaluation produces a final value.
+The CPS handler primitives restore exception-handlers and current-error
+from inside their success continuation, which never runs when an invoked
+handler escapes via a raised condition (an unhandled or non-continuable
+raise).  Checkpoint that state on entry and restore it should the
+trampoline unwind before producing a final value, so the CPS path is
+unwind-safe like the direct path.  Normal return and reified-continuation
+escapes leave the checkpoint untouched."
+      (let ((checkpoint (capture-handler-state context))
+            (completed #f))
+        (dynamic-wind
+         (lambda () #f)
+         (lambda ()
+           (let loop ((state state))
+             (if (bounce? state)
+                 ;; A bounce carries the value environment, syntax
+                 ;; environment, and evaluator continuation needed by the
+                 ;; next tail step.
+                 (loop
+                  (with-syntax-environment
+                   context
+                   (bounce-syntax-environment state)
+                   (lambda ()
+                     (eval-expression (bounce-expression state)
+                                      (bounce-environment state)
+                                      context
+                                      #t
+                                      (bounce-continuation state)))))
+                 (begin
+                   (set! completed #t)
+                   state))))
+         (lambda ()
+           (if (not completed)
+               (restore-handler-state context checkpoint))))))
 
     (define (trampoline expression environment context)
       "Evaluate EXPRESSION in tail-call trampoline mode and budget the result."
