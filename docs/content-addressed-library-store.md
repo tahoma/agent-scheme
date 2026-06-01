@@ -821,7 +821,7 @@ for; depends on the sound bridge, chunk 0.16).*
    still counts transitively — but the edges need settling: re-export/rename makes
    contractual status relative to the exporting library, and it is unsettled
    whether export *names* and library-level metadata join the contract identity
-   (likely yes). See Identity → "Two identities."
+   (likely yes). See Identity → "Two identities." *Tracked: #384.*
 6. **Hash-addressed context spines.** Should the (capability/dynamic) context
    spine be an immutable hash-addressed value layer with a mutable symbolic
    resolution layer on top (functional update + rebind on mutation), viewable from
@@ -832,6 +832,7 @@ for; depends on the sound bridge, chunk 0.16).*
    unchanged; frame-level hash memoization for efficiency) rather than native
    (persistent functional spine). Completes content-addressing across code, data,
    and runtime context. See Environment → "hash-addressed context spines."
+   *Tracked: #385.* **Implementation of the store + exchange is tracked as #386.**
 7. **Cross-process capability delegation (distributed ocap).** *Direction
    settled (this thread); spec sub-parts open.* Handles are non-marshalable and
    nonces linear, yet the orchestrator must delegate scoped authority to a worker
