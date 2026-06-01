@@ -787,13 +787,22 @@ merge of it.
 At the operator's direction, slimmed the roadmap (#53) Graph Invariants section by
 migrating invariants whose referenced issues are **all closed** into a new
 `docs/resolved-graph-invariants.md`, mirroring the chunk-to-release-notes
-migration. Classification was scripted (closed-issue set vs. each invariant's issue
-references; conservative — any open or unknown reference retains the invariant):
-**76 of 100 migrated, 24 retained** (the retained set is the open/future cluster —
-LLIR/GC/byte-code backends, SRFI bundle, library resolution, license, external
-protocol, JVM contracts — plus the two standing structural rules). Done as an
-isolated commit on the #376/#377 branch per the operator's call (their review;
+migration. Correct split (after a fix — see below): **37 of 100 migrated, 63
+retained**; the retained set is the open/future cluster (LLIR/GC/byte-code
+backends, bootstrap ownership, task control loop, providers, VCS, capability
+domains, SRFI, etc.) plus the standing structural rules. Done as an isolated
+commit on the #376/#377 branch per the operator's call (their review;
 roadmap-maintenance precedent #364 is closed).
+
+**Bug caught (by the operator's verification question) and fixed.** The first pass
+used a shell-loop classifier that over-migrated — it filed 39 invariants
+referencing *open* issues (e.g. #115 LLIR, #346 portable-symbol-ownership, #286
+task control loop) as "all closed." The fix: pull authoritative per-issue state in
+a single `gh issue list --state all --json number,state` call, partition
+closed/open from that one source, and reclassify with an `awk` pass (no shell-loop
+subtleties). Verified: **0** migrated invariants reference any open issue. This is
+exactly the silent graph-corruption the migration was warned to avoid; the
+verification step is now mandatory for any such migration.
 
 ## Where it landed
 
