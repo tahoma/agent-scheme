@@ -354,9 +354,10 @@
               (error \"bad input\" 'alpha 7))")
           "(\"bad input\" (alpha 7))")))
 
-(defun agent-scheme-eval-test--fresh-context ()
-  "Return a cons of a fresh evaluation context and base environment."
-  (let ((context (agent-scheme--new-eval-context nil))
+(defun agent-scheme-eval-test--fresh-context (&optional options)
+  "Return a cons of a fresh evaluation context and base environment.
+OPTIONS is an evaluation-context option plist (e.g. `:max-steps')."
+  (let ((context (agent-scheme--new-eval-context options))
         (environment (agent-scheme-make-base-environment)))
     (setf (agent-scheme--eval-context-interaction-environment context)
           environment)
@@ -480,5 +481,51 @@ must run pending after thunks while unwinding to the handler."
                  (lambda () (add 'during) (raise 'x))
                  (lambda () (add 'after)))))")
           "(before during after caught)")))
+
+(ert-deftest agent-scheme-eval-test-budget-error-in-handler-unwind-safe ()
+  "A budget overflow raised while a handler runs restores dynamic state.
+The checkpoint must cover Emacs Lisp `signal's beyond raises: a step
+budget exceeded inside an invoked handler still leaves `exception-handlers'
+and `current-error' at their pre-evaluation baseline."
+  (let* ((cell (agent-scheme-eval-test--fresh-context '(:max-steps 5000)))
+         (context (car cell))
+         (environment (cdr cell))
+         (baseline-handlers
+          (agent-scheme--eval-context-exception-handlers context))
+         (baseline-error
+          (agent-scheme--eval-context-current-error context)))
+    (should-error
+     (agent-scheme-eval-test--run-on
+      "(define (spin n) (spin (+ n 1)))
+       (with-exception-handler
+        (lambda (condition) (spin 0))
+        (lambda () (raise 'boom)))"
+      context environment)
+     :type 'agent-scheme-budget-error)
+    (should (equal (agent-scheme--eval-context-exception-handlers context)
+                   baseline-handlers))
+    (should (eq (agent-scheme--eval-context-current-error context)
+                baseline-error))))
+
+(ert-deftest agent-scheme-eval-test-dynamic-wind-stack-unwind-safe ()
+  "An aborting signal does not leak `dynamic-wind' frames onto the context.
+When an unhandled raise unwinds the trampoline out of a `dynamic-wind'
+body, the context's dynamic-wind stack must return to its pre-evaluation
+baseline rather than retaining the entered frame."
+  (let* ((cell (agent-scheme-eval-test--fresh-context))
+         (context (car cell))
+         (environment (cdr cell))
+         (baseline-winds
+          (agent-scheme--eval-context-dynamic-winds context)))
+    (should-error
+     (agent-scheme-eval-test--run-on
+      "(dynamic-wind
+         (lambda () 'before)
+         (lambda () (raise 'boom))
+         (lambda () 'after))"
+      context environment)
+     :type 'agent-scheme-eval-error)
+    (should (equal (agent-scheme--eval-context-dynamic-winds context)
+                   baseline-winds))))
 
 ;;; agent-scheme-eval-test.el ends here
