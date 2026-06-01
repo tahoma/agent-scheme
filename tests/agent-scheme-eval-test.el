@@ -354,4 +354,80 @@
               (error \"bad input\" 'alpha 7))")
           "(\"bad input\" (alpha 7))")))
 
+(defun agent-scheme-eval-test--fresh-context ()
+  "Return a cons of a fresh evaluation context and base environment."
+  (let ((context (agent-scheme--new-eval-context nil))
+        (environment (agent-scheme-make-base-environment)))
+    (setf (agent-scheme--eval-context-interaction-environment context)
+          environment)
+    (agent-scheme--ensure-base-syntax context environment)
+    (cons context environment)))
+
+(defun agent-scheme-eval-test--run-on (source context environment)
+  "Evaluate SOURCE through the CPS trampoline on CONTEXT and ENVIRONMENT."
+  (agent-scheme--trampoline
+   (agent-scheme--make-sequence (agent-scheme-read-all source nil) t)
+   environment
+   context))
+
+(ert-deftest agent-scheme-eval-test-exception-handler-unwind-safe ()
+  "A handler that re-raises non-continuably restores handler state.
+Whether the exception machinery runs through the CPS trampoline or the
+direct (non-`/k') primitive, an Emacs Lisp `signal' escaping the invoked
+handler must leave `exception-handlers' and `current-error' at their
+pre-evaluation baseline.  Regression for the CPS path that previously
+restored that state only inside its success continuation."
+  ;; CPS path: the inner handler re-raises non-continuably; the outer
+  ;; handler returns, which signals "non-continuable exception handler
+  ;; returned" before any success continuation can pop the installed
+  ;; frames.
+  (let* ((cell (agent-scheme-eval-test--fresh-context))
+         (context (car cell))
+         (environment (cdr cell))
+         (baseline-handlers
+          (agent-scheme--eval-context-exception-handlers context))
+         (baseline-error
+          (agent-scheme--eval-context-current-error context)))
+    (should-error
+     (agent-scheme-eval-test--run-on
+      "(with-exception-handler
+         (lambda (outer) 'outer-returned)
+         (lambda ()
+           (with-exception-handler
+            (lambda (inner) (raise 'from-inner))
+            (lambda () (raise 'original)))))"
+      context environment)
+     :type 'agent-scheme-eval-error)
+    (should (equal (agent-scheme--eval-context-exception-handlers context)
+                   baseline-handlers))
+    (should (eq (agent-scheme--eval-context-current-error context)
+                baseline-error)))
+  ;; Direct path: enter through the non-`/k' `with-exception-handler'
+  ;; primitive with the same nested scenario built as procedures.
+  (let* ((cell (agent-scheme-eval-test--fresh-context))
+         (context (car cell))
+         (environment (cdr cell))
+         (handler
+          (agent-scheme-eval-test--run-on
+           "(lambda (outer) 'outer-returned)" context environment))
+         (thunk
+          (agent-scheme-eval-test--run-on
+           "(lambda ()
+              (with-exception-handler
+               (lambda (inner) (raise 'from-inner))
+               (lambda () (raise 'original))))"
+           context environment))
+         (baseline-handlers
+          (agent-scheme--eval-context-exception-handlers context))
+         (baseline-error
+          (agent-scheme--eval-context-current-error context)))
+    (should-error
+     (agent-scheme--primitive-with-exception-handler
+      (list handler thunk) context)
+     :type 'agent-scheme-eval-error)
+    (should (equal (agent-scheme--eval-context-exception-handlers context)
+                   baseline-handlers))
+    (should (eq (agent-scheme--eval-context-current-error context)
+                baseline-error))))
+
 ;;; agent-scheme-eval-test.el ends here
