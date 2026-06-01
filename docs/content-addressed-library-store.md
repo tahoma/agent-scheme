@@ -2,7 +2,7 @@
 
 > Status: exploratory design note. This captures a design discussion, not a
 > ratified architecture. It is tracked under tahoma/agent-scheme#376 (design/RFC;
-> roadmap chunk 0.15.6) and landed via PR #377. Treat it as the
+> roadmap chunk 0.15.5) and landed via PR #377. Treat it as the
 > shared vocabulary and the set of open decisions for a future library-exchange
 > facility, to be reconciled with [Architecture and threat
 > model](architecture.md) and [Capability Environment and Effect
