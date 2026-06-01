@@ -44,7 +44,7 @@
               (map exact-integer? (cdr version))
               (map (lambda (component) (>= component 0))
                    (cdr version))))")
-    "((agent-scheme-version 0 15 4) (#t #t #t) (#t #t #t))")))
+    "((agent-scheme-version 0 15 5) (#t #t #t) (#t #t #t))")))
 
 (ert-deftest agent-scheme-reflect-test-simple-string-docstrings ()
   "Expose simple procedure docstrings through `(agent reflect)'."

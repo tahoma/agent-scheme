@@ -461,13 +461,13 @@ internal-doc change → nothing. Open edges: re-export/rename makes contractual
 status relative to the exporting library, not intrinsic; and whether export names
 + library-level metadata join the contract identity. Kept as Open question #5.
 
-## Tracked: issue #376, PR #377, roadmap 0.15.6
+## Tracked: issue #376, PR #377, roadmap 0.15.5
 
 The operator called the conversation past the point of needing real tracking.
 Filed the design/RFC umbrella **#376** (`surface:design` / `documentation` /
 `size:umbrella` / `host:agent-runtime` / `risk:medium`), inserted at "now" in the
-roadmap (#53) as chunk **0.15.6**, created branch
-`tahoma/issue-376/library-exchange-design`, bumped `version.sld` 0.15.4 → 0.15.6,
+roadmap (#53) as chunk **0.15.5**, created branch
+`tahoma/issue-376/library-exchange-design`, bumped `version.sld` 0.15.4 → 0.15.5,
 committed both design docs, and opened **PR #377** targeting `main`. The spike
 **#375** now references #376 as its parent. #376 stays open as an umbrella
 coordinating the spikes and eventual implementation; the docs remain
@@ -699,7 +699,7 @@ housekeeping that greens the dependent references.
 ## Everything placed in the roadmap
 
 Per the operator's "everything goes somewhere in the roadmap": **#375** placed at
-**0.15.7** — immediately after the design issue #376 (0.15.6), shifting **#378** to
+**0.15.7** — immediately after the design issue #376 (0.15.5), shifting **#378** to
 **0.15.8** (renumber noted on #378). The three parked issues placed in their
 natural homes: **#380** (thin-agent tier) → chunk **0.39 Orphans and Unloved
 Issues** (the honest catch-all for a parked, doesn't-fit-a-theme decision);
@@ -710,8 +710,8 @@ deferred, per the prior convention) to their late chunks, which is the intent;
 #375 is scheduled at the *front* (0.15.7), so it stays the "do-next" pull despite
 now being on the map. Convention clarified: the roadmap tracks *issues* (the
 work), not *PRs* (the delivery mechanism) — so **PR #377 has no roadmap slot**; it
-is the vehicle that delivers issue #376 (roadmap 0.15.6) and carries the matching
-version bump. Roadmap slot 0.15.6 = issue #376 = delivered by PR #377. (GitHub
+is the vehicle that delivers issue #376 (roadmap 0.15.5) and carries the matching
+version bump. Roadmap slot 0.15.5 = issue #376 = delivered by PR #377. (GitHub
 shares one number sequence across issues and PRs, so the PR opened right after the
 issue took the adjacent number — easy to mistake for a sibling issue. Convention:
 always write "issue #N" / "PR #N" explicitly to disambiguate.) This leaves a
@@ -719,7 +719,7 @@ always write "issue #N" / "PR #N" explicitly to disambiguate.) This leaves a
 a PR is-an-issue in GitHub's model, `gh issue view 377` even *returns* the PR — so
 the gap appears "filled" by the PR. This is a cosmetic GitHub-numbering artifact,
 **not a roadmap gap**: the version-bumping change is fully on the roadmap as issue
-#376 (0.15.6), which PR #377 delivers. #377 is the only PR in the #375–#382 range,
+#376 (0.15.5), which PR #377 delivers. #377 is the only PR in the #375–#382 range,
 so it is the only such gap.
 
 ## Cross-process capability delegation worked through (Open #7 direction)
@@ -803,6 +803,23 @@ closed/open from that one source, and reclassify with an `awk` pass (no shell-lo
 subtleties). Verified: **0** migrated invariants reference any open issue. This is
 exactly the silent graph-corruption the migration was warned to avoid; the
 verification step is now mandatory for any such migration.
+
+## Version corrected to 0.15.5 (avoid orphaning) + version-everywhere fix
+
+Two operator catches, both mine to own. (1) **Orphaning:** main is at 0.15.4 and
+0.15.5 (#367, unmerged) sits ahead of #376 in the chunk map, so bumping #377 to
+0.15.6 would skip 0.15.5. Since #377 is what actually merges next, it should take
+**0.15.5**; swapped the chunk map so #376 = 0.15.5 and #367 = 0.15.6 (#367 not yet
+merged, so free to move). (2) **Version-everywhere + untested commit:** the runtime
+version is asserted in several tests (`agent-scheme-runtime-test.el`,
+`agent-scheme-eval-test.scm`, `agent-scheme-reflect-test.el`); I bumped only
+`version.sld`, so every CI job went red on the version mismatch — and I had
+committed without running the suite. Fixed: set `version.sld` + all 8 true version
+assertions to 0.15.5 (the static `since` doc-metadata fixtures, which do not track
+the runtime version, were correctly left at 0.15.4), then **ran the full local
+suite green** (Emacs core/library/capabilities/tools + Gambit/Gauche/Guile/Racket/
+Cyclone-compiled hosts, 0 unexpected) *before* committing. Lesson recorded:
+`make test` must pass locally before any commit that touches `version.sld` or code.
 
 ## Where it landed
 

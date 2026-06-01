@@ -261,11 +261,11 @@
 
 (check 'runtime-version-components
        (agent-scheme-version-components)
-       '(0 15 4))
+       '(0 15 5))
 
 (check 'runtime-version-datum
        (agent-scheme-result->external (agent-scheme-version))
-       "(agent-scheme-version 0 15 4)")
+       "(agent-scheme-version 0 15 5)")
 
 (check 'reader-source-metadata-default-enabled
        (agent-scheme-datum->external
