@@ -821,6 +821,25 @@ suite green** (Emacs core/library/capabilities/tools + Gambit/Gauche/Guile/Racke
 Cyclone-compiled hosts, 0 unexpected) *before* committing. Lesson recorded:
 `make test` must pass locally before any commit that touches `version.sld` or code.
 
+## Scrub for follow-through gaps; version-footprint trim; CI-monitoring rule
+
+Three operator wrap-up asks. **(1) Version footprint trim:** the runtime version is
+hardcoded in ~9 places (version.sld + 8 test assertions). Recommendation: refactor
+the version-asserting tests to *derive* the expected value from
+`agent-scheme-version-datum` (assert machinery/consistency, not a literal), leaving
+version.sld the sole per-PR update point. Filed as **#387** (DX, 0.15.9). **(2)
+Scrub of the design log vs. GitHub:** open questions #1-#4/#7 are tracked
+(#375/#381/#382/#380/#383), but #5 and #6 had no issues, and — the real gap — the
+*core artifact had only the RFC (#376), no build issue*. Filed **#384** (Open #5,
+0.17), **#385** (Open #6, 0.40), and **#386** the content-addressed store +
+exchange *implementation* phase 1 (0.17; depends on #375/#50/bridge-0.16) — the
+follow-through anchor. So every open question and the core build are now tracked.
+**(3) CI-monitoring rule:** filed **#388** to encode in AGENTS.md that after any
+commit to an open PR one must background-monitor CI to completion (never declare
+success on a partial signal) and compare posted shard-timing data against recent
+merged-PR timings to catch regressions. Adopted behaviorally as of this PR (the
+version fix was pushed only after a full local green, then CI watched to 56/0).
+
 ## Where it landed
 
 The judgment-call forks are resolved (see the design note's "Resolved direction").
