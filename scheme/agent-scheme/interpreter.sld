@@ -1351,26 +1351,35 @@
                      (step remaining))))))))
         (step forms)))
 
-    (define (capture-handler-state context)
-      "Return a checkpoint of CONTEXT's exception-handler and current-error state."
-      (cons (context-exception-handlers context)
-            (context-current-error context)))
+    (define (capture-dynamic-state context)
+      "Return a checkpoint of CONTEXT's dynamic-extent state.
+The checkpoint covers the exception-handler stack, current-error, and the
+dynamic-wind stack -- the state CPS primitives mutate and unwind through
+their success continuations."
+      (list (context-exception-handlers context)
+            (context-current-error context)
+            (context-dynamic-winds context)))
 
-    (define (restore-handler-state context checkpoint)
-      "Restore CONTEXT's exception-handler and current-error state from CHECKPOINT."
-      (set-context-exception-handlers! context (car checkpoint))
-      (set-context-current-error! context (cdr checkpoint)))
+    (define (restore-dynamic-state context checkpoint)
+      "Restore CONTEXT's dynamic-extent state from CHECKPOINT."
+      (set-context-exception-handlers! context (list-ref checkpoint 0))
+      (set-context-current-error! context (list-ref checkpoint 1))
+      (set-context-dynamic-winds! context (list-ref checkpoint 2)))
 
     (define (drain-state state context)
       "Run bounce states until evaluation produces a final value.
-The CPS handler primitives restore exception-handlers and current-error
-from inside their success continuation, which never runs when an invoked
-handler escapes via a raised condition (an unhandled or non-continuable
-raise).  Checkpoint that state on entry and restore it should the
-trampoline unwind before producing a final value, so the CPS path is
-unwind-safe like the direct path.  Normal return and reified-continuation
-escapes leave the checkpoint untouched."
-      (let ((checkpoint (capture-handler-state context))
+The CPS primitives restore the exception-handler stack, current-error,
+and the dynamic-wind stack from inside their success continuation, which
+never runs when an invoked handler or wind thunk escapes via a raised
+condition (an unhandled or non-continuable raise, a budget overflow).
+Checkpoint that state on entry and restore it should the trampoline
+unwind before producing a final value, so the CPS path is unwind-safe
+like the direct path.  Normal return and reified-continuation escapes
+leave the checkpoint untouched, so an aborting condition cannot leak
+handler or wind frames into a reused context.  Caught escapes still run
+dynamic-wind after thunks via switch-dynamic-winds!; an aborting
+condition does not."
+      (let ((checkpoint (capture-dynamic-state context))
             (completed #f))
         (dynamic-wind
          (lambda () #f)
@@ -1395,7 +1404,7 @@ escapes leave the checkpoint untouched."
                    state))))
          (lambda ()
            (if (not completed)
-               (restore-handler-state context checkpoint))))))
+               (restore-dynamic-state context checkpoint))))))
 
     (define (trampoline expression environment context)
       "Evaluate EXPRESSION in tail-call trampoline mode and budget the result."
