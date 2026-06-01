@@ -78,6 +78,7 @@
           continuation-procedure
           continuation-dynamic-winds
           continuation-exception-handlers
+          continuation-current-error
           make-dynamic-wind-frame
           dynamic-wind-frame?
           dynamic-wind-frame-before
@@ -430,11 +431,13 @@
     ;; Continuations snapshot the user procedure plus dynamic context so
     ;; repeated invocation can re-run dynamic-wind and handler transitions.
     (define-record-type <continuation>
-      (make-continuation procedure dynamic-winds exception-handlers)
+      (make-continuation procedure dynamic-winds exception-handlers
+                         current-error)
       continuation?
       (procedure continuation-procedure)
       (dynamic-winds continuation-dynamic-winds)
-      (exception-handlers continuation-exception-handlers))
+      (exception-handlers continuation-exception-handlers)
+      (current-error continuation-current-error))
 
     ;; Record type for before/after thunks active in dynamic-wind stacks.
     (define-record-type <dynamic-wind-frame>
