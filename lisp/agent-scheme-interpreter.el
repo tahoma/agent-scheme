@@ -1310,28 +1310,38 @@ top-level definition forms within the sequence."
                     (step rest nil)))))))))
       (step forms t))))
 
-(defun agent-scheme--capture-handler-state (context)
-  "Return a checkpoint of CONTEXT's exception-handler and current-error state."
-  (cons (agent-scheme--eval-context-exception-handlers context)
-        (agent-scheme--eval-context-current-error context)))
+(defun agent-scheme--capture-dynamic-state (context)
+  "Return a checkpoint of CONTEXT's dynamic-extent state.
+The checkpoint covers the exception-handler stack, `current-error', and
+the dynamic-wind stack -- the state CPS primitives mutate and unwind
+through their success continuations."
+  (list (agent-scheme--eval-context-exception-handlers context)
+        (agent-scheme--eval-context-current-error context)
+        (agent-scheme--eval-context-dynamic-winds context)))
 
-(defun agent-scheme--restore-handler-state (context checkpoint)
-  "Restore CONTEXT's exception-handler and current-error state from CHECKPOINT."
+(defun agent-scheme--restore-dynamic-state (context checkpoint)
+  "Restore CONTEXT's dynamic-extent state from CHECKPOINT."
   (setf (agent-scheme--eval-context-exception-handlers context)
-        (car checkpoint))
+        (nth 0 checkpoint))
   (setf (agent-scheme--eval-context-current-error context)
-        (cdr checkpoint)))
+        (nth 1 checkpoint))
+  (setf (agent-scheme--eval-context-dynamic-winds context)
+        (nth 2 checkpoint)))
 
 (defun agent-scheme--drain-state (state context)
   "Run trampoline bounces in STATE under CONTEXT.
-The CPS handler primitives restore `exception-handlers' and
-`current-error' from inside their success continuation, which never runs
-when an invoked handler escapes via an Emacs Lisp `signal' (an unhandled
-or non-continuable raise).  Checkpoint that state on entry and restore it
-should the trampoline unwind before producing a final value, so the CPS
-path is unwind-safe like the direct `unwind-protect' path.  Normal return
-and reified-continuation escapes leave the checkpoint untouched."
-  (let ((checkpoint (agent-scheme--capture-handler-state context))
+The CPS primitives restore the exception-handler stack, `current-error',
+and the dynamic-wind stack from inside their success continuation, which
+never runs when an invoked handler or wind thunk escapes via an Emacs
+Lisp `signal' (an unhandled or non-continuable raise, a budget overflow).
+Checkpoint that state on entry and restore it should the trampoline
+unwind before producing a final value, so the CPS path is unwind-safe
+like the direct `unwind-protect' path.  Normal return and
+reified-continuation escapes leave the checkpoint untouched, so an
+aborting signal cannot leak handler or wind frames into a reused context.
+Caught escapes still run `dynamic-wind' after thunks via
+`agent-scheme--switch-dynamic-winds'; an aborting signal does not."
+  (let ((checkpoint (agent-scheme--capture-dynamic-state context))
         (completed nil))
     (unwind-protect
         (prog1
@@ -1361,7 +1371,7 @@ and reified-continuation escapes leave the checkpoint untouched."
               state)
           (setq completed t))
       (unless completed
-        (agent-scheme--restore-handler-state context checkpoint)))))
+        (agent-scheme--restore-dynamic-state context checkpoint)))))
 
 (defun agent-scheme--trampoline (expression environment context)
   "Evaluate EXPRESSION in ENVIRONMENT using CONTEXT's trampoline."
