@@ -528,4 +528,32 @@ baseline rather than retaining the entered frame."
     (should (equal (agent-scheme--eval-context-dynamic-winds context)
                    baseline-winds))))
 
+(ert-deftest agent-scheme-eval-test-reentrant-continuation-restores-current-error ()
+  "Re-invoking a continuation captured inside a handler restores `current-error'.
+A continuation snapshots the dynamic state at capture time, so re-entering
+a handler must reinstate that handler's condition -- not whatever condition
+is current at the point of re-invocation.  The probe captures a continuation
+while handling `FIRST', handles an unrelated `SECOND' in between, then
+re-enters: `current-error' must report `FIRST' on both passes, proving the
+snapshot is restored rather than the ambient (or stale) condition leaking in."
+  (should
+   (equal (agent-scheme-eval-test--external
+           "(import (scheme base) (agent debugger))
+            (define k #f)
+            (define seen '())
+            (define (err-value)
+              (let ((condition (current-error)))
+                (if condition (cadr (assq 'value (cdr condition))) 'none)))
+            (guard (top (#t 'done-first))
+              (with-exception-handler
+               (lambda (condition)
+                 (call/cc (lambda (cc) (set! k cc)))
+                 (set! seen (cons (err-value) seen))
+                 (raise 'leave-first))
+               (lambda () (raise-continuable 'FIRST))))
+            (guard (other (#t 'done-second)) (raise 'SECOND))
+            (if k (let ((resume k)) (set! k #f) (resume 'reenter)))
+            (reverse seen)")
+          "(\"FIRST\" \"FIRST\")")))
+
 ;;; agent-scheme-eval-test.el ends here
