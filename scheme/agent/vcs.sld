@@ -1,3 +1,6 @@
+;; SPDX-License-Identifier: Apache-2.0
+;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
+;;
 ;;; vcs.sld --- Portable Agent Scheme VCS datum library
 ;;;
 ;;; This host-neutral library owns canonical VCS datums and pure parsers for

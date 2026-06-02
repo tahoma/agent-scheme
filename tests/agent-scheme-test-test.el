@@ -1,4 +1,6 @@
 ;;; agent-scheme-test-test.el --- Helper self-test library tests  -*- lexical-binding: t; -*-
+;; SPDX-License-Identifier: Apache-2.0
+;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
 ;;; Commentary:
 

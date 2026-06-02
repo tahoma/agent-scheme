@@ -1,3 +1,6 @@
+;; SPDX-License-Identifier: Apache-2.0
+;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
+;;
 ;;; Portable R7RS datum reader for Agent Scheme.
 ;;;
 ;;; This library mirrors the Emacs Lisp reader in portable Scheme.  It returns

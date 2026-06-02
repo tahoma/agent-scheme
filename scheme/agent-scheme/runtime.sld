@@ -1,3 +1,6 @@
+;; SPDX-License-Identifier: Apache-2.0
+;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
+;;
 ;;; Portable Agent Scheme runtime values and evaluation state.
 ;;;
 ;;; This library owns the host-neutral records, lexical environment helpers,

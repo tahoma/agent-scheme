@@ -1,3 +1,6 @@
+;; SPDX-License-Identifier: Apache-2.0
+;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
+;;
 ;;; Portable derived bindings for the initial `(scheme base)' environment.
 ;;;
 ;;; This file is loaded as ordinary Scheme source by both evaluator

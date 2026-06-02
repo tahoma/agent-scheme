@@ -1,3 +1,6 @@
+;; SPDX-License-Identifier: Apache-2.0
+;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
+;;
 ;;; Portable Agent Scheme macro expansion and syntax environments.
 ;;;
 ;;; This library owns syntax environments, syntax-rules expansion, recursive

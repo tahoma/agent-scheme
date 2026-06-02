@@ -1,4 +1,6 @@
 ;;; agent-scheme-diagnostics.el --- Diagnostic datums and Emacs backend adapters  -*- lexical-binding: t; -*-
+;; SPDX-License-Identifier: Apache-2.0
+;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
 ;;; Commentary:
 

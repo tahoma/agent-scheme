@@ -1,4 +1,6 @@
 ;;; agent-scheme-oracle.el --- R7RS reference oracle runner  -*- lexical-binding: t; -*-
+;; SPDX-License-Identifier: Apache-2.0
+;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
 ;;; Commentary:
 
