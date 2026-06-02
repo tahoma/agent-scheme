@@ -35,16 +35,19 @@
 (ert-deftest agent-scheme-reflect-test-runtime-version-is-canonical-triple ()
   "Expose the Agent Scheme runtime version through `(agent reflect)'."
   (agent-scheme-reflect-test--reset)
-  (should
-   (equal
-    (agent-scheme-reflect-test--eval-value-string
-     "(import (scheme base) (agent reflect))
+  (let* ((components (agent-scheme-version-components))
+         (datum-external (agent-scheme-value->external (agent-scheme-version)))
+         (flags (mapconcat (lambda (_) "#t") components " ")))
+    (should
+     (equal
+      (agent-scheme-reflect-test--eval-value-string
+       "(import (scheme base) (agent reflect))
       (let ((version (agent-scheme-version)))
         (list version
               (map exact-integer? (cdr version))
               (map (lambda (component) (>= component 0))
                    (cdr version))))")
-    "((agent-scheme-version 0 15 7) (#t #t #t) (#t #t #t))")))
+      (format "(%s (%s) (%s))" datum-external flags flags)))))
 
 (ert-deftest agent-scheme-reflect-test-simple-string-docstrings ()
   "Expose simple procedure docstrings through `(agent reflect)'."
