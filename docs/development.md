@@ -360,6 +360,33 @@ The default local verification command is:
 make test
 ```
 
+`make test` runs a trimmed default shard set for a fast local loop: one
+representative portable host (`test-portable-racket`,
+`CONSENT_DEFAULT_PORTABLE_TEST_SHARD_TARGETS`) plus all four Emacs-hosted shards
+(`test-emacs-core`, `test-emacs-library`, `test-emacs-capabilities`,
+`test-emacs-tools`). The portable reader/writer/docstring machinery that the
+source-metadata and docstring-retention modes exercise is host-independent, so
+one portable host is enough for the default loop.
+
+Run the exhaustive set — every portable host shard plus every Emacs shard —
+with the opt-in escape hatch:
+
+```sh
+make test-full
+```
+
+`make test-full` runs `CONSENT_FULL_TEST_SHARD_TARGETS`. You can also override
+the default set directly, for example to add one more host without running the
+whole matrix:
+
+```sh
+CONSENT_TEST_SHARD_TARGETS='test-portable-guile test-emacs-core' make test
+```
+
+Run `make test-full` (or the matching scheduled CI lane) before landing
+axis-sensitive changes to the reader, writer, or docstring machinery, since
+those are the paths the trimmed default no longer fans out across every host.
+
 Set `CONSENT_TEST_TARGET_ROOT` to keep the current checkout's Makefile and
 ERT harness while pointing portable Scheme host commands at another checkout or
 archive's `scheme/` directory. This is useful for historical timing sweeps that
@@ -368,6 +395,20 @@ replay a newer harness against an older reader/evaluator implementation:
 ```sh
 CONSENT_TEST_TARGET_ROOT=/tmp/consent-old make test-portable-eval
 ```
+
+CI mirrors this trimmed default on the per-push lane (`pull_request` and `push`)
+and keeps the exhaustive run on a separate opt-in lane. Each push runs the full
+`source_metadata` × `docstring_retention` (2 × 3) cross-product on one canonical
+portable host (Gambit, the `test-portable-gambit` job) and one canonical Emacs
+shard (the core language/runtime shard, the `test-emacs-core` job), and runs
+only the canonical `on` / `full` combo on every other host and shard. Every host
+and every Emacs shard is still represented at least once, so cross-host parity
+coverage is preserved; only the redundant metadata/docstring fan-out collapses.
+The exhaustive matrix — every host and shard across all six combos — runs nightly
+on the `schedule` lane and on demand through `workflow_dispatch`. The trimmed
+jobs (`test-portable-extra-hosts` and `test-emacs-hosted`) drive their
+`source_metadata` and `docstring_retention` matrix axes from a `github.event_name`
+expression, so those two events expand them back to the full axis.
 
 CI runs the aggregate suite as host/runtime-oriented shards so timing and
 failures stay visible by architectural path:
@@ -412,7 +453,10 @@ CI builds and caches Gambit 4.9.7 because Ubuntu 24.04's `gambc` package is
 4.9.3 and does not accept the `-:r7rs` runtime option needed for the portable
 library search path. The extra R7RS host matrix runs inside an Ubuntu 26.04
 container because Ubuntu 24.04 does not ship the Gauche package used by that
-shard. These shards contribute required host timing data. The
+shard. That container base image is pulled from the rate-limit-free AWS ECR
+Public Ubuntu mirror (`public.ecr.aws/ubuntu/ubuntu:26.04`) instead of Docker
+Hub, whose anonymous per-IP pull limit previously timed this job out at
+container provisioning. These shards contribute required host timing data. The
 Emacs-hosted shards split the non-portable ERT suite into core
 language/runtime, library/conformance, capability/policy, and
 tools/docs/integration groups. `make test-emacs-hosted` remains available as
