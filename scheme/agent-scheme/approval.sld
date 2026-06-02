@@ -1,3 +1,6 @@
+;; SPDX-License-Identifier: Apache-2.0
+;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
+;;
 ;;; Portable Agent Scheme approval request records.
 ;;;
 ;;; This library owns host-neutral approval request datums.  Host adapters own

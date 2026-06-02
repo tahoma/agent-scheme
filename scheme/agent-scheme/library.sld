@@ -1,3 +1,6 @@
+;; SPDX-License-Identifier: Apache-2.0
+;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
+;;
 ;;; Portable Agent Scheme library resolver support.
 ;;;
 ;;; This library owns source-library discovery, import-set resolution, and

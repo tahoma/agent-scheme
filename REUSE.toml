@@ -1,0 +1,21 @@
+version = 1
+
+# Source files (.el, .sld, .scm, .sh) carry inline SPDX headers. This file
+# supplies the same Apache-2.0 licensing for documentation, skill manifests,
+# build, and configuration files where an inline header is impractical or
+# undesirable. Future vendored third-party material must instead carry its own
+# upstream license via an inline SPDX header or a dedicated annotation here
+# (see docs/licensing.md).
+
+[[annotations]]
+path = [
+  "**/*.md",
+  "Makefile",
+  ".gitignore",
+  "NOTICE",
+  ".github/pull_request_template.md",
+  ".github/workflows/test.yml",
+]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 Tahoma Toelkes"
+SPDX-License-Identifier = "Apache-2.0"

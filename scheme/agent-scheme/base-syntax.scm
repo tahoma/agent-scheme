@@ -1,3 +1,6 @@
+;; SPDX-License-Identifier: Apache-2.0
+;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
+;;
 ;;; Portable derived syntax for the initial `(scheme base)' syntactic environment.
 ;;;
 ;;; These macros are evaluated into a fresh syntax environment after the base

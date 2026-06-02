@@ -1,4 +1,6 @@
 ;;; agent-scheme-library.el --- R7RS library resolver support  -*- lexical-binding: t; -*-
+;; SPDX-License-Identifier: Apache-2.0
+;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
 ;;; Commentary:
 

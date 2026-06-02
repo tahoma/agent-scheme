@@ -1,3 +1,6 @@
+;; SPDX-License-Identifier: Apache-2.0
+;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
+;;
 ;;; Portable Agent Scheme result rendering boundary.
 ;;;
 ;;; This library owns conversion from runtime values and evaluation outcomes to
