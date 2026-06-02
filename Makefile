@@ -29,15 +29,24 @@ CONSENT_LIVE_MODEL_SELECTOR ?= "consent-models-test-live-local-.*"
 CONSENT_PORTABLE_TEST_SHARD_TARGETS ?= test-portable-gambit test-portable-gambit-native test-portable-racket test-portable-compiled test-portable-guile test-portable-gauche
 CONSENT_OPTIONAL_PORTABLE_TEST_SHARD_TARGETS ?= test-portable-eval test-portable-rest
 CONSENT_EMACS_TEST_SHARD_TARGETS ?= test-emacs-core test-emacs-library test-emacs-capabilities test-emacs-tools
-CONSENT_TEST_SHARD_TARGETS ?= $(CONSENT_PORTABLE_TEST_SHARD_TARGETS) $(CONSENT_EMACS_TEST_SHARD_TARGETS)
+# Representative portable host kept in the trimmed default make test shard set.
+# The reader/writer/docstring machinery exercised by the portable shards is
+# host-independent, so one host is enough for the fast local loop; the full host
+# matrix stays available through make test-full and the scheduled CI lane.
+CONSENT_DEFAULT_PORTABLE_TEST_SHARD_TARGETS ?= test-portable-racket
+# Trimmed default: one representative portable host plus the full Emacs shard set.
+CONSENT_TEST_SHARD_TARGETS ?= $(CONSENT_DEFAULT_PORTABLE_TEST_SHARD_TARGETS) $(CONSENT_EMACS_TEST_SHARD_TARGETS)
+# Exhaustive opt-in set: every portable host shard plus every Emacs shard.
+CONSENT_FULL_TEST_SHARD_TARGETS ?= $(CONSENT_PORTABLE_TEST_SHARD_TARGETS) $(CONSENT_EMACS_TEST_SHARD_TARGETS)
 CONSENT_PORTABLE_TEST_JOBS ?= $(words $(CONSENT_PORTABLE_TEST_SHARD_TARGETS))
 CONSENT_OPTIONAL_PORTABLE_TEST_JOBS ?= $(words $(CONSENT_OPTIONAL_PORTABLE_TEST_SHARD_TARGETS))
 CONSENT_EMACS_TEST_JOBS ?= $(words $(CONSENT_EMACS_TEST_SHARD_TARGETS))
 CONSENT_TEST_JOBS ?= $(words $(CONSENT_TEST_SHARD_TARGETS))
+CONSENT_FULL_TEST_JOBS ?= $(words $(CONSENT_FULL_TEST_SHARD_TARGETS))
 
 .DEFAULT_GOAL := help
 
-.PHONY: help clean clean-compile compile compile-elisp test test-portable test-portable-chibi test-portable-eval test-portable-rest test-portable-gambit test-portable-gambit-native test-portable-racket test-portable-compiled test-portable-guile test-portable-gauche test-emacs-hosted test-emacs-core test-emacs-library test-emacs-capabilities test-emacs-tools test-live-model-ci test-live-model conformance-oracle
+.PHONY: help clean clean-compile compile compile-elisp test test-full test-portable test-portable-chibi test-portable-eval test-portable-rest test-portable-gambit test-portable-gambit-native test-portable-racket test-portable-compiled test-portable-guile test-portable-gauche test-emacs-hosted test-emacs-core test-emacs-library test-emacs-capabilities test-emacs-tools test-live-model-ci test-live-model conformance-oracle
 
 help:
 	@printf '%s\n' 'Consent Scheme top-level actions:'
@@ -46,7 +55,8 @@ help:
 	@printf '  %-26s %s\n' 'clean-compile' 'Remove host-compiled portable executable outputs.'
 	@printf '  %-26s %s\n' 'compile' 'Build host-compiled portable executable artifacts.'
 	@printf '  %-26s %s\n' 'compile-elisp' 'Byte-compile checked-in Elisp sources.'
-	@printf '  %-26s %s\n' 'test' 'Run the project test suite across local shards.'
+	@printf '  %-26s %s\n' 'test' 'Run the trimmed default local shard set.'
+	@printf '  %-26s %s\n' 'test-full' 'Run the exhaustive local shard set across every host and Emacs shard.'
 	@printf '  %-26s %s\n' 'test-portable' 'Run the default portable R7RS host shards.'
 	@printf '  %-26s %s\n' 'test-portable-chibi' 'Run the optional portable R7RS Chibi shards.'
 	@printf '  %-26s %s\n' 'test-portable-eval' 'Run the optional portable R7RS Chibi evaluator subset shard.'
@@ -73,7 +83,8 @@ help:
 	@printf '  %-50s %s\n' 'CONSENT_TEST_SOURCE_METADATA=on|off' 'Default source metadata mode injected by CI matrix shards.'
 	@printf '  %-50s %s\n' 'CONSENT_TEST_DOCSTRING_RETENTION=full|simple|none' 'Default docstring retention mode injected by CI matrix shards.'
 	@printf '  %-50s %s\n' 'CONSENT_TEST_JOBS=N' 'Parallel jobs used by make test.'
-	@printf '  %-50s %s\n' 'CONSENT_TEST_SHARD_TARGETS=a b' 'Shard targets run by make test.'
+	@printf '  %-50s %s\n' 'CONSENT_TEST_SHARD_TARGETS=a b' 'Trimmed default shard targets run by make test.'
+	@printf '  %-50s %s\n' 'CONSENT_FULL_TEST_SHARD_TARGETS=a b' 'Exhaustive shard targets run by make test-full.'
 	@printf '  %-50s %s\n' 'CONSENT_OPTIONAL_PORTABLE_TEST_SHARD_TARGETS=a b' 'Optional portable shard targets run by make test-portable-chibi.'
 	@printf '  %-50s %s\n' 'CONSENT_OPTIONAL_PORTABLE_TEST_JOBS=N' 'Parallel jobs used by make test-portable-chibi.'
 	@printf '  %-50s %s\n' 'CONSENT_TEST_SELECTOR=SEL' 'Optional ERT selector for make test.'
@@ -134,6 +145,12 @@ else
 test:
 	$(CONSENT_PARALLEL_MAKE) -j$(CONSENT_TEST_JOBS) $(CONSENT_TEST_SHARD_TARGETS)
 endif
+
+# Exhaustive escape hatch: run every portable host shard and every Emacs shard.
+# Use before landing axis-sensitive reader/writer/docstring changes, and as the
+# scheduled CI lane's local equivalent.
+test-full:
+	$(CONSENT_PARALLEL_MAKE) -j$(CONSENT_FULL_TEST_JOBS) $(CONSENT_FULL_TEST_SHARD_TARGETS)
 
 ifneq ($(filter environment command line override,$(origin CONSENT_PORTABLE_TEST_SELECTOR)),)
 test-portable:
