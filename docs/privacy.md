@@ -1,6 +1,6 @@
 # Secrets, Local-Only Context, and Redaction
 
-Agent Scheme treats secrets and private context as policy-bearing data. Runtime
+Consent Scheme treats secrets and private context as policy-bearing data. Runtime
 boundaries should redact secret-prone values before they enter audit records,
 session transcripts, memory records, skill/resource disclosures, exported
 artifacts, or remote provider payloads.

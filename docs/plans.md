@@ -1,6 +1,6 @@
 # First-Class Plans
 
-Agent Scheme plans are Scheme-readable records shared through the `(agent plan)`
+Consent Scheme plans are Scheme-readable records shared through the `(agent plan)`
 library. They keep an agent's current intention structure editable in the REPL
 instead of burying it in prose status messages.
 

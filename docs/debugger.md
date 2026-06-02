@@ -1,4 +1,4 @@
-# Agent Scheme Debugger
+# Consent Scheme Debugger
 
 The debugger surface turns evaluator failures and Scheme-raised exceptions into
 Scheme-readable condition datums. The outer host can render those datums in a
@@ -95,8 +95,8 @@ Example:
 ## Emacs Debugger Buffer
 
 The Emacs adapter renders debugger datums with
-`agent-scheme-debugger-display`.  The command opens a read-only
-`agent-scheme-debugger-mode` buffer derived from Emacs `special-mode` rather
+`consent-debugger-display`.  The command opens a read-only
+`consent-debugger-mode` buffer derived from Emacs `special-mode` rather
 than introducing a separate UI protocol.  The buffer shows:
 
 - the condition summary
@@ -139,7 +139,7 @@ same condition and restart datums instead of inventing separate error payloads.
 
 ## Host Boundary
 
-Debugger data follows the same host boundary as other Agent Scheme state:
+Debugger data follows the same host boundary as other Consent Scheme state:
 
 - Conditions, stack frames, environment summaries, restarts, and debugger
   events are ordinary Scheme-readable datums.

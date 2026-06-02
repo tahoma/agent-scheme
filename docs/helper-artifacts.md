@@ -1,8 +1,8 @@
 # Helper Libraries and Artifacts
 
-Agent Scheme helper libraries are reusable Scheme source snippets and related
+Consent Scheme helper libraries are reusable Scheme source snippets and related
 datums captured from interactive work. They sit between transient REPL
-definitions and packaged Agent Scheme skills: easy to inspect and reload, but
+definitions and packaged Consent Scheme skills: easy to inspect and reload, but
 not automatically trusted package contents.
 
 The public Scheme surface is `(agent helper)`:
@@ -46,7 +46,7 @@ Helper storage has three scopes:
 - `project-private`: helpers are stored in private local state keyed by the
   project root. This is the default outside a named session and does not create
   tracked files in the repository.
-- `project-tracked`: helpers are written under `.agent-scheme/helpers/` only
+- `project-tracked`: helpers are written under `.consent/helpers/` only
   after the `helper-tracked-write` policy gate approves the write.
 
 Session-local and project-private helpers are suitable for exploratory probes,
@@ -200,7 +200,7 @@ audit records. Helpers may call capability procedures that are already imported
 and approved, but helper storage itself does not grant buffer, file, process,
 network, or VCS authority.
 
-Helper libraries differ from packaged Agent Scheme skills. Packaged skills are
+Helper libraries differ from packaged Consent Scheme skills. Packaged skills are
 explicit bundles with `SKILL.md`, optional `SKILL.scm`, references, tests, and
 assets. A helper-promoted skill candidate is only a candidate datum until a
 separate export or packaging workflow writes files and trust policy accepts the

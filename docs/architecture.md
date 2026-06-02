@@ -1,6 +1,6 @@
-# Agent Scheme Architecture and Threat Model
+# Consent Scheme Architecture and Threat Model
 
-Agent Scheme is an R7RS-small guest runtime for agentic scripting. Its first
+Consent Scheme is an R7RS-small guest runtime for agentic scripting. Its first
 host is Emacs, but Emacs is an adapter around the language, not the language's
 semantic center.
 
@@ -12,13 +12,13 @@ The core promise is:
 - ecosystem compatibility through Agent Skills packages
 
 The old working name "Agent Lisp" should be treated as historical. Durable
-project APIs, docs, tests, and examples should use "Agent Scheme".
+project APIs, docs, tests, and examples should use "Consent Scheme".
 
 ## Design Rules
 
 ### R7RS First
 
-Agent Scheme targets R7RS-small compliance rather than a Scheme-flavored Lisp
+Consent Scheme targets R7RS-small compliance rather than a Scheme-flavored Lisp
 subset. The reader, datum validator, evaluator, macro expander, library system,
 standard-library bindings, ports, writer, and conformance tests should be
 designed against R7RS-small semantics.
@@ -36,7 +36,7 @@ evaluation and host authority are separate concerns:
 
 ### Lisp-First Internals
 
-Internal Agent Scheme APIs should think in Lisp and Scheme terms first. Prefer
+Internal Consent Scheme APIs should think in Lisp and Scheme terms first. Prefer
 s-expressions, symbols, datums, macros, REPL transcripts, and Scheme-readable
 logs for internal examples and records.
 
@@ -90,7 +90,7 @@ behavior, and process-boundary test strategy are recorded in
 
 ### First-Class Portable Scheme
 
-The portable R7RS implementation under `scheme/agent-scheme/` is not a sample,
+The portable R7RS implementation under `scheme/consent/` is not a sample,
 downstream mirror, or convenience test harness. It is a peer implementation of
 the language core and the strategic path toward a self-hosted or native reader,
 evaluator, emitter, and REPL. Emacs Lisp is the first host and useful
@@ -99,8 +99,8 @@ reference.
 
 Changes to reader, evaluator, macro, library, runtime, result, primitive
 manifest, standard-library, conformance fixture, or public test behavior should
-preserve architectural parity between `lisp/agent-scheme-*.el` and
-`scheme/agent-scheme/*.sld`. If a slice must land on one side first, the issue,
+preserve architectural parity between `lisp/consent-*.el` and
+`scheme/consent/*.sld`. If a slice must land on one side first, the issue,
 commit, or pull request should name the remaining parity work, and the work
 should not be presented as architecturally complete until both sides are
 handled.
@@ -217,7 +217,7 @@ implementation-level language features, and structured `host-adapter` and
 
 ## Pass-Oriented Frontend and Backends
 
-Agent Scheme should have one shared frontend for reading, resolving libraries,
+Consent Scheme should have one shared frontend for reading, resolving libraries,
 expanding macros, and normalizing Scheme programs. Interpreters, native
 compilers, and Emacs Lisp or byte-code backends consume that shared frontend
 output instead of reimplementing reader, library, or macro behavior.
@@ -236,7 +236,7 @@ backend boundary should remain Scheme-readable or printable where practical.
 
 ### Frontend Pass Boundaries
 
-The reader and datum validator turn source text into Agent Scheme datums. This
+The reader and datum validator turn source text into Consent Scheme datums. This
 pass owns lexical grammar, datum labels, abbreviation syntax, numeric and
 character external representations, and depth, node, and string-size limits. It
 does not resolve identifiers, run macros, import libraries, or perform host
@@ -284,13 +284,13 @@ runtime is bootstrapping.
 Future native compiler backends consume the same normalized core form or IR and
 emit executable code for a Scheme, byte-code, native, or other runtime target.
 They may choose different calling conventions or storage layouts, but they must
-preserve the R7RS-small contract, Agent Scheme policy behavior, inspectable
+preserve the R7RS-small contract, Consent Scheme policy behavior, inspectable
 result records, and the shared library and macro semantics supplied by the
 frontend.
 
 Future Emacs Lisp or byte-code backends also consume the normalized core form or
 IR. Generated Emacs Lisp remains an implementation detail behind
-`agent-scheme-` APIs and must not expose raw Emacs objects as Scheme values. Any
+`consent-` APIs and must not expose raw Emacs objects as Scheme values. Any
 compiled call that reaches Emacs buffers, files, processes, commands, or
 windows goes through the same capability, policy, handle, and audit surfaces as
 the interpreter backend.
@@ -304,9 +304,9 @@ and runtime records.
 
 Primitive and standard-binding metadata is exposed through a shared manifest
 surface instead of being inferred from host registration code alone. The current
-bootstrap accessors are `agent-scheme-primitive-manifest-binding-specs`,
-`agent-scheme-base-primitive-specs`, and
-`agent-scheme-base-prelude-binding-specs`; the portable Scheme evaluator exposes
+bootstrap accessors are `consent-primitive-manifest-binding-specs`,
+`consent-base-primitive-specs`, and
+`consent-base-prelude-binding-specs`; the portable Scheme evaluator exposes
 the same manifest records as Scheme-readable association lists.
 
 Each manifest record identifies the public binding name, library, minimum and
@@ -327,7 +327,7 @@ Compiler backends should treat `emitter-hook` as a dispatch hint, not as an
 authorization decision. Pure bindings can be inlined or emitted as ordinary
 runtime calls when the backend knows their representation. Mutation, control,
 port, and dynamic-state effects must lower through runtime helpers that preserve
-Agent Scheme semantics. Host-capability effects such as file, process, time,
+Consent Scheme semantics. Host-capability effects such as file, process, time,
 REPL, provider, UI, memory, and future Emacs capability operations must carry
 the `backend-effect-path` value `shared-capability-request`, lower to
 capability requests that consult policy, and produce audit records. No backend
@@ -349,13 +349,13 @@ modules while the bootstrap runtime grows. Future file splits should preserve
 behavior and keep both implementations aligned while moving responsibilities to
 more focused frontend, runtime, and backend modules:
 
-- `agent-scheme-reader.el` and `(agent-scheme reader)` are frontend reader and
+- `consent-reader.el` and `(consent reader)` are frontend reader and
   datum-validation passes.
 - Library registry, import-set resolution, `define-library`, `cond-expand`, and
   include handling in the evaluator belong to frontend library-resolution
   modules.
 - `syntax-rules`, syntax environments, identifier hygiene,
-  `agent-scheme-expand`, and `agent-scheme-expand-source` belong to frontend
+  `consent-expand`, and `consent-expand-source` belong to frontend
   expansion modules.
 - Recursive full expansion of core combinations is a frontend lowering step
   until it is replaced or followed by an explicit normalizer.
@@ -364,23 +364,23 @@ more focused frontend, runtime, and backend modules:
   ports, budgets, and result records belong to the interpreter backend and
   shared runtime support.
 - The `(scheme base)` primitive registry, portable base prelude discovery, and
-  primitive manifest metadata live in `agent-scheme-base.el` so they can be
+  primitive manifest metadata live in `consent-base.el` so they can be
   inspected without loading an interpreter backend.
 - Library records, source-library discovery, import-set resolution, includes,
   `cond-expand`, and `define-library` bootstrap support live in
-  `agent-scheme-library.el`; evaluation of library bodies still calls into the
+  `consent-library.el`; evaluation of library bodies still calls into the
   current interpreter backend.
 - Syntax environments, `syntax-rules` parsing and application, hygienic
-  template expansion, and `agent-scheme-expand` entry points live in
-  `agent-scheme-macro.el`.
+  template expansion, and `consent-expand` entry points live in
+  `consent-macro.el`.
 - Evaluation, primitive implementations, procedure application, continuations,
   the trampoline, and Scheme-readable evaluation result records live in
-  `agent-scheme-interpreter.el`; `agent-scheme-eval.el` remains the public
+  `consent-interpreter.el`; `consent-eval.el` remains the public
   orchestration entry point.
 - Model provider registration, role routing, diagnostics, and the Emacs local
-  OpenAI-compatible transport live in `agent-scheme-models.el`, with matching
+  OpenAI-compatible transport live in `consent-models.el`, with matching
   portable `(agent models)` registration and routing primitives in
-  `scheme/agent-scheme/interpreter.sld`.
+  `scheme/consent/interpreter.sld`.
 - Default-denied file, process, time, default-port, and host-capability
   primitives are backend-visible capability calls, but their authority decisions
   belong to policy and adapter modules rather than to portable frontend passes.
@@ -409,7 +409,7 @@ keeps the R7RS-small contract independent of any one backend.
 
 ## Evaluation Scopes
 
-Agent Scheme has three evaluation scopes:
+Consent Scheme has three evaluation scopes:
 
 - Fresh evaluation: isolated one-off forms with no durable definitions, imports,
   macros, handles, or helper procedures after the evaluation returns.
@@ -487,7 +487,7 @@ operation, including the evaluated form, capability name, target handles or
 files, policy decision, and result or error.
 
 The Emacs adapter exposes the current bootstrap policy surface through
-`agent-scheme-policy-category-actions`.  Each category maps to `allow`, `deny`,
+`consent-policy-category-actions`.  Each category maps to `allow`, `deny`,
 or `confirm`; confirmation uses a host callback that denies in noninteractive
 batch mode unless tests or callers install an explicit confirmation function.
 
@@ -510,9 +510,9 @@ batch mode unless tests or callers install an explicit confirmation function.
 | `skill-export-write` | `confirm` | Skill export writes require explicit approval. |
 
 Audit entries live in memory as Scheme-readable datums and can be inspected
-through `agent-scheme-audit-recent-entries` or `agent-scheme-audit-display`.
-`agent-scheme-audit-clear` clears the current log, and
-`agent-scheme-audit-rotate` trims it to a chosen number of newest entries.  The
+through `consent-audit-recent-entries` or `consent-audit-display`.
+`consent-audit-clear` clears the current log, and
+`consent-audit-rotate` trims it to a chosen number of newest entries.  The
 current audit implementation records evaluations, read-only and buffer-edit
 capability calls and outcomes, capability grant creation/use/attenuation/
 expiration/revocation, standard host-effect denials or grants, skill activation
@@ -526,7 +526,7 @@ Agent Skills interop, and `(agent io)` session storage.
 
 ## Capability Grants
 
-The `(agent capability)` library represents authority as Scheme-readable grant
+The `(consent capability)` library represents authority as Scheme-readable grant
 datums. Policy still decides whether authority may exist; a grant describes how
 little of that approved authority is usable by one capability call.
 
@@ -558,7 +558,7 @@ Grant operations include `grant-capability!`, `current-grants`, `grant-ref`,
 `grant-attenuate`, `grant-revoke!`, and `with-capability-grant`. Grants can be
 attenuated by operation, resource, range, session lifetime, use count, and skill
 identity. Stale handles, revoked grants, expired grants, or mismatched scopes
-fail closed with an Agent Scheme capability grant condition before the host
+fail closed with an Consent Scheme capability grant condition before the host
 mutation runs.
 
 ## Approval Records
@@ -635,7 +635,7 @@ surface for policy-gated repository changes and remote intents.
 
 ## Threat Model
 
-Agent Scheme should assume that evaluated code, imported skills, project files,
+Consent Scheme should assume that evaluated code, imported skills, project files,
 and model-authored helper scripts can be wrong or adversarial.
 
 Primary risks:
@@ -655,7 +655,7 @@ Primary risks:
 
 Mitigations:
 
-- parse Scheme syntax with an Agent Scheme reader, not Emacs `read`
+- parse Scheme syntax with an Consent Scheme reader, not Emacs `read`
 - validate datums for maximum depth, length, scalar type, string size, and total
   node count before evaluation
 - preserve proper tail recursion while still enforcing evaluation budgets
@@ -695,7 +695,7 @@ Example events:
 (request
   (kind approval)
   (policy buffer-edit)
-  (effect (buffer-replace! h-17 120 140 "agent-scheme-read"))
+  (effect (buffer-replace! h-17 120 140 "consent-read"))
   (reason "Replace old public entry point"))
 
 (warn
@@ -735,7 +735,7 @@ The initial `(scheme base)` environment is assembled in two phases:
 
 1. install a small evaluator kernel of host primitives
 2. evaluate the portable prelude in
-   `scheme/agent-scheme/base-prelude.scm` into that environment
+   `scheme/consent/base-prelude.scm` into that environment
 
 Kernel primitives are reserved for bindings that cannot yet be expressed
 portably inside the bootstrap evaluator: primitive expression and application
@@ -764,12 +764,12 @@ adapter or primitive policy surfaces instead of portable source files.
 ## Agent Skills Interop
 
 The ecosystem Agent Skills directory format is the public interchange format.
-Agent Scheme imports skills into Scheme-readable datums for runtime use.
+Consent Scheme imports skills into Scheme-readable datums for runtime use.
 
 Package surfaces:
 
 - `SKILL.md`: portable Markdown instruction surface for the broader ecosystem
-- `SKILL.scm`: optional Agent Scheme-native manifest and helper library surface
+- `SKILL.scm`: optional Consent Scheme-native manifest and helper library surface
 
 Import/export expectations:
 
@@ -797,41 +797,41 @@ Example normalized record:
 
 ## Public Entry Points and Names
 
-Durable Agent Scheme identifiers use the project namespace documented in
+Durable Consent Scheme identifiers use the project namespace documented in
 [Naming Convention](naming.md). Public Emacs Lisp commands, functions,
 variables, customization options, faces, modes, hooks, and module entry points
-use `agent-scheme-`. Private Emacs Lisp internals use `agent-scheme--`.
+use `consent-`. Private Emacs Lisp internals use `consent--`.
 
 Initial public entry points should include:
 
-- `agent-scheme-read`
-- `agent-scheme-eval`
-- `agent-scheme-describe-environment`
-- `agent-scheme-start-repl`
-- `agent-scheme-mcp-start`
-- `agent-scheme-mcp-stop`
-- `agent-scheme-mcp-register-tools`
-- `agent-scheme-mcp-unregister-tools`
+- `consent-read`
+- `consent-eval`
+- `consent-describe-environment`
+- `consent-start-repl`
+- `consent-mcp-start`
+- `consent-mcp-stop`
+- `consent-mcp-register-tools`
+- `consent-mcp-unregister-tools`
 
 Compatibility aliases may exist during migrations from shipped names, but they
 must be documented as temporary and must not appear as the preferred names in new
-Agent Scheme docs, tests, examples, or issue plans.
+Consent Scheme docs, tests, examples, or issue plans.
 
 ## Emacs and MCP Integration
 
-Agent Scheme should keep local agent UX and MCP wiring in separable modules with
+Consent Scheme should keep local agent UX and MCP wiring in separable modules with
 clear responsibilities:
 
 - local agent UX loads the REPL, session, policy, audit, memory, and capability
   buffers
-- MCP wiring registers Agent Scheme tools only after the reader, evaluator,
+- MCP wiring registers Consent Scheme tools only after the reader, evaluator,
   library system, policy layer, sessions, and event channel are available
 - MCP payloads preserve Scheme-readable result and event datums inside the
   protocol response
-- `agent-scheme-mcp-start` and `agent-scheme-mcp-stop` should expose the
+- `consent-mcp-start` and `consent-mcp-stop` should expose the
   user-facing integration lifecycle
-- `agent-scheme-mcp-register-tools` and
-  `agent-scheme-mcp-unregister-tools` should not disturb unrelated Emacs MCP
+- `consent-mcp-register-tools` and
+  `consent-mcp-unregister-tools` should not disturb unrelated Emacs MCP
   tools
 
 MCP exposure should come after local evaluation, policy, session UX, and
@@ -842,83 +842,83 @@ MCP exposure should come after local evaluation, policy, session UX, and
 Later tickets should use focused modules rather than one large host file.
 Portable R7RS core modules live under `scheme/`, with Emacs Lisp bootstrap and
 host adapter modules under `lisp/`. Scheme modules should be usable by another
-R7RS implementation while Agent Scheme is still self-bootstrapping; Emacs Lisp
+R7RS implementation while Consent Scheme is still self-bootstrapping; Emacs Lisp
 modules own Emacs integration and must stay aligned with the portable core
 where they implement shared language behavior.
 
 Likely portable R7RS modules:
 
-- `scheme/agent-scheme/reader.sld`
-- `scheme/agent-scheme/runtime.sld`
-- `scheme/agent-scheme/base.sld`
-- `scheme/agent-scheme/datum.sld`
-- `scheme/agent-scheme/frontend.sld`
-- `scheme/agent-scheme/library.sld`
-- `scheme/agent-scheme/macro.sld`
-- `scheme/agent-scheme/normalize.sld`
-- `scheme/agent-scheme/interpreter.sld`
-- `scheme/agent-scheme/eval.sld`
-- `scheme/agent-scheme/write.sld`
-- `scheme/agent-scheme/approval.sld`
-- `scheme/agent-scheme/result.sld`
+- `scheme/consent/reader.sld`
+- `scheme/consent/runtime.sld`
+- `scheme/consent/base.sld`
+- `scheme/consent/datum.sld`
+- `scheme/consent/frontend.sld`
+- `scheme/consent/library.sld`
+- `scheme/consent/macro.sld`
+- `scheme/consent/normalize.sld`
+- `scheme/consent/interpreter.sld`
+- `scheme/consent/eval.sld`
+- `scheme/consent/write.sld`
+- `scheme/consent/approval.sld`
+- `scheme/consent/result.sld`
 
 Likely Emacs Lisp bootstrap and adapter modules:
 
-- `lisp/agent-scheme-reader.el`
-- `lisp/agent-scheme-runtime.el`
-- `lisp/agent-scheme-result.el`
-- `lisp/agent-scheme-datum.el`
-- `lisp/agent-scheme-library.el`
-- `lisp/agent-scheme-macro.el`
-- `lisp/agent-scheme-normalize.el`
-- `lisp/agent-scheme-interpreter.el`
-- `lisp/agent-scheme-eval.el`
-- `lisp/agent-scheme-env.el`
-- `lisp/agent-scheme-base.el`
-- `lisp/agent-scheme-write.el`
-- `lisp/agent-scheme-compile.el`
-- `lisp/agent-scheme-bytecode.el`
-- `lisp/agent-scheme-policy.el`
-- `lisp/agent-scheme-approval.el`
-- `lisp/agent-scheme-debugger.el`
-- `lisp/agent-scheme-diagnostics.el`
-- `lisp/agent-scheme-diff.el`
-- `lisp/agent-scheme-audit.el`
-- `lisp/agent-scheme-agent-io.el`
-- `lisp/agent-scheme-handle.el`
-- `lisp/agent-scheme-capability.el`
-- `lisp/agent-scheme-models.el`
-- `lisp/agent-scheme-repl.el`
-- `lisp/agent-scheme-transcript.el`
-- `lisp/agent-scheme-mcp.el`
+- `lisp/consent-reader.el`
+- `lisp/consent-runtime.el`
+- `lisp/consent-result.el`
+- `lisp/consent-datum.el`
+- `lisp/consent-library.el`
+- `lisp/consent-macro.el`
+- `lisp/consent-normalize.el`
+- `lisp/consent-interpreter.el`
+- `lisp/consent-eval.el`
+- `lisp/consent-env.el`
+- `lisp/consent-base.el`
+- `lisp/consent-write.el`
+- `lisp/consent-compile.el`
+- `lisp/consent-bytecode.el`
+- `lisp/consent-policy.el`
+- `lisp/consent-approval.el`
+- `lisp/consent-debugger.el`
+- `lisp/consent-diagnostics.el`
+- `lisp/consent-diff.el`
+- `lisp/consent-audit.el`
+- `lisp/consent-agent-io.el`
+- `lisp/consent-handle.el`
+- `lisp/consent-capability.el`
+- `lisp/consent-models.el`
+- `lisp/consent-repl.el`
+- `lisp/consent-transcript.el`
+- `lisp/consent-mcp.el`
 
-After the split, `agent-scheme-eval.el` can remain the public orchestration
+After the split, `consent-eval.el` can remain the public orchestration
 surface for reading, expanding, normalizing, and invoking the default backend,
 while focused frontend and backend modules own the underlying pass behavior.
 
 Focused test files should mirror the modules:
 
-- `tests/agent-scheme-reader-test.el`
-- `tests/agent-scheme-runtime-test.el`
-- `tests/agent-scheme-result-test.el`
-- `tests/agent-scheme-library-test.el`
-- `tests/agent-scheme-library-module-test.el`
-- `tests/agent-scheme-macro-test.el`
-- `tests/agent-scheme-macro-module-test.el`
-- `tests/agent-scheme-normalize-test.el`
-- `tests/agent-scheme-eval-test.el`
-- `tests/agent-scheme-base-test.el`
-- `tests/agent-scheme-base-module-test.el`
-- `tests/agent-scheme-interpreter-test.el`
-- `tests/agent-scheme-interpreter-module-test.el`
-- `tests/agent-scheme-compile-test.el`
-- `tests/agent-scheme-policy-test.el`
-- `tests/agent-scheme-approval-test.el`
-- `tests/agent-scheme-diagnostics-test.el`
-- `tests/agent-scheme-diff-test.el`
-- `tests/agent-scheme-capability-test.el`
-- `tests/agent-scheme-repl-test.el`
-- `tests/agent-scheme-mcp-test.el`
+- `tests/consent-reader-test.el`
+- `tests/consent-runtime-test.el`
+- `tests/consent-result-test.el`
+- `tests/consent-library-test.el`
+- `tests/consent-library-module-test.el`
+- `tests/consent-macro-test.el`
+- `tests/consent-macro-module-test.el`
+- `tests/consent-normalize-test.el`
+- `tests/consent-eval-test.el`
+- `tests/consent-base-test.el`
+- `tests/consent-base-module-test.el`
+- `tests/consent-interpreter-test.el`
+- `tests/consent-interpreter-module-test.el`
+- `tests/consent-compile-test.el`
+- `tests/consent-policy-test.el`
+- `tests/consent-approval-test.el`
+- `tests/consent-diagnostics-test.el`
+- `tests/consent-diff-test.el`
+- `tests/consent-capability-test.el`
+- `tests/consent-repl-test.el`
+- `tests/consent-mcp-test.el`
 
 The early conformance fixture suite belongs with issue tahoma/agent-scheme#12
 and should be usable before the whole runtime is complete.

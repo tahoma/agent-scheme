@@ -1,7 +1,6 @@
+;;; Portable source for the R7RS `(scheme lazy)' library.
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
-;;
-;;; Portable source for the R7RS `(scheme lazy)' library.
 ;;;
 ;;; This source is loaded by both evaluator bootstraps as ordinary checked-in
 ;;; Scheme library code.  It must stay host-neutral and rely only on
@@ -13,15 +12,15 @@
   (begin
     (define (%promise lazy? value)
       "Construct the internal promise record as portable mutable list data."
-      (list 'agent-scheme-promise lazy? value))
+      (list 'consent-promise lazy? value))
 
     (define (promise? obj)
-      "Return #t when OBJ is an Agent Scheme promise record."
+      "Return #t when OBJ is an Consent Scheme promise record."
       #((parameters . ((obj . "Value to inspect.")))
         (returns . "#t when OBJ has the portable promise record shape; otherwise #f.")
         (effects . (pure)))
       (and (pair? obj)
-           (eq? (car obj) 'agent-scheme-promise)))
+           (eq? (car obj) 'consent-promise)))
 
     (define (make-promise obj)
       "Return OBJ as a promise, preserving existing promises."

@@ -1,25 +1,25 @@
 # R7RS-Small Conformance Matrix
 
-This matrix is the source of truth for Agent Scheme's R7RS-small surface. Use
+This matrix is the source of truth for Consent Scheme's R7RS-small surface. Use
 the local [R7RS-small report reference](r7rs-small-report.md) for the underlying
 language text. This matrix tracks the language features, standard libraries, and
 representative fixture cases that should move from `pending` to `implemented`
 or `policy-gated` as the runtime lands.
 
-Fixture cases live in the shared `agent-scheme-fixture-suite` at
+Fixture cases live in the shared `consent-fixture-suite` at
 `fixtures/r7rs/conformance-cases.scm`. The initial external implementation
 mining report lives in [R7RS Implementation Test Mining](r7rs-implementation-mining.md).
 The ERT harness in
-`tests/agent-scheme-conformance-test.el` filters that corpus to
+`tests/consent-conformance-test.el` filters that corpus to
 `kind r7rs-conformance`, validates every conformance fixture, and runs cases
 marked `implemented`.
 
 `make conformance-oracle` runs a separate reference implementation oracle over
 pure shared fixtures. The default adapters target Chibi Scheme through
-`AGENT_SCHEME_CHIBI` or `chibi-scheme` on `PATH` and Sagittarius through
-`AGENT_SCHEME_SAGITTARIUS` or `sagittarius` on `PATH`; missing references are
+`CONSENT_CHIBI` or `chibi-scheme` on `PATH` and Sagittarius through
+`CONSENT_SAGITTARIUS` or `sagittarius` on `PATH`; missing references are
 reported as `unsupported-reference` without affecting `make test`. Gauche and
-Guile adapters can be selected with `AGENT_SCHEME_ORACLE_REFERENCES` when
+Guile adapters can be selected with `CONSENT_ORACLE_REFERENCES` when
 comparing candidate reference sets. Racket can also be selected as a developer
 comparison adapter when `racket` and the Racket `r7rs` package are installed;
 CHICKEN can be selected the same way when `csi` and the `r7rs` egg are
@@ -30,16 +30,16 @@ that same R7RS library search behavior.
 Oracle `implementation-variant` rows are expected to stay visible when they
 reflect genuine reference diversity, such as exactness choices, case-folding
 quirks, datum-label support, bytevector port optional-argument behavior, or
-library-loading behavior. They are not Agent Scheme failures unless the report
+library-loading behavior. They are not Consent Scheme failures unless the report
 status is `agent-mismatch`.
 
 ## Status Values
 
 | Status | Meaning |
 | --- | --- |
-| `pending` | Required R7RS behavior that Agent Scheme has not implemented yet. |
-| `implemented` | Behavior implemented by Agent Scheme and exercised by `make test`. |
-| `policy-gated` | Required behavior whose host effects must pass Agent Scheme policy before use. The Scheme semantics still need conformance tests. |
+| `pending` | Required R7RS behavior that Consent Scheme has not implemented yet. |
+| `implemented` | Behavior implemented by Consent Scheme and exercised by `make test`. |
+| `policy-gated` | Required behavior whose host effects must pass Consent Scheme policy before use. The Scheme semantics still need conformance tests. |
 | `unavailable` | Intentionally unavailable only where R7RS permits an implementation to omit or reject the behavior. No current row uses this status. |
 
 ## Classification Notes
@@ -48,8 +48,8 @@ Some issue #95 classifications are not fixture `status` values:
 
 - `unspecified` is recorded with fixture oracle metadata when an expectation is
   intentionally not portable across R7RS implementations.
-- `implementation-variant` is an oracle report status, not an Agent Scheme
-  fixture status; it means supported references disagree while Agent Scheme
+- `implementation-variant` is an oracle report status, not an Consent Scheme
+  fixture status; it means supported references disagree while Consent Scheme
   still matches at least one reference.
 - `agent-specific` is a fixture `kind` for harness behavior, result records,
   and resource-limit checks outside the portable R7RS conformance slice.
@@ -73,7 +73,7 @@ Some issue #95 classifications are not fixture `status` values:
 
 | Area | R7RS-small coverage | Status | Representative fixtures | Notes |
 | --- | --- | --- | --- | --- |
-| Reader syntax | Comments, case directives, booleans, numbers, characters, strings, symbols, lists, dotted pairs, abbreviations, vectors, bytevectors, datum comments, datum labels | `implemented` | `reader-boolean-literals`, `reader-long-boolean-literal`, `reader-bytevector-literal`, `reader-bytevector-byte-range-error`, `reader-character-literal`, `reader-symbol-case-directive`, `reader-no-fold-case-directive`, `reader-string-line-continuation`, `reader-number-radix-prefix`, `reader-dotted-list`, `reader-vector-literal`, `reader-abbreviation-forms`, `reader-comments-and-datum-comments`, `reader-escaped-identifier`, `reader-datum-label-cycle` | First-pass reader datums, including escaped identifiers, string continuations, radix prefixes, bytevector range errors, and shared and circular datum labels, are implemented and fixture-loaded with Agent Scheme's reader. |
+| Reader syntax | Comments, case directives, booleans, numbers, characters, strings, symbols, lists, dotted pairs, abbreviations, vectors, bytevectors, datum comments, datum labels | `implemented` | `reader-boolean-literals`, `reader-long-boolean-literal`, `reader-bytevector-literal`, `reader-bytevector-byte-range-error`, `reader-character-literal`, `reader-symbol-case-directive`, `reader-no-fold-case-directive`, `reader-string-line-continuation`, `reader-number-radix-prefix`, `reader-dotted-list`, `reader-vector-literal`, `reader-abbreviation-forms`, `reader-comments-and-datum-comments`, `reader-escaped-identifier`, `reader-datum-label-cycle` | First-pass reader datums, including escaped identifiers, string continuations, radix prefixes, bytevector range errors, and shared and circular datum labels, are implemented and fixture-loaded with Consent Scheme's reader. |
 | Primitive expressions | Literal, variable reference, quote, procedure call, `if`, `set!`, `lambda` | `implemented` | `primitive-procedure-call` | Emacs Lisp and portable R7RS evaluator kernels cover explicit lexical environments, closures, mutation, and primitive calls. |
 | Definitions and sequencing | `define`, `define-values`, `begin`, internal definitions | `implemented` | `primitive-procedure-call`, `multiple-values-define-values` | Top-level and internal definitions are supported, including `define-values`. |
 | Derived syntax | `cond`, `case`, `and`, `or`, `when`, `unless`, `let`, `let*`, `letrec`, `letrec*`, `let-values`, `let*-values`, `do`, `delay`, `quasiquote`, `parameterize` | `implemented` | `derived-let-expression`, `derived-cond-arrow-literal-binding`, `derived-case-expression`, `derived-do-expression`, `derived-quasiquote-expression`, `standard-library-lazy-force` | Macro-expanded derived syntax and evaluator-supported forms cover the R7RS-small initial target, including dynamic parameter rebinding through `parameterize`. |
@@ -95,15 +95,15 @@ Some issue #95 classifications are not fixture `status` values:
 | `(scheme base)` | `policy-gated` | `primitive-procedure-call`, `derived-let-expression`, `multiple-values-call-with-values`, `numeric-radix-string-conversions`, `numeric-rationalize-tolerance`, `standard-library-read-bytevector-partial`, `standard-library-write-string-range-newline`, `standard-library-base-features-utf8` | Core syntax, pure procedures, radix numeric conversion, rationalization, and in-memory textual/binary port helpers are implemented. Current/default ports and host-facing I/O remain policy-gated. |
 | `(scheme case-lambda)` | `implemented` | `standard-library-case-lambda`, `standard-library-case-lambda-rest` | Fixed, variadic, and dotted `case-lambda` clauses are implemented. |
 | `(scheme char)` | `implemented` | `standard-library-char-upcase`, `standard-library-char-foldcase` | Character predicates, case operations, digit values, case-insensitive character comparisons, and case-insensitive string helpers are implemented for the runtime's supported character set. |
-| `(scheme complex)` | `implemented` | `numeric-complex-rectangular-arithmetic`, `numeric-polar-special-values` | `make-rectangular`, `make-polar`, `real-part`, `imag-part`, `magnitude`, and `angle` are available. Polar and special-value results are normalized back into Agent Scheme numeric records instead of exposing host NaN/infinity spellings. |
+| `(scheme complex)` | `implemented` | `numeric-complex-rectangular-arithmetic`, `numeric-polar-special-values` | `make-rectangular`, `make-polar`, `real-part`, `imag-part`, `magnitude`, and `angle` are available. Polar and special-value results are normalized back into Consent Scheme numeric records instead of exposing host NaN/infinity spellings. |
 | `(scheme cxr)` | `implemented` | `standard-library-cxr-cadr`, `standard-library-cxr-cadddr` | Three- and four-level composed accessors are implemented. |
-| `(scheme eval)` | `implemented` | `standard-library-eval-environment` | `environment` imports explicit library sets into immutable environment specifiers; `eval` evaluates Scheme expressions through the Agent Scheme evaluator rather than host eval. Unit tests cover rejecting definitions into immutable environments. |
+| `(scheme eval)` | `implemented` | `standard-library-eval-environment` | `environment` imports explicit library sets into immutable environment specifiers; `eval` evaluates Scheme expressions through the Consent Scheme evaluator rather than host eval. Unit tests cover rejecting definitions into immutable environments. |
 | `(scheme file)` | `policy-gated` | `standard-library-file-exists-policy` | Host file-system access must be audited and policy-gated. |
-| `(scheme inexact)` | `implemented` | `numeric-inexact-special-values`, `standard-library-inexact-transcendentals` | Predicates and representative real-valued transcendental procedures are implemented through host math with Agent Scheme canonical inexact records. |
+| `(scheme inexact)` | `implemented` | `numeric-inexact-special-values`, `standard-library-inexact-transcendentals` | Predicates and representative real-valued transcendental procedures are implemented through host math with Consent Scheme canonical inexact records. |
 | `(scheme lazy)` | `implemented` | `standard-library-lazy-force` | Promise imports with memoizing `delay`, `delay-force`, `force`, `make-promise`, and `promise?` are implemented. |
 | `(scheme load)` | `policy-gated` | `standard-library-load-policy-denied` | Loading host files requires file policy. Fixture coverage exercises default denial; unit tests cover allowed-root loading. |
 | `(scheme process-context)` | `policy-gated` | `standard-library-process-context-policy-denied` | Environment, command-line, and process-exit access import successfully but require policy checks before use. |
-| `(scheme read)` | `policy-gated` | `standard-library-read-string-port`, `standard-library-read-write-roundtrip` | `read` is implemented for explicit in-memory string input ports and uses the Agent Scheme reader. Default current input and host ports remain policy-gated. |
+| `(scheme read)` | `policy-gated` | `standard-library-read-string-port`, `standard-library-read-write-roundtrip` | `read` is implemented for explicit in-memory string input ports and uses the Consent Scheme reader. Default current input and host ports remain policy-gated. |
 | `(scheme repl)` | `policy-gated` | `standard-library-repl-policy-denied`, `standard-library-repl-interaction-environment` | `interaction-environment` denies outside a current session context and returns a mutable environment specifier for the active session when policy allows it. |
 | `(scheme time)` | `policy-gated` | `standard-library-time-policy-denied`, `standard-library-time-clock-grant` | Time is an observable host effect. Calls fail closed without clock authority and return R7RS-shaped clock values through the shared capability path when a clock grant authorizes the observation. |
 | `(scheme write)` | `policy-gated` | `standard-library-write-display`, `standard-library-write-shared`, `standard-library-write-simple`, `standard-library-write-circular`, `standard-library-write-string-range-newline`, `standard-library-read-write-roundtrip`, `standard-library-current-output-port` | In-memory string output with `display`, `write`, `write-shared`, `write-simple`, range writes, and newline output is implemented; default current output and host-backed ports remain policy-gated. |
@@ -175,8 +175,8 @@ Implemented macro-expanded and evaluator-supported syntax includes `and`,
 `let-syntax`, `letrec-syntax`, `or`, `parameterize`, `quasiquote`,
 `syntax-rules`, `unless`, and `when`.
 
-The evaluator exposes a macro expansion phase through `agent-scheme-expand` and
-`agent-scheme-expand-source` in both the Emacs Lisp and portable Scheme
+The evaluator exposes a macro expansion phase through `consent-expand` and
+`consent-expand-source` in both the Emacs Lisp and portable Scheme
 kernels.
 
 Policy-gated base bindings are limited to host-managed ports,
@@ -194,7 +194,7 @@ operations above do not grant host authority.
   metadata fields.
 - When a fixture is inspired by an external test suite, include a `provenance`
   field with source location, license location, and a review note stating
-  whether the fixture is an Agent Scheme-owned rewrite or copied material.
+  whether the fixture is an Consent Scheme-owned rewrite or copied material.
 - A fixture marked `implemented` must run through `make test` and compare its
   printed value, multiple values, or expected error.
 - Fixtures marked `pending`, `policy-gated`, or `unavailable` are still loaded

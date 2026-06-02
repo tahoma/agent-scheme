@@ -7,17 +7,17 @@ set -eu
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 repo_root=$(CDPATH= cd -- "$script_dir/.." && pwd)
 
-compile_host=${AGENT_SCHEME_COMPILE_HOST:-racket}
-build_dir=${AGENT_SCHEME_COMPILE_BUILD_DIR:-"$repo_root/build/compile"}
+compile_host=${CONSENT_COMPILE_HOST:-racket}
+build_dir=${CONSENT_COMPILE_BUILD_DIR:-"$repo_root/build/compile"}
 case "$build_dir" in
   /*) ;;
   *) build_dir="$repo_root/$build_dir" ;;
 esac
 scheme_dir="$repo_root/scheme"
-version_file="$scheme_dir/agent-scheme/version.sld"
+version_file="$scheme_dir/consent/version.sld"
 
 die() {
-  printf '%s\n' "agent-scheme compile: $*" >&2
+  printf '%s\n' "consent compile: $*" >&2
   exit 2
 }
 
@@ -48,7 +48,7 @@ find_command() {
 
 version_components() {
   awk '
-    match($0, /\(agent-scheme-version [0-9]+ [0-9]+ [0-9]+\)/) {
+    match($0, /\(consent-version [0-9]+ [0-9]+ [0-9]+\)/) {
       text = substr($0, RSTART + 1, RLENGTH - 2)
       split(text, parts, " ")
       print parts[2] "." parts[3] "." parts[4]
@@ -59,7 +59,7 @@ version_components() {
 
 version_datum() {
   components=$1
-  printf '(agent-scheme-version %s)\n' "$(printf '%s\n' "$components" | tr '.' ' ')"
+  printf '(consent-version %s)\n' "$(printf '%s\n' "$components" | tr '.' ' ')"
 }
 
 write_manifest() {
@@ -69,12 +69,12 @@ write_manifest() {
   manifest="$host_root/manifest.scm"
 
   cat > "$manifest" <<EOF
-(agent-scheme-compile
+(consent-compile
   (compile-host $host)
   (version $(version_datum "$version"))
   (layout
     (root "$host_root")
-    (executable "bin/agent-scheme")
+    (executable "bin/consent")
     (generated-source "src")
     (dependency-manifest "manifest.scm")
     (smoke-log "logs/smoke.log")))
@@ -90,116 +90,116 @@ write_racket_main() {
 ;; Prefix imports keep script-time R7RS and project libraries linked into the
 ;; executable even when user programs import them only after startup.
 (import (scheme base)
-        (prefix (scheme case-lambda) agent-scheme-main:r7rs-case-lambda:)
-        (prefix (scheme char) agent-scheme-main:r7rs-char:)
-        (prefix (scheme complex) agent-scheme-main:r7rs-complex:)
-        (prefix (scheme cxr) agent-scheme-main:r7rs-cxr:)
+        (prefix (scheme case-lambda) consent-main:r7rs-case-lambda:)
+        (prefix (scheme char) consent-main:r7rs-char:)
+        (prefix (scheme complex) consent-main:r7rs-complex:)
+        (prefix (scheme cxr) consent-main:r7rs-cxr:)
         (only (scheme eval) environment)
-        (prefix (scheme file) agent-scheme-main:r7rs-file:)
-        (prefix (scheme inexact) agent-scheme-main:r7rs-inexact:)
-        (prefix (scheme lazy) agent-scheme-main:r7rs-lazy:)
+        (prefix (scheme file) consent-main:r7rs-file:)
+        (prefix (scheme inexact) consent-main:r7rs-inexact:)
+        (prefix (scheme lazy) consent-main:r7rs-lazy:)
         (scheme load)
         (scheme process-context)
-        (prefix (scheme r5rs) agent-scheme-main:r7rs-r5rs:)
-        (prefix (scheme read) agent-scheme-main:r7rs-read:)
-        (prefix (scheme repl) agent-scheme-main:r7rs-repl:)
-        (prefix (scheme time) agent-scheme-main:r7rs-time:)
+        (prefix (scheme r5rs) consent-main:r7rs-r5rs:)
+        (prefix (scheme read) consent-main:r7rs-read:)
+        (prefix (scheme repl) consent-main:r7rs-repl:)
+        (prefix (scheme time) consent-main:r7rs-time:)
         (scheme write)
-        (prefix (agent task) agent-scheme-main:agent-task:)
-        (prefix (agent transcript) agent-scheme-main:agent-transcript:)
-        (prefix (agent-scheme approval) agent-scheme-main:approval:)
-        (prefix (agent-scheme base) agent-scheme-main:base:)
-        (prefix (agent-scheme context) agent-scheme-main:context:)
-        (prefix (agent-scheme helper) agent-scheme-main:helper:)
-        (prefix (agent-scheme job) agent-scheme-main:job:)
-        (prefix (agent-scheme library) agent-scheme-main:library:)
-        (prefix (agent-scheme macro) agent-scheme-main:macro:)
-        (prefix (agent-scheme memory) agent-scheme-main:memory:)
-        (prefix (agent-scheme plan) agent-scheme-main:plan:)
-        (prefix (agent-scheme reader) agent-scheme-main:reader:)
-        (prefix (agent-scheme redaction) agent-scheme-main:redaction:)
-        (prefix (agent-scheme result) agent-scheme-main:result:)
-        (prefix (agent-scheme runtime) agent-scheme-main:runtime:)
-        (prefix (agent-scheme session) agent-scheme-main:session:)
-        (only (agent-scheme eval)
-              agent-scheme-eval-source
-              agent-scheme-value->external)
-        (only (agent-scheme version)
-              agent-scheme-version-datum))
+        (prefix (agent task) consent-main:agent-task:)
+        (prefix (agent transcript) consent-main:agent-transcript:)
+        (prefix (consent approval) consent-main:approval:)
+        (prefix (consent base) consent-main:base:)
+        (prefix (consent context) consent-main:context:)
+        (prefix (consent helper) consent-main:helper:)
+        (prefix (consent job) consent-main:job:)
+        (prefix (consent library) consent-main:library:)
+        (prefix (consent macro) consent-main:macro:)
+        (prefix (consent memory) consent-main:memory:)
+        (prefix (consent plan) consent-main:plan:)
+        (prefix (consent reader) consent-main:reader:)
+        (prefix (consent redaction) consent-main:redaction:)
+        (prefix (consent result) consent-main:result:)
+        (prefix (consent runtime) consent-main:runtime:)
+        (prefix (consent session) consent-main:session:)
+        (only (consent eval)
+              consent-eval-source
+              consent-value->external)
+        (only (consent version)
+              consent-version-datum))
 
-(define (agent-scheme-main-version-string)
-  (let ((primary (list-ref agent-scheme-version-datum 1))
-        (secondary (list-ref agent-scheme-version-datum 2))
-        (tertiary (list-ref agent-scheme-version-datum 3)))
+(define (consent-main-version-string)
+  (let ((primary (list-ref consent-version-datum 1))
+        (secondary (list-ref consent-version-datum 2))
+        (tertiary (list-ref consent-version-datum 3)))
     (string-append
-     "Agent Scheme "
+     "Consent Scheme "
      (number->string primary)
      "."
      (number->string secondary)
      "."
      (number->string tertiary))))
 
-(define (agent-scheme-main-help)
-  (display "Usage: agent-scheme [--help] [--version] [--eval SOURCE] [--script FILE]\n")
+(define (consent-main-help)
+  (display "Usage: consent [--help] [--version] [--eval SOURCE] [--script FILE]\n")
   (display "\n")
   (display "Commands:\n")
   (display "  --help          Show this help.\n")
-  (display "  --version       Print the Agent Scheme runtime version.\n")
-  (display "  --eval SOURCE   Evaluate a pure Agent Scheme expression.\n")
+  (display "  --version       Print the Consent Scheme runtime version.\n")
+  (display "  --eval SOURCE   Evaluate a pure Consent Scheme expression.\n")
   (display "  --script FILE   Run an R7RS Scheme source file.\n"))
 
-(define (agent-scheme-main-error message)
-  (display "agent-scheme: " (current-error-port))
+(define (consent-main-error message)
+  (display "consent: " (current-error-port))
   (display message (current-error-port))
   (newline (current-error-port))
   (exit 2))
 
-(define (agent-scheme-main-eval source)
+(define (consent-main-eval source)
   (guard (condition
           (else
-           (display "agent-scheme: evaluation failed" (current-error-port))
+           (display "consent: evaluation failed" (current-error-port))
            (display ": " (current-error-port))
            (write condition (current-error-port))
            (newline (current-error-port))
            (exit 1)))
     (display
-     (agent-scheme-value->external
-      (agent-scheme-eval-source source)))
+     (consent-value->external
+      (consent-eval-source source)))
     (newline)))
 
-(define (agent-scheme-main-script path)
+(define (consent-main-script path)
   (guard (condition
           (else
-           (display "agent-scheme: script failed" (current-error-port))
+           (display "consent: script failed" (current-error-port))
            (display ": " (current-error-port))
            (write condition (current-error-port))
            (newline (current-error-port))
            (exit 1)))
     (load path (environment))))
 
-(define (agent-scheme-main args)
+(define (consent-main args)
   (cond
    ((null? args)
-    (agent-scheme-main-help))
+    (consent-main-help))
    ((string=? (car args) "--help")
-    (agent-scheme-main-help))
+    (consent-main-help))
    ((string=? (car args) "--version")
-    (display (agent-scheme-main-version-string))
+    (display (consent-main-version-string))
     (newline))
    ((string=? (car args) "--eval")
     (if (null? (cdr args))
-        (agent-scheme-main-error "--eval requires SOURCE")
-        (agent-scheme-main-eval (cadr args))))
+        (consent-main-error "--eval requires SOURCE")
+        (consent-main-eval (cadr args))))
    ((string=? (car args) "--script")
     (if (null? (cdr args))
-        (agent-scheme-main-error "--script requires FILE")
-        (agent-scheme-main-script (cadr args))))
+        (consent-main-error "--script requires FILE")
+        (consent-main-script (cadr args))))
    (else
-    (agent-scheme-main-error
+    (consent-main-error
      (string-append "unknown option " (car args))))))
 
 (let ((arguments (command-line)))
-  (agent-scheme-main
+  (consent-main
    (if (null? arguments) '() (cdr arguments))))
 EOF
 }
@@ -211,119 +211,119 @@ write_gambit_main() {
   printf '#!gsi -:r7rs,search=%s\n' "$search_dir" > "$main_file"
   cat >> "$main_file" <<'EOF'
 
-;; Gambit R7RS main program for the host-compiled Agent Scheme runner.
+;; Gambit R7RS main program for the host-compiled Consent Scheme runner.
 
 (import (scheme base)
-        (prefix (scheme case-lambda) agent-scheme-main:r7rs-case-lambda:)
-        (prefix (scheme char) agent-scheme-main:r7rs-char:)
-        (prefix (scheme complex) agent-scheme-main:r7rs-complex:)
-        (prefix (scheme cxr) agent-scheme-main:r7rs-cxr:)
-        (prefix (scheme eval) agent-scheme-main:r7rs-eval:)
-        (prefix (scheme file) agent-scheme-main:r7rs-file:)
-        (prefix (scheme inexact) agent-scheme-main:r7rs-inexact:)
-        (prefix (scheme lazy) agent-scheme-main:r7rs-lazy:)
+        (prefix (scheme case-lambda) consent-main:r7rs-case-lambda:)
+        (prefix (scheme char) consent-main:r7rs-char:)
+        (prefix (scheme complex) consent-main:r7rs-complex:)
+        (prefix (scheme cxr) consent-main:r7rs-cxr:)
+        (prefix (scheme eval) consent-main:r7rs-eval:)
+        (prefix (scheme file) consent-main:r7rs-file:)
+        (prefix (scheme inexact) consent-main:r7rs-inexact:)
+        (prefix (scheme lazy) consent-main:r7rs-lazy:)
         (scheme load)
         (scheme process-context)
-        (prefix (scheme r5rs) agent-scheme-main:r7rs-r5rs:)
-        (prefix (scheme read) agent-scheme-main:r7rs-read:)
-        (prefix (scheme repl) agent-scheme-main:r7rs-repl:)
-        (prefix (scheme time) agent-scheme-main:r7rs-time:)
+        (prefix (scheme r5rs) consent-main:r7rs-r5rs:)
+        (prefix (scheme read) consent-main:r7rs-read:)
+        (prefix (scheme repl) consent-main:r7rs-repl:)
+        (prefix (scheme time) consent-main:r7rs-time:)
         (scheme write)
-        (prefix (agent task) agent-scheme-main:agent-task:)
-        (prefix (agent transcript) agent-scheme-main:agent-transcript:)
-        (prefix (agent-scheme approval) agent-scheme-main:approval:)
-        (prefix (agent-scheme base) agent-scheme-main:base:)
-        (prefix (agent-scheme context) agent-scheme-main:context:)
-        (prefix (agent-scheme helper) agent-scheme-main:helper:)
-        (prefix (agent-scheme job) agent-scheme-main:job:)
-        (prefix (agent-scheme library) agent-scheme-main:library:)
-        (prefix (agent-scheme macro) agent-scheme-main:macro:)
-        (prefix (agent-scheme memory) agent-scheme-main:memory:)
-        (prefix (agent-scheme plan) agent-scheme-main:plan:)
-        (prefix (agent-scheme reader) agent-scheme-main:reader:)
-        (prefix (agent-scheme redaction) agent-scheme-main:redaction:)
-        (prefix (agent-scheme result) agent-scheme-main:result:)
-        (prefix (agent-scheme runtime) agent-scheme-main:runtime:)
-        (prefix (agent-scheme session) agent-scheme-main:session:)
-        (only (agent-scheme eval)
-              agent-scheme-eval-source
-              agent-scheme-value->external)
-        (only (agent-scheme version)
-              agent-scheme-version-datum))
+        (prefix (agent task) consent-main:agent-task:)
+        (prefix (agent transcript) consent-main:agent-transcript:)
+        (prefix (consent approval) consent-main:approval:)
+        (prefix (consent base) consent-main:base:)
+        (prefix (consent context) consent-main:context:)
+        (prefix (consent helper) consent-main:helper:)
+        (prefix (consent job) consent-main:job:)
+        (prefix (consent library) consent-main:library:)
+        (prefix (consent macro) consent-main:macro:)
+        (prefix (consent memory) consent-main:memory:)
+        (prefix (consent plan) consent-main:plan:)
+        (prefix (consent reader) consent-main:reader:)
+        (prefix (consent redaction) consent-main:redaction:)
+        (prefix (consent result) consent-main:result:)
+        (prefix (consent runtime) consent-main:runtime:)
+        (prefix (consent session) consent-main:session:)
+        (only (consent eval)
+              consent-eval-source
+              consent-value->external)
+        (only (consent version)
+              consent-version-datum))
 
-(define (agent-scheme-main-version-string)
-  (let ((primary (list-ref agent-scheme-version-datum 1))
-        (secondary (list-ref agent-scheme-version-datum 2))
-        (tertiary (list-ref agent-scheme-version-datum 3)))
+(define (consent-main-version-string)
+  (let ((primary (list-ref consent-version-datum 1))
+        (secondary (list-ref consent-version-datum 2))
+        (tertiary (list-ref consent-version-datum 3)))
     (string-append
-     "Agent Scheme "
+     "Consent Scheme "
      (number->string primary)
      "."
      (number->string secondary)
      "."
      (number->string tertiary))))
 
-(define (agent-scheme-main-help)
-  (display "Usage: agent-scheme [--help] [--version] [--eval SOURCE] [--script FILE]\n")
+(define (consent-main-help)
+  (display "Usage: consent [--help] [--version] [--eval SOURCE] [--script FILE]\n")
   (display "\n")
   (display "Commands:\n")
   (display "  --help          Show this help.\n")
-  (display "  --version       Print the Agent Scheme runtime version.\n")
-  (display "  --eval SOURCE   Evaluate a pure Agent Scheme expression.\n")
+  (display "  --version       Print the Consent Scheme runtime version.\n")
+  (display "  --eval SOURCE   Evaluate a pure Consent Scheme expression.\n")
   (display "  --script FILE   Run an R7RS Scheme source file.\n"))
 
-(define (agent-scheme-main-error message)
-  (display "agent-scheme: " (current-error-port))
+(define (consent-main-error message)
+  (display "consent: " (current-error-port))
   (display message (current-error-port))
   (newline (current-error-port))
   (exit 2))
 
-(define (agent-scheme-main-eval source)
+(define (consent-main-eval source)
   (guard (condition
           (else
-           (display "agent-scheme: evaluation failed" (current-error-port))
+           (display "consent: evaluation failed" (current-error-port))
            (display ": " (current-error-port))
            (write condition (current-error-port))
            (newline (current-error-port))
            (exit 1)))
     (display
-     (agent-scheme-value->external
-      (agent-scheme-eval-source source)))
+     (consent-value->external
+      (consent-eval-source source)))
     (newline)))
 
-(define (agent-scheme-main-script path)
+(define (consent-main-script path)
   (guard (condition
           (else
-           (display "agent-scheme: script failed" (current-error-port))
+           (display "consent: script failed" (current-error-port))
            (display ": " (current-error-port))
            (write condition (current-error-port))
            (newline (current-error-port))
            (exit 1)))
     (load path)))
 
-(define (agent-scheme-main args)
+(define (consent-main args)
   (cond
    ((null? args)
-    (agent-scheme-main-help))
+    (consent-main-help))
    ((string=? (car args) "--help")
-    (agent-scheme-main-help))
+    (consent-main-help))
    ((string=? (car args) "--version")
-    (display (agent-scheme-main-version-string))
+    (display (consent-main-version-string))
     (newline))
    ((string=? (car args) "--eval")
     (if (null? (cdr args))
-        (agent-scheme-main-error "--eval requires SOURCE")
-        (agent-scheme-main-eval (cadr args))))
+        (consent-main-error "--eval requires SOURCE")
+        (consent-main-eval (cadr args))))
    ((string=? (car args) "--script")
     (if (null? (cdr args))
-        (agent-scheme-main-error "--script requires FILE")
-        (agent-scheme-main-script (cadr args))))
+        (consent-main-error "--script requires FILE")
+        (consent-main-script (cadr args))))
    (else
-    (agent-scheme-main-error
+    (consent-main-error
      (string-append "unknown option " (car args))))))
 
 (let ((arguments (command-line)))
-  (agent-scheme-main
+  (consent-main
    (if (null? arguments) '() (cdr arguments))))
 EOF
 }
@@ -353,11 +353,11 @@ run_smoke() {
     || die "compiled runner failed --version; see $log_file.version.err"
   eval_output=$("$runner" --eval "(+ 1 2)" 2>"$log_file.eval.err") \
     || die "compiled runner failed --eval; see $log_file.eval.err"
-  script_output=$("$runner" --script "$repo_root/tests/scheme/agent-scheme-reader-test.scm" 2>"$log_file.script.err") \
+  script_output=$("$runner" --script "$repo_root/tests/scheme/consent-reader-test.scm" 2>"$log_file.script.err") \
     || die "compiled runner failed --script reader smoke; see $log_file.script.err"
 
-  if [ "$version_output" != "Agent Scheme $expected_version" ]; then
-    die "compiled runner --version returned '$version_output', expected 'Agent Scheme $expected_version'"
+  if [ "$version_output" != "Consent Scheme $expected_version" ]; then
+    die "compiled runner --version returned '$version_output', expected 'Consent Scheme $expected_version'"
   fi
 
   if [ "$eval_output" != "3" ]; then
@@ -370,7 +370,7 @@ run_smoke() {
   smoke_finished=$(date +%s)
 
   cat > "$log_file" <<EOF
-(agent-scheme-compile-smoke
+(consent-compile-smoke
   (version-output "$version_output")
   (eval-output "$eval_output")
   (script-output "$script_output")
@@ -379,22 +379,22 @@ EOF
 }
 
 compile_racket() {
-  racket=$(find_command AGENT_SCHEME_RACKET racket) \
-    || die "Racket compile prerequisites are missing; set AGENT_SCHEME_RACKET to a runnable racket executable."
-  raco=$(find_command AGENT_SCHEME_RACO raco) \
-    || die "Racket compile prerequisites are missing; set AGENT_SCHEME_RACO to a runnable raco executable."
+  racket=$(find_command CONSENT_RACKET racket) \
+    || die "Racket compile prerequisites are missing; set CONSENT_RACKET to a runnable racket executable."
+  raco=$(find_command CONSENT_RACO raco) \
+    || die "Racket compile prerequisites are missing; set CONSENT_RACO to a runnable raco executable."
 
   host_root="$build_dir/racket"
   src_dir="$host_root/src"
   collections_dir="$host_root/collections"
   bin_dir="$host_root/bin"
   logs_dir="$host_root/logs"
-  main_file="$src_dir/agent-scheme-main.rkt"
-  runner="$bin_dir/agent-scheme"
+  main_file="$src_dir/consent-main.rkt"
+  runner="$bin_dir/consent"
   smoke_log="$logs_dir/smoke.log"
   version=$(version_components)
 
-  [ -n "$version" ] || die "could not read Agent Scheme version from $version_file"
+  [ -n "$version" ] || die "could not read Consent Scheme version from $version_file"
 
   mkdir -p "$src_dir" "$collections_dir" "$bin_dir" "$logs_dir"
   generate_racket_collections "$collections_dir"
@@ -415,22 +415,22 @@ compile_racket() {
 }
 
 compile_gambit() {
-  gsi=$(find_command AGENT_SCHEME_GAMBIT gsi) \
-    || die "Gambit compile prerequisites are missing; set AGENT_SCHEME_GAMBIT to a runnable gsi executable."
-  gsc=$(find_command AGENT_SCHEME_GAMBIT_COMPILER gsc) \
-    || die "Gambit compile prerequisites are missing; set AGENT_SCHEME_GAMBIT_COMPILER to a runnable gsc executable."
+  gsi=$(find_command CONSENT_GAMBIT gsi) \
+    || die "Gambit compile prerequisites are missing; set CONSENT_GAMBIT to a runnable gsi executable."
+  gsc=$(find_command CONSENT_GAMBIT_COMPILER gsc) \
+    || die "Gambit compile prerequisites are missing; set CONSENT_GAMBIT_COMPILER to a runnable gsc executable."
 
   host_root="$build_dir/gambit"
   src_dir="$host_root/src"
   bin_dir="$host_root/bin"
   logs_dir="$host_root/logs"
-  main_file="$src_dir/agent-scheme-main.scm"
-  main_c="$src_dir/agent-scheme-main.c"
-  runner="$bin_dir/agent-scheme"
+  main_file="$src_dir/consent-main.scm"
+  main_c="$src_dir/consent-main.c"
+  runner="$bin_dir/consent"
   smoke_log="$logs_dir/smoke.log"
   version=$(version_components)
 
-  [ -n "$version" ] || die "could not read Agent Scheme version from $version_file"
+  [ -n "$version" ] || die "could not read Consent Scheme version from $version_file"
 
   mkdir -p "$src_dir" "$bin_dir" "$logs_dir"
 
@@ -443,62 +443,62 @@ compile_gambit() {
   }
 
   copy_gambit_source \
-    "$scheme_dir/agent-scheme/version.sld" \
-    "$src_dir/agent-scheme/version.sld"
+    "$scheme_dir/consent/version.sld" \
+    "$src_dir/consent/version.sld"
   copy_gambit_source \
-    "$scheme_dir/agent-scheme/reader.sld" \
-    "$src_dir/agent-scheme/reader.sld"
+    "$scheme_dir/consent/reader.sld" \
+    "$src_dir/consent/reader.sld"
   copy_gambit_source \
-    "$scheme_dir/agent-scheme/runtime.sld" \
-    "$src_dir/agent-scheme/runtime.sld"
+    "$scheme_dir/consent/runtime.sld" \
+    "$src_dir/consent/runtime.sld"
   copy_gambit_source \
-    "$scheme_dir/agent-scheme/base.sld" \
-    "$src_dir/agent-scheme/base.sld"
+    "$scheme_dir/consent/base.sld" \
+    "$src_dir/consent/base.sld"
   copy_gambit_source \
-    "$scheme_dir/agent-scheme/base-prelude.scm" \
-    "$src_dir/agent-scheme/base-prelude.scm"
+    "$scheme_dir/consent/base-prelude.scm" \
+    "$src_dir/consent/base-prelude.scm"
   copy_gambit_source \
-    "$scheme_dir/agent-scheme/base-syntax.scm" \
-    "$src_dir/agent-scheme/base-syntax.scm"
+    "$scheme_dir/consent/base-syntax.scm" \
+    "$src_dir/consent/base-syntax.scm"
   copy_gambit_source \
-    "$scheme_dir/agent-scheme/library.sld" \
-    "$src_dir/agent-scheme/library.sld"
+    "$scheme_dir/consent/library.sld" \
+    "$src_dir/consent/library.sld"
   copy_gambit_source \
-    "$scheme_dir/agent-scheme/result.sld" \
-    "$src_dir/agent-scheme/result.sld"
+    "$scheme_dir/consent/result.sld" \
+    "$src_dir/consent/result.sld"
   copy_gambit_source \
-    "$scheme_dir/agent-scheme/macro.sld" \
-    "$src_dir/agent-scheme/macro.sld"
+    "$scheme_dir/consent/macro.sld" \
+    "$src_dir/consent/macro.sld"
   copy_gambit_source \
-    "$scheme_dir/agent-scheme/approval.sld" \
-    "$src_dir/agent-scheme/approval.sld"
+    "$scheme_dir/consent/approval.sld" \
+    "$src_dir/consent/approval.sld"
   copy_gambit_source \
-    "$scheme_dir/agent-scheme/context.sld" \
-    "$src_dir/agent-scheme/context.sld"
+    "$scheme_dir/consent/context.sld" \
+    "$src_dir/consent/context.sld"
   copy_gambit_source \
-    "$scheme_dir/agent-scheme/helper.sld" \
-    "$src_dir/agent-scheme/helper.sld"
+    "$scheme_dir/consent/helper.sld" \
+    "$src_dir/consent/helper.sld"
   copy_gambit_source \
-    "$scheme_dir/agent-scheme/job.sld" \
-    "$src_dir/agent-scheme/job.sld"
+    "$scheme_dir/consent/job.sld" \
+    "$src_dir/consent/job.sld"
   copy_gambit_source \
-    "$scheme_dir/agent-scheme/memory.sld" \
-    "$src_dir/agent-scheme/memory.sld"
+    "$scheme_dir/consent/memory.sld" \
+    "$src_dir/consent/memory.sld"
   copy_gambit_source \
-    "$scheme_dir/agent-scheme/plan.sld" \
-    "$src_dir/agent-scheme/plan.sld"
+    "$scheme_dir/consent/plan.sld" \
+    "$src_dir/consent/plan.sld"
   copy_gambit_source \
-    "$scheme_dir/agent-scheme/redaction.sld" \
-    "$src_dir/agent-scheme/redaction.sld"
+    "$scheme_dir/consent/redaction.sld" \
+    "$src_dir/consent/redaction.sld"
   copy_gambit_source \
-    "$scheme_dir/agent-scheme/session.sld" \
-    "$src_dir/agent-scheme/session.sld"
+    "$scheme_dir/consent/session.sld" \
+    "$src_dir/consent/session.sld"
   copy_gambit_source \
-    "$scheme_dir/agent-scheme/interpreter.sld" \
-    "$src_dir/agent-scheme/interpreter.sld"
+    "$scheme_dir/consent/interpreter.sld" \
+    "$src_dir/consent/interpreter.sld"
   copy_gambit_source \
-    "$scheme_dir/agent-scheme/eval.sld" \
-    "$src_dir/agent-scheme/eval.sld"
+    "$scheme_dir/consent/eval.sld" \
+    "$src_dir/consent/eval.sld"
   copy_gambit_source \
     "$scheme_dir/agent/task.sld" \
     "$src_dir/agent/task.sld"
@@ -509,7 +509,7 @@ compile_gambit() {
   "$gsi" -:r7rs,search="$scheme_dir" \
     -e '(import (scheme base) (scheme write)) (write (+ 1 2)) (newline)' \
     >"$logs_dir/gsi-r7rs-probe.log" 2>&1 \
-    || die "Gambit gsi does not accept R7RS mode with the Agent Scheme library search path; see $logs_dir/gsi-r7rs-probe.log"
+    || die "Gambit gsi does not accept R7RS mode with the Consent Scheme library search path; see $logs_dir/gsi-r7rs-probe.log"
 
   write_gambit_main "$main_file" "$src_dir"
   write_manifest "$host_root" gambit "$version"
@@ -532,65 +532,65 @@ compile_gambit() {
   }
 
   compile_gambit_module \
-    agent-scheme/version \
-    "$scheme_dir/agent-scheme/version.sld" \
-    "$src_dir/agent-scheme/version.c"
+    consent/version \
+    "$scheme_dir/consent/version.sld" \
+    "$src_dir/consent/version.c"
   compile_gambit_module \
-    agent-scheme/reader \
-    "$scheme_dir/agent-scheme/reader.sld" \
-    "$src_dir/agent-scheme/reader.c"
+    consent/reader \
+    "$scheme_dir/consent/reader.sld" \
+    "$src_dir/consent/reader.c"
   compile_gambit_module \
-    agent-scheme/runtime \
-    "$scheme_dir/agent-scheme/runtime.sld" \
-    "$src_dir/agent-scheme/runtime.c"
+    consent/runtime \
+    "$scheme_dir/consent/runtime.sld" \
+    "$src_dir/consent/runtime.c"
   compile_gambit_module \
-    agent-scheme/base \
-    "$scheme_dir/agent-scheme/base.sld" \
-    "$src_dir/agent-scheme/base.c"
+    consent/base \
+    "$scheme_dir/consent/base.sld" \
+    "$src_dir/consent/base.c"
   compile_gambit_module \
-    agent-scheme/library \
-    "$scheme_dir/agent-scheme/library.sld" \
-    "$src_dir/agent-scheme/library.c"
+    consent/library \
+    "$scheme_dir/consent/library.sld" \
+    "$src_dir/consent/library.c"
   compile_gambit_module \
-    agent-scheme/result \
-    "$scheme_dir/agent-scheme/result.sld" \
-    "$src_dir/agent-scheme/result.c"
+    consent/result \
+    "$scheme_dir/consent/result.sld" \
+    "$src_dir/consent/result.c"
   compile_gambit_module \
-    agent-scheme/macro \
-    "$scheme_dir/agent-scheme/macro.sld" \
-    "$src_dir/agent-scheme/macro.c"
+    consent/macro \
+    "$scheme_dir/consent/macro.sld" \
+    "$src_dir/consent/macro.c"
   compile_gambit_module \
-    agent-scheme/approval \
-    "$scheme_dir/agent-scheme/approval.sld" \
-    "$src_dir/agent-scheme/approval.c"
+    consent/approval \
+    "$scheme_dir/consent/approval.sld" \
+    "$src_dir/consent/approval.c"
   compile_gambit_module \
-    agent-scheme/context \
-    "$scheme_dir/agent-scheme/context.sld" \
-    "$src_dir/agent-scheme/context.c"
+    consent/context \
+    "$scheme_dir/consent/context.sld" \
+    "$src_dir/consent/context.c"
   compile_gambit_module \
-    agent-scheme/helper \
-    "$scheme_dir/agent-scheme/helper.sld" \
-    "$src_dir/agent-scheme/helper.c"
+    consent/helper \
+    "$scheme_dir/consent/helper.sld" \
+    "$src_dir/consent/helper.c"
   compile_gambit_module \
-    agent-scheme/job \
-    "$scheme_dir/agent-scheme/job.sld" \
-    "$src_dir/agent-scheme/job.c"
+    consent/job \
+    "$scheme_dir/consent/job.sld" \
+    "$src_dir/consent/job.c"
   compile_gambit_module \
-    agent-scheme/memory \
-    "$scheme_dir/agent-scheme/memory.sld" \
-    "$src_dir/agent-scheme/memory.c"
+    consent/memory \
+    "$scheme_dir/consent/memory.sld" \
+    "$src_dir/consent/memory.c"
   compile_gambit_module \
-    agent-scheme/plan \
-    "$scheme_dir/agent-scheme/plan.sld" \
-    "$src_dir/agent-scheme/plan.c"
+    consent/plan \
+    "$scheme_dir/consent/plan.sld" \
+    "$src_dir/consent/plan.c"
   compile_gambit_module \
-    agent-scheme/redaction \
-    "$scheme_dir/agent-scheme/redaction.sld" \
-    "$src_dir/agent-scheme/redaction.c"
+    consent/redaction \
+    "$scheme_dir/consent/redaction.sld" \
+    "$src_dir/consent/redaction.c"
   compile_gambit_module \
-    agent-scheme/session \
-    "$scheme_dir/agent-scheme/session.sld" \
-    "$src_dir/agent-scheme/session.c"
+    consent/session \
+    "$scheme_dir/consent/session.sld" \
+    "$src_dir/consent/session.c"
   compile_gambit_module \
     agent/task \
     "$scheme_dir/agent/task.sld" \
@@ -600,13 +600,13 @@ compile_gambit() {
     "$scheme_dir/agent/transcript.sld" \
     "$src_dir/agent/transcript.c"
   compile_gambit_module \
-    agent-scheme/interpreter \
-    "$scheme_dir/agent-scheme/interpreter.sld" \
-    "$src_dir/agent-scheme/interpreter.c"
+    consent/interpreter \
+    "$scheme_dir/consent/interpreter.sld" \
+    "$src_dir/consent/interpreter.c"
   compile_gambit_module \
-    agent-scheme/eval \
-    "$scheme_dir/agent-scheme/eval.sld" \
-    "$src_dir/agent-scheme/eval.c"
+    consent/eval \
+    "$scheme_dir/consent/eval.sld" \
+    "$src_dir/consent/eval.c"
 
   "$gsc" -:r7rs,search="$scheme_dir" \
     -c -o "$main_c" "$main_file" \
@@ -623,7 +623,7 @@ compile_gambit() {
     || die "gsc -exe did not create $runner; see $logs_dir/gsc-exe.log"
   chmod +x "$runner"
   cat > "$logs_dir/compile.log" <<EOF
-(agent-scheme-compile-timing
+(consent-compile-timing
   (compile-host gambit)
   (compile-seconds $((compile_finished - compile_started))))
 EOF
@@ -640,6 +640,6 @@ case "$compile_host" in
     compile_gambit
     ;;
   *)
-    die "AGENT_SCHEME_COMPILE_HOST must be one of: racket, gambit"
+    die "CONSENT_COMPILE_HOST must be one of: racket, gambit"
     ;;
 esac

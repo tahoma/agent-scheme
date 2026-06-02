@@ -1,10 +1,9 @@
+;;; test.sld --- Agent helper self-test library
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
-;;
-;;; test.sld --- Agent helper self-test library
 ;;;
 ;;; This host-neutral library provides lightweight self-tests for helper
-;;; libraries and Agent Scheme skill manifests.  Test outcomes are ordinary
+;;; libraries and Consent Scheme skill manifests.  Test outcomes are ordinary
 ;;; Scheme-readable datums; source-string execution is delegated to the host
 ;;; primitive bridge so normal evaluator budgets and sandbox policy still
 ;;; apply.
@@ -319,7 +318,7 @@
        (else '())))
 
     (define (test-yield-failures result)
-      "Yield failed tests from RESULT as one structured Agent Scheme event."
+      "Yield failed tests from RESULT as one structured Consent Scheme event."
       #((parameters . ((result . "Test result, test group, or registered test name to inspect.")))
         (returns . "List of failed nested test result datums.")
         (effects . (state-read agent-yield))

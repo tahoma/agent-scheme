@@ -46,5 +46,5 @@ Migrated 2026-05-31 (under issue #376 / PR #377).
 - Native Scheme character externalization parity (#83) should follow core data and writer behavior (#17) before ports, read/write, load, and eval policy (#18).
 - Multi-host boundaries (#55) should keep Emacs as first host without making Emacs the semantic center.
 - Emacs debugger UI (#227) should follow debugger and restart UX (#44) and preserve the portable condition and restart datum surface while adding policy-gated host restart actions.
-- Public naming migration (#61) landed as early project-frame cleanup after the architecture named Agent Scheme, and should keep later REPL, MCP, and durable API work from introducing informal identifiers.
+- Public naming migration (#61) landed as early project-frame cleanup after the architecture named Consent Scheme, and should keep later REPL, MCP, and durable API work from introducing informal identifiers.
 - Secrets/redaction (#49) should precede remote-provider routing and persistence/export work.

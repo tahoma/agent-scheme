@@ -1,6 +1,6 @@
 # Macro Expansion Introspection
 
-Agent Scheme exposes macro expansion as Scheme-readable data through
+Consent Scheme exposes macro expansion as Scheme-readable data through
 `(agent reflect)`. The introspection procedures expand forms in the current
 session's syntax environment and return records; they do not evaluate the
 expanded expression.
@@ -82,7 +82,7 @@ available library:
 ```
 
 `(syntax-source datum)` returns source metadata when the datum came from an
-Agent Scheme reader call with source metadata enabled, and `#f` when no source
+Consent Scheme reader call with source metadata enabled, and `#f` when no source
 is attached. Ordinary read/eval and macro expansion source paths enable source
 metadata by default so diagnostic records can point back to the syntax that
 produced them. Source metadata is ordinary Scheme-readable data and does not
@@ -116,7 +116,7 @@ native session event buffers.
 
 ## Emacs Buffer View
 
-From a native REPL session, `M-x agent-scheme-repl-macroexpand-source` reads the
+From a native REPL session, `M-x consent-repl-macroexpand-source` reads the
 selected region or a prompted form, expands it in the current session, and opens
 an `*Agent Macroexpand: SESSION*` buffer. The buffer shows the original form,
 expanded form, individual expansion steps, and the complete record for direct
