@@ -39,7 +39,7 @@
       ;; The roadmap note is a slim pointer to the GitHub roadmap issue (#53);
       ;; the control-loop summary lives in architecture.md, not here.
       (should (string-match-p
-               (regexp-quote "tahoma/agent-scheme/issues/53")
+               (regexp-quote "tahoma/consent/issues/53")
                roadmap))
       (dolist (needle
                '("# Task Lifecycle and Control Loop"

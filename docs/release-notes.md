@@ -2,7 +2,7 @@
 
 This file is the historical record of completed Consent Scheme roadmap chunks,
 migrated out of the living roadmap issue
-[#53](https://github.com/tahoma/agent-scheme/issues/53). The living roadmap keeps
+[#53](https://github.com/tahoma/consent/issues/53). The living roadmap keeps
 only the current and future chunks; once every issue in a chunk has shipped, the
 chunk is moved here.
 
