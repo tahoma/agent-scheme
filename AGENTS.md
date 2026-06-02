@@ -12,6 +12,7 @@ Before starting issue work in this repository, read and follow:
 - `docs/naming.md` for public and private Agent Scheme identifier conventions
 - `docs/references.md` for canonical external Scheme references
 - `docs/r7rs-small-report.md` for the local R7RS-small language reference
+- `docs/licensing.md` for the project's Apache-2.0 + SPDX licensing policy
 - the GitHub issue being worked
 
 Repository conventions override generic workflow defaults. In particular:

@@ -1,3 +1,6 @@
+;; SPDX-License-Identifier: Apache-2.0
+;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
+;;
 ;;; test.sld --- Agent helper self-test library
 ;;;
 ;;; This host-neutral library provides lightweight self-tests for helper

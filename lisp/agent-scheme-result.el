@@ -1,4 +1,6 @@
 ;;; agent-scheme-result.el --- Stable Agent Scheme result rendering  -*- lexical-binding: t; -*-
+;; SPDX-License-Identifier: Apache-2.0
+;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
 ;;; Commentary:
 

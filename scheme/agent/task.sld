@@ -1,3 +1,6 @@
+;; SPDX-License-Identifier: Apache-2.0
+;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
+;;
 ;;; Public Agent Scheme task lifecycle records.
 ;;;
 ;;; This library owns the host-neutral `(agent task)' record vocabulary:

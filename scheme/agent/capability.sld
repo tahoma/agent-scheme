@@ -1,3 +1,6 @@
+;; SPDX-License-Identifier: Apache-2.0
+;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
+;;
 ;;; capability.sld --- Agent capability grant library
 ;;;
 ;;; This host-neutral library exposes Scheme-visible grant helpers while the

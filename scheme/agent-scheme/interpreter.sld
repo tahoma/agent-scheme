@@ -1,3 +1,6 @@
+;; SPDX-License-Identifier: Apache-2.0
+;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
+;;
 ;;; Portable Agent Scheme interpreter backend.
 ;;;
 ;;; This library owns evaluation, procedure application, primitive

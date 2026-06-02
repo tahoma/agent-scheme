@@ -1,4 +1,6 @@
 ;;; agent-scheme-scheme-host.el --- Portable R7RS host bridge helpers  -*- lexical-binding: t; -*-
+;; SPDX-License-Identifier: Apache-2.0
+;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
 ;;; Commentary:
 

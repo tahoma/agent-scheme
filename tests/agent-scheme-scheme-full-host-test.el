@@ -1,4 +1,6 @@
 ;;; agent-scheme-scheme-full-host-test.el --- Full portable R7RS host suites  -*- lexical-binding: t; -*-
+;; SPDX-License-Identifier: Apache-2.0
+;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
 ;;; Commentary:
 

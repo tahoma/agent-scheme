@@ -1,3 +1,6 @@
+;; SPDX-License-Identifier: Apache-2.0
+;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
+;;
 ;;; Portable evaluator test runner for the Agent Scheme R7RS library.
 ;;;
 ;;; This program runs under an external R7RS Scheme and exercises the portable

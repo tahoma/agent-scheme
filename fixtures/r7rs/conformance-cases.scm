@@ -1,3 +1,6 @@
+;; SPDX-License-Identifier: Apache-2.0
+;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
+;;
 ;;; conformance-cases.scm --- Shared reader, evaluator, and R7RS fixture cases for Agent Scheme
 
 ;; This file is intentionally Scheme-readable data. Test code may read it during

@@ -1,4 +1,6 @@
 ;;; agent-scheme-conformance-test.el --- R7RS conformance fixture tests  -*- lexical-binding: t; -*-
+;; SPDX-License-Identifier: Apache-2.0
+;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
 ;;; Commentary:
 

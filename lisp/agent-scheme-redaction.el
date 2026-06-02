@@ -1,4 +1,6 @@
 ;;; agent-scheme-redaction.el --- Secrets and redaction policy  -*- lexical-binding: t; -*-
+;; SPDX-License-Identifier: Apache-2.0
+;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
 ;;; Commentary:
 

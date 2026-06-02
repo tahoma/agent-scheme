@@ -1,3 +1,6 @@
+;; SPDX-License-Identifier: Apache-2.0
+;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
+;;
 ;;; Portable Agent Scheme inspectable memory records.
 ;;;
 ;;; This library owns host-neutral scoped memory records as Scheme-readable

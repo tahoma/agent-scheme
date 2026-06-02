@@ -1,3 +1,6 @@
+;; SPDX-License-Identifier: Apache-2.0
+;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
+;;
 ;;; Portable Agent Scheme base-library registry and bootstrap metadata.
 ;;;
 ;;; This library owns `(scheme base)' primitive metadata, prelude discovery, and

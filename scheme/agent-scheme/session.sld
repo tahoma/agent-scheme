@@ -1,3 +1,6 @@
+;; SPDX-License-Identifier: Apache-2.0
+;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
+;;
 ;;; Portable Agent Scheme session lifecycle records.
 ;;;
 ;;; This library owns the host-neutral session lifecycle model as
