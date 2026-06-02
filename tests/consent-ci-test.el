@@ -419,6 +419,61 @@
              "emacs-\\${{ matrix.shard.shard }}-\\${{ matrix.source_metadata }}-docstrings-\\${{ matrix.docstring_retention }}\\.log"
              workflow))))
 
+(ert-deftest consent-ci-test-trims-per-push-matrix-and-keeps-full-lane ()
+  "Trim the per-push CI matrix while keeping a scheduled exhaustive lane."
+  (let ((workflow (consent-ci-test--repo-file-string
+                   ".github/workflows/test.yml")))
+    ;; Exhaustive lane triggers are present.
+    (should (string-match-p "^  schedule:" workflow))
+    (should (string-match-p "cron:" workflow))
+    (should (string-match-p "^  workflow_dispatch:" workflow))
+    ;; The trimmed jobs drive their syntax/docstring axes from the event name,
+    ;; so schedule / workflow_dispatch expand back to the full cross-product.
+    ;; job-level `if:` cannot read the matrix context, so the trim lives in the
+    ;; matrix axis expression instead.
+    (should (string-match-p
+             "(github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && fromJSON"
+             workflow))
+    ;; Per-push lane falls back to the canonical on/full combo.
+    (should (string-match-p "|| fromJSON('\\[\"on\"\\]')" workflow))
+    (should (string-match-p "|| fromJSON('\\[\"full\"\\]')" workflow))
+    ;; One portable host (Gambit) and one Emacs shard (core) keep the full
+    ;; syntax/docstring cross on every lane in their own jobs.
+    (should (string-match-p "^  test-portable-gambit:" workflow))
+    (should (string-match-p "^  test-emacs-core:" workflow))
+    ;; The trimmed jobs must not statically pin the full axis.
+    (should-not (string-match-p "matrix.source_metadata == 'on'" workflow))))
+
+(ert-deftest consent-ci-test-extra-hosts-base-image-avoids-docker-hub ()
+  "Pull the container base image from the rate-limit-free ECR Public mirror."
+  (let ((workflow (consent-ci-test--repo-file-string
+                   ".github/workflows/test.yml")))
+    (should (string-match-p
+             "container: public\\.ecr\\.aws/ubuntu/ubuntu:26\\.04"
+             workflow))
+    ;; The Docker Hub form (registry-1.docker.io) must no longer be requested.
+    (should-not (string-match-p "container: ubuntu:26\\.04" workflow))))
+
+(ert-deftest consent-ci-test-make-test-trims-default-and-keeps-full ()
+  "Trim the default make test shard set with a make test-full escape hatch."
+  (let ((makefile (consent-ci-test--repo-file-string "Makefile")))
+    ;; Trimmed default keeps the full Emacs shard set plus one portable host.
+    (should (string-match-p
+             "CONSENT_DEFAULT_PORTABLE_TEST_SHARD_TARGETS \\?=.*test-portable-racket"
+             makefile))
+    (should (string-match-p
+             "CONSENT_TEST_SHARD_TARGETS \\?=.*CONSENT_DEFAULT_PORTABLE_TEST_SHARD_TARGETS"
+             makefile))
+    ;; Default no longer fans out across every portable host.
+    (should-not (string-match-p
+                 "CONSENT_TEST_SHARD_TARGETS \\?=.*CONSENT_PORTABLE_TEST_SHARD_TARGETS"
+                 makefile))
+    ;; Exhaustive opt-in set and target remain available.
+    (should (string-match-p
+             "CONSENT_FULL_TEST_SHARD_TARGETS \\?=.*CONSENT_PORTABLE_TEST_SHARD_TARGETS"
+             makefile))
+    (should (string-match-p "^test-full:" makefile))))
+
 (ert-deftest consent-ci-test-pr-summary-uses-stable-shard-order ()
   "Render pull request timing rows in the intended shard display order."
   (let* ((tools-shard '(:name "Emacs tools/docs/integration"
