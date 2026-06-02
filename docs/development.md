@@ -1,6 +1,6 @@
 # Development Setup
 
-This guide describes a seed development machine setup for working on Agent
+This guide describes a seed development machine setup for working on Consent
 Scheme. The repository is still early, so the required toolchain is intentionally
 small and will grow as implementation tickets land.
 

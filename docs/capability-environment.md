@@ -123,7 +123,7 @@ need to expose raw host objects or unredacted secrets.
   (timestamp "2026-05-20T02:36:16-0700"))
 ```
 
-Denied requests are audit records too. A denial returns or signals an Agent
+Denied requests are audit records too. A denial returns or signals a Consent
 Scheme condition before the host effect runs.
 
 ```scheme
