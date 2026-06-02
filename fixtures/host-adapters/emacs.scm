@@ -1,3 +1,6 @@
+;; SPDX-License-Identifier: Apache-2.0
+;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
+;;
 ;;; emacs.scm --- Emacs host adapter fixture
 
 (agent-scheme-host-adapter-fixture

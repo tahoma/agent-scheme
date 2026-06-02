@@ -1,4 +1,6 @@
 ;;; agent-scheme-control-loop-doc-test.el --- Control-loop design doc checks  -*- lexical-binding: t; -*-
+;; SPDX-License-Identifier: Apache-2.0
+;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
 ;;; Commentary:
 

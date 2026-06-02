@@ -1,3 +1,6 @@
+;; SPDX-License-Identifier: Apache-2.0
+;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
+;;
 ;;; Portable Agent Scheme planning records.
 ;;;
 ;;; This library owns host-neutral scoped plan records as Scheme-readable data.

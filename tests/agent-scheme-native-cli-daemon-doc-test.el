@@ -1,4 +1,6 @@
 ;;; agent-scheme-native-cli-daemon-doc-test.el --- Native CLI daemon contract doc checks  -*- lexical-binding: t; -*-
+;; SPDX-License-Identifier: Apache-2.0
+;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
 ;;; Commentary:
 

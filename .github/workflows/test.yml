@@ -15,6 +15,24 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
+  license-reuse:
+    name: REUSE / SPDX license compliance
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install REUSE
+        run: pip install reuse
+
+      - name: Check REUSE/SPDX compliance
+        run: reuse lint
+
   test-portable-gambit:
     name: portable R7RS / Gambit full suite / syntax ${{ matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention }}
     runs-on: ubuntu-latest

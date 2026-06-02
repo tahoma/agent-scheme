@@ -1,3 +1,6 @@
+;; SPDX-License-Identifier: Apache-2.0
+;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
+;;
 ;;; Portable Agent Scheme version data.
 ;;;
 ;;; This library is the single source of truth for the Agent Scheme runtime
@@ -11,4 +14,4 @@
   (begin
     ;; Define the canonical Agent Scheme version datum.
     (define agent-scheme-version-datum
-      '(agent-scheme-version 0 15 8))))
+      '(agent-scheme-version 0 15 9))))

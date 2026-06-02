@@ -1,3 +1,6 @@
+;; SPDX-License-Identifier: Apache-2.0
+;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
+;;
 ;;; Portable Agent Scheme helper artifact records.
 ;;;
 ;;; This library owns host-neutral helper libraries, artifacts, and skill

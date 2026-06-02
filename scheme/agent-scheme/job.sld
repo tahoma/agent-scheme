@@ -1,3 +1,6 @@
+;; SPDX-License-Identifier: Apache-2.0
+;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
+;;
 ;;; Portable Agent Scheme job records.
 ;;;
 ;;; This library owns the host-neutral job lifecycle model as Scheme-readable

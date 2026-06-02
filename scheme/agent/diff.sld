@@ -1,3 +1,6 @@
+;; SPDX-License-Identifier: Apache-2.0
+;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
+;;
 ;;; diff.sld --- Portable Agent Scheme diff datum library
 ;;;
 ;;; This host-neutral library owns canonical diff datums and unified rendering.

@@ -1,3 +1,6 @@
+;; SPDX-License-Identifier: Apache-2.0
+;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
+;;
 ;;; Portable Agent Scheme secrets and redaction policy.
 ;;;
 ;;; This library owns the host-neutral redaction datum model.  Host adapters
