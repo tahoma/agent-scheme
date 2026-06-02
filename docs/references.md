@@ -1,7 +1,7 @@
 # Scheme References
 
 This document collects external Scheme references that are useful while building
-Agent Scheme. Keep project-specific decisions in this repository's own design
+Consent Scheme. Keep project-specific decisions in this repository's own design
 docs; use these references for language context, historical grounding, and
 implementation techniques.
 
@@ -65,7 +65,7 @@ implementation techniques.
 
 - [Guile procedure properties](https://www.gnu.org/software/guile/manual/html_node/Procedure-Properties.html)
   document literal procedure-property metadata and string docstrings in
-  procedure bodies. Agent Scheme's
+  procedure bodies. Consent Scheme's
   [Docstring Metadata Convention](docstring-metadata.md) is influenced by that
   shape but defines its own R7RS-compatible public behavior and
   Scheme-readable metadata records.

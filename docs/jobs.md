@@ -1,6 +1,6 @@
 # Jobs, Cancellation, and Streaming Yields
 
-Agent Scheme represents long-running or concurrent work as Scheme-readable
+Consent Scheme represents long-running or concurrent work as Scheme-readable
 `job` datums.  The Emacs host adapter owns the live thread and session lock;
 the public record stays printable and inspectable:
 
@@ -22,7 +22,7 @@ the public record stays printable and inspectable:
 
 Foreground REPL evaluation still uses the session APIs described in
 [`session-lifecycle.md`](session-lifecycle.md).  A call such as
-`agent-scheme-session-eval-source` runs to completion before the caller regains
+`consent-session-eval-source` runs to completion before the caller regains
 control.  During that evaluation the session moves through `active` and then
 back to `idle`, `failed`, or another terminal lifecycle state.  This mode is
 best for short forms where the caller wants the value immediately.
@@ -34,7 +34,7 @@ macro environment, capability grants, handles, and transcript at the same time.
 ## Background Jobs
 
 Background evaluation starts with `(job-start! session form options)` from
-`(agent job)` or `agent-scheme-job-start!` from Emacs Lisp.  The job begins in
+`(agent job)` or `consent-job-start!` from Emacs Lisp.  The job begins in
 `queued`, then moves to `running` when the host thread starts evaluating.  The
 same session environment is used, but the session records `(locked-by-job j-N)`
 until the job finishes and cleanup releases the lock.

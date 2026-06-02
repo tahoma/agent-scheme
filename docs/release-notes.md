@@ -1,6 +1,6 @@
 # Release Notes
 
-This file is the historical record of completed Agent Scheme roadmap chunks,
+This file is the historical record of completed Consent Scheme roadmap chunks,
 migrated out of the living roadmap issue
 [#53](https://github.com/tahoma/agent-scheme/issues/53). The living roadmap keeps
 only the current and future chunks; once every issue in a chunk has shipped, the
@@ -13,7 +13,7 @@ Each entry is recorded as `<major>.<minor>.<ordinal> — #<issue> <title>`, wher
 one-based position within the chunk.
 
 - **Chunks `0.00`-`0.13` (synthesized ordinals).** These chunks shipped before
-  `scheme/agent-scheme/version.sld` existed, so no per-issue version was ever
+  `scheme/consent/version.sld` existed, so no per-issue version was ever
   committed. Their ordinals are synthesized from GitHub merge order: issues are
   sorted by `closed_at` (ties broken by ascending issue number) and numbered from
   one.
@@ -36,7 +36,7 @@ position in #53 until its whole chunk has shipped.
 - 0.00.3 — #62 add unit test harness
 - 0.00.4 — #69 run test harness in GitHub Actions
 - 0.00.5 — #60 add GitHub issue taxonomy
-- 0.00.6 — #264 Agent Scheme getting started guide
+- 0.00.6 — #264 Consent Scheme getting started guide
 - 0.00.7 — #295 reconcile roadmap metadata and issue relationships
 - 0.00.8 — #294 refresh roadmap documentation from issue #53
 - 0.00.9 — #322 split CI tests and report timing
@@ -112,7 +112,7 @@ position in #53 until its whole chunk has shipped.
 - 0.09.2 — #221 implement port capability domain
 - 0.09.3 — #103 ensure backends share policy-gated effect path
 - 0.09.4 — #222 implement process capability domain
-- 0.09.5 — #266 Agent Scheme shared VCS capability contract
+- 0.09.5 — #266 Consent Scheme shared VCS capability contract
 - 0.09.6 — #279 add policy-gated mutating VCS operations
 - 0.09.7 — #290 implement network capability domain
 - 0.09.8 — #311 implement policy-gated time standard library
@@ -126,7 +126,7 @@ position in #53 until its whole chunk has shipped.
 
 ## 0.11 Emacs Process, VCS, and Test Surface
 
-- 0.11.1 — #36 Agent Scheme Emacs VCS adapter library
+- 0.11.1 — #36 Consent Scheme Emacs VCS adapter library
 - 0.11.2 — #292 implement Emacs policy-gated mutating VCS operations
 - 0.11.3 — #46 add jobs, cancellation, and streaming yields
 - 0.11.4 — #34 add Emacs compile capability library

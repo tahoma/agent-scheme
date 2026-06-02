@@ -1,7 +1,6 @@
+;;; diff.sld --- Portable Consent Scheme diff datum library
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
-;;
-;;; diff.sld --- Portable Agent Scheme diff datum library
 ;;;
 ;;; This host-neutral library owns canonical diff datums and unified rendering.
 ;;; Host adapters produce these records from live resources, but the record
@@ -237,7 +236,7 @@
           ""))
 
     (define (diff-yield diff)
-      "Yield DIFF through the portable Agent Scheme event channel."
+      "Yield DIFF through the portable Consent Scheme event channel."
       #((parameters . ((diff . "Canonical diff datum to publish as an agent event.")))
         (returns . "The host-specific result of `agent-yield`.")
         (effects . (agent-yield))

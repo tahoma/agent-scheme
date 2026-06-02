@@ -1,7 +1,6 @@
+;;; Portable source for the R7RS `(scheme case-lambda)' library.
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
-;;
-;;; Portable source for the R7RS `(scheme case-lambda)' library.
 ;;;
 ;;; This source is loaded by both evaluator bootstraps as ordinary checked-in
 ;;; Scheme library code.  It must stay host-neutral and rely only on

@@ -1,7 +1,6 @@
+;;; diagnostics.sld --- Portable Consent Scheme diagnostic datum library
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
-;;
-;;; diagnostics.sld --- Portable Agent Scheme diagnostic datum library
 ;;;
 ;;; This host-neutral library owns canonical diagnostic datums, adapter
 ;;; request/result records, and event yielding. Host adapters obtain diagnostic
@@ -311,7 +310,7 @@
       (if (memq operation diagnostics-read-only-operations) #t #f))
 
     (define (diagnostics-yield diagnostics)
-      "Yield DIAGNOSTICS through the portable Agent Scheme event channel."
+      "Yield DIAGNOSTICS through the portable Consent Scheme event channel."
       #((parameters . ((diagnostics . "Diagnostic snapshot, diagnostic list, or related diagnostic datum to publish.")))
         (returns . "The host-specific result of `agent-yield`.")
         (effects . (agent-yield)))

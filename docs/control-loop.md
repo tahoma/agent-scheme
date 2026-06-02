@@ -1,6 +1,6 @@
 # Task Lifecycle and Control Loop
 
-Agent Scheme's control loop is the runtime layer that turns Scheme-readable
+Consent Scheme's control loop is the runtime layer that turns Scheme-readable
 building blocks into an inspectable task-oriented agent. It receives a user
 goal or a resumed task, observes context, routes model work, updates plans,
 invokes Scheme helpers and host capabilities through policy, records
@@ -28,7 +28,7 @@ work, pause states, and stop states so hosts can distinguish "resume this
 later" from "this task is done."
 
 The diagram uses underscores for Mermaid state identifiers; the table below it
-keeps the public Agent Scheme state symbol spellings.
+keeps the public Consent Scheme state symbol spellings.
 
 ```mermaid
 stateDiagram-v2
@@ -269,7 +269,7 @@ executable code. They are ordinary datums, not host objects.
   (kind host-capability)
   (library (emacs buffer edit))
   (binding buffer-replace!)
-  (arguments ((handle buffer h-12) 120 140 "agent-scheme-read"))
+  (arguments ((handle buffer h-12) 120 140 "consent-read"))
   (requires ((policy buffer-edit)
              (grant region-edit)
              (approval approval-buffer-grant)))
@@ -333,7 +333,7 @@ must remain readable by older hosts. Unknown fields are ignored by readers that
 do not need them.
 
 Issue #285 turns the record vocabulary into the `(agent task)` library and the
-Emacs-side `agent-scheme-task` module. That executable slice exposes:
+Emacs-side `consent-task` module. That executable slice exposes:
 
 - public state data in `task-states`
 - the explicit transition table in `task-allowed-transitions`
@@ -447,7 +447,7 @@ errors, budgets, cancellation, transcript entries, and audit entries.
   (transport openai-compatible-http)
   (prompt
    (messages
-    ((system "Plan the next Agent Scheme task step.")
+    ((system "Plan the next Consent Scheme task step.")
      (user "Use the observations and current plan."))))
   (context
    ((task task-17)

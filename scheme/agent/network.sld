@@ -1,7 +1,6 @@
+;;; network.sld --- Portable Consent Scheme network capability datums
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
-;;
-;;; network.sld --- Portable Agent Scheme network capability datums
 ;;;
 ;;; This host-neutral library owns canonical network request, grant, decision,
 ;;; response, stream handle, port capability, and audit records. Host adapters

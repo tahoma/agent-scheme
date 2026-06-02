@@ -1,0 +1,220 @@
+;;; consent-reader-test.el --- R7RS reader tests  -*- lexical-binding: t; -*-
+;; SPDX-License-Identifier: Apache-2.0
+;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
+
+;;; Commentary:
+
+;; Focused tests for the Emacs Lisp reader implementation. Shared external
+;; reader behavior runs through the canonical fixture corpus; these tests keep
+;; host-side object identity, writer round trips, limit errors, and low-level
+;; reader diagnostics close to the implementation.
+
+;;; Code:
+
+(require 'ert)
+(require 'consent-reader)
+
+(defun consent-reader-test--external (source &optional options)
+  "Read SOURCE and return its external representation."
+  (consent-datum->external (consent-read source options)))
+
+(ert-deftest consent-reader-test-booleans-and-empty-list-are-distinct ()
+  "Read Scheme booleans without conflating false and the empty list."
+  (should (eq (consent-read "#t") consent-true))
+  (should (eq (consent-read "#true") consent-true))
+  (should (eq (consent-read "#f") consent-false))
+  (should (eq (consent-read "#false") consent-false))
+  (should-not (null (consent-read "#f")))
+  (should (null (consent-read "()")))
+  (should (equal (consent-reader-test--external "#f") "#f"))
+  (should (equal (consent-reader-test--external "()") "()")))
+
+(ert-deftest consent-reader-test-symbols-case-and-vertical-bars ()
+  "Read identifiers, vertical-bar identifiers, and case directives."
+  (let ((symbol (consent-read "Consent-Scheme")))
+    (should (consent-symbol-p symbol))
+    (should (equal (consent-symbol-name symbol) "Consent-Scheme")))
+  (should
+   (equal (consent-symbol-name
+           (consent-read "#!fold-case Consent-Scheme"))
+          "consent-scheme"))
+  (should
+   (equal (consent-symbol-name
+           (consent-read "|two\\x20;words|"))
+          "two words"))
+  (should
+   (equal (consent-reader-test--external "|two words|")
+          "|two words|")))
+
+(ert-deftest consent-reader-test-strings-and-characters ()
+  "Read strings and character literals with R7RS escapes."
+  (should
+   (equal (consent-read "\"line\\n\\x03bb;\"")
+          (concat "line\n" (string #x03bb))))
+  (should
+   (equal (consent-read "\"a\\\n  b\"") "ab"))
+  (should
+   (= (consent-character-code (consent-read "#\\space")) 32))
+  (should
+   (= (consent-character-code (consent-read "#\\x03bb")) #x03bb))
+  (should
+   (= (consent-character-code (consent-read "#\\X03BB")) #x03bb))
+  (should-error (consent-read "#\\Space")
+                :type 'consent-reader-error)
+  (should
+   (= (consent-character-code
+       (consent-read "#!fold-case #\\Space"))
+      32)))
+
+(ert-deftest consent-reader-test-character-writer-canonical-forms ()
+  "Write named, printable, Unicode, and control character forms."
+  (dolist (case '(("#\\space" . "#\\space")
+                  ("#\\tab" . "#\\tab")
+                  ("#\\alarm" . "#\\alarm")
+                  ("#\\backspace" . "#\\backspace")
+                  ("#\\delete" . "#\\delete")
+                  ("#\\escape" . "#\\escape")
+                  ("#\\newline" . "#\\newline")
+                  ("#\\null" . "#\\null")
+                  ("#\\return" . "#\\return")
+                  ("#\\a" . "#\\a")
+                  ("#\\x03bb" . "#\\λ")
+                  ("#\\x1" . "#\\x1")
+                  ("#\\x1f" . "#\\x1f")
+                  ("#\\x7f" . "#\\delete")))
+    (let* ((source (car case))
+           (expected (cdr case))
+           (external (consent-reader-test--external source)))
+      (should (equal external expected))
+      (should (equal (consent-reader-test--external external)
+                     expected)))))
+
+(ert-deftest consent-reader-test-numbers ()
+  "Read representative exact, inexact, radix, and rational numbers."
+  (let ((integer (consent-read "42"))
+        (hex (consent-read "#x2a"))
+        (rational (consent-read "3/4"))
+        (decimal (consent-read "1.5")))
+    (should (consent-number-p integer))
+    (should (eq (consent-number-kind integer) 'integer))
+    (should (= (consent-number-value integer) 42))
+    (should (= (consent-number-value hex) 42))
+    (should (eq (consent-number-kind rational) 'rational))
+    (should (equal (consent-number-value rational) '(3 . 4)))
+    (should (eq (consent-number-kind decimal) 'decimal))
+    (should (= (consent-number-value decimal) 1.5)))
+  (should
+   (equal
+    (consent-datum->external
+     (consent--make-canonical-decimal 3.0))
+    "3.0"))
+  (should-error (consent-read "1/0")
+                :type 'consent-reader-error))
+
+(ert-deftest consent-reader-test-numeric-tower-literals ()
+  "Read normalized R7RS rational, exact decimal, and complex literals."
+  (let ((reduced (consent-read "6/10"))
+        (exact-decimal (consent-read "#e1.5"))
+        (inexact-rational (consent-read "#i3/2"))
+        (complex (consent-read "3/4-5/6i")))
+    (should (eq (consent-number-kind reduced) 'rational))
+    (should (equal (consent-number-value reduced) '(3 . 5)))
+    (should (equal (consent-datum->external reduced) "3/5"))
+    (should (eq (consent-number-exactness exact-decimal) 'exact))
+    (should (equal (consent-datum->external exact-decimal) "3/2"))
+    (should (eq (consent-number-exactness inexact-rational) 'inexact))
+    (should (equal (consent-datum->external inexact-rational) "1.5"))
+    (should (eq (consent-number-kind complex) 'complex))
+    (should (equal (consent-datum->external complex) "3/4-5/6i"))))
+
+(ert-deftest consent-reader-test-inexact-complex-special-values ()
+  "Read inexact special values in complex external forms canonically."
+  (should (equal (consent-reader-test--external "+inf.0i")
+                 "0+inf.0i"))
+  (should (equal (consent-reader-test--external "-inf.0i")
+                 "0-inf.0i"))
+  (should (equal (consent-reader-test--external "+nan.0i")
+                 "0+nan.0i"))
+  (should (equal (consent-reader-test--external "+inf.0@0")
+                 "+inf.0+nan.0i"))
+  (should (equal (consent-reader-test--external "1@+inf.0")
+                 "+nan.0+nan.0i"))
+  (should (equal (consent-reader-test--external "+nan.0@0")
+                 "+nan.0+nan.0i")))
+
+(ert-deftest consent-reader-test-lists-vectors-bytevectors-and-abbreviations ()
+  "Read compound datum forms."
+  (should
+   (equal (consent-reader-test--external "(alpha beta . gamma)")
+          "(alpha beta . gamma)"))
+  (should
+   (equal (consent-reader-test--external "'alpha")
+          "(quote alpha)"))
+  (should
+   (equal (consent-reader-test--external "`(,alpha ,@beta)")
+          "(quasiquote ((unquote alpha) (unquote-splicing beta)))"))
+  (should
+   (equal (consent-reader-test--external "#(1 alpha \"ok\")")
+          "#(1 alpha \"ok\")"))
+  (let ((bytevector (consent-read "#u8(0 127 255)")))
+    (should (consent-bytevector-p bytevector))
+    (should (equal (append (consent-bytevector-bytes bytevector) nil)
+                   '(0 127 255)))
+    (should (equal (consent-datum->external bytevector)
+                   "#u8(0 127 255)")))
+  (should-error (consent-read "#u8(256)")
+                :type 'consent-reader-error)
+  (should-error (consent-read "#u8(1 . 2)")
+                :type 'consent-reader-error))
+
+(ert-deftest consent-reader-test-datum-labels-preserve-identity ()
+  "Read R7RS datum labels as shared and circular structure."
+  (let ((circular (consent-read "#1=(a . #1#)"))
+        (shared (consent-read "(#1=(a b) #1#)")))
+    (should (eq circular (cdr circular)))
+    (should (eq (car shared) (cadr shared)))
+    (should (equal (consent-datum->external circular)
+                   "#0=(a . #0#)"))
+    (should (equal (consent-datum->external shared)
+                   "((a b) (a b))"))))
+
+(ert-deftest consent-reader-test-comments-and-read-all ()
+  "Skip line, block, datum comments, and read multiple datums."
+  (should
+   (equal (mapcar #'consent-datum->external
+                  (consent-read-all
+                   "; ignore\n#| nested #| comment |# done |#\n1 #;(skip me) 2"))
+          '("1" "2")))
+  (should
+   (equal (mapcar #'consent-datum->external
+                  (consent-read-all
+                   "#!fold-case FOO #!no-fold-case BAR"))
+          '("foo" "BAR"))))
+
+(ert-deftest consent-reader-test-resource-limits ()
+  "Reject datums that exceed configured validator limits."
+  (should-error (consent-read "(((x)))" '(:max-depth 2))
+                :type 'consent-datum-limit-error)
+  (should-error (consent-read "(1 2 3)" '(:max-list-length 2))
+                :type 'consent-datum-limit-error)
+  (should-error (consent-read "\"abc\"" '(:max-string-size 2))
+                :type 'consent-datum-limit-error)
+  (should-error (consent-read "#(1 2 3)" '(:max-vector-length 2))
+                :type 'consent-datum-limit-error)
+  (should-error (consent-read "#u8(1 2 3)" '(:max-bytevector-length 2))
+                :type 'consent-datum-limit-error))
+
+(ert-deftest consent-reader-test-friendly-syntax-errors ()
+  "Reject malformed syntax with reader errors."
+  (should-error (consent-read "(1 . 2 3)")
+                :type 'consent-reader-error)
+  (should-error (consent-read "(1 2")
+                :type 'consent-reader-error)
+  (should-error (consent-read "#1#")
+                :type 'consent-reader-error)
+  (should-error (consent-read "1 2")
+                :type 'consent-reader-error)
+  (should-error (consent-validate-datum (current-buffer))
+                :type 'consent-reader-error))
+
+;;; consent-reader-test.el ends here

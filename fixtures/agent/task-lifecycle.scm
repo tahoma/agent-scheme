@@ -1,9 +1,8 @@
+;;; task-lifecycle.scm --- Shared task lifecycle fixture records
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
-;;
-;;; task-lifecycle.scm --- Shared task lifecycle fixture records
 
-(agent-scheme-task-lifecycle-fixture
+(consent-task-lifecycle-fixture
  (version 1)
  (scenarios
   ((id normal-completion)

@@ -1,6 +1,6 @@
 # Feature and Host Reflection
 
-Agent Scheme programs should prefer capability discovery over hard-coded host
+Consent Scheme programs should prefer capability discovery over hard-coded host
 identity. The runtime supports portable Scheme first, then exposes host-specific
 surfaces as explicit libraries and Scheme-readable adapter data.
 
@@ -12,7 +12,7 @@ Use R7RS `cond-expand` with `(library ...)` feature requirements when code must
 choose imports or definitions before runtime execution.
 
 ```scheme
-(define-library (agent-scheme examples host-aware)
+(define-library (consent examples host-aware)
   (export host-kind)
   (import (scheme base))
   (cond-expand
@@ -36,14 +36,14 @@ portable fallback instead of failing at runtime.
 ## Implementation Features
 
 Use `(features)` for implementation and language features, not host identity.
-Agent Scheme may report features such as:
+Consent Scheme may report features such as:
 
 ```scheme
-(r7rs ratios exact-complex ieee-float agent-scheme)
+(r7rs ratios exact-complex ieee-float consent)
 ```
 
 The feature list answers questions such as "does this implementation advertise
-R7RS?" or "is this Agent Scheme?" It should not be used to distinguish Emacs
+R7RS?" or "is this Consent Scheme?" It should not be used to distinguish Emacs
 from a native CLI daemon. Host adapters have richer structure than a flat
 feature symbol can represent.
 
@@ -60,7 +60,7 @@ The intended `(agent reflect)` or `(agent context)` surface is:
   (modes (cli batch daemon))
   (provides
     ((library (cli process))
-     (library (agent capability)))))
+     (library (consent capability)))))
 
 (current-host-capabilities)
 ;; =>
@@ -85,13 +85,13 @@ other hosts:
   (name emacs)
   (contract r7rs-small)
   (implementation
-    ((runtime agent-scheme)
-     (version-source-file "scheme/agent-scheme/version.sld")
-     (version-binding agent-scheme-version-datum)
+    ((runtime consent)
+     (version-source-file "scheme/consent/version.sld")
+     (version-binding consent-version-datum)
      (version-source roadmap-derived)))
   (provides
     ((library (emacs buffer))
-     (library (agent capability)))))
+     (library (consent capability)))))
 ```
 
 Future runtime reflection can consume this Scheme-readable declaration and its
@@ -115,17 +115,17 @@ Adapter reflection follows these rules:
 
 ## Runtime Reflection Library
 
-`(agent reflect)` exposes read-only snapshots of the active Agent Scheme
+`(agent reflect)` exposes read-only snapshots of the active Consent Scheme
 runtime. It is for diagnostics, adaptive helper libraries, and agent-authored
 scripts that need to understand their current authority and budget before
 choosing what to do next.
 
 Current procedures:
 
-- `(agent-scheme-version)` returns the canonical Agent Scheme runtime version
-  datum, shaped as `(agent-scheme-version major minor ordinal)`.
+- `(consent-version)` returns the canonical Consent Scheme runtime version
+  datum, shaped as `(consent-version major minor ordinal)`.
   Components are exact non-negative integers. The current value is
-  `(agent-scheme-version 0 15 4)`: the `major` and `minor` components come from
+  `(consent-version 0 15 4)`: the `major` and `minor` components come from
   the roadmap chunk's dotted number (`Chunk 0.15` → `0.15`), and `ordinal` is
   the issue's one-based position in that chunk. The major component is no longer
   hardcoded to `0`; a future `Chunk 1.x` line yields `1.x.x` versions while the
@@ -221,14 +221,14 @@ boundary remains Scheme-readable data.
 
 Current implemented pieces:
 
-- `(agent-scheme-version)` reports the roadmap-derived runtime version as
-  `(agent-scheme-version 0 15 4)`, and the Emacs host-adapter fixture points
-  at `scheme/agent-scheme/version.sld` as the single source of truth for the
+- `(consent-version)` reports the roadmap-derived runtime version as
+  `(consent-version 0 15 4)`, and the Emacs host-adapter fixture points
+  at `scheme/consent/version.sld` as the single source of truth for the
   runtime version datum.
 - R7RS `cond-expand` library requirements are available for implemented
   libraries.
 - `(features)` reports implementation-level feature identifiers, including
-  `agent-scheme`.
+  `consent`.
 - Emacs capability libraries are registered under `(emacs ...)` names.
 - The Emacs host-adapter declaration and capability manifest fixture is checked
   in as `fixtures/host-adapters/emacs.scm`.

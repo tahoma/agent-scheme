@@ -1,7 +1,7 @@
 # Shared VCS Capability Contract
 
-Agent Scheme exposes repository state through a host-neutral `(agent vcs)`
-library. This is an Agent Scheme capability contract, not an SRFI compatibility target.
+Consent Scheme exposes repository state through a host-neutral `(agent vcs)`
+library. This is an Consent Scheme capability contract, not an SRFI compatibility target.
 SRFI 170, SRFI 193, and SRFI 176 cover useful operating-system,
 command-line, and version-output ground, but they do not define Git or VCS
 records.
@@ -222,7 +222,7 @@ portable status symbols remain the common boundary vocabulary.
 
 ## SRFI Relationship
 
-This contract is intentionally Agent Scheme-specific. SRFI 170 helps describe
+This contract is intentionally Consent Scheme-specific. SRFI 170 helps describe
 operating-system services, SRFI 193 covers command-line metadata, and SRFI 176
 covers version output conventions. None of those SRFIs define VCS records,
 Git porcelain parsing, repository mutation policy, or host adapter request

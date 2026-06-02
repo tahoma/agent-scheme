@@ -1,5 +1,5 @@
 ---
-name: agent-scheme-naming-lint
+name: consent-naming-lint
 description: Use when adding or reviewing public names, private internals, module names, test names, Scheme library names, or documentation examples.
 ---
 
@@ -19,16 +19,16 @@ text that names project APIs.
 ## Rules
 
 - Public Emacs Lisp commands, functions, variables, groups, faces, modes, and
-  module entry points use `agent-scheme-`.
+  module entry points use `consent-`.
 - Private Emacs Lisp helpers, macros, structs, variables, and implementation
-  details use `agent-scheme--`.
-- The top-level customization group is `agent-scheme`; nested groups extend the
-  package name, such as `agent-scheme-mcp`.
+  details use `consent--`.
+- The top-level customization group is `consent`; nested groups extend the
+  package name, such as `consent-mcp`.
 - Scheme libraries use Scheme names such as `(scheme base)`, `(emacs buffer)`,
-  `(agent io)`, or portable implementation names under `(agent-scheme ...)`.
-- `lisp/agent-scheme-foo.el` provides `agent-scheme-foo`.
-- `tests/agent-scheme-foo-test.el` mirrors the implementation module.
-- `scheme/agent-scheme/foo.sld` defines `(agent-scheme foo)`.
+  `(agent io)`, or portable implementation names under `(consent ...)`.
+- `lisp/consent-foo.el` provides `consent-foo`.
+- `tests/consent-foo-test.el` mirrors the implementation module.
+- `scheme/consent/foo.sld` defines `(consent foo)`.
 - Do not use private names in README examples, user docs, issue plans, or tests
   that describe public behavior.
 - Keep assistant, tool, vendor, and workflow branding out of branch names,
@@ -40,20 +40,20 @@ text that names project APIs.
 Run the repository documentation private-history scan:
 
 ```sh
-rg -n "m[y]/agent-scheme|m[y]/mcp" README.md docs
+rg -n "m[y]/consent|m[y]/mcp" README.md docs
 ```
 
 When skill files changed, scan them too:
 
 ```sh
-rg -n "m[y]/agent-scheme|m[y]/mcp" skills
+rg -n "m[y]/consent|m[y]/mcp" skills
 ```
 
 Check for private Emacs Lisp names leaking into public docs. The command
 excludes the canonical rule documents and the skills that explain the rule.
 
 ```sh
-rg -n "\\bagent-scheme--" README.md docs skills -g '!docs/naming.md' -g '!docs/architecture.md' -g '!skills/host-boundary-review/SKILL.md' -g '!skills/naming-lint/SKILL.md'
+rg -n "\\bconsent--" README.md docs skills -g '!docs/naming.md' -g '!docs/architecture.md' -g '!skills/host-boundary-review/SKILL.md' -g '!skills/naming-lint/SKILL.md'
 ```
 
 List Emacs Lisp definitions for manual namespace review:
@@ -66,14 +66,14 @@ List Scheme library definitions and test file names for mirror checks:
 
 ```sh
 rg -n "\\(define-library \\(" scheme tests/scheme
-rg --files lisp tests scheme/agent-scheme
+rg --files lisp tests scheme/consent
 ```
 
 ## Review Workflow
 
 1. Run the deterministic checks that apply to the changed files.
 2. Compare new names against `docs/naming.md`.
-3. Treat public examples as API promises. Prefer public `agent-scheme-` names
-   there and keep private `agent-scheme--` names in implementation tests only.
+3. Treat public examples as API promises. Prefer public `consent-` names
+   there and keep private `consent--` names in implementation tests only.
 4. For any intentional exception, document the reason in the change or pull
    request rather than leaving the naming rule ambiguous.
