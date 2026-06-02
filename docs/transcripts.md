@@ -1,6 +1,6 @@
 # Replayable Transcripts
 
-Agent Scheme transcripts record session and runtime activity as
+Consent Scheme transcripts record session and runtime activity as
 Scheme-readable data. They are not terminal logs: raw transcript datums remain
 the canonical state, and human-readable summaries are views over those datums.
 

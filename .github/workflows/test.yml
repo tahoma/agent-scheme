@@ -37,14 +37,14 @@ jobs:
     name: portable R7RS / Gambit full suite / syntax ${{ matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention }}
     runs-on: ubuntu-latest
     env:
-      AGENT_SCHEME_GAMBIT_VERSION: "4.9.7"
-      AGENT_SCHEME_GAMBIT_SHA256: "0da7c9772a2186dab1fba6bf6c777afe7424f40beacadf1b117d5cc825fe2db3"
-      AGENT_SCHEME_TEST_SOURCE_METADATA: ${{ matrix.source_metadata }}
-      AGENT_SCHEME_TEST_DOCSTRING_RETENTION: ${{ matrix.docstring_retention }}
-      AGENT_SCHEME_CI_LOG_FILE: portable-gambit-${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}.log
-      AGENT_SCHEME_CI_NATIVE_LOG_FILE: portable-gambit-native-${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}.log
-      AGENT_SCHEME_CI_SHARD_SUMMARY_NAME: Portable R7RS Gambit full suite / source metadata ${{ matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention }}
-      AGENT_SCHEME_CI_NATIVE_SHARD_SUMMARY_NAME: Portable R7RS Gambit native Agent Scheme full suite / source metadata ${{ matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention }}
+      CONSENT_GAMBIT_VERSION: "4.9.7"
+      CONSENT_GAMBIT_SHA256: "0da7c9772a2186dab1fba6bf6c777afe7424f40beacadf1b117d5cc825fe2db3"
+      CONSENT_TEST_SOURCE_METADATA: ${{ matrix.source_metadata }}
+      CONSENT_TEST_DOCSTRING_RETENTION: ${{ matrix.docstring_retention }}
+      CONSENT_CI_LOG_FILE: portable-gambit-${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}.log
+      CONSENT_CI_NATIVE_LOG_FILE: portable-gambit-native-${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}.log
+      CONSENT_CI_SHARD_SUMMARY_NAME: Portable R7RS Gambit full suite / source metadata ${{ matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention }}
+      CONSENT_CI_NATIVE_SHARD_SUMMARY_NAME: Portable R7RS Gambit native Consent Scheme full suite / source metadata ${{ matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention }}
     strategy:
       fail-fast: false
       matrix:
@@ -59,20 +59,20 @@ jobs:
         id: cache-gambit
         uses: actions/cache@v4
         with:
-          path: ${{ runner.tool_cache }}/gambit/${{ env.AGENT_SCHEME_GAMBIT_VERSION }}
-          key: ${{ runner.os }}-gambit-${{ env.AGENT_SCHEME_GAMBIT_VERSION }}
+          path: ${{ runner.tool_cache }}/gambit/${{ env.CONSENT_GAMBIT_VERSION }}
+          key: ${{ runner.os }}-gambit-${{ env.CONSENT_GAMBIT_VERSION }}
 
       - name: Install Gambit
         run: |
           sudo apt-get update
           sudo apt-get install -y emacs-nox build-essential ca-certificates curl libssl-dev
 
-          gambit_prefix="${RUNNER_TOOL_CACHE}/gambit/${AGENT_SCHEME_GAMBIT_VERSION}"
+          gambit_prefix="${RUNNER_TOOL_CACHE}/gambit/${CONSENT_GAMBIT_VERSION}"
           if [ ! -x "${gambit_prefix}/bin/gsi" ]; then
             curl -fsSL \
-              "https://github.com/gambit/gambit/archive/refs/tags/v${AGENT_SCHEME_GAMBIT_VERSION}.tar.gz" \
+              "https://github.com/gambit/gambit/archive/refs/tags/v${CONSENT_GAMBIT_VERSION}.tar.gz" \
               -o /tmp/gambit.tar.gz
-            printf '%s  %s\n' "${AGENT_SCHEME_GAMBIT_SHA256}" /tmp/gambit.tar.gz | sha256sum -c -
+            printf '%s  %s\n' "${CONSENT_GAMBIT_SHA256}" /tmp/gambit.tar.gz | sha256sum -c -
 
             rm -rf /tmp/gambit-src
             mkdir -p /tmp/gambit-src "${gambit_prefix}"
@@ -94,14 +94,14 @@ jobs:
           mkdir -p ci-logs
           started=$SECONDS
           set +e
-          make test-portable-gambit 2>&1 | tee "ci-logs/${AGENT_SCHEME_CI_LOG_FILE}"
+          make test-portable-gambit 2>&1 | tee "ci-logs/${CONSENT_CI_LOG_FILE}"
           status=${PIPESTATUS[0]}
           wall=$((SECONDS - started))
           {
-            printf 'AGENT_SCHEME_CI_SHARD_NAME=%s\n' "${AGENT_SCHEME_CI_SHARD_SUMMARY_NAME}"
-            printf 'AGENT_SCHEME_CI_SHARD_SELECTOR=%s\n' '"^agent-scheme-scheme-gambit-host-test-r7rs-suite$"'
-            printf 'AGENT_SCHEME_CI_WALL_SECONDS=%s\n' "$wall"
-          } >> "ci-logs/${AGENT_SCHEME_CI_LOG_FILE}"
+            printf 'CONSENT_CI_SHARD_NAME=%s\n' "${CONSENT_CI_SHARD_SUMMARY_NAME}"
+            printf 'CONSENT_CI_SHARD_SELECTOR=%s\n' '"^consent-scheme-gambit-host-test-r7rs-suite$"'
+            printf 'CONSENT_CI_WALL_SECONDS=%s\n' "$wall"
+          } >> "ci-logs/${CONSENT_CI_LOG_FILE}"
           exit "$status"
 
       - name: Run portable R7RS Gambit native shard
@@ -110,14 +110,14 @@ jobs:
           mkdir -p ci-logs
           started=$SECONDS
           set +e
-          make test-portable-gambit-native 2>&1 | tee "ci-logs/${AGENT_SCHEME_CI_NATIVE_LOG_FILE}"
+          make test-portable-gambit-native 2>&1 | tee "ci-logs/${CONSENT_CI_NATIVE_LOG_FILE}"
           status=${PIPESTATUS[0]}
           wall=$((SECONDS - started))
           {
-            printf 'AGENT_SCHEME_CI_SHARD_NAME=%s\n' "${AGENT_SCHEME_CI_NATIVE_SHARD_SUMMARY_NAME}"
-            printf 'AGENT_SCHEME_CI_SHARD_SELECTOR=%s\n' '"^agent-scheme-scheme-gambit-native-host-test-r7rs-suite$"'
-            printf 'AGENT_SCHEME_CI_WALL_SECONDS=%s\n' "$wall"
-          } >> "ci-logs/${AGENT_SCHEME_CI_NATIVE_LOG_FILE}"
+            printf 'CONSENT_CI_SHARD_NAME=%s\n' "${CONSENT_CI_NATIVE_SHARD_SUMMARY_NAME}"
+            printf 'CONSENT_CI_SHARD_SELECTOR=%s\n' '"^consent-scheme-gambit-native-host-test-r7rs-suite$"'
+            printf 'CONSENT_CI_WALL_SECONDS=%s\n' "$wall"
+          } >> "ci-logs/${CONSENT_CI_NATIVE_LOG_FILE}"
           exit "$status"
 
       - name: Upload portable Gambit shard log
@@ -125,7 +125,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: test-log-portable-gambit-${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}
-          path: ci-logs/${{ env.AGENT_SCHEME_CI_LOG_FILE }}
+          path: ci-logs/${{ env.CONSENT_CI_LOG_FILE }}
           if-no-files-found: warn
 
       - name: Upload portable Gambit native shard log
@@ -133,7 +133,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: test-log-portable-gambit-native-${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}
-          path: ci-logs/${{ env.AGENT_SCHEME_CI_NATIVE_LOG_FILE }}
+          path: ci-logs/${{ env.CONSENT_CI_NATIVE_LOG_FILE }}
           if-no-files-found: warn
 
       - name: Render portable Gambit shard timing summary
@@ -141,16 +141,16 @@ jobs:
         shell: bash
         run: |
           logs=()
-          if [ -f "ci-logs/${AGENT_SCHEME_CI_LOG_FILE}" ]; then
-            logs+=("ci-logs/${AGENT_SCHEME_CI_LOG_FILE}")
+          if [ -f "ci-logs/${CONSENT_CI_LOG_FILE}" ]; then
+            logs+=("ci-logs/${CONSENT_CI_LOG_FILE}")
           fi
-          if [ -f "ci-logs/${AGENT_SCHEME_CI_NATIVE_LOG_FILE}" ]; then
-            logs+=("ci-logs/${AGENT_SCHEME_CI_NATIVE_LOG_FILE}")
+          if [ -f "ci-logs/${CONSENT_CI_NATIVE_LOG_FILE}" ]; then
+            logs+=("ci-logs/${CONSENT_CI_NATIVE_LOG_FILE}")
           fi
           if [ "${#logs[@]}" -gt 0 ]; then
             emacs -Q --batch -L lisp \
-              --eval "(require 'agent-scheme-ci)" \
-              --funcall agent-scheme-ci-summary-batch-main -- "${logs[@]}"
+              --eval "(require 'consent-ci)" \
+              --funcall consent-ci-summary-batch-main -- "${logs[@]}"
           fi
 
   test-portable-extra-hosts:
@@ -159,10 +159,10 @@ jobs:
     container: ubuntu:26.04
     env:
       DEBIAN_FRONTEND: noninteractive
-      AGENT_SCHEME_TEST_SOURCE_METADATA: ${{ matrix.source_metadata }}
-      AGENT_SCHEME_TEST_DOCSTRING_RETENTION: ${{ matrix.docstring_retention }}
-      AGENT_SCHEME_CI_LOG_FILE: portable-${{ matrix.host.host }}-${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}.log
-      AGENT_SCHEME_CI_SHARD_SUMMARY_NAME: ${{ matrix.host.summary_name }} / source metadata ${{ matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention }}
+      CONSENT_TEST_SOURCE_METADATA: ${{ matrix.source_metadata }}
+      CONSENT_TEST_DOCSTRING_RETENTION: ${{ matrix.docstring_retention }}
+      CONSENT_CI_LOG_FILE: portable-${{ matrix.host.host }}-${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}.log
+      CONSENT_CI_SHARD_SUMMARY_NAME: ${{ matrix.host.summary_name }} / source metadata ${{ matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention }}
     strategy:
       fail-fast: false
       matrix:
@@ -174,25 +174,25 @@ jobs:
             apt_package: racket
             make_target: test-portable-racket
             summary_name: Portable R7RS Racket full suite
-            selector: '"^agent-scheme-scheme-racket-host-test-r7rs-suite$"'
+            selector: '"^consent-scheme-racket-host-test-r7rs-suite$"'
           - host: compiled
-            host_name: Compiled Agent Scheme
+            host_name: Compiled Consent Scheme
             apt_package: racket
             make_target: test-portable-compiled
-            summary_name: Portable R7RS Compiled Agent Scheme full suite
-            selector: '"^agent-scheme-scheme-compiled-host-test-r7rs-suite$"'
+            summary_name: Portable R7RS Compiled Consent Scheme full suite
+            selector: '"^consent-scheme-compiled-host-test-r7rs-suite$"'
           - host: guile
             host_name: Guile
             apt_package: guile-3.0
             make_target: test-portable-guile
             summary_name: Portable R7RS Guile full suite
-            selector: '"^agent-scheme-scheme-guile-host-test-r7rs-suite$"'
+            selector: '"^consent-scheme-guile-host-test-r7rs-suite$"'
           - host: gauche
             host_name: Gauche
             apt_package: gauche
             make_target: test-portable-gauche
             summary_name: Portable R7RS Gauche full suite
-            selector: '"^agent-scheme-scheme-gauche-host-test-r7rs-suite$"'
+            selector: '"^consent-scheme-gauche-host-test-r7rs-suite$"'
 
     steps:
       - name: Install checkout tools
@@ -237,14 +237,14 @@ jobs:
           mkdir -p ci-logs
           started=$SECONDS
           set +e
-          make "${{ matrix.host.make_target }}" 2>&1 | tee "ci-logs/${AGENT_SCHEME_CI_LOG_FILE}"
+          make "${{ matrix.host.make_target }}" 2>&1 | tee "ci-logs/${CONSENT_CI_LOG_FILE}"
           status=${PIPESTATUS[0]}
           wall=$((SECONDS - started))
           {
-            printf 'AGENT_SCHEME_CI_SHARD_NAME=%s\n' "${AGENT_SCHEME_CI_SHARD_SUMMARY_NAME}"
-            printf 'AGENT_SCHEME_CI_SHARD_SELECTOR=%s\n' '${{ matrix.host.selector }}'
-            printf 'AGENT_SCHEME_CI_WALL_SECONDS=%s\n' "$wall"
-          } >> "ci-logs/${AGENT_SCHEME_CI_LOG_FILE}"
+            printf 'CONSENT_CI_SHARD_NAME=%s\n' "${CONSENT_CI_SHARD_SUMMARY_NAME}"
+            printf 'CONSENT_CI_SHARD_SELECTOR=%s\n' '${{ matrix.host.selector }}'
+            printf 'CONSENT_CI_WALL_SECONDS=%s\n' "$wall"
+          } >> "ci-logs/${CONSENT_CI_LOG_FILE}"
           exit "$status"
 
       - name: Upload portable R7RS host shard log
@@ -252,26 +252,26 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: test-log-portable-${{ matrix.host.host }}-${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}
-          path: ci-logs/${{ env.AGENT_SCHEME_CI_LOG_FILE }}
+          path: ci-logs/${{ env.CONSENT_CI_LOG_FILE }}
           if-no-files-found: warn
 
       - name: Render portable R7RS host shard timing summary
         if: always()
         run: |
-          if [ -f "ci-logs/${AGENT_SCHEME_CI_LOG_FILE}" ]; then
+          if [ -f "ci-logs/${CONSENT_CI_LOG_FILE}" ]; then
             emacs -Q --batch -L lisp \
-              --eval "(require 'agent-scheme-ci)" \
-              --eval "(agent-scheme-ci-write-summary (list (expand-file-name (getenv \"AGENT_SCHEME_CI_LOG_FILE\") \"ci-logs\")) (getenv \"GITHUB_STEP_SUMMARY\"))"
+              --eval "(require 'consent-ci)" \
+              --eval "(consent-ci-write-summary (list (expand-file-name (getenv \"CONSENT_CI_LOG_FILE\") \"ci-logs\")) (getenv \"GITHUB_STEP_SUMMARY\"))"
           fi
 
   test-emacs-hosted:
     name: Emacs-hosted ERT (${{ matrix.shard.label }}; syntax ${{ matrix.source_metadata }}; docstrings ${{ matrix.docstring_retention }})
     runs-on: ubuntu-latest
     env:
-      AGENT_SCHEME_TEST_SOURCE_METADATA: ${{ matrix.source_metadata }}
-      AGENT_SCHEME_TEST_DOCSTRING_RETENTION: ${{ matrix.docstring_retention }}
-      AGENT_SCHEME_CI_LOG_FILE: emacs-${{ matrix.shard.shard }}-${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}.log
-      AGENT_SCHEME_CI_SHARD_SUMMARY_NAME: ${{ matrix.shard.summary_name }} / source metadata ${{ matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention }}
+      CONSENT_TEST_SOURCE_METADATA: ${{ matrix.source_metadata }}
+      CONSENT_TEST_DOCSTRING_RETENTION: ${{ matrix.docstring_retention }}
+      CONSENT_CI_LOG_FILE: emacs-${{ matrix.shard.shard }}-${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}.log
+      CONSENT_CI_SHARD_SUMMARY_NAME: ${{ matrix.shard.summary_name }} / source metadata ${{ matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention }}
     strategy:
       fail-fast: false
       matrix:
@@ -282,22 +282,22 @@ jobs:
             label: core language/runtime
             make_target: test-emacs-core
             summary_name: Emacs core language/runtime
-            selector: '(or "agent-scheme-base.*" "agent-scheme-eval.*" "agent-scheme-interpreter-module.*" "agent-scheme-macro.*" "agent-scheme-reader.*" "agent-scheme-result.*" "agent-scheme-runtime.*")'
+            selector: '(or "consent-base.*" "consent-eval.*" "consent-interpreter-module.*" "consent-macro.*" "consent-reader.*" "consent-result.*" "consent-runtime.*")'
           - shard: emacs-library
             label: library/conformance
             make_target: test-emacs-library
             summary_name: Emacs library/conformance
-            selector: '(or "agent-scheme-conformance.*" "agent-scheme-fixture.*" "agent-scheme-host-adapter-fixture.*" "agent-scheme-library.*" "agent-scheme-oracle.*")'
+            selector: '(or "consent-conformance.*" "consent-fixture.*" "consent-host-adapter-fixture.*" "consent-library.*" "consent-oracle.*")'
           - shard: emacs-capabilities
             label: capabilities/policy
             make_target: test-emacs-capabilities
             summary_name: Emacs capabilities/policy
-            selector: '(or "agent-scheme-agent-io.*" "agent-scheme-approval.*" "agent-scheme-capability.*" "agent-scheme-context.*" "agent-scheme-memory.*" "agent-scheme-models.*" "agent-scheme-network.*" "agent-scheme-policy.*" "agent-scheme-redaction.*" "agent-scheme-session.*")'
+            selector: '(or "consent-agent-io.*" "consent-approval.*" "consent-capability.*" "consent-context.*" "consent-memory.*" "consent-models.*" "consent-network.*" "consent-policy.*" "consent-redaction.*" "consent-session.*")'
           - shard: emacs-tools
             label: tools/docs/integration
             make_target: test-emacs-tools
             summary_name: Emacs tools/docs/integration
-            selector: '(or "agent-scheme-ci.*" "agent-scheme-compile.*" "agent-scheme-control-loop-doc.*" "agent-scheme-debugger.*" "agent-scheme-diagnostics.*" "agent-scheme-diff.*" "agent-scheme-feature-reflection-doc.*" "agent-scheme-job.*" "agent-scheme-native-cli-daemon-doc.*" "agent-scheme-reflect.*" "agent-scheme-repl.*" "agent-scheme-skill.*" "agent-scheme-smoke.*" "agent-scheme-vcs.*")'
+            selector: '(or "consent-ci.*" "consent-compile.*" "consent-control-loop-doc.*" "consent-debugger.*" "consent-diagnostics.*" "consent-diff.*" "consent-feature-reflection-doc.*" "consent-job.*" "consent-native-cli-daemon-doc.*" "consent-reflect.*" "consent-repl.*" "consent-skill.*" "consent-smoke.*" "consent-vcs.*")'
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
@@ -313,14 +313,14 @@ jobs:
           mkdir -p ci-logs
           started=$SECONDS
           set +e
-          make "${{ matrix.shard.make_target }}" 2>&1 | tee "ci-logs/${AGENT_SCHEME_CI_LOG_FILE}"
+          make "${{ matrix.shard.make_target }}" 2>&1 | tee "ci-logs/${CONSENT_CI_LOG_FILE}"
           status=${PIPESTATUS[0]}
           wall=$((SECONDS - started))
           {
-            printf 'AGENT_SCHEME_CI_SHARD_NAME=%s\n' "${AGENT_SCHEME_CI_SHARD_SUMMARY_NAME}"
-            printf 'AGENT_SCHEME_CI_SHARD_SELECTOR=%s\n' '${{ matrix.shard.selector }}'
-            printf 'AGENT_SCHEME_CI_WALL_SECONDS=%s\n' "$wall"
-          } >> "ci-logs/${AGENT_SCHEME_CI_LOG_FILE}"
+            printf 'CONSENT_CI_SHARD_NAME=%s\n' "${CONSENT_CI_SHARD_SUMMARY_NAME}"
+            printf 'CONSENT_CI_SHARD_SELECTOR=%s\n' '${{ matrix.shard.selector }}'
+            printf 'CONSENT_CI_WALL_SECONDS=%s\n' "$wall"
+          } >> "ci-logs/${CONSENT_CI_LOG_FILE}"
           exit "$status"
 
       - name: Upload Emacs-hosted shard log
@@ -328,16 +328,16 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: test-log-${{ matrix.shard.shard }}-${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}
-          path: ci-logs/${{ env.AGENT_SCHEME_CI_LOG_FILE }}
+          path: ci-logs/${{ env.CONSENT_CI_LOG_FILE }}
           if-no-files-found: warn
 
       - name: Render Emacs-hosted shard timing summary
         if: always()
         run: |
-          if [ -f "ci-logs/${AGENT_SCHEME_CI_LOG_FILE}" ]; then
+          if [ -f "ci-logs/${CONSENT_CI_LOG_FILE}" ]; then
             emacs -Q --batch -L lisp \
-              --eval "(require 'agent-scheme-ci)" \
-              --eval "(agent-scheme-ci-write-summary (list (expand-file-name (getenv \"AGENT_SCHEME_CI_LOG_FILE\") \"ci-logs\")) (getenv \"GITHUB_STEP_SUMMARY\"))"
+              --eval "(require 'consent-ci)" \
+              --eval "(consent-ci-write-summary (list (expand-file-name (getenv \"CONSENT_CI_LOG_FILE\") \"ci-logs\")) (getenv \"GITHUB_STEP_SUMMARY\"))"
           fi
 
   test-summary:
@@ -380,16 +380,16 @@ jobs:
           fi
           summary_file=ci-logs/test-shard-summary.md
           : > "$summary_file"
-          AGENT_SCHEME_CI_SUMMARY_FILE="$summary_file" emacs -Q --batch -L lisp \
-            --eval "(require 'agent-scheme-ci)" \
-            --funcall agent-scheme-ci-summary-batch-main -- "${logs[@]}"
+          CONSENT_CI_SUMMARY_FILE="$summary_file" emacs -Q --batch -L lisp \
+            --eval "(require 'consent-ci)" \
+            --funcall consent-ci-summary-batch-main -- "${logs[@]}"
           cat "$summary_file" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Prepare pull request timing comment
         if: github.event_name == 'pull_request'
         shell: bash
         env:
-          AGENT_SCHEME_CI_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          CONSENT_CI_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           mkdir -p ci-logs
           logs=()
@@ -397,35 +397,35 @@ jobs:
             logs+=("$log")
           done < <(find ci-logs -type f -name '*.log' -print0)
           if [ "${#logs[@]}" -eq 0 ]; then
-            printf '%s\n\n%s\n' '<!-- agent-scheme-ci-timing-summary -->' 'No shard logs were available.' > ci-logs/pr-timing-summary.md
+            printf '%s\n\n%s\n' '<!-- consent-ci-timing-summary -->' 'No shard logs were available.' > ci-logs/pr-timing-summary.md
             exit 0
           fi
-          AGENT_SCHEME_CI_PR_SUMMARY_FILE=ci-logs/pr-timing-summary.md emacs -Q --batch -L lisp \
-            --eval "(require 'agent-scheme-ci)" \
-            --funcall agent-scheme-ci-pr-summary-batch-main -- "${logs[@]}"
+          CONSENT_CI_PR_SUMMARY_FILE=ci-logs/pr-timing-summary.md emacs -Q --batch -L lisp \
+            --eval "(require 'consent-ci)" \
+            --funcall consent-ci-pr-summary-batch-main -- "${logs[@]}"
 
       - name: Publish pull request timing comment
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          AGENT_SCHEME_PR_NUMBER: ${{ github.event.pull_request.number }}
+          CONSENT_PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          marker='<!-- agent-scheme-ci-timing-summary -->'
+          marker='<!-- consent-ci-timing-summary -->'
           comment_file=ci-logs/pr-timing-summary.md
           if [ ! -s "$comment_file" ]; then
             printf '%s\n\nNo shard timing summary was available.' "$marker" > "$comment_file"
           fi
-          comment_id="$(gh api "repos/${GITHUB_REPOSITORY}/issues/${AGENT_SCHEME_PR_NUMBER}/comments" \
+          comment_id="$(gh api "repos/${GITHUB_REPOSITORY}/issues/${CONSENT_PR_NUMBER}/comments" \
             --paginate \
-            --jq '.[] | select(.body | contains("<!-- agent-scheme-ci-timing-summary -->")) | .id' \
+            --jq '.[] | select(.body | contains("<!-- consent-ci-timing-summary -->")) | .id' \
             | head -n 1)"
           if [ -n "$comment_id" ]; then
             gh api --method PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${comment_id}" \
               --field "body=@${comment_file}" \
               --silent
           else
-            gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/${AGENT_SCHEME_PR_NUMBER}/comments" \
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/${CONSENT_PR_NUMBER}/comments" \
               --field "body=@${comment_file}" \
               --silent
           fi
@@ -435,8 +435,8 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      AGENT_SCHEME_LIVE_MODEL_ENDPOINT: http://127.0.0.1:11434/v1
-      AGENT_SCHEME_LIVE_MODEL_ID: qwen2.5-coder:0.5b
+      CONSENT_LIVE_MODEL_ENDPOINT: http://127.0.0.1:11434/v1
+      CONSENT_LIVE_MODEL_ID: qwen2.5-coder:0.5b
       OLLAMA_VERSION: 0.24.0
 
     steps:
@@ -474,7 +474,7 @@ jobs:
           exit 1
 
       - name: Pull smoke model
-        run: ollama pull "$AGENT_SCHEME_LIVE_MODEL_ID"
+        run: ollama pull "$CONSENT_LIVE_MODEL_ID"
 
       - name: Run live local model smoke
         run: make test-live-model-ci

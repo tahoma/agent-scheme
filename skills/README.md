@@ -1,6 +1,6 @@
 # Project Skill Bundle
 
-This directory is the repository-owned location for Agent Scheme development
+This directory is the repository-owned location for Consent Scheme development
 skills. Each skill lives in its own subdirectory with a `SKILL.md` file so the
 bundle is easy for agentic tooling to discover without tying the repository to
 one client or runtime.

@@ -1,7 +1,6 @@
+;;; vcs.sld --- Portable Consent Scheme VCS datum library
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
-;;
-;;; vcs.sld --- Portable Agent Scheme VCS datum library
 ;;;
 ;;; This host-neutral library owns canonical VCS datums and pure parsers for
 ;;; stable Git machine formats. Host adapters obtain repository observations,
@@ -735,7 +734,7 @@
             (if number number 0)))))
 
     (define (vcs-status-char->symbol char)
-      "Convert a one-character Git status code to an Agent Scheme symbol."
+      "Convert a one-character Git status code to an Consent Scheme symbol."
       (cond
        ((char=? char #\.) 'unchanged)
        ((char=? char #\space) 'unchanged)

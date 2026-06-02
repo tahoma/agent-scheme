@@ -1,12 +1,12 @@
 ---
-name: agent-scheme-issue-workflow
-description: Use before starting, committing, or publishing Agent Scheme issue work to follow branch, dependency, roadmap, pull request, and verification conventions.
+name: consent-issue-workflow
+description: Use before starting, committing, or publishing Consent Scheme issue work to follow branch, dependency, roadmap, pull request, and verification conventions.
 ---
 
 # Issue Workflow
 
 Use this skill when taking on a GitHub issue, preparing commits, updating issue
-dependencies, or opening a pull request for Agent Scheme.
+dependencies, or opening a pull request for Consent Scheme.
 
 ## Canonical References
 
@@ -37,14 +37,14 @@ dependencies, or opening a pull request for Agent Scheme.
 
    ```sh
    git diff --check
-   rg -n "m[y]/agent-scheme|m[y]/mcp" README.md docs
+   rg -n "m[y]/consent|m[y]/mcp" README.md docs
    ```
 
    When documentation changes include `skills/`, run the same private-history
    scan over the skill bundle too:
 
    ```sh
-   rg -n "m[y]/agent-scheme|m[y]/mcp" skills
+   rg -n "m[y]/consent|m[y]/mcp" skills
    ```
 
 7. Commit one coherent change at a time with Conventional Commits form from

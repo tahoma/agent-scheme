@@ -1,9 +1,8 @@
+;;; emacs.scm --- Emacs host adapter fixture
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
-;;
-;;; emacs.scm --- Emacs host adapter fixture
 
-(agent-scheme-host-adapter-fixture
+(consent-host-adapter-fixture
  (id emacs-host-adapter)
  (status implemented)
  (adapter
@@ -11,9 +10,9 @@
    (name emacs)
    (contract r7rs-small)
    (implementation
-    ((runtime agent-scheme)
-     (version-source-file "scheme/agent-scheme/version.sld")
-     (version-binding agent-scheme-version-datum)
+    ((runtime consent)
+     (version-source-file "scheme/consent/version.sld")
+     (version-binding consent-version-datum)
      (version-source roadmap-derived)))
    (modes (editor batch))
    (execution
@@ -49,8 +48,8 @@
      (library (agent diff))
      (library (agent vcs))
      (library (agent network))
-     (library (agent capability))
-     (library (agent capability primitive))
+     (library (consent capability))
+     (library (consent capability primitive))
      (library (agent test primitive))
      (library (agent task))
      (library (agent memory))

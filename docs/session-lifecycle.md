@@ -1,6 +1,6 @@
 # Session Lifecycle and Snapshots
 
-Agent Scheme sessions are explicit runtime records for evaluation state that
+Consent Scheme sessions are explicit runtime records for evaluation state that
 survives beyond a single form. The host keeps live environments, syntax
 bindings, handles, and buffers private; the public inspection surface is a
 Scheme-readable session datum.
@@ -34,7 +34,7 @@ validated.
 
 ## Scopes
 
-Agent Scheme has three session scopes:
+Consent Scheme has three session scopes:
 
 - `fresh`: one-off evaluation. It is created as `collectable`, does not enter
   the durable registry, and should not retain imports, definitions, macros, or
@@ -104,8 +104,8 @@ session evaluation; grants with use-count lifetimes expire after their allowed
 uses. Snapshot and fork paths preserve grant datums but revalidate associated
 handles before a host capability can use them.
 
-The Emacs bootstrap also exposes matching `agent-scheme-session-*` functions
-and `agent-scheme-session-eval-source` for evaluating source inside a durable
+The Emacs bootstrap also exposes matching `consent-session-*` functions
+and `consent-session-eval-source` for evaluating source inside a durable
 session.
 
 ## Handle Lifetime
@@ -142,7 +142,7 @@ when the handle is still known:
 
 The public statuses are `live`, `stale`, and `released`. Capability calls must
 revalidate a handle immediately before they observe or mutate host state. A
-stale handle fails closed with an Agent Scheme condition instead of falling
+stale handle fails closed with an Consent Scheme condition instead of falling
 back to a similarly named buffer, window, process, file, project, or stream.
 `handle-release!` removes the live registry entry and returns the final
 released metadata record; later `handle-ref` returns `#f`.
@@ -172,7 +172,7 @@ handle through the relevant capability and check `handle-live?` before using
 it. A stored handle is acceptable only inside the owning live session, and only
 as a short-lived capability argument.
 
-Foreground calls to `agent-scheme-session-eval-source` run to completion before
+Foreground calls to `consent-session-eval-source` run to completion before
 the caller regains control.  Background work uses `(agent job)` and locks the
 session with `(locked-by-job j-N)` while the host evaluates.  See
 [`jobs.md`](jobs.md) for the job datum shape, streaming `agent-yield` workflow,
@@ -180,12 +180,12 @@ and cancellation and interrupt behavior.
 
 ## Native Emacs REPL UX
 
-`agent-scheme-start-repl` starts or switches to a project session by default.
+`consent-start-repl` starts or switches to a project session by default.
 It creates the native, non-vterm buffer set for the session:
 
 ```text
 *Agent: PROJECT*
-*Agent Scheme: PROJECT*
+*Consent Scheme: PROJECT*
 *Agent Events: PROJECT*
 *Agent Audit: PROJECT*
 *Agent Approvals: PROJECT*
@@ -277,12 +277,12 @@ must revalidate them against current project trust and policy before use.
 A named session is the shared workspace between a user and an agent:
 
 ```elisp
-(agent-scheme-session-create! 'named '(:id "repl-main"))
-(agent-scheme-session-eval-source
+(consent-session-create! 'named '(:id "repl-main"))
+(consent-session-eval-source
  "repl-main"
  "(define answer 41)
   (+ answer 1)")
-(agent-scheme-session-ref "repl-main")
+(consent-session-ref "repl-main")
 ```
 
 The user can inspect the same session datum in an Emacs buffer or through a

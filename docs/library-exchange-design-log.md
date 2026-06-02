@@ -27,11 +27,11 @@
 
 The opening question was mundane: *how do other compiled Scheme implementations
 handle libraries and loading?* Grounding it in the repo surfaced the key framing
-that shaped everything after — Agent Scheme has **two loading layers**:
+that shaped everything after — Consent Scheme has **two loading layers**:
 
 1. a **host layer**, where the R7RS `.sld` runtime is linked into a native
    binary by a host toolchain (Racket `raco exe`, Gambit `gsc`, Cyclone), and
-2. a **guest layer**, where `(agent-scheme library)` resolves `import` /
+2. a **guest layer**, where `(consent library)` resolves `import` /
    `define-library` at runtime for user programs the interpreter evaluates.
 
 Almost everything that followed is about the guest layer.
@@ -76,7 +76,7 @@ loadable libraries for speed" but "design the library as a first-class, live,
 shareable entity."
 
 **The unifying thesis.** In ordinary Scheme a library does one job (namespacing
-and reuse). In Agent Scheme the *same boundary* can carry three: namespacing,
+and reuse). In Consent Scheme the *same boundary* can carry three: namespacing,
 **capability scoping** (a library instantiates against the importer's grants),
 and **inter-agent exchange**. Deliberately align all three on the library
 boundary and they become one mechanism.
@@ -220,7 +220,7 @@ The operator's observation: in a good Lisp/Scheme system the environment is a
 runtime value. Sharpened honestly: *standard* Scheme reifies it only operatively
 (closures, continuations) and deliberately keeps it non-reflective to protect
 compilation; the image-Lisp tradition (Smalltalk, MIT/GNU Scheme) makes the
-opposite trade. Agent Scheme's meta-circular interpreter already reifies
+opposite trade. Consent Scheme's meta-circular interpreter already reifies
 environments as data, so it is reflective by construction — it reclaimed the open
 pole standard Scheme sold for sealing. Consequence: **reflection/mutation over an
 environment is a meta-capability, the root that governs the integrity of every
@@ -308,7 +308,7 @@ compilation* needs per-host *backings of a fixed surface* (host-adapter work,
 compatible with a closed surface), not surface *growth* — so it does not itself
 force F1; the escape is reserved for the rarer genuine-new-capability case, left
 undefined until needed. **Foreign-export: deferred indefinitely, likely never** —
-Agent Scheme is an agent runtime, not a system-extension language; the
+Consent Scheme is an agent runtime, not a system-extension language; the
 separate-plane decision is what makes "decide not to decide" safe, and the
 existing host-adapter/CLI entry point (session context fixed at the process
 boundary) is a *constrained* foreign-export that stays — only the *general* form
@@ -521,11 +521,11 @@ ground, perhaps without having framed it as such.
 
 ## Where the capability system diverges from BEAM
 
-The operator noted the capability system is where Agent Scheme first diverges from
+The operator noted the capability system is where Consent Scheme first diverges from
 otherwise-aligned BEAM semantics. Analysis: up to capabilities the designs are
 strikingly convergent (shared-nothing, message passing, hot-swap, structural
 data); the divergence is rooted in the *threat model*. BEAM = fault tolerance
-among trusted-but-fallible code (ambient authority fine); Agent Scheme = open,
+among trusted-but-fallible code (ambient authority fine); Consent Scheme = open,
 mutually-distrusting, possibly agent-authored code (malice/over-reach), which
 forbids ambient authority and forces the capability membrane BEAM never needed.
 The two isolations are orthogonal and complementary — fault isolation (integrity
@@ -533,10 +533,10 @@ under failure) vs authority isolation (confinement under adversarial operation) 
 and BEAM's shared-nothing substrate (built for fault isolation) is exactly what
 makes authority confinement clean, so the divergence extends the model rather than
 fighting it ("mine the model" still holds). Deeper: BEAM reifies processes and
-messages but not authority; Agent Scheme reifies authority as a first-class
+messages but not authority; Consent Scheme reifies authority as a first-class
 scoped, revocable value. Honest tension: let-it-crash vs deny-and-handle — a
 denial is a recoverable refusal, not a fault (naïve crash-and-supervise over
-denials would loop), so Agent Scheme's failure model is crash-and-supervise *plus*
+denials would loop), so Consent Scheme's failure model is crash-and-supervise *plus*
 deny-and-handle. In seam terms: BEAM is the open shared-nothing periphery; the
 capability membrane is the gated core the threat model forces — the divergence
 *is* the open/sealed seam through the actor lens.
@@ -650,7 +650,7 @@ recorded in #53 and via a comment on #379. **PR hygiene:** adopt the convention
 that each PR description states safe merge order and the issue(s) it closes;
 applied to #377 as the first instance (added a Merge & dependent issues section
 covering #375/#378/#379). **The chip pattern:** the harness chip (capture-at-
-discovery, isolated worktree spinoff, ephemeral) maps onto Agent Scheme's own
+discovery, isolated worktree spinoff, ephemeral) maps onto Consent Scheme's own
 design — orchestrator-spawns-worker-actor (isolated heap, nonce/leased authority,
 s-expr exchange) organized as OTP-style supervision/worker trees ("trees of
 temporary task-lists"), with the durable side already in `job`/`plan`/`task`. The
@@ -811,8 +811,8 @@ Two operator catches, both mine to own. (1) **Orphaning:** main is at 0.15.4 and
 0.15.6 would skip 0.15.5. Since #377 is what actually merges next, it should take
 **0.15.5**; swapped the chunk map so #376 = 0.15.5 and #367 = 0.15.6 (#367 not yet
 merged, so free to move). (2) **Version-everywhere + untested commit:** the runtime
-version is asserted in several tests (`agent-scheme-runtime-test.el`,
-`agent-scheme-eval-test.scm`, `agent-scheme-reflect-test.el`); I bumped only
+version is asserted in several tests (`consent-runtime-test.el`,
+`consent-eval-test.scm`, `consent-reflect-test.el`); I bumped only
 `version.sld`, so every CI job went red on the version mismatch — and I had
 committed without running the suite. Fixed: set `version.sld` + all 8 true version
 assertions to 0.15.5 (the static `since` doc-metadata fixtures, which do not track
@@ -826,7 +826,7 @@ Cyclone-compiled hosts, 0 unexpected) *before* committing. Lesson recorded:
 Three operator wrap-up asks. **(1) Version footprint trim:** the runtime version is
 hardcoded in ~9 places (version.sld + 8 test assertions). Recommendation: refactor
 the version-asserting tests to *derive* the expected value from
-`agent-scheme-version-datum` (assert machinery/consistency, not a literal), leaving
+`consent-version-datum` (assert machinery/consistency, not a literal), leaving
 version.sld the sole per-PR update point. Filed as **#387** (DX, 0.15.9). **(2)
 Scrub of the design log vs. GitHub:** open questions #1-#4/#7 are tracked
 (#375/#381/#382/#380/#383), but #5 and #6 had no issues, and — the real gap — the

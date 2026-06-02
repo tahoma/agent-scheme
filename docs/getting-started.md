@@ -1,6 +1,6 @@
 # Getting Started
 
-This guide covers the currently supported first-use path for Agent Scheme from a
+This guide covers the currently supported first-use path for Consent Scheme from a
 local checkout. The supported user entry point today is the Emacs-hosted native
 REPL session. The portable Scheme code and native CLI/daemon adapter contract
 are part of the project direction, but they are not yet the general first-use
@@ -30,7 +30,7 @@ Clone the repository and enter the checkout:
 
 ```sh
 git clone git@github.com:tahoma/agent-scheme.git
-cd agent-scheme
+cd consent
 ```
 
 For issue work, create a branch that includes the issue number:
@@ -55,19 +55,19 @@ From Emacs, add the checkout's `lisp/` directory to `load-path` and load the
 native REPL module:
 
 ```elisp
-(add-to-list 'load-path (expand-file-name "lisp" "/path/to/agent-scheme/"))
-(require 'agent-scheme-repl)
+(add-to-list 'load-path (expand-file-name "lisp" "/path/to/consent/"))
+(require 'consent-repl)
 ```
 
 Then run:
 
 ```text
-M-x agent-scheme-start-repl
+M-x consent-start-repl
 ```
 
-`agent-scheme-start-repl` defaults to a project session. From this repository,
-the visible buffers normally use the project label `agent-scheme`, such as
-`*Agent: agent-scheme*` and `*Agent Scheme: agent-scheme*`.
+`consent-start-repl` defaults to a project session. From this repository,
+the visible buffers normally use the project label `consent`, such as
+`*Agent: consent*` and `*Consent Scheme: consent*`.
 
 The native dispatch menu is bound to:
 
@@ -83,7 +83,7 @@ sessions, opening session buffers, and evaluating source in the current session.
 After starting the REPL, run:
 
 ```text
-M-x agent-scheme-repl-eval
+M-x consent-repl-eval
 ```
 
 Enter a pure Scheme expression:
@@ -115,10 +115,10 @@ You can also exercise the same path in batch Emacs from the repository root:
 
 ```sh
 emacs -Q --batch -L lisp \
-  --eval "(require 'agent-scheme-repl)" \
-  --eval "(require 'agent-scheme-result)" \
-  --eval "(agent-scheme-start-repl 'named \"getting-started\")" \
-  --eval "(princ (agent-scheme-result->external (agent-scheme-repl-eval-source \"(import (scheme base) (agent io)) (define saved-answer 21) (agent-yield '(ready)) (+ saved-answer saved-answer)\")))"
+  --eval "(require 'consent-repl)" \
+  --eval "(require 'consent-result)" \
+  --eval "(consent-start-repl 'named \"getting-started\")" \
+  --eval "(princ (consent-result->external (consent-repl-eval-source \"(import (scheme base) (agent io)) (define saved-answer 21) (agent-yield '(ready)) (+ saved-answer saved-answer)\")))"
 ```
 
 Expected output:
@@ -129,13 +129,13 @@ Expected output:
 
 ## Session Buffer Map
 
-`agent-scheme-start-repl` creates a native, non-vterm buffer set for the active
+`consent-start-repl` creates a native, non-vterm buffer set for the active
 session:
 
 | Buffer | Role |
 | --- | --- |
 | `*Agent: PROJECT*` | Status and session record view. This is the primary state view for imports, definitions, memory references, handles, status, transcript references, and recent events. |
-| `*Agent Scheme: PROJECT*` | Persistent REPL transcript. Evaluations appear as summarized Scheme-readable `transcript-event` datums. |
+| `*Consent Scheme: PROJECT*` | Persistent REPL transcript. Evaluations appear as summarized Scheme-readable `transcript-event` datums. |
 | `*Agent Events: PROJECT*` | Recent `(agent io)` events, such as `agent-yield`, `agent-log`, progress, warnings, and request records. |
 | `*Agent Audit: PROJECT*` | Session-scoped audit entries for lifecycle transitions, evaluations, policy decisions, approval records, and capability activity. |
 | `*Agent Approvals: PROJECT*` | Pending and resolved approval request datums for effects that need host or user confirmation. Pure examples normally leave this buffer empty. |
@@ -148,8 +148,8 @@ Agent[SESSION:STATUS]
 
 Memory is represented in the session record and through `(agent memory)` when
 that library is imported. Editable memory buffers are separate from the REPL
-buffer set; after loading `agent-scheme-memory`, use `M-x
-agent-scheme-memory-open` to inspect instance, session, or project memory as
+buffer set; after loading `consent-memory`, use `M-x
+consent-memory-open` to inspect instance, session, or project memory as
 Scheme-readable data.
 
 Plans are represented through `(agent plan)` when that library is imported.
@@ -250,7 +250,7 @@ Start the local server if it is not already running:
 ollama serve
 ```
 
-Register that local server from Agent Scheme:
+Register that local server from Consent Scheme:
 
 ```scheme
 (import (scheme base)
@@ -279,7 +279,7 @@ routine code work, `qwen2.5-coder:32b` for stronger code and review work,
 `qwen3:30b`, `qwen3:32b`, or `llama3.1:70b` for slower planning or review
 passes on machines with enough memory.
 
-Suggested downloadable local model profiles by Agent Scheme role:
+Suggested downloadable local model profiles by Consent Scheme role:
 
 | Role | Practical local models |
 | --- | --- |
@@ -326,15 +326,15 @@ make test-live-model
 
 The test defaults to `http://127.0.0.1:11434/v1` and
 `qwen2.5-coder:0.5b`. Override those with
-`AGENT_SCHEME_LIVE_MODEL_ENDPOINT` and `AGENT_SCHEME_LIVE_MODEL_ID`.
-The Make targets set `AGENT_SCHEME_LIVE_MODEL_TEST=1`; `make test-live-model`
-also sets `AGENT_SCHEME_LIVE_MODEL_MATRIX=1`. The matrix test checks that each
-documented local model completes through Agent Scheme's OpenAI-compatible
+`CONSENT_LIVE_MODEL_ENDPOINT` and `CONSENT_LIVE_MODEL_ID`.
+The Make targets set `CONSENT_LIVE_MODEL_TEST=1`; `make test-live-model`
+also sets `CONSENT_LIVE_MODEL_MATRIX=1`. The matrix test checks that each
+documented local model completes through Consent Scheme's OpenAI-compatible
 transport; it is not a quality or correctness benchmark.
 
 Keep provider profiles and credentials in private Emacs initialization or an
-ignored local file, then load them with `agent-scheme-models-register-provider!`
-from `agent-scheme-models.el`. Do not commit provider tokens. Diagnostics from
+ignored local file, then load them with `consent-models-register-provider!`
+from `consent-models.el`. Do not commit provider tokens. Diagnostics from
 `model-provider-diagnostics` redact credential-shaped fields before they appear
 in Scheme-readable output.
 
@@ -345,7 +345,7 @@ denied before any transport can run.
 
 ## Policy and Capabilities
 
-Agent Scheme keeps host authority explicit. Pure R7RS evaluation is allowed
+Consent Scheme keeps host authority explicit. Pure R7RS evaluation is allowed
 under resource budgets, while host-observing or host-mutating work goes through
 policy, grants, handles, and audit records. The first-use posture is
 default-deny for ungranted or unresolved host effects.
@@ -401,7 +401,7 @@ approved `make test` workflow looks like:
 
 ```scheme
 (import (scheme base)
-        (agent capability)
+        (consent capability)
         (emacs compile))
 
 (grant-capability!
@@ -437,7 +437,7 @@ For documentation-only changes, also run:
 
 ```sh
 git diff --check
-rg -n "m[y]/agent-scheme|m[y]/mcp" README.md docs
+rg -n "m[y]/consent|m[y]/mcp" README.md docs
 ```
 
 The `rg` command should normally return no matches. If documentation changes
@@ -447,7 +447,7 @@ Optional portable and oracle checks use installed R7RS implementations. Chibi
 checks can be run explicitly when Chibi Scheme is available:
 
 ```sh
-AGENT_SCHEME_CHIBI=chibi-scheme make test-portable-chibi
+CONSENT_CHIBI=chibi-scheme make test-portable-chibi
 ```
 
 Pure shared fixtures can be compared against reference implementations:
@@ -461,24 +461,24 @@ references or report statuses.
 
 ## Troubleshooting
 
-If `require` cannot find `agent-scheme-repl`, confirm that the checkout's
+If `require` cannot find `consent-repl`, confirm that the checkout's
 `lisp/` directory is on `load-path`. In a fresh Emacs session, this form should
 point at the local checkout:
 
 ```elisp
-(add-to-list 'load-path (expand-file-name "lisp" "/path/to/agent-scheme/"))
+(add-to-list 'load-path (expand-file-name "lisp" "/path/to/consent/"))
 ```
 
-If `M-x agent-scheme-start-repl` is unavailable, reload the module:
+If `M-x consent-start-repl` is unavailable, reload the module:
 
 ```elisp
-(require 'agent-scheme-repl)
+(require 'consent-repl)
 ```
 
 If a session seems stale, inspect the status buffer with `M-x
-agent-scheme-inspect-session`, switch sessions with `M-x
-agent-scheme-switch-session`, or retire the current session with `M-x
-agent-scheme-stop-session`.
+consent-inspect-session`, switch sessions with `M-x
+consent-switch-session`, or retire the current session with `M-x
+consent-stop-session`.
 
 If a host-effecting example is denied, treat that as the expected safe posture.
 Inspect `*Agent Audit: PROJECT*` and `*Agent Approvals: PROJECT*` to see the
@@ -486,14 +486,14 @@ request and decision records, then add the smallest explicit grant or policy
 change needed for the experiment.
 
 If optional Chibi checks are skipped, install Chibi Scheme or set
-`AGENT_SCHEME_CHIBI` to the executable path. Missing optional reference
+`CONSENT_CHIBI` to the executable path. Missing optional reference
 implementations are reported as unsupported references for oracle work and do
 not make the default `make test` command fail.
 
 ## Non-Emacs Status
 
 Emacs is the supported first host and current first-use path. The portable R7RS
-implementation under `scheme/agent-scheme/` is a first-class implementation
+implementation under `scheme/consent/` is a first-class implementation
 path and is exercised through the test suite where practical, but the native
 CLI and daemon adapter is currently a specified host contract rather than a
 general user entry point.

@@ -5,11 +5,11 @@ Before starting issue work in this repository, read and follow:
 - `docs/contributing.md` for issue lifecycle, branch names, pull requests, and
   commit messages
 - `docs/development.md` for setup, expected repository shape, and verification
-- `docs/architecture.md` for the Agent Scheme design, host boundary, module map,
+- `docs/architecture.md` for the Consent Scheme design, host boundary, module map,
   and runtime expectations
 - `docs/multi-host-bootstrap.md` for the Emacs-first bootstrap stance and the
   portable Scheme self-hosting path
-- `docs/naming.md` for public and private Agent Scheme identifier conventions
+- `docs/naming.md` for public and private Consent Scheme identifier conventions
 - `docs/references.md` for canonical external Scheme references
 - `docs/r7rs-small-report.md` for the local R7RS-small language reference
 - `docs/licensing.md` for the project's Apache-2.0 + SPDX licensing policy
@@ -25,7 +25,7 @@ Repository conventions override generic workflow defaults. In particular:
 - Commits must use the Conventional Commits form documented in
   `docs/contributing.md`.
 - Every issue branch must update the canonical runtime version in
-  `scheme/agent-scheme/version.sld` to match the roadmap-derived version for
+  `scheme/consent/version.sld` to match the roadmap-derived version for
   the issue being advanced. Use #53's flat chunk map as the source: each chunk
   is numbered `Chunk <major>.<minor>` (for example `Chunk 0.15`), and the
   runtime version is `<major>.<minor>.<ordinal>` where `<major>.<minor>` is the
@@ -42,8 +42,8 @@ Repository conventions override generic workflow defaults. In particular:
   update the Emacs Lisp and portable Scheme implementations in parallel when
   practical. If one side must lead, document the remaining parity work in the
   issue, commit, or pull request instead of treating the refactor as complete.
-- Public Agent Scheme identifiers must use `agent-scheme-`; private Emacs Lisp
-  internals must use `agent-scheme--`.
+- Public Consent Scheme identifiers must use `consent-`; private Emacs Lisp
+  internals must use `consent--`.
 - For Scheme-specific language questions, consult the local R7RS-small report
   reference and canonical Scheme references before relying on memory or
   incidental web search results.

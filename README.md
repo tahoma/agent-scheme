@@ -1,6 +1,6 @@
-# Agent Scheme
+# Consent Scheme
 
-Agent Scheme is an R7RS-small guest language and agentic REPL design whose first host is Emacs.
+Consent Scheme is an R7RS-small guest language and agentic REPL design whose first host is Emacs.
 
 The project goal is to give agents and users a Lisp-native scripting environment with:
 
@@ -42,11 +42,11 @@ non-Emacs UI surfaces.
 - Think in Lisp/Scheme first for internal APIs and examples.
 - Keep canonical runtime state inspectable as Scheme data.
 - Use JSON, HTTP, Markdown, and other encodings at protocol or document boundaries, not as the internal model.
-- Keep host adapters severable. Emacs is the first body; Agent Scheme should have a portable core.
+- Keep host adapters severable. Emacs is the first body; Consent Scheme should have a portable core.
 - Keep Emacs Lisp and portable R7RS Scheme architecture in parity for core
   language behavior.
 - Prefer conservative, audited capabilities over broad host access.
-- Use the Agent Scheme project namespace for durable Emacs Lisp APIs and docs.
+- Use the Consent Scheme project namespace for durable Emacs Lisp APIs and docs.
 
 ## Repository Shape
 
@@ -83,7 +83,7 @@ Optional SRFI imports should be guarded so portable R7RS-small code still runs
 when the `stdlib-plus` layer is unavailable:
 
 ```scheme
-(define-library (agent-scheme examples optional-srfi)
+(define-library (consent examples optional-srfi)
   (export sample)
   (import (scheme base))
   (cond-expand
@@ -99,7 +99,7 @@ subject to host policy. Adapter-provided procedures can be imported beside
 ordinary Scheme code when the host enables them:
 
 ```scheme
-(define-library (agent-scheme examples hosted)
+(define-library (consent examples hosted)
   (export summarize-buffer)
   (import (scheme base)
           (scheme write)
@@ -237,7 +237,7 @@ can use it:
 
 ```scheme
 (import (scheme base)
-        (agent capability)
+        (consent capability)
         (emacs buffer)
         (emacs buffer edit))
 

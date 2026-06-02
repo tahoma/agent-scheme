@@ -1,7 +1,6 @@
+;;; Public Consent Scheme transcript records.
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
-;;
-;;; Public Agent Scheme transcript records.
 ;;;
 ;;; This library owns host-neutral replayable transcript datums, replay
 ;;; classification, fixture generation, and summary views.  Host adapters may

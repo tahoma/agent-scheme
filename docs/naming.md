@@ -1,37 +1,47 @@
 # Naming Convention
 
-Agent Scheme uses a project namespace for durable Emacs Lisp identifiers. The
-goal is to make public APIs recognizable as part of Agent Scheme while keeping
+Consent Scheme uses a project namespace for durable Emacs Lisp identifiers. The
+goal is to make public APIs recognizable as part of Consent Scheme while keeping
 personal configuration glue outside the project surface.
+
+## Brand versus identifier
+
+The brand is the two-word **Consent Scheme** (long form "Consent Scheme (CS)",
+short form "Consent"); use it in prose, titles, and documentation. Code
+identifiers collapse to the single short word `consent` — **not**
+`consent-scheme-`. So the Emacs Lisp prefixes are `consent-` / `consent--`, the
+Scheme core libraries are `(consent ...)`, the build and environment variables
+are `CONSENT_*`, and the binary is `consent`. The distinctive first word carries
+the meaning, so the descriptor word "Scheme" never appears in an identifier.
 
 ## Public Names
 
-Use `agent-scheme-` for public Emacs Lisp commands, functions, variables,
+Use `consent-` for public Emacs Lisp commands, functions, variables,
 customization options, faces, modes, hooks, and module-level entry points.
 
-Use `agent-scheme` for the top-level customization group. Nested groups should
-extend the package name, such as `agent-scheme-mcp` or `agent-scheme-repl`.
+Use `consent` for the top-level customization group. Nested groups should
+extend the package name, such as `consent-mcp` or `consent-repl`.
 
 Planned user-facing command names include:
 
-- `agent-scheme-read`
-- `agent-scheme-eval`
-- `agent-scheme-describe-environment`
-- `agent-scheme-start-repl`
-- `agent-scheme-mcp-start`
-- `agent-scheme-mcp-stop`
-- `agent-scheme-mcp-register-tools`
-- `agent-scheme-mcp-unregister-tools`
+- `consent-read`
+- `consent-eval`
+- `consent-describe-environment`
+- `consent-start-repl`
+- `consent-mcp-start`
+- `consent-mcp-stop`
+- `consent-mcp-register-tools`
+- `consent-mcp-unregister-tools`
 
 Scheme libraries keep Scheme library names instead of Emacs Lisp package names,
 for example `(scheme base)`, `(emacs buffer)`, and `(agent io)`.
-Portable implementation libraries under `scheme/agent-scheme/` use
-`(agent-scheme ...)` names, such as `(agent-scheme reader)`, when they expose
-core Agent Scheme facilities for bootstrapping.
+Portable implementation libraries under `scheme/consent/` use
+`(consent ...)` names, such as `(consent reader)`, when they expose
+core Consent Scheme facilities for bootstrapping.
 
 ## Private Names
 
-Use `agent-scheme--` for private Emacs Lisp internals, including helper
+Use `consent--` for private Emacs Lisp internals, including helper
 functions, helper macros, internal variables, private structs, and implementation
 details that are not supported as public API.
 
@@ -42,41 +52,41 @@ tests that describe public behavior.
 
 Implementation files under `lisp/` should follow the package namespace:
 
-- `lisp/agent-scheme-reader.el` provides `agent-scheme-reader`
-- `lisp/agent-scheme-runtime.el` provides `agent-scheme-runtime`
-- `lisp/agent-scheme-result.el` provides `agent-scheme-result`
-- `lisp/agent-scheme-base.el` provides `agent-scheme-base`
-- `lisp/agent-scheme-library.el` provides `agent-scheme-library`
-- `lisp/agent-scheme-macro.el` provides `agent-scheme-macro`
-- `lisp/agent-scheme-interpreter.el` provides `agent-scheme-interpreter`
-- `lisp/agent-scheme-eval.el` provides `agent-scheme-eval`
-- `lisp/agent-scheme-approval.el` provides `agent-scheme-approval`
-- `lisp/agent-scheme-job.el` provides `agent-scheme-job`
-- `lisp/agent-scheme-task.el` provides `agent-scheme-task`
-- `lisp/agent-scheme-diagnostics.el` provides `agent-scheme-diagnostics`
-- `lisp/agent-scheme-diff.el` provides `agent-scheme-diff`
-- `lisp/agent-scheme-context.el` provides `agent-scheme-context`
-- `lisp/agent-scheme-redaction.el` provides `agent-scheme-redaction`
-- `lisp/agent-scheme-transcript.el` provides `agent-scheme-transcript`
-- `lisp/agent-scheme-mcp.el` provides `agent-scheme-mcp`
+- `lisp/consent-reader.el` provides `consent-reader`
+- `lisp/consent-runtime.el` provides `consent-runtime`
+- `lisp/consent-result.el` provides `consent-result`
+- `lisp/consent-base.el` provides `consent-base`
+- `lisp/consent-library.el` provides `consent-library`
+- `lisp/consent-macro.el` provides `consent-macro`
+- `lisp/consent-interpreter.el` provides `consent-interpreter`
+- `lisp/consent-eval.el` provides `consent-eval`
+- `lisp/consent-approval.el` provides `consent-approval`
+- `lisp/consent-job.el` provides `consent-job`
+- `lisp/consent-task.el` provides `consent-task`
+- `lisp/consent-diagnostics.el` provides `consent-diagnostics`
+- `lisp/consent-diff.el` provides `consent-diff`
+- `lisp/consent-context.el` provides `consent-context`
+- `lisp/consent-redaction.el` provides `consent-redaction`
+- `lisp/consent-transcript.el` provides `consent-transcript`
+- `lisp/consent-mcp.el` provides `consent-mcp`
 
 Tests should mirror the module names, such as
-`tests/agent-scheme-reader-test.el`.
+`tests/consent-reader-test.el`.
 
-Portable R7RS implementation files under `scheme/agent-scheme/` should mirror
+Portable R7RS implementation files under `scheme/consent/` should mirror
 their library names:
 
-- `scheme/agent-scheme/reader.sld` defines `(agent-scheme reader)`
-- `scheme/agent-scheme/runtime.sld` defines `(agent-scheme runtime)`
-- `scheme/agent-scheme/base.sld` defines `(agent-scheme base)`
-- `scheme/agent-scheme/library.sld` defines `(agent-scheme library)`
-- `scheme/agent-scheme/macro.sld` defines `(agent-scheme macro)`
-- `scheme/agent-scheme/interpreter.sld` defines `(agent-scheme interpreter)`
-- `scheme/agent-scheme/eval.sld` defines `(agent-scheme eval)`
-- `scheme/agent-scheme/approval.sld` defines `(agent-scheme approval)`
-- `scheme/agent-scheme/job.sld` defines `(agent-scheme job)`
-- `scheme/agent-scheme/context.sld` defines `(agent-scheme context)`
-- `scheme/agent-scheme/redaction.sld` defines `(agent-scheme redaction)`
+- `scheme/consent/reader.sld` defines `(consent reader)`
+- `scheme/consent/runtime.sld` defines `(consent runtime)`
+- `scheme/consent/base.sld` defines `(consent base)`
+- `scheme/consent/library.sld` defines `(consent library)`
+- `scheme/consent/macro.sld` defines `(consent macro)`
+- `scheme/consent/interpreter.sld` defines `(consent interpreter)`
+- `scheme/consent/eval.sld` defines `(consent eval)`
+- `scheme/consent/approval.sld` defines `(consent approval)`
+- `scheme/consent/job.sld` defines `(consent job)`
+- `scheme/consent/context.sld` defines `(consent context)`
+- `scheme/consent/redaction.sld` defines `(consent redaction)`
 
 Here "mirror" means naming and pass-ownership parity, not subordination. Core
 semantic changes should update the corresponding Emacs Lisp and portable R7RS
@@ -86,21 +96,21 @@ Use `.sld` for portable R7RS `define-library` modules. Use `.scm` for Scheme
 programs, tests, fixtures, and ordinary source snippets that are loaded or run
 as code rather than imported as libraries.
 
-Public Agent Scheme libraries that are not implementation-pass modules may live
+Public Consent Scheme libraries that are not implementation-pass modules may live
 under their public namespace, such as `scheme/agent/diff.sld` for `(agent
 diff)`, `scheme/agent/diagnostics.sld` for `(agent diagnostics)`, and
 `scheme/agent/task.sld` for `(agent task)`, and
 `scheme/agent/transcript.sld` for `(agent transcript)`.
 
 Scheme-side tests live under `tests/scheme/`; their ERT bridge files still use
-the normal `tests/agent-scheme-*-test.el` naming pattern.
+the normal `tests/consent-*-test.el` naming pattern.
 
 If future bootstrap work touches files named `lisp/config-agent*.el`, treat
-those files as host-configuration integration. Any durable Agent Scheme API
-defined there must still use `agent-scheme-` for public names and
-`agent-scheme--` for private internals. Personal configuration helpers outside
-the Agent Scheme subsystem may keep their local naming style, but they should
-call Agent Scheme APIs rather than re-exporting them.
+those files as host-configuration integration. Any durable Consent Scheme API
+defined there must still use `consent-` for public names and
+`consent--` for private internals. Personal configuration helpers outside
+the Consent Scheme subsystem may keep their local naming style, but they should
+call Consent Scheme APIs rather than re-exporting them.
 
 ## Compatibility
 

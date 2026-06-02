@@ -1,6 +1,6 @@
 # Docstring Metadata Convention
 
-Agent Scheme source can carry documentation metadata as ordinary R7RS data in
+Consent Scheme source can carry documentation metadata as ordinary R7RS data in
 procedure bodies. The convention supports simple string docstrings and richer
 property records without adding reader syntax or changing standard Scheme
 evaluation.
@@ -14,7 +14,7 @@ source tool reads the original text.
 
 The convention uses literal body expressions that R7RS-small already accepts.
 A literal expression in a non-final body position is evaluated and discarded by
-ordinary Scheme semantics. Agent Scheme treats selected non-final literals as
+ordinary Scheme semantics. Consent Scheme treats selected non-final literals as
 metadata while preserving the same runtime result.
 
 Documentation metadata is recognized only in the leading non-tail metadata
@@ -154,12 +154,12 @@ the source text of formal parameter names for reflection.
 
 Rich documentation metadata uses a literal vector of pairs in the same leading
 non-tail metadata position. This follows Guile's procedure-property style as an
-influence, but the fields and reflection shape below are Agent Scheme public
+influence, but the fields and reflection shape below are Consent Scheme public
 behavior.
 
 ```scheme
 (define (open-agent-log path)
-  #((documentation . "Open PATH as an Agent Scheme log input port.")
+  #((documentation . "Open PATH as an Consent Scheme log input port.")
     (parameters . ((path . "Path to a readable log file.")))
     (returns . "An input port.")
     (effects . (file-read)))
@@ -170,7 +170,7 @@ The simple string form and rich property form may appear together:
 
 ```scheme
 (define (normalize-name name)
-  "Return NAME in canonical Agent Scheme identifier form."
+  "Return NAME in canonical Consent Scheme identifier form."
   #((parameters . ((name . "A string or symbol.")))
     (returns . "A symbol."))
   (if (symbol? name)
@@ -192,7 +192,7 @@ When reflected through `(documentation subject)`, the string contributes the
   (origin (body-literal string vector))
   (fields
     ((arguments (name))
-     (documentation "Return NAME in canonical Agent Scheme identifier form.")
+     (documentation "Return NAME in canonical Consent Scheme identifier form.")
      (parameters ((name . "A string or symbol.")))
      (returns "A symbol."))))
 ```
@@ -286,7 +286,7 @@ Field values are ordinary Scheme-readable data. The initial field set is:
 - `effects`: list of effect symbols, such as `(pure)` or `(file-read)`
 - `examples`: list of source/result example records
 - `see-also`: list of related binding, library, issue, or document references
-- `since`: version datum such as `(agent-scheme-version 0 15 2)`
+- `since`: version datum such as `(consent-version 0 15 2)`
 - `deprecated`: `#f` or a string explaining the replacement
 - `stability`: symbol such as `experimental`, `stable`, or `internal`
 

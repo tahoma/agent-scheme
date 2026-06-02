@@ -1,5 +1,5 @@
 ---
-name: agent-scheme-host-boundary-review
+name: consent-host-boundary-review
 description: Use when implementing or reviewing portable core code, Emacs adapter code, host capabilities, policy-gated effects, opaque handles, or Scheme-readable records.
 ---
 
@@ -24,7 +24,7 @@ records, persistence, or backend boundaries.
 - Emacs UI, buffers, commands, process integration, policy prompts,
   persistence plumbing, and live-object tables belong under `lisp/`.
 - Tests should mirror the implementation surface: Emacs adapter tests in
-  `tests/agent-scheme-*-test.el`, portable Scheme tests in `tests/scheme/`
+  `tests/consent-*-test.el`, portable Scheme tests in `tests/scheme/`
   with an ERT bridge when practical.
 
 ## Review Workflow
@@ -53,7 +53,7 @@ records, persistence, or backend boundaries.
 - Does every host observation or mutation cross a policy-visible boundary?
 - Can a result, memory record, plan, approval, event, or audit entry be printed
   as Scheme-readable data?
-- Are public Emacs Lisp names `agent-scheme-` and private internals
-  `agent-scheme--`?
+- Are public Emacs Lisp names `consent-` and private internals
+  `consent--`?
 - Does `make test` cover the changed boundary, with portable fixtures where
   practical?
