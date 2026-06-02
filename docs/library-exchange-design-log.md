@@ -356,7 +356,7 @@ confirmed already captured in the design note's **Resolved direction**.
 ## Type-identity spike filed (#375)
 
 The operator flagged the earlier "first build experiment" suggestion as a concrete
-issue. Filed **tahoma/agent-scheme#375** — a `surface:design` /
+issue. Filed **tahoma/consent#375** — a `surface:design` /
 `host:agent-runtime` / `size:weekend` spike: define a library exporting a record
 type, make two versions (one with the record unchanged, one changed), and check
 whether a value built under v1 satisfies v2's predicate. Baseline measures the

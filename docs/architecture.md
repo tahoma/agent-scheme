@@ -121,7 +121,7 @@ Canonical memory records should be ordinary datums, for example:
   (kind fact)
   (tags (architecture r7rs host-boundary))
   (value "Emacs is the first host adapter, not the semantic center.")
-  (source (issue tahoma/agent-scheme 1))
+  (source (issue tahoma/consent 1))
   (confidence high))
 ```
 
@@ -920,12 +920,12 @@ Focused test files should mirror the modules:
 - `tests/consent-repl-test.el`
 - `tests/consent-mcp-test.el`
 
-The early conformance fixture suite belongs with issue tahoma/agent-scheme#12
+The early conformance fixture suite belongs with issue tahoma/consent#12
 and should be usable before the whole runtime is complete.
 
 ## Roadmap Alignment
 
 The implementation order belongs in [Roadmap](roadmap.md), with
-tahoma/agent-scheme#53 as the living dependency graph. Roadmap updates should
+tahoma/consent#53 as the living dependency graph. Roadmap updates should
 preserve this architecture's distinction between portable Scheme semantics and
 explicit host authority.

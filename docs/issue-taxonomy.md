@@ -12,7 +12,7 @@ less visible from ordinary issue lists, searches, and pull requests.
 
 The `surface:*` axis is exclusive by convention: each issue should have exactly
 one surface label. Roadmap timing is tracked by the chunk map in
-[tahoma/agent-scheme#53](https://github.com/tahoma/agent-scheme/issues/53),
+[tahoma/consent#53](https://github.com/tahoma/consent/issues/53),
 not by the old `phase:*` labels. If the project later needs stronger
 enforcement, mirror these labels or chunk placements into GitHub Project
 single-select fields instead of inventing a second vocabulary.
@@ -33,13 +33,13 @@ The surface label answers where a contributor can work on the issue.
 ## Roadmap Chunk Placement
 
 The chunk map in
-[tahoma/agent-scheme#53](https://github.com/tahoma/agent-scheme/issues/53)
+[tahoma/consent#53](https://github.com/tahoma/consent/issues/53)
 mirrors the roadmap's current implementation order. Each roadmap issue should
 appear in one current chunk unless it is deliberately outside the roadmap.
 
 Do not add new `phase:*` labels. Existing `phase:*` labels are legacy metadata
 from the old roadmap model and should be retired through
-[tahoma/agent-scheme#295](https://github.com/tahoma/agent-scheme/issues/295)
+[tahoma/consent#295](https://github.com/tahoma/consent/issues/295)
 rather than extended.
 
 ## Optional Labels
