@@ -29,7 +29,7 @@ Optional Scheme implementations improve portable and oracle coverage:
 Clone the repository and enter the checkout:
 
 ```sh
-git clone git@github.com:tahoma/agent-scheme.git
+git clone git@github.com:tahoma/consent.git
 cd consent
 ```
 
