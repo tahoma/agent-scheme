@@ -1,7 +1,7 @@
 # Roadmap
 
 The active roadmap lives in GitHub issues, with
-[tahoma/agent-scheme#53](https://github.com/tahoma/agent-scheme/issues/53) as
+[tahoma/consent#53](https://github.com/tahoma/consent/issues/53) as
 the single source of truth: a living dependency graph and flat, time-ordered
 chunk map. This note is only a pointer so roadmap planning can happen entirely
 in #53 without a repo change. For chunk bands, runtime-version mapping, roadmap

@@ -1,7 +1,7 @@
 # Content-Addressed Library Store and Inter-Agent Exchange
 
 > Status: exploratory design note. This captures a design discussion, not a
-> ratified architecture. It is tracked under tahoma/agent-scheme#376 (design/RFC;
+> ratified architecture. It is tracked under tahoma/consent#376 (design/RFC;
 > roadmap chunk 0.15.5) and landed via PR #377. Treat it as the
 > shared vocabulary and the set of open decisions for a future library-exchange
 > facility, to be reconciled with [Architecture and threat
@@ -211,7 +211,7 @@ vs ambient) — everything else is imitation by necessity of what `main` already
 does.
 
 *Status (this thread).* The foreign-import generalization is ~90% present already,
-so it is now tracked as **tahoma/agent-scheme#379** — formalize the explicit
+so it is now tracked as **tahoma/consent#379** — formalize the explicit
 declaration spec and make the built-in primitives *comply* as instances of it
 (behavior-neutral, closed-default preserved; arbitrary-native resolution remains
 later work). On the export side, the **irreducible foreign-export surface is the
@@ -648,7 +648,7 @@ re-delegation is later needed). Distributed GC is dissolved by the lease-every-
 cross-vat-ticket + vat-death-reclamation constraint, so no GC follow-on is needed
 unless persistent un-leased cross-vat caps are ever permitted.
 
-*Filed as tahoma/agent-scheme#383 (roadmap 0.29.10, immediately before the
+*Filed as tahoma/consent#383 (roadmap 0.29.10, immediately before the
 cross-process control-loop cluster #57/#286/#289/#321 it is the authority substrate
 for; depends on the sound bridge, chunk 0.16).*
 
@@ -770,7 +770,7 @@ for; depends on the sound bridge, chunk 0.16).*
   added later; concretely, the field to add to the `<library>` record
   (`make-library`, `runtime.sld`) now as a minimal default-`#f` boolean
   (`foreign?`), widened to richer foreign-plane metadata when FFI lands. **Filed
-  as tahoma/agent-scheme#378, scheduled sooner-than-later at roadmap 0.15.7.** (b)
+  as tahoma/consent#378, scheduled sooner-than-later at roadmap 0.15.7.** (b)
   **Capability handles stay opaque and non-marshalable** — they are inherently
   properties of the host context and have no meaning migrated outside that world,
   so they can never cross `foreign-export`; the no-leak rule is therefore
@@ -786,7 +786,7 @@ for; depends on the sound bridge, chunk 0.16).*
    finer grain than the library even while behavior stays library-grain. The
    concrete fork is *structural* vs *nominal* identity — Erlang dodges
    fragmentation entirely via structural, copied data (see Granularity, above).
-   **Spike filed: tahoma/agent-scheme#375** (scheduled 0.15.7, immediately after
+   **Spike filed: tahoma/consent#375** (scheduled 0.15.7, immediately after
    the design) — the minimal record-crossing-a-version-boundary experiment to
    prove or break this. Relatedly, inter-agent
    *messages* are s-expression structural data — already structural and
@@ -838,7 +838,7 @@ for; depends on the sound bridge, chunk 0.16).*
    nonces linear, yet the orchestrator must delegate scoped authority to a worker
    in another process — so authority cannot cross *as a handle*. Direction:
    distributed object-capability protocol, CapTP/E lineage (see "Cross-process
-   capability delegation" section). **Filed: tahoma/agent-scheme#383 (roadmap
+   capability delegation" section). **Filed: tahoma/consent#383 (roadmap
    0.29.10).** Sub-parts now scoped: bridge transport security is **intra-team
    only** (spawn-controlled trusted channel) — *cross-team is out of scope for now*
    (Byzantine threat), deferred to #382 if ever revisited; re-delegation is decided

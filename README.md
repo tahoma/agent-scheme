@@ -28,7 +28,7 @@ policy-gated behavior.
 
 SRFI support is not part of the R7RS-small compliance contract. Optional SRFI
 libraries belong to a future `stdlib-plus` layer tracked separately in
-[tahoma/agent-scheme#54](https://github.com/tahoma/agent-scheme/issues/54), so
+[tahoma/consent#54](https://github.com/tahoma/consent/issues/54), so
 SRFI import failures should not be read as R7RS-small conformance failures.
 
 The multi-host bootstrap strategy lives in
