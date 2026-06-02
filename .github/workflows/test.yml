@@ -5,6 +5,13 @@ on:
   push:
     branches:
       - main
+  # Exhaustive opt-in lane: run the full source-metadata × docstring-retention
+  # cross-product on every host and Emacs shard nightly and on demand. The
+  # per-push lane (pull_request / push) trims this matrix; see the per-job
+  # `if:` guards below.
+  schedule:
+    - cron: "0 7 * * *"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -36,6 +43,10 @@ jobs:
   test-portable-gambit:
     name: portable R7RS / Gambit full suite / syntax ${{ matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention }}
     runs-on: ubuntu-latest
+    # Gambit is the canonical portable host: it runs the full 2×3 syntax/docstring
+    # cross-product on every lane. The portable reader/writer/docstring machinery
+    # that axis exercises is host-independent, so the other portable hosts only
+    # run the canonical combo on the per-push lane (see test-portable-extra-hosts).
     env:
       CONSENT_GAMBIT_VERSION: "4.9.7"
       CONSENT_GAMBIT_SHA256: "0da7c9772a2186dab1fba6bf6c777afe7424f40beacadf1b117d5cc825fe2db3"
@@ -156,7 +167,11 @@ jobs:
   test-portable-extra-hosts:
     name: portable R7RS / ${{ matrix.host.host_name }} full suite / syntax ${{ matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention }}
     runs-on: ubuntu-latest
-    container: ubuntu:26.04
+    # Pull the base image from the rate-limit-free AWS ECR Public Ubuntu mirror
+    # instead of Docker Hub (registry-1.docker.io), whose anonymous per-IP limit
+    # intermittently times this container job out at provisioning. Same Ubuntu
+    # 26.04 image, so interpreter versions are unchanged.
+    container: public.ecr.aws/ubuntu/ubuntu:26.04
     env:
       DEBIAN_FRONTEND: noninteractive
       CONSENT_TEST_SOURCE_METADATA: ${{ matrix.source_metadata }}
@@ -165,9 +180,13 @@ jobs:
       CONSENT_CI_SHARD_SUMMARY_NAME: ${{ matrix.host.summary_name }} / source metadata ${{ matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention }}
     strategy:
       fail-fast: false
+      # Per-push lane runs every extra host on the canonical on/full combo only;
+      # the scheduled / workflow_dispatch lane expands to the full 2×3 cross.
+      # Gambit (test-portable-gambit) carries the full portable cross on every
+      # lane, so the host-independent metadata/docstring axis stays covered.
       matrix:
-        source_metadata: ["on", "off"]
-        docstring_retention: ["full", "simple", "none"]
+        source_metadata: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && fromJSON('["on", "off"]') || fromJSON('["on"]') }}
+        docstring_retention: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && fromJSON('["full", "simple", "none"]') || fromJSON('["full"]') }}
         host:
           - host: racket
             host_name: Racket
@@ -274,15 +293,14 @@ jobs:
       CONSENT_CI_SHARD_SUMMARY_NAME: ${{ matrix.shard.summary_name }} / source metadata ${{ matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention }}
     strategy:
       fail-fast: false
+      # Per-push lane runs the library/capabilities/tools shards on the canonical
+      # on/full combo only; the scheduled / workflow_dispatch lane expands to the
+      # full 2×3 cross. The core language/runtime shard carries the full Emacs
+      # cross on every lane in its own job (test-emacs-core).
       matrix:
-        source_metadata: ["on", "off"]
-        docstring_retention: ["full", "simple", "none"]
+        source_metadata: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && fromJSON('["on", "off"]') || fromJSON('["on"]') }}
+        docstring_retention: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && fromJSON('["full", "simple", "none"]') || fromJSON('["full"]') }}
         shard:
-          - shard: emacs-core
-            label: core language/runtime
-            make_target: test-emacs-core
-            summary_name: Emacs core language/runtime
-            selector: '(or "consent-base.*" "consent-eval.*" "consent-interpreter-module.*" "consent-macro.*" "consent-reader.*" "consent-result.*" "consent-runtime.*")'
           - shard: emacs-library
             label: library/conformance
             make_target: test-emacs-library
@@ -340,6 +358,71 @@ jobs:
               --eval "(consent-ci-write-summary (list (expand-file-name (getenv \"CONSENT_CI_LOG_FILE\") \"ci-logs\")) (getenv \"GITHUB_STEP_SUMMARY\"))"
           fi
 
+  test-emacs-core:
+    name: Emacs-hosted ERT (${{ matrix.shard.label }}; syntax ${{ matrix.source_metadata }}; docstrings ${{ matrix.docstring_retention }})
+    runs-on: ubuntu-latest
+    # Canonical Emacs shard: the core language/runtime shard runs the full 2×3
+    # syntax/docstring cross-product on every lane, so the Emacs reader/writer/
+    # docstring axis stays covered per push. The remaining Emacs shards trim to
+    # the canonical combo on the per-push lane (see test-emacs-hosted).
+    env:
+      CONSENT_TEST_SOURCE_METADATA: ${{ matrix.source_metadata }}
+      CONSENT_TEST_DOCSTRING_RETENTION: ${{ matrix.docstring_retention }}
+      CONSENT_CI_LOG_FILE: emacs-${{ matrix.shard.shard }}-${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}.log
+      CONSENT_CI_SHARD_SUMMARY_NAME: ${{ matrix.shard.summary_name }} / source metadata ${{ matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention }}
+    strategy:
+      fail-fast: false
+      matrix:
+        source_metadata: ["on", "off"]
+        docstring_retention: ["full", "simple", "none"]
+        shard:
+          - shard: emacs-core
+            label: core language/runtime
+            make_target: test-emacs-core
+            summary_name: Emacs core language/runtime
+            selector: '(or "consent-base.*" "consent-eval.*" "consent-interpreter-module.*" "consent-macro.*" "consent-reader.*" "consent-result.*" "consent-runtime.*")'
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Install Emacs
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y emacs-nox
+
+      - name: Run Emacs-hosted ERT shard
+        shell: bash
+        run: |
+          mkdir -p ci-logs
+          started=$SECONDS
+          set +e
+          make "${{ matrix.shard.make_target }}" 2>&1 | tee "ci-logs/${CONSENT_CI_LOG_FILE}"
+          status=${PIPESTATUS[0]}
+          wall=$((SECONDS - started))
+          {
+            printf 'CONSENT_CI_SHARD_NAME=%s\n' "${CONSENT_CI_SHARD_SUMMARY_NAME}"
+            printf 'CONSENT_CI_SHARD_SELECTOR=%s\n' '${{ matrix.shard.selector }}'
+            printf 'CONSENT_CI_WALL_SECONDS=%s\n' "$wall"
+          } >> "ci-logs/${CONSENT_CI_LOG_FILE}"
+          exit "$status"
+
+      - name: Upload Emacs-hosted shard log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-log-${{ matrix.shard.shard }}-${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}
+          path: ci-logs/${{ env.CONSENT_CI_LOG_FILE }}
+          if-no-files-found: warn
+
+      - name: Render Emacs-hosted shard timing summary
+        if: always()
+        run: |
+          if [ -f "ci-logs/${CONSENT_CI_LOG_FILE}" ]; then
+            emacs -Q --batch -L lisp \
+              --eval "(require 'consent-ci)" \
+              --eval "(consent-ci-write-summary (list (expand-file-name (getenv \"CONSENT_CI_LOG_FILE\") \"ci-logs\")) (getenv \"GITHUB_STEP_SUMMARY\"))"
+          fi
+
   test-summary:
     name: test shard timing summary
     runs-on: ubuntu-latest
@@ -347,6 +430,7 @@ jobs:
       - test-portable-gambit
       - test-portable-extra-hosts
       - test-emacs-hosted
+      - test-emacs-core
     if: always()
 
     steps:
