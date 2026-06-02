@@ -8,6 +8,7 @@
 
 ;;; Code:
 
+(require 'cl-lib)
 (require 'ert)
 (require 'agent-scheme-result)
 
@@ -16,11 +17,23 @@
   "Repository-relative canonical Agent Scheme version source.")
 
 (ert-deftest agent-scheme-runtime-test-version-components-are-canonical ()
-  "Expose the runtime version as host components and a Scheme datum."
-  (should (equal (agent-scheme-version-components) '(0 15 7)))
-  (should (equal (agent-scheme-value->external (agent-scheme-version))
-                 "(agent-scheme-version 0 15 7)"))
-  (should (equal (agent-scheme-version-string) "0.15.7")))
+  "Derive the host version views from the canonical version datum."
+  (let* ((datum agent-scheme--version-datum)
+         (components (mapcar #'agent-scheme-number-value (cdr datum))))
+    ;; The datum head is the canonical version tag symbol.
+    (should (agent-scheme--version-symbol-named-p
+             (car datum) "agent-scheme-version"))
+    ;; Components are the datum's exact non-negative host-integer cdr.
+    (should (equal (agent-scheme-version-components) components))
+    (should (cl-every (lambda (component)
+                        (and (integerp component) (>= component 0)))
+                      components))
+    ;; `agent-scheme-version' round-trips the canonical datum.
+    (should (equal (agent-scheme-value->external (agent-scheme-version))
+                   (agent-scheme-value->external datum)))
+    ;; The version string is the components joined with dots.
+    (should (equal (agent-scheme-version-string)
+                   (mapconcat #'number-to-string components ".")))))
 
 (ert-deftest agent-scheme-runtime-test-version-comes-from-shared-source ()
   "Keep the version number in one Scheme-readable source file."
@@ -44,9 +57,13 @@
       (with-temp-buffer
         (insert-file-contents path)
         (buffer-string))))
-    (should
-     (equal (agent-scheme-value->external (agent-scheme-version))
-            "(agent-scheme-version 0 15 7)"))
+    ;; The host version API must reflect the datum defined in this file.
+    (let ((file-datum (agent-scheme--version-find-definition-value
+                       (car forms))))
+      (should file-datum)
+      (should
+       (equal (agent-scheme-value->external (agent-scheme-version))
+              (agent-scheme-value->external file-datum))))
     (should
      (string-match-p
       "single source of truth"
@@ -126,7 +143,8 @@
                    (when (featurep 'agent-scheme-eval)
                      (error \"runtime loaded evaluator\"))
                    (unless (equal (agent-scheme-version-components)
-                                  '(0 15 7))
+                                  (mapcar #'agent-scheme-number-value
+                                          (cdr agent-scheme--version-datum)))
                      (kill-emacs 6))
                    (let ((context
                           (agent-scheme--new-eval-context

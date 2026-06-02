@@ -22,6 +22,8 @@
         (only (agent-scheme reader)
               agent-scheme-datum->external
               agent-scheme-read)
+        (only (agent-scheme version)
+              agent-scheme-version-datum)
         (only (agent-scheme runtime)
               audit-process-capability-result!
               audit-network-capability-result!
@@ -259,13 +261,23 @@
           (agent-scheme-eval-source-result source))
          expected))
 
+;; Render the canonical datum's external form from its components so the
+;; expectation tracks (agent-scheme version) instead of a hardcoded literal.
+(define (agent-scheme-test--expected-version-external)
+  (let loop ((components (cdr agent-scheme-version-datum))
+             (acc "(agent-scheme-version"))
+    (if (null? components)
+        (string-append acc ")")
+        (loop (cdr components)
+              (string-append acc " " (number->string (car components)))))))
+
 (check 'runtime-version-components
        (agent-scheme-version-components)
-       '(0 15 7))
+       (cdr agent-scheme-version-datum))
 
 (check 'runtime-version-datum
        (agent-scheme-result->external (agent-scheme-version))
-       "(agent-scheme-version 0 15 7)")
+       (agent-scheme-test--expected-version-external))
 
 (check 'reader-source-metadata-default-enabled
        (agent-scheme-datum->external
