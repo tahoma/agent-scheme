@@ -191,7 +191,7 @@ It creates the native, non-vterm buffer set for the session:
 *Agent Approvals: PROJECT*
 ```
 
-`*Agent: PROJECT*` shows the current session record and status. `*Agent
+`*Agent: PROJECT*` shows the current session record and status. `*Consent
 Scheme: PROJECT*` shows the persistent REPL transcript as Scheme-readable
 `transcript-event` datums. `*Agent Events: PROJECT*` shows recent `(agent io)`
 records, `*Agent Audit: PROJECT*` shows session-scoped audit entries, and

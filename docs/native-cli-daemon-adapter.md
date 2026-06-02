@@ -1,6 +1,6 @@
 # Native CLI and Daemon Adapter Contract
 
-The native CLI and daemon adapter is the first planned non-Emacs host for Agent
+The native CLI and daemon adapter is the first planned non-Emacs host for Consent
 Scheme. It should make the runtime usable from a terminal, a batch command, and
 a long-lived local daemon without changing the Scheme-facing language contract.
 
