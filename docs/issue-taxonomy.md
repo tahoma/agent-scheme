@@ -1,6 +1,6 @@
 # GitHub Issue Taxonomy
 
-Agent Scheme uses GitHub labels to describe where an issue can be worked and
+Consent Scheme uses GitHub labels to describe where an issue can be worked and
 how much coordination it needs. Labels are intentionally generic so they remain
 appropriate for a public repository and can apply to open and closed issues.
 
@@ -26,7 +26,7 @@ The surface label answers where a contributor can work on the issue.
 | Label | Use for |
 | --- | --- |
 | `surface:r7rs-portable` | Portable Scheme, data, fixtures, references, or libraries that can be developed without a specialized host adapter. |
-| `surface:portable-core+adapter` | Agent Scheme core runtime work that may need both portable Scheme and bootstrap or host-adapter changes. |
+| `surface:portable-core+adapter` | Consent Scheme core runtime work that may need both portable Scheme and bootstrap or host-adapter changes. |
 | `surface:specialized-host` | Emacs, MCP, model/provider, CI, sidecar, or other host-specific integration work. |
 | `surface:design` | Architecture, policy, naming, roadmap, taxonomy, or process decisions. |
 
@@ -52,7 +52,7 @@ Use optional labels when they clarify issue selection or review needs.
 | `risk:medium` | Ordinary implementation or design work with some cross-module coupling. |
 | `risk:high` | Work that changes core semantics, security posture, persistence, provider behavior, or large compatibility surfaces. |
 | `host:any-r7rs` | Work can be done in portable R7RS Scheme or Scheme-readable data without live host dependencies. |
-| `host:agent-runtime` | Work depends on the Agent Scheme runtime, bootstrap evaluator, or shared adapter boundary. |
+| `host:agent-runtime` | Work depends on the Consent Scheme runtime, bootstrap evaluator, or shared adapter boundary. |
 | `host:emacs` | Work requires Emacs APIs, buffers, windows, commands, or Emacs Lisp UX. |
 | `host:external-service` | Work depends on GitHub, CI, model providers, MCP clients, sidecars, or other external services. |
 | `size:weekend` | The issue is scoped as a coherent weekend-sized slice. |

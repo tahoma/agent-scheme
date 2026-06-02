@@ -1,12 +1,11 @@
+;;; conformance-cases.scm --- Shared reader, evaluator, and R7RS fixture cases for Consent Scheme
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
-;;
-;;; conformance-cases.scm --- Shared reader, evaluator, and R7RS fixture cases for Agent Scheme
 
 ;; This file is intentionally Scheme-readable data. Test code may read it during
-;; bootstrap, and the Agent Scheme reader should eventually own that job.
+;; bootstrap, and the Consent Scheme reader should eventually own that job.
 
-(agent-scheme-fixture-suite
+(consent-fixture-suite
   (version 1)
   (cases
     ((id reader-boolean-literals)
@@ -78,8 +77,8 @@
      (oracle shared)
      (options ())
      (description "Case-folding directives affect subsequent symbols.")
-     (source "#!fold-case Agent-Scheme")
-     (expect (value "agent-scheme")))
+     (source "#!fold-case Consent-Scheme")
+     (expect (value "consent-scheme")))
 
     ((id reader-no-fold-case-directive)
      (kind r7rs-conformance)
@@ -90,8 +89,8 @@
      (oracle shared)
      (options ())
      (description "The no-fold-case directive restores the default identifier case behavior.")
-     (source "#!fold-case #!no-fold-case Agent-Scheme")
-     (expect (value "Agent-Scheme")))
+     (source "#!fold-case #!no-fold-case Consent-Scheme")
+     (expect (value "Consent-Scheme")))
 
     ((id reader-string-line-continuation)
      (kind r7rs-conformance)
@@ -180,10 +179,10 @@
       (license "BSD-style")
       (license-url "https://github.com/ashinn/chibi-scheme/blob/master/COPYING")
       (license-url "https://github.com/shirok/Gauche/blob/master/COPYING")
-      (review-note "Agent Scheme-owned rewrite; no third-party test text copied."))
+      (review-note "Consent Scheme-owned rewrite; no third-party test text copied."))
      (description "Vertical-bar identifiers preserve escaped delimiter characters.")
-     (source "|agent\\x2d;scheme|")
-     (expect (value "agent-scheme")))
+     (source "|consent\\x2d;scheme|")
+     (expect (value "consent-scheme")))
 
     ((id primitive-procedure-call)
      (kind r7rs-conformance)
@@ -258,7 +257,7 @@
       (source-url "https://github.com/ashinn/chibi-scheme/blob/master/tests/r7rs-tests.scm")
       (license "BSD-style")
       (license-url "https://github.com/ashinn/chibi-scheme/blob/master/COPYING")
-      (review-note "Agent Scheme-owned rewrite; no third-party test text copied."))
+      (review-note "Consent Scheme-owned rewrite; no third-party test text copied."))
      (description "exact-integer-sqrt handles a large exact power with zero remainder.")
      (source "(call-with-values (lambda () (exact-integer-sqrt (expt 2 60))) list)")
      (expect (value "(1073741824 0)")))
@@ -396,7 +395,7 @@
       (source-url "https://github.com/ashinn/chibi-scheme/blob/master/tests/r7rs-tests.scm")
       (license "BSD-style")
       (license-url "https://github.com/ashinn/chibi-scheme/blob/master/COPYING")
-      (review-note "Agent Scheme-owned rewrite; no third-party test text copied."))
+      (review-note "Consent Scheme-owned rewrite; no third-party test text copied."))
      (description "letrec-syntax supports recursively expanded syntax-rules macros without capturing local temporaries.")
      (source "(letrec-syntax ((choose (syntax-rules () ((choose) #f) ((choose expr) expr) ((choose expr rest ...) (let ((temp expr)) (if temp temp (choose rest ...))))))) (let ((temp 'program)) (choose #f temp 'unreached)))")
      (expect (value "program")))
@@ -482,7 +481,7 @@
      (oracle shared)
      (options ())
      (description "Library cond-expand declarations select available imported libraries.")
-     (source "(define-library (agent-scheme fixture conditional) (cond-expand ((library (scheme base)) (export answer) (import (scheme base)) (begin (define answer 42))) (else (export answer) (begin (define answer 'missing))))) (import (agent-scheme fixture conditional)) answer")
+     (source "(define-library (consent fixture conditional) (cond-expand ((library (scheme base)) (export answer) (import (scheme base)) (begin (define answer 42))) (else (export answer) (begin (define answer 'missing))))) (import (consent fixture conditional)) answer")
      (expect (value "42")))
 
     ((id library-import-export)
@@ -494,7 +493,7 @@
      (oracle shared)
      (options ())
      (description "A defined library exports a binding imported by a program.")
-     (source "(define-library (agent-scheme fixture math) (export answer) (import (scheme base)) (begin (define answer 42))) (import (agent-scheme fixture math)) answer")
+     (source "(define-library (consent fixture math) (export answer) (import (scheme base)) (begin (define answer 42))) (import (consent fixture math)) answer")
      (expect (value "42")))
 
     ((id library-exported-macro-scope)
@@ -506,7 +505,7 @@
      (oracle shared)
      (options ())
      (description "Exported library macros resolve free template identifiers in the library scope.")
-     (source "(define-library (agent-scheme fixture syntax) (export choose) (import (scheme base)) (begin (define default 'library) (define-syntax choose (syntax-rules () ((choose) default))))) (import (scheme base) (agent-scheme fixture syntax)) (let ((default 'program)) (choose))")
+     (source "(define-library (consent fixture syntax) (export choose) (import (scheme base)) (begin (define default 'library) (define-syntax choose (syntax-rules () ((choose) default))))) (import (scheme base) (consent fixture syntax)) (let ((default 'program)) (choose))")
      (expect (value "library")))
 
     ((id library-import-modifiers-composed)
@@ -523,9 +522,9 @@
       (source-url "https://github.com/lexi-lambda/racket-r7rs/tree/master/r7rs-test/tests")
       (license "Chibi BSD-style; Racket R7RS license file not present in repository")
       (license-url "https://github.com/ashinn/chibi-scheme/blob/master/COPYING")
-      (review-note "Agent Scheme-owned rewrite; no third-party test text copied."))
+      (review-note "Consent Scheme-owned rewrite; no third-party test text copied."))
      (description "Program imports compose only, rename, and prefix modifiers without local-name conflicts.")
-     (source "(define-library (agent-scheme fixture mined imports) (export add subtract) (import (scheme base)) (begin (define (add x y) (+ x y)) (define (subtract x y) (- x y)))) (import (only (agent-scheme fixture mined imports) add) (prefix (rename (agent-scheme fixture mined imports) (subtract minus)) lib-)) (list (add 1 2) (lib-add 3 4) (lib-minus 10 6))")
+     (source "(define-library (consent fixture mined imports) (export add subtract) (import (scheme base)) (begin (define (add x y) (+ x y)) (define (subtract x y) (- x y)))) (import (only (consent fixture mined imports) add) (prefix (rename (consent fixture mined imports) (subtract minus)) lib-)) (list (add 1 2) (lib-add 3 4) (lib-minus 10 6))")
      (expect (value "(3 7 4)")))
 
     ((id library-imported-binding-immutable)
@@ -549,7 +548,7 @@
      (oracle shared)
      (options ())
      (description "Duplicate external export names are rejected.")
-     (source "(define-library (agent-scheme fixture duplicate-export) (export value value) (import (scheme base)) (begin (define value 1)))")
+     (source "(define-library (consent fixture duplicate-export) (export value value) (import (scheme base)) (begin (define value 1)))")
      (expect (error)))
 
     ((id program-import-after-expression-error)
@@ -577,7 +576,7 @@
      (oracle-reason host-policy)
      (options ())
      (description "Library include declarations are denied unless host file policy allows the path.")
-     (source "(define-library (agent-scheme fixture conformance include) (export answer) (import (scheme base)) (include \"fixtures/r7rs/include-body.scm\"))")
+     (source "(define-library (consent fixture conformance include) (export answer) (import (scheme base)) (include \"fixtures/r7rs/include-body.scm\"))")
      (expect (error)))
 
     ((id library-include-ci-policy-denied)
@@ -591,7 +590,7 @@
      (oracle-reason host-policy)
      (options ())
      (description "Library include-ci declarations are denied unless host file policy allows the path.")
-     (source "(define-library (agent-scheme fixture conformance include-ci) (export mixedanswer) (import (scheme base)) (include-ci \"fixtures/r7rs/include-ci-body.scm\"))")
+     (source "(define-library (consent fixture conformance include-ci) (export mixedanswer) (import (scheme base)) (include-ci \"fixtures/r7rs/include-ci-body.scm\"))")
      (expect (error)))
 
     ((id proper-tail-recursion-loop)
@@ -681,7 +680,7 @@
       (license "BSD-style")
       (license-url "https://github.com/shirok/Gauche/blob/master/COPYING")
       (license-url "https://github.com/ashinn/chibi-scheme/blob/master/COPYING")
-      (review-note "Agent Scheme-owned rewrite; no third-party test text copied."))
+      (review-note "Consent Scheme-owned rewrite; no third-party test text copied."))
      (description "guard can inspect R7RS error object messages and irritants.")
      (source "(guard (exn ((error-object? exn) (list (error-object-message exn) (error-object-irritants exn)))) (error \"bad input\" 'alpha 7))")
      (expect (value "(\"bad input\" (alpha 7))")))
@@ -737,7 +736,7 @@
       (license "BSD-style")
       (license-url "https://github.com/shirok/Gauche/blob/master/COPYING")
       (license-url "https://github.com/ashinn/chibi-scheme/blob/master/COPYING")
-      (review-note "Agent Scheme-owned rewrite; no third-party test text copied."))
+      (review-note "Consent Scheme-owned rewrite; no third-party test text copied."))
      (description "A continuation captured inside a higher-order traversal can escape to the surrounding expression.")
      (source "(call/cc (lambda (return) (for-each (lambda (x) (if (= x 3) (return x) #f)) '(1 2 3 4)) #f))")
      (expect (value "3")))
@@ -1026,7 +1025,7 @@
      (status implemented)
      (oracle shared)
      (options ())
-     (description "The read library reads Agent Scheme datums from input string ports.")
+     (description "The read library reads Consent Scheme datums from input string ports.")
      (source "(import (scheme base) (scheme read) (scheme write))\n(let ((in (open-input-string \"(alpha 1) \")) (out (open-output-string))) (write (read in) out) (write-char (read-char in) out) (list (get-output-string out) (eof-object? (read in))))")
      (expect (value "(\"(alpha 1) \" #t)")))
 
@@ -1045,7 +1044,7 @@
       (license "BSD-style")
       (license-url "https://github.com/ashinn/chibi-scheme/blob/master/COPYING")
       (license-url "https://github.com/shirok/Gauche/blob/master/COPYING")
-      (review-note "Agent Scheme-owned rewrite; no third-party test text copied."))
+      (review-note "Consent Scheme-owned rewrite; no third-party test text copied."))
      (description "A datum written to an output string port can be read back from an input string port.")
      (source "(import (scheme base) (scheme read) (scheme write))\n(let ((out (open-output-string))) (write '(alpha \"beta\" 3) out) (read (open-input-string (get-output-string out))))")
      (expect (value "(alpha \"beta\" 3)")))

@@ -1,7 +1,7 @@
 # R7RS Implementation Test Mining
 
 This report records the first issue #94 pass over external R7RS and near-R7RS
-test material. The goal is coverage discovery, not vendoring. New Agent Scheme
+test material. The goal is coverage discovery, not vendoring. New Consent Scheme
 fixtures from this pass are small rewrites owned by this repository, with
 fixture-level provenance notes and no copied third-party test text.
 
@@ -52,6 +52,6 @@ oracle runner can classify reference diversity separately from `make test`.
   implementation-dependent printer spelling after reviewing oracle output across
   Chibi, Sagittarius, Gauche, Guile, Racket, and CHICKEN.
 - Mine library-loading behavior separately from pure imports, because include,
-  load, file, process-context, repl, and time remain Agent Scheme policy-gated.
+  load, file, process-context, repl, and time remain Consent Scheme policy-gated.
 - Consider adding pending fixtures for unspecified behavior only when the matrix
   explicitly labels them as portability notes rather than conformance facts.

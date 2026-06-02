@@ -1,6 +1,6 @@
 # Capability Environment and Effect Lowering
 
-Agent Scheme evaluates pure R7RS-small code under resource budgets, but every
+Consent Scheme evaluates pure R7RS-small code under resource budgets, but every
 operation that can observe or mutate host state goes through a session
 capability environment. The environment is Scheme-readable data that connects
 user defaults, project trust, session state, task-specific grants, policy
@@ -365,7 +365,7 @@ Revocation and stale-handle rules:
 - Revalidation occurs before each host operation, not only when the handle is
   created.
 - Reusing a stale handle, expired grant, revoked grant, or mismatched scope
-  signals an Agent Scheme capability condition and writes a denied audit entry.
+  signals an Consent Scheme capability condition and writes a denied audit entry.
 
 ## Effect Lowering
 

@@ -1,6 +1,11 @@
 # Licensing Policy
 
-Agent Scheme is licensed under the **Apache License, Version 2.0**
+<!-- This document discusses SPDX tags as prose and examples; the REUSE tool
+     must not parse them as this file's own license. The file's license is
+     supplied by the root REUSE.toml. -->
+<!-- REUSE-IgnoreStart -->
+
+Consent Scheme is licensed under the **Apache License, Version 2.0**
 (`SPDX-License-Identifier: Apache-2.0`). The canonical license text lives in
 `LICENSE` (so GitHub's repository license detection reports `Apache-2.0`) and in
 `LICENSES/Apache-2.0.txt` (so the project is [REUSE](https://reuse.software)
@@ -75,3 +80,5 @@ Apache-2.0 to be permanent.
 - `reuse lint` must pass (run in CI; install with `pip install reuse`).
 - GitHub's REST `/license` endpoint and the repository license badge must report
   `Apache-2.0`.
+
+<!-- REUSE-IgnoreEnd -->

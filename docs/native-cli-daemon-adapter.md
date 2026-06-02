@@ -30,7 +30,7 @@ load it as a fixture, or expose it through the daemon control channel.
        (status future)
        (frontend shared)
        (effect-path shared-capability-request)
-       (runtime-abi agent-scheme-compiled-runtime))))
+       (runtime-abi consent-compiled-runtime))))
   (provides
     ((library (cli cwd))
      (library (cli file))
@@ -40,7 +40,7 @@ load it as a fixture, or expose it through the daemon control channel.
      (library (cli process))
      (library (cli daemon))
      (library (cli audit))
-     (library (agent capability))
+     (library (consent capability))
      (library (agent approval))
      (library (agent io))
      (library (agent session))))
@@ -68,7 +68,7 @@ load it as a fixture, or expose it through the daemon control channel.
      (process-boundary-suite native-cli))))
 ```
 
-`provides` names adapter-specific and shared Agent Scheme libraries that the
+`provides` names adapter-specific and shared Consent Scheme libraries that the
 host can install. `mediates` names standard R7RS libraries whose bindings lower
 to the same capability environment when they observe or mutate host state.
 Importing one of these libraries only installs bindings; authority still comes
@@ -96,7 +96,7 @@ capability request path.
 | `(cli daemon)` | daemon status, client handles, session listing, request routing, shutdown | `session`, `process` | `daemon-control`, `process-control` |
 | `(cli audit)` | audit sink handles, tailing, rotation, redacted export | `memory`, `port` | `audit-observation`, `audit-export` |
 
-The shared libraries `(agent capability)`, `(agent approval)`, `(agent io)`,
+The shared libraries `(consent capability)`, `(agent approval)`, `(agent io)`,
 and `(agent session)` keep the same Scheme-level shapes across Emacs, CLI, and
 daemon hosts. The CLI adapter only changes how approvals are displayed, how
 events are transported, and how live host resources are represented behind

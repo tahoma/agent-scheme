@@ -1,5 +1,5 @@
 ---
-name: agent-scheme-r7rs-fixtures
+name: consent-r7rs-fixtures
 description: Use when adding, reviewing, or triaging R7RS fixture cases, conformance matrix rows, oracle metadata, or local Scheme reference lookups.
 ---
 
@@ -7,7 +7,7 @@ description: Use when adding, reviewing, or triaging R7RS fixture cases, conform
 
 Use this skill when adding or changing shared fixture cases, marking R7RS
 coverage, comparing oracle results, or answering Scheme-specific behavior
-questions for Agent Scheme.
+questions for Consent Scheme.
 
 ## Canonical References
 
@@ -16,9 +16,9 @@ questions for Agent Scheme.
 - `docs/development.md`
 - `docs/references.md`
 - `fixtures/r7rs/conformance-cases.scm`
-- `lisp/agent-scheme-oracle.el`
-- `tests/agent-scheme-test-helper.el`
-- `tests/agent-scheme-conformance-test.el`
+- `lisp/consent-oracle.el`
+- `tests/consent-test-helper.el`
+- `tests/consent-conformance-test.el`
 
 ## Workflow
 
@@ -27,7 +27,7 @@ questions for Agent Scheme.
 2. Add or update one representative fixture for each behavior before marking a
    matrix row `implemented`.
 3. Keep fixture ids stable, lowercase, and descriptive. Use the shared
-   `agent-scheme-fixture-suite` in `fixtures/r7rs/conformance-cases.scm`.
+   `consent-fixture-suite` in `fixtures/r7rs/conformance-cases.scm`.
 4. Include the shared fields:
 
    ```scheme
@@ -48,9 +48,9 @@ questions for Agent Scheme.
    multiple values or larger programs.
 6. Add `provenance` metadata when a fixture is inspired by an external test
    suite. Include source location, license location, and a review note saying
-   whether the case is an Agent Scheme-owned rewrite or copied material.
+   whether the case is an Consent Scheme-owned rewrite or copied material.
 7. Add `oracle-eligibility` and `oracle-reason` only when a reference command
-   cannot exercise the same language mode or policy model as Agent Scheme.
+   cannot exercise the same language mode or policy model as Consent Scheme.
    Do not use oracle metadata merely to hide implementation disagreement.
 8. Update `docs/r7rs-conformance.md` in the same change when a fixture changes
    matrix coverage, status, representative ids, or portability notes.

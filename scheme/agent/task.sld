@@ -1,7 +1,6 @@
+;;; Public Consent Scheme task lifecycle records.
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
-;;
-;;; Public Agent Scheme task lifecycle records.
 ;;;
 ;;; This library owns the host-neutral `(agent task)' record vocabulary:
 ;;; task, step, action, observation, decision, pause, stop, wait, failure, and
@@ -155,7 +154,7 @@
 
     (define (raise-task-error kind fields)
       "Raise a task lifecycle error carrying a structured condition datum."
-      (error "agent-scheme-task" (make-task-condition kind fields)))
+      (error "consent-task" (make-task-condition kind fields)))
 
     (define (normalize-state state)
       "Validate and return STATE."

@@ -1,6 +1,6 @@
 # Contributing
 
-Agent Scheme keeps project process lightweight, but commit history should be
+Consent Scheme keeps project process lightweight, but commit history should be
 structured from the outset.
 
 ## Issue Lifecycle
@@ -14,7 +14,7 @@ Workflow:
 2. Create a branch for that issue.
 3. Confirm the issue's roadmap chunk placement in #53.
 4. Make the smallest coherent change that advances the issue.
-5. Update the canonical runtime version in `scheme/agent-scheme/version.sld`
+5. Update the canonical runtime version in `scheme/consent/version.sld`
    to match the roadmap-derived version for that issue.
 6. Open a pull request back to `main`.
 7. Merge through the pull request after review and verification.
@@ -48,7 +48,7 @@ Pull requests should:
 ## Runtime Versioning
 
 Every issue branch updates the canonical runtime version source at
-`scheme/agent-scheme/version.sld`. The version is roadmap-derived from #53's
+`scheme/consent/version.sld`. The version is roadmap-derived from #53's
 flat chunk map.
 
 Each chunk is numbered `Chunk <major>.<minor>` (for example `Chunk 0.15`).
@@ -60,11 +60,11 @@ Derive the version `<major>.<minor>.<ordinal>` as:
 The major component is no longer hardcoded to `0`. Future major releases are
 sculpted by adding `Chunk 1.0`, `Chunk 1.1`, ... to the chunk map, which yields
 the `1.x` version series. The `version.sld` datum shape
-`(agent-scheme-version <major> <minor> <ordinal>)` is unchanged.
+`(consent-version <major> <minor> <ordinal>)` is unchanged.
 
 For example, the first issue in `Chunk 0.14` is version `0.14.1`, represented by
-the canonical Scheme datum `(agent-scheme-version 0 14 1)`; the first issue in a
-future `Chunk 1.0` would be `1.0.1`, or `(agent-scheme-version 1 0 1)`.
+the canonical Scheme datum `(consent-version 0 14 1)`; the first issue in a
+future `Chunk 1.0` would be `1.0.1`, or `(consent-version 1 0 1)`.
 
 Completed chunks migrate from #53 into `docs/release-notes.md`. Migrate a full
 chunk when starting the first issue of the next chunk (not opportunistically
@@ -137,7 +137,7 @@ Recommended early scopes:
 Examples:
 
 ```text
-docs(architecture): add Agent Scheme threat model
+docs(architecture): add Consent Scheme threat model
 
 Refs: #1
 ```

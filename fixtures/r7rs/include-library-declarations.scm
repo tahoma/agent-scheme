@@ -1,7 +1,6 @@
+;;; Library declaration include fixture for Consent Scheme include tests.
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
-;;
-;;; Library declaration include fixture for Agent Scheme include tests.
 ;;;
 ;;; This file is spliced into a define-library form when include-library-
 ;;; declarations policy allows access to fixture paths.

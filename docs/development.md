@@ -53,7 +53,7 @@ Clone the repository and create a topic branch for each issue:
 
 ```sh
 git clone git@github.com:tahoma/agent-scheme.git
-cd agent-scheme
+cd consent
 git switch -c author-name/issue-N/short-name
 ```
 
@@ -116,7 +116,7 @@ ordinary R7RS reading.
   comments may supplement per-binding comments, but they do not replace needed
   per-binding documentation.
 - For record types, document ownership of the record shape, any mutable fields,
-  and whether the record is part of the public Agent Scheme datum surface or an
+  and whether the record is part of the public Consent Scheme datum surface or an
   internal implementation record.
 - For macros, document hygiene assumptions, literal identifiers, private marker
   syntax, and the target form or pass that receives the expansion.
@@ -149,12 +149,12 @@ string)`.
 Project tests live under `tests/` and run through the repository `Makefile`.
 Emacs Lisp bootstrap tests use ERT and follow these conventions:
 
-- test files are named `tests/agent-scheme-*-test.el`
+- test files are named `tests/consent-*-test.el`
 - module tests mirror implementation modules, such as
-  `tests/agent-scheme-reader-test.el` for `lisp/agent-scheme-reader.el`
-- shared ERT helpers should live in `tests/agent-scheme-test-helper.el` and
-  provide `agent-scheme-test-helper`
-- the batch runner is `tests/agent-scheme-test-runner.el`
+  `tests/consent-reader-test.el` for `lisp/consent-reader.el`
+- shared ERT helpers should live in `tests/consent-test-helper.el` and
+  provide `consent-test-helper`
+- the batch runner is `tests/consent-test-runner.el`
 
 The runner starts Emacs with `-Q --batch`, adds project-local `lisp/` and
 `tests/` directories to `load-path`, loads test files in deterministic order,
@@ -168,7 +168,7 @@ default portable shards run the full suite under Gambit, Racket with its `r7rs`
 package, Guile, and Gauche. Chibi remains available as an optional host through
 `make test-portable-chibi`, `make test-portable-eval`, and `make
 test-portable-rest`; those targets use `chibi-scheme` on `PATH`, or the command
-named by `AGENT_SCHEME_CHIBI`, and skip when Chibi is unavailable.
+named by `CONSENT_CHIBI`, and skip when Chibi is unavailable.
 
 Core runtime, reader, evaluator, macro, library, and standard-library changes
 should normally add or update portable tests alongside the Emacs Lisp tests.
@@ -186,7 +186,7 @@ The local R7RS-small report reference lives in
 [`docs/r7rs-small-report.md`](r7rs-small-report.md). The active R7RS-small
 conformance matrix lives in [`docs/r7rs-conformance.md`](r7rs-conformance.md).
 The canonical shared fixture corpus lives in
-`fixtures/r7rs/conformance-cases.scm` as an `agent-scheme-fixture-suite`.
+`fixtures/r7rs/conformance-cases.scm` as an `consent-fixture-suite`.
 Fixture records carry `id`, `kind`, `phase`, `category`, `section`, `status`,
 `oracle`, `options`, `source`, `expect`, and `description` fields so the Emacs
 Lisp harness, portable Scheme harness, and conformance runner select from the
@@ -212,9 +212,9 @@ make conformance-oracle
 The default reference adapters are Chibi Scheme and Sagittarius. Gauche, Guile,
 Racket, CHICKEN, and Gambit remain opt-in comparison adapters so contributors
 can inspect a wider implementation matrix before changing defaults. The runner
-uses `AGENT_SCHEME_CHIBI`, `AGENT_SCHEME_GAUCHE`, `AGENT_SCHEME_GUILE`,
-`AGENT_SCHEME_SAGITTARIUS`, `AGENT_SCHEME_RACKET`, `AGENT_SCHEME_CHICKEN`,
-and `AGENT_SCHEME_GAMBIT` when set, otherwise it searches for `chibi-scheme`,
+uses `CONSENT_CHIBI`, `CONSENT_GAUCHE`, `CONSENT_GUILE`,
+`CONSENT_SAGITTARIUS`, `CONSENT_RACKET`, `CONSENT_CHICKEN`,
+and `CONSENT_GAMBIT` when set, otherwise it searches for `chibi-scheme`,
 `gosh`, `guile`, `sagittarius`, `racket`, `csi`, and `gsi` on `PATH`. The
 Racket adapter requires Racket's separate `r7rs` package and wraps generated
 fixture programs with `#lang r7rs`. The CHICKEN adapter requires the `r7rs`
@@ -228,16 +228,16 @@ not affect the default `make test` command.
 
 | Adapter | Role | Environment override | Discovered command | Notes |
 | --- | --- | --- | --- | --- |
-| Chibi Scheme | default | `AGENT_SCHEME_CHIBI` | `chibi-scheme` | Also used by optional portable Chibi checks when available. |
-| Sagittarius | default | `AGENT_SCHEME_SAGITTARIUS` | `sagittarius` | Runs with `-r 7` for R7RS mode. |
-| Gauche | opt-in comparison | `AGENT_SCHEME_GAUCHE` | `gosh` | Useful for library and writer behavior comparisons. |
-| Guile | opt-in comparison | `AGENT_SCHEME_GUILE` | `guile` | Runs with `--no-auto-compile --r7rs`. |
-| Racket | developer-only comparison | `AGENT_SCHEME_RACKET` | `racket` | Requires the Racket `r7rs` package; generated programs are wrapped with `#lang r7rs`. |
-| CHICKEN Scheme | developer-only comparison | `AGENT_SCHEME_CHICKEN` | `csi` | Requires the `r7rs` egg; runs with `-q -R r7rs -s`. |
-| Gambit Scheme | developer-only comparison | `AGENT_SCHEME_GAMBIT` | `gsi` | Homebrew formula `gambit-scheme`; runs with `-:r7rs,search=$REPO/scheme`. |
+| Chibi Scheme | default | `CONSENT_CHIBI` | `chibi-scheme` | Also used by optional portable Chibi checks when available. |
+| Sagittarius | default | `CONSENT_SAGITTARIUS` | `sagittarius` | Runs with `-r 7` for R7RS mode. |
+| Gauche | opt-in comparison | `CONSENT_GAUCHE` | `gosh` | Useful for library and writer behavior comparisons. |
+| Guile | opt-in comparison | `CONSENT_GUILE` | `guile` | Runs with `--no-auto-compile --r7rs`. |
+| Racket | developer-only comparison | `CONSENT_RACKET` | `racket` | Requires the Racket `r7rs` package; generated programs are wrapped with `#lang r7rs`. |
+| CHICKEN Scheme | developer-only comparison | `CONSENT_CHICKEN` | `csi` | Requires the `r7rs` egg; runs with `-q -R r7rs -s`. |
+| Gambit Scheme | developer-only comparison | `CONSENT_GAMBIT` | `gsi` | Homebrew formula `gambit-scheme`; runs with `-:r7rs,search=$REPO/scheme`. |
 
 The Gambit compile path uses the same R7RS mode and library search stance as
-the interpreter shard. Set `AGENT_SCHEME_GAMBIT_COMPILER` to choose a specific
+the interpreter shard. Set `CONSENT_GAMBIT_COMPILER` to choose a specific
 `gsc` executable; otherwise compile checks discover `gsc` on `PATH`. The
 oracle runner does not invoke `gsc`, but documenting both tools keeps
 interpreter and compiler setup aligned.
@@ -245,7 +245,7 @@ interpreter and compiler setup aligned.
 Oracle reports identify each fixture by case id and classify the comparison as
 `portable-agree`, `implementation-variant`, `agent-mismatch`,
 `unsupported-reference`, `policy-gated`, or `not-oracle-eligible`. The runner
-intentionally skips Agent Scheme-specific result fixtures, resource-limit
+intentionally skips Consent Scheme-specific result fixtures, resource-limit
 fixtures, and host-effecting R7RS libraries such as `(scheme file)`,
 `(scheme load)`, `(scheme process-context)`, `(scheme repl)`, and
 `(scheme time)`. It also skips fixtures whose result depends on whether a
@@ -260,7 +260,7 @@ outputs. It does not collapse semantic distinctions such as exact versus
 inexact numbers.
 
 `implementation-variant` reports are intentionally visible. Treat them as
-portability notes rather than failures when Agent Scheme agrees with at least
+portability notes rather than failures when Consent Scheme agrees with at least
 one supported reference and the remaining references differ among themselves.
 Current expected sources include exact versus inexact numeric results, special
 NaN and infinity spellings, optional reader support for datum labels in program
@@ -274,20 +274,20 @@ implementations disagree.
 To focus the report stream, pass a comma-separated status filter:
 
 ```sh
-AGENT_SCHEME_ORACLE_STATUSES='agent-mismatch,implementation-variant' make conformance-oracle
+CONSENT_ORACLE_STATUSES='agent-mismatch,implementation-variant' make conformance-oracle
 ```
 
 To compare a chosen reference implementation set, pass a comma-separated
 reference filter:
 
 ```sh
-AGENT_SCHEME_ORACLE_REFERENCES='chibi,gauche,guile,sagittarius,racket,chicken,gambit' make conformance-oracle
+CONSENT_ORACLE_REFERENCES='chibi,gauche,guile,sagittarius,racket,chicken,gambit' make conformance-oracle
 ```
 
 To print a compact status count before the report stream:
 
 ```sh
-AGENT_SCHEME_ORACLE_SUMMARY=1 make conformance-oracle
+CONSENT_ORACLE_SUMMARY=1 make conformance-oracle
 ```
 
 ## Host-Compiled Portable Executables
@@ -295,7 +295,7 @@ AGENT_SCHEME_ORACLE_SUMMARY=1 make conformance-oracle
 `make compile` builds executable artifacts from the portable R7RS runtime by
 using external Scheme host compiler toolchains. This path packages the current
 portable implementation through mature host compilers; it is not the future
-Agent Scheme LLIR/native compiler backend tracked by #115 through #121.
+Consent Scheme LLIR/native compiler backend tracked by #115 through #121.
 
 The default compile host is Racket CS:
 
@@ -303,28 +303,28 @@ The default compile host is Racket CS:
 make compile
 ```
 
-Select a host explicitly with `AGENT_SCHEME_COMPILE_HOST`:
+Select a host explicitly with `CONSENT_COMPILE_HOST`:
 
 ```sh
-AGENT_SCHEME_COMPILE_HOST=racket make compile
-AGENT_SCHEME_COMPILE_HOST=gambit make compile
+CONSENT_COMPILE_HOST=racket make compile
+CONSENT_COMPILE_HOST=gambit make compile
 ```
 
 The Racket path requires both `racket` and `raco`; override discovery with:
 
 ```sh
-AGENT_SCHEME_RACKET=/path/to/racket AGENT_SCHEME_RACO=/path/to/raco make compile
+CONSENT_RACKET=/path/to/racket CONSENT_RACO=/path/to/raco make compile
 ```
 
 The Gambit path requires both `gsi` and `gsc`; override discovery with:
 
 ```sh
-AGENT_SCHEME_GAMBIT=gsi AGENT_SCHEME_GAMBIT_COMPILER=gsc AGENT_SCHEME_COMPILE_HOST=gambit make compile
+CONSENT_GAMBIT=gsi CONSENT_GAMBIT_COMPILER=gsc CONSENT_COMPILE_HOST=gambit make compile
 ```
 
 Generated outputs stay under `build/compile/<host>/` by default:
 
-- `bin/agent-scheme`: the host-compiled executable artifact
+- `bin/consent`: the host-compiled executable artifact
 - `src/`: generated host wrapper sources and, for Gambit, the mirrored
   portable `.sld` sources plus generated C files used for linking
 - `collections/`: generated host dependency wrappers when a host needs them,
@@ -332,18 +332,18 @@ Generated outputs stay under `build/compile/<host>/` by default:
 - `manifest.scm`: Scheme-readable artifact manifest
 - `logs/`: compiler, compile-timing, and smoke-test logs
 
-Use `AGENT_SCHEME_COMPILE_BUILD_DIR` to place those generated files elsewhere:
+Use `CONSENT_COMPILE_BUILD_DIR` to place those generated files elsewhere:
 
 ```sh
-AGENT_SCHEME_COMPILE_BUILD_DIR=/tmp/agent-scheme-compile make compile
+CONSENT_COMPILE_BUILD_DIR=/tmp/consent-compile make compile
 ```
 
 The build runs smoke commands against the executable before reporting success:
 
 ```sh
-build/compile/<host>/bin/agent-scheme --version
-build/compile/<host>/bin/agent-scheme --eval '(+ 1 2)'
-build/compile/<host>/bin/agent-scheme --script tests/scheme/agent-scheme-reader-test.scm
+build/compile/<host>/bin/consent --version
+build/compile/<host>/bin/consent --eval '(+ 1 2)'
+build/compile/<host>/bin/consent --script tests/scheme/consent-reader-test.scm
 ```
 
 Remove generated compile artifacts with:
@@ -360,25 +360,25 @@ The default local verification command is:
 make test
 ```
 
-Set `AGENT_SCHEME_TEST_TARGET_ROOT` to keep the current checkout's Makefile and
+Set `CONSENT_TEST_TARGET_ROOT` to keep the current checkout's Makefile and
 ERT harness while pointing portable Scheme host commands at another checkout or
 archive's `scheme/` directory. This is useful for historical timing sweeps that
 replay a newer harness against an older reader/evaluator implementation:
 
 ```sh
-AGENT_SCHEME_TEST_TARGET_ROOT=/tmp/agent-scheme-old make test-portable-eval
+CONSENT_TEST_TARGET_ROOT=/tmp/consent-old make test-portable-eval
 ```
 
 CI runs the aggregate suite as host/runtime-oriented shards so timing and
 failures stay visible by architectural path:
 
 ```sh
-AGENT_SCHEME_GAMBIT=gsi make test-portable-gambit
-AGENT_SCHEME_GAMBIT=gsi AGENT_SCHEME_GAMBIT_COMPILER=gsc make test-portable-gambit-native
-AGENT_SCHEME_RACKET=racket make test-portable-racket
+CONSENT_GAMBIT=gsi make test-portable-gambit
+CONSENT_GAMBIT=gsi CONSENT_GAMBIT_COMPILER=gsc make test-portable-gambit-native
+CONSENT_RACKET=racket make test-portable-racket
 make test-portable-compiled
-AGENT_SCHEME_GUILE=guile make test-portable-guile
-AGENT_SCHEME_GAUCHE=gosh make test-portable-gauche
+CONSENT_GUILE=guile make test-portable-guile
+CONSENT_GAUCHE=gosh make test-portable-gauche
 make test-emacs-core
 make test-emacs-library
 make test-emacs-capabilities
@@ -388,13 +388,13 @@ make test-emacs-tools
 `make test` runs those shard targets in parallel by default. `make
 test-portable` remains available as the local aggregate for the default
 portable R7RS host shards. CI runs full portable-suite host shards under
-Gambit, the Gambit-native compiled Agent Scheme runner, Racket with its `r7rs`
-package, the Racket-built compiled Agent Scheme runner, Guile, and Gauche.
+Gambit, the Gambit-native compiled Consent Scheme runner, Racket with its `r7rs`
+package, the Racket-built compiled Consent Scheme runner, Guile, and Gauche.
 Optional Chibi shard targets remain available for manual timing and
 compatibility checks:
 
 ```sh
-AGENT_SCHEME_CHIBI=chibi-scheme make test-portable-chibi
+CONSENT_CHIBI=chibi-scheme make test-portable-chibi
 ```
 
 The full-suite host shards run the same portable Scheme test files so their
@@ -404,10 +404,10 @@ temporary `#lang r7rs` collection wrappers for checked-in `.sld` libraries
 because Racket's R7RS package resolves imports as Racket collection modules.
 The Racket compiled host shard runs `make compile` first, then executes that
 same full-suite file list through
-`build/compile/racket/bin/agent-scheme --script`. The Gambit-native shard runs
-`AGENT_SCHEME_COMPILE_HOST=gambit make compile`, emits the build tree's
+`build/compile/racket/bin/consent --script`. The Gambit-native shard runs
+`CONSENT_COMPILE_HOST=gambit make compile`, emits the build tree's
 `logs/compile.log` and `logs/smoke.log` timing datums, and executes the same
-file list through `build/compile/gambit/bin/agent-scheme --script`.
+file list through `build/compile/gambit/bin/consent --script`.
 CI builds and caches Gambit 4.9.7 because Ubuntu 24.04's `gambc` package is
 4.9.3 and does not accept the `-:r7rs` runtime option needed for the portable
 library search path. The extra R7RS host matrix runs inside an Ubuntu 26.04
@@ -417,20 +417,20 @@ Emacs-hosted shards split the non-portable ERT suite into core
 language/runtime, library/conformance, capability/policy, and
 tools/docs/integration groups. `make test-emacs-hosted` remains available as
 the local aggregate for all non-portable ERT tests with
-`(not "agent-scheme-scheme-.*")`.
+`(not "consent-scheme-.*")`.
 
-When `AGENT_SCHEME_TEST_SELECTOR` is set, `make test` uses a single ERT runner
+When `CONSENT_TEST_SELECTOR` is set, `make test` uses a single ERT runner
 with that selector instead of the local shard fan-out:
 
 ```sh
-AGENT_SCHEME_TEST_SELECTOR='agent-scheme-smoke-test-harness-runs' make test
+CONSENT_TEST_SELECTOR='consent-smoke-test-harness-runs' make test
 ```
 
 Each shard uploads a `test-log-*` artifact and writes a job summary. On pull
 requests, the combined timing job also updates one PR comment with a compact
 shard timing table and a collapsible detail section so reviewers can see timing
 at a glance from the PR conversation. Portable Scheme runners may also emit
-fine-grained `AGENT_SCHEME_CI_CHECK_SECONDS` diagnostics for slow checks; the
+fine-grained `CONSENT_CI_CHECK_SECONDS` diagnostics for slow checks; the
 combined summary keeps those details below the fold and treats shard wall time
 as the primary signal.
 
@@ -448,16 +448,16 @@ matrix, with:
 make test-live-model
 ```
 
-Both live targets set `AGENT_SCHEME_LIVE_MODEL_TEST=1`. The all-live target also
-sets `AGENT_SCHEME_LIVE_MODEL_MATRIX=1`. Use
-`AGENT_SCHEME_LIVE_MODEL_ENDPOINT` and `AGENT_SCHEME_LIVE_MODEL_ID` to override
+Both live targets set `CONSENT_LIVE_MODEL_TEST=1`. The all-live target also
+sets `CONSENT_LIVE_MODEL_MATRIX=1`. Use
+`CONSENT_LIVE_MODEL_ENDPOINT` and `CONSENT_LIVE_MODEL_ID` to override
 the default local endpoint and smoke model id.
 
 For documentation-only changes, also run:
 
 ```sh
 git diff --check
-rg -n "m[y]/agent-scheme|m[y]/mcp" README.md docs
+rg -n "m[y]/consent|m[y]/mcp" README.md docs
 ```
 
 The `rg` command should normally return no matches. Also search for any
@@ -500,7 +500,7 @@ Until those paths exist, avoid committing:
 Before opening a PR:
 
 - Confirm the branch only contains the intended issue work.
-- Confirm `scheme/agent-scheme/version.sld` matches the issue's
+- Confirm `scheme/consent/version.sld` matches the issue's
   roadmap-derived version from #53.
 - Run the available verification commands.
 - Check public docs for stale personal-config or historical-repo references.

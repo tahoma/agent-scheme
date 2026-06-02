@@ -11,7 +11,7 @@
 > that were corrected — see the
 > [Library Exchange Design Log](library-exchange-design-log.md).
 
-Agent Scheme is not a sealed application. Like the Lisp systems it descends
+Consent Scheme is not a sealed application. Like the Lisp systems it descends
 from, it is meant to grow as a live, extensible toolkit, and — uniquely — to let
 an orchestrated community of agents share and exchange code. This note works out
 what the *unit of that sharing* is, how identity and authority attach to it, and
@@ -22,7 +22,7 @@ form, and adopt authority only when linked into a particular agent.
 
 ## Premise: open by necessity, and the seam that makes it survivable
 
-Agent Scheme is open by necessity. The moment an agent's medium of action is
+Consent Scheme is open by necessity. The moment an agent's medium of action is
 *code* rather than a fixed tool vocabulary, it has an open-ended, runtime-defined
 action space — and a sealed environment can only ever express what was compiled
 before it ran. A sealed programming language for agents is close to a
@@ -52,7 +52,7 @@ raises the stakes on the seam rather than removing it.
 ## The library is where three roles coincide
 
 In ordinary Scheme a library does one job: namespacing and reuse — the enabling
-R6RS/R7RS development that made serious Scheme feasible. In Agent Scheme the same
+R6RS/R7RS development that made serious Scheme feasible. In Consent Scheme the same
 boundary can carry two more jobs we actually need:
 
 - **Namespacing and reuse** — R7RS `import`/`export`.
@@ -261,7 +261,7 @@ continuations (captured control) — and deliberately keeps it *non-reflective*
 compilation. The image-Lisp tradition (Smalltalk; MIT/GNU Scheme's first-class
 environments) makes the opposite trade and pays for it in compilability. Agent
 Scheme's meta-circular interpreter already reifies environments as data
-(`agent-scheme-make-base-environment`, the library registry), so it sits in the
+(`consent-make-base-environment`, the library registry), so it sits in the
 reflective camp by construction — it has reclaimed the open pole standard Scheme
 sold for sealing. This is *why* compilation has to be a local-cache optimization
 here rather than the foundation.
@@ -310,7 +310,7 @@ content-addressed store. Renaming and upgrading are metadata operations;
 re-instantiation under a new hash is how the live periphery evolves without
 disturbing existing instances.
 
-The existing `(agent-scheme library)` registry — `library-registry-ref/set!`,
+The existing `(consent library)` registry — `library-registry-ref/set!`,
 `resolve-library`, `eval-define-library` — is the seed of this store. Growing it
 into a content-addressed store is an extension of what exists, not a rewrite.
 
@@ -515,10 +515,10 @@ there is no platonic "right" FFI — it is a perf-vs-isolation tradeoff; BEAM of
 both the safe out-of-process path and the dangerous in-process one, which is
 better than the strawman implies.)
 
-The **capability system is where Agent Scheme first diverges from BEAM**, and the
+The **capability system is where Consent Scheme first diverges from BEAM**, and the
 divergence is rooted in the *threat model*. BEAM was built for fault tolerance
 among trusted-but-fallible code (ambient authority is fine when every process is
-yours); Agent Scheme assumes open, mutually-distrusting, possibly agent-authored
+yours); Consent Scheme assumes open, mutually-distrusting, possibly agent-authored
 code (malice/over-reach, not just crashes), which forbids ambient authority and
 forces the membrane BEAM never needed. The two isolations are orthogonal and
 *complementary* — fault isolation (integrity under failure) vs authority isolation
@@ -526,11 +526,11 @@ forces the membrane BEAM never needed. The two isolations are orthogonal and
 built for the former, is exactly what makes the latter clean (no shared mutable
 state to leak authority), so the divergence *extends* the model rather than
 fighting it ("mine the model" still holds). The new axis: BEAM reifies processes
-and messages but not authority; Agent Scheme reifies authority (capabilities,
+and messages but not authority; Consent Scheme reifies authority (capabilities,
 grants, leases, the gated environment) as a first-class scoped, revocable value.
 Honest tension: BEAM's *let-it-crash* and capability *deny* are different failure
 shapes — a denial is a recoverable refusal, not a fault, so naïve
-crash-and-supervise over denied operations would loop; Agent Scheme treats denials
+crash-and-supervise over denied operations would loop; Consent Scheme treats denials
 as handled conditions (approval statuses, eval-error-on-violation), so its failure
 model is crash-and-supervise *plus* deny-and-handle. In seam terms: BEAM is the
 open shared-nothing periphery; the capability membrane is the gated core the
@@ -757,7 +757,7 @@ for; depends on the sound bridge, chunk 0.16).*
   categorically different from bounded capabilities, not flattened among them. One
   link-time consent model thus spans all authority, with FFI at the high-scrutiny
   top of the gradient. **Foreign-export:
-  deferred indefinitely, likely never** — Agent Scheme is an agent runtime, not a
+  deferred indefinitely, likely never** — Consent Scheme is an agent runtime, not a
   system-extension language; the separate-plane decision is what makes "decide not
   to decide" safe. The existing host-adapter/CLI entry point is a *constrained*
   foreign-export that stays (its context is the session, fixed at the process

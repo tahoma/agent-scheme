@@ -1,6 +1,6 @@
 # Multi-Host Adapter and Bootstrap Strategy
 
-Agent Scheme treats R7RS-small as the user-facing language contract and treats
+Consent Scheme treats R7RS-small as the user-facing language contract and treats
 each host as a replaceable adapter. Emacs is the first host and the bootstrap
 vehicle, but the portable runtime model should remain able to move into other
 Scheme implementations, compiled backends, and non-Emacs user interfaces.
@@ -99,7 +99,7 @@ filesystem authority. It owns:
   libraries
 - canonical datums for memory records, plans, rules, skills, transcripts,
   session records, results, events, approvals, and audit entries
-- portable helper libraries and Agent Scheme-native manifests
+- portable helper libraries and Consent Scheme-native manifests
 - conformance fixtures, reference data, and portable tests
 - deterministic library names and imports such as `(scheme base)`,
   `(agent memory)`, and `(agent plan)`
@@ -132,7 +132,7 @@ and auditable at the Scheme boundary.
 
 ## Emacs as the First Host
 
-The Emacs adapter is the first body for Agent Scheme because it can provide
+The Emacs adapter is the first body for Consent Scheme because it can provide
 native buffers, project integration, ERT tests, process management, and policy
 prompts early. That bootstrap role does not make Emacs Lisp the architectural
 reference. While the Emacs Lisp and portable Scheme implementations coexist,
@@ -155,7 +155,7 @@ that only imports standard Scheme libraries should remain host-neutral.
 
 R7RS-small remains the contract even if an R6RS or Chez-based backend becomes
 attractive later. A backend can be faster, more mature, or easier to compile
-without changing the language that Agent Scheme promises to users.
+without changing the language that Consent Scheme promises to users.
 
 Bootstrap work should proceed in this order:
 
@@ -173,7 +173,7 @@ Bootstrap work should proceed in this order:
 
 Chez Scheme or another R6RS system may become an implementation backend. If so,
 it should be wrapped by an adapter layer that presents R7RS-small names and
-semantics to Agent Scheme programs. R6RS libraries, condition systems,
+semantics to Consent Scheme programs. R6RS libraries, condition systems,
 Unicode behavior, or module facilities can inform the implementation, but they
 must not replace the R7RS-small user contract.
 
@@ -182,9 +182,9 @@ must not replace the R7RS-small user contract.
 | Target | Role | Strengths | Constraints | Validation target |
 | --- | --- | --- | --- | --- |
 | Emacs Lisp adapter | First host and bootstrap adapter | Native editor UX, ERT, project buffers, policy prompts | Host-specific objects and dynamic editor state must stay behind handles | `make test` through ERT |
-| Chibi Scheme | Optional external R7RS validation path | Small R7RS implementation, `.sld` support, useful for portability spot checks | Optional on developer machines; validates the portable product path but is not itself the product host | `AGENT_SCHEME_CHIBI=chibi-scheme make test-portable-chibi` |
+| Chibi Scheme | Optional external R7RS validation path | Small R7RS implementation, `.sld` support, useful for portability spot checks | Optional on developer machines; validates the portable product path but is not itself the product host | `CONSENT_CHIBI=chibi-scheme make test-portable-chibi` |
 | Gauche, Gambit, Racket, Guile, or Cyclone | R7RS compatibility probes | Broader implementation diversity and performance signals | Library/import behavior and extensions differ by implementation | Default portable CI shards plus opt-in oracle adapters |
-| Chez or another R6RS backend | Possible optimized backend | Mature compiler and runtime, strong performance story | R6RS is not the Agent Scheme language contract | R7RS compatibility adapter plus conformance fixtures |
+| Chez or another R6RS backend | Possible optimized backend | Mature compiler and runtime, strong performance story | R6RS is not the Consent Scheme language contract | R7RS compatibility adapter plus conformance fixtures |
 | Future compiled backend | Long-term runtime strategy | Fast startup or embedding in non-editor hosts | Must preserve inspectable datums, policy, and library semantics | Same core fixture suite |
 | Non-Emacs UI shell | Future UX host | CLI, web, IDE, or editor surfaces can share the core | Needs its own policy, handles, and persistence adapter | Mock or real host-adapter suite |
 
@@ -203,14 +203,14 @@ the feature can be expressed through R7RS libraries and data alone.
 
 Current examples:
 
-- `tests/agent-scheme-scheme-reader-test.el` runs
-  `tests/scheme/agent-scheme-reader-test.scm` with the configured external
+- `tests/consent-scheme-reader-test.el` runs
+  `tests/scheme/consent-reader-test.scm` with the configured external
   Scheme host for the selected portable shard.
-- `tests/agent-scheme-scheme-eval-test.el` runs
-  `tests/scheme/agent-scheme-eval-test.scm` the same way and also guards a
+- `tests/consent-scheme-eval-test.el` runs
+  `tests/scheme/consent-eval-test.scm` the same way and also guards a
   bootstrap invariant around explicit continuations.
-- `tests/agent-scheme-conformance-test.el` validates the fixture suite and runs
-  implemented cases through the Agent Scheme evaluator.
+- `tests/consent-conformance-test.el` validates the fixture suite and runs
+  implemented cases through the Consent Scheme evaluator.
 
 Future portable-core work should add R7RS fixtures first when practical, then
 bridge them into `make test` through ERT so a minimal checkout still has one
@@ -243,17 +243,17 @@ without exposing raw host VCS objects or granting mutation by default.
 
 ## Contributor Placement Rules
 
-- Put host-neutral R7RS libraries in `scheme/agent-scheme/`.
-- Put Emacs adapter code in `lisp/agent-scheme-*.el`.
+- Put host-neutral R7RS libraries in `scheme/consent/`.
+- Put Emacs adapter code in `lisp/consent-*.el`.
 - Put portable Scheme tests in `tests/scheme/` and bridge them through ERT.
-- Put host adapter tests in focused `tests/agent-scheme-*-test.el` files.
+- Put host adapter tests in focused `tests/consent-*-test.el` files.
 - Keep capability libraries visibly separate from standard Scheme libraries.
 - Keep host performance caches rebuildable from canonical Scheme-readable data.
 - Update Emacs Lisp and portable Scheme pass modules together for core
   semantics and refactors when practical; otherwise record the parity follow-up
   explicitly.
 - Document any backend-specific shortcut as an adapter implementation detail,
-  not as a change to Agent Scheme semantics.
+  not as a change to Consent Scheme semantics.
 
 When a design question is about Scheme semantics, prefer the local
 R7RS-small report and the conformance matrix. When the question is about host
