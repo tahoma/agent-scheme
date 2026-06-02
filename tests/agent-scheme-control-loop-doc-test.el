@@ -33,8 +33,12 @@
       (dolist (needle
                '("control-loop.md"
                  "Task Lifecycle and Control Loop"))
-        (should (string-match-p (regexp-quote needle) architecture))
-        (should (string-match-p (regexp-quote needle) roadmap)))
+        (should (string-match-p (regexp-quote needle) architecture)))
+      ;; The roadmap note is a slim pointer to the GitHub roadmap issue (#53);
+      ;; the control-loop summary lives in architecture.md, not here.
+      (should (string-match-p
+               (regexp-quote "agent-scheme/issues/53")
+               roadmap))
       (dolist (needle
                '("# Task Lifecycle and Control Loop"
                  "## Lifecycle States"

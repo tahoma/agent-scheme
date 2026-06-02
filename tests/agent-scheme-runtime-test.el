@@ -17,10 +17,10 @@
 
 (ert-deftest agent-scheme-runtime-test-version-components-are-canonical ()
   "Expose the runtime version as host components and a Scheme datum."
-  (should (equal (agent-scheme-version-components) '(0 15 6)))
+  (should (equal (agent-scheme-version-components) '(0 15 7)))
   (should (equal (agent-scheme-value->external (agent-scheme-version))
-                 "(agent-scheme-version 0 15 6)"))
-  (should (equal (agent-scheme-version-string) "0.15.6")))
+                 "(agent-scheme-version 0 15 7)"))
+  (should (equal (agent-scheme-version-string) "0.15.7")))
 
 (ert-deftest agent-scheme-runtime-test-version-comes-from-shared-source ()
   "Keep the version number in one Scheme-readable source file."
@@ -46,7 +46,7 @@
         (buffer-string))))
     (should
      (equal (agent-scheme-value->external (agent-scheme-version))
-            "(agent-scheme-version 0 15 6)"))
+            "(agent-scheme-version 0 15 7)"))
     (should
      (string-match-p
       "single source of truth"
@@ -126,7 +126,7 @@
                    (when (featurep 'agent-scheme-eval)
                      (error \"runtime loaded evaluator\"))
                    (unless (equal (agent-scheme-version-components)
-                                  '(0 15 6))
+                                  '(0 15 7))
                      (kill-emacs 6))
                    (let ((context
                           (agent-scheme--new-eval-context
