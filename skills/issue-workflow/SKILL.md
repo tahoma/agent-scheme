@@ -22,7 +22,7 @@ dependencies, or opening a pull request for Consent Scheme.
 1. Read the issue and confirm whether it is blocked. If new dependencies are
    discovered, record them in the issue body and in GitHub Issues relationship
    metadata when that is available.
-2. Check the roadmap issue, `tahoma/agent-scheme#53`, when the work changes
+2. Check the roadmap issue, `tahoma/consent#53`, when the work changes
    dependency order, phase placement, or graph invariants.
 3. Create one branch for the issue using
    `author-name/issue-N/short-name`. Keep assistant, tool, vendor, and workflow
