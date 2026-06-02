@@ -137,7 +137,7 @@ batch test execution:
 ```
 
 Native skill manifests and exported skill packages can carry source tests as
-datums. `skill-test-run` evaluates those source strings through normal Agent
+datums. `skill-test-run` evaluates those source strings through normal Consent
 Scheme evaluation, so the usual sandbox policy and budget limits still apply:
 
 ```scheme

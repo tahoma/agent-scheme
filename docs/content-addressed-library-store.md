@@ -259,7 +259,7 @@ environment only *operatively* — in closures (captured lexical scope) and
 continuations (captured control) — and deliberately keeps it *non-reflective*
 (the `eval`/`environment` interface is opaque) to protect lexical scope and
 compilation. The image-Lisp tradition (Smalltalk; MIT/GNU Scheme's first-class
-environments) makes the opposite trade and pays for it in compilability. Agent
+environments) makes the opposite trade and pays for it in compilability. Consent
 Scheme's meta-circular interpreter already reifies environments as data
 (`consent-make-base-environment`, the library registry), so it sits in the
 reflective camp by construction — it has reclaimed the open pole standard Scheme
