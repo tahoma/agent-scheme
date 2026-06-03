@@ -379,3 +379,17 @@ scenarios mark the host operation `not-performed`, so the validator proves the
 denial precedes any allowed host effect. The validator runs through `make test`
 on the default portable host and skips cleanly when no optional R7RS
 implementation is available.
+
+The `(mock-adapter-suite emacs-ert)` lane is also checked in. The ERT tests in
+`tests/consent-native-cli-daemon-mock-test.el` read the same fixture for its
+authority postures and vocabulary and drive a deterministic in-process mock
+adapter that never starts a real process, terminal, socket, or daemon. They
+exercise the terminal, batch, and daemon prompt postures, fail noninteractive
+confirmation closed with `noninteractive-confirmation-unavailable`, prove stale
+handles and revoked or expired grants deny before the host-operation counter
+moves, audit those denials as Scheme-readable records, keep the request,
+decision, result, event, audit, and error datums comparable with the capability
+environment vocabulary, compare interpreted and compiled effect records for the
+same request, and prove redaction precedes event and audit export. The
+remaining `(process-boundary-suite native-cli)` lane still needs a real native
+entrypoint.
