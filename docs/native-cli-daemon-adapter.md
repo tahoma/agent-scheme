@@ -367,3 +367,15 @@ any available R7RS implementation and through `make test`. That slice should
 cover library names, authority classes, handle kinds, noninteractive denial,
 record shapes, and stale-handle denial without starting a real daemon or
 spawning a child process.
+
+This slice is checked in. The adapter declaration and capability manifest live
+in `fixtures/host-adapters/native-cli-daemon.scm` as Scheme-readable data, and
+the portable validator in
+`tests/scheme/consent-native-cli-daemon-adapter-test.scm` reads that fixture
+with the standard R7RS reader to check the library names, authority classes,
+handle kinds, event kinds, error kinds, capability and boundary record shapes,
+and the mock noninteractive-confirmation and stale-handle denials. Both denial
+scenarios mark the host operation `not-performed`, so the validator proves the
+denial precedes any allowed host effect. The validator runs through `make test`
+on the default portable host and skips cleanly when no optional R7RS
+implementation is available.
