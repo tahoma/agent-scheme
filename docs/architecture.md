@@ -423,7 +423,9 @@ inspect imported libraries, definitions, recent yields, policy decisions,
 memory, and pending approvals as Scheme data.
 
 The concrete lifecycle, snapshot, fork, and cleanup contract is recorded in
-[Session Lifecycle and Snapshots](session-lifecycle.md).
+[Session Lifecycle and Snapshots](session-lifecycle.md). The host-neutral
+read-eval-render loop both hosts drive over a durable session is defined in the
+[Cross-Host REPL Interaction Contract](repl-interaction-contract.md).
 
 Reusable helper libraries, helper artifacts, skill candidate promotion, and
 their storage and policy boundaries are recorded in
