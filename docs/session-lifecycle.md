@@ -203,6 +203,11 @@ inspecting, stopping, evaluating in, and opening the native session buffers.
 Buffers include a mode-line status indicator in the form
 `Agent[SESSION:STATUS]`.
 
+The host-neutral read-eval-render loop both the Emacs and portable hosts drive
+over a durable session — incremental reading, session persistence, value/error
+rendering, stream separation, EOF/exit, and policy-gated host effects — is
+defined in the [Cross-Host REPL Interaction Contract](repl-interaction-contract.md).
+
 ## Snapshots
 
 `session-snapshot!` returns a Scheme-readable snapshot record:
