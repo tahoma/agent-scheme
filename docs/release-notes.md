@@ -22,10 +22,13 @@ one-based position within the chunk.
   ordinals are the versions actually committed to `version.sld`, not a renumber, so
   historical gaps in the committed sequence are preserved.
 
-**Migration trigger (going forward).** Migrate a full chunk from #53 into this
-file when starting the first issue of the *next* chunk — not opportunistically
-mid-chunk — so every still-open issue keeps its `<major>.<minor>.<ordinal>`
-position in #53 until its whole chunk has shipped.
+**Migration trigger (going forward).** A chunk lives in #53 only until every one
+of its issues has shipped. As a standing invariant, whenever you advance any
+issue, check whether an earlier chunk is now fully shipped yet still listed in
+#53; if so, migrate it here in the same change rather than deferring it to a
+later edge. Do not split a chunk mid-flight — a chunk with any still-open issue
+keeps all of its issues, and their `<major>.<minor>.<ordinal>` positions, in
+#53 until the whole chunk has shipped.
 
 ---
 
@@ -172,12 +175,17 @@ being introduced mid-chunk; it is recorded at its chunk position for completenes
 
 ## 0.15 Host-Compiled Portable Executables
 
-Chunk `0.15` is still the live chunk in #53 (the roadmap maintenance issue #364 is
-open), but its host-compiled executable line has shipped. Version `0.15.3` (#272)
-was not separately committed to `version.sld`; it is recorded here for
-completeness alongside the other shipped slices.
+Ordinals follow this chunk's positions in #53. Version `0.15.3` (#272) was not
+separately committed to `version.sld`; it is recorded here at its chunk position
+for completeness.
 
 - 0.15.1 — #270 add make compile for host-compiled portable executables
 - 0.15.2 — #273 compile portable runtime executable with Gambit
 - 0.15.3 — #272 compile portable runtime executable with Racket CS
 - 0.15.4 — #364 roadmap maintenance — release-notes migration, chunk renumbering, and reconciliation
+- 0.15.5 — #376 design content-addressed library store and inter-agent exchange (RFC)
+- 0.15.6 — #367 make CPS exception-handler restoration unwind-safe
+- 0.15.7 — #394 slim docs/roadmap.md to a pointer to the roadmap issue
+- 0.15.8 — #387 reduce the runtime-version update footprint to version.sld alone
+- 0.15.9 — #68 relicense to Apache-2.0 with SPDX headers and NOTICE
+- 0.15.10 — #389 rename Agent Scheme to Consent Scheme

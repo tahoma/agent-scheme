@@ -32,10 +32,17 @@ Repository conventions override generic workflow defaults. In particular:
   chunk's dotted number and `<ordinal>` is the issue's one-based position inside
   that chunk. The major component is no longer hardcoded to `0`; a future
   `Chunk 1.0`, `Chunk 1.1`, ... line sculpts the `1.x` major release series.
-  Completed chunks are migrated to `docs/release-notes.md`, which records each
-  shipped issue's final `<major>.<minor>.<ordinal>` version. If the issue is not
-  placed in #53, update or clarify the roadmap placement before calling the
-  issue work complete.
+  If the issue is not placed in #53, update or clarify the roadmap placement
+  before calling the issue work complete.
+- Retire fully shipped chunks from #53 as a standing invariant, not a one-time
+  edge action. On every issue you advance, check whether an earlier chunk now
+  has all of its issues shipped while still listed in #53's chunk map; if so,
+  migrate that chunk to `docs/release-notes.md` (recording each shipped issue's
+  final `<major>.<minor>.<ordinal>` version) and remove its section from #53 in
+  the same change. Do this as a drive-by integrated with the issue at hand so a
+  missed chunk edge is caught on the next issue instead of deferred. Do not
+  split a chunk mid-flight: a chunk with any still-open issue keeps all of its
+  issues in #53.
 - The portable R7RS implementation is a first-class peer, not a secondary
   mirror of the Emacs Lisp bootstrap. For semantic changes, evaluator pass
   boundaries, public runtime behavior, standard libraries, fixtures, or tests,
