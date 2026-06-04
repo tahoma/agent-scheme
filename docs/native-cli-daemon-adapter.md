@@ -390,6 +390,34 @@ handles and revoked or expired grants deny before the host-operation counter
 moves, audit those denials as Scheme-readable records, keep the request,
 decision, result, event, audit, and error datums comparable with the capability
 environment vocabulary, compare interpreted and compiled effect records for the
-same request, and prove redaction precedes event and audit export. The
-remaining `(process-boundary-suite native-cli)` lane still needs a real native
-entrypoint.
+same request, and prove redaction precedes event and audit export.
+
+The `(process-boundary-suite native-cli)` lane is also checked in. The minimal
+native entrypoint is `tools/consent-native-cli` (a POSIX shell wrapper) over
+`tools/consent-native-cli.el`. It runs the adapter under Emacs batch as a real
+OS process, resolves each request's authority posture from the same fixture, and
+on approval spawns, streams, waits for, signals, and reaps a real child process.
+The Scheme-readable request, decision, result, event, audit, and error records
+are written to stdout only; approval prompts and diagnostics are written to
+stderr, so a prompt never consumes the data stream a host-backed stdin port
+delivers to a child. Run the entrypoint directly with
+`tools/consent-native-cli OPERATION [OPTIONS]`; it honors `CONSENT_EMACS` or
+`EMACS` for the batch runtime.
+
+The ERT harness `tests/consent-native-cli-daemon-process-test.el` runs that
+entrypoint as a child process and asserts on the records it emits: an approved
+spawn streams child stdout, stderr, and exit status across the real boundary; a
+host-backed stdin port reaches a child while the approval prompt stays on the
+adapter's stderr; a real long-lived child is signaled and reaped; and
+noninteractive confirmation, stale job handles, and denied stdin ports fail
+closed with Scheme-readable audit and error records before any host operation
+runs. The harness also proves interpreted and future compiled execution share
+one record shape. Its `consent-native-cli-daemon-process-*` tests run through
+`make test` in the Emacs tools shard; the narrower target is
+`CONSENT_TEST_SELECTOR='"consent-native-cli-daemon-process-.*"' make test`.
+
+The interpreted path routes through the shared `shared-capability-request`
+effect path and the `(cli process)` and `(cli stdio)` vocabulary; the
+adapter-specific `(cli ...)` runtime bindings remain a contract, so the
+process-boundary lane is the first real boundary rather than a live install of
+those libraries.
