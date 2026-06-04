@@ -8,15 +8,14 @@
 ;; (docs/native-cli-daemon-adapter.md, fixture
 ;; fixtures/host-adapters/native-cli-daemon.scm).
 ;;
-;; The portable validator (tests/scheme/consent-native-cli-daemon-adapter-test.scm)
-;; checks the static record shapes, and the mock adapter lane
-;; (tests/consent-native-cli-daemon-mock-test.el) drives a deterministic
-;; in-process mock that never starts a real process.  This lane is the
-;; `(process-boundary-suite native-cli)' lane named in the fixture: it runs the
-;; real native CLI entrypoint (tools/consent-native-cli, tools/consent-native-cli.el)
-;; as a child OS process and asserts on the Scheme-readable records the adapter
-;; emits after it spawns, streams, waits for, signals, and reaps a real child
-;; process.
+;; This lane is the Emacs-host PARITY TWIN of the `(process-boundary-suite
+;; native-cli)' lane.  The canonical portable lane is
+;; tests/scheme/consent-native-cli-daemon-process-test.scm, which runs the same
+;; record contract under every R7RS host shard.  This twin runs the Emacs
+;; entrypoint (tools/consent-native-cli.el via the wrapper) as a child OS process
+;; and asserts on the Scheme-readable records the adapter emits after it spawns,
+;; streams, waits for, signals, and reaps a real child process, so the Emacs and
+;; portable bootstrap hosts stay at parity.
 ;;
 ;; The deftests are named `consent-native-cli-daemon-process-...' so the
 ;; `consent-native-cli-daemon.*' Emacs tools shard selector runs them through
@@ -61,9 +60,12 @@ stdout datum stream), `:stdout', and `:stderr'."
                       consent--test-root))
          (stderr-file (make-temp-file "consent-native-cli-process-stderr"))
          (process-environment
-          (cons (format "CONSENT_EMACS=%s"
-                        (consent-native-cli-daemon-process--emacs))
-                process-environment)))
+          ;; Pin the wrapper to the Emacs twin so this lane exercises the Emacs
+          ;; entrypoint regardless of which portable hosts are installed.
+          (append (list "CONSENT_NATIVE_CLI_HOST=emacs"
+                        (format "CONSENT_EMACS=%s"
+                                (consent-native-cli-daemon-process--emacs)))
+                  process-environment)))
     (unwind-protect
         (with-temp-buffer
           (let* ((exit (apply #'call-process entrypoint stdin-file

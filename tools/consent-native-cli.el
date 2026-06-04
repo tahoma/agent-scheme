@@ -8,14 +8,15 @@
 ;; host adapter (docs/native-cli-daemon-adapter.md, fixture
 ;; fixtures/host-adapters/native-cli-daemon.scm).
 ;;
-;; The portable validator (tests/scheme/consent-native-cli-daemon-adapter-test.scm)
-;; checks the static record shapes, and the mock adapter lane
-;; (tests/consent-native-cli-daemon-mock-test.el) drives a deterministic
-;; in-process mock that never starts a real process.  This file is the
-;; `(process-boundary-suite native-cli)' lane's executable: it is run as a real
-;; OS process (see the `tools/consent-native-cli' wrapper) and, when a capability
-;; request is approved, it spawns, streams, waits for, signals, and reaps a real
-;; child process before emitting the contract's Scheme-readable boundary records.
+;; This file is the Emacs-host PARITY TWIN of the `(process-boundary-suite
+;; native-cli)' lane.  The canonical, non-Emacs entrypoint is the portable
+;; Consent Scheme program `tools/consent-native-cli.scm' over the `(cli
+;; native-cli)' and `(cli process-host)' libraries; this Emacs implementation
+;; mirrors the same Scheme-readable record contract under the Emacs host so the
+;; two bootstrap hosts stay at parity.  It is run as a real OS process (see the
+;; `tools/consent-native-cli' wrapper with `CONSENT_NATIVE_CLI_HOST=emacs') and,
+;; when a capability request is approved, it spawns, streams, waits for, signals,
+;; and reaps a real child process before emitting the contract's records.
 ;;
 ;; Design invariants the harness depends on:
 ;;
@@ -483,8 +484,8 @@ Return 0 after the real host operation completes."
               (id (consent-native-cli--id "event-exit" request-id)))
          (push (consent-native-cli--event-datum
                 id session 'process-exit source
-                (list 'signal (intern (plist-get sig :signal))
-                      'exit-status (plist-get sig :exit)))
+                (list (list 'signal (intern (plist-get sig :signal)))
+                      (list 'exit-status (plist-get sig :exit))))
                events)
          (push id event-ids)
          (setq host-value (list 'handle 'process-job job)

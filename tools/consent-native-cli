@@ -2,22 +2,50 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
-# Minimal native CLI process-boundary entrypoint for the native CLI and daemon
-# host adapter (docs/native-cli-daemon-adapter.md). Runs the adapter under Emacs
-# batch across a real OS process boundary and emits Scheme-readable boundary
-# records on stdout; approval prompts and diagnostics go to stderr.
+# Native CLI process-boundary entrypoint for the native CLI and daemon host
+# adapter (docs/native-cli-daemon-adapter.md). Runs the adapter across a real OS
+# process boundary and emits Scheme-readable boundary records on stdout; approval
+# prompts and diagnostics go to stderr.
+#
+# By default this runs the portable Consent Scheme entrypoint
+# (tools/consent-native-cli.scm) under the first available R7RS host -- the
+# non-Emacs host the portable terminal REPL shell builds on. The Emacs-Lisp
+# implementation (tools/consent-native-cli.el) is a parity twin, selected with
+# CONSENT_NATIVE_CLI_HOST=emacs.
 #
 # Usage: tools/consent-native-cli OPERATION [OPTIONS]
-# See tools/consent-native-cli.el for the operation table and options.
+# Host:  CONSENT_NATIVE_CLI_HOST=chibi|guile|gauche|emacs (default: auto-detect)
+# See scheme/cli/native-cli.sld for the operation table and options.
 
 set -eu
 
-script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-repo_root=$(CDPATH= cd -- "$script_dir/.." && pwd)
-emacs=${CONSENT_EMACS:-${EMACS:-emacs}}
+repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+scheme_root="$repo_root/scheme"
+program="$repo_root/tools/consent-native-cli.scm"
 
-exec "$emacs" -Q --batch \
-  -L "$repo_root/lisp" \
-  --load "$repo_root/tools/consent-native-cli.el" \
-  -f consent-native-cli-main \
-  -- "$@"
+run_chibi() { exec chibi-scheme -A "$scheme_root" "$program" "$@"; }
+run_guile() { exec guile --no-auto-compile --r7rs -L "$scheme_root" "$program" "$@"; }
+run_gauche() { exec gosh -I "$scheme_root" -r7 "$program" "$@"; }
+run_emacs() {
+  exec "${CONSENT_EMACS:-${EMACS:-emacs}}" -Q --batch \
+    -L "$repo_root/lisp" \
+    --load "$repo_root/tools/consent-native-cli.el" \
+    -f consent-native-cli-main \
+    -- "$@"
+}
+
+case "${CONSENT_NATIVE_CLI_HOST:-}" in
+  chibi) run_chibi "$@" ;;
+  guile) run_guile "$@" ;;
+  gauche) run_gauche "$@" ;;
+  emacs) run_emacs "$@" ;;
+  "")
+    if command -v chibi-scheme >/dev/null 2>&1; then run_chibi "$@"
+    elif command -v guile >/dev/null 2>&1; then run_guile "$@"
+    elif command -v gosh >/dev/null 2>&1; then run_gauche "$@"
+    else run_emacs "$@"
+    fi ;;
+  *)
+    printf '%s\n' "consent-native-cli: unknown CONSENT_NATIVE_CLI_HOST: ${CONSENT_NATIVE_CLI_HOST}" >&2
+    exit 2 ;;
+esac

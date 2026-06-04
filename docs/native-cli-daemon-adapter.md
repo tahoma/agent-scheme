@@ -392,32 +392,55 @@ decision, result, event, audit, and error datums comparable with the capability
 environment vocabulary, compare interpreted and compiled effect records for the
 same request, and prove redaction precedes event and audit export.
 
-The `(process-boundary-suite native-cli)` lane is also checked in. The minimal
-native entrypoint is `tools/consent-native-cli` (a POSIX shell wrapper) over
-`tools/consent-native-cli.el`. It runs the adapter under Emacs batch as a real
-OS process, resolves each request's authority posture from the same fixture, and
-on approval spawns, streams, waits for, signals, and reaps a real child process.
-The Scheme-readable request, decision, result, event, audit, and error records
-are written to stdout only; approval prompts and diagnostics are written to
-stderr, so a prompt never consumes the data stream a host-backed stdin port
-delivers to a child. Run the entrypoint directly with
-`tools/consent-native-cli OPERATION [OPTIONS]`; it honors `CONSENT_EMACS` or
-`EMACS` for the batch runtime.
+The `(process-boundary-suite native-cli)` lane is also checked in, and it is
+**portable Consent Scheme first** — the non-Emacs host this track exists to
+reach. The adapter is split into two checked-in Scheme libraries:
 
-The ERT harness `tests/consent-native-cli-daemon-process-test.el` runs that
-entrypoint as a child process and asserts on the records it emits: an approved
-spawn streams child stdout, stderr, and exit status across the real boundary; a
-host-backed stdin port reaches a child while the approval prompt stays on the
-adapter's stderr; a real long-lived child is signaled and reaped; and
-noninteractive confirmation, stale job handles, and denied stdin ports fail
-closed with Scheme-readable audit and error records before any host operation
-runs. The harness also proves interpreted and future compiled execution share
-one record shape. Its `consent-native-cli-daemon-process-*` tests run through
-`make test` in the Emacs tools shard; the narrower target is
-`CONSENT_TEST_SELECTOR='"consent-native-cli-daemon-process-.*"' make test`.
+- `(cli native-cli)` (`scheme/cli/native-cli.sld`) is host-neutral. It resolves
+  each request's authority posture from the same fixture, builds the
+  Scheme-readable request, decision, result, event, audit, and error records,
+  and runs the real host operation only after a request is approved. It returns
+  the record stream and the approval-prompt list as data, so the entrypoint can
+  write records to stdout while writing prompts to the diagnostic stream — a
+  prompt never consumes the data stream a host-backed stdin port delivers to a
+  child.
+- `(cli process-host)` (`scheme/cli/process-host.sld`) is the one host-specific
+  piece. R7RS-small has no portable process spawn (`(scheme process-context)`
+  stops at `command-line`, `exit`, and the environment), and no SRFI standardizes
+  spawning either — SRFI 170's POSIX API deliberately defers subprocess creation
+  to an unwritten future SRFI. So each host branch (`cond-expand` over Gambit,
+  Chibi, Guile, Gauche, and Racket) imports its own process module and runs the
+  child through `/bin/sh -c` with a trailing exit-status marker. The only
+  host-specific capability each branch must provide is capturing a command's
+  standard output; standard input, standard error, cwd and environment grants,
+  and the exit status are carried by the shell, keeping the per-host surface
+  minimal and uniform.
 
-The interpreted path routes through the shared `shared-capability-request`
-effect path and the `(cli process)` and `(cli stdio)` vocabulary; the
-adapter-specific `(cli ...)` runtime bindings remain a contract, so the
-process-boundary lane is the first real boundary rather than a live install of
-those libraries.
+The portable entrypoint is `tools/consent-native-cli.scm`, run under any
+supported R7RS host with `scheme/` on the library search path; it is the
+non-Emacs entrypoint the portable terminal REPL shell builds on. The
+`tools/consent-native-cli` wrapper runs it under the first available host and
+selects one with `CONSENT_NATIVE_CLI_HOST=chibi|guile|gauche`. The Emacs-Lisp
+implementation (`tools/consent-native-cli.el`, selected with
+`CONSENT_NATIVE_CLI_HOST=emacs`) is a **parity twin**, not the canonical host.
+
+The portable lane `tests/scheme/consent-native-cli-daemon-process-test.scm`
+runs under every R7RS host shard (registered in the shared host file list, with
+a Chibi bridge for the optional Chibi shard). It drives `(cli native-cli)` and,
+on hosts whose process module is available, spawns, streams, waits for, signals,
+and reaps a real child: it asserts spawn/stdout/stderr/exit, a host-backed stdin
+port that reaches the child while the prompt stays on the diagnostic stream, cwd
+and environment grants observed in a child, a real signal-and-reap, the
+fail-closed noninteractive/stale-handle/stdin denials with Scheme-readable audit
+and error records, fixture-vocabulary consistency, and interpreted/compiled
+record-shape alignment. The lane runs across the Gambit, Racket, Guile, Gauche,
+and Chibi interpreters **and** the Racket-built and Gambit-native compiled
+runtimes — so compiled execution is a real boundary here, not merely an aligned
+record shape. The Emacs parity twin
+`tests/consent-native-cli-daemon-process-test.el` runs the same contract through
+the Emacs entrypoint in the `make test` Emacs tools shard.
+
+All paths route host effects through the shared `shared-capability-request`
+effect path and the `(cli process)` and `(cli stdio)` vocabulary. The
+adapter-specific `(cli ...)` libraries are now installable Scheme code rather
+than a contract sketch for the process and stdio surface this lane exercises.
