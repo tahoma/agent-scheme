@@ -15,6 +15,7 @@
   '("tests/scheme/consent-reader-test.scm"
     "tests/scheme/consent-fixture-test.scm"
     "tests/scheme/consent-native-cli-daemon-adapter-test.scm"
+    "tests/scheme/consent-native-cli-daemon-process-test.scm"
     "tests/scheme/consent-module-boundary-test.scm"
     "tests/scheme/consent-transcript-test.scm"
     "tests/scheme/consent-eval-test.scm")

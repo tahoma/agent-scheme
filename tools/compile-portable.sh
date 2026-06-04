@@ -121,6 +121,8 @@ write_racket_main() {
         (prefix (consent result) consent-main:result:)
         (prefix (consent runtime) consent-main:runtime:)
         (prefix (consent session) consent-main:session:)
+        (prefix (cli process-host) consent-main:cli-process-host:)
+        (prefix (cli native-cli) consent-main:cli-native-cli:)
         (only (consent eval)
               consent-eval-source
               consent-value->external)
@@ -245,6 +247,8 @@ write_gambit_main() {
         (prefix (consent result) consent-main:result:)
         (prefix (consent runtime) consent-main:runtime:)
         (prefix (consent session) consent-main:session:)
+        (prefix (cli process-host) consent-main:cli-process-host:)
+        (prefix (cli native-cli) consent-main:cli-native-cli:)
         (only (consent eval)
               consent-eval-source
               consent-value->external)
@@ -505,6 +509,12 @@ compile_gambit() {
   copy_gambit_source \
     "$scheme_dir/agent/transcript.sld" \
     "$src_dir/agent/transcript.sld"
+  copy_gambit_source \
+    "$scheme_dir/cli/process-host.sld" \
+    "$src_dir/cli/process-host.sld"
+  copy_gambit_source \
+    "$scheme_dir/cli/native-cli.sld" \
+    "$src_dir/cli/native-cli.sld"
 
   "$gsi" -:r7rs,search="$scheme_dir" \
     -e '(import (scheme base) (scheme write)) (write (+ 1 2)) (newline)' \
@@ -607,6 +617,14 @@ compile_gambit() {
     consent/eval \
     "$scheme_dir/consent/eval.sld" \
     "$src_dir/consent/eval.c"
+  compile_gambit_module \
+    cli/process-host \
+    "$scheme_dir/cli/process-host.sld" \
+    "$src_dir/cli/process-host.c"
+  compile_gambit_module \
+    cli/native-cli \
+    "$scheme_dir/cli/native-cli.sld" \
+    "$src_dir/cli/native-cli.c"
 
   "$gsc" -:r7rs,search="$scheme_dir" \
     -c -o "$main_c" "$main_file" \
