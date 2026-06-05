@@ -303,6 +303,7 @@ requested-grants: ((capability-grant (library (emacs buffer edit)) (effect buffe
 - [Multi-host adapter and bootstrap strategy](docs/multi-host-bootstrap.md)
 - [Native CLI and daemon adapter contract](docs/native-cli-daemon-adapter.md)
 - [Cross-host REPL interaction contract](docs/repl-interaction-contract.md)
+- [Portable terminal REPL shell](docs/portable-repl.md)
 - [Scheme references](docs/references.md)
 - [R7RS-small report reference](docs/r7rs-small-report.md)
 - [R7RS-small conformance matrix](docs/r7rs-conformance.md)
