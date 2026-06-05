@@ -52,16 +52,19 @@ printf '(+ 1 2)\n(exit)\n' | tools/consent-repl
 The setup above is for the *interpreted* shell, which needs a Scheme host on
 `PATH`. A host-compiled Consent Scheme executable
 ([development.md](development.md), "Host-Compiled Portable Executables") links
-`(cli repl-shell)` into the binary, so it can run the REPL with **no runtime
-setup at all** — no Scheme host and no language packages on `PATH`, because the
-binary is self-contained.
-
-There is no dedicated `repl` subcommand; the compiled binary starts the shell by
-running the entry script through its `--script` option:
+`(cli repl-shell)` into the binary and exposes it as a `--repl` command, so it
+runs the REPL with **no runtime setup at all** — no Scheme host and no language
+packages on `PATH`, and nothing else on disk, because the binary is
+self-contained:
 
 ```sh
-build/compile/racket/bin/consent --script tools/consent-repl.scm   # or gambit/...
+build/compile/racket/bin/consent --repl                # or the gambit binary
+printf '(+ 1 2)\n(exit)\n' | build/compile/gambit/bin/consent --repl --session demo
 ```
+
+`--repl` accepts the same `--session NAME` option and uses the same stream
+separation (records on stderr, program output on stdout) and close-status exit
+code as the interpreted launcher.
 
 The setup such a binary needs is at *build* time, not run time: the compile
 toolchain documented in [development.md](development.md) — Gambit (`gsi`/`gsc`),
