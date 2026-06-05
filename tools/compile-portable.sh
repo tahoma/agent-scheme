@@ -143,13 +143,14 @@ write_racket_main() {
      (number->string tertiary))))
 
 (define (consent-main-help)
-  (display "Usage: consent [--help] [--version] [--eval SOURCE] [--script FILE]\n")
+  (display "Usage: consent [--help] [--version] [--repl] [--eval SOURCE] [--script FILE]\n")
   (display "\n")
   (display "Commands:\n")
   (display "  --help          Show this help.\n")
   (display "  --version       Print the Consent Scheme runtime version.\n")
   (display "  --eval SOURCE   Evaluate a pure Consent Scheme expression.\n")
-  (display "  --script FILE   Run an R7RS Scheme source file.\n"))
+  (display "  --script FILE   Run an R7RS Scheme source file.\n")
+  (display "  --repl          Start the portable terminal REPL shell.\n"))
 
 (define (consent-main-error message)
   (display "consent: " (current-error-port))
@@ -197,6 +198,8 @@ write_racket_main() {
     (if (null? (cdr args))
         (consent-main-error "--script requires FILE")
         (consent-main-script (cadr args))))
+   ((string=? (car args) "--repl")
+    (consent-main:cli-repl-shell:cli-repl-main))
    (else
     (consent-main-error
      (string-append "unknown option " (car args))))))
@@ -270,13 +273,14 @@ write_gambit_main() {
      (number->string tertiary))))
 
 (define (consent-main-help)
-  (display "Usage: consent [--help] [--version] [--eval SOURCE] [--script FILE]\n")
+  (display "Usage: consent [--help] [--version] [--repl] [--eval SOURCE] [--script FILE]\n")
   (display "\n")
   (display "Commands:\n")
   (display "  --help          Show this help.\n")
   (display "  --version       Print the Consent Scheme runtime version.\n")
   (display "  --eval SOURCE   Evaluate a pure Consent Scheme expression.\n")
-  (display "  --script FILE   Run an R7RS Scheme source file.\n"))
+  (display "  --script FILE   Run an R7RS Scheme source file.\n")
+  (display "  --repl          Start the portable terminal REPL shell.\n"))
 
 (define (consent-main-error message)
   (display "consent: " (current-error-port))
@@ -324,6 +328,8 @@ write_gambit_main() {
     (if (null? (cdr args))
         (consent-main-error "--script requires FILE")
         (consent-main-script (cadr args))))
+   ((string=? (car args) "--repl")
+    (consent-main:cli-repl-shell:cli-repl-main))
    (else
     (consent-main-error
      (string-append "unknown option " (car args))))))
