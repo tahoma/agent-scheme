@@ -66,6 +66,29 @@ Return a plist containing :status and :output."
                   (buffer-string))))
       (kill-buffer buffer))))
 
+(defun consent-compile-portable-test--run-repl (program input)
+  "Run compiled PROGRAM's `--repl' with INPUT fed on standard input.
+Return a plist with :status and :output, where :output is the program-output
+stream (stdout) only; the interaction record stream (stderr) is discarded so the
+assertion covers stream separation as well as the command."
+  (let ((in-file (make-temp-file "consent-repl-input-"))
+        (err-file (make-temp-file "consent-repl-stderr-"))
+        (buffer (generate-new-buffer " *consent-compiled-repl-test*")))
+    (unwind-protect
+        (progn
+          (with-temp-file in-file (insert input))
+          (let ((status
+                 (let ((default-directory consent--test-root))
+                   (process-file program in-file (list buffer err-file) nil
+                                 "--repl"))))
+            (list :status status
+                  :output
+                  (with-current-buffer buffer
+                    (buffer-string)))))
+      (ignore-errors (delete-file in-file))
+      (ignore-errors (delete-file err-file))
+      (kill-buffer buffer))))
+
 (defun consent-compile-portable-test--status (result)
   "Return RESULT's process status."
   (plist-get result :status))
@@ -149,7 +172,15 @@ Return a plist containing :status and :output."
              (equal
               (consent-compile-portable-test--run-executable
                runner "--script" "tests/scheme/consent-reader-test.scm")
-              '(:status 0 :output "Scheme reader tests passed\n"))))
+              '(:status 0 :output "Scheme reader tests passed\n")))
+            (should
+             (equal
+              (consent-compile-portable-test--run-repl
+               runner
+               (concat "(import (scheme base) (scheme write))\n"
+                       "(display \"ok\")(newline)\n"
+                       "(exit)\n"))
+              '(:status 0 :output "ok\n"))))
         (when (file-directory-p build-dir)
           (delete-directory build-dir t))))))
 
@@ -256,7 +287,15 @@ Return a plist containing :status and :output."
              (equal
               (consent-compile-portable-test--run-executable
                runner "--script" "tests/scheme/consent-reader-test.scm")
-              '(:status 0 :output "Scheme reader tests passed\n"))))
+              '(:status 0 :output "Scheme reader tests passed\n")))
+            (should
+             (equal
+              (consent-compile-portable-test--run-repl
+               runner
+               (concat "(import (scheme base) (scheme write))\n"
+                       "(display \"ok\")(newline)\n"
+                       "(exit)\n"))
+              '(:status 0 :output "ok\n"))))
         (when (file-directory-p build-dir)
           (delete-directory build-dir t))))))
 
