@@ -46,7 +46,7 @@ CONSENT_FULL_TEST_JOBS ?= $(words $(CONSENT_FULL_TEST_SHARD_TARGETS))
 
 .DEFAULT_GOAL := help
 
-.PHONY: help clean clean-compile compile compile-elisp test test-full test-portable test-portable-chibi test-portable-eval test-portable-rest test-portable-gambit test-portable-gambit-native test-portable-racket test-portable-compiled test-portable-guile test-portable-gauche test-emacs-hosted test-emacs-core test-emacs-library test-emacs-capabilities test-emacs-tools test-live-model-ci test-live-model conformance-oracle
+.PHONY: help clean clean-compile compile compile-elisp repl test test-full test-portable test-portable-chibi test-portable-eval test-portable-rest test-portable-gambit test-portable-gambit-native test-portable-racket test-portable-compiled test-portable-guile test-portable-gauche test-emacs-hosted test-emacs-core test-emacs-library test-emacs-capabilities test-emacs-tools test-live-model-ci test-live-model conformance-oracle
 
 help:
 	@printf '%s\n' 'Consent Scheme top-level actions:'
@@ -55,6 +55,7 @@ help:
 	@printf '  %-26s %s\n' 'clean-compile' 'Remove host-compiled portable executable outputs.'
 	@printf '  %-26s %s\n' 'compile' 'Build host-compiled portable executable artifacts.'
 	@printf '  %-26s %s\n' 'compile-elisp' 'Byte-compile checked-in Elisp sources.'
+	@printf '  %-26s %s\n' 'repl' 'Start the portable terminal REPL shell (ARGS=... passes flags).'
 	@printf '  %-26s %s\n' 'test' 'Run the trimmed default local shard set.'
 	@printf '  %-26s %s\n' 'test-full' 'Run the exhaustive local shard set across every host and Emacs shard.'
 	@printf '  %-26s %s\n' 'test-portable' 'Run the default portable R7RS host shards.'
@@ -137,6 +138,13 @@ compile:
 
 compile-elisp:
 	$(EMACS) -Q --batch -L lisp --eval "(setq load-prefer-newer t)" -f batch-byte-compile $(CONSENT_ELISP_SOURCES)
+
+# Start the portable terminal REPL shell outside Emacs (docs/portable-repl.md).
+# Reads Consent Scheme forms from stdin, writes interaction-contract records to
+# stderr, and keeps program output on stdout. Pass arguments through ARGS, e.g.
+# make repl ARGS='--session demo'.
+repl:
+	@tools/consent-repl $(ARGS)
 
 ifneq ($(strip $(CONSENT_TEST_SELECTOR)),)
 test:

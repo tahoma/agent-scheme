@@ -1,0 +1,44 @@
+#!/bin/sh
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Tahoma Toelkes
+
+# Portable terminal REPL shell entrypoint for the Consent Scheme runtime
+# (docs/portable-repl.md). Reads Consent Scheme forms incrementally from stdin,
+# evaluates them in a durable authorized session, and writes the cross-host REPL
+# interaction contract record stream (docs/repl-interaction-contract.md) to the
+# diagnostic stream (stderr). Program output written by evaluated forms stays on
+# stdout, so the shell can be scripted without corrupting program output.
+#
+# This is the first interactive non-Emacs entrypoint; the Emacs incremental REPL
+# entry is its parity twin.
+#
+# Usage: tools/consent-repl [--session NAME]
+# Host:  CONSENT_REPL_HOST=chibi|guile|gauche (default: auto-detect)
+# See scheme/cli/repl-shell.sld for the emitted record vocabulary.
+
+set -eu
+
+repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+scheme_root="$repo_root/scheme"
+program="$repo_root/tools/consent-repl.scm"
+
+run_chibi() { exec chibi-scheme -A "$scheme_root" "$program" "$@"; }
+run_guile() { exec guile --no-auto-compile --r7rs -L "$scheme_root" "$program" "$@"; }
+run_gauche() { exec gosh -I "$scheme_root" -r7 "$program" "$@"; }
+
+case "${CONSENT_REPL_HOST:-}" in
+  chibi) run_chibi "$@" ;;
+  guile) run_guile "$@" ;;
+  gauche) run_gauche "$@" ;;
+  "")
+    if command -v chibi-scheme >/dev/null 2>&1; then run_chibi "$@"
+    elif command -v guile >/dev/null 2>&1; then run_guile "$@"
+    elif command -v gosh >/dev/null 2>&1; then run_gauche "$@"
+    else
+      printf '%s\n' "consent-repl: no supported R7RS host found (need chibi-scheme, guile, or gosh)" >&2
+      exit 2
+    fi ;;
+  *)
+    printf '%s\n' "consent-repl: unknown CONSENT_REPL_HOST: ${CONSENT_REPL_HOST}" >&2
+    exit 2 ;;
+esac
