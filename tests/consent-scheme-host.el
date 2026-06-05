@@ -18,6 +18,7 @@
     "tests/scheme/consent-native-cli-daemon-process-test.scm"
     "tests/scheme/consent-module-boundary-test.scm"
     "tests/scheme/consent-transcript-test.scm"
+    "tests/scheme/consent-repl-test.scm"
     "tests/scheme/consent-eval-test.scm")
   "Portable Scheme test files exercised by full-suite host shards.")
 

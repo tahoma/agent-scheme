@@ -123,6 +123,7 @@ write_racket_main() {
         (prefix (consent session) consent-main:session:)
         (prefix (cli process-host) consent-main:cli-process-host:)
         (prefix (cli native-cli) consent-main:cli-native-cli:)
+        (prefix (cli repl-shell) consent-main:cli-repl-shell:)
         (only (consent eval)
               consent-eval-source
               consent-value->external)
@@ -249,6 +250,7 @@ write_gambit_main() {
         (prefix (consent session) consent-main:session:)
         (prefix (cli process-host) consent-main:cli-process-host:)
         (prefix (cli native-cli) consent-main:cli-native-cli:)
+        (prefix (cli repl-shell) consent-main:cli-repl-shell:)
         (only (consent eval)
               consent-eval-source
               consent-value->external)
@@ -515,6 +517,9 @@ compile_gambit() {
   copy_gambit_source \
     "$scheme_dir/cli/native-cli.sld" \
     "$src_dir/cli/native-cli.sld"
+  copy_gambit_source \
+    "$scheme_dir/cli/repl-shell.sld" \
+    "$src_dir/cli/repl-shell.sld"
 
   "$gsi" -:r7rs,search="$scheme_dir" \
     -e '(import (scheme base) (scheme write)) (write (+ 1 2)) (newline)' \
@@ -625,6 +630,10 @@ compile_gambit() {
     cli/native-cli \
     "$scheme_dir/cli/native-cli.sld" \
     "$src_dir/cli/native-cli.c"
+  compile_gambit_module \
+    cli/repl-shell \
+    "$scheme_dir/cli/repl-shell.sld" \
+    "$src_dir/cli/repl-shell.c"
 
   "$gsc" -:r7rs,search="$scheme_dir" \
     -c -o "$main_c" "$main_file" \
