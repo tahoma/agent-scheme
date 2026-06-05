@@ -14,6 +14,11 @@
           consent-expand-source
           consent-eval-result
           consent-eval-source-result
+          consent-make-interaction-context
+          consent-interaction-context?
+          consent-interaction-context-session-id
+          consent-interaction-program-output
+          consent-interaction-eval-form
           consent-make-empty-environment
           consent-make-base-environment
           consent-base-primitive-names

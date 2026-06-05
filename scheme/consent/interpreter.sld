@@ -14,6 +14,11 @@
           consent-expand-source
           consent-eval-result
           consent-eval-source-result
+          consent-make-interaction-context
+          consent-interaction-context?
+          consent-interaction-context-session-id
+          consent-interaction-program-output
+          consent-interaction-eval-form
           consent-make-empty-environment
           consent-make-base-environment
           consent-base-primitive-names
@@ -7699,5 +7704,77 @@ condition does not."
              (ok-result-datum
               (trampoline (make-sequence forms #t) environment context)
               context))))))
+
+    ;; A durable interaction context bundles the persistent state a REPL session
+    ;; reuses across submissions: the evaluator options (carrying `session-id',
+    ;; policy actions, and capability grants), the mutable value environment, and
+    ;; the syntax environment.  Each submission still runs in a fresh evaluation
+    ;; context with its own step/host-callback/event budget -- exactly as
+    ;; `consent-eval-source-result' does -- but that context reuses the persisted
+    ;; value and syntax environments.  Value definitions and imports persist
+    ;; because they mutate the shared value environment; macros and imported
+    ;; syntax persist because the shared syntax environment is threaded through
+    ;; instead of being rebuilt per call.  This is the portable peer of the Emacs
+    ;; session evaluator that drives `consent-repl-eval-source'.
+    (define-record-type <consent-interaction-context>
+      (make-consent-interaction-context options environment syntax-environment
+                                        program-output-port)
+      consent-interaction-context?
+      (options interaction-context-options)
+      (environment interaction-context-environment)
+      (syntax-environment interaction-context-syntax-environment)
+      (program-output-port interaction-context-program-output-port))
+
+    (define (interaction-context-session-id-from-options options)
+      "Return the SESSION-ID configured in OPTIONS, or #f when unsessioned."
+      (let ((entry (assq 'session-id options)))
+        (and entry (cdr entry))))
+
+    (define (make-interaction-program-output-port)
+      "Return a fresh textual string output port (like `open-output-string') for the program output stream."
+      (make-consent-port
+       'string #f #t #t #f #t #f 0 ""
+       #f '() #f '() #f #f #f '()))
+
+    (define (consent-make-interaction-context . rest)
+      "Create a durable interaction context from optional REST options (session-id, policy-actions, capability-grants) whose definitions, imports, macros, and program output persist across `consent-interaction-eval-form' submissions."
+      (let* ((options (if (null? rest) '() (car rest)))
+             (context (new-eval-context options))
+             (environment (consent-make-base-environment)))
+        (set-context-interaction-environment! context environment)
+        (ensure-base-syntax! context environment)
+        (make-consent-interaction-context
+         options environment (context-syntax-environment context)
+         (make-interaction-program-output-port))))
+
+    (define (consent-interaction-context-session-id interaction)
+      "Return the session id INTERACTION evaluates under, or #f when unsessioned."
+      (interaction-context-session-id-from-options
+       (interaction-context-options interaction)))
+
+    (define (consent-interaction-program-output interaction)
+      "Return the program output the most recent `consent-interaction-eval-form' submission wrote, cleared before each evaluation."
+      (consent-port-contents
+       (interaction-context-program-output-port interaction)))
+
+    (define (consent-interaction-eval-form interaction form)
+      "Evaluate one already-read top-level FORM in durable INTERACTION, reusing its value/syntax environments and program-output port, and return an `evaluation-result' datum (ok/values or captured error) like `consent-eval-source-result'."
+      (let* ((options (interaction-context-options interaction))
+             (environment (interaction-context-environment interaction))
+             (syntax-environment
+              (interaction-context-syntax-environment interaction))
+             (program-output-port
+              (interaction-context-program-output-port interaction))
+             (context (new-eval-context options)))
+        (set-consent-port-contents! program-output-port "")
+        (set-context-syntax-environment! context syntax-environment)
+        (set-context-interaction-environment! context environment)
+        (set-context-current-output-port! context program-output-port)
+        (call-with-result-condition-handler
+         context
+         (lambda ()
+           (ok-result-datum
+            (trampoline (make-sequence (list form) #t) environment context)
+            context)))))
 
     ))

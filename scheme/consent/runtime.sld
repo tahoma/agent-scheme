@@ -145,6 +145,7 @@
           set-context-host-callbacks!
           context-maximum-host-callbacks
           context-event-count
+          set-context-event-count!
           context-maximum-events
           context-maximum-event-nodes
           context-syntax-environment
