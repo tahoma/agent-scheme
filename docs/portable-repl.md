@@ -62,13 +62,59 @@ build/compile/racket/bin/consent --repl                # or the gambit binary
 printf '(+ 1 2)\n(exit)\n' | build/compile/gambit/bin/consent --repl --session demo
 ```
 
-`--repl` accepts the same `--session NAME` option and uses the same stream
-separation (records on stderr, program output on stdout) and close-status exit
-code as the interpreted launcher.
+`--repl` accepts the same `--session NAME`, `--chrome NAME`, and `--color=WHEN`
+options and uses the same stream separation (chrome on stderr, program output on
+stdout) and close-status exit code as the interpreted launcher.
 
 The setup such a binary needs is at *build* time, not run time: the compile
 toolchain documented in [development.md](development.md) — Gambit (`gsi`/`gsc`),
 or Racket plus its R7RS language package (`raco pkg install --auto r7rs`).
+
+### Chrome (human presentation)
+
+The canonical surface of the REPL is the Scheme-readable record stream
+([the interaction contract](repl-interaction-contract.md))  — ideal for tooling,
+debugging, and the cross-host parity corpus, but heavy as the everyday human
+default. A **chrome** is a presentation layer over those records: a pure function
+that maps each record to readable terminal text. Chrome is host-specific
+presentation *under* the contract; the records stay the canonical, byte-level
+parity surface, and chrome rides above them.
+
+Select a chrome with `--chrome NAME`:
+
+| Chrome    | Intent                                                                    |
+| --------- | ------------------------------------------------------------------------- |
+| `comment` | **Default.** Prompts, results, and diagnostics are block comments and submitted forms are echoed as bare code, so the whole stream is valid Consent Scheme that *replays* to the same evaluation apart from program output. The prompt shows the ordinal alone for the lone default session and grows a session label when the session is named. |
+| `datum`   | The raw record stream, one datum per line — the canonical machine-readable surface. Never colored. Always reachable, regardless of the default. |
+| `classic` | A `>`/`...` prompt and bare result values.                                |
+| `quiet`   | No prompts; results and conditions only.                                  |
+| `silent`  | Suppresses all interaction records; only program output reaches stdout.   |
+
+```sh
+printf '(+ 1 2)\n(exit)\n' | tools/consent-repl --chrome classic
+printf '(+ 1 2)\n(exit)\n' | tools/consent-repl --chrome datum   # raw records
+make repl ARGS='--chrome quiet'
+```
+
+Styling is expressed as named **semantic roles** (`furniture`, `prompt-session`,
+`prompt-ordinal`, `result-marker`, `result-value`, `error-marker`, `error-text`,
+`exit-status`), never raw ANSI, so another host (the Emacs renderer, #425) can
+realize the same roles as faces. The terminal renderer maps roles to ANSI SGR.
+The built-in chromes are ordinary registered procedures over records in
+`(cli repl-chrome)`, so a future custom chrome (#426) is the same kind of value.
+
+#### Color
+
+`--color=WHEN` controls ANSI color, where `WHEN` is one of:
+
+- `auto` (default) — color only when the control channel is a terminal and the
+  `NO_COLOR` environment variable is unset, so output is plain when piped or
+  redirected;
+- `always` — color unconditionally (an explicit override that ignores `NO_COLOR`);
+- `never` — never color.
+
+`NO_COLOR` (when set to a non-empty value) disables color under `auto`. The
+spaced form `--color always` is also accepted.
 
 ### Streams
 
@@ -78,8 +124,9 @@ so it can be scripted without corrupting program output:
 - **stdout** carries only *program output* — whatever evaluated forms write to
   the current output port (for example via `(display ...)` from `(scheme write)`,
   or `write-string` from `(scheme base)`).
-- **stderr** carries the *interaction records* — prompts, submissions, results,
-  conditions, and the close record.
+- **stderr** carries the *interaction channel* — prompts, results, conditions,
+  and the close record, rendered through the active chrome (`--chrome datum` puts
+  the raw record stream here).
 
 So a pipeline that reads the shell's stdout sees only program output:
 
@@ -94,8 +141,9 @@ close (`closed-error`), mapping the contract close status to a shell exit code.
 
 ## Emitted records
 
-Each turn of the loop emits the contract records on stderr, one Scheme datum per
-line. For `(+ 1 2)` followed by end of input:
+Under `--chrome datum`, each turn of the loop emits the contract records on
+stderr, one Scheme datum per line — the canonical surface every chrome renders
+from. For `(+ 1 2)` followed by end of input:
 
 ```scheme
 (repl-prompt (session demo) (ordinal 1) (state ready) (pending #f))
@@ -149,7 +197,10 @@ and therefore runs on every portable host shard (Gambit, Racket, Guile, Gauche,
 and the compiled host). It asserts simple evaluation, persistent definitions and
 macros, session-gated `interaction-environment`, recoverable reader and evaluator
 conditions, EOF and explicit-exit close status, policy-gated host-effect denial,
-and program-output/record stream separation.
+and program-output/record stream separation. It also covers the chrome layer:
+the chrome registry, the `datum` chrome reproducing the raw record stream, the
+`comment` chrome replaying unedited, the `classic`/`quiet`/`silent` renderings,
+the TTY/NO_COLOR color decision, and option parsing.
 
 Run the default verification, which includes the Racket host shard:
 

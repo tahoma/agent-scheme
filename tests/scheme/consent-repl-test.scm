@@ -11,7 +11,8 @@
 
 (import (scheme base)
         (scheme write)
-        (cli repl-shell))
+        (cli repl-shell)
+        (cli repl-chrome))
 
 ;; Count failed checks so the portable runner can report all mismatches.
 (define failures 0)
@@ -244,6 +245,154 @@
              (count-of records 'repl-result) 3)
       (check-true 'stream-separation-has-exit
                   (> (count-of records 'repl-exit) 0)))))
+
+;;;; Pluggable chrome layer (presentation over the canonical record stream)
+
+;; The ANSI SGR escape, built without a literal escape character in source.
+(define escape (string (integer->char 27)))
+
+;; Return #t when HAYSTACK contains NEEDLE as a substring.
+(define (string-contains? haystack needle)
+  (let ((hay (string-length haystack))
+        (need (string-length needle)))
+    (if (zero? need)
+        #t
+        (let loop ((start 0))
+          (cond
+           ((> (+ start need) hay) #f)
+           ((let match ((index 0))
+              (cond
+               ((>= index need) #t)
+               ((char=? (string-ref haystack (+ start index))
+                        (string-ref needle index))
+                (match (+ index 1)))
+               (else #f)))
+            #t)
+           (else (loop (+ start 1))))))))
+
+;; Render RECORDS as the raw datum stream the `datum' chrome must reproduce.
+(define (datum-stream records)
+  (let ((port (open-output-string)))
+    (for-each (lambda (record) (write record port) (newline port)) records)
+    (get-output-string port)))
+
+;; Return the ordered `display' strings of the `repl-result' records in RECORDS.
+(define (result-displays records)
+  (map (lambda (result) (field result 'display))
+       (records-of records 'repl-result)))
+
+;;;; The registry: built-in chromes are ordinary registered procedures
+
+(check 'chrome-default-name (cli-repl-chrome-default-name) 'comment)
+(check-true 'chrome-comment-procedure
+            (procedure? (cli-repl-chrome-lookup 'comment)))
+(check-true 'chrome-lookup-by-string
+            (procedure? (cli-repl-chrome-lookup "classic")))
+(check-false 'chrome-unknown-lookup (cli-repl-chrome-lookup 'no-such-chrome))
+(let ((names (cli-repl-chrome-names)))
+  (check-true 'chrome-names-complete
+              (and (memq 'comment names) (memq 'datum names)
+                   (memq 'classic names) (memq 'quiet names)
+                   (memq 'silent names) #t)))
+
+;;;; The `datum' chrome reproduces the raw record stream and stays reachable
+
+;; Paint each record with the datum chrome over the SAME record objects the raw
+;; stream writes, so the comparison is stable on hosts whose `write' embeds a
+;; per-object address for opaque values.
+(let* ((records (drive "(+ 1 2)\n(exit)\n"))
+       (datum (cli-repl-chrome-lookup 'datum))
+       (render (lambda (color?)
+                 (let loop ((records records) (accumulated ""))
+                   (if (null? records)
+                       accumulated
+                       (loop (cdr records)
+                             (string-append
+                              accumulated
+                              (cli-repl-chrome-paint (datum (car records))
+                                                     color?))))))))
+  (check 'datum-recovers-raw-stream (render #f) (datum-stream records))
+  ;; The datum chrome is never colored, even with color forced on.
+  (check-false 'datum-never-colored (string-contains? (render #t) escape))
+  ;; The canonical view is reachable regardless of any default chrome change.
+  (check-true 'datum-always-reachable
+              (procedure? (cli-repl-chrome-lookup 'datum))))
+
+;;;; The `comment' chrome is valid, replayable Consent Scheme
+
+(let* ((input "(+ 1 2)\n(define base 7)\n(* base 3)\n")
+       (rendered (cli-repl-rendered-from-string input "repl-main" 'comment #f)))
+  ;; Prompts, results, and diagnostics are block comments.
+  (check-true 'comment-uses-block-comments (string-contains? rendered "#| "))
+  ;; Re-driving the rendered control stream reproduces the same results: the
+  ;; comments are ignored and the echoed forms re-evaluate identically.
+  (check 'comment-replays-unedited
+         (result-displays (drive rendered))
+         (result-displays (drive input))))
+
+;; The default-session prompt shows the ordinal alone; a named session grows a
+;; session label.
+(check 'comment-default-session-prompt
+       (cli-repl-rendered-from-string "(+ 1 2)\n" "repl-main" 'comment #f)
+       "#| 1 |# (+ 1 2)\n#| => 3 |#\n#| 2 |# #| exit closed-ok |#\n")
+(check 'comment-named-session-prompt
+       (cli-repl-rendered-from-string "(+ 1 2)\n" "project-main" 'comment #f)
+       (string-append "#| project-main:1 |# (+ 1 2)\n#| => 3 |#\n"
+                      "#| project-main:2 |# #| exit closed-ok |#\n"))
+
+;;;; The `classic', `quiet', and `silent' chromes
+
+(check 'classic-prompts-and-values
+       (cli-repl-rendered-from-string "(+ 1 2)\n" "repl-main" 'classic #f)
+       "> 3\n> ")
+(check 'quiet-results-only
+       (cli-repl-rendered-from-string "(+ 1 2)\n" "repl-main" 'quiet #f)
+       "3\n")
+(check 'silent-suppresses-all
+       (cli-repl-rendered-from-string "(+ 1 2)\n" "repl-main" 'silent #f)
+       "")
+
+;;;; A recoverable condition still renders under a human chrome
+
+(let ((rendered
+       (cli-repl-rendered-from-string "undefined-name\n" "repl-main"
+                                      'comment #f)))
+  (check-true 'comment-condition-marker (string-contains? rendered "#| !! ")))
+
+;;;; Color is TTY-gated, overridable, and strips when piped or NO_COLOR is set
+
+(check 'color-never-off (cli-repl-chrome-color? 'never #f #t) #f)
+(check 'color-always-on (cli-repl-chrome-color? 'always #t #f) #t)
+(check 'color-auto-tty-on (cli-repl-chrome-color? 'auto #f #t) #t)
+(check 'color-auto-piped-off (cli-repl-chrome-color? 'auto #f #f) #f)
+(check 'color-auto-no-color-off (cli-repl-chrome-color? 'auto #t #t) #f)
+
+;; The painter adds ANSI SGR only when color is enabled.
+(check-true 'paint-color-emits-escape
+            (string-contains?
+             (cli-repl-rendered-from-string "(+ 1 2)\n" "repl-main" 'comment #t)
+             escape))
+(check-false 'paint-plain-has-no-escape
+             (string-contains?
+              (cli-repl-rendered-from-string "(+ 1 2)\n" "repl-main"
+                                             'comment #f)
+              escape))
+
+;;;; Option parsing: --session, --chrome, --color (inline and spaced)
+
+(let ((options (cli-repl-parse-options
+                (list "--chrome" "classic" "--color=always" "--session" "demo"))))
+  (check 'parse-session (cdr (assq 'session options)) "demo")
+  (check 'parse-chrome (cdr (assq 'chrome options)) 'classic)
+  (check 'parse-color-inline (cdr (assq 'color options)) 'always))
+(let ((options (cli-repl-parse-options (list "--color" "never"))))
+  (check 'parse-color-spaced (cdr (assq 'color options)) 'never)
+  (check 'parse-chrome-default (cdr (assq 'chrome options)) 'comment)
+  (check 'parse-session-default (cdr (assq 'session options)) "repl-main"))
+;; A bare `--repl' token (passed through from the compiled host dispatch) and any
+;; unrecognized argument are ignored, leaving the defaults intact.
+(let ((options (cli-repl-parse-options (list "--repl"))))
+  (check 'parse-ignores-repl-token (cdr (assq 'chrome options)) 'comment))
 
 (if (> failures 0)
     (error "portable terminal REPL tests failed" failures))

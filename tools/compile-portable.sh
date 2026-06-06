@@ -123,6 +123,7 @@ write_racket_main() {
         (prefix (consent session) consent-main:session:)
         (prefix (cli process-host) consent-main:cli-process-host:)
         (prefix (cli native-cli) consent-main:cli-native-cli:)
+        (prefix (cli repl-chrome) consent-main:cli-repl-chrome:)
         (prefix (cli repl-shell) consent-main:cli-repl-shell:)
         (prefix (cli script) consent-main:cli-script:)
         (only (consent eval)
@@ -153,7 +154,13 @@ write_racket_main() {
   (display "  --script FILE   Run an R7RS Scheme source file.\n")
   (display "  --repl          Start the portable terminal REPL shell.\n")
   (display "  FILE            Run FILE as a script (same as --script FILE),\n")
-  (display "                  so a #!/usr/bin/env consent shebang runs directly.\n"))
+  (display "                  so a #!/usr/bin/env consent shebang runs directly.\n")
+  (display "\n")
+  (display "REPL options (with --repl):\n")
+  (display "  --session NAME  Name the REPL session id.\n")
+  (display "  --chrome NAME   Presentation chrome: comment (default), datum,\n")
+  (display "                  classic, quiet, or silent.\n")
+  (display "  --color=WHEN    Colorize chrome: auto (default), always, never.\n"))
 
 (define (consent-main-error message)
   (display "consent: " (current-error-port))
@@ -262,6 +269,7 @@ write_gambit_main() {
         (prefix (consent session) consent-main:session:)
         (prefix (cli process-host) consent-main:cli-process-host:)
         (prefix (cli native-cli) consent-main:cli-native-cli:)
+        (prefix (cli repl-chrome) consent-main:cli-repl-chrome:)
         (prefix (cli repl-shell) consent-main:cli-repl-shell:)
         (prefix (cli script) consent-main:cli-script:)
         (only (consent eval)
@@ -292,7 +300,13 @@ write_gambit_main() {
   (display "  --script FILE   Run an R7RS Scheme source file.\n")
   (display "  --repl          Start the portable terminal REPL shell.\n")
   (display "  FILE            Run FILE as a script (same as --script FILE),\n")
-  (display "                  so a #!/usr/bin/env consent shebang runs directly.\n"))
+  (display "                  so a #!/usr/bin/env consent shebang runs directly.\n")
+  (display "\n")
+  (display "REPL options (with --repl):\n")
+  (display "  --session NAME  Name the REPL session id.\n")
+  (display "  --chrome NAME   Presentation chrome: comment (default), datum,\n")
+  (display "                  classic, quiet, or silent.\n")
+  (display "  --color=WHEN    Colorize chrome: auto (default), always, never.\n"))
 
 (define (consent-main-error message)
   (display "consent: " (current-error-port))
@@ -584,6 +598,9 @@ compile_gambit() {
     "$scheme_dir/cli/native-cli.sld" \
     "$src_dir/cli/native-cli.sld"
   copy_gambit_source \
+    "$scheme_dir/cli/repl-chrome.sld" \
+    "$src_dir/cli/repl-chrome.sld"
+  copy_gambit_source \
     "$scheme_dir/cli/repl-shell.sld" \
     "$src_dir/cli/repl-shell.sld"
   copy_gambit_source \
@@ -699,6 +716,10 @@ compile_gambit() {
     cli/native-cli \
     "$scheme_dir/cli/native-cli.sld" \
     "$src_dir/cli/native-cli.c"
+  compile_gambit_module \
+    cli/repl-chrome \
+    "$scheme_dir/cli/repl-chrome.sld" \
+    "$src_dir/cli/repl-chrome.c"
   compile_gambit_module \
     cli/repl-shell \
     "$scheme_dir/cli/repl-shell.sld" \
