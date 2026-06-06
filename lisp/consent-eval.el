@@ -246,6 +246,102 @@ agent events, and handle references across calls."
        (consent--audit-evaluation-error input-form condition context)
        (consent--condition-result-datum condition context)))))
 
+;;;; Durable interaction context for incremental REPL sessions
+
+;; A durable interaction context bundles the persistent state a REPL session
+;; reuses across submissions: the evaluator options (carrying `:session-id',
+;; policy actions, and capability grants), the mutable value environment, the
+;; syntax environment, and the program-output port.  Each submission still runs
+;; in a fresh evaluation context with its own step/host-callback/event budget --
+;; exactly as `consent-eval-source-result' does -- but that context reuses the
+;; persisted value and syntax environments.  Value definitions and imports
+;; persist because they mutate the shared value environment; macros and imported
+;; syntax persist because the shared syntax environment is threaded through
+;; instead of being rebuilt per call.  This is the Emacs peer of the portable
+;; `(consent eval)' interaction context that drives the portable terminal REPL
+;; shell, so the two hosts read and evaluate one form at a time over the same
+;; durable substrate (docs/repl-interaction-contract.md).
+
+(cl-defstruct (consent--interaction-context
+               (:constructor consent--make-interaction-context-record
+                             (options environment syntax-environment
+                              program-output-port))
+               (:copier nil))
+  "Durable state a REPL session reuses across submissions.
+OPTIONS are the evaluator options (carrying `:session-id', `:policy-actions',
+and `:capability-grants').  ENVIRONMENT is the persistent value environment and
+SYNTAX-ENVIRONMENT the persistent syntax environment, so definitions, imports,
+and macros persist across `consent-interaction-eval-form' submissions.
+PROGRAM-OUTPUT-PORT captures what each submission writes to current output,
+separated from the interaction record stream."
+  options environment syntax-environment program-output-port)
+
+;;;###autoload
+(defun consent-make-interaction-context (&optional options)
+  "Create a durable interaction context from plist OPTIONS.
+OPTIONS may carry `:session-id', `:policy-actions', and `:capability-grants'
+whose definitions, imports, macros, and program output persist across
+`consent-interaction-eval-form' submissions.  Mirrors the portable
+`(consent eval)' `consent-make-interaction-context'."
+  (let* ((context (consent--new-eval-context options))
+         (environment (consent-make-base-environment)))
+    (setf (consent--eval-context-interaction-environment context)
+          environment)
+    (consent--ensure-base-syntax context environment)
+    (consent--make-interaction-context-record
+     options environment
+     (consent--eval-context-syntax-environment context)
+     (consent--primitive-open-output-string nil nil))))
+
+;;;###autoload
+(defalias 'consent-interaction-context-p #'consent--interaction-context-p
+  "Return non-nil when its argument is a durable interaction context.")
+
+;;;###autoload
+(defun consent-interaction-context-session-id (interaction)
+  "Return the session id INTERACTION evaluates under, or nil when unsessioned."
+  (plist-get (consent--interaction-context-options interaction) :session-id))
+
+;;;###autoload
+(defun consent-interaction-program-output (interaction)
+  "Return program output the most recent `consent-interaction-eval-form' wrote.
+The buffer is cleared before each evaluation."
+  (or (consent--port-contents
+       (consent--interaction-context-program-output-port interaction))
+      ""))
+
+;;;###autoload
+(defun consent-interaction-eval-form (interaction form)
+  "Evaluate one already-read top-level FORM in durable INTERACTION.
+Reuse INTERACTION's value and syntax environments and program-output port and
+return an `evaluation-result' datum (ok/values or captured error) like
+`consent-eval-source-result', never signaling on an evaluator error.  Mirrors
+the portable `(consent eval)' `consent-interaction-eval-form'."
+  (let* ((options (consent--interaction-context-options interaction))
+         (environment (consent--interaction-context-environment interaction))
+         (syntax-environment
+          (consent--interaction-context-syntax-environment interaction))
+         (program-output-port
+          (consent--interaction-context-program-output-port interaction))
+         (context (consent--new-eval-context options)))
+    (setf (consent--port-contents program-output-port) "")
+    (setf (consent--eval-context-syntax-environment context)
+          syntax-environment)
+    (setf (consent--eval-context-interaction-environment context)
+          environment)
+    (setf (consent--eval-context-current-output-port context)
+          program-output-port)
+    (condition-case condition
+        (let ((value
+               (consent--trampoline
+                (consent--make-sequence (list form) t)
+                environment context)))
+          (consent-capability-expire-after-eval! context)
+          (consent--ok-result-datum value context))
+      (error
+       (consent-capability-expire-after-eval! context)
+       (consent--condition-result-datum condition context)))))
+
 (provide 'consent-eval)
 
 ;;; consent-eval.el ends here
