@@ -399,17 +399,25 @@ Each host MAY realize these as fits its environment, as long as the host-neutral
 records and behavior above are unchanged:
 
 - **Input source and editing.** The portable host draws interaction input from a
-  terminal/stdin byte stream; Emacs draws it from a buffer command. Line editing,
-  history, completion, and key bindings are explicitly out of scope here (#360,
-  #391, and later issues) and are not part of the contract.
+  terminal/stdin byte stream (the `(cli repl-shell)` shell, `tools/consent-repl`,
+  `make repl`); Emacs draws it from batch stdin or a submitted buffer/region (the
+  `consent-repl-stream` adapter — `consent-repl-stream-main` for a scripted
+  `emacs --batch` session and the `consent-repl-stream` command interactively).
+  Both read one complete form at a time over the shared recovery-aware reader.
+  Line editing, history, completion, and key bindings are explicitly out of scope
+  here (#360, #391, and later issues) and are not part of the contract.
 - **Physical stream multiplexing.** A terminal may render prompts/results/
-  diagnostics inline on one TTY; Emacs renders them across its native session
-  buffers (`*Consent Scheme: PROJECT*`, `*Agent Events: PROJECT*`,
+  diagnostics inline on one TTY; the Emacs batch entry writes the canonical
+  record stream to the error/control channel and program output to stdout, while
+  the in-editor surface renders across its native session buffers
+  (`*Consent Scheme: PROJECT*`, `*Agent Events: PROJECT*`,
   `*Agent Approvals: PROJECT*`). Both must preserve the logical channel
   separation.
 - **Close-status encoding.** The portable terminal maps `repl-exit` status to a
-  process exit code; Emacs maps it to a session disposition and buffer state.
-  The status vocabulary is shared; its encoding is host-specific.
+  process exit code; the Emacs batch entry maps it to the `emacs --batch` exit
+  code (`closed-ok` → 0, `closed-error` → 1), and the in-editor surface to a
+  session disposition and buffer state. The status vocabulary is shared; its
+  encoding is host-specific.
 - **Prompt presentation and approval UX.** The exact prompt strings, redaction
   rendering, and approval interaction belong to each host, within the prompt
   posture and audit obligations of the capability and CLI/daemon contracts.
@@ -513,14 +521,18 @@ ids). Selecting a restart by id is eval-independent and renders identically on
 both hosts, so it needs neither a sigil nor a submission-`kind` discriminator. No
 meta-command lexicon is left open for a later revision.
 
-### Open decision: last-value bindings
+### Resolved: last-value bindings (neither host)
 
 Whether a REPL session binds recent results to convenience identifiers
-(`*1`/`*2`/`*3`, or `it` for the last value) is unresolved. It is small, but it is
-a **parity decision, not a per-host accident**: if one host binds `*1` and the
-other does not, #392 fails. Once made, the decision (bind on both hosts, or
-neither) belongs to the host-neutral obligations; it is recorded here as open
-until #360 and #391 settle it.
+(`*1`/`*2`/`*3`, or `it` for the last value) was left open until the two host
+implementations settled it. It is small, but it is a **parity decision, not a
+per-host accident**: if one host binds `*1` and the other does not, #392 fails.
+Both the portable terminal REPL (#360) and the Emacs incremental entry (#391)
+ship **without** last-value bindings, so the decision is settled as *neither
+host binds*, and it is now a host-neutral obligation: a future revision that
+introduces them must do so on both hosts together. The contract continues to
+decline meta-command syntax for the same reasons given above; a last-value
+binding, if added, is an ordinary identifier, not a sigil.
 
 ## Conformance
 
