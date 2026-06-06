@@ -421,6 +421,19 @@ records and behavior above are unchanged:
 - **Prompt presentation and approval UX.** The exact prompt strings, redaction
   rendering, and approval interaction belong to each host, within the prompt
   posture and audit obligations of the capability and CLI/daemon contracts.
+- **Presentation chrome.** The everyday human view rides above the records as a
+  *chrome*: a pure function from each record to readable output, with styling
+  expressed as named **semantic roles** (`furniture`, `prompt-session`,
+  `prompt-ordinal`, `result-marker`, `result-value`, `error-marker`,
+  `error-text`, `exit-status`). The chrome *model* — the named set
+  (`comment` default, `datum`, `classic`, `quiet`, `silent`) and the
+  record-to-role mapping — is host-neutral and shared; the *substrate* is
+  host-specific. The portable terminal renders roles as ANSI SGR
+  (`(cli repl-chrome)`); Emacs renders the same roles as faces in the session
+  buffer (`consent-repl-chrome.el`). This is familiarity, not byte-identity:
+  forcing ANSI into a buffer (or faces onto a TTY) would fight both hosts. The
+  `datum` chrome reproduces the canonical record stream and is always reachable
+  on every host, so no chrome can suppress the parity surface.
 - **Scheduling.** Foreground versus background/job-driven evaluation and any
   buffer or daemon bookkeeping are host concerns, provided submissions are
   evaluated in order and each produces its contract records.
