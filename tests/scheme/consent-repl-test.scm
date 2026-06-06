@@ -344,12 +344,12 @@
 
 (check 'classic-prompts-and-values
        (cli-repl-rendered-from-string "(+ 1 2)\n" "repl-main" 'classic #f)
-       ">>> 3\n>>> ")
-;; `>>> ' and `... ' are both four columns, so a continued form's code aligns
-;; with the first submission's code.
+       "> 3\n> ")
+;; `> ' and `| ' are both two columns, so a continued form's code aligns with
+;; the first submission's code.
 (check 'classic-continuation-aligns
        (cli-repl-rendered-from-string "(+ 1\n2)\n" "repl-main" 'classic #f)
-       ">>> ... 3\n>>> ")
+       "> | 3\n> ")
 (check 'quiet-results-only
        (cli-repl-rendered-from-string "(+ 1 2)\n" "repl-main" 'quiet #f)
        "3\n")

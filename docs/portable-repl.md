@@ -86,7 +86,7 @@ Select a chrome with `--chrome NAME`:
 | --------- | ------------------------------------------------------------------------- |
 | `comment` | **Default.** Prompts, results, and diagnostics are block comments and submitted forms are echoed as bare code, so the whole stream is valid Consent Scheme that *replays* to the same evaluation apart from program output. The prompt shows the ordinal alone for the lone default session and grows a session label when the session is named. |
 | `datum`   | The raw record stream, one datum per line — the canonical machine-readable surface. Never colored. Always reachable, regardless of the default. |
-| `classic` | A `>>>`/`...` prompt (aligned, four columns each) and bare result values. |
+| `classic` | A `>`/`|` prompt (aligned two columns; `|` is a continuation gutter) and bare result values. |
 | `quiet`   | No prompts; results and conditions only.                                  |
 | `silent`  | Suppresses all interaction records; only program output reaches stdout.   |
 
