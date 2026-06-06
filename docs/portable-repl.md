@@ -98,10 +98,13 @@ make repl ARGS='--chrome quiet'
 
 Styling is expressed as named **semantic roles** (`furniture`, `prompt-session`,
 `prompt-ordinal`, `result-marker`, `result-value`, `error-marker`, `error-text`,
-`exit-status`), never raw ANSI, so another host (the Emacs renderer, #425) can
-realize the same roles as faces. The terminal renderer maps roles to ANSI SGR.
-The built-in chromes are ordinary registered procedures over records in
-`(cli repl-chrome)`, so a future custom chrome (#426) is the same kind of value.
+`exit-status`), never raw ANSI, so another host realizes the same roles on its
+own substrate. The terminal renderer maps roles to ANSI SGR; the Emacs host maps
+the same named set and record-to-role mapping to faces in its session buffer
+(`consent-repl-chrome.el`), so the standalone shell and the in-editor REPL share
+a presentation. The built-in chromes are ordinary registered procedures over
+records in `(cli repl-chrome)`, so a future custom chrome (#426) is the same
+kind of value.
 
 #### Color
 
