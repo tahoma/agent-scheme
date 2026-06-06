@@ -205,6 +205,16 @@ the chrome registry, the `datum` chrome reproducing the raw record stream, the
 `comment` chrome replaying unedited, the `classic`/`quiet`/`silent` renderings,
 the TTY/NO_COLOR color decision, and option parsing.
 
+Cross-host parity with the Emacs entry is enforced separately by the shared
+conformance corpus [`fixtures/repl/parity-cases.scm`](../fixtures/repl/parity-cases.scm).
+The portable runner `tests/scheme/consent-repl-parity-test.scm` and the Emacs
+runner `tests/consent-repl-parity-test.el` drive the same cases against both
+hosts and assert the same record sequence, so a host that drifts from the
+[REPL interaction contract](repl-interaction-contract.md) fails its runner. The
+portable runner is in the shared host-suite file list (so it runs on every
+portable host shard) and runs under Chibi via
+`tests/consent-scheme-repl-parity-test.el`.
+
 Run the default verification, which includes the Racket host shard:
 
 ```sh
