@@ -126,17 +126,19 @@ byte-for-byte raw record stream regardless of the color setting."
         (write record port)
         (string-append (get-output-string port) "\n")))
 
-    ;;;; The `classic' chrome: `>'/`...' prompts and bare values
+    ;;;; The `classic' chrome: `>>>'/`...' prompts and bare values
 
     (define (chrome--classic record)
-      "Render RECORD under the `classic' chrome: a `>'/`...' prompt and bare
+      "Render RECORD under the `classic' chrome: a `>>>'/`...' prompt and bare
 values, with submissions and the exit record suppressed."
       (let ((kind (chrome--kind record)))
         (cond
          ((eq? kind 'repl-prompt)
+          ;; `>>> ' and `... ' are both four columns wide, so a continued form's
+          ;; code aligns under the first submission's code.
           (if (eq? (chrome--field record 'state) 'continuation)
               (list (chrome--furniture "... "))
-              (list (chrome--furniture "> "))))
+              (list (chrome--furniture ">>> "))))
          ((eq? kind 'repl-result)
           (list (chrome--seg 'result-value (chrome--display record))
                 (chrome--furniture "\n")))
