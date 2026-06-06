@@ -550,11 +550,30 @@ binding, if added, is an ordinary identifier, not a sigil.
 ## Conformance
 
 The shared cross-host REPL parity conformance fixtures (#392) encode this
-contract as `consent-fixture-suite` cases that drive a scripted interaction
-input and assert the emitted sequence of `repl-prompt`, `repl-submission`,
-`repl-result`, `repl-condition`, and `repl-exit` records against both hosts.
+contract as a `consent-fixture-suite` corpus,
+[`fixtures/repl/parity-cases.scm`](../fixtures/repl/parity-cases.scm), whose
+cases drive a scripted interaction input and assert the emitted sequence of
+`repl-prompt`, `repl-submission`, `repl-result`, `repl-condition`, and
+`repl-exit` records against both hosts. Two parallel runners read that one
+corpus: `tests/scheme/consent-repl-parity-test.scm` drives the portable terminal
+REPL shell `(cli repl-shell)`, and `tests/consent-repl-parity-test.el` drives the
+Emacs incremental entry `consent-repl-stream`. Each case enumerates every record
+its turn produces; the runners assert per-kind record counts and the
+contract-meaningful fields of each record, correlating a
+`repl-result`/`repl-condition` to its submission by the `(submission sub-N)`
+field rather than by record position (see [Forward
+Compatibility](#forward-compatibility)). Host-specific text — condition
+`message`/`display` strings and the opaque `value`/`budget` payloads — is
+deliberately not pinned, so the corpus fixes the record shape, not a host's exact
+rendering.
+
 Because a REPL session is a host-effecting `(scheme repl)` surface, those cases
 are not reference-oracle eligible; they are parity checks between the Emacs and
 portable hosts, feeding the parity CI gate (#374). The portable terminal REPL
 (#360) and the Emacs incremental entry (#391) each implement this contract on
-their respective host and are validated against the #392 corpus.
+their respective host and are validated against the #392 corpus. The portable
+runner runs on every full-suite R7RS host shard (and, like the other portable
+test files, under Chibi via `tests/consent-scheme-repl-parity-test.el` in
+`make test-portable-chibi`); the Emacs runner runs under `make test`. A host
+prerequisite that is unavailable skips with an actionable message rather than
+failing.
