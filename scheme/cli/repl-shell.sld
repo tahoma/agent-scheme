@@ -24,11 +24,23 @@
 ;;; the portable smoke tests can assert the emitted record stream without a TTY.
 ;;; `cli-repl-main' wires that driver to stdin and the diagnostic stream for an
 ;;; interactive or piped terminal session.
+;;;
+;;; The raw record stream is the canonical surface; everyday human output is a
+;;; *chrome* over it (`--chrome NAME', default `comment') supplied by the
+;;; host-neutral (cli repl-chrome) layer.  `cli-repl-main' selects the chrome,
+;;; resolves `--color=auto|always|never' against the control channel's terminal
+;;; status and NO_COLOR, applies the chrome to each record, and flushes the
+;;; control channel so a no-newline prompt appears before the blocking read.
+;;; Chrome text stays on the control channel (stderr); program output on stdout
+;;; is never touched.  `--chrome datum' recovers the canonical record stream and
+;;; is always reachable.
 
 (define-library (cli repl-shell)
   (export cli-repl-drive
           cli-repl-records-from-string
           cli-repl-run
+          cli-repl-parse-options
+          cli-repl-rendered-from-string
           cli-repl-main)
   (import (scheme base)
           (scheme write)
@@ -36,7 +48,34 @@
           (scheme process-context)
           (consent eval)
           (consent reader)
-          (consent result))
+          (consent result)
+          (cli repl-chrome))
+
+  ;; The one host-specific obligation of the chrome layer: deciding whether the
+  ;; control channel is a terminal so `--color=auto' can gate ANSI off when the
+  ;; session is piped or redirected.  R7RS-small has no portable terminal-port
+  ;; predicate, so each host branch imports its own; hosts without one fall to
+  ;; the `else' branch, where `auto' is treated as non-terminal (color off).
+  (cond-expand
+   (gambit
+    (import (only (gambit) tty?))
+    (begin
+      (define (repl--control-tty? port) (and (tty? port) #t))))
+   (racket
+    (import (only (racket base) terminal-port?))
+    (begin
+      (define (repl--control-tty? port) (and (terminal-port? port) #t))))
+   (guile
+    (import (only (guile) isatty?))
+    (begin
+      (define (repl--control-tty? port) (and (isatty? port) #t))))
+   (gauche
+    (import (gauche base))
+    (begin
+      (define (repl--control-tty? port) (and (sys-isatty port) #t))))
+   (else
+    (begin
+      (define (repl--control-tty? port) (and port #f)))))
 
   (begin
 
@@ -392,32 +431,92 @@
 
     ;;;; Terminal entry
 
-    (define (repl--parse-session arguments)
-      "Return the session id from ARGUMENTS, honoring `--session NAME'."
-      (let loop ((arguments arguments))
+    (define (repl--color-inline argument)
+      "Return the VALUE in a `--color=VALUE' ARGUMENT, or #f for any other argument."
+      (let* ((prefix "--color=")
+             (length (string-length prefix)))
+        (and (>= (string-length argument) length)
+             (string=? (substring argument 0 length) prefix)
+             (substring argument length (string-length argument)))))
+
+    (define (cli-repl-parse-options arguments)
+      "Parse ARGUMENTS into the REPL option alist ((session . S) (chrome . C) (color . M)), honoring --session NAME, --chrome NAME, and --color=auto|always|never (or the spaced --color VALUE); later flags win, unrecognized arguments are ignored, and the caller validates chrome and color against the registry and the known modes."
+      (let loop ((arguments arguments) (session #f) (chrome #f) (color #f))
         (cond
-         ((null? arguments) "repl-main")
-         ((and (string=? (car arguments) "--session")
-               (pair? (cdr arguments)))
-          (cadr arguments))
-         (else (loop (cdr arguments))))))
+         ((null? arguments)
+          (list (cons 'session (or session "repl-main"))
+                (cons 'chrome (or chrome (cli-repl-chrome-default-name)))
+                (cons 'color (or color 'auto))))
+         ((and (string=? (car arguments) "--session") (pair? (cdr arguments)))
+          (loop (cddr arguments) (cadr arguments) chrome color))
+         ((and (string=? (car arguments) "--chrome") (pair? (cdr arguments)))
+          (loop (cddr arguments) session (string->symbol (cadr arguments)) color))
+         ((and (string=? (car arguments) "--color") (pair? (cdr arguments)))
+          (loop (cddr arguments) session chrome (string->symbol (cadr arguments))))
+         ((repl--color-inline (car arguments))
+          => (lambda (value)
+               (loop (cdr arguments) session chrome (string->symbol value))))
+         (else (loop (cdr arguments) session chrome color)))))
+
+    (define (repl--option options name)
+      "Return the value bound to NAME in the parsed OPTIONS alist."
+      (cdr (assq name options)))
+
+    (define (repl--rendering-writer chrome color? port)
+      "Return a write-record procedure that paints each record with CHROME under COLOR? to PORT, flushing so a no-newline prompt appears before the next blocking read."
+      (lambda (record)
+        (let ((painted (cli-repl-chrome-paint (chrome record) color?)))
+          (when painted
+            (write-string painted port)
+            (flush-output-port port)))))
+
+    (define (cli-repl-rendered-from-string input session chrome-name color?)
+      "Drive a REPL over INPUT under SESSION and return the CHROME-NAME chrome's control-channel text, painted when COLOR? is true and discarding program output; the host-neutral, TTY-free hook the tests assert chrome output against."
+      (let ((chrome (cli-repl-chrome-lookup chrome-name))
+            (port (open-output-string)))
+        (cli-repl-run
+         (repl--list-chunk-source (repl--split-lines input))
+         (repl--rendering-writer chrome color? port)
+         (lambda (output) output)
+         session)
+        (get-output-string port)))
+
+    (define (repl--fatal message detail)
+      "Write MESSAGE and DETAIL to the control channel and exit with status 2."
+      (let ((port (current-error-port)))
+        (display "consent-repl: " port)
+        (display message port)
+        (display detail port)
+        (newline port)
+        (exit 2)))
 
     (define (cli-repl-main)
-      "Entry point: read forms from stdin, write records to stderr and program output to stdout, then exit with the close-status code."
-      (let* ((session (repl--parse-session (cdr (command-line))))
+      "Entry point: read forms from stdin, paint each record through the selected chrome onto stderr, leave program output on stdout, then exit with the close-status code."
+      (let* ((options (cli-repl-parse-options (cdr (command-line))))
+             (session (repl--option options 'session))
+             (chrome-name (repl--option options 'chrome))
+             (color-mode (repl--option options 'color))
+             (chrome (cli-repl-chrome-lookup chrome-name))
              (record-port (current-error-port))
-             (output-port (current-output-port))
-             (read-chunk
-              (lambda ()
-                (let ((line (read-line)))
-                  (if (eof-object? line)
-                      line
-                      (string-append line "\n")))))
-             (write-record
-              (lambda (record)
-                (write record record-port)
-                (newline record-port)))
-             (write-output
-              (lambda (output)
-                (write-string output output-port))))
-        (exit (cli-repl-run read-chunk write-record write-output session))))))
+             (output-port (current-output-port)))
+        (unless chrome
+          (repl--fatal "unknown chrome: " (symbol->string chrome-name)))
+        (unless (memq color-mode '(auto always never))
+          (repl--fatal "unknown color mode: " (symbol->string color-mode)))
+        (let* ((no-color-value (get-environment-variable "NO_COLOR"))
+               (no-color? (and no-color-value
+                               (> (string-length no-color-value) 0)))
+               (color? (cli-repl-chrome-color?
+                        color-mode no-color? (repl--control-tty? record-port)))
+               (read-chunk
+                (lambda ()
+                  (let ((line (read-line)))
+                    (if (eof-object? line)
+                        line
+                        (string-append line "\n")))))
+               (write-record (repl--rendering-writer chrome color? record-port))
+               (write-output
+                (lambda (output)
+                  (write-string output output-port)
+                  (flush-output-port output-port))))
+          (exit (cli-repl-run read-chunk write-record write-output session)))))))
