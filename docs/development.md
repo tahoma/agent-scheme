@@ -346,6 +346,12 @@ build/compile/<host>/bin/consent --eval '(+ 1 2)'
 build/compile/<host>/bin/consent --script tests/scheme/consent-reader-test.scm
 ```
 
+The smoke also runs a script by bare path (`consent FILE`, equivalent to
+`consent --script FILE`) and as an executable `/bin/sh` polyglot, exercising the
+shebang-handling boundary end to end. See
+[executable-scripts.md](executable-scripts.md) for how to write and run an
+executable Consent Scheme script.
+
 Remove generated compile artifacts with:
 
 ```sh
