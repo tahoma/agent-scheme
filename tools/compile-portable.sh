@@ -124,6 +124,7 @@ write_racket_main() {
         (prefix (cli process-host) consent-main:cli-process-host:)
         (prefix (cli native-cli) consent-main:cli-native-cli:)
         (prefix (cli repl-shell) consent-main:cli-repl-shell:)
+        (prefix (cli script) consent-main:cli-script:)
         (only (consent eval)
               consent-eval-source
               consent-value->external)
@@ -143,14 +144,16 @@ write_racket_main() {
      (number->string tertiary))))
 
 (define (consent-main-help)
-  (display "Usage: consent [--help] [--version] [--repl] [--eval SOURCE] [--script FILE]\n")
+  (display "Usage: consent [--help] [--version] [--repl] [--eval SOURCE] [--script FILE | FILE]\n")
   (display "\n")
   (display "Commands:\n")
   (display "  --help          Show this help.\n")
   (display "  --version       Print the Consent Scheme runtime version.\n")
   (display "  --eval SOURCE   Evaluate a pure Consent Scheme expression.\n")
   (display "  --script FILE   Run an R7RS Scheme source file.\n")
-  (display "  --repl          Start the portable terminal REPL shell.\n"))
+  (display "  --repl          Start the portable terminal REPL shell.\n")
+  (display "  FILE            Run FILE as a script (same as --script FILE),\n")
+  (display "                  so a #!/usr/bin/env consent shebang runs directly.\n"))
 
 (define (consent-main-error message)
   (display "consent: " (current-error-port))
@@ -200,9 +203,15 @@ write_racket_main() {
         (consent-main-script (cadr args))))
    ((string=? (car args) "--repl")
     (consent-main:cli-repl-shell:cli-repl-main))
-   (else
+   ((and (> (string-length (car args)) 0)
+         (char=? (string-ref (car args) 0) #\-))
     (consent-main-error
-     (string-append "unknown option " (car args))))))
+     (string-append "unknown option " (car args))))
+   (else
+    ;; A bare path is a script file: consent FILE == consent --script FILE.
+    ;; This lets a #!/usr/bin/env consent shebang run a file with no flag,
+    ;; avoiding the kernel single-argument rule that breaks a flagged shebang.
+    (consent-main-script (car args)))))
 
 (let ((arguments (command-line)))
   (consent-main
@@ -254,6 +263,7 @@ write_gambit_main() {
         (prefix (cli process-host) consent-main:cli-process-host:)
         (prefix (cli native-cli) consent-main:cli-native-cli:)
         (prefix (cli repl-shell) consent-main:cli-repl-shell:)
+        (prefix (cli script) consent-main:cli-script:)
         (only (consent eval)
               consent-eval-source
               consent-value->external)
@@ -273,14 +283,16 @@ write_gambit_main() {
      (number->string tertiary))))
 
 (define (consent-main-help)
-  (display "Usage: consent [--help] [--version] [--repl] [--eval SOURCE] [--script FILE]\n")
+  (display "Usage: consent [--help] [--version] [--repl] [--eval SOURCE] [--script FILE | FILE]\n")
   (display "\n")
   (display "Commands:\n")
   (display "  --help          Show this help.\n")
   (display "  --version       Print the Consent Scheme runtime version.\n")
   (display "  --eval SOURCE   Evaluate a pure Consent Scheme expression.\n")
   (display "  --script FILE   Run an R7RS Scheme source file.\n")
-  (display "  --repl          Start the portable terminal REPL shell.\n"))
+  (display "  --repl          Start the portable terminal REPL shell.\n")
+  (display "  FILE            Run FILE as a script (same as --script FILE),\n")
+  (display "                  so a #!/usr/bin/env consent shebang runs directly.\n"))
 
 (define (consent-main-error message)
   (display "consent: " (current-error-port))
@@ -330,9 +342,15 @@ write_gambit_main() {
         (consent-main-script (cadr args))))
    ((string=? (car args) "--repl")
     (consent-main:cli-repl-shell:cli-repl-main))
-   (else
+   ((and (> (string-length (car args)) 0)
+         (char=? (string-ref (car args) 0) #\-))
     (consent-main-error
-     (string-append "unknown option " (car args))))))
+     (string-append "unknown option " (car args))))
+   (else
+    ;; A bare path is a script file: consent FILE == consent --script FILE.
+    ;; This lets a #!/usr/bin/env consent shebang run a file with no flag,
+    ;; avoiding the kernel single-argument rule that breaks a flagged shebang.
+    (consent-main-script (car args)))))
 
 (let ((arguments (command-line)))
   (consent-main
@@ -379,6 +397,46 @@ run_smoke() {
   if [ "$script_output" != "Scheme reader tests passed" ]; then
     die "compiled runner --script returned '$script_output', expected 'Scheme reader tests passed'"
   fi
+
+  # Executable-script smokes (#399): prove the runner runs a real on-disk
+  # shebang script end to end, exercising the OS-level dispatch that the
+  # in-process tests cannot.
+  shebang_dir=$(mktemp -d "${TMPDIR:-/tmp}/consent-shebang.XXXXXX") \
+    || die "could not create a temporary directory for the shebang smokes"
+
+  # Bare-path form: kernel runs `consent FILE`; the runner skips the shebang
+  # line and runs the file as a script with no `--script` flag.
+  bare_script="$shebang_dir/bare.scm"
+  cat > "$bare_script" <<EOF
+#!/usr/bin/env consent
+(import (scheme base) (scheme write))
+(display "shebang-bare-ok\n")
+EOF
+  bare_output=$("$runner" "$bare_script" 2>"$log_file.bare.err") \
+    || die "compiled runner failed bare-path shebang smoke; see $log_file.bare.err"
+  if [ "$bare_output" != "shebang-bare-ok" ]; then
+    die "compiled runner bare-path shebang returned '$bare_output', expected 'shebang-bare-ok'"
+  fi
+
+  # sh-polyglot form: kernel runs /bin/sh, whose `exec` re-launches the runner
+  # on the same file; the runner skips the shebang and reads the `#| exec |#`
+  # block comment that hides the shell line from Scheme.
+  polyglot_script="$shebang_dir/polyglot.scm"
+  cat > "$polyglot_script" <<EOF
+#!/bin/sh
+#|
+exec "$runner" --script "\$0" "\$@"
+|#
+(import (scheme base) (scheme write))
+(display "shebang-polyglot-ok\n")
+EOF
+  chmod +x "$polyglot_script"
+  polyglot_output=$("$polyglot_script" 2>"$log_file.polyglot.err") \
+    || die "compiled runner failed sh-polyglot shebang smoke; see $log_file.polyglot.err"
+  if [ "$polyglot_output" != "shebang-polyglot-ok" ]; then
+    die "sh-polyglot shebang returned '$polyglot_output', expected 'shebang-polyglot-ok'"
+  fi
+  rm -rf "$shebang_dir"
   smoke_finished=$(date +%s)
 
   cat > "$log_file" <<EOF
@@ -386,6 +444,8 @@ run_smoke() {
   (version-output "$version_output")
   (eval-output "$eval_output")
   (script-output "$script_output")
+  (shebang-bare-output "$bare_output")
+  (shebang-polyglot-output "$polyglot_output")
   (run-seconds $((smoke_finished - smoke_started))))
 EOF
 }
@@ -526,6 +586,9 @@ compile_gambit() {
   copy_gambit_source \
     "$scheme_dir/cli/repl-shell.sld" \
     "$src_dir/cli/repl-shell.sld"
+  copy_gambit_source \
+    "$scheme_dir/cli/script.sld" \
+    "$src_dir/cli/script.sld"
 
   "$gsi" -:r7rs,search="$scheme_dir" \
     -e '(import (scheme base) (scheme write)) (write (+ 1 2)) (newline)' \
@@ -640,6 +703,10 @@ compile_gambit() {
     cli/repl-shell \
     "$scheme_dir/cli/repl-shell.sld" \
     "$src_dir/cli/repl-shell.c"
+  compile_gambit_module \
+    cli/script \
+    "$scheme_dir/cli/script.sld" \
+    "$src_dir/cli/script.c"
 
   "$gsc" -:r7rs,search="$scheme_dir" \
     -c -o "$main_c" "$main_file" \
