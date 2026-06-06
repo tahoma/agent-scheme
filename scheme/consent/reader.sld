@@ -11,6 +11,20 @@
   (export consent-read
           consent-read-all
           consent-read-from-string-at
+          consent-read-recover
+          consent-read-recover-from-string-at
+          consent-resync-to-next-form
+          consent-recovery-result?
+          consent-recovery-result-datums
+          consent-recovery-result-diagnostics
+          consent-recovery-result-spans
+          consent-recovery-result-status
+          consent-recovery-step?
+          consent-recovery-step-status
+          consent-recovery-step-datum
+          consent-recovery-step-diagnostic
+          consent-recovery-step-span
+          consent-recovery-step-next
           consent-read-eof
           consent-read-eof?
           consent-datum-source
@@ -67,7 +81,7 @@
       (make-reader source position length line-starts fold-case node-count datum-labels
                    maximum-depth maximum-list-length maximum-vector-length
                    maximum-bytevector-length maximum-string-size
-                   maximum-total-nodes source-id source-metadata)
+                   maximum-total-nodes source-id source-metadata recovery)
       reader?
       (source reader-source)
       (position reader-position set-reader-position!)
@@ -83,7 +97,11 @@
       (maximum-string-size reader-maximum-string-size)
       (maximum-total-nodes reader-maximum-total-nodes)
       (source-id reader-source-id)
-      (source-metadata reader-source-metadata))
+      (source-metadata reader-source-metadata)
+      ;; RECOVERY toggles errors-as-data: when set, reader errors raise a
+      ;; structured <reader-condition> the recovery driver can resynchronize
+      ;; past instead of unwinding the whole read.
+      (recovery reader-recovery))
 
     ;; Validation records own the post-read resource budget for host datums.
     (define-record-type <validation>
@@ -155,6 +173,44 @@
       (filled datum-label-filled? set-datum-label-filled!)
       (value datum-label-value set-datum-label-value!))
 
+    ;; Structured reader condition raised in recovery mode.  KIND is one of
+    ;; `invalid` (genuine syntax error), `incomplete` (a valid prefix that needs
+    ;; more input, such as an unterminated list at end of input), or `limit` (a
+    ;; resource budget was exceeded).  OFFSET is the source position at the point
+    ;; of failure.  In the default raise-on-error mode these conditions are never
+    ;; constructed; reader errors stay plain `error` objects.
+    (define-record-type <reader-condition>
+      (make-reader-condition kind offset message irritants)
+      reader-condition?
+      (kind reader-condition-kind)
+      (offset reader-condition-offset)
+      (message reader-condition-message)
+      (irritants reader-condition-irritants))
+
+    ;; Recovery read result for a whole source: a partial datum list plus the
+    ;; ordered diagnostics and recovery spans collected along the way.  STATUS is
+    ;; `complete` when the source was fully consumed or `incomplete` when the
+    ;; trailing region is a valid prefix awaiting more input.
+    (define-record-type <consent-recovery-result>
+      (make-recovery-result datums diagnostics spans status)
+      consent-recovery-result?
+      (datums consent-recovery-result-datums)
+      (diagnostics consent-recovery-result-diagnostics)
+      (spans consent-recovery-result-spans)
+      (status consent-recovery-result-status))
+
+    ;; Recovery read step for a single form, the substrate interactive callers
+    ;; (REPL, editor adapters) drive one form at a time.  STATUS is `datum`,
+    ;; `invalid`, `incomplete`, or `eof`.  NEXT is the offset to resume from.
+    (define-record-type <consent-recovery-step>
+      (make-recovery-step status datum diagnostic span next)
+      consent-recovery-step?
+      (status consent-recovery-step-status)
+      (datum consent-recovery-step-datum)
+      (diagnostic consent-recovery-step-diagnostic)
+      (span consent-recovery-step-span)
+      (next consent-recovery-step-next))
+
     ;; Character constant for R7RS page whitespace.
     (define char-page (integer->char 12))
 
@@ -219,7 +275,8 @@
                          (if source-metadata
                              (option-ref options 'source-id #f)
                              #f)
-                         source-metadata))))
+                         source-metadata
+                         (option-ref options 'recovery #f)))))
 
     (define (source-field name value)
       "Build one Scheme-readable source metadata field."
@@ -327,29 +384,40 @@
             (consent-datum-source-set! target metadata))
         target))
 
+    (define (raise-reader-condition reader kind prefix message irritants)
+      "Raise a reader failure as a structured condition under recovery mode, or as the historical plain error otherwise."
+      (if (reader-recovery reader)
+          (raise (make-reader-condition kind
+                                        (reader-position reader)
+                                        message
+                                        irritants))
+          (apply error
+                 (string-append
+                  prefix
+                  (consent-integer->radix-string
+                   (reader-position reader)
+                   10)
+                  ": "
+                  message)
+                 irritants)))
+
     (define (reader-error reader message . irritants)
-      "Raise a reader error annotated with the current source offset."
-      (apply error
-             (string-append
-              "consent reader error at offset "
-              (consent-integer->radix-string
-               (reader-position reader)
-               10)
-              ": "
-              message)
-             irritants))
+      "Raise a reader syntax error annotated with the current source offset."
+      (raise-reader-condition reader 'invalid
+                              "consent reader error at offset "
+                              message irritants))
+
+    (define (reader-incomplete reader message . irritants)
+      "Raise a reader failure for a valid prefix that needs more input.  The default error text is identical to `reader-error`; only recovery mode tells the two apart."
+      (raise-reader-condition reader 'incomplete
+                              "consent reader error at offset "
+                              message irritants))
 
     (define (limit-error reader message . irritants)
       "Raise a datum resource-limit error annotated with the current source offset."
-      (apply error
-             (string-append
-              "consent datum limit error at offset "
-              (consent-integer->radix-string
-               (reader-position reader)
-               10)
-              ": "
-              message)
-             irritants))
+      (raise-reader-condition reader 'limit
+                              "consent datum limit error at offset "
+                              message irritants))
 
     (define (check-depth reader depth)
       "Enforce the active reader maximum depth budget."
@@ -452,7 +520,7 @@
          ((and (= depth 0) (not (starts-with? reader "#|")))
           #t)
          ((eof? reader)
-          (reader-error reader "unterminated block comment"))
+          (reader-incomplete reader "unterminated block comment"))
          ((starts-with? reader "#|")
           (advance! reader 2)
           (loop (+ depth 1)))
@@ -1138,7 +1206,7 @@
                 (advance! reader)
                 (loop))))
         (if (eof? reader)
-            (reader-error reader "unterminated hexadecimal escape"))
+            (reader-incomplete reader "unterminated hexadecimal escape"))
         (let ((digits (substring (reader-source reader)
                                  start
                                  (reader-position reader))))
@@ -1185,8 +1253,8 @@
            ((and (peek reader) (char=? (peek reader) #\newline))
             (advance! reader))
            (else
-            (reader-error reader
-                          "expected line ending in string continuation")))
+            (reader-incomplete reader
+                               "expected line ending in string continuation")))
           (let loop-trailing ()
             (if (intraline-whitespace? (peek reader))
                 (begin
@@ -1195,7 +1263,7 @@
         (let loop ()
           (cond
            ((eof? reader)
-            (reader-error reader "unterminated string"))
+            (reader-incomplete reader "unterminated string"))
            ((char=? (peek reader) #\")
             (advance! reader)
             (list->string (reverse result)))
@@ -1204,7 +1272,7 @@
             (let ((escaped (peek reader)))
               (cond
                ((not escaped)
-                (reader-error reader "unterminated string escape"))
+                (reader-incomplete reader "unterminated string escape"))
                ((char=? escaped #\x)
                 (advance! reader)
                 (emit! (read-hex-escape reader))
@@ -1230,7 +1298,7 @@
         (let loop ()
           (cond
            ((eof? reader)
-            (reader-error reader "unterminated vertical symbol"))
+            (reader-incomplete reader "unterminated vertical symbol"))
            ((char=? (peek reader) #\|)
             (advance! reader)
             (let ((name (list->string (reverse result))))
@@ -1242,7 +1310,7 @@
             (let ((escaped (peek reader)))
               (cond
                ((not escaped)
-                (reader-error reader "unterminated vertical symbol escape"))
+                (reader-incomplete reader "unterminated vertical symbol escape"))
                ((char=? escaped #\x)
                 (advance! reader)
                 (set! result (cons (read-hex-escape reader) result))
@@ -1328,7 +1396,7 @@
       "Read an R7RS character literal after the #\\\\ introducer."
       (advance! reader 2)
       (if (eof? reader)
-          (reader-error reader "missing character after #\\"))
+          (reader-incomplete reader "missing character after #\\"))
       (let* ((token (read-token reader))
              (name (if (reader-fold-case reader)
                        (string-foldcase token)
@@ -1394,7 +1462,7 @@
           (skip-intertoken-space! reader depth)
           (cond
            ((eof? reader)
-            (reader-error reader "unterminated list"))
+            (reader-incomplete reader "unterminated list"))
            ((char=? (peek reader) #\))
             (advance! reader)
             (note-node! reader)
@@ -1432,7 +1500,7 @@
         (skip-intertoken-space! reader depth)
         (cond
          ((eof? reader)
-          (reader-error reader "unterminated sequence" kind))
+          (reader-incomplete reader "unterminated sequence" kind))
          ((char=? (peek reader) close-char)
           (advance! reader)
           (reverse items))
@@ -1610,7 +1678,7 @@
       (check-depth reader depth)
       (skip-intertoken-space! reader depth)
       (if (eof? reader)
-          (reader-error reader "unexpected end of input"))
+          (reader-incomplete reader "unexpected end of input"))
       (let ((start (reader-position reader))
             (char (peek reader)))
         (let ((datum
@@ -1729,6 +1797,213 @@
                             reader)))
                 (consent-validate-datum datum options)
                 (cons datum (reader-position reader)))))))
+
+    ;;;; Reader recovery: errors as data, resynchronization, and spans.
+
+    (define (form-start-char? char)
+      "Report whether CHAR can begin a top-level form for resync purposes."
+      (not (or (whitespace? char)
+               (char=? char #\)))))
+
+    (define (consent-resync-to-next-form source position)
+      "Form-level batch resync strategy: return the offset of the next top-level form strictly after POSITION.  A top-level form is anchored to a line start whose first character is neither whitespace nor a closing parenthesis; when none remains, return the end of SOURCE.  This is the default recovery resync strategy; callers may supply their own (for example a lexer-level or editor-grade strategy) through the `resync` option."
+      (let ((length (string-length source)))
+        (let loop ((index position))
+          (cond
+           ((>= index length) length)
+           ((and (> index position)
+                 (char=? (string-ref source (- index 1)) #\newline)
+                 (form-start-char? (string-ref source index)))
+            index)
+           (else (loop (+ index 1)))))))
+
+    (define (render-irritant value)
+      "Render one reader-error irritant as stable text for a diagnostic reason."
+      (cond
+       ((string? value) value)
+       ((symbol? value) (symbol->string value))
+       ((char? value) (string value))
+       ((consent-number? value) (consent-number->external value))
+       ((and (number? value) (exact? value) (integer? value))
+        (consent-integer->radix-string value 10))
+       (else "?")))
+
+    (define (condition-reason condition)
+      "Return the human-readable reason text for a reader CONDITION."
+      (let ((message (reader-condition-message condition))
+            (irritants (reader-condition-irritants condition)))
+        (if (null? irritants)
+            message
+            (string-append
+             message
+             ": "
+             (join (map render-irritant irritants) " ")))))
+
+    (define (recovery-range line-starts start end)
+      "Build a diagnostic-range datum spanning START..END using LINE-STARTS.  The shape matches `(agent diagnostics)` `make-diagnostic-range`."
+      (let ((start-position (line-starts-line-column line-starts start))
+            (end-position (line-starts-line-column line-starts end)))
+        (list 'diagnostic-range
+              (list 'start (consent-make-canonical-integer start))
+              (list 'end (consent-make-canonical-integer end))
+              (list 'line (consent-make-canonical-integer (car start-position)))
+              (list 'column (consent-make-canonical-integer (cdr start-position)))
+              (list 'end-line (consent-make-canonical-integer (car end-position)))
+              (list 'end-column
+                    (consent-make-canonical-integer (cdr end-position))))))
+
+    (define (recovery-diagnostic source-id kind reason range)
+      "Build a Scheme-readable diagnostic datum for a recovery event.  The shape matches `(agent diagnostics)` `make-diagnostic`; KIND (`invalid` or `incomplete`) rides in the metadata so every host adapter consumes it identically."
+      (list 'diagnostic
+            (list 'severity 'error)
+            (list 'message reason)
+            (list 'source 'reader)
+            (list 'file (if source-id source-id #f))
+            (list 'buffer #f)
+            (list 'range range)
+            (list 'metadata
+                  (list (list 'kind kind)
+                        (list 'phase 'read)))))
+
+    (define (recovery-span kind reason range text)
+      "Build a recovery span datum recording one skipped or incomplete region.  TEXT preserves the source bytes so recovery never silently drops input; the range vocabulary is shared with comment trivia and CST recovery nodes."
+      (list 'recovery-span
+            (list 'kind kind)
+            (list 'reason reason)
+            (list 'range range)
+            (list 'text text)))
+
+    (define (guard-reader-failure reader thunk)
+      "Run THUNK, returning its value tagged (value . V), or (condition . C) when it raises.  Non-reader conditions are normalized to an `invalid` reader condition at the current offset."
+      (call/cc
+       (lambda (return)
+         (with-exception-handler
+          (lambda (condition)
+            (return
+             (cons 'condition
+                   (if (reader-condition? condition)
+                       condition
+                       (make-reader-condition
+                        'invalid
+                        (reader-position reader)
+                        (if (error-object? condition)
+                            (error-object-message condition)
+                            "reader error")
+                        (if (error-object? condition)
+                            (error-object-irritants condition)
+                            '()))))))
+          (lambda ()
+            (cons 'value (thunk)))))))
+
+    (define (build-failure-step reader resync line-starts source-id start condition)
+      "Build the <consent-recovery-step> for a reader failure anchored at START.  Incomplete input rewinds to START; a genuine error advances past the malformed region via RESYNC with guaranteed forward progress."
+      (let ((kind (reader-condition-kind condition))
+            (reason (condition-reason condition)))
+        (if (eq? kind 'incomplete)
+            (let* ((end (reader-length reader))
+                   (range (recovery-range line-starts start end))
+                   (text (substring (reader-source reader) start end))
+                   (diagnostic
+                    (recovery-diagnostic source-id 'incomplete reason range))
+                   (span (recovery-span 'incomplete reason range text)))
+              (set-reader-position! reader start)
+              (make-recovery-step 'incomplete #f diagnostic span start))
+            (let* ((proposed (resync (reader-source reader) start))
+                   (next (min (reader-length reader)
+                              (max proposed (+ start 1))))
+                   (range (recovery-range line-starts start next))
+                   (text (substring (reader-source reader) start next))
+                   (diagnostic
+                    (recovery-diagnostic source-id 'invalid reason range))
+                   (span (recovery-span 'invalid reason range text)))
+              (set-reader-position! reader next)
+              (make-recovery-step 'invalid #f diagnostic span next)))))
+
+    (define (recover-step! reader resync line-starts source-id options)
+      "Read one form in recovery mode and return a <consent-recovery-step>.  Leading trivia is skipped first so a malformed region is anchored at the datum start, not at preceding whitespace; trivia-level failures (such as an unterminated block comment) are anchored where the trivia began."
+      (let* ((pre (reader-position reader))
+             (skip-outcome
+              (guard-reader-failure
+               reader
+               (lambda () (skip-intertoken-space! reader 0)))))
+        (cond
+         ((eq? (car skip-outcome) 'condition)
+          (build-failure-step reader resync line-starts source-id
+                              pre (cdr skip-outcome)))
+         ((eof? reader)
+          (make-recovery-step 'eof #f #f #f (reader-position reader)))
+         (else
+          (let* ((start (reader-position reader))
+                 (read-outcome
+                  (guard-reader-failure
+                   reader
+                   (lambda ()
+                     (set-reader-datum-labels! reader '())
+                     (let ((datum (resolve-datum-labels
+                                   (read-datum reader 0)
+                                   reader)))
+                       (consent-validate-datum datum options)
+                       datum)))))
+            (if (eq? (car read-outcome) 'value)
+                (make-recovery-step 'datum (cdr read-outcome) #f #f
+                                    (reader-position reader))
+                (build-failure-step reader resync line-starts source-id
+                                    start (cdr read-outcome))))))))
+
+    (define (recovery-reader source options)
+      "Create a recovery-mode reader over SOURCE, forcing the recovery flag on."
+      (reader-from-source source (cons (cons 'recovery #t) options)))
+
+    (define (consent-read-recover source . maybe-options)
+      "Read SOURCE in recovery mode, collecting every readable datum plus an ordered diagnostics list and recovery spans instead of aborting on the first malformed form.  The result's STATUS is `incomplete` when the trailing region is a valid prefix awaiting more input, otherwise `complete`.  The resync point is caller-selectable through the `resync` option (defaulting to `consent-resync-to-next-form`)."
+      (if (not (string? source))
+          (error "consent reader source must be a string" source))
+      (let* ((options (options-from-rest maybe-options))
+             (resync (option-ref options 'resync consent-resync-to-next-form))
+             (source-id (option-ref options 'source-id #f))
+             (line-starts (source-line-starts source))
+             (reader (recovery-reader source options)))
+        (let loop ((datums '()) (diagnostics '()) (spans '()))
+          (let* ((step (recover-step! reader resync line-starts
+                                      source-id options))
+                 (status (consent-recovery-step-status step)))
+            (cond
+             ((eq? status 'eof)
+              (make-recovery-result (reverse datums)
+                                    (reverse diagnostics)
+                                    (reverse spans)
+                                    'complete))
+             ((eq? status 'datum)
+              (loop (cons (consent-recovery-step-datum step) datums)
+                    diagnostics
+                    spans))
+             ((eq? status 'incomplete)
+              (make-recovery-result
+               (reverse datums)
+               (reverse (cons (consent-recovery-step-diagnostic step)
+                              diagnostics))
+               (reverse (cons (consent-recovery-step-span step) spans))
+               'incomplete))
+             (else
+              (loop datums
+                    (cons (consent-recovery-step-diagnostic step) diagnostics)
+                    (cons (consent-recovery-step-span step) spans))))))))
+
+    (define (consent-read-recover-from-string-at source position . maybe-options)
+      "Recovery-aware single-form read for interactive and streaming callers (REPL, editor adapters).  Returns a <consent-recovery-step> whose STATUS is `datum`, `invalid`, `incomplete`, or `eof`, and whose NEXT offset is where the caller should resume.  Incomplete input is surfaced as its own status so auto-indent and continuation prompts never confuse a valid prefix with a syntax error."
+      (if (not (string? source))
+          (error "consent reader source must be a string" source))
+      (if (or (not (integer? position))
+              (< position 0)
+              (> position (string-length source)))
+          (error "consent reader position out of range" position))
+      (let* ((options (options-from-rest maybe-options))
+             (resync (option-ref options 'resync consent-resync-to-next-form))
+             (source-id (option-ref options 'source-id #f))
+             (line-starts (source-line-starts source))
+             (reader (recovery-reader source options)))
+        (set-reader-position! reader position)
+        (recover-step! reader resync line-starts source-id options)))
 
     (define (validation-note-node! validation)
       "Charge one validation node against the post-read total-node budget."
