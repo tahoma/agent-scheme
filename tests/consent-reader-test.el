@@ -217,4 +217,129 @@
   (should-error (consent-validate-datum (current-buffer))
                 :type 'consent-reader-error))
 
+;;;; Reader recovery: errors as data, resync, incomplete vs invalid.
+
+(defun consent-reader-test--field-in (fields name)
+  "Return the value of the field named NAME in FIELDS, or nil."
+  (catch 'found
+    (dolist (field fields)
+      (when (and (consp field)
+                 (consent-symbol-p (car field))
+                 (equal (consent-symbol-name (car field)) name))
+        (throw 'found (cadr field))))
+    nil))
+
+(defun consent-reader-test--field (record name)
+  "Return the value of the tagged RECORD's field named NAME."
+  (consent-reader-test--field-in (cdr record) name))
+
+(defun consent-reader-test--range-offset (range name)
+  "Return integer offset NAME from a diagnostic RANGE."
+  (consent-number-value (consent-reader-test--field range name)))
+
+(defun consent-reader-test--span-pair (diagnostic)
+  "Return the (START . END) offsets of DIAGNOSTIC's range."
+  (let ((range (consent-reader-test--field diagnostic "range")))
+    (cons (consent-reader-test--range-offset range "start")
+          (consent-reader-test--range-offset range "end"))))
+
+(defun consent-reader-test--kind (diagnostic)
+  "Return the recovery kind name stored in DIAGNOSTIC's metadata."
+  (let ((metadata (consent-reader-test--field diagnostic "metadata")))
+    (consent-symbol-name
+     (consent-reader-test--field-in metadata "kind"))))
+
+(ert-deftest consent-reader-test-recovery-collects-errors-as-data ()
+  "Recover the good forms around malformed ones and collect diagnostics."
+  (let* ((result
+          (consent-read-recover "(good 1)\n(broken ]\n(also ]\n(good 2)\n"))
+         (diagnostics (consent-recovery-result-diagnostics result))
+         (spans (consent-recovery-result-spans result)))
+    (should (eq (consent-recovery-result-status result) 'complete))
+    (should (equal (mapcar #'consent-datum->external
+                           (consent-recovery-result-datums result))
+                   '("(good 1)" "(good 2)")))
+    (should (= (length diagnostics) 2))
+    (should (= (length spans) 2))
+    (let ((diagnostic (car diagnostics)))
+      (should (equal (consent-symbol-name
+                      (consent-reader-test--field diagnostic "severity"))
+                     "error"))
+      (should (equal (consent-symbol-name
+                      (consent-reader-test--field diagnostic "source"))
+                     "reader"))
+      (should (equal (consent-reader-test--kind diagnostic) "invalid"))
+      (should (equal (consent-reader-test--span-pair diagnostic) '(9 . 19))))
+    (let ((span (car spans)))
+      (should (equal (consent-symbol-name
+                      (consent-reader-test--field span "kind"))
+                     "invalid"))
+      ;; The skipped bytes are preserved in the span, never silently dropped.
+      (should (equal (consent-reader-test--field span "text") "(broken ]\n")))))
+
+(ert-deftest consent-reader-test-recovery-incomplete-vs-invalid ()
+  "Surface an incomplete trailing prefix distinctly from a syntax error."
+  (let ((result (consent-read-recover "(a 1)\n(b ")))
+    (should (eq (consent-recovery-result-status result) 'incomplete))
+    (should (equal (mapcar #'consent-datum->external
+                           (consent-recovery-result-datums result))
+                   '("(a 1)")))
+    (should (equal (consent-reader-test--kind
+                    (car (consent-recovery-result-diagnostics result)))
+                   "incomplete"))))
+
+(ert-deftest consent-reader-test-recovery-resync-is-pluggable ()
+  "Honor a caller-supplied resync strategy."
+  (let ((result
+         (consent-read-recover
+          "(bad ]\n(good)\n"
+          (list :resync (lambda (source _position) (length source))))))
+    (should (null (consent-recovery-result-datums result)))
+    (should (= (length (consent-recovery-result-diagnostics result)) 1))))
+
+(ert-deftest consent-reader-test-recovery-single-form-steps ()
+  "Classify single-form recovery reads as datum, invalid, incomplete, or eof."
+  (let ((datum-step (consent-read-recover-from-string-at "(a b) trailing" 0))
+        (invalid-step (consent-read-recover-from-string-at ")oops\n(z)" 0))
+        (incomplete-step (consent-read-recover-from-string-at "(a" 0))
+        (eof-step (consent-read-recover-from-string-at "   \n" 0)))
+    (should (eq (consent-recovery-step-status datum-step) 'datum))
+    (should (equal (consent-datum->external
+                    (consent-recovery-step-datum datum-step))
+                   "(a b)"))
+    (should (eq (consent-recovery-step-status invalid-step) 'invalid))
+    (should (> (consent-recovery-step-next invalid-step) 0))
+    (should (eq (consent-recovery-step-status incomplete-step) 'incomplete))
+    ;; Incomplete input does not consume the prefix; the caller resumes at 0.
+    (should (= (consent-recovery-step-next incomplete-step) 0))
+    (should (eq (consent-recovery-step-status eof-step) 'eof))))
+
+(ert-deftest consent-reader-test-recovery-spans-are-deterministic ()
+  "Produce identical ordered spans across repeated reads."
+  (let ((first (consent-read-recover "(a ]\n(b }\n(c)\n"))
+        (second (consent-read-recover "(a ]\n(b }\n(c)\n")))
+    (should (equal (mapcar #'consent-reader-test--span-pair
+                           (consent-recovery-result-diagnostics first))
+                   (mapcar #'consent-reader-test--span-pair
+                           (consent-recovery-result-diagnostics second))))))
+
+(ert-deftest consent-reader-test-recovery-terminates-on-pathological-input ()
+  "Guarantee termination and forward progress on adversarial input."
+  (should (eq (consent-recovery-result-status
+               (consent-read-recover (make-string 500 ?\))))
+              'complete))
+  (should (eq (consent-recovery-result-status
+               (consent-read-recover (make-string 50 ?\()))
+              'incomplete))
+  (let ((result
+         (consent-read-recover
+          (mapconcat #'identity (make-list 200 "]") "\n"))))
+    (should (eq (consent-recovery-result-status result) 'complete))
+    (should (= (length (consent-recovery-result-diagnostics result)) 200))))
+
+(ert-deftest consent-reader-test-recovery-default-path-unchanged ()
+  "Keep the default raise-on-error behavior for existing callers."
+  (should-error (consent-read "(a") :type 'consent-reader-error)
+  (should-error (consent-read-all "(good) (bad ]") :type 'consent-reader-error))
+
 ;;; consent-reader-test.el ends here

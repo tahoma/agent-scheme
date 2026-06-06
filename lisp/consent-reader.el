@@ -54,6 +54,39 @@
   "Consent Scheme datum resource limit exceeded"
   'consent-reader-error)
 
+(define-error 'consent--reader-recovery-condition
+  "Consent Scheme reader recovery condition")
+
+(cl-defstruct (consent--reader-condition
+               (:constructor consent--make-reader-condition)
+               (:copier nil))
+  "Structured reader failure raised only in recovery mode.
+KIND is `invalid' (genuine syntax error), `incomplete' (a valid prefix
+needing more input, such as an unterminated list at end of input), or
+`limit' (a resource budget was exceeded).  OFFSET is the failure position
+and MESSAGE is the human-readable reason without the offset prefix."
+  kind offset message)
+
+(cl-defstruct (consent-recovery-result
+               (:constructor consent--make-recovery-result
+                             (datums diagnostics spans status))
+               (:copier nil))
+  "Recovery read result for a whole source.
+DATUMS is the partial list of successfully read datums; DIAGNOSTICS and
+SPANS are the ordered Scheme-readable records collected along the way;
+STATUS is `complete' when the source was fully consumed or `incomplete'
+when the trailing region is a valid prefix awaiting more input."
+  datums diagnostics spans status)
+
+(cl-defstruct (consent-recovery-step
+               (:constructor consent--make-recovery-step
+                             (status datum diagnostic span next))
+               (:copier nil))
+  "Recovery read step for a single form.
+Interactive callers drive one form at a time.  STATUS is `datum',
+`invalid', `incomplete', or `eof'; NEXT is the offset to resume from."
+  status datum diagnostic span next)
+
 (cl-defstruct (consent-boolean
                (:constructor consent--make-boolean (value))
                (:copier nil))
@@ -147,7 +180,11 @@ per-run resource limits."
   maximum-string-size
   maximum-total-nodes
   source-id
-  source-metadata)
+  source-metadata
+  ;; RECOVERY toggles errors-as-data: when non-nil, reader errors signal a
+  ;; structured `consent--reader-condition' the recovery driver resynchronizes
+  ;; past instead of unwinding the whole read.
+  recovery)
 
 (defvar consent--symbol-table (make-hash-table :test #'equal)
   "Intern table for Scheme symbol datums.")
@@ -243,7 +280,8 @@ per-run resource limits."
      :source-id
      (and source-metadata
           (consent--source-id source options))
-     :source-metadata source-metadata)))
+     :source-metadata source-metadata
+     :recovery (consent--option options :recovery nil))))
 
 (defun consent--source-field (name value)
   "Return a source metadata field named NAME with VALUE."
@@ -347,21 +385,43 @@ When OVERWRITE is nil, keep TARGET's existing source metadata."
       (consent--set-datum-source target metadata)))
   target)
 
+(defun consent--raise-reader-condition (reader kind error-symbol formatted)
+  "Raise a reader failure of KIND for READER.
+In recovery mode this signals a structured `consent--reader-condition' the
+recovery driver can resynchronize past; otherwise it signals ERROR-SYMBOL
+with the historical offset-prefixed FORMATTED message."
+  (if (consent--reader-recovery reader)
+      (signal 'consent--reader-recovery-condition
+              (list (consent--make-reader-condition
+                     :kind kind
+                     :offset (consent--reader-position reader)
+                     :message formatted)))
+    (signal error-symbol
+            (list (format "at offset %d: %s"
+                          (consent--reader-position reader)
+                          formatted)))))
+
 (defun consent--reader-error (reader message &rest args)
-  "Signal a reader error at READER's current position.
+  "Signal a reader syntax error at READER's current position.
 MESSAGE and ARGS are passed to `format'."
-  (signal 'consent-reader-error
-          (list (format "at offset %d: %s"
-                        (consent--reader-position reader)
-                        (apply #'format message args)))))
+  (consent--raise-reader-condition
+   reader 'invalid 'consent-reader-error
+   (apply #'format message args)))
+
+(defun consent--reader-incomplete (reader message &rest args)
+  "Signal a reader failure for a valid prefix that needs more input.
+The default error text is identical to `consent--reader-error'; only
+recovery mode tells the two apart.  MESSAGE and ARGS are passed to `format'."
+  (consent--raise-reader-condition
+   reader 'incomplete 'consent-reader-error
+   (apply #'format message args)))
 
 (defun consent--limit-error (reader message &rest args)
   "Signal a datum resource limit error for READER.
 MESSAGE and ARGS are passed to `format'."
-  (signal 'consent-datum-limit-error
-          (list (format "at offset %d: %s"
-                        (consent--reader-position reader)
-                        (apply #'format message args)))))
+  (consent--raise-reader-condition
+   reader 'limit 'consent-datum-limit-error
+   (apply #'format message args)))
 
 (defun consent--check-depth (reader depth)
   "Signal if DEPTH exceeds READER's maximum depth."
@@ -444,7 +504,7 @@ MESSAGE and ARGS are passed to `format'."
                (consent--starts-with-p reader "#|"))
       (cond
        ((consent--eof-p reader)
-        (consent--reader-error reader "unterminated block comment"))
+        (consent--reader-incomplete reader "unterminated block comment"))
        ((consent--starts-with-p reader "#|")
         (cl-incf depth)
         (consent--advance reader 2))
@@ -525,7 +585,7 @@ DEPTH is used when reading a datum comment's discarded datum."
                 (not (eq (consent--peek reader) ?\;)))
       (consent--advance reader))
     (when (consent--eof-p reader)
-      (consent--reader-error reader "unterminated hexadecimal escape"))
+      (consent--reader-incomplete reader "unterminated hexadecimal escape"))
     (let ((digits (substring (consent--reader-source reader)
                              start
                              (consent--reader-position reader))))
@@ -574,14 +634,14 @@ DEPTH is used when reading a datum comment's discarded datum."
            ((eq (consent--peek reader) ?\n)
             (consent--advance reader))
            (t
-            (consent--reader-error
+            (consent--reader-incomplete
              reader "expected line ending in string continuation")))
           (while (consent--intraline-whitespace-p
                   (consent--peek reader))
             (consent--advance reader))))
       (while (not (eq (consent--peek reader) ?\"))
         (when (consent--eof-p reader)
-          (consent--reader-error reader "unterminated string"))
+          (consent--reader-incomplete reader "unterminated string"))
         (let ((char (consent--peek reader)))
           (cond
            ((eq char ?\\)
@@ -610,7 +670,7 @@ DEPTH is used when reading a datum comment's discarded datum."
   (let (result)
     (while (not (eq (consent--peek reader) ?|))
       (when (consent--eof-p reader)
-        (consent--reader-error reader "unterminated vertical symbol"))
+        (consent--reader-incomplete reader "unterminated vertical symbol"))
       (let ((char (consent--peek reader)))
         (cond
          ((eq char ?\\)
@@ -1115,7 +1175,7 @@ The return value is (BODY EXACTNESS RADIX), or nil."
   "Read a character datum from READER after `#\\'."
   (consent--advance reader 2)
   (when (consent--eof-p reader)
-    (consent--reader-error reader "missing character after #\\"))
+    (consent--reader-incomplete reader "missing character after #\\"))
   (let ((token (consent--read-token reader)))
     (when (= (length token) 0)
       (consent--reader-error reader "missing character after #\\"))
@@ -1148,7 +1208,7 @@ The return value is (BODY EXACTNESS RADIX), or nil."
       (consent--skip-intertoken-space reader depth)
       (cond
        ((consent--eof-p reader)
-        (consent--reader-error reader "unterminated list"))
+        (consent--reader-incomplete reader "unterminated list"))
        ((eq (consent--peek reader) ?\))
         (consent--advance reader)
         (setq done t))
@@ -1199,7 +1259,7 @@ Signal if the sequence exceeds MAXIMUM-LENGTH."
       (consent--skip-intertoken-space reader depth)
       (cond
        ((consent--eof-p reader)
-        (consent--reader-error reader "unterminated %s" kind))
+        (consent--reader-incomplete reader "unterminated %s" kind))
        ((eq (consent--peek reader) close-char)
         (consent--advance reader)
         (setq done t))
@@ -1369,7 +1429,7 @@ Signal if the sequence exceeds MAXIMUM-LENGTH."
   (consent--check-depth reader depth)
   (consent--skip-intertoken-space reader depth)
   (when (consent--eof-p reader)
-    (consent--reader-error reader "unexpected end of input"))
+    (consent--reader-incomplete reader "unexpected end of input"))
   (let ((start (consent--reader-position reader))
         (char (consent--peek reader))
         datum)
@@ -1493,6 +1553,231 @@ Return (DATUM . NEXT-POSITION).  DATUM is
               reader)))
         (consent-validate-datum datum options)
         (cons datum (consent--reader-position reader))))))
+
+;;;; Reader recovery: errors as data, resynchronization, and spans.
+
+(defun consent--form-start-char-p (char)
+  "Return non-nil when CHAR can begin a top-level form for resync purposes."
+  (not (or (consent--whitespace-char-p char)
+           (eq char ?\)))))
+
+(defun consent-resync-to-next-form (source position)
+  "Form-level batch resync strategy for reader recovery.
+Return the offset of the next top-level form strictly after POSITION in
+SOURCE.  A top-level form is anchored to a line start whose first character
+is neither whitespace nor a closing parenthesis; when none remains, return
+the end of SOURCE.  This is the default resync strategy; callers may supply
+their own (for example a lexer-level or editor-grade strategy) through the
+`:resync' option."
+  (let ((length (length source))
+        (index position)
+        (result nil))
+    (while (and (not result) (< index length))
+      (if (and (> index position)
+               (eq (aref source (1- index)) ?\n)
+               (consent--form-start-char-p (aref source index)))
+          (setq result index)
+        (setq index (1+ index))))
+    (or result length)))
+
+(defun consent--recovery-range (line-starts start end)
+  "Build a diagnostic-range datum spanning START..END using LINE-STARTS.
+The shape matches the `(agent diagnostics)' range record."
+  (let ((start-position (consent--line-starts-line-column line-starts start))
+        (end-position (consent--line-starts-line-column line-starts end)))
+    (list (consent--intern-symbol "diagnostic-range")
+          (list (consent--intern-symbol "start")
+                (consent--make-canonical-integer start))
+          (list (consent--intern-symbol "end")
+                (consent--make-canonical-integer end))
+          (list (consent--intern-symbol "line")
+                (consent--make-canonical-integer (car start-position)))
+          (list (consent--intern-symbol "column")
+                (consent--make-canonical-integer (cdr start-position)))
+          (list (consent--intern-symbol "end-line")
+                (consent--make-canonical-integer (car end-position)))
+          (list (consent--intern-symbol "end-column")
+                (consent--make-canonical-integer (cdr end-position))))))
+
+(defun consent--recovery-diagnostic (source-id kind reason range)
+  "Build a Scheme-readable diagnostic datum for a recovery event.
+The shape matches `(agent diagnostics)' `make-diagnostic'; KIND (`invalid'
+or `incomplete') rides in the metadata so every host adapter consumes it
+identically.  REASON is the human-readable message and RANGE is the
+malformed region."
+  (list (consent--intern-symbol "diagnostic")
+        (list (consent--intern-symbol "severity")
+              (consent--intern-symbol "error"))
+        (list (consent--intern-symbol "message") reason)
+        (list (consent--intern-symbol "source")
+              (consent--intern-symbol "reader"))
+        (list (consent--intern-symbol "file")
+              (or source-id consent-false))
+        (list (consent--intern-symbol "buffer") consent-false)
+        (list (consent--intern-symbol "range") range)
+        (list (consent--intern-symbol "metadata")
+              (list (list (consent--intern-symbol "kind")
+                          (consent--intern-symbol (symbol-name kind)))
+                    (list (consent--intern-symbol "phase")
+                          (consent--intern-symbol "read"))))))
+
+(defun consent--recovery-span (kind reason range text)
+  "Build a recovery span datum recording one skipped or incomplete region.
+TEXT preserves the source bytes so recovery never silently drops input; the
+range vocabulary is shared with comment trivia and CST recovery nodes."
+  (list (consent--intern-symbol "recovery-span")
+        (list (consent--intern-symbol "kind")
+              (consent--intern-symbol (symbol-name kind)))
+        (list (consent--intern-symbol "reason") reason)
+        (list (consent--intern-symbol "range") range)
+        (list (consent--intern-symbol "text") text)))
+
+(defun consent--guard-reader-failure (reader thunk)
+  "Run THUNK, returning (value . V) or (condition . C) when it raises.
+Non-structured errors are normalized to an `invalid' reader condition at
+READER's current offset."
+  (condition-case err
+      (cons 'value (funcall thunk))
+    (consent--reader-recovery-condition
+     (cons 'condition (car (cdr err))))
+    (consent-reader-error
+     (cons 'condition
+           (consent--make-reader-condition
+            :kind 'invalid
+            :offset (consent--reader-position reader)
+            :message (car (cdr err)))))
+    (error
+     (cons 'condition
+           (consent--make-reader-condition
+            :kind 'invalid
+            :offset (consent--reader-position reader)
+            :message (error-message-string err))))))
+
+(defun consent--build-failure-step
+    (reader resync line-starts source-id start condition)
+  "Build the `consent-recovery-step' for a reader failure anchored at START.
+Incomplete input rewinds to START; a genuine error advances past the
+malformed region via RESYNC with guaranteed forward progress."
+  (let ((kind (consent--reader-condition-kind condition))
+        (reason (consent--reader-condition-message condition))
+        (source (consent--reader-source reader))
+        (length (consent--reader-length reader)))
+    (if (eq kind 'incomplete)
+        (let* ((range (consent--recovery-range line-starts start length))
+               (text (substring source start length))
+               (diagnostic
+                (consent--recovery-diagnostic source-id 'incomplete reason range))
+               (span (consent--recovery-span 'incomplete reason range text)))
+          (setf (consent--reader-position reader) start)
+          (consent--make-recovery-step 'incomplete nil diagnostic span start))
+      (let* ((proposed (funcall resync source start))
+             (next (min length (max proposed (1+ start))))
+             (range (consent--recovery-range line-starts start next))
+             (text (substring source start next))
+             (diagnostic
+              (consent--recovery-diagnostic source-id 'invalid reason range))
+             (span (consent--recovery-span 'invalid reason range text)))
+        (setf (consent--reader-position reader) next)
+        (consent--make-recovery-step 'invalid nil diagnostic span next)))))
+
+(defun consent--recover-step (reader resync line-starts source-id options)
+  "Read one form from READER in recovery mode and return a `consent-recovery-step'.
+Leading trivia is skipped first so a malformed region is anchored at the
+datum start, not at preceding whitespace; trivia-level failures (such as an
+unterminated block comment) are anchored where the trivia began.  RESYNC is
+the resync strategy, LINE-STARTS positions diagnostics, SOURCE-ID labels
+them, and OPTIONS carries reader limits."
+  (let* ((pre (consent--reader-position reader))
+         (skip-outcome
+          (consent--guard-reader-failure
+           reader
+           (lambda () (consent--skip-intertoken-space reader 0)))))
+    (cond
+     ((eq (car skip-outcome) 'condition)
+      (consent--build-failure-step reader resync line-starts source-id
+                                   pre (cdr skip-outcome)))
+     ((consent--eof-p reader)
+      (consent--make-recovery-step 'eof nil nil nil
+                                   (consent--reader-position reader)))
+     (t
+      (let* ((start (consent--reader-position reader))
+             (read-outcome
+              (consent--guard-reader-failure
+               reader
+               (lambda ()
+                 (setf (consent--reader-datum-labels reader)
+                       (make-hash-table :test #'equal))
+                 (let ((datum (consent--resolve-datum-labels
+                               (consent--read-datum reader 0)
+                               reader)))
+                   (consent-validate-datum datum options)
+                   datum)))))
+        (if (eq (car read-outcome) 'value)
+            (consent--make-recovery-step 'datum (cdr read-outcome) nil nil
+                                         (consent--reader-position reader))
+          (consent--build-failure-step reader resync line-starts source-id
+                                       start (cdr read-outcome))))))))
+
+(defun consent--recovery-reader (source options)
+  "Create a recovery-mode reader over SOURCE, forcing recovery on."
+  (consent--new-reader source (plist-put (copy-sequence options) :recovery t)))
+
+;;;###autoload
+(defun consent-read-recover (source &optional options)
+  "Read SOURCE in recovery mode and return a `consent-recovery-result'.
+Collect every readable datum plus an ordered diagnostics list and recovery
+spans instead of aborting on the first malformed form.  The result STATUS is
+`incomplete' when the trailing region is a valid prefix awaiting more input,
+otherwise `complete'.  The resync point is caller-selectable through the
+`:resync' option (defaulting to `consent-resync-to-next-form')."
+  (unless (stringp source)
+    (signal 'wrong-type-argument (list 'stringp source)))
+  (let* ((resync (consent--option options :resync #'consent-resync-to-next-form))
+         (source-id (consent--option options :source-id nil))
+         (line-starts (consent--source-line-starts source))
+         (reader (consent--recovery-reader source options))
+         (datums nil)
+         (diagnostics nil)
+         (spans nil)
+         (status 'complete)
+         (done nil))
+    (while (not done)
+      (let* ((step (consent--recover-step reader resync line-starts
+                                          source-id options))
+             (step-status (consent-recovery-step-status step)))
+        (cond
+         ((eq step-status 'eof)
+          (setq done t))
+         ((eq step-status 'datum)
+          (push (consent-recovery-step-datum step) datums))
+         ((eq step-status 'incomplete)
+          (push (consent-recovery-step-diagnostic step) diagnostics)
+          (push (consent-recovery-step-span step) spans)
+          (setq status 'incomplete done t))
+         (t
+          (push (consent-recovery-step-diagnostic step) diagnostics)
+          (push (consent-recovery-step-span step) spans)))))
+    (consent--make-recovery-result
+     (nreverse datums) (nreverse diagnostics) (nreverse spans) status)))
+
+;;;###autoload
+(defun consent-read-recover-from-string-at (source position &optional options)
+  "Recovery-aware single-form read for interactive and streaming callers.
+Return a `consent-recovery-step' whose STATUS is `datum', `invalid',
+`incomplete', or `eof', and whose NEXT offset is where the caller should
+resume.  Incomplete input is surfaced as its own status so auto-indent and
+continuation prompts never confuse a valid prefix with a syntax error."
+  (unless (and (stringp source)
+               (integerp position)
+               (<= 0 position)
+               (<= position (length source)))
+    (signal 'wrong-type-argument (list 'string-position (list source position))))
+  (let* ((resync (consent--option options :resync #'consent-resync-to-next-form))
+         (source-id (consent--option options :source-id nil))
+         (line-starts (consent--source-line-starts source))
+         (reader (consent--recovery-reader source options)))
+    (setf (consent--reader-position reader) position)
+    (consent--recover-step reader resync line-starts source-id options)))
 
 (defun consent--validate-note-node (reader)
   "Record one validated datum node in READER."

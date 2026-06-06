@@ -157,6 +157,173 @@
          (consent-datum->external shared)
          "((a b) (a b))"))
 
+;;;; Reader recovery: errors as data, resync, incomplete vs invalid.
+
+;; Read one tagged field value from a tagged record list.
+(define (record-field record name)
+  (let ((cell (assq name (cdr record))))
+    (and cell (cadr cell))))
+
+;; Read one value from a bare field alist (such as diagnostic metadata).
+(define (alist-field alist name)
+  (let ((cell (assq name alist)))
+    (and cell (cadr cell))))
+
+;; Return an integer offset from a diagnostic range field.
+(define (range-offset range name)
+  (consent-number-value (alist-field (cdr range) name)))
+
+;; Return the (start . end) offset pair for a diagnostic's range.
+(define (diagnostic-span-pair diagnostic)
+  (let ((range (record-field diagnostic 'range)))
+    (cons (range-offset range 'start)
+          (range-offset range 'end))))
+
+;; Return the recovery kind symbol stored in a diagnostic's metadata.
+(define (diagnostic-kind diagnostic)
+  (alist-field (record-field diagnostic 'metadata) 'kind))
+
+;; The default form-level strategy recovers the good forms on either side of a
+;; malformed top-level form and collects an ordered diagnostics list.
+(let ((result
+       (consent-read-recover
+        "(good 1)\n(broken ]\n(also ]\n(good 2)\n")))
+  (check 'recover-status-complete
+         (consent-recovery-result-status result)
+         'complete)
+  (check 'recover-good-datums
+         (map consent-datum->external
+              (consent-recovery-result-datums result))
+         '("(good 1)" "(good 2)"))
+  (check 'recover-multi-error-count
+         (length (consent-recovery-result-diagnostics result))
+         2)
+  (check 'recover-span-count
+         (length (consent-recovery-result-spans result))
+         2)
+  (let ((diagnostic (car (consent-recovery-result-diagnostics result))))
+    (check 'recover-diagnostic-severity
+           (record-field diagnostic 'severity)
+           'error)
+    (check 'recover-diagnostic-source
+           (record-field diagnostic 'source)
+           'reader)
+    (check 'recover-diagnostic-kind
+           (diagnostic-kind diagnostic)
+           'invalid)
+    ;; The malformed top-level form runs from "(broken" to the next line.
+    (check 'recover-diagnostic-span
+           (diagnostic-span-pair diagnostic)
+           '(9 . 19)))
+  ;; The skipped bytes are preserved in the span, never silently dropped.
+  (let ((span (car (consent-recovery-result-spans result))))
+    (check 'recover-span-kind
+           (record-field span 'kind)
+           'invalid)
+    (check 'recover-span-text-preserved
+           (record-field span 'text)
+           "(broken ]\n")))
+
+;; A recovery read returns the partial prefix even when the trailing form is an
+;; incomplete (valid-prefix) region, and marks the result incomplete.
+(let ((result (consent-read-recover "(a 1)\n(b ")))
+  (check 'recover-incomplete-status
+         (consent-recovery-result-status result)
+         'incomplete)
+  (check 'recover-incomplete-prefix
+         (map consent-datum->external
+              (consent-recovery-result-datums result))
+         '("(a 1)"))
+  (check 'recover-incomplete-kind
+         (diagnostic-kind
+          (car (consent-recovery-result-diagnostics result)))
+         'incomplete))
+
+;; The resync point is caller-selectable: a strategy that jumps to end of
+;; source discards everything after the first malformed form.
+(let ((result
+       (consent-read-recover
+        "(bad ]\n(good)\n"
+        (list (cons 'resync
+                    (lambda (source position)
+                      (string-length source)))))))
+  (check 'recover-custom-resync-datums
+         (consent-recovery-result-datums result)
+         '())
+  (check 'recover-custom-resync-diagnostics
+         (length (consent-recovery-result-diagnostics result))
+         1))
+
+;; Single-form recovery distinguishes datum, invalid, incomplete, and eof, and
+;; reports a resume offset for each.
+(let ((datum-step (consent-read-recover-from-string-at "(a b) trailing" 0))
+      (invalid-step (consent-read-recover-from-string-at ")oops\n(z)" 0))
+      (incomplete-step (consent-read-recover-from-string-at "(a" 0))
+      (eof-step (consent-read-recover-from-string-at "   \n" 0)))
+  (check 'step-datum-status
+         (consent-recovery-step-status datum-step)
+         'datum)
+  (check 'step-datum-external
+         (consent-datum->external (consent-recovery-step-datum datum-step))
+         "(a b)")
+  (check 'step-invalid-status
+         (consent-recovery-step-status invalid-step)
+         'invalid)
+  (check 'step-invalid-progress
+         (> (consent-recovery-step-next invalid-step) 0)
+         #t)
+  (check 'step-incomplete-status
+         (consent-recovery-step-status incomplete-step)
+         'incomplete)
+  ;; Incomplete input does not consume the prefix; the caller resumes at 0.
+  (check 'step-incomplete-rewinds
+         (consent-recovery-step-next incomplete-step)
+         0)
+  (check 'step-eof-status
+         (consent-recovery-step-status eof-step)
+         'eof))
+
+;; Recovery spans are deterministic: two reads of the same source produce the
+;; same ordered offset pairs, so cached editor diagnostics do not flicker.
+(let ((first (consent-read-recover "(a ]\n(b }\n(c)\n"))
+      (second (consent-read-recover "(a ]\n(b }\n(c)\n")))
+  (check 'recover-spans-stable
+         (map diagnostic-span-pair
+              (consent-recovery-result-diagnostics first))
+         (map diagnostic-span-pair
+              (consent-recovery-result-diagnostics second))))
+
+;; Recovery terminates on pathological input instead of looping forever.  A
+;; long run of closers collapses to one skipped region; a nested run of openers
+;; under the depth limit is a single incomplete prefix; and many malformed lines
+;; each make forward progress instead of wedging the driver.
+(let ((closers (consent-read-recover (make-string 500 #\))))
+      (openers (consent-read-recover (make-string 50 #\()))
+      (junk-lines
+       (consent-read-recover
+        (let loop ((n 0) (text ""))
+          (if (= n 200) text (loop (+ n 1) (string-append text "]\n")))))))
+  (check 'recover-pathological-closers
+         (consent-recovery-result-status closers)
+         'complete)
+  (check 'recover-pathological-openers
+         (consent-recovery-result-status openers)
+         'incomplete)
+  (check 'recover-pathological-junk-terminates
+         (consent-recovery-result-status junk-lines)
+         'complete)
+  (check 'recover-pathological-junk-progress
+         (= (length (consent-recovery-result-diagnostics junk-lines)) 200)
+         #t))
+
+;; The default raise-on-error path is unchanged for existing callers.
+(check 'recover-default-still-raises
+       (raises? (lambda () (consent-read "(a")))
+       #t)
+(check 'recover-default-read-all-raises
+       (raises? (lambda () (consent-read-all "(good) (bad ]")))
+       #t)
+
 (if (= failures 0)
     (begin
       (display "Scheme reader tests passed")
