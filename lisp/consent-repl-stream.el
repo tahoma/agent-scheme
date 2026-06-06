@@ -32,10 +32,18 @@
 ;; session, and `consent-repl-stream' is an interactive command that drives a
 ;; submitted source string and renders the records in a transcript buffer.
 ;;
+;; The interactive command renders its transcript buffer through the shared
+;; chrome model (`consent-repl-chrome.el', the Emacs parity twin of the portable
+;; `(cli repl-chrome)' layer): the same named chromes and the same
+;; record-to-role mapping, realized as Emacs faces.  The default is `comment',
+;; consistent with the portable terminal default; `datum' recovers the canonical
+;; raw record stream in the buffer and is always reachable.  The batch entry and
+;; the pure `consent-repl-stream-drive' driver keep emitting that raw record
+;; stream untouched -- it is the canonical surface the parity corpus asserts
+;; against both hosts.
+;;
 ;; This entry is deliberately minimal: full line editing, history, completion,
-;; and comint UI polish are out of scope (they belong to later issues), as is the
-;; shared chrome presentation layer (#425).  The canonical surface here is the
-;; raw record stream, which is what the parity corpus asserts against both hosts.
+;; and comint UI polish are out of scope (they belong to later issues).
 
 ;;; Code:
 
@@ -44,6 +52,7 @@
 (require 'subr-x)
 (require 'consent-eval)
 (require 'consent-reader)
+(require 'consent-repl-chrome)
 (require 'consent-result)
 
 (defconst consent-repl-stream-default-session "repl-main"
@@ -451,6 +460,31 @@ Return the ordered contract records for SESSION under evaluator OPTIONS."
     (consent-repl-stream--split-lines input))
    session options))
 
+;;;; Shared chrome presentation
+
+;;;###autoload
+(defun consent-repl-stream-rendered-from-string
+    (input session chrome-name &optional apply-faces options)
+  "Drive a REPL over INPUT under SESSION and return the CHROME-NAME chrome's text.
+Each contract record is rendered through the named chrome from
+`consent-repl-chrome.el' and concatenated into the control-channel text;
+program output is discarded.  Faces are applied when APPLY-FACES is non-nil, so
+omitting it recovers the plain text.  This is the host-neutral, buffer-free hook
+the chrome tests assert against, the Emacs twin of the portable
+`cli-repl-rendered-from-string'."
+  (let ((chrome (consent-repl-chrome-lookup chrome-name))
+        (parts nil))
+    (consent-repl-stream-run
+     (consent-repl-stream--list-chunk-source
+      (consent-repl-stream--split-lines input))
+     (lambda (record)
+       (let ((painted (consent-repl-chrome-paint
+                       (funcall chrome record) apply-faces)))
+         (when painted (push painted parts))))
+     #'ignore
+     session options)
+    (apply #'concat (nreverse parts))))
+
 ;;;; Terminal/batch entry
 
 (defun consent-repl-stream--batch-read-chunk ()
@@ -485,24 +519,33 @@ run under `emacs -Q --batch -l consent-repl-stream -f consent-repl-stream-main'.
   "Name of the buffer the interactive incremental REPL renders records into.")
 
 ;;;###autoload
-(defun consent-repl-stream (source &optional session)
+(defun consent-repl-stream (source &optional session chrome-name)
   "Read and incrementally evaluate SOURCE in an incremental Consent Scheme REPL.
 SOURCE may hold several forms; each is read and evaluated one at a time in the
-durable SESSION (default `consent-repl-stream-default-session'), and the emitted
-contract records are appended to `consent-repl-stream-buffer-name'.  Return the
-list of contract records.  Interactively, prompt for SOURCE."
+durable SESSION (default `consent-repl-stream-default-session').  The emitted
+contract records are rendered through the CHROME-NAME chrome (default
+`comment', consistent with the portable terminal default) from
+`consent-repl-chrome.el' -- realized as Emacs faces -- and appended to
+`consent-repl-stream-buffer-name'.  `datum' recovers the canonical raw record
+stream in the buffer.  Return the list of contract records.  Interactively,
+prompt for SOURCE."
   (interactive
    (list (if (use-region-p)
              (buffer-substring-no-properties (region-beginning) (region-end))
            (read-string "Consent Scheme REPL input: "))))
   (let* ((session (or session consent-repl-stream-default-session))
+         (chrome-name (or chrome-name (consent-repl-chrome-default-name)))
+         (chrome (or (consent-repl-chrome-lookup chrome-name)
+                     (consent-repl-chrome-lookup
+                      (consent-repl-chrome-default-name))))
          (records (consent-repl-stream-records-from-string source session))
          (buffer (get-buffer-create consent-repl-stream-buffer-name)))
     (with-current-buffer buffer
       (goto-char (point-max))
       (let ((inhibit-read-only t))
         (dolist (record records)
-          (insert (consent-result->external record) "\n")))
+          (let ((painted (consent-repl-chrome-paint (funcall chrome record) t)))
+            (when painted (insert painted)))))
       (special-mode))
     (when (called-interactively-p 'interactive)
       (display-buffer buffer))

@@ -19,6 +19,7 @@
 (require 'seq)
 (require 'consent-eval)
 (require 'consent-reader)
+(require 'consent-repl-chrome)
 (require 'consent-repl-stream)
 (require 'consent-result)
 
@@ -328,18 +329,127 @@ OPTIONS are evaluator options.  Return the ordered contract records."
             (and (stringp display) (string-match-p "emitted" display))))
         (consent-repl-stream-test--of records "repl-result"))))))
 
-;;;; The interactive command renders records into its transcript buffer
+;;;; The interactive command renders records through the shared chrome
 
-(ert-deftest consent-repl-stream-interactive-command-renders-records ()
-  "`consent-repl-stream' returns records and renders them into its buffer."
+(ert-deftest consent-repl-stream-interactive-command-renders-comment-chrome ()
+  "`consent-repl-stream' returns records and paints them through the default chrome."
   (when (get-buffer consent-repl-stream-buffer-name)
     (kill-buffer consent-repl-stream-buffer-name))
   (let ((records (consent-repl-stream "(+ 1 2)\n")))
     (should (= (consent-repl-stream-test--count records "repl-result") 1))
     (with-current-buffer consent-repl-stream-buffer-name
-      (should (string-match-p "repl-result" (buffer-string)))
-      (should (string-match-p "repl-exit" (buffer-string)))))
+      ;; The default `comment' chrome renders block comments, not the raw tags.
+      (should (string-match-p (regexp-quote "#| => 3 |#") (buffer-string)))
+      (should (string-match-p (regexp-quote "#| exit closed-ok |#")
+                              (buffer-string)))
+      (should-not (string-match-p "repl-result" (buffer-string)))
+      ;; Faces realize the chrome roles in the buffer.
+      (should (text-property-not-all
+               (point-min) (point-max) 'face nil))))
   (kill-buffer consent-repl-stream-buffer-name))
+
+(ert-deftest consent-repl-stream-interactive-command-datum-chrome ()
+  "The `datum' chrome keeps the canonical raw record stream reachable in the buffer."
+  (when (get-buffer consent-repl-stream-buffer-name)
+    (kill-buffer consent-repl-stream-buffer-name))
+  (consent-repl-stream "(+ 1 2)\n" nil 'datum)
+  (with-current-buffer consent-repl-stream-buffer-name
+    (should (string-match-p "repl-result" (buffer-string)))
+    (should (string-match-p "repl-exit" (buffer-string)))
+    ;; The raw datum stream is never faced.
+    (should-not (text-property-not-all (point-min) (point-max) 'face nil)))
+  (kill-buffer consent-repl-stream-buffer-name))
+
+;;;; The shared chrome model: same names and record-to-role mapping as portable
+
+(defun consent-repl-stream-test--result-displays (records)
+  "Return the ordered `display' strings of the `repl-result' RECORDS."
+  (mapcar (lambda (result) (consent-repl-stream-test--field result "display"))
+          (consent-repl-stream-test--of records "repl-result")))
+
+(ert-deftest consent-repl-stream-chrome-registry ()
+  "The registry exposes the same names and default as the portable renderer."
+  (should (eq (consent-repl-chrome-default-name) 'comment))
+  (should (functionp (consent-repl-chrome-lookup 'comment)))
+  (should (functionp (consent-repl-chrome-lookup "classic")))
+  (should-not (consent-repl-chrome-lookup 'no-such-chrome))
+  (let ((names (consent-repl-chrome-names)))
+    (dolist (name '(comment datum classic quiet silent))
+      (should (memq name names)))))
+
+(ert-deftest consent-repl-stream-chrome-datum-recovers-raw-stream ()
+  "The `datum' chrome reproduces the raw record stream and is never faced."
+  (let* ((input "(+ 1 2)\n(exit)\n")
+         (records (consent-repl-stream-records-from-string input "repl-main"))
+         (raw (mapconcat (lambda (record)
+                           (concat (consent-result->external record) "\n"))
+                         records ""))
+         (plain (consent-repl-stream-rendered-from-string
+                 input "repl-main" 'datum nil))
+         (faced (consent-repl-stream-rendered-from-string
+                 input "repl-main" 'datum t)))
+    (should (equal plain raw))
+    ;; The datum chrome is byte-identical with faces requested, and unfaced.
+    (should (equal (substring-no-properties faced) raw))
+    (should-not (text-property-not-all 0 (length faced) 'face nil faced))))
+
+(ert-deftest consent-repl-stream-chrome-comment-replays-unedited ()
+  "The `comment' chrome is valid, replayable Consent Scheme."
+  (let* ((input "(+ 1 2)\n(define base 7)\n(* base 3)\n")
+         (rendered (consent-repl-stream-rendered-from-string
+                    input "repl-main" 'comment nil)))
+    (should (string-match-p (regexp-quote "#| ") rendered))
+    ;; Re-driving the rendered control stream reproduces the same results: the
+    ;; comments are ignored and the echoed forms re-evaluate identically.
+    (should (equal (consent-repl-stream-test--result-displays
+                    (consent-repl-stream-records-from-string rendered "repl-main"))
+                   (consent-repl-stream-test--result-displays
+                    (consent-repl-stream-records-from-string input "repl-main"))))))
+
+(ert-deftest consent-repl-stream-chrome-comment-prompt-shapes ()
+  "The default session shows the ordinal alone; a named session grows a label."
+  (should (equal (consent-repl-stream-rendered-from-string
+                  "(+ 1 2)\n" "repl-main" 'comment nil)
+                 "#| 1 |# (+ 1 2)\n#| => 3 |#\n#| 2 |# #| exit closed-ok |#\n"))
+  (should (equal (consent-repl-stream-rendered-from-string
+                  "(+ 1 2)\n" "project-main" 'comment nil)
+                 (concat "#| project-main:1 |# (+ 1 2)\n#| => 3 |#\n"
+                         "#| project-main:2 |# #| exit closed-ok |#\n"))))
+
+(ert-deftest consent-repl-stream-chrome-classic-quiet-silent ()
+  "The `classic', `quiet', and `silent' chromes match the portable rendering."
+  (should (equal (consent-repl-stream-rendered-from-string
+                  "(+ 1 2)\n" "repl-main" 'classic nil)
+                 "> 3\n> "))
+  (should (equal (consent-repl-stream-rendered-from-string
+                  "(+ 1 2)\n" "repl-main" 'quiet nil)
+                 "3\n"))
+  (should (equal (consent-repl-stream-rendered-from-string
+                  "(+ 1 2)\n" "repl-main" 'silent nil)
+                 "")))
+
+(ert-deftest consent-repl-stream-chrome-condition-marker ()
+  "A recoverable condition renders under a human chrome."
+  (should (string-match-p
+           (regexp-quote "#| !! ")
+           (consent-repl-stream-rendered-from-string
+            "undefined-name\n" "repl-main" 'comment nil))))
+
+(ert-deftest consent-repl-stream-chrome-faces-realize-roles ()
+  "Faces are applied when requested and absent from the plain rendering."
+  (let ((faced (consent-repl-stream-rendered-from-string
+                "(+ 1 2)\n" "repl-main" 'comment t))
+        (plain (consent-repl-stream-rendered-from-string
+                "(+ 1 2)\n" "repl-main" 'comment nil)))
+    ;; Faces are presentation only: stripping them recovers the plain text.
+    (should (equal (substring-no-properties faced) plain))
+    (should (text-property-not-all 0 (length faced) 'face nil faced))
+    (should-not (text-property-not-all 0 (length plain) 'face nil plain))
+    ;; A colored role realizes its dedicated face; the neutral result value
+    ;; stays unfaced, mirroring the portable renderer leaving it uncolored.
+    (let ((marker (string-match-p (regexp-quote "=> ") faced)))
+      (should (eq (get-text-property marker 'face faced)
+                  'consent-repl-chrome-result-marker)))))
 
 (provide 'consent-repl-stream-test)
 
