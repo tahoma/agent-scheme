@@ -200,6 +200,17 @@ eligibility values are `policy-gated` and `not-oracle-eligible`. Reasons include
 `host-policy`, `agent-specific`, `resource-limit`, `agent-result-record`,
 `implementation-dependent`, and `unspecified`.
 
+A second `consent-fixture-suite` corpus, `fixtures/repl/parity-cases.scm` (kind
+`repl-parity`), is the host-neutral conformance corpus for the cross-host REPL
+interaction contract ([`docs/repl-interaction-contract.md`](repl-interaction-contract.md)).
+Its cases carry `session`, `options`, `input`, and an `expect` record sequence
+rather than the reader/evaluator fields above. Two parallel runners drive the
+same cases against both REPL hosts: `tests/scheme/consent-repl-parity-test.scm`
+(portable terminal REPL, in the shared host-suite file list and run under Chibi
+via `tests/consent-scheme-repl-parity-test.el`) and
+`tests/consent-repl-parity-test.el` (Emacs incremental REPL). Because both read
+one corpus, a host that drifts from the contract fails its runner.
+
 ## Reference Oracle
 
 Pure shared R7RS conformance fixtures can also be compared with external Scheme
