@@ -203,12 +203,13 @@ the feature can be expressed through R7RS libraries and data alone.
 
 Current examples:
 
-- `tests/consent-scheme-reader-test.el` runs
-  `tests/scheme/consent-reader-test.scm` with the configured external
-  Scheme host for the selected portable shard.
-- `tests/consent-scheme-eval-test.el` runs
-  `tests/scheme/consent-eval-test.scm` the same way and also guards a
-  bootstrap invariant around explicit continuations.
+- `tests/consent-scheme-full-host-test.el` runs the shared portable file list
+  (including `tests/scheme/consent-reader-test.scm` and
+  `tests/scheme/consent-eval-test.scm`) with the configured external Scheme host
+  for the selected portable shard, via `consent--scheme-host-run-suite`. Every
+  host, Chibi included, goes through this one aggregate loop.
+- `tests/consent-scheme-eval-test.el` guards a host-independent bootstrap
+  invariant around explicit continuations in the portable evaluator source.
 - `tests/consent-conformance-test.el` validates the fixture suite and runs
   implemented cases through the Consent Scheme evaluator.
 

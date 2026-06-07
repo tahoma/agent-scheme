@@ -4,7 +4,11 @@
 
 ;;; Commentary:
 
-;; ERT bridge for portable R7RS pass-boundary libraries.
+;; Host-independent module-boundary check for the portable runtime.  The
+;; portable module-boundary test file itself runs through the shared aggregate
+;; host suite (`consent--scheme-host-run-suite'); the out-of-repository load
+;; check below spawns Chibi directly because it must run from a working
+;; directory outside the repository tree.
 
 ;;; Code:
 
@@ -34,29 +38,6 @@
             (match-string 1)
             (match-string 2)
             (match-string 3))))
-
-(ert-deftest consent-scheme-module-boundary-test-r7rs-suite ()
-  "Run the portable R7RS module-boundary tests."
-  (let ((runner (consent--scheme-module-boundary-runner)))
-    (skip-unless runner)
-    (let ((output-buffer
-           (generate-new-buffer " *consent-r7rs-module-boundary*")))
-      (unwind-protect
-          (let* ((default-directory consent--test-root)
-                 (status
-                  (process-file
-                   runner
-                   nil
-                   output-buffer
-                   nil
-                   "-A"
-                   (consent--test-target-library-directory)
-                   "tests/scheme/consent-module-boundary-test.scm")))
-            (unless (equal status 0)
-              (ert-fail
-               (with-current-buffer output-buffer
-                 (buffer-string)))))
-        (kill-buffer output-buffer)))))
 
 (ert-deftest consent-scheme-module-boundary-test-runtime-version-loads-outside-repo ()
   "Load portable runtime version data from a non-repository working directory."

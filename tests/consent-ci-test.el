@@ -369,17 +369,13 @@
         (makefile (consent-ci-test--repo-file-string "Makefile")))
     (should-not (string-match-p "name: portable R7RS / Chibi" workflow))
     (should-not (string-match-p "[[:space:]]+- test-portable\n" workflow))
+    ;; Chibi runs the same aggregate host suite as its peers but stays out of
+    ;; the default/CI portable shard set, reachable only through its own target.
     (should-not (string-match-p
-                 "CONSENT_PORTABLE_TEST_SHARD_TARGETS \\?=.*test-portable-eval"
-                 makefile))
-    (should-not (string-match-p
-                 "CONSENT_PORTABLE_TEST_SHARD_TARGETS \\?=.*test-portable-rest"
+                 "CONSENT_PORTABLE_TEST_SHARD_TARGETS \\?=.*test-portable-chibi"
                  makefile))
     (should (string-match-p
-             "CONSENT_OPTIONAL_PORTABLE_TEST_SHARD_TARGETS \\?=.*test-portable-eval"
-             makefile))
-    (should (string-match-p
-             "CONSENT_OPTIONAL_PORTABLE_TEST_SHARD_TARGETS \\?=.*test-portable-rest"
+             "CONSENT_PORTABLE_CHIBI_TEST_SELECTOR \\?="
              makefile))
     (should (string-match-p "^test-portable-chibi:" makefile))))
 
