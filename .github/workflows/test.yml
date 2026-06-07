@@ -428,15 +428,18 @@ jobs:
     runs-on: ubuntu-latest
     # Required cross-implementation gate (#374): run the shared fixture corpus
     # through both in-repo cores -- the Emacs-hosted implementation and the
-    # portable R7RS implementation, exercised here under Gauche -- and fail on
+    # portable R7RS implementation, exercised here under Guile -- and fail on
     # any result divergence. The per-push lane runs the canonical on/full combo;
     # the scheduled / workflow_dispatch lane expands to the full 2x3 cross, since
-    # each core's own shards already carry the metadata/docstring axis.
+    # each core's own shards already carry the metadata/docstring axis. Guile is
+    # the parity host here because it ships in the bare ubuntu-latest runner's
+    # apt universe; gauche is only packaged in the ubuntu:26.04 container the
+    # other portable-host shards run in.
     env:
-      CONSENT_PARITY_HOST: gauche
+      CONSENT_PARITY_HOST: guile
       CONSENT_TEST_SOURCE_METADATA: ${{ matrix.source_metadata }}
       CONSENT_TEST_DOCSTRING_RETENTION: ${{ matrix.docstring_retention }}
-      CONSENT_CI_LOG_FILE: parity-gauche-${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}.log
+      CONSENT_CI_LOG_FILE: parity-guile-${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}.log
       CONSENT_CI_SHARD_SUMMARY_NAME: Emacs/portable parity gate / source metadata ${{ matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention }}
     strategy:
       fail-fast: false
@@ -447,11 +450,12 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v6
 
-      - name: Install Emacs and Gauche
+      - name: Install Emacs and Guile
         run: |
           sudo apt-get update
-          sudo apt-get install -y emacs-nox gauche
-          gosh -I scheme -r7 -e '(import (scheme base) (scheme write)) (write (+ 1 2)) (newline)'
+          sudo apt-get install -y emacs-nox guile-3.0
+          guile --no-auto-compile --r7rs -L scheme \
+            -c '(import (scheme base) (scheme write)) (write (+ 1 2)) (newline)'
 
       - name: Run Emacs/portable parity gate
         shell: bash
@@ -473,7 +477,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: test-log-parity-gauche-${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}
+          name: test-log-parity-guile-${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}
           path: ci-logs/${{ env.CONSENT_CI_LOG_FILE }}
           if-no-files-found: warn
 

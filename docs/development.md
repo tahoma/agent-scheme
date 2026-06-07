@@ -440,8 +440,10 @@ on the `schedule` lane and on demand through `workflow_dispatch`. The trimmed
 jobs (`test-portable-extra-hosts`, `test-emacs-hosted`, and the `test-parity`
 gate) drive their `source_metadata` and `docstring_retention` matrix axes from a
 `github.event_name` expression, so those events expand them back to the full
-axis. The `test-parity` job (#374) runs the parity gate under Gauche as a
-required check on every lane.
+axis. The `test-parity` job (#374) runs the parity gate under Guile as a
+required check on every lane (Guile is packaged for the bare `ubuntu-latest`
+runner, whereas the other portable-host shards install their interpreters inside
+the `ubuntu:26.04` container).
 
 CI runs the aggregate suite as host/runtime-oriented shards so timing and
 failures stay visible by architectural path:
@@ -457,7 +459,7 @@ make test-emacs-core
 make test-emacs-library
 make test-emacs-capabilities
 make test-emacs-tools
-CONSENT_PARITY_HOST=gauche make test-parity
+CONSENT_PARITY_HOST=guile make test-parity
 ```
 
 `make test` runs those shard targets in parallel by default. `make
