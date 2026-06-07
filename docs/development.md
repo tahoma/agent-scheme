@@ -399,6 +399,26 @@ Emacs bridge spawns the portable emitter
 when unset) and skips when no portable host is available, so the gate is a
 no-op rather than a failure on a host-free machine.
 
+The default set also runs `lint-elisp`, the Emacs byte-compile lint gate (#415).
+It byte-compiles every checked-in `lisp/*.el` source with
+`byte-compile-error-on-warn` enabled, so any byte-compiler warning — unbound
+variables, arity mismatches, unused lexicals, obsolete calls — fails the build.
+This is the cheapest static analysis already available for the Emacs Lisp twin
+and is the Emacs-side counterpart to the portable doc-lint coverage the suite
+carries (#407/#412). The gate redirects its bytecode into a throwaway
+`CONSENT_LINT_BUILD_DIR` (default `build/lint`) so it leaves no stale `.elc`
+beside the sources and never races the parallel test shards that load the `.el`
+files directly. Run it on its own with:
+
+```sh
+make lint-elisp
+```
+
+`make compile-elisp` remains available as the non-gating target that produces
+in-place bytecode without warnings-as-errors. A batch `checkdoc` docstring pass
+is intentionally not part of this gate yet; it surfaces a large backlog of
+docstring-convention findings and is tracked as a separate follow-up slice.
+
 Run the exhaustive set — every portable host shard plus every Emacs shard —
 with the opt-in escape hatch:
 
@@ -444,6 +464,11 @@ axis. The `test-parity` job (#374) runs the parity gate under Guile as a
 required check on every lane (Guile is packaged for the bare `ubuntu-latest`
 runner, whereas the other portable-host shards install their interpreters inside
 the `ubuntu:26.04` container).
+
+The `lint-elisp` job (#415) runs `make lint-elisp` on every lane as its own
+lightweight required check, alongside the `license-reuse` REUSE/SPDX job. It
+needs only Emacs, so it is a fast static gate that runs in parallel with the
+test shards rather than fanning out across the matrix axes.
 
 CI runs the aggregate suite as host/runtime-oriented shards so timing and
 failures stay visible by architectural path:

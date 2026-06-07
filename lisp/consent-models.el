@@ -284,7 +284,7 @@ transport is `openai-compatible-http'."
            "no registered provider model supports role"))))
 
 ;;;###autoload
-(defun consent-models-route (role options &optional context)
+(defun consent-models-route (role options &optional _context)
   "Return an inspectable routing decision for ROLE and OPTIONS."
   (let* ((role-name (consent-models--expect-name role "model role"))
          (candidate (consent-models--select role-name options))
