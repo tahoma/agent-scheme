@@ -423,6 +423,69 @@ jobs:
               --eval "(consent-ci-write-summary (list (expand-file-name (getenv \"CONSENT_CI_LOG_FILE\") \"ci-logs\")) (getenv \"GITHUB_STEP_SUMMARY\"))"
           fi
 
+  test-parity:
+    name: Emacs/portable parity gate (syntax ${{ matrix.source_metadata }}; docstrings ${{ matrix.docstring_retention }})
+    runs-on: ubuntu-latest
+    # Required cross-implementation gate (#374): run the shared fixture corpus
+    # through both in-repo cores -- the Emacs-hosted implementation and the
+    # portable R7RS implementation, exercised here under Gauche -- and fail on
+    # any result divergence. The per-push lane runs the canonical on/full combo;
+    # the scheduled / workflow_dispatch lane expands to the full 2x3 cross, since
+    # each core's own shards already carry the metadata/docstring axis.
+    env:
+      CONSENT_PARITY_HOST: gauche
+      CONSENT_TEST_SOURCE_METADATA: ${{ matrix.source_metadata }}
+      CONSENT_TEST_DOCSTRING_RETENTION: ${{ matrix.docstring_retention }}
+      CONSENT_CI_LOG_FILE: parity-gauche-${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}.log
+      CONSENT_CI_SHARD_SUMMARY_NAME: Emacs/portable parity gate / source metadata ${{ matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention }}
+    strategy:
+      fail-fast: false
+      matrix:
+        source_metadata: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && fromJSON('["on", "off"]') || fromJSON('["on"]') }}
+        docstring_retention: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && fromJSON('["full", "simple", "none"]') || fromJSON('["full"]') }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Install Emacs and Gauche
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y emacs-nox gauche
+          gosh -I scheme -r7 -e '(import (scheme base) (scheme write)) (write (+ 1 2)) (newline)'
+
+      - name: Run Emacs/portable parity gate
+        shell: bash
+        run: |
+          mkdir -p ci-logs
+          started=$SECONDS
+          set +e
+          make test-parity 2>&1 | tee "ci-logs/${CONSENT_CI_LOG_FILE}"
+          status=${PIPESTATUS[0]}
+          wall=$((SECONDS - started))
+          {
+            printf 'CONSENT_CI_SHARD_NAME=%s\n' "${CONSENT_CI_SHARD_SUMMARY_NAME}"
+            printf 'CONSENT_CI_SHARD_SELECTOR=%s\n' '"^consent-parity-test-.*"'
+            printf 'CONSENT_CI_WALL_SECONDS=%s\n' "$wall"
+          } >> "ci-logs/${CONSENT_CI_LOG_FILE}"
+          exit "$status"
+
+      - name: Upload parity gate shard log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-log-parity-gauche-${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}
+          path: ci-logs/${{ env.CONSENT_CI_LOG_FILE }}
+          if-no-files-found: warn
+
+      - name: Render parity gate shard timing summary
+        if: always()
+        run: |
+          if [ -f "ci-logs/${CONSENT_CI_LOG_FILE}" ]; then
+            emacs -Q --batch -L lisp \
+              --eval "(require 'consent-ci)" \
+              --eval "(consent-ci-write-summary (list (expand-file-name (getenv \"CONSENT_CI_LOG_FILE\") \"ci-logs\")) (getenv \"GITHUB_STEP_SUMMARY\"))"
+          fi
+
   test-summary:
     name: test shard timing summary
     runs-on: ubuntu-latest
@@ -431,6 +494,7 @@ jobs:
       - test-portable-extra-hosts
       - test-emacs-hosted
       - test-emacs-core
+      - test-parity
     if: always()
 
     steps:
