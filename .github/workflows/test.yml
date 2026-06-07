@@ -315,7 +315,7 @@ jobs:
             label: tools/docs/integration
             make_target: test-emacs-tools
             summary_name: Emacs tools/docs/integration
-            selector: '(or "consent-ci.*" "consent-compile.*" "consent-control-loop-doc.*" "consent-debugger.*" "consent-diagnostics.*" "consent-diff.*" "consent-feature-reflection-doc.*" "consent-job.*" "consent-native-cli-daemon-doc.*" "consent-reflect.*" "consent-repl.*" "consent-skill.*" "consent-smoke.*" "consent-vcs.*")'
+            selector: '(or "consent-ci.*" "consent-compile.*" "consent-control-loop-doc.*" "consent-debugger.*" "consent-diagnostics.*" "consent-diff.*" "consent-feature-reflection-doc.*" "consent-job.*" "consent-native-cli-daemon-doc.*" "consent-reflect.*" "consent-repl.*" "consent-skill.*" "consent-smoke.*" "consent-vcs.*" "consent-scheme-documentation-test-.*" "consent-scheme-module-ownership-test-.*" "^consent-scheme-eval-test-bootstrap-avoids-host-call/cc$" "^consent-scheme-module-boundary-test-runtime-version-loads-outside-repo$")'
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
