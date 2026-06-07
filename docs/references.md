@@ -121,7 +121,8 @@ stream as the canonical surface, host-specific chrome as presentation, a shared
 user+agent session, Scheme-readable replayable transcripts, and errors-as-data
 reader recovery — stays defined in this repository's own design docs
 ([repl-interaction-contract.md](repl-interaction-contract.md),
-[portable-repl.md](portable-repl.md), [control-loop.md](control-loop.md),
+[repl.md](repl.md), [portable-repl.md](portable-repl.md),
+[control-loop.md](control-loop.md),
 [transcripts.md](transcripts.md), [session-lifecycle.md](session-lifecycle.md),
 and [debugger.md](debugger.md)).
 
