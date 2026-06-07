@@ -23,8 +23,8 @@
                    "docs/docstring-metadata.md"
                    consent--test-root)))
     (should (file-exists-p doc-path))
-    (let ((readme
-           (consent-docstring-metadata-doc-test--read "README.md"))
+    (let ((index
+           (consent-docstring-metadata-doc-test--read "docs/README.md"))
           (architecture
            (consent-docstring-metadata-doc-test--read
             "docs/architecture.md"))
@@ -37,7 +37,7 @@
           (doc
            (consent-docstring-metadata-doc-test--read
             "docs/docstring-metadata.md")))
-      (dolist (linked-doc (list readme architecture development references))
+      (dolist (linked-doc (list index architecture development references))
         (should (string-match-p
                  (regexp-quote "docstring-metadata.md")
                  linked-doc)))

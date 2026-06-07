@@ -23,8 +23,8 @@
                    "docs/feature-reflection.md"
                    consent--test-root)))
     (should (file-exists-p doc-path))
-    (let ((readme
-           (consent-feature-reflection-doc-test--read "README.md"))
+    (let ((index
+           (consent-feature-reflection-doc-test--read "docs/README.md"))
           (architecture
            (consent-feature-reflection-doc-test--read
             "docs/architecture.md"))
@@ -37,7 +37,7 @@
           (doc
            (consent-feature-reflection-doc-test--read
             "docs/feature-reflection.md")))
-      (dolist (linked-doc (list readme architecture multi-host native))
+      (dolist (linked-doc (list index architecture multi-host native))
         (should (string-match-p
                  (regexp-quote "feature-reflection.md")
                  linked-doc)))

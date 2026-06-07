@@ -29,9 +29,9 @@
           (multi-host
            (consent-native-cli-daemon-doc-test--read
             "docs/multi-host-bootstrap.md"))
-          (readme
+          (index
            (consent-native-cli-daemon-doc-test--read
-            "README.md"))
+            "docs/README.md"))
           (doc
            (consent-native-cli-daemon-doc-test--read
             "docs/native-cli-daemon-adapter.md")))
@@ -40,7 +40,7 @@
                  "Native CLI and Daemon Adapter Contract"))
         (should (string-match-p (regexp-quote needle) architecture))
         (should (string-match-p (regexp-quote needle) multi-host))
-        (should (string-match-p (regexp-quote needle) readme)))
+        (should (string-match-p (regexp-quote needle) index)))
       (dolist (needle
                '("# Native CLI and Daemon Adapter Contract"
                  "## Adapter Declaration"
