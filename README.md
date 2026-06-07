@@ -291,24 +291,18 @@ automatically:
 requested-grants: ((capability-grant (library (emacs buffer edit)) (effect buffer-replace!) (scope (skill refactor-helper) (range 120 140)) (expires after-eval)))
 ```
 
-## Project Docs
+## Documentation
 
-- [Repository agent instructions](AGENTS.md)
-- [Project skill bundle](skills/README.md)
+High-traffic starting points:
+
 - [Getting started](docs/getting-started.md)
-- [Architecture and threat model](docs/architecture.md)
-- [Feature and host reflection](docs/feature-reflection.md)
-- [Docstring metadata convention](docs/docstring-metadata.md)
-- [Debugger workflow](docs/debugger.md)
-- [Multi-host adapter and bootstrap strategy](docs/multi-host-bootstrap.md)
-- [Native CLI and daemon adapter contract](docs/native-cli-daemon-adapter.md)
-- [Cross-host REPL interaction contract](docs/repl-interaction-contract.md)
-- [Portable terminal REPL shell](docs/portable-repl.md)
-- [Scheme references](docs/references.md)
-- [R7RS-small report reference](docs/r7rs-small-report.md)
-- [R7RS-small conformance matrix](docs/r7rs-conformance.md)
 - [Contributing](docs/contributing.md)
-- [Development setup](docs/development.md)
-- [Naming convention](docs/naming.md)
-- [GitHub issue taxonomy](docs/issue-taxonomy.md)
-- [Roadmap note](docs/roadmap.md)
+- [Architecture and threat model](docs/architecture.md)
+- [Multi-host adapter and bootstrap strategy](docs/multi-host-bootstrap.md)
+- [Roadmap](https://github.com/tahoma/consent/issues/53)
+
+**Full documentation index: [docs/README.md](docs/README.md)** — every document in
+`docs/`, grouped by topic.
+
+Also useful: [repository agent instructions](AGENTS.md) and the
+[project skill bundle](skills/README.md).
