@@ -415,9 +415,19 @@ make lint-elisp
 ```
 
 `make compile-elisp` remains available as the non-gating target that produces
-in-place bytecode without warnings-as-errors. A batch `checkdoc` docstring pass
-is intentionally not part of this gate yet; it surfaces a large backlog of
-docstring-convention findings and is tracked as a separate follow-up slice.
+in-place bytecode without warnings-as-errors.
+
+The gate disables the byte-compiler's docstring-*width* sub-check
+(`byte-compile-docstring-max-column` is left unbounded) so it is deterministic
+across Emacs versions. `cl-defstruct` auto-generates a constructor docstring
+whose `(fn &key SLOT...)` calling-convention line scales with the slot count;
+Emacs 30 excludes that machine-generated line from the width check while Emacs
+29 does not, so a wide struct — notably the `consent--eval-context` god-object
+tracked by #371 — would otherwise fail the gate on the Emacs the CI runners
+install (29.x) but not on a newer local Emacs. Docstring style and width are
+owned by the separate `checkdoc` slice, not this gate. That batch `checkdoc`
+pass is intentionally not part of the gate yet; it surfaces a large backlog of
+docstring-convention findings and is tracked as its own follow-up slice.
 
 Run the exhaustive set — every portable host shard plus every Emacs shard —
 with the opt-in escape hatch:
