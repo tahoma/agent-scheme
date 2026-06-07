@@ -83,17 +83,17 @@
     ;; first occurrence delimits the boundary.
     (define cli-host--exit-marker "__CONSENT_CLI_EXIT__")
 
-    ;; Read every remaining character from PORT into a string.  Used by host
-    ;; branches whose process module yields an input port rather than a string.
     (define (cli-host--drain port)
+      "Read every remaining character from PORT into a string.  Used by host
+branches whose process module yields an input port rather than a string."
       (let loop ((characters '()))
         (let ((character (read-char port)))
           (if (eof-object? character)
               (list->string (reverse characters))
               (loop (cons character characters))))))
 
-    ;; Return STRING with each single quote made shell-safe, for single-quoting.
     (define (cli-host--escape string)
+      "Return STRING with each single quote made shell-safe, for single-quoting."
       (let ((out (open-output-string)))
         (string-for-each
          (lambda (character)
@@ -103,19 +103,19 @@
          string)
         (get-output-string out)))
 
-    ;; Return STRING wrapped as a single shell word.
     (define (cli-host--quote string)
+      "Return STRING wrapped as a single shell word."
       (string-append "'" (cli-host--escape string) "'"))
 
-    ;; Join shell-quoted WORDS with spaces.
     (define (cli-host--join words)
+      "Join shell-quoted WORDS with spaces."
       (cond
        ((null? words) "")
        ((null? (cdr words)) (car words))
        (else (string-append (car words) " " (cli-host--join (cdr words))))))
 
-    ;; Return the index of the first occurrence of NEEDLE in HAYSTACK, or #f.
     (define (cli-host--index-of haystack needle)
+      "Return the index of the first occurrence of NEEDLE in HAYSTACK, or #f."
       (let ((haystack-length (string-length haystack))
             (needle-length (string-length needle)))
         (let loop ((start 0))
@@ -125,9 +125,9 @@
             start)
            (else (loop (+ start 1)))))))
 
-    ;; Render an environment-grant alist of (NAME . VALUE) string pairs as the
-    ;; `NAME='VALUE' ...' shell prefix that scopes those variables to the child.
     (define (cli-host--environment-prefix environment)
+      "Render an environment-grant alist of (NAME . VALUE) string pairs as the
+`NAME='VALUE' ...' shell prefix that scopes those variables to the child."
       (if (null? environment)
           ""
           (string-append
@@ -135,12 +135,12 @@
            " "
            (cli-host--environment-prefix (cdr environment)))))
 
-    ;; Build the `/bin/sh -c' program: run COMMAND/ARGUMENTS as a group under the
-    ;; optional CWD and ENVIRONMENT grants with the optional stdin and stderr
-    ;; redirections, then print the exit marker and the shell `$?'.  Returning the
-    ;; status through stdout keeps exit-status capture host-neutral.
     (define (cli-host--shell-program command arguments stdin-file stderr-file
                                      cwd environment)
+      "Build the `/bin/sh -c' program: run COMMAND/ARGUMENTS as a group under the
+optional CWD and ENVIRONMENT grants with the optional stdin and stderr
+redirections, then print the exit marker and the shell `$?'.  Returning the
+status through stdout keeps exit-status capture host-neutral."
       (string-append
        "{ "
        (if cwd (string-append "cd " (cli-host--quote cwd) " && ") "")
@@ -153,10 +153,10 @@
        (if stderr-file (string-append " 2> " (cli-host--quote stderr-file)) "")
        " ; printf '" cli-host--exit-marker "%s' \"$?\""))
 
-    ;; Read FILE's whole contents as a string, then delete it; return "" when
-    ;; FILE is absent.  The caller owns the path, so the captured stderr does not
-    ;; outlive the boundary call.
     (define (cli-host--read-file file)
+      "Read FILE's whole contents as a string, then delete it; return \"\" when
+FILE is absent.  The caller owns the path, so the captured stderr does not
+outlive the boundary call."
       (if (and file (file-exists? file))
           (let ((contents (call-with-input-file file cli-host--drain)))
             (delete-file file)
