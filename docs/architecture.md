@@ -105,6 +105,18 @@ commit, or pull request should name the remaining parity work, and the work
 should not be presented as architecturally complete until both sides are
 handled.
 
+This parity rule is no longer enforced by prose and reviewer diligence alone.
+The `test-parity` gate (`make test-parity`, the `test-parity` CI job; #374) runs
+the shared fixture corpus through both in-repo cores and fails on any result
+divergence. Its scope is the irreducible dual core — the layers each host must
+implement in its own language — so it explicitly excludes cases whose source
+imports a library that is single-sourced from a portable `.sld` and loaded by
+both bootstraps: such a library is one implementation, not two, and cannot
+diverge from itself. The exclusion is keyed off the single-sourced library
+registry (`consent--agent-source-library-files` and
+`consent--standard-source-library-files`), so a newly single-sourced library
+drops out of parity scope automatically as that migration proceeds.
+
 ### Inspectable Memory
 
 Agent memory must always be inspectable as Lisp/Scheme data. Vector indexes,
