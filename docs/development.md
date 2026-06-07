@@ -385,6 +385,20 @@ representative portable host (`test-portable-racket`,
 source-metadata and docstring-retention modes exercise is host-independent, so
 one portable host is enough for the default loop.
 
+The default set also runs `test-parity`, the cross-implementation parity gate
+(#374). It runs the shared fixture corpus through both in-repo cores — the
+Emacs-hosted implementation and the portable R7RS implementation — and fails on
+any result divergence, turning the `docs/architecture.md` "First-Class Portable
+Scheme" parity rule into an executable gate. Scope is the irreducible dual core
+(reader, evaluator, macro, runtime); cases whose source imports a library that
+is single-sourced from a portable `.sld` and loaded by both bootstraps fall out
+of scope automatically, because such a library cannot diverge from itself. The
+Emacs bridge spawns the portable emitter
+(`tests/scheme/consent-parity-emit.scm`) under the host named by
+`CONSENT_PARITY_HOST` (auto-discovered from `chibi-scheme`, `gosh`, or `guile`
+when unset) and skips when no portable host is available, so the gate is a
+no-op rather than a failure on a host-free machine.
+
 Run the exhaustive set — every portable host shard plus every Emacs shard —
 with the opt-in escape hatch:
 
@@ -423,9 +437,11 @@ and every Emacs shard is still represented at least once, so cross-host parity
 coverage is preserved; only the redundant metadata/docstring fan-out collapses.
 The exhaustive matrix — every host and shard across all six combos — runs nightly
 on the `schedule` lane and on demand through `workflow_dispatch`. The trimmed
-jobs (`test-portable-extra-hosts` and `test-emacs-hosted`) drive their
-`source_metadata` and `docstring_retention` matrix axes from a `github.event_name`
-expression, so those two events expand them back to the full axis.
+jobs (`test-portable-extra-hosts`, `test-emacs-hosted`, and the `test-parity`
+gate) drive their `source_metadata` and `docstring_retention` matrix axes from a
+`github.event_name` expression, so those events expand them back to the full
+axis. The `test-parity` job (#374) runs the parity gate under Gauche as a
+required check on every lane.
 
 CI runs the aggregate suite as host/runtime-oriented shards so timing and
 failures stay visible by architectural path:
@@ -441,6 +457,7 @@ make test-emacs-core
 make test-emacs-library
 make test-emacs-capabilities
 make test-emacs-tools
+CONSENT_PARITY_HOST=gauche make test-parity
 ```
 
 `make test` runs those shard targets in parallel by default. `make

@@ -24,6 +24,7 @@ CONSENT_EMACS_CORE_TEST_SELECTOR ?= (or "consent-base.*" "consent-eval.*" "conse
 CONSENT_EMACS_LIBRARY_TEST_SELECTOR ?= (or "consent-conformance.*" "consent-fixture.*" "consent-host-adapter-fixture.*" "consent-library.*" "consent-oracle.*")
 CONSENT_EMACS_CAPABILITY_TEST_SELECTOR ?= (or "consent-agent-io.*" "consent-approval.*" "consent-capability.*" "consent-context.*" "consent-helper.*" "consent-memory.*" "consent-models.*" "consent-network.*" "consent-plan.*" "consent-policy.*" "consent-redaction.*" "consent-session.*" "consent-task.*" "consent-test.*" "consent-transcript.*")
 CONSENT_EMACS_TOOLS_TEST_SELECTOR ?= (or "consent-ci.*" "consent-compile.*" "consent-control-loop-doc.*" "consent-debugger.*" "consent-diagnostics.*" "consent-diff.*" "consent-docstring-metadata-doc.*" "consent-feature-reflection-doc.*" "consent-job.*" "consent-native-cli-daemon.*" "consent-reflect.*" "consent-repl.*" "consent-script.*" "consent-skill.*" "consent-smoke.*" "consent-vcs.*")
+CONSENT_PARITY_TEST_SELECTOR ?= "^consent-parity-test-.*"
 CONSENT_LIVE_MODEL_CI_SELECTOR ?= consent-models-test-live-local-openai-compatible-completion
 CONSENT_LIVE_MODEL_SELECTOR ?= "consent-models-test-live-local-.*"
 CONSENT_PORTABLE_TEST_SHARD_TARGETS ?= test-portable-gambit test-portable-gambit-native test-portable-racket test-portable-compiled test-portable-guile test-portable-gauche
@@ -34,10 +35,12 @@ CONSENT_EMACS_TEST_SHARD_TARGETS ?= test-emacs-core test-emacs-library test-emac
 # host-independent, so one host is enough for the fast local loop; the full host
 # matrix stays available through make test-full and the scheduled CI lane.
 CONSENT_DEFAULT_PORTABLE_TEST_SHARD_TARGETS ?= test-portable-racket
-# Trimmed default: one representative portable host plus the full Emacs shard set.
-CONSENT_TEST_SHARD_TARGETS ?= $(CONSENT_DEFAULT_PORTABLE_TEST_SHARD_TARGETS) $(CONSENT_EMACS_TEST_SHARD_TARGETS)
-# Exhaustive opt-in set: every portable host shard plus every Emacs shard.
-CONSENT_FULL_TEST_SHARD_TARGETS ?= $(CONSENT_PORTABLE_TEST_SHARD_TARGETS) $(CONSENT_EMACS_TEST_SHARD_TARGETS)
+# Trimmed default: one representative portable host, the full Emacs shard set,
+# and the cross-implementation parity gate (#374).
+CONSENT_TEST_SHARD_TARGETS ?= $(CONSENT_DEFAULT_PORTABLE_TEST_SHARD_TARGETS) $(CONSENT_EMACS_TEST_SHARD_TARGETS) test-parity
+# Exhaustive opt-in set: every portable host shard, every Emacs shard, and the
+# parity gate.
+CONSENT_FULL_TEST_SHARD_TARGETS ?= $(CONSENT_PORTABLE_TEST_SHARD_TARGETS) $(CONSENT_EMACS_TEST_SHARD_TARGETS) test-parity
 CONSENT_PORTABLE_TEST_JOBS ?= $(words $(CONSENT_PORTABLE_TEST_SHARD_TARGETS))
 CONSENT_OPTIONAL_PORTABLE_TEST_JOBS ?= $(words $(CONSENT_OPTIONAL_PORTABLE_TEST_SHARD_TARGETS))
 CONSENT_EMACS_TEST_JOBS ?= $(words $(CONSENT_EMACS_TEST_SHARD_TARGETS))
@@ -46,7 +49,7 @@ CONSENT_FULL_TEST_JOBS ?= $(words $(CONSENT_FULL_TEST_SHARD_TARGETS))
 
 .DEFAULT_GOAL := help
 
-.PHONY: help clean clean-compile compile compile-elisp repl test test-full test-portable test-portable-chibi test-portable-eval test-portable-rest test-portable-gambit test-portable-gambit-native test-portable-racket test-portable-compiled test-portable-guile test-portable-gauche test-emacs-hosted test-emacs-core test-emacs-library test-emacs-capabilities test-emacs-tools test-live-model-ci test-live-model conformance-oracle
+.PHONY: help clean clean-compile compile compile-elisp repl test test-full test-portable test-portable-chibi test-portable-eval test-portable-rest test-portable-gambit test-portable-gambit-native test-portable-racket test-portable-compiled test-portable-guile test-portable-gauche test-emacs-hosted test-emacs-core test-emacs-library test-emacs-capabilities test-emacs-tools test-parity test-live-model-ci test-live-model conformance-oracle
 
 help:
 	@printf '%s\n' 'Consent Scheme top-level actions:'
@@ -73,6 +76,7 @@ help:
 	@printf '  %-26s %s\n' 'test-emacs-library' 'Run the Emacs-hosted library/conformance shard.'
 	@printf '  %-26s %s\n' 'test-emacs-capabilities' 'Run the Emacs-hosted capability and policy shard.'
 	@printf '  %-26s %s\n' 'test-emacs-tools' 'Run the Emacs-hosted tools, docs, and integration shard.'
+	@printf '  %-26s %s\n' 'test-parity' 'Diff the Emacs and portable cores over the shared corpus (#374).'
 	@printf '  %-26s %s\n' 'test-live-model-ci' 'Run the CI live local model smoke test.'
 	@printf '  %-26s %s\n' 'test-live-model' 'Run all opt-in live local model tests.'
 	@printf '  %-26s %s\n' 'conformance-oracle' 'Compare pure shared fixtures with reference R7RS implementations.'
@@ -103,6 +107,8 @@ help:
 	@printf '  %-50s %s\n' 'CONSENT_EMACS_LIBRARY_TEST_SELECTOR=SEL' 'ERT selector used by make test-emacs-library.'
 	@printf '  %-50s %s\n' 'CONSENT_EMACS_CAPABILITY_TEST_SELECTOR=SEL' 'ERT selector used by make test-emacs-capabilities.'
 	@printf '  %-50s %s\n' 'CONSENT_EMACS_TOOLS_TEST_SELECTOR=SEL' 'ERT selector used by make test-emacs-tools.'
+	@printf '  %-50s %s\n' 'CONSENT_PARITY_TEST_SELECTOR=SEL' 'ERT selector used by make test-parity.'
+	@printf '  %-50s %s\n' 'CONSENT_PARITY_HOST=chibi|gauche|guile' 'Portable host that runs the parity emitter (auto-discovered when unset).'
 	@printf '  %-50s %s\n' 'CONSENT_LIVE_MODEL_CI_SELECTOR=SEL' 'ERT selector used by make test-live-model-ci.'
 	@printf '  %-50s %s\n' 'CONSENT_LIVE_MODEL_SELECTOR=SEL' 'ERT selector used by make test-live-model.'
 	@printf '  %-50s %s\n' 'CONSENT_LIVE_MODEL_ENDPOINT=URL' 'OpenAI-compatible endpoint for live local model tests.'
@@ -226,6 +232,14 @@ test-emacs-capabilities:
 
 test-emacs-tools:
 	CONSENT_TEST_SELECTOR='$(CONSENT_EMACS_TOOLS_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
+
+# Cross-implementation parity gate: run the shared fixture corpus through the
+# Emacs-hosted and portable cores and fail on any result divergence (#374). The
+# Emacs-hosted ERT bridge spawns the portable emitter under the host selected by
+# CONSENT_PARITY_HOST (auto-discovered from chibi-scheme/gosh/guile when unset),
+# and skips when no portable host is available.
+test-parity:
+	CONSENT_TEST_SELECTOR='$(CONSENT_PARITY_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
 
 test-live-model-ci:
 	CONSENT_LIVE_MODEL_TEST=1 CONSENT_TEST_SELECTOR='$(CONSENT_LIVE_MODEL_CI_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)

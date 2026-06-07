@@ -50,6 +50,14 @@ Pull requests should:
 - avoid bundling unrelated issue work into the same branch
 - use plain project titles without assistant, tool, vendor, or workflow branding
 
+For changes that touch the dual core (reader, evaluator, macro, runtime),
+standard libraries, conformance fixtures, or public test behavior, confirm the
+Emacs-hosted and portable implementations still agree: the `test-parity` gate
+(`make test-parity`; #374) diffs both cores over the shared corpus and fails on
+divergence. If a slice intentionally lands on one side first, say so in the pull
+request and name the remaining parity work rather than presenting it as
+complete.
+
 ## Runtime Versioning
 
 Every issue branch updates the canonical runtime version source at
