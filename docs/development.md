@@ -514,6 +514,12 @@ fine-grained `CONSENT_CI_CHECK_SECONDS` diagnostics for slow checks; the
 combined summary keeps those details below the fold and treats shard wall time
 as the primary signal.
 
+Alongside that human-facing summary, the combined timing job emits one
+machine-readable, append-only record per run for longitudinal analysis. The
+record is JSON Lines tagged with a `schema_version`, uploaded as the
+`ci-run-record` artifact. See [CI run record](ci-run-record.md) for the schema,
+the field set, the schema-version discipline, and the durable-sink plan.
+
 Live local model tests require an OpenAI-compatible local model endpoint. Run
 the CI smoke selector with:
 
