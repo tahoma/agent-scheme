@@ -49,7 +49,10 @@ git remote -v
 ## Emacs REPL Startup
 
 The current first-use flow loads the Emacs Lisp bootstrap modules from the
-checkout and starts a project session.
+checkout and starts a project session. This section covers the session UX
+(`consent-start-repl` / `consent-repl-eval`). For the incremental, one-form-at-a-time
+entry (`consent-repl-stream`), the portable terminal REPL, and a cross-host
+parity matrix, see [Using the Consent Scheme REPL](repl.md).
 
 From Emacs, add the checkout's `lisp/` directory to `load-path` and load the
 native REPL module:

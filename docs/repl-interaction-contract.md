@@ -29,7 +29,9 @@ It builds on existing substrate rather than introducing new runtime mechanism:
 This is a *contract*, not an implementation. The portable terminal REPL (#360),
 the Emacs incremental entry (#391), line editing, history, completion, daemon
 control sockets, and multi-client routing are all out of scope here and are
-owned by their own issues.
+owned by their own issues. For task-oriented guidance on *using* the REPL on
+each host, with a parity matrix linking these obligations to their conformance
+cases, see [Using the Consent Scheme REPL](repl.md).
 
 ## Interaction Model
 
