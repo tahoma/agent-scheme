@@ -165,10 +165,10 @@ test command instead of adding a second top-level verification path.
 
 Portable R7RS tests live under `tests/scheme/` and are launched by ERT. The
 default portable shards run the full suite under Gambit, Racket with its `r7rs`
-package, Guile, and Gauche. Chibi remains available as an optional host through
-`make test-portable-chibi`, `make test-portable-eval`, and `make
-test-portable-rest`; those targets use `chibi-scheme` on `PATH`, or the command
-named by `CONSENT_CHIBI`, and skip when Chibi is unavailable.
+package, Guile, and Gauche. Chibi runs the same aggregate host suite as its
+peers but stays opt-in through `make test-portable-chibi`; that target uses
+`chibi-scheme` on `PATH`, or the command named by `CONSENT_CHIBI`, and skips
+when Chibi is unavailable.
 
 Core runtime, reader, evaluator, macro, library, and standard-library changes
 should normally add or update portable tests alongside the Emacs Lisp tests.
@@ -206,8 +206,8 @@ interaction contract ([`docs/repl-interaction-contract.md`](repl-interaction-con
 Its cases carry `session`, `options`, `input`, and an `expect` record sequence
 rather than the reader/evaluator fields above. Two parallel runners drive the
 same cases against both REPL hosts: `tests/scheme/consent-repl-parity-test.scm`
-(portable terminal REPL, in the shared host-suite file list and run under Chibi
-via `tests/consent-scheme-repl-parity-test.el`) and
+(portable terminal REPL, in the shared host-suite file list, so it runs on
+every host shard including Chibi) and
 `tests/consent-repl-parity-test.el` (Emacs incremental REPL). Because both read
 one corpus, a host that drifts from the contract fails its runner.
 
@@ -424,7 +424,7 @@ archive's `scheme/` directory. This is useful for historical timing sweeps that
 replay a newer harness against an older reader/evaluator implementation:
 
 ```sh
-CONSENT_TEST_TARGET_ROOT=/tmp/consent-old make test-portable-eval
+CONSENT_TEST_TARGET_ROOT=/tmp/consent-old make test-portable-chibi
 ```
 
 CI mirrors this trimmed default on the per-push lane (`pull_request` and `push`)

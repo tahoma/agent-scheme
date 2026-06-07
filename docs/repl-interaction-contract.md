@@ -575,7 +575,7 @@ portable hosts, feeding the parity CI gate (#374). The portable terminal REPL
 (#360) and the Emacs incremental entry (#391) each implement this contract on
 their respective host and are validated against the #392 corpus. The portable
 runner runs on every full-suite R7RS host shard (and, like the other portable
-test files, under Chibi via `tests/consent-scheme-repl-parity-test.el` in
+test files, under Chibi through the shared host suite in
 `make test-portable-chibi`); the Emacs runner runs under `make test`. A host
 prerequisite that is unavailable skips with an actionable message rather than
 failing.
