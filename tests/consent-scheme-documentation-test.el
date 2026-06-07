@@ -56,6 +56,18 @@
    "\\`[[:space:]]*\"\\(?:[^\"\\]\\|\\\\.\\)*\"[[:space:]]*\\'"
    line))
 
+(defun consent--scheme-documentation-string-open-line-p (line)
+  "Return non-nil when LINE opens a multi-line Scheme string literal.
+A multi-line docstring -- common on indented internal defines and on
+defines whose argument list wraps -- starts a string that the closing
+quote completes on a later line, so the opening line never satisfies the
+standalone-string predicate.  Crediting the opening line lets the
+documentation rule recognize such docstrings the same as single-line
+ones."
+  (string-match-p
+   "\\`[[:space:]]*\"\\(?:[^\"\\]\\|\\\\.\\)*\\'"
+   line))
+
 (defun consent--scheme-documentation-definition-end-index
     (file lines index)
   "Return index after the top-level definition at INDEX in LINES."
@@ -81,8 +93,10 @@
                index))
          found)
      (while (and (not found) (< cursor end))
-       (when (consent--scheme-documentation-string-line-p
-              (nth cursor lines))
+       (when (or (consent--scheme-documentation-string-line-p
+                  (nth cursor lines))
+                 (consent--scheme-documentation-string-open-line-p
+                  (nth cursor lines)))
          (setq found t))
        (setq cursor (1+ cursor)))
      found)))

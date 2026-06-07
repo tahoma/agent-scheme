@@ -91,7 +91,9 @@
 ;;;; Outcome accessors
 
 (define (outcome-exit outcome) (car outcome))
+;; Return the boundary record stream from an execute OUTCOME.
 (define (outcome-records outcome) (cadr outcome))
+;; Return the approval prompt list from an execute OUTCOME.
 (define (outcome-prompts outcome) (list-ref outcome 2))
 
 ;;;; Fixture vocabulary (standard reader only)
@@ -99,9 +101,11 @@
 (define fixture
   (call-with-input-file "fixtures/host-adapters/native-cli-daemon.scm" read))
 
+;; Return the adapter declaration form from the fixture.
 (define (adapter-declaration)
   (field-value fixture 'adapter))
 
+;; Return the adapter declaration field named NAME.
 (define (vocabulary name)
   (field-value (adapter-declaration) name))
 

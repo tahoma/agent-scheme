@@ -146,32 +146,38 @@
    (consent-test-rest-environment rest)
    (consent-test-merge-options (consent-test-rest-options rest))))
 
+;; Evaluate SOURCE text under the CI matrix defaults.
 (define (consent-eval-source source . rest)
   (raw-consent-eval-source
    source
    (consent-test-rest-environment rest)
    (consent-test-merge-options (consent-test-rest-options rest))))
 
+;; Alias kept for tests that read by string name.
 (define consent-eval-string consent-eval-source)
 
+;; Expand EXPRESSION under the CI matrix defaults.
 (define (consent-expand expression . rest)
   (raw-consent-expand
    expression
    (consent-test-rest-environment rest)
    (consent-test-merge-options (consent-test-rest-options rest))))
 
+;; Expand SOURCE text under the CI matrix defaults.
 (define (consent-expand-source source . rest)
   (raw-consent-expand-source
    source
    (consent-test-rest-environment rest)
    (consent-test-merge-options (consent-test-rest-options rest))))
 
+;; Evaluate EXPRESSION and return the full result record.
 (define (consent-eval-result expression . rest)
   (raw-consent-eval-result
    expression
    (consent-test-rest-environment rest)
    (consent-test-merge-options (consent-test-rest-options rest))))
 
+;; Evaluate SOURCE text and return the full result record.
 (define (consent-eval-source-result source . rest)
   (raw-consent-eval-source-result
    source
