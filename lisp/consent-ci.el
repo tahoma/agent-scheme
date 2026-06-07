@@ -1,15 +1,19 @@
-;;; consent-ci.el --- CI shard timing reports  -*- lexical-binding: t; -*-
+;;; consent-ci.el --- CI timing and run records  -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
 ;;; Commentary:
 
 ;; Helpers for parsing Consent Scheme ERT shard logs and rendering the GitHub
-;; Actions step summary used by the repository test workflow.
+;; Actions step summary used by the repository test workflow.  The same parsed
+;; shard data also feeds a structured, append-only per-run record (#465) for
+;; longitudinal analysis; see the "Structured per-run record" section below and
+;; docs/ci-run-record.md.
 
 ;;; Code:
 
 (require 'cl-lib)
+(require 'json)
 (require 'subr-x)
 
 (defconst consent-ci--result-line-regexp
@@ -835,6 +839,154 @@ RUN-URL, when non-nil, links the comment back to the producing workflow run."
      log-files
      output-file
      (getenv "CONSENT_CI_RUN_URL"))))
+
+;;; Structured per-run record (#465)
+
+;; Beyond the human-facing timing summary above, CI emits one machine-readable,
+;; append-only record per run so longitudinal questions ("how did metric X drift
+;; across the last N PRs") have a stable data source. The record is JSON Lines:
+;; one self-describing object per line, tagged with `schema_version'. Schema
+;; discipline: add fields freely, but never silently rename or repurpose one --
+;; that is what breaks cross-run diffs. See docs/ci-run-record.md.
+
+(defconst consent-ci-run-record-schema-version 1
+  "Schema version for the structured per-run CI record.
+Increment on any change to the record shape; never silently rename or
+repurpose an existing field, since stable field names are what make the
+record diffable across runs.")
+
+(defun consent-ci--env-string (name)
+  "Return environment variable NAME as a JSON string value, or nil when unset.
+An unset or empty variable becomes nil so it serializes as JSON null rather
+than an empty string."
+  (let ((value (getenv name)))
+    (when (and value (not (string-empty-p value)))
+      value)))
+
+(defun consent-ci--env-integer (name)
+  "Return environment variable NAME parsed as an integer, or nil when unset."
+  (let ((value (consent-ci--env-string name)))
+    (when value
+      (truncate (string-to-number value)))))
+
+(defun consent-ci--env-boolean (name)
+  "Return environment variable NAME as a JSON boolean, or nil when unset.
+\"true\"/\"1\"/\"yes\" read as true; any other non-empty value reads as false."
+  (let ((value (consent-ci--env-string name)))
+    (when value
+      (if (member (downcase value) '("true" "1" "yes"))
+          t
+        :json-false))))
+
+(defun consent-ci--json-boolean (value)
+  "Return non-nil VALUE as JSON true, nil as JSON false."
+  (if value t :json-false))
+
+(defun consent-ci--run-record-provenance ()
+  "Return provenance sub-records gathered from the CI environment.
+The workflow populates the GitHub-context and change-scope variables; any
+unset variable serializes as JSON null."
+  (list
+   (cons "run"
+         (list (cons "repository" (consent-ci--env-string "GITHUB_REPOSITORY"))
+               (cons "event" (consent-ci--env-string "GITHUB_EVENT_NAME"))
+               (cons "run_id" (consent-ci--env-string "GITHUB_RUN_ID"))
+               (cons "run_attempt"
+                     (consent-ci--env-integer "GITHUB_RUN_ATTEMPT"))
+               (cons "run_url" (consent-ci--env-string "CONSENT_CI_RUN_URL"))
+               (cons "actor" (consent-ci--env-string "GITHUB_ACTOR"))
+               (cons "runner_os" (consent-ci--env-string "RUNNER_OS"))
+               (cons "runner_arch" (consent-ci--env-string "RUNNER_ARCH"))))
+   (cons "change"
+         (list (cons "pr_number"
+                     (consent-ci--env-integer "CONSENT_CI_PR_NUMBER"))
+               (cons "base_ref" (consent-ci--env-string "CONSENT_CI_BASE_REF"))
+               (cons "head_sha" (consent-ci--env-string "CONSENT_CI_HEAD_SHA"))
+               (cons "base_sha" (consent-ci--env-string "CONSENT_CI_BASE_SHA"))
+               (cons "changed_files"
+                     (consent-ci--env-integer "CONSENT_CI_CHANGED_FILES"))
+               (cons "insertions"
+                     (consent-ci--env-integer "CONSENT_CI_INSERTIONS"))
+               (cons "deletions"
+                     (consent-ci--env-integer "CONSENT_CI_DELETIONS"))
+               (cons "version_changed"
+                     (consent-ci--env-boolean "CONSENT_CI_VERSION_CHANGED"))))
+   (cons "parity"
+         (list (cons "result"
+                     (consent-ci--env-string "CONSENT_CI_PARITY_RESULT"))))))
+
+(defun consent-ci--shard-record (shard)
+  "Return SHARD as a JSON-ready alist for the per-run record.
+`passed' is derived from the unexpected count; the source metadata and
+docstring variant are split out of the shard name."
+  (let ((variant (consent-ci--option-variant shard)))
+    (list (cons "name" (consent-ci--shard-base-name shard))
+          (cons "selector" (plist-get shard :selector))
+          (cons "source_metadata" (car variant))
+          (cons "docstrings" (cdr variant))
+          (cons "ran" (plist-get shard :ran))
+          (cons "expected" (plist-get shard :expected))
+          (cons "unexpected" (plist-get shard :unexpected))
+          (cons "skipped" (plist-get shard :skipped))
+          (cons "ert_seconds" (plist-get shard :ert-seconds))
+          (cons "wall_seconds" (plist-get shard :wall-seconds))
+          (cons "passed"
+                (consent-ci--json-boolean
+                 (= (or (plist-get shard :unexpected) 0) 0))))))
+
+(defun consent-ci--run-record-totals (shards)
+  "Return aggregate totals across SHARDS as a JSON-ready alist."
+  (let ((unexpected (consent-ci--sum-shard-field shards :unexpected)))
+    (list (cons "shards" (length shards))
+          (cons "ran" (consent-ci--sum-shard-field shards :ran))
+          (cons "expected" (consent-ci--sum-shard-field shards :expected))
+          (cons "unexpected" unexpected)
+          (cons "skipped" (consent-ci--sum-shard-field shards :skipped))
+          (cons "ert_seconds" (consent-ci--sum-shard-field shards :ert-seconds))
+          (cons "wall_seconds"
+                (consent-ci--sum-shard-field shards :wall-seconds))
+          (cons "all_passed" (consent-ci--json-boolean (= unexpected 0))))))
+
+(defun consent-ci-build-run-record (shards)
+  "Return the structured per-run CI record for SHARDS as a JSON-ready alist.
+Provenance fields come from the CI environment; per-shard outcomes and
+totals come from the parsed shard logs.  Encode the result with
+`consent-ci-render-run-record'."
+  (let ((shards (consent-ci--sort-shards shards)))
+    (append
+     (list (cons "schema_version" consent-ci-run-record-schema-version)
+           (cons "generated_at" (consent-ci--env-string "CONSENT_CI_TIMESTAMP")))
+     (consent-ci--run-record-provenance)
+     (list (cons "totals" (consent-ci--run-record-totals shards))
+           (cons "shards"
+                 (vconcat (mapcar #'consent-ci--shard-record shards)))))))
+
+(defun consent-ci-render-run-record (shards)
+  "Render SHARDS as a single-line JSON per-run CI record."
+  (let ((json-encoding-pretty-print nil))
+    (json-encode (consent-ci-build-run-record shards))))
+
+(defun consent-ci-write-run-record (log-files output-file)
+  "Append the per-run CI record for LOG-FILES as one JSON line to OUTPUT-FILE.
+The file is JSON Lines, so appending keeps prior runs intact."
+  (let ((line (consent-ci-render-run-record
+               (mapcar #'consent-ci-parse-log-file log-files))))
+    (with-temp-buffer
+      (insert line)
+      (insert "\n")
+      (write-region (point-min) (point-max) output-file t 'silent))))
+
+(defun consent-ci-run-record-batch-main ()
+  "Batch entry point that writes the structured per-run CI record.
+Reads shard log paths after the `--' separator and the destination from
+the CONSENT_CI_RUN_RECORD_FILE environment variable."
+  (let ((log-files (consent-ci--batch-log-files))
+        (output-file (getenv "CONSENT_CI_RUN_RECORD_FILE")))
+    (unless log-files
+      (error "No CI log files supplied"))
+    (unless (and output-file (not (string-empty-p output-file)))
+      (error "CONSENT_CI_RUN_RECORD_FILE is required"))
+    (consent-ci-write-run-record log-files output-file)))
 
 (provide 'consent-ci)
 

@@ -537,6 +537,68 @@ jobs:
             --funcall consent-ci-summary-batch-main -- "${logs[@]}"
           cat "$summary_file" >> "$GITHUB_STEP_SUMMARY"
 
+      # Structured, append-only per-run record for longitudinal analysis (#465).
+      # Extends the consent-ci summary path over the same shard logs; the record
+      # is JSON Lines tagged with schema_version. The durable sink is a
+      # long-retention artifact for now; a queryable orphan-branch sink is
+      # tracked as a follow-up. See docs/ci-run-record.md.
+      - name: Emit per-run CI record
+        if: always()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CONSENT_CI_PARITY_RESULT: ${{ needs.test-parity.result }}
+          CONSENT_CI_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          CONSENT_CI_PR_NUMBER: ${{ github.event.pull_request.number }}
+          CONSENT_CI_BASE_REF: ${{ github.event.pull_request.base.ref || github.ref_name }}
+          CONSENT_CI_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          CONSENT_CI_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          mkdir -p ci-logs
+          logs=()
+          while IFS= read -r -d '' log; do
+            logs+=("$log")
+          done < <(find ci-logs -type f -name '*.log' -print0)
+          if [ "${#logs[@]}" -eq 0 ]; then
+            printf '%s\n' 'No shard logs were available; skipping per-run record.'
+            exit 0
+          fi
+          CONSENT_CI_TIMESTAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          export CONSENT_CI_TIMESTAMP
+          # Change scope comes from the PR API (history-independent here, since
+          # the summary job only checks out the merge commit). Null on push /
+          # schedule lanes, which have no pull request to size.
+          if [ "${GITHUB_EVENT_NAME}" = "pull_request" ] && [ -n "${CONSENT_CI_PR_NUMBER}" ]; then
+            if scope="$(gh pr view "${CONSENT_CI_PR_NUMBER}" \
+                  --repo "${GITHUB_REPOSITORY}" \
+                  --json files,changedFiles,additions,deletions 2>/dev/null)"; then
+              CONSENT_CI_CHANGED_FILES="$(printf '%s' "$scope" | jq -r '.changedFiles')"
+              CONSENT_CI_INSERTIONS="$(printf '%s' "$scope" | jq -r '.additions')"
+              CONSENT_CI_DELETIONS="$(printf '%s' "$scope" | jq -r '.deletions')"
+              export CONSENT_CI_CHANGED_FILES CONSENT_CI_INSERTIONS CONSENT_CI_DELETIONS
+              if printf '%s' "$scope" \
+                  | jq -e '.files[] | select(.path == "scheme/consent/version.sld")' >/dev/null; then
+                export CONSENT_CI_VERSION_CHANGED=true
+              else
+                export CONSENT_CI_VERSION_CHANGED=false
+              fi
+            fi
+          fi
+          CONSENT_CI_RUN_RECORD_FILE=ci-logs/run-record.jsonl emacs -Q --batch -L lisp \
+            --eval "(require 'consent-ci)" \
+            --funcall consent-ci-run-record-batch-main -- "${logs[@]}"
+          printf 'Wrote per-run CI record:\n'
+          cat ci-logs/run-record.jsonl
+
+      - name: Upload per-run CI record
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ci-run-record
+          path: ci-logs/run-record.jsonl
+          retention-days: 90
+          if-no-files-found: ignore
+
       - name: Prepare pull request timing comment
         if: github.event_name == 'pull_request'
         shell: bash
