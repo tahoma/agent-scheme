@@ -1,6 +1,7 @@
 EMACS ?= emacs
 CONSENT_COMPILE_HOST ?= racket
 CONSENT_COMPILE_BUILD_DIR ?= build/compile
+CONSENT_LINT_BUILD_DIR ?= build/lint
 CONSENT_RACKET ?= racket
 CONSENT_RACO ?= raco
 CONSENT_GAMBIT ?= gsi
@@ -33,12 +34,13 @@ CONSENT_EMACS_TEST_SHARD_TARGETS ?= test-emacs-core test-emacs-library test-emac
 # host-independent, so one host is enough for the fast local loop; the full host
 # matrix stays available through make test-full and the scheduled CI lane.
 CONSENT_DEFAULT_PORTABLE_TEST_SHARD_TARGETS ?= test-portable-racket
-# Trimmed default: one representative portable host, the full Emacs shard set,
-# and the cross-implementation parity gate (#374).
-CONSENT_TEST_SHARD_TARGETS ?= $(CONSENT_DEFAULT_PORTABLE_TEST_SHARD_TARGETS) $(CONSENT_EMACS_TEST_SHARD_TARGETS) test-parity
-# Exhaustive opt-in set: every portable host shard, every Emacs shard, and the
-# parity gate.
-CONSENT_FULL_TEST_SHARD_TARGETS ?= $(CONSENT_PORTABLE_TEST_SHARD_TARGETS) $(CONSENT_EMACS_TEST_SHARD_TARGETS) test-parity
+# Trimmed default: the Emacs byte-compile lint gate, one representative portable
+# host, the full Emacs shard set, and the cross-implementation parity gate
+# (#374).
+CONSENT_TEST_SHARD_TARGETS ?= lint-elisp $(CONSENT_DEFAULT_PORTABLE_TEST_SHARD_TARGETS) $(CONSENT_EMACS_TEST_SHARD_TARGETS) test-parity
+# Exhaustive opt-in set: the Emacs byte-compile lint gate, every portable host
+# shard, every Emacs shard, and the parity gate.
+CONSENT_FULL_TEST_SHARD_TARGETS ?= lint-elisp $(CONSENT_PORTABLE_TEST_SHARD_TARGETS) $(CONSENT_EMACS_TEST_SHARD_TARGETS) test-parity
 CONSENT_PORTABLE_TEST_JOBS ?= $(words $(CONSENT_PORTABLE_TEST_SHARD_TARGETS))
 CONSENT_EMACS_TEST_JOBS ?= $(words $(CONSENT_EMACS_TEST_SHARD_TARGETS))
 CONSENT_TEST_JOBS ?= $(words $(CONSENT_TEST_SHARD_TARGETS))
@@ -46,7 +48,7 @@ CONSENT_FULL_TEST_JOBS ?= $(words $(CONSENT_FULL_TEST_SHARD_TARGETS))
 
 .DEFAULT_GOAL := help
 
-.PHONY: help clean clean-compile compile compile-elisp repl test test-full test-portable test-portable-chibi test-portable-gambit test-portable-gambit-native test-portable-racket test-portable-compiled test-portable-guile test-portable-gauche test-emacs-hosted test-emacs-core test-emacs-library test-emacs-capabilities test-emacs-tools test-parity test-live-model-ci test-live-model conformance-oracle
+.PHONY: help clean clean-compile compile compile-elisp lint-elisp repl test test-full test-portable test-portable-chibi test-portable-gambit test-portable-gambit-native test-portable-racket test-portable-compiled test-portable-guile test-portable-gauche test-emacs-hosted test-emacs-core test-emacs-library test-emacs-capabilities test-emacs-tools test-parity test-live-model-ci test-live-model conformance-oracle
 
 help:
 	@printf '%s\n' 'Consent Scheme top-level actions:'
@@ -55,6 +57,7 @@ help:
 	@printf '  %-26s %s\n' 'clean-compile' 'Remove host-compiled portable executable outputs.'
 	@printf '  %-26s %s\n' 'compile' 'Build host-compiled portable executable artifacts.'
 	@printf '  %-26s %s\n' 'compile-elisp' 'Byte-compile checked-in Elisp sources.'
+	@printf '  %-26s %s\n' 'lint-elisp' 'Byte-compile Elisp sources with warnings-as-errors.'
 	@printf '  %-26s %s\n' 'repl' 'Start the portable terminal REPL shell (ARGS=... passes flags).'
 	@printf '  %-26s %s\n' 'test' 'Run the trimmed default local shard set.'
 	@printf '  %-26s %s\n' 'test-full' 'Run the exhaustive local shard set across every host and Emacs shard.'
@@ -136,6 +139,22 @@ compile:
 
 compile-elisp:
 	$(EMACS) -Q --batch -L lisp --eval "(setq load-prefer-newer t)" -f batch-byte-compile $(CONSENT_ELISP_SOURCES)
+
+# Quality gate: byte-compile every checked-in Elisp source with
+# `byte-compile-error-on-warn' so any byte-compiler warning (unbound variables,
+# arity mismatches, unused lexicals, obsolete calls) fails the build. Bytecode
+# is redirected into a throwaway build directory so the gate leaves no stale
+# `.elc' beside the sources and never races the parallel test shards that load
+# the `.el' files directly.
+lint-elisp:
+	@rm -rf '$(CONSENT_LINT_BUILD_DIR)'
+	@mkdir -p '$(CONSENT_LINT_BUILD_DIR)'
+	$(EMACS) -Q --batch -L lisp \
+		--eval "(setq load-prefer-newer t)" \
+		--eval "(setq byte-compile-error-on-warn t)" \
+		--eval "(setq byte-compile-dest-file-function (lambda (source) (expand-file-name (concat (file-name-nondirectory source) \"c\") \"$(CONSENT_LINT_BUILD_DIR)\")))" \
+		-f batch-byte-compile $(CONSENT_ELISP_SOURCES)
+	@rm -rf '$(CONSENT_LINT_BUILD_DIR)'
 
 # Start the portable terminal REPL shell outside Emacs (docs/portable-repl.md).
 # Reads Consent Scheme forms from stdin, writes interaction-contract records to

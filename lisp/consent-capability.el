@@ -26,6 +26,7 @@
 (require 'consent-vcs)
 
 (declare-function consent--apply-procedure "consent-interpreter")
+(declare-function consent-agent-io--primitive-yield "consent-agent-io")
 
 (define-error 'consent-capability-grant-error
   "Consent Scheme capability grant denied"
@@ -124,7 +125,7 @@ metadata such as `:name', `:status', `:buffer', `:stdout', and
   :type 'function
   :group 'consent)
 
-(defun consent--default-network-request (resource _context)
+(defun consent--default-network-request (_resource _context)
   "Default host adapter for network requests.
 RESOURCE is a redacted Scheme-readable request resource.  The
 default refuses live transport so tests and hosts must install an
@@ -141,7 +142,7 @@ succeeded.  It must return a Scheme-readable response datum."
   :type 'function
   :group 'consent)
 
-(defun consent--default-network-stream (resource _context)
+(defun consent--default-network-stream (_resource _context)
   "Default host adapter for network stream requests."
   (signal 'consent-capability-grant-error
           (list "no network stream adapter configured")))

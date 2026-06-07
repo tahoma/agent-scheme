@@ -763,7 +763,7 @@ Each spec has (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY)."
     (_
      (consent--eval-error "unknown standard library: %s" key))))
 
-(defun consent--library-available-p (name context environment)
+(defun consent--library-available-p (name context _environment)
   "Return non-nil if NAME can be imported."
   (let ((key (consent--library-name-key name)))
     (cond
