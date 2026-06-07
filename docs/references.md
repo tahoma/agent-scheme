@@ -1,9 +1,12 @@
 # Scheme References
 
-This document collects external Scheme references that are useful while building
-Consent Scheme. Keep project-specific decisions in this repository's own design
-docs; use these references for language context, historical grounding, and
-implementation techniques.
+This document collects external references that are useful while building
+Consent Scheme: Scheme-language references for the runtime core, and — in
+[REPL and Interactive-Environment References](#repl-and-interactive-environment-references)
+— prior art on REPLs and interactive programming environments for the Chunk 0.16
+interactive-surface work. Keep project-specific decisions in this repository's
+own design docs; use these references for language context, historical grounding,
+and implementation techniques.
 
 ## Canonical External Scheme References
 
@@ -106,3 +109,69 @@ when a ticket benefits from them directly.
 - [*Software Design for Flexibility*](https://mitpress.mit.edu/9780262045490/software-design-for-flexibility)
   for modern Sussman/Hanson design patterns that may inform agent-facing Scheme
   libraries later.
+
+## REPL and Interactive-Environment References
+
+These collect external prior art on REPLs and interactive programming
+environments, grounding the Chunk 0.16 interactive-surface work — the functional
+R7RS terminal REPL, cross-host parity, the interaction contract, chrome, and
+reader recovery. They are prior art for grounding and technique, **not**
+authority. Consent Scheme's distinctive REPL stance — a host-neutral record
+stream as the canonical surface, host-specific chrome as presentation, a shared
+user+agent session, Scheme-readable replayable transcripts, and errors-as-data
+reader recovery — stays defined in this repository's own design docs
+([repl-interaction-contract.md](repl-interaction-contract.md),
+[portable-repl.md](portable-repl.md), [control-loop.md](control-loop.md),
+[transcripts.md](transcripts.md), [session-lifecycle.md](session-lifecycle.md),
+and [debugger.md](debugger.md)).
+
+### Interactive Lisp/Scheme REPL Environments
+
+- [SLIME / SWANK](https://slime.common-lisp.dev/) splits Emacs↔Lisp interaction
+  into an Emacs client and an in-image SWANK server over a wire protocol; direct
+  prior art for the editor↔running-runtime separation and the interaction
+  contract. Supports Common Lisp, Clojure, and Scheme images.
+- [nREPL](https://nrepl.org/) is Clojure's network REPL: a documented
+  client/server protocol where many tools connect to one runtime (the inverse of
+  SLIME's one-client-many-Lisps). Relevant to a host-neutral REPL protocol and to
+  the agent and user sharing one session.
+- [Geiser](https://www.nongnu.org/geiser/) is Emacs Scheme interaction spanning
+  Guile/Racket/Chicken/MIT/Chibi/Chez; the closest analog to one REPL front-end
+  over multiple Scheme implementations, relevant to cross-host parity.
+- [DrScheme: A Programming Environment for Scheme](https://www2.ccs.neu.edu/racket/pubs/jfp01-fcffksf.pdf)
+  (Findler, Flanagan, Flatt, Krishnamurthi, Felleisen) describes a functional
+  read-eval-print loop with language levels, an algebraically sensible printer,
+  and an integrated editor; reference for REPL semantics and structured output
+  rendering. See also [The Racket Manifesto](https://www2.ccs.neu.edu/racket/pubs/manifesto.pdf)
+  for the language-plus-environment design principles.
+
+### History and Concept
+
+- [Read–eval–print loop](https://en.wikipedia.org/wiki/Read%E2%80%93eval%E2%80%93print_loop)
+  is a history pointer for the term and its lineage (Deutsch & Berkeley's 1964
+  PDP-1 Lisp; McCarthy's interactive `eval`). For historical grounding only.
+
+### Image-Based and Live Environments
+
+- [Smalltalk-80: The Language and its Implementation](http://stephane.ducasse.free.fr/FreeBooks/BlueBook/Bluebook.pdf)
+  (Goldberg & Robson, the "Blue Book") is the canonical live, image-based
+  environment where the editor and running system are one; reference for a
+  persistent shared live session and image/snapshot semantics
+  ([session-lifecycle.md](session-lifecycle.md)).
+
+### Notebooks and Literate Computing
+
+- [IPython / Jupyter](https://ipython.org/) — Pérez & Granger, "IPython: A System
+  for Interactive Scientific Computing"
+  ([CiSE 2007](https://doi.org/10.1109/MCSE.2007.53)) and the later
+  language-agnostic kernel/client architecture; reference for a host-neutral REPL
+  message protocol, rich/structured results, and "literate computing" narratives
+  anchored in live computation ([transcripts.md](transcripts.md)).
+
+### Structured Interaction, Errors, and Recovery
+
+- [Condition Handling in the Lisp Language Family](https://www.nhplace.com/kent/Papers/Condition-Handling-2001.html)
+  (Kent Pitman, 2001) covers interactive restarts and condition handling: the
+  Lisp model for recoverable, interactive error handling. Directly relevant to
+  reader recovery / errors-as-data, the debugger
+  ([debugger.md](debugger.md)), and graceful REPL resync.
