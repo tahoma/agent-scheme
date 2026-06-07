@@ -16,6 +16,14 @@
 (require 'consent-runtime)
 (require 'consent-result)
 
+;; Flymake is an optional runtime dependency loaded lazily by
+;; `consent-diagnostics--flymake-diagnostics'; declare its accessors so the
+;; byte-compiler does not flag the guarded call sites.
+(declare-function flymake-diagnostic-type "flymake")
+(declare-function flymake-diagnostic-text "flymake")
+(declare-function flymake-diagnostic-beg "flymake")
+(declare-function flymake-diagnostic-end "flymake")
+
 (defcustom consent-diagnostics-buffer-function
   #'consent-diagnostics-default-buffer-diagnostics
   "Function that returns raw diagnostic observations for a live buffer.

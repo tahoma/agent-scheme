@@ -438,17 +438,14 @@ When EXISTING is non-nil, preserve its id and creation sequence."
 
 (defun consent--plan-replace-field (record name value)
   "Return RECORD with field NAME replaced by VALUE."
-  (let ((replaced nil))
-    (cons
-     (car record)
-     (mapcar
-      (lambda (field)
-        (if (consent--plan-field-named-p field name)
-            (progn
-              (setq replaced t)
-              (consent--plan-field name value))
-          field))
-      (cdr record)))))
+  (cons
+   (car record)
+   (mapcar
+    (lambda (field)
+      (if (consent--plan-field-named-p field name)
+          (consent--plan-field name value)
+        field))
+    (cdr record))))
 
 (defun consent--plan-touch (record)
   "Return RECORD with a refreshed updated-at sequence."

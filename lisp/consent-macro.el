@@ -776,7 +776,7 @@ free bindings resolve in the macro definition environment."
        (consent--symbol-named-p (car form) "define-syntax")))
 
 (defun consent--eval-define-syntax
-    (form environment context syntax-environment)
+    (form environment _context syntax-environment)
   "Install the syntax definition FORM in SYNTAX-ENVIRONMENT."
   (let ((parts (consent--proper-list-elements
                 form "define-syntax form")))
@@ -1397,7 +1397,7 @@ ONE-STEP stops after the first macro expansion."
   (consent--macroexpand-result form environment context options 'one-step))
 
 (defun consent-macro-binding-info
-    (identifier &optional environment context)
+    (identifier &optional _environment context)
   "Return Scheme-readable syntax binding metadata for IDENTIFIER."
   (let* ((name (consent--expect-symbol-name
                 identifier "macro-binding-info identifier"))

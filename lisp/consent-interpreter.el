@@ -45,8 +45,6 @@
       (setq target-outer (cdr target-outer)))
     common))
 
-(declare-function consent--apply-procedure "consent-interpreter")
-
 (defun consent--call-ignoring-values (procedure context description)
   "Call zero-argument PROCEDURE in CONTEXT and discard its values."
   (consent--expect-procedure procedure description)
@@ -384,9 +382,6 @@ Return a cons cell (NAME . INITIALIZER-EXPRESSION)."
    (consent--eval-context-docstring-retention-mode context)
    maybe-formals))
 
-(declare-function consent--eval-expression "consent-eval")
-(declare-function consent--eval-sequence "consent-eval")
-
 (defun consent--prepare-body-environment (body environment context)
   "Return (ENVIRONMENT . EXPRESSIONS) for lambda BODY.
 Internal definitions are installed in fresh locations before their
@@ -620,7 +615,7 @@ Return a cons cell (FORMALS . INITIALIZER-EXPRESSION)."
          (or (null maximum) (<= count maximum)))))
 
 (defun consent--apply-procedure
-    (procedure arguments context tailp &optional continuation)
+    (procedure arguments context _tailp &optional continuation)
   "Apply PROCEDURE to ARGUMENTS.
 When CONTINUATION is non-nil, deliver the result to it.  When it is nil, run
 any resulting bounce to preserve existing direct-call helper behavior."
@@ -3638,18 +3633,18 @@ DESCRIPTION names the primitive for errors."
      (consent--expect-bytevector-output-port
       (car arguments) "get-output-bytevector")))))
 
-(defun consent--primitive-read (arguments _context)
+(defun consent--primitive-read (arguments context)
   "Primitive read over ARGUMENTS."
   (let* ((port (consent--expect-textual-input-port
                 (if arguments
                     (car arguments)
-                  (consent--current-input-port-or-deny _context "read"))
+                  (consent--current-input-port-or-deny context "read"))
                 "read"))
          (result
           (consent--read-one-from-string-at
            (consent--port-source port)
            (consent--port-position port))))
-    (consent--port-capability-check port _context 'read)
+    (consent--port-capability-check port context 'read)
     (setf (consent--port-position port) (cdr result))
     (consent-capability-audit-port-result port 'read 'datum)
     (if (eq (car result) consent--read-eof)
@@ -4038,12 +4033,12 @@ Advance when ADVANCEP is non-nil.  Signal errors using DESCRIPTION."
       (consent--flush-file-output-port port context 'flush)))
   consent-unspecified)
 
-(defun consent--primitive-read-error? (arguments _context)
-  "Primitive read-error? over ARGUMENTS."
+(defun consent--primitive-read-error? (_arguments _context)
+  "Primitive read-error?."
   (consent--scheme-boolean nil))
 
-(defun consent--primitive-file-error? (arguments _context)
-  "Primitive file-error? over ARGUMENTS."
+(defun consent--primitive-file-error? (_arguments _context)
+  "Primitive file-error?."
   (consent--scheme-boolean nil))
 
 (defun consent--primitive-features (_arguments _context)
@@ -4211,8 +4206,9 @@ Advance when ADVANCEP is non-nil.  Signal errors using DESCRIPTION."
           (set-buffer-multibyte nil)
           (insert-file-contents-literally path)
           (let ((bytes (make-vector (buffer-size) 0)))
-            (dotimes (index (buffer-size) bytes)
-              (aset bytes index (char-after (1+ index))))))
+            (dotimes (index (buffer-size))
+              (aset bytes index (char-after (1+ index))))
+            bytes))
       (consent-capability-audit-file-result authorization 'opened))))
 
 (defun consent--primitive-open-input-file (arguments context)
