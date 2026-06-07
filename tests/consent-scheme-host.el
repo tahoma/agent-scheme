@@ -73,6 +73,8 @@
                  "build/compile/racket/bin/consent"
                  consent--test-root)))
            (and (file-executable-p runner) runner))))
+    ('chibi
+     (consent--scheme-host-configured-command "CONSENT_CHIBI" "chibi-scheme"))
     (_
      (error "Unknown portable Scheme host: %S" host))))
 
@@ -116,6 +118,9 @@ RACKET-COLLECTION-ROOT is required when HOST is `racket'."
     ('compiled
      (ignore library-directory racket-collection-root)
      (list "--script" test-file))
+    ('chibi
+     (ignore racket-collection-root)
+     (list "-A" library-directory test-file))
     (_
      (error "Unknown portable Scheme host: %S" host))))
 
@@ -157,6 +162,13 @@ RACKET-COLLECTION-ROOT is accepted for API symmetry with test arguments."
     ('compiled
      (ignore library-directory racket-collection-root)
      (list "--eval" "(+ 1 2)"))
+    ('chibi
+     (ignore racket-collection-root)
+     (list
+      "-A"
+      library-directory
+      "-e"
+      "(import (scheme base) (scheme write)) (write (+ 1 2)) (newline)"))
     (_
      (error "Unknown portable Scheme host: %S" host))))
 

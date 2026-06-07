@@ -5,8 +5,8 @@
 ;;; Commentary:
 
 ;; ERT bridges for running the portable R7RS Scheme tests under additional
-;; R7RS hosts.  Chibi remains split across optional narrower shards for manual
-;; timing.
+;; R7RS hosts.  Every host, Chibi included, runs the same aggregate
+;; `consent--scheme-host-run-suite' loop over the shared test-file list.
 
 ;;; Code:
 
@@ -38,6 +38,10 @@
 (ert-deftest consent-scheme-compiled-host-test-r7rs-suite ()
   "Run the full portable R7RS suite with the compiled Consent Scheme runner."
   (consent--scheme-host-run-suite 'compiled "compiled Consent Scheme"))
+
+(ert-deftest consent-scheme-chibi-host-test-r7rs-suite ()
+  "Run the full portable R7RS suite with Chibi Scheme."
+  (consent--scheme-host-run-suite 'chibi "chibi"))
 
 (provide 'consent-scheme-full-host-test)
 

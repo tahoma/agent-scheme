@@ -11,14 +11,13 @@ CONSENT_TEST_RUNNER_COMMAND = $(CONSENT_TEST_ENV) $(CONSENT_TEST_RUNNER)
 CONSENT_PARALLEL_MAKE = $(MAKE) --no-print-directory
 CONSENT_ELISP_SOURCES := $(sort $(wildcard lisp/*.el))
 CONSENT_PORTABLE_TEST_SELECTOR ?= "consent-scheme-.*"
-CONSENT_PORTABLE_EVAL_TEST_SELECTOR ?= "^consent-scheme-eval-test-r7rs-suite$$"
-CONSENT_PORTABLE_REST_TEST_SELECTOR ?= (and "consent-scheme-.*" (not "^consent-scheme-eval-test-r7rs-suite$$") (not "^consent-scheme-.*-host-test-r7rs-suite$$"))
 CONSENT_PORTABLE_GAMBIT_TEST_SELECTOR ?= "^consent-scheme-gambit-host-test-r7rs-suite$$"
 CONSENT_PORTABLE_GAMBIT_NATIVE_TEST_SELECTOR ?= "^consent-scheme-gambit-native-host-test-r7rs-suite$$"
 CONSENT_PORTABLE_RACKET_TEST_SELECTOR ?= "^consent-scheme-racket-host-test-r7rs-suite$$"
 CONSENT_PORTABLE_COMPILED_TEST_SELECTOR ?= "^consent-scheme-compiled-host-test-r7rs-suite$$"
 CONSENT_PORTABLE_GUILE_TEST_SELECTOR ?= "^consent-scheme-guile-host-test-r7rs-suite$$"
 CONSENT_PORTABLE_GAUCHE_TEST_SELECTOR ?= "^consent-scheme-gauche-host-test-r7rs-suite$$"
+CONSENT_PORTABLE_CHIBI_TEST_SELECTOR ?= "^consent-scheme-chibi-host-test-r7rs-suite$$"
 CONSENT_EMACS_HOSTED_TEST_SELECTOR ?= (not "consent-scheme-.*")
 CONSENT_EMACS_CORE_TEST_SELECTOR ?= (or "consent-base.*" "consent-eval.*" "consent-interpreter-module.*" "consent-macro.*" "consent-reader.*" "consent-result.*" "consent-runtime.*")
 CONSENT_EMACS_LIBRARY_TEST_SELECTOR ?= (or "consent-conformance.*" "consent-fixture.*" "consent-host-adapter-fixture.*" "consent-library.*" "consent-oracle.*")
@@ -28,7 +27,6 @@ CONSENT_PARITY_TEST_SELECTOR ?= "^consent-parity-test-.*"
 CONSENT_LIVE_MODEL_CI_SELECTOR ?= consent-models-test-live-local-openai-compatible-completion
 CONSENT_LIVE_MODEL_SELECTOR ?= "consent-models-test-live-local-.*"
 CONSENT_PORTABLE_TEST_SHARD_TARGETS ?= test-portable-gambit test-portable-gambit-native test-portable-racket test-portable-compiled test-portable-guile test-portable-gauche
-CONSENT_OPTIONAL_PORTABLE_TEST_SHARD_TARGETS ?= test-portable-eval test-portable-rest
 CONSENT_EMACS_TEST_SHARD_TARGETS ?= test-emacs-core test-emacs-library test-emacs-capabilities test-emacs-tools
 # Representative portable host kept in the trimmed default make test shard set.
 # The reader/writer/docstring machinery exercised by the portable shards is
@@ -42,14 +40,13 @@ CONSENT_TEST_SHARD_TARGETS ?= $(CONSENT_DEFAULT_PORTABLE_TEST_SHARD_TARGETS) $(C
 # parity gate.
 CONSENT_FULL_TEST_SHARD_TARGETS ?= $(CONSENT_PORTABLE_TEST_SHARD_TARGETS) $(CONSENT_EMACS_TEST_SHARD_TARGETS) test-parity
 CONSENT_PORTABLE_TEST_JOBS ?= $(words $(CONSENT_PORTABLE_TEST_SHARD_TARGETS))
-CONSENT_OPTIONAL_PORTABLE_TEST_JOBS ?= $(words $(CONSENT_OPTIONAL_PORTABLE_TEST_SHARD_TARGETS))
 CONSENT_EMACS_TEST_JOBS ?= $(words $(CONSENT_EMACS_TEST_SHARD_TARGETS))
 CONSENT_TEST_JOBS ?= $(words $(CONSENT_TEST_SHARD_TARGETS))
 CONSENT_FULL_TEST_JOBS ?= $(words $(CONSENT_FULL_TEST_SHARD_TARGETS))
 
 .DEFAULT_GOAL := help
 
-.PHONY: help clean clean-compile compile compile-elisp repl test test-full test-portable test-portable-chibi test-portable-eval test-portable-rest test-portable-gambit test-portable-gambit-native test-portable-racket test-portable-compiled test-portable-guile test-portable-gauche test-emacs-hosted test-emacs-core test-emacs-library test-emacs-capabilities test-emacs-tools test-parity test-live-model-ci test-live-model conformance-oracle
+.PHONY: help clean clean-compile compile compile-elisp repl test test-full test-portable test-portable-chibi test-portable-gambit test-portable-gambit-native test-portable-racket test-portable-compiled test-portable-guile test-portable-gauche test-emacs-hosted test-emacs-core test-emacs-library test-emacs-capabilities test-emacs-tools test-parity test-live-model-ci test-live-model conformance-oracle
 
 help:
 	@printf '%s\n' 'Consent Scheme top-level actions:'
@@ -62,9 +59,7 @@ help:
 	@printf '  %-26s %s\n' 'test' 'Run the trimmed default local shard set.'
 	@printf '  %-26s %s\n' 'test-full' 'Run the exhaustive local shard set across every host and Emacs shard.'
 	@printf '  %-26s %s\n' 'test-portable' 'Run the default portable R7RS host shards.'
-	@printf '  %-26s %s\n' 'test-portable-chibi' 'Run the optional portable R7RS Chibi shards.'
-	@printf '  %-26s %s\n' 'test-portable-eval' 'Run the optional portable R7RS Chibi evaluator subset shard.'
-	@printf '  %-26s %s\n' 'test-portable-rest' 'Run the optional portable R7RS Chibi non-evaluator subset shard.'
+	@printf '  %-26s %s\n' 'test-portable-chibi' 'Run the optional portable R7RS Chibi full-suite host shard.'
 	@printf '  %-26s %s\n' 'test-portable-gambit' 'Run the portable R7RS Gambit full-suite host shard.'
 	@printf '  %-26s %s\n' 'test-portable-gambit-native' 'Build and run the Gambit-native Consent Scheme full-suite host shard.'
 	@printf '  %-26s %s\n' 'test-portable-racket' 'Run the portable R7RS Racket full-suite host shard.'
@@ -90,12 +85,9 @@ help:
 	@printf '  %-50s %s\n' 'CONSENT_TEST_JOBS=N' 'Parallel jobs used by make test.'
 	@printf '  %-50s %s\n' 'CONSENT_TEST_SHARD_TARGETS=a b' 'Trimmed default shard targets run by make test.'
 	@printf '  %-50s %s\n' 'CONSENT_FULL_TEST_SHARD_TARGETS=a b' 'Exhaustive shard targets run by make test-full.'
-	@printf '  %-50s %s\n' 'CONSENT_OPTIONAL_PORTABLE_TEST_SHARD_TARGETS=a b' 'Optional portable shard targets run by make test-portable-chibi.'
-	@printf '  %-50s %s\n' 'CONSENT_OPTIONAL_PORTABLE_TEST_JOBS=N' 'Parallel jobs used by make test-portable-chibi.'
 	@printf '  %-50s %s\n' 'CONSENT_TEST_SELECTOR=SEL' 'Optional ERT selector for make test.'
 	@printf '  %-50s %s\n' 'CONSENT_PORTABLE_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable.'
-	@printf '  %-50s %s\n' 'CONSENT_PORTABLE_EVAL_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-eval.'
-	@printf '  %-50s %s\n' 'CONSENT_PORTABLE_REST_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-rest.'
+	@printf '  %-50s %s\n' 'CONSENT_PORTABLE_CHIBI_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-chibi.'
 	@printf '  %-50s %s\n' 'CONSENT_PORTABLE_GAMBIT_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-gambit.'
 	@printf '  %-50s %s\n' 'CONSENT_PORTABLE_GAMBIT_NATIVE_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-gambit-native.'
 	@printf '  %-50s %s\n' 'CONSENT_PORTABLE_RACKET_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-racket.'
@@ -175,13 +167,7 @@ test-portable:
 endif
 
 test-portable-chibi:
-	$(CONSENT_PARALLEL_MAKE) -j$(CONSENT_OPTIONAL_PORTABLE_TEST_JOBS) $(CONSENT_OPTIONAL_PORTABLE_TEST_SHARD_TARGETS)
-
-test-portable-eval:
-	CONSENT_TEST_SELECTOR='$(CONSENT_PORTABLE_EVAL_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
-
-test-portable-rest:
-	CONSENT_TEST_SELECTOR='$(CONSENT_PORTABLE_REST_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
+	CONSENT_TEST_SELECTOR='$(CONSENT_PORTABLE_CHIBI_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
 
 test-portable-gambit:
 	CONSENT_TEST_SELECTOR='$(CONSENT_PORTABLE_GAMBIT_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
