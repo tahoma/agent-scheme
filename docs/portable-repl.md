@@ -13,7 +13,9 @@ This document covers setup, invocation, the emitted records, limitations, and
 verification. For the host-neutral behavioral obligations themselves — the
 interaction model, record fields, stream separation, and close-status vocabulary
 — see the contract document; this shell satisfies those obligations rather than
-re-deriving them.
+re-deriving them. For a single guide that covers starting the REPL on *both*
+hosts side by side, with a cross-host parity matrix, see
+[Using the Consent Scheme REPL](repl.md).
 
 ## Setup
 
