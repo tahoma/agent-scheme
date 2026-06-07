@@ -146,12 +146,23 @@ compile-elisp:
 # is redirected into a throwaway build directory so the gate leaves no stale
 # `.elc' beside the sources and never races the parallel test shards that load
 # the `.el' files directly.
+#
+# The docstring-width sub-check is disabled (`byte-compile-docstring-max-column'
+# unbounded) so the gate is deterministic across Emacs versions. `cl-defstruct'
+# auto-generates a constructor docstring with a `(fn &key SLOT...)' line whose
+# width scales with the slot count; Emacs 30 excludes that machine-generated
+# line from the width check while Emacs 29 does not, so a wide struct (notably
+# the `consent--eval-context' god-object tracked by #371) would fail the gate on
+# one Emacs but not another. Docstring style and width are owned by the separate
+# checkdoc slice, not this gate; this target enforces the semantic warning
+# classes the issue motivates.
 lint-elisp:
 	@rm -rf '$(CONSENT_LINT_BUILD_DIR)'
 	@mkdir -p '$(CONSENT_LINT_BUILD_DIR)'
 	$(EMACS) -Q --batch -L lisp \
 		--eval "(setq load-prefer-newer t)" \
 		--eval "(setq byte-compile-error-on-warn t)" \
+		--eval "(setq byte-compile-docstring-max-column most-positive-fixnum)" \
 		--eval "(setq byte-compile-dest-file-function (lambda (source) (expand-file-name (concat (file-name-nondirectory source) \"c\") \"$(CONSENT_LINT_BUILD_DIR)\")))" \
 		-f batch-byte-compile $(CONSENT_ELISP_SOURCES)
 	@rm -rf '$(CONSENT_LINT_BUILD_DIR)'
