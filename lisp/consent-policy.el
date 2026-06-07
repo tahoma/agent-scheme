@@ -124,7 +124,7 @@
    fields))
 
 (defun consent-policy--deny
-    (category operation action fields context event reason)
+    (category operation action fields _context event reason)
   "Audit and signal a denied policy decision."
   (consent-audit-record
    event
@@ -200,13 +200,13 @@ to `policy-decision'."
 
 ;;;###autoload
 (defun consent-policy-authorize-skill-activation
-    (skill-name source-directory trust-scope &optional context)
-  "Authorize activation for SKILL-NAME from SOURCE-DIRECTORY."
+    (skill-name source-dir trust-scope &optional context)
+  "Authorize activation for SKILL-NAME from SOURCE-DIR."
   (consent-policy-authorize
    'skill-discovery-activation
    "activate-skill"
    `((skill-name . ,skill-name)
-     (source-directory . ,source-directory)
+     (source-directory . ,source-dir)
      (trust-scope . ,trust-scope))
    context
    'skill-activation))

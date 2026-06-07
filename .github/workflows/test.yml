@@ -40,6 +40,21 @@ jobs:
       - name: Check REUSE/SPDX compliance
         run: reuse lint
 
+  lint-elisp:
+    name: Emacs byte-compile lint (warnings-as-errors)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Install Emacs
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y emacs-nox
+
+      - name: Byte-compile lisp/ with warnings-as-errors
+        run: make lint-elisp
+
   test-portable-gambit:
     name: portable R7RS / Gambit full suite / syntax ${{ matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention }}
     runs-on: ubuntu-latest
