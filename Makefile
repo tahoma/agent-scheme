@@ -2,6 +2,8 @@ EMACS ?= emacs
 CONSENT_COMPILE_HOST ?= racket
 CONSENT_COMPILE_BUILD_DIR ?= build/compile
 CONSENT_LINT_BUILD_DIR ?= build/lint
+CONSENT_PORTABLE_LINT_BUILD_DIR ?= build/lint-portable
+CONSENT_GUILE ?= guile
 CONSENT_RACKET ?= racket
 CONSENT_RACO ?= raco
 CONSENT_GAMBIT ?= gsi
@@ -34,13 +36,14 @@ CONSENT_EMACS_TEST_SHARD_TARGETS ?= test-emacs-core test-emacs-library test-emac
 # host-independent, so one host is enough for the fast local loop; the full host
 # matrix stays available through make test-full and the scheduled CI lane.
 CONSENT_DEFAULT_PORTABLE_TEST_SHARD_TARGETS ?= test-portable-racket
-# Trimmed default: the Emacs byte-compile lint gate, one representative portable
-# host, the full Emacs shard set, and the cross-implementation parity gate
-# (#374).
-CONSENT_TEST_SHARD_TARGETS ?= lint-elisp $(CONSENT_DEFAULT_PORTABLE_TEST_SHARD_TARGETS) $(CONSENT_EMACS_TEST_SHARD_TARGETS) test-parity
-# Exhaustive opt-in set: the Emacs byte-compile lint gate, every portable host
-# shard, every Emacs shard, and the parity gate.
-CONSENT_FULL_TEST_SHARD_TARGETS ?= lint-elisp $(CONSENT_PORTABLE_TEST_SHARD_TARGETS) $(CONSENT_EMACS_TEST_SHARD_TARGETS) test-parity
+# Trimmed default: the Emacs byte-compile lint gate, the portable-host compiler
+# warnings gate, one representative portable host, the full Emacs shard set, and
+# the cross-implementation parity gate (#374).
+CONSENT_TEST_SHARD_TARGETS ?= lint-elisp lint-portable $(CONSENT_DEFAULT_PORTABLE_TEST_SHARD_TARGETS) $(CONSENT_EMACS_TEST_SHARD_TARGETS) test-parity
+# Exhaustive opt-in set: the Emacs byte-compile lint gate, the portable-host
+# compiler warnings gate, every portable host shard, every Emacs shard, and the
+# parity gate.
+CONSENT_FULL_TEST_SHARD_TARGETS ?= lint-elisp lint-portable $(CONSENT_PORTABLE_TEST_SHARD_TARGETS) $(CONSENT_EMACS_TEST_SHARD_TARGETS) test-parity
 CONSENT_PORTABLE_TEST_JOBS ?= $(words $(CONSENT_PORTABLE_TEST_SHARD_TARGETS))
 CONSENT_EMACS_TEST_JOBS ?= $(words $(CONSENT_EMACS_TEST_SHARD_TARGETS))
 CONSENT_TEST_JOBS ?= $(words $(CONSENT_TEST_SHARD_TARGETS))
@@ -48,7 +51,7 @@ CONSENT_FULL_TEST_JOBS ?= $(words $(CONSENT_FULL_TEST_SHARD_TARGETS))
 
 .DEFAULT_GOAL := help
 
-.PHONY: help clean clean-compile compile compile-elisp lint-elisp repl test test-full test-portable test-portable-chibi test-portable-gambit test-portable-gambit-native test-portable-racket test-portable-compiled test-portable-guile test-portable-gauche test-emacs-hosted test-emacs-core test-emacs-library test-emacs-capabilities test-emacs-tools test-parity test-live-model-ci test-live-model conformance-oracle
+.PHONY: help clean clean-compile compile compile-elisp lint-elisp lint-portable repl test test-full test-portable test-portable-chibi test-portable-gambit test-portable-gambit-native test-portable-racket test-portable-compiled test-portable-guile test-portable-gauche test-emacs-hosted test-emacs-core test-emacs-library test-emacs-capabilities test-emacs-tools test-parity test-live-model-ci test-live-model conformance-oracle
 
 help:
 	@printf '%s\n' 'Consent Scheme top-level actions:'
@@ -58,6 +61,7 @@ help:
 	@printf '  %-26s %s\n' 'compile' 'Build host-compiled portable executable artifacts.'
 	@printf '  %-26s %s\n' 'compile-elisp' 'Byte-compile checked-in Elisp sources.'
 	@printf '  %-26s %s\n' 'lint-elisp' 'Byte-compile Elisp sources with warnings-as-errors.'
+	@printf '  %-26s %s\n' 'lint-portable' 'Compile portable libraries under Guile with warnings-as-errors.'
 	@printf '  %-26s %s\n' 'repl' 'Start the portable terminal REPL shell (ARGS=... passes flags).'
 	@printf '  %-26s %s\n' 'test' 'Run the trimmed default local shard set.'
 	@printf '  %-26s %s\n' 'test-full' 'Run the exhaustive local shard set across every host and Emacs shard.'
@@ -166,6 +170,18 @@ lint-elisp:
 		--eval "(setq byte-compile-dest-file-function (lambda (source) (expand-file-name (concat (file-name-nondirectory source) \"c\") \"$(CONSENT_LINT_BUILD_DIR)\")))" \
 		-f batch-byte-compile $(CONSENT_ELISP_SOURCES)
 	@rm -rf '$(CONSENT_LINT_BUILD_DIR)'
+
+# Portable twin of lint-elisp (#421): compile the host-loadable portable Consent
+# Scheme libraries under Guile with the high-signal static warning classes
+# (unbound variable, arity mismatch, use-before-definition, unused lexical,
+# format/case-datum) promoted to errors. Guile is the gate host because, among
+# the portable hosts already in CI, it is the only one with a usable `-W`
+# warning facility; see tools/lint-portable.sh and docs/development.md. Skips
+# (does not fail) when Guile is unavailable, matching the portable host shards.
+lint-portable:
+	CONSENT_GUILE='$(CONSENT_GUILE)' \
+	CONSENT_PORTABLE_LINT_BUILD_DIR='$(CONSENT_PORTABLE_LINT_BUILD_DIR)' \
+	tools/lint-portable.sh
 
 # Start the portable terminal REPL shell outside Emacs (docs/portable-repl.md).
 # Reads Consent Scheme forms from stdin, writes interaction-contract records to
