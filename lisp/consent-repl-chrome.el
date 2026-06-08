@@ -150,6 +150,24 @@ return nil, mirroring the portable terminal renderer leaving them uncolored."
   "Build a neutral furniture segment carrying punctuation/whitespace TEXT."
   (consent-repl-chrome--seg 'furniture text))
 
+;;;; Input-echo signal: does the host already echo interaction input?
+
+;; The portable terminal twin (`cli-repl-chrome-input-echoed?' in
+;; scheme/cli/repl-chrome.sld) carries this signal so the `comment' chrome keeps
+;; exactly one replayable copy of each submission: an interactive TTY echoes the
+;; typed form in cooked mode, so the chrome must suppress its own echo there and
+;; keep echoing when input is piped or redirected.  This dynamic variable is the
+;; Emacs twin of that parameter.  Both Emacs entries leave it nil: the batch
+;; entry (`consent-repl-stream-main') reads piped stdin with no terminal echo,
+;; and the interactive command renders submitted source into a buffer rather
+;; than echoing a live terminal -- so neither host path double-echoes.  The
+;; variable exists for model symmetry and lets a future echoing Emacs front end
+;; bind it without re-deriving the gate.
+(defvar consent-repl-chrome-input-echoed nil
+  "Non-nil when the host already echoes REPL interaction input.
+When non-nil, the `comment' chrome suppresses its own submission echo so a
+captured transcript holds exactly one replayable copy of each form.")
+
 ;;;; The `comment' chrome (default): block-comment furniture, replayable
 
 (defun consent-repl-chrome--comment (record)
@@ -157,7 +175,10 @@ return nil, mirroring the portable terminal renderer leaving them uncolored."
 Every prompt, result, and diagnostic is a block comment and a complete
 submission is echoed as bare source, so the whole control-channel stream is
 valid Consent Scheme that replays to the same evaluation apart from program
-output."
+output.  The submission echo is suppressed when
+`consent-repl-chrome-input-echoed' is non-nil (the host already echoes the typed
+form), so a captured transcript holds exactly one replayable copy of each form
+in both the piped and the interactive case."
   (let ((kind (consent-repl-chrome--kind record)))
     (cond
      ((equal kind "repl-prompt")
@@ -176,8 +197,12 @@ output."
                  (consent-repl-chrome--furniture " |# "))))))
      ((equal kind "repl-submission")
       ;; Echo a whole form as bare code so it replays; leave an incomplete
-      ;; (EOF-truncated) submission unechoed so the stream stays balanced.
-      (if (consent-repl-chrome--field-true-p record "complete")
+      ;; (EOF-truncated) submission unechoed so the stream stays balanced.  When
+      ;; the host already echoes interaction input (an interactive TTY in cooked
+      ;; mode), suppress this echo too: the terminal's own echo is the single
+      ;; replayable copy, and a second copy would replay the form twice.
+      (if (and (consent-repl-chrome--field-true-p record "complete")
+               (not consent-repl-chrome-input-echoed))
           (list (consent-repl-chrome--seg
                  'submission (consent-repl-chrome--field record "source"))
                 (consent-repl-chrome--furniture "\n"))

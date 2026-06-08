@@ -464,15 +464,18 @@ Return the ordered contract records for SESSION under evaluator OPTIONS."
 
 ;;;###autoload
 (defun consent-repl-stream-rendered-from-string
-    (input session chrome-name &optional apply-faces options)
+    (input session chrome-name &optional apply-faces options input-echoed)
   "Drive a REPL over INPUT under SESSION and return the CHROME-NAME chrome's text.
 Each contract record is rendered through the named chrome from
 `consent-repl-chrome.el' and concatenated into the control-channel text;
 program output is discarded.  Faces are applied when APPLY-FACES is non-nil, so
-omitting it recovers the plain text.  This is the host-neutral, buffer-free hook
+omitting it recovers the plain text.  INPUT-ECHOED models a host that already
+echoes interaction input -- an interactive TTY -- so the comment chrome
+suppresses its own submission echo.  This is the host-neutral, buffer-free hook
 the chrome tests assert against, the Emacs twin of the portable
 `cli-repl-rendered-from-string'."
   (let ((chrome (consent-repl-chrome-lookup chrome-name))
+        (consent-repl-chrome-input-echoed input-echoed)
         (parts nil))
     (consent-repl-stream-run
      (consent-repl-stream--list-chunk-source

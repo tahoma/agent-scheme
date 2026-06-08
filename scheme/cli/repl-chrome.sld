@@ -28,6 +28,7 @@
   (export cli-repl-chrome-lookup
           cli-repl-chrome-names
           cli-repl-chrome-default-name
+          cli-repl-chrome-input-echoed?
           cli-repl-chrome-paint
           cli-repl-chrome-color?)
   (import (scheme base)
@@ -69,13 +70,33 @@
       "Build a neutral furniture segment carrying punctuation/whitespace TEXT."
       (chrome--seg 'furniture text))
 
+    ;;;; Input-echo signal: does the host already echo interaction input?
+
+    ;; On an interactive TTY the terminal driver echoes each typed form in cooked
+    ;; mode, so the form is already on screen (and in any `script(1)' capture)
+    ;; before the chrome runs.  The `comment' chrome keeps exactly one replayable
+    ;; copy of each submission in the control-channel stream, so when the host
+    ;; already echoes input it must *suppress* its own echo (the terminal's echo
+    ;; is the single copy), and when input is piped or redirected -- no terminal
+    ;; echo -- it must keep echoing (the chrome supplies the single copy).  This
+    ;; parameter carries that host signal to the otherwise pure chrome without
+    ;; handing it a live port: the shell binds it from a per-host TTY check
+    ;; against stdin.  The default #f is the piped/redirected posture, so a
+    ;; string-driven or scripted render echoes as before.
+    (define cli-repl-chrome-input-echoed?
+      (make-parameter #f))
+
     ;;;; The `comment' chrome (default): block-comment furniture, replayable
 
     (define (chrome--comment record)
       "Render RECORD under the default `comment' chrome.  Every prompt, result,
 and diagnostic is a block comment and a complete submission is echoed as bare
 source, so the whole control-channel stream is valid Consent Scheme that replays
-to the same evaluation apart from program output."
+to the same evaluation apart from program output.  The submission echo is
+suppressed when `cli-repl-chrome-input-echoed?' is true (the host -- an
+interactive TTY -- already echoes the typed form), so a captured transcript
+holds exactly one replayable copy of each form in both the piped and the
+interactive case."
       (let ((kind (chrome--kind record)))
         (cond
          ((eq? kind 'repl-prompt)
@@ -94,7 +115,11 @@ to the same evaluation apart from program output."
          ((eq? kind 'repl-submission)
           ;; Echo a whole form as bare code so it replays; leave an incomplete
           ;; (EOF-truncated) submission unechoed so the stream stays balanced.
-          (if (chrome--field record 'complete)
+          ;; When the host already echoes interaction input (an interactive TTY
+          ;; in cooked mode), suppress this echo too: the terminal's own echo is
+          ;; the single replayable copy, and a second copy would replay twice.
+          (if (and (chrome--field record 'complete)
+                   (not (cli-repl-chrome-input-echoed?)))
               (list (chrome--seg 'submission (chrome--field record 'source))
                     (chrome--furniture "\n"))
               #f))
