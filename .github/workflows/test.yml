@@ -55,6 +55,26 @@ jobs:
       - name: Byte-compile lisp/ with warnings-as-errors
         run: make lint-elisp
 
+  lint-portable:
+    name: Portable-host compiler lint (warnings-as-errors)
+    runs-on: ubuntu-latest
+    # Portable twin of lint-elisp (#421): compile the host-loadable portable
+    # libraries under Guile with static warnings promoted to errors. Guile is the
+    # gate host because it is the only in-CI portable host with a usable `-W`
+    # warning facility; it ships in the bare ubuntu-latest apt universe.
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Install Guile
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y guile-3.0
+          guile --version
+
+      - name: Compile portable libraries with warnings-as-errors
+        run: make lint-portable
+
   test-portable-gambit:
     name: portable R7RS / Gambit full suite / syntax ${{ matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention }}
     runs-on: ubuntu-latest

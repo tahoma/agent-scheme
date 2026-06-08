@@ -429,6 +429,44 @@ owned by the separate `checkdoc` slice, not this gate. That batch `checkdoc`
 pass is intentionally not part of the gate yet; it surfaces a large backlog of
 docstring-convention findings and is tracked as its own follow-up slice.
 
+The default set also runs `lint-portable`, the portable twin of `lint-elisp`
+(#421). It compiles the host-loadable portable Consent Scheme libraries under
+Guile with the high-signal static warning classes — unbound variable, arity
+mismatch, use-before-definition, unused lexical, and `format`/`case`-datum
+mistakes — promoted to errors, so the portable peer gets the same cheap static
+coverage the Emacs twin does. Run it on its own with:
+
+```sh
+make lint-portable
+```
+
+Guile is the gate host because, among the portable hosts already wired into CI
+(Gambit, Racket, Guile, Gauche), it is the only one with a usable ahead-of-time
+warning facility — `guild compile -W ...`, the same `-W` baseline the linting
+survey records for Chez/Guile. Gambit reports arity mismatches only at run time,
+and Racket and Gauche expose no comparable unused/unbound static warning pass, so
+they are intentionally out of scope for this gate (the issue bounds it to hosts
+already in CI). The gate drives a generated driver that imports every
+host-loadable library with a unique prefix; auto-compilation surfaces warnings
+for each transitively compiled library, and a fresh compile is forced each run so
+cached bytecode never masks a warning. The driver and bytecode cache live under a
+throwaway `CONSENT_PORTABLE_LINT_BUILD_DIR` (default `build/lint-portable`) that
+the gate removes when it finishes, so it leaves nothing beside the sources.
+
+Two warning classes are deliberately not gated. `unused-toplevel` and
+`unused-module` fire hundreds of false positives because the project registers
+internal helpers and primitives through runtime dispatch tables that Guile's
+per-module static analysis cannot see; they are too noisy to gate cleanly. Four
+libraries are also out of the gate's reach because they are not host-loadable as
+pure R7RS — `(agent diagnostics)`, `(agent diff)`, and `(agent test)` import the
+runtime-virtual `(agent io)` module, and `(consent capability)` imports the
+host-adapter `(consent capability primitive)` layer; these are exercised through
+the runtime instead. The exclusion list in `tools/lint-portable.sh` is explicit
+so that a newly added library reaching such a module fails the gate loudly rather
+than being skipped silently. Like the portable host shards, the gate *skips*
+(rather than fails) when Guile is unavailable, so it is a no-op on a Guile-free
+machine; CI installs Guile so it always runs there.
+
 Run the exhaustive set — every portable host shard plus every Emacs shard —
 with the opt-in escape hatch:
 
@@ -478,7 +516,10 @@ the `ubuntu:26.04` container).
 The `lint-elisp` job (#415) runs `make lint-elisp` on every lane as its own
 lightweight required check, alongside the `license-reuse` REUSE/SPDX job. It
 needs only Emacs, so it is a fast static gate that runs in parallel with the
-test shards rather than fanning out across the matrix axes.
+test shards rather than fanning out across the matrix axes. The `lint-portable`
+job (#421) is its portable twin: it installs Guile and runs `make lint-portable`
+on every lane as an equally lightweight required check, so the portable libraries
+are gated for compiler warnings on the same per-push cadence.
 
 CI runs the aggregate suite as host/runtime-oriented shards so timing and
 failures stay visible by architectural path:
