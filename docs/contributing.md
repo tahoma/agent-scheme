@@ -179,3 +179,80 @@ feat(reader)!: change datum representation for bytevectors
 BREAKING CHANGE: bytevectors now use a dedicated implementation record.
 Refs: #2
 ```
+
+## Continuous Integration
+
+CI is not advisory. After every commit you push to a branch with an open pull
+request, you must watch that PR's checks to completion before reporting the work
+as done, and you must check the PR's timing data for regressions before merging.
+
+### Background-monitor checks to completion
+
+After each push to an open PR, background-monitor the run to completion:
+
+```sh
+gh pr checks <pr> --watch
+```
+
+Rules:
+
+- Watch every push, including small follow-up commits. A new push starts a new
+  run; the previous green result does not carry over.
+- Do not declare success on a partial or "green so far" signal. A run is
+  conclusive only once every required check has reported a terminal state.
+  Treat a still-running, cancelled, or skipped-but-required check as not yet
+  passing.
+- A red required check is a stop condition: fix it and re-push rather than
+  reporting the branch ready.
+- If a required check fails only intermittently across re-runs, treat it as a
+  flake to be investigated, not noise to be retried away — note it on the PR.
+
+### Where the timing data lives
+
+The split-shard CI introduced in #322 and rebalanced in #325 publishes per-run
+timing in three places. Read them in this order of convenience:
+
+1. **The PR timing comment.** On every `pull_request` run, the combined timing
+   job upserts a single comment marked `<!-- consent-ci-timing-summary -->`,
+   holding the portable-host timing table, the Emacs-shard timing table, and a
+   collapsible per-shard detail section. Each cell shows ERT time with CI
+   wall-clock time in parentheses. Fetch it for any PR with:
+
+   ```sh
+   gh api repos/<owner>/<repo>/issues/<pr>/comments \
+     --paginate \
+     --jq '.[] | select(.body | contains("consent-ci-timing-summary")) | .body'
+   ```
+
+2. **The per-shard `test-log-*` artifacts**, for the raw per-test breakdown
+   behind a shard's number.
+3. **The `ci-run-record` artifact** (JSON Lines, one record per run), for
+   structured longitudinal comparison. See [CI run record](ci-run-record.md) for
+   the schema; `totals.*` and `shards[].ert_seconds` / `wall_seconds` are the
+   timing fields.
+
+### Regression heuristic
+
+After your PR's timing comment lands, compare it against the same comment on the
+last three to five merged pull requests (read each with the `gh api` query
+above). Use this simple heuristic:
+
+- **Primary signal: per-shard ERT seconds for the canonical `on/full` cells** —
+  the one syntax/docstring combo that runs on every per-push lane, so it is
+  always present to compare. ERT time isolates test cost from runner noise.
+- **Compare shard-by-shard against the recent-merged baseline** (the median of
+  those last few merged PRs' `on/full` cells for that shard), not against a
+  single prior run.
+- **Flag a regression** when a shard's ERT rises by **both ≥20% and ≥3s** over
+  that baseline **while its `Ran` count is unchanged**. A higher `Ran` count
+  means new tests — expected growth, not a regression; note it instead of
+  flagging it.
+- **Use wall time as a secondary signal for build-bound shards** (the
+  Gambit-native and compiled-host runners, whose wall time is dominated by a
+  recompile and dwarfs their ERT time). A material, unexplained rise in those
+  shards' wall time is worth flagging even when ERT is flat.
+
+When the heuristic flags a shard, investigate before merging: either land a fix,
+or state in the PR why the increase is justified (for example, a deliberately
+added test or a host-toolchain change). Do not merge a flagged, unexplained
+timing regression silently.
