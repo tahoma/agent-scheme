@@ -38,9 +38,12 @@ the *set of shards* and the project name are not.
 | D | #362–#405 | + Gambit-native compiled shard | still `agent-scheme` |
 | E | #406–present | project renamed to **consent** | current format; shard names gain `Consent Scheme` |
 
-The Era A→B boundary (#355→#356) is a hard discontinuity: the slow single Chibi
-portable host (~70s `eval` + a 152s `rest` outlier) was replaced by parallel
-fast hosts. Do not compare a portable-host number across it.
+The Era A→B boundary (#355→#356) is a hard discontinuity *for the portable
+side*: the slow single Chibi host (~70s `eval` + a 152s `rest` outlier) was
+replaced by parallel fast hosts. Do not compare a portable-host number across it.
+The Emacs shards have their own, separate level shift in this window — see the
+observations below; it is driven by two runtime changes (#355, #359), not by the
+host fan-out.
 
 ## Current baseline (Era E, PR ≥ #406, `on/full`, 24 PRs)
 
@@ -79,13 +82,27 @@ the ERT *is* the signal, with no `Ran`-growth guard to apply).
   heuristic compares against the **median of several recent merged PRs**, never a
   single run or the historical max.
 
-- **One sustained, infra-driven level shift: #355→#356.** Across the Era A→B
-  boundary every Emacs shard's floor stepped up ~8–12s and stayed there
-  (core ~42→~55s, library ~46→~53s, capabilities ~40→~47s, tools ~40→~44s) with
-  `Ran` essentially flat. The uniform, all-shards shift coinciding with the
-  multi-host CI restructure points at the runner/parallelism environment, not
-  any one shard's tests. It is the only sustained baseline shift in the history
-  and is now priced into the Era E baseline above.
+- **One sustained level shift, from two runtime changes (#355 and #359) — not
+  the runner.** Every Emacs shard's floor stepped up ~5–11s in the #355–#359
+  window and stayed there, with `Ran` flat. It resolves into two distinct steps
+  that bracket two reader/datum-representation PRs:
+  - **#355 "attach source metadata to syntax datums"** lifts the parse/fixture
+    shards: `library` 47.7s → 52.8s and `capabilities` 40.7s → 46.1s, both first
+    cleanly measured at #356 (and `Ran` unchanged).
+  - **#359 "add docstring retention modes"** lifts the eval shard: `core` 40.2s
+    (at #356) → ~51s (at #359), `Ran` unchanged at 73. The jump appears in
+    **every** syntax/docstring combo, including `off/none` (53.5s) — turning the
+    features off does **not** recover the old timing, so the cost is structural
+    in the datum representation those PRs added, not in the optional metadata
+    payload.
+
+  This is an in-process **ERT** (CPU-time) rise, uniform across shards that run
+  on isolated GitHub-hosted VMs, so it is categorically *not* runner contention
+  (an earlier draft of this doc misattributed it that way). It is a genuine
+  latent regression that landed unflagged — exactly the case the
+  [regression heuristic](contributing.md#continuous-integration) now exists to
+  catch: #359's core step is +27% and +11s at constant `Ran`, well over the
+  ≥20%-and-≥3s threshold. It is now priced into the Era E baseline above.
 
 - **`tools/docs/integration` growth is test-count growth, not regression.** Its
   `Ran` climbed 72 → 179 (≈2.5×) and ERT 30s → 60s over the window, tracking
