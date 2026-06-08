@@ -30,10 +30,14 @@
 ;;; host-neutral (cli repl-chrome) layer.  `cli-repl-main' selects the chrome,
 ;;; resolves `--color=auto|always|never' against the control channel's terminal
 ;;; status and NO_COLOR, applies the chrome to each record, and flushes the
-;;; control channel so a no-newline prompt appears before the blocking read.
-;;; Chrome text stays on the control channel (stderr); program output on stdout
-;;; is never touched.  `--chrome datum' recovers the canonical record stream and
-;;; is always reachable.
+;;; control channel so a no-newline prompt appears before the blocking read.  It
+;;; also decides from stdin's terminal status whether the interaction input is
+;;; already echoed -- an interactive TTY echoes each typed form in cooked mode --
+;;; so the `comment' chrome suppresses its own submission echo and a captured
+;;; transcript keeps exactly one replayable copy of each form.  Chrome text stays
+;;; on the control channel (stderr); program output on stdout is never touched.
+;;; `--chrome datum' recovers the canonical record stream and is always
+;;; reachable.
 
 (define-library (cli repl-shell)
   (export cli-repl-drive
@@ -51,31 +55,34 @@
           (consent result)
           (cli repl-chrome))
 
-  ;; The one host-specific obligation of the chrome layer: deciding whether the
-  ;; control channel is a terminal so `--color=auto' can gate ANSI off when the
-  ;; session is piped or redirected.  R7RS-small has no portable terminal-port
-  ;; predicate, so each host branch imports its own; hosts without one fall to
-  ;; the `else' branch, where `auto' is treated as non-terminal (color off).
+  ;; The one host-specific obligation of the chrome layer: deciding whether a
+  ;; given port is a terminal.  The control channel (stderr) drives `--color=auto'
+  ;; -- ANSI off when the session is piped or redirected -- and the interaction
+  ;; input (stdin) drives the `comment' chrome's echo decision -- suppress the
+  ;; submission echo when the terminal already echoes typed forms.  R7RS-small
+  ;; has no portable terminal-port predicate, so each host branch imports its
+  ;; own; hosts without one fall to the `else' branch, where a port is treated as
+  ;; non-terminal (color off, echo kept).
   (cond-expand
    (gambit
     (import (only (gambit) tty?))
     (begin
-      (define (repl--control-tty? port) (and (tty? port) #t))))
+      (define (repl--port-tty? port) (and (tty? port) #t))))
    (racket
     (import (only (racket base) terminal-port?))
     (begin
-      (define (repl--control-tty? port) (and (terminal-port? port) #t))))
+      (define (repl--port-tty? port) (and (terminal-port? port) #t))))
    (guile
     (import (only (guile) isatty?))
     (begin
-      (define (repl--control-tty? port) (and (isatty? port) #t))))
+      (define (repl--port-tty? port) (and (isatty? port) #t))))
    (gauche
     (import (gauche base))
     (begin
-      (define (repl--control-tty? port) (and (sys-isatty port) #t))))
+      (define (repl--port-tty? port) (and (sys-isatty port) #t))))
    (else
     (begin
-      (define (repl--control-tty? port) (and port #f)))))
+      (define (repl--port-tty? port) (and port #f)))))
 
   (begin
 
@@ -470,15 +477,19 @@
             (write-string painted port)
             (flush-output-port port)))))
 
-    (define (cli-repl-rendered-from-string input session chrome-name color?)
-      "Drive a REPL over INPUT under SESSION and return the CHROME-NAME chrome's control-channel text, painted when COLOR? is true and discarding program output; the host-neutral, TTY-free hook the tests assert chrome output against."
+    (define (cli-repl-rendered-from-string input session chrome-name color?
+                                           . maybe-input-echoed?)
+      "Drive a REPL over INPUT under SESSION and return the CHROME-NAME chrome's control-channel text, painted when COLOR? is true and discarding program output; the host-neutral, TTY-free hook the tests assert chrome output against.  The optional INPUT-ECHOED? flag (default #f) models a host that already echoes interaction input -- an interactive TTY -- so the comment chrome suppresses its own submission echo just as the live terminal entry does."
       (let ((chrome (cli-repl-chrome-lookup chrome-name))
-            (port (open-output-string)))
-        (cli-repl-run
-         (repl--list-chunk-source (repl--split-lines input))
-         (repl--rendering-writer chrome color? port)
-         (lambda (output) output)
-         session)
+            (port (open-output-string))
+            (input-echoed? (and (pair? maybe-input-echoed?)
+                                (car maybe-input-echoed?))))
+        (parameterize ((cli-repl-chrome-input-echoed? input-echoed?))
+          (cli-repl-run
+           (repl--list-chunk-source (repl--split-lines input))
+           (repl--rendering-writer chrome color? port)
+           (lambda (output) output)
+           session))
         (get-output-string port)))
 
     (define (repl--fatal message detail)
@@ -498,6 +509,7 @@
              (color-mode (repl--option options 'color))
              (chrome (cli-repl-chrome-lookup chrome-name))
              (record-port (current-error-port))
+             (input-port (current-input-port))
              (output-port (current-output-port)))
         (unless chrome
           (repl--fatal "unknown chrome: " (symbol->string chrome-name)))
@@ -507,7 +519,11 @@
                (no-color? (and no-color-value
                                (> (string-length no-color-value) 0)))
                (color? (cli-repl-chrome-color?
-                        color-mode no-color? (repl--control-tty? record-port)))
+                        color-mode no-color? (repl--port-tty? record-port)))
+               ;; An interactive terminal echoes each typed form in cooked mode,
+               ;; so stdin being a TTY means the form is already on screen; the
+               ;; comment chrome then suppresses its own echo to keep one copy.
+               (input-echoed? (repl--port-tty? input-port))
                (read-chunk
                 (lambda ()
                   (let ((line (read-line)))
@@ -519,4 +535,6 @@
                 (lambda (output)
                   (write-string output output-port)
                   (flush-output-port output-port))))
-          (exit (cli-repl-run read-chunk write-record write-output session)))))))
+          (exit
+           (parameterize ((cli-repl-chrome-input-echoed? input-echoed?))
+             (cli-repl-run read-chunk write-record write-output session))))))))
