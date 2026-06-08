@@ -86,7 +86,7 @@ Select a chrome with `--chrome NAME`:
 
 | Chrome    | Intent                                                                    |
 | --------- | ------------------------------------------------------------------------- |
-| `comment` | **Default.** Prompts, results, and diagnostics are block comments and submitted forms are echoed as bare code, so the whole stream is valid Consent Scheme that *replays* to the same evaluation apart from program output. The prompt shows the ordinal alone for the lone default session and grows a session label when the session is named. |
+| `comment` | **Default.** Prompts, results, and diagnostics are block comments and submitted forms are echoed as bare code, so the whole stream is valid Consent Scheme that *replays* to the same evaluation apart from program output. On an interactive terminal the chrome suppresses its own echo (the terminal already echoed the typed form) so a captured transcript still holds exactly one copy of each form; see [Replayable transcripts and input echo](#replayable-transcripts-and-input-echo). The prompt shows the ordinal alone for the lone default session and grows a session label when the session is named. |
 | `datum`   | The raw record stream, one datum per line — the canonical machine-readable surface. Never colored. Always reachable, regardless of the default. |
 | `classic` | A `>`/`|` prompt (aligned two columns; `|` is a continuation gutter) and bare result values. |
 | `quiet`   | No prompts; results and conditions only.                                  |
@@ -120,6 +120,32 @@ kind of value.
 
 `NO_COLOR` (when set to a non-empty value) disables color under `auto`. The
 spaced form `--color always` is also accepted.
+
+#### Replayable transcripts and input echo
+
+The `comment` chrome's replay guarantee — a captured control-channel stream is
+valid Consent Scheme that re-evaluates to the same session — depends on each
+submitted form appearing **exactly once** in the transcript. Who supplies that
+one copy depends on whether the interaction input is itself echoed:
+
+- **Piped or redirected stdin** is not echoed by any terminal, so the chrome
+  echoes each complete submission as bare code. That chrome echo is the single
+  replayable copy.
+- **An interactive terminal** reads stdin in cooked mode and the terminal driver
+  echoes every typed form, so the form is already in a `script(1)`-style capture
+  before the chrome runs. Here the chrome **suppresses** its own echo; the
+  terminal's echo, which lands in the same slot right after the prompt, is the
+  single replayable copy.
+
+Either way a captured transcript holds one copy of each form and replays once.
+Without the suppression an interactive capture would carry every form twice —
+the terminal echo plus the chrome echo — and replaying it would evaluate every
+form twice, diverging from the original session for any definition, mutation, or
+side effect. The shell decides which mode it is in with the same per-host
+terminal-port predicate it uses for `--color=auto`, applied to **stdin** rather
+than the control channel. The other chromes do not echo submissions, so they are
+unaffected, and `--chrome datum` always reproduces the raw record stream
+verbatim.
 
 ### Streams
 
@@ -179,7 +205,10 @@ This is the minimal v1 shell. The following are intentionally out of scope and
 are owned by later issues:
 
 - **No line editing, history, or completion.** Input is read line by line; use a
-  terminal wrapper such as `rlwrap` for editing convenience.
+  terminal wrapper such as `rlwrap` for editing convenience. Because the line is
+  read in the terminal's cooked mode, the terminal driver echoes each typed form;
+  the `comment` chrome accounts for that echo (see
+  [Replayable transcripts and input echo](#replayable-transcripts-and-input-echo)).
 - **Program input.** The loop consumes standard input as interaction input, so a
   form that reads from the current input port has no separate program-input
   stream in this v1 shell; such a read fails closed.
@@ -204,8 +233,9 @@ macros, session-gated `interaction-environment`, recoverable reader and evaluato
 conditions, EOF and explicit-exit close status, policy-gated host-effect denial,
 and program-output/record stream separation. It also covers the chrome layer:
 the chrome registry, the `datum` chrome reproducing the raw record stream, the
-`comment` chrome replaying unedited, the `classic`/`quiet`/`silent` renderings,
-the TTY/NO_COLOR color decision, and option parsing.
+`comment` chrome replaying unedited, its interactive-TTY echo suppression (the
+no-double-echo path), the `classic`/`quiet`/`silent` renderings, the
+TTY/NO_COLOR color decision, and option parsing.
 
 Cross-host parity with the Emacs entry is enforced separately by the shared
 conformance corpus [`fixtures/repl/parity-cases.scm`](../fixtures/repl/parity-cases.scm).

@@ -416,6 +416,30 @@ OPTIONS are evaluator options.  Return the ordered contract records."
                  (concat "#| project-main:1 |# (+ 1 2)\n#| => 3 |#\n"
                          "#| project-main:2 |# #| exit closed-ok |#\n"))))
 
+(ert-deftest consent-repl-stream-chrome-comment-input-echoed-suppresses-echo ()
+  "When the host already echoes input, the comment chrome drops its own echo.
+This is the parity twin of the portable terminal shell's interactive-TTY
+posture: the terminal's own cooked-mode echo is the single replayable copy, so a
+second chrome echo would replay each form twice.  Both Emacs entries leave the
+flag nil today (piped batch stdin and buffer rendering never terminal-echo); the
+flag exists for model symmetry and is exercised here through the rendered hook."
+  (let* ((input "(+ 1 2)\n(define base 7)\n(set! base 9)\n(* base 3)\n")
+         (echoed (consent-repl-stream-rendered-from-string
+                  input "repl-main" 'comment nil nil t)))
+    ;; The interactive render carries no bare submission echo, so re-driving the
+    ;; chrome output alone evaluates nothing: the single copy is the terminal
+    ;; echo (the input), never a duplicate in the control channel.
+    (should (equal (consent-repl-stream-test--result-displays
+                    (consent-repl-stream-records-from-string echoed "repl-main"))
+                   nil))
+    ;; Prompts and results still render as block comments; only the redundant
+    ;; submission echo is dropped.
+    (should (string-match-p (regexp-quote "#| => ") echoed))
+    ;; The bare submission echo lands in the prompt slot the terminal echo fills.
+    (should (equal (consent-repl-stream-rendered-from-string
+                    "(+ 1 2)\n" "repl-main" 'comment nil nil t)
+                   "#| 1 |# #| => 3 |#\n#| 2 |# #| exit closed-ok |#\n"))))
+
 (ert-deftest consent-repl-stream-chrome-classic-quiet-silent ()
   "The `classic', `quiet', and `silent' chromes match the portable rendering."
   (should (equal (consent-repl-stream-rendered-from-string
