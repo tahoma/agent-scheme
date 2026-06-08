@@ -383,21 +383,28 @@
   "Deal out CI shards across host, syntax metadata, and docstring retention."
   (let ((workflow (consent-ci-test--repo-file-string
                    ".github/workflows/test.yml")))
-    (should (string-match-p "source_metadata: \\[\"on\", \"off\"\\]" workflow))
-    (should (string-match-p
-             "docstring_retention: \\[\"full\", \"simple\", \"none\"\\]"
-             workflow))
+    ;; The trimmed extra-host / emacs-hosted / parity jobs still read their
+    ;; syntax and docstring axes straight off the matrix context.
     (should (string-match-p
              "CONSENT_TEST_SOURCE_METADATA: \\${{ matrix.source_metadata }}"
              workflow))
     (should (string-match-p
              "CONSENT_TEST_DOCSTRING_RETENTION: \\${{ matrix.docstring_retention }}"
              workflow))
+    ;; The canonical Gambit and Emacs-core jobs carry a per-combo `native`/
+    ;; metadata object instead of two literal axes (#481), so their env and
+    ;; artifact names index through `matrix.combo`.
     (should (string-match-p
-             "portable-gambit-\\${{ matrix.source_metadata }}-docstrings-\\${{ matrix.docstring_retention }}\\.log"
+             "CONSENT_TEST_SOURCE_METADATA: \\${{ matrix.combo.source_metadata }}"
              workflow))
     (should (string-match-p
-             "portable-gambit-native-\\${{ matrix.source_metadata }}-docstrings-\\${{ matrix.docstring_retention }}\\.log"
+             "CONSENT_TEST_DOCSTRING_RETENTION: \\${{ matrix.combo.docstring_retention }}"
+             workflow))
+    (should (string-match-p
+             "portable-gambit-\\${{ matrix.combo.source_metadata }}-docstrings-\\${{ matrix.combo.docstring_retention }}\\.log"
+             workflow))
+    (should (string-match-p
+             "portable-gambit-native-\\${{ matrix.combo.source_metadata }}-docstrings-\\${{ matrix.combo.docstring_retention }}\\.log"
              workflow))
     (should (string-match-p
              "portable-\\${{ matrix.host.host }}-\\${{ matrix.source_metadata }}-docstrings-\\${{ matrix.docstring_retention }}\\.log"
@@ -410,6 +417,11 @@
     (should (string-match-p "make_target: test-portable-compiled" workflow))
     (should (string-match-p
              "Portable R7RS Compiled Consent Scheme full suite"
+             workflow))
+    ;; Emacs-core indexes its log through the combo too; the other Emacs shards
+    ;; keep the bare matrix axes.
+    (should (string-match-p
+             "emacs-\\${{ matrix.shard.shard }}-\\${{ matrix.combo.source_metadata }}-docstrings-\\${{ matrix.combo.docstring_retention }}\\.log"
              workflow))
     (should (string-match-p
              "emacs-\\${{ matrix.shard.shard }}-\\${{ matrix.source_metadata }}-docstrings-\\${{ matrix.docstring_retention }}\\.log"
@@ -434,11 +446,30 @@
     (should (string-match-p "|| fromJSON('\\[\"on\"\\]')" workflow))
     (should (string-match-p "|| fromJSON('\\[\"full\"\\]')" workflow))
     ;; One portable host (Gambit) and one Emacs shard (core) keep the full
-    ;; syntax/docstring cross on every lane in their own jobs.
+    ;; syntax/docstring cross on the exhaustive lane in their own jobs.
     (should (string-match-p "^  test-portable-gambit:" workflow))
     (should (string-match-p "^  test-emacs-core:" workflow))
     ;; The trimmed jobs must not statically pin the full axis.
-    (should-not (string-match-p "matrix.source_metadata == 'on'" workflow))))
+    (should-not (string-match-p "matrix.source_metadata == 'on'" workflow))
+    ;; #481: the de-feature cross on Gambit and Emacs-core is no longer run in
+    ;; full on every push. Per push they run only the canonical on/full combo
+    ;; plus a single fully-stripped off/none smoke leg; the exhaustive lane
+    ;; expands back to the full 2×3 cross.
+    (should (string-match-p
+             "fromJSON('\\[{\"source_metadata\":\"on\",\"docstring_retention\":\"full\"}"
+             workflow))
+    (should (string-match-p
+             "|| fromJSON('\\[{\"source_metadata\":\"on\",\"docstring_retention\":\"full\"},{\"source_metadata\":\"off\",\"docstring_retention\":\"none\"}\\]')"
+             workflow))
+    ;; The recompile-bound Gambit native shard runs on/full only per push: its
+    ;; combo carries a `native` flag that gates the native step, false on the
+    ;; off/none smoke leg.
+    (should (string-match-p
+             "|| fromJSON('\\[{\"source_metadata\":\"on\",\"docstring_retention\":\"full\",\"native\":true},{\"source_metadata\":\"off\",\"docstring_retention\":\"none\",\"native\":false}\\]')"
+             workflow))
+    (should (string-match-p
+             "if: \\${{ matrix.combo.native }}"
+             workflow))))
 
 (ert-deftest consent-ci-test-extra-hosts-base-image-avoids-docker-hub ()
   "Pull the container base image from the rate-limit-free ECR Public mirror."
