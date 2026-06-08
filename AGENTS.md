@@ -59,3 +59,10 @@ Repository conventions override generic workflow defaults. In particular:
   artifacts.
 - For documentation-only work, run the verification commands in
   `docs/development.md` and state when `make test` is unavailable.
+- After every commit pushed to a branch with an open pull request,
+  background-monitor that PR's CI to completion (for example
+  `gh pr checks <pr> --watch`) before reporting the work done. Never declare
+  success on a partial or green-so-far signal while checks are still running,
+  and re-run the watch after each follow-up push. Then read the PR's timing
+  comment against recent merged PRs and flag significant timing regressions, per
+  the "Continuous Integration" section of `docs/contributing.md`.
