@@ -76,26 +76,32 @@ jobs:
         run: make lint-portable
 
   test-portable-gambit:
-    name: portable R7RS / Gambit full suite / syntax ${{ matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention }}
+    name: portable R7RS / Gambit full suite / syntax ${{ matrix.combo.source_metadata }} / docstrings ${{ matrix.combo.docstring_retention }}
     runs-on: ubuntu-latest
-    # Gambit is the canonical portable host: it runs the full 2×3 syntax/docstring
-    # cross-product on every lane. The portable reader/writer/docstring machinery
-    # that axis exercises is host-independent, so the other portable hosts only
-    # run the canonical combo on the per-push lane (see test-portable-extra-hosts).
+    # Gambit is the canonical portable host: on the per-push lane its full-suite
+    # shard runs the canonical on/full combo plus a single fully-stripped off/none
+    # de-feature smoke leg, and its recompile-bound native shard runs on/full only
+    # (#481). The scheduled / workflow_dispatch lane expands both shards back to the
+    # full 2×3 syntax/docstring cross-product. The reader/writer/docstring machinery
+    # that axis exercises is host-independent, so the other portable hosts only run
+    # the canonical combo on the per-push lane (see test-portable-extra-hosts).
     env:
       CONSENT_GAMBIT_VERSION: "4.9.7"
       CONSENT_GAMBIT_SHA256: "0da7c9772a2186dab1fba6bf6c777afe7424f40beacadf1b117d5cc825fe2db3"
-      CONSENT_TEST_SOURCE_METADATA: ${{ matrix.source_metadata }}
-      CONSENT_TEST_DOCSTRING_RETENTION: ${{ matrix.docstring_retention }}
-      CONSENT_CI_LOG_FILE: portable-gambit-${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}.log
-      CONSENT_CI_NATIVE_LOG_FILE: portable-gambit-native-${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}.log
-      CONSENT_CI_SHARD_SUMMARY_NAME: Portable R7RS Gambit full suite / source metadata ${{ matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention }}
-      CONSENT_CI_NATIVE_SHARD_SUMMARY_NAME: Portable R7RS Gambit native Consent Scheme full suite / source metadata ${{ matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention }}
+      CONSENT_TEST_SOURCE_METADATA: ${{ matrix.combo.source_metadata }}
+      CONSENT_TEST_DOCSTRING_RETENTION: ${{ matrix.combo.docstring_retention }}
+      CONSENT_CI_LOG_FILE: portable-gambit-${{ matrix.combo.source_metadata }}-docstrings-${{ matrix.combo.docstring_retention }}.log
+      CONSENT_CI_NATIVE_LOG_FILE: portable-gambit-native-${{ matrix.combo.source_metadata }}-docstrings-${{ matrix.combo.docstring_retention }}.log
+      CONSENT_CI_SHARD_SUMMARY_NAME: Portable R7RS Gambit full suite / source metadata ${{ matrix.combo.source_metadata }} / docstrings ${{ matrix.combo.docstring_retention }}
+      CONSENT_CI_NATIVE_SHARD_SUMMARY_NAME: Portable R7RS Gambit native Consent Scheme full suite / source metadata ${{ matrix.combo.source_metadata }} / docstrings ${{ matrix.combo.docstring_retention }}
     strategy:
       fail-fast: false
+      # Per-push lane: canonical on/full on both shards plus a single fully-stripped
+      # off/none smoke leg on the full-suite shard only (`native: false` skips the
+      # recompile-bound native shard there). Scheduled / workflow_dispatch lane:
+      # full 2×3 cross on both shards.
       matrix:
-        source_metadata: ["on", "off"]
-        docstring_retention: ["full", "simple", "none"]
+        combo: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && fromJSON('[{"source_metadata":"on","docstring_retention":"full","native":true},{"source_metadata":"on","docstring_retention":"simple","native":true},{"source_metadata":"on","docstring_retention":"none","native":true},{"source_metadata":"off","docstring_retention":"full","native":true},{"source_metadata":"off","docstring_retention":"simple","native":true},{"source_metadata":"off","docstring_retention":"none","native":true}]') || fromJSON('[{"source_metadata":"on","docstring_retention":"full","native":true},{"source_metadata":"off","docstring_retention":"none","native":false}]') }}
 
     steps:
       - name: Check out repository
@@ -151,6 +157,7 @@ jobs:
           exit "$status"
 
       - name: Run portable R7RS Gambit native shard
+        if: ${{ matrix.combo.native }}
         shell: bash
         run: |
           mkdir -p ci-logs
@@ -170,15 +177,15 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: test-log-portable-gambit-${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}
+          name: test-log-portable-gambit-${{ matrix.combo.source_metadata }}-docstrings-${{ matrix.combo.docstring_retention }}
           path: ci-logs/${{ env.CONSENT_CI_LOG_FILE }}
           if-no-files-found: warn
 
       - name: Upload portable Gambit native shard log
-        if: always()
+        if: ${{ always() && matrix.combo.native }}
         uses: actions/upload-artifact@v7
         with:
-          name: test-log-portable-gambit-native-${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}
+          name: test-log-portable-gambit-native-${{ matrix.combo.source_metadata }}-docstrings-${{ matrix.combo.docstring_retention }}
           path: ci-logs/${{ env.CONSENT_CI_NATIVE_LOG_FILE }}
           if-no-files-found: warn
 
@@ -394,22 +401,25 @@ jobs:
           fi
 
   test-emacs-core:
-    name: Emacs-hosted ERT (${{ matrix.shard.label }}; syntax ${{ matrix.source_metadata }}; docstrings ${{ matrix.docstring_retention }})
+    name: Emacs-hosted ERT (${{ matrix.shard.label }}; syntax ${{ matrix.combo.source_metadata }}; docstrings ${{ matrix.combo.docstring_retention }})
     runs-on: ubuntu-latest
-    # Canonical Emacs shard: the core language/runtime shard runs the full 2×3
-    # syntax/docstring cross-product on every lane, so the Emacs reader/writer/
-    # docstring axis stays covered per push. The remaining Emacs shards trim to
-    # the canonical combo on the per-push lane (see test-emacs-hosted).
+    # Canonical Emacs shard: on the per-push lane the core language/runtime shard
+    # runs the canonical on/full combo plus a single fully-stripped off/none
+    # de-feature smoke leg, so the Emacs reader/writer/docstring axis keeps a fast
+    # per-push canary (#481). The scheduled / workflow_dispatch lane expands it back
+    # to the full 2×3 syntax/docstring cross-product. The remaining Emacs shards
+    # trim to the canonical combo on the per-push lane (see test-emacs-hosted).
     env:
-      CONSENT_TEST_SOURCE_METADATA: ${{ matrix.source_metadata }}
-      CONSENT_TEST_DOCSTRING_RETENTION: ${{ matrix.docstring_retention }}
-      CONSENT_CI_LOG_FILE: emacs-${{ matrix.shard.shard }}-${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}.log
-      CONSENT_CI_SHARD_SUMMARY_NAME: ${{ matrix.shard.summary_name }} / source metadata ${{ matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention }}
+      CONSENT_TEST_SOURCE_METADATA: ${{ matrix.combo.source_metadata }}
+      CONSENT_TEST_DOCSTRING_RETENTION: ${{ matrix.combo.docstring_retention }}
+      CONSENT_CI_LOG_FILE: emacs-${{ matrix.shard.shard }}-${{ matrix.combo.source_metadata }}-docstrings-${{ matrix.combo.docstring_retention }}.log
+      CONSENT_CI_SHARD_SUMMARY_NAME: ${{ matrix.shard.summary_name }} / source metadata ${{ matrix.combo.source_metadata }} / docstrings ${{ matrix.combo.docstring_retention }}
     strategy:
       fail-fast: false
+      # Per-push lane: canonical on/full plus a single fully-stripped off/none smoke
+      # leg. Scheduled / workflow_dispatch lane: full 2×3 cross.
       matrix:
-        source_metadata: ["on", "off"]
-        docstring_retention: ["full", "simple", "none"]
+        combo: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && fromJSON('[{"source_metadata":"on","docstring_retention":"full"},{"source_metadata":"on","docstring_retention":"simple"},{"source_metadata":"on","docstring_retention":"none"},{"source_metadata":"off","docstring_retention":"full"},{"source_metadata":"off","docstring_retention":"simple"},{"source_metadata":"off","docstring_retention":"none"}]') || fromJSON('[{"source_metadata":"on","docstring_retention":"full"},{"source_metadata":"off","docstring_retention":"none"}]') }}
         shard:
           - shard: emacs-core
             label: core language/runtime
@@ -445,7 +455,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: test-log-${{ matrix.shard.shard }}-${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}
+          name: test-log-${{ matrix.shard.shard }}-${{ matrix.combo.source_metadata }}-docstrings-${{ matrix.combo.docstring_retention }}
           path: ci-logs/${{ env.CONSENT_CI_LOG_FILE }}
           if-no-files-found: warn
 

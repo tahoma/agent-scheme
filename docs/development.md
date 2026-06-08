@@ -496,19 +496,39 @@ CONSENT_TEST_TARGET_ROOT=/tmp/consent-old make test-portable-chibi
 ```
 
 CI mirrors this trimmed default on the per-push lane (`pull_request` and `push`)
-and keeps the exhaustive run on a separate opt-in lane. Each push runs the full
-`source_metadata` × `docstring_retention` (2 × 3) cross-product on one canonical
-portable host (Gambit, the `test-portable-gambit` job) and one canonical Emacs
-shard (the core language/runtime shard, the `test-emacs-core` job), and runs
-only the canonical `on` / `full` combo on every other host and shard. Every host
-and every Emacs shard is still represented at least once, so cross-host parity
-coverage is preserved; only the redundant metadata/docstring fan-out collapses.
-The exhaustive matrix — every host and shard across all six combos — runs nightly
-on the `schedule` lane and on demand through `workflow_dispatch`. The trimmed
-jobs (`test-portable-extra-hosts`, `test-emacs-hosted`, and the `test-parity`
-gate) drive their `source_metadata` and `docstring_retention` matrix axes from a
-`github.event_name` expression, so those events expand them back to the full
-axis. The `test-parity` job (#374) runs the parity gate under Guile as a
+and keeps the exhaustive run on a separate opt-in lane. The
+`source_metadata` × `docstring_retention` cross is a de-feature smoke test —
+stripping syntax metadata and docstrings and confirming the runtime still passes.
+Over the cross's first 29 PRs it never selected a different test list or caught a
+failure the canonical combo missed, so the per-push lane carries only a fast
+canary of it (#481):
+
+- The canonical portable host (Gambit, the `test-portable-gambit` job) and the
+  canonical Emacs shard (the core language/runtime shard, the `test-emacs-core`
+  job) each run the canonical `on` / `full` combo plus a single fully-stripped
+  `off` / `none` de-feature smoke leg per push. The four intermediate combos
+  (`on`/`simple`, `on`/`none`, `off`/`full`, `off`/`simple`) run only on the
+  exhaustive lane.
+- The recompile-bound Gambit **native** shard runs `on` / `full` only per push;
+  its de-feature cross is exhaustive-lane only, since recompiling the native
+  executable to re-run an identical ~2 s suite is the cross's largest per-push
+  cost.
+- Every other host and Emacs shard runs only the canonical `on` / `full` combo
+  per push.
+
+Every host and every Emacs shard is still represented at least once, so
+cross-host parity coverage is preserved; only the redundant metadata/docstring
+fan-out collapses. The exhaustive matrix — every host and shard across all six
+combos, including the Gambit native cross — runs nightly on the `schedule` lane
+and on demand through `workflow_dispatch`. Trigger it before landing
+axis-sensitive changes to the reader, writer, or docstring machinery: open the
+**Actions → Test** workflow and use **Run workflow** (`workflow_dispatch`), or
+wait for the nightly `schedule` run. The trimmed jobs
+(`test-portable-gambit`, `test-emacs-core`, `test-portable-extra-hosts`,
+`test-emacs-hosted`, and the `test-parity` gate) drive their `source_metadata`
+and `docstring_retention` matrix axes from a `github.event_name` expression, so
+those events expand them back to the full cross. The `test-parity` job (#374)
+runs the parity gate under Guile as a
 required check on every lane (Guile is packaged for the bare `ubuntu-latest`
 runner, whereas the other portable-host shards install their interpreters inside
 the `ubuntu:26.04` container).
