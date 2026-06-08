@@ -108,6 +108,17 @@ It has two entry points:
   `comment`, consistent with the portable terminal; `datum` recovers the raw
   record stream in the buffer.
 
+Input echo posture (parity note for the `comment` chrome's replay guarantee, per
+[portable-repl.md](portable-repl.md#replayable-transcripts-and-input-echo)):
+neither Emacs entry terminal-echoes interaction input — the batch entry reads
+piped stdin and the interactive entry renders submitted source into a buffer — so
+the comment chrome keeps its submission echo on Emacs, supplying the single
+replayable copy just as the portable shell does for piped stdin. The shared
+chrome carries an input-echoed signal (`consent-repl-chrome-input-echoed`, the
+twin of the portable `cli-repl-chrome-input-echoed?` parameter) that the portable
+shell binds from a per-host stdin-TTY check; the Emacs entries leave it at its
+nil default, and a future echoing Emacs front end would bind it the same way.
+
 The pure driver `consent-repl-stream-drive` maps an interaction-input chunk
 source to the list of contract records, which is what the conformance corpus and
 the Emacs smoke tests assert against without needing a terminal.

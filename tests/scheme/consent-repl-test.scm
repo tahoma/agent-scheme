@@ -330,11 +330,41 @@
          (result-displays (drive rendered))
          (result-displays (drive input))))
 
+;; On an interactive TTY the terminal already echoes each typed form, so the
+;; comment chrome suppresses its own submission echo: the captured transcript
+;; then holds exactly one copy of each form and replays once, not twice.  The
+;; string-driven hook models that input-echoed posture with its optional flag.
+(let* ((input "(+ 1 2)\n(define base 7)\n(set! base 9)\n(* base 3)\n")
+       (echoed (cli-repl-rendered-from-string input "repl-main" 'comment #f #t))
+       (piped (cli-repl-rendered-from-string input "repl-main" 'comment #f)))
+  ;; The piped render carries one bare echo per form (the chrome's single copy);
+  ;; the interactive render carries none, since the terminal supplies that copy.
+  (check 'comment-echoed-suppresses-submission-echo
+         (result-displays (drive echoed))
+         '())
+  (check-true 'comment-piped-still-echoes
+              (> (length (result-displays (drive piped))) 0))
+  ;; Prompts, results, and diagnostics are still rendered as block comments;
+  ;; only the redundant submission echo is dropped.
+  (check-true 'comment-echoed-keeps-result-comments
+              (string-contains? echoed "#| => "))
+  ;; The single replayable copy lives in the terminal echo (the input itself);
+  ;; replaying input + the echo-suppressed chrome evaluates each form exactly
+  ;; once, matching the original session.
+  (check 'comment-echoed-replays-once
+         (result-displays (drive input))
+         (result-displays (drive (string-append input echoed)))))
+
 ;; The default-session prompt shows the ordinal alone; a named session grows a
 ;; session label.
 (check 'comment-default-session-prompt
        (cli-repl-rendered-from-string "(+ 1 2)\n" "repl-main" 'comment #f)
        "#| 1 |# (+ 1 2)\n#| => 3 |#\n#| 2 |# #| exit closed-ok |#\n")
+;; Under the input-echoed posture the same session drops the bare submission
+;; echo: the terminal's own echo lands in that exact slot after the prompt.
+(check 'comment-echoed-default-session-prompt
+       (cli-repl-rendered-from-string "(+ 1 2)\n" "repl-main" 'comment #f #t)
+       "#| 1 |# #| => 3 |#\n#| 2 |# #| exit closed-ok |#\n")
 (check 'comment-named-session-prompt
        (cli-repl-rendered-from-string "(+ 1 2)\n" "project-main" 'comment #f)
        (string-append "#| project-main:1 |# (+ 1 2)\n#| => 3 |#\n"
