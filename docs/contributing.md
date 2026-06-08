@@ -235,7 +235,8 @@ timing in three places. Read them in this order of convenience:
 
 After your PR's timing comment lands, compare it against the same comment on the
 last three to five merged pull requests (read each with the `gh api` query
-above). Use this simple heuristic:
+above), or against the recorded baseline and observations in
+[CI timing baselines](ci-timing-baselines.md). Use this simple heuristic:
 
 - **Primary signal: per-shard ERT seconds for the canonical `on/full` cells** —
   the one syntax/docstring combo that runs on every per-push lane, so it is
