@@ -1171,30 +1171,44 @@ The return value is (BODY EXACTNESS RADIX), or nil."
           (consent--parse-complex-number-body
            reader token lower-body exactness radix)))))
 
+(defun consent--character-name-start-p (char)
+  "Report whether CHAR (an ASCII letter) can begin a named or #\\x hex literal."
+  (and char
+       (or (and (<= ?a char) (<= char ?z))
+           (and (<= ?A char) (<= char ?Z)))))
+
 (defun consent--read-character (reader)
   "Read a character datum from READER after `#\\'."
   (consent--advance reader 2)
   (when (consent--eof-p reader)
     (consent--reader-incomplete reader "missing character after #\\"))
-  (let ((token (consent--read-token reader)))
-    (when (= (length token) 0)
-      (consent--reader-error reader "missing character after #\\"))
-    (let* ((name (if (consent--reader-fold-case reader)
-                     (downcase token)
-                   token))
-           (code
-            (cond
-             ((and (> (length token) 1)
-                   (memq (aref token 0) '(?x ?X)))
-              (consent--hex-scalar-to-char reader (substring token 1)))
-             ((assoc name consent--character-names)
-              (cdr (assoc name consent--character-names)))
-             ((= (length token) 1)
-              (aref token 0))
-             (t
-              (consent--reader-error
-               reader "unknown character literal #\\%s" token)))))
-      (consent--make-character code))))
+  (let ((first (consent--peek reader)))
+    (if (not (consent--character-name-start-p first))
+        ;; Any non-letter first character — including delimiters and
+        ;; bracket/pipe characters like #\( #\) #\[ #\] #\| — is taken
+        ;; literally per the R7RS grammar #\<any character>.
+        ;; `consent--read-token' would refuse these (delimiter or reserved),
+        ;; so take it directly.
+        (progn
+          (consent--advance reader)
+          (consent--make-character first))
+      (let* ((token (consent--read-token reader))
+             (name (if (consent--reader-fold-case reader)
+                       (downcase token)
+                     token))
+             (code
+              (cond
+               ((and (> (length token) 1)
+                     (memq (aref token 0) '(?x ?X)))
+                (consent--hex-scalar-to-char reader (substring token 1)))
+               ((assoc name consent--character-names)
+                (cdr (assoc name consent--character-names)))
+               ((= (length token) 1)
+                (aref token 0))
+               (t
+                (consent--reader-error
+                 reader "unknown character literal #\\%s" token)))))
+        (consent--make-character code)))))
 
 (defun consent--read-list (reader depth)
   "Read a list datum from READER at DEPTH."

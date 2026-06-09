@@ -529,7 +529,11 @@
               (syntax-bind-pattern-variable!
                bindings name input path)))))
          ((pair? pattern)
-          (and (pair? input)
+          ;; A pair pattern can still match the empty list when it is wholly
+          ;; collapsible through an ellipsis, e.g. ((name val) ...) against ()
+          ;; as in (let () body ...).  match-pattern-elements rejects pairs that
+          ;; genuinely require elements, so admitting null input here is safe.
+          (and (or (pair? input) (null? input))
                (let ((pattern-pieces (list-elements-tail pattern))
                      (input-pieces (list-elements-tail input)))
                  (match-pattern-elements
