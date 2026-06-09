@@ -482,12 +482,12 @@ and install manifest from, so the build never hand-maintains a parallel list."
          environment
          context)))
 
+    ;; Host posture: any internal `(consent X)' / `(cli X)' library can be loaded
+    ;; as a source library so a trusted program can import the runtime's own
+    ;; implementation. This is the capability that lets the compiled runtime act
+    ;; as a full Scheme host for the portable white-box tests (self-hosting).
     (define (host-library-key? key)
-      "Report whether KEY names a runtime-internal `(consent X)'/`(cli X)' library
-that may be loaded from source under the host posture. Exposing these as source
-libraries lets a trusted program import the runtime's own implementation -- the
-capability that lets the compiled runtime act as a full Scheme host for the
-portable white-box tests (self-hosting)."
+      "Report whether KEY names a runtime-internal source library exposable under the host posture."
       (and (pair? key)
            (memq (car key) '(consent cli))
            (not (member key consent-library-keys))
