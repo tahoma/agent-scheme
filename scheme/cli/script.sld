@@ -29,7 +29,6 @@
           cli-script-run-file)
   (import (scheme base)
           (scheme file)
-          (consent reader)
           (consent eval))
 
   (begin
@@ -78,35 +77,16 @@
       "Return PATH's contents with any leading executable-script shebang removed, ready for the reader."
       (cli-script-strip-shebang (script--read-file-string path)))
 
-    (define (script--result-status result)
-      "Return the status symbol of an evaluation-result datum, or #f."
-      (let ((entry (and (pair? result) (assq 'status (cdr result)))))
-        (and entry (cadr entry))))
-
     (define (cli-script-run-file path . rest)
-      "Run executable Consent Scheme script PATH through the Consent interpreter and return its last evaluation result.
-A leading shebang line is consumed before reading. Evaluation runs through a
-durable interaction context (REST may supply session-id/policy-actions/grants),
-which carries the non-interactive script posture: program output is captured and
-re-emitted on the host's standard output, while confirm-gated host capabilities
-(filesystem mutation, network, process control, ...) are denied without an
-explicit grant. A form whose result carries an error status raises, so a CLI
-caller's guard can exit non-zero. This is the host-neutral peer of the Emacs
-`consent-script-run-file' and shares the REPL's interaction-context posture."
-      (let* ((options (if (pair? rest) (car rest) '()))
-             (interaction (consent-make-interaction-context options))
-             (forms (consent-read-all (cli-script-source-from-file path)))
-             (out-port (current-output-port)))
-        (let loop ((remaining forms) (last-result #f))
-          (if (null? remaining)
-              last-result
-              (let ((result
-                     (consent-interaction-eval-form interaction (car remaining))))
-                (let ((output (consent-interaction-program-output interaction)))
-                  (when (> (string-length output) 0)
-                    (write-string output out-port)))
-                (if (eq? (script--result-status result) 'error)
-                    (error "consent script evaluation failed" result)
-                    (loop (cdr remaining) last-result))))))))) ; last value unused by CLI
+      "Run executable Consent Scheme script PATH through the Consent interpreter and return its last value.
+A leading shebang line is consumed before reading, so a file made executable with
+`#!/usr/bin/env consent' (or the `/bin/sh' polyglot) reads correctly. Evaluation
+goes through `consent-eval-source' with the optional REST (environment, options),
+inheriting the non-interactive fail-closed policy posture: confirm-gated host
+capabilities -- including program output -- are denied without an explicit grant,
+policy file, or preloaded approval, and a denial or error raises so a CLI caller
+exits non-zero. This is the host-neutral peer of, and byte-for-byte posture match
+with, the Emacs `consent-script-run-file'."
+      (apply consent-eval-source (cli-script-source-from-file path) rest))))
 
 ;;; script.sld ends here
