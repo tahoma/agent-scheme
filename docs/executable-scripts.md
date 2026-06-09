@@ -124,9 +124,10 @@ A normalized, host-identical contract — `(command-line)` returning
 `(script-path arg …)` with the interpreter name and any `--script` token removed
 — is deferred to the consent-runtime script model (issue #400), where the runtime
 owns `command-line` directly and can present the same clean vector on every host.
-Under the host-load model used here, the interpreter cannot relocate element 0
-(for example Racket pins it to the executable's run file), so a clean contract is
-not deliverable without that runtime-owned evaluation.
+The script is evaluated through the Consent interpreter, but `command-line` is
+still the host's raw vector (element 0 is host-pinned, for example Racket's run
+file), so a clean, normalized contract is not deliverable until that
+runtime-owned `command-line` lands.
 
 ## Policy posture: noninteractive and fail-closed
 
@@ -140,35 +141,30 @@ denial is recorded as a Scheme-readable audit record rather than raised as a
 prompt. With no confirmation channel attached, anything that would prompt is
 denied.
 
-How completely this applies depends on how the file is evaluated, which differs
-by host — as it does throughout the project — while the shebang handling itself
-is identical:
+Both host script paths now evaluate the file through the Consent interpreter
+(`consent-eval-source`), so the fail-closed posture applies fully and
+identically — the host-compiled binary is **not** a host R7RS interpreter:
 
-- **Host-compiled binary (`consent FILE` / `--script`).** The file is loaded as
-  an ordinary R7RS program, so it may `import` standard libraries and runs with
-  the host's R7RS power; raw host primitives such as the host's own
-  `(scheme file)` are not themselves gated. Confirm-gated *Consent capabilities*
-  still fail closed in batch. Run only scripts you trust here, the same trust
-  model as `python script.py`.
-- **Consent-runtime evaluation (the Emacs batch runner `consent-script-run-file`).**
-  The file is evaluated through the consent runtime, where the standard library
-  is itself capability-gated: a `(file-exists? …)` is denied and audited as a
-  `standard-host-effect`, no raw host objects are exposed to script values, and
-  even program output (`display`) is a gated host effect. This path runs scripts
-  that compute and act through Consent capabilities, but does not yet stream
-  captured program output — that needs the output-capturing interaction context
-  (see below).
+- **Host-compiled binary (`consent FILE` / `--script`).** Evaluated through the
+  Consent interpreter. The standard library is capability-gated, no raw host
+  objects are exposed to script values, and confirm-gated capabilities —
+  including program output (`display`) — are denied in batch without a grant. An
+  `(open-output-file …)` or `(file-exists? …)` is denied and audited; a denial
+  raises and the process exits non-zero.
+- **Emacs batch runner (`consent-script-run-file`).** The identical contract
+  through the same `consent-eval-source`. The two are byte-for-byte posture
+  matches.
 
-Tightening the host-compiled script path into the same fully sandboxed,
-no-raw-host posture means running scripts through the consent interaction context
-rather than the host loader — the non-interactive twin of the REPL. That
-substrate exists on the portable host (it shipped with the terminal REPL, #360)
-but not yet on the Emacs host, where it is the still-open Emacs REPL parity entry
-(#391). So fully sandboxed script execution at cross-host parity is sequenced
-after #391, and lands with the promptable non-interactive script authority work
-(#400), which also admits *promptable* scripts that call `(prompt …)`. This
-feature ships shebang handling at parity and host-R7RS execution, and ensures
-Consent confirm-gated actions fail closed.
+White-box tests that `import` the runtime's internal libraries (for example
+`(consent interpreter)`) are **not** scripts and do not run through this path:
+they exercise the compiled libraries on a separate, non-shipped host-execution
+test runner, never through `consent --script`. Host execution is not on the
+product command surface.
+
+Promptable scripts that call `(prompt …)`, a grant/policy mechanism for
+admitting program output and other capabilities to a trusted script, and a
+normalized host-identical `command-line` contract remain the scope of the
+non-interactive script authority work (#400).
 
 ## Verification
 
@@ -176,9 +172,12 @@ The shebang-handling boundary is covered at host parity by
 `tests/scheme/consent-script-test.scm` (every portable R7RS host) and
 `tests/consent-script-test.el` (the Emacs host), both of which assert the narrow
 recognition rule, the line-preserving strip, and that `#!fold-case` still reads
-normally. The host-compiled build additionally runs an end-to-end smoke that
-makes a real file executable and runs both the bare-path and `/bin/sh`-polyglot
-forms against the compiled binary. Run the default suite with:
+normally. The host-compiled build additionally runs end-to-end smokes that make
+a real file executable and run the bare-path and `/bin/sh`-polyglot forms against
+the compiled binary, and that assert the Consent-not-host discriminator: a pure
+script evaluates and exits 0, while an ungranted file write through `--script`, a
+bare-path script, or `--eval` is denied and leaves no file. Run the default suite
+with:
 
 ```sh
 make test
