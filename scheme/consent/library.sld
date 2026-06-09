@@ -230,18 +230,20 @@
             (cdr entry)
             (eval-error "standard source library is not available" key))))
 
+    (define (source-library-relative-path paths)
+      "Return the canonical datadir/embedded-relative path for a source library: the last (most-relative) configured candidate."
+      (if (null? (cdr paths))
+          (car paths)
+          (source-library-relative-path (cdr paths))))
+
     (define (load-standard-source-library-source key)
-      "Read KEY's source from the first path that works in this host layout."
-      (let try ((paths (standard-source-library-paths key)))
-        (if (null? paths)
-            (eval-error "unable to load standard source library" key)
-            (guard (condition
-                    (else (try (cdr paths))))
-              (let ((source
-                     (call-with-input-file
-                         (car paths)
-                       read-port-string)))
-                (cons (car paths) source))))))
+      "Read KEY's source through the host/core resolution contract (search dirs, source tree, embedded)."
+      (let* ((paths (standard-source-library-paths key))
+             (relative (source-library-relative-path paths))
+             (entry (resolve-source-entry relative paths)))
+        (if entry
+            entry
+            (eval-error "unable to load standard source library" key))))
 
     (define (standard-source-library-source-entry key)
       "Return cached source-file/source pair for source-backed standard library KEY."
@@ -267,17 +269,13 @@
             (eval-error "source library is not available" key))))
 
     (define (load-agent-source-library-source key)
-      "Read Agent library KEY's source from the first usable path."
-      (let try ((paths (agent-source-library-paths key)))
-        (if (null? paths)
-            (eval-error "unable to load agent source library" key)
-            (guard (condition
-                    (else (try (cdr paths))))
-              (let ((source
-                     (call-with-input-file
-                         (car paths)
-                       read-port-string)))
-                (cons (car paths) source))))))
+      "Read Agent library KEY's source through the host/core resolution contract (search dirs, source tree, embedded)."
+      (let* ((paths (agent-source-library-paths key))
+             (relative (source-library-relative-path paths))
+             (entry (resolve-source-entry relative paths)))
+        (if entry
+            entry
+            (eval-error "unable to load agent source library" key))))
 
     (define (agent-source-library-source-entry key)
       "Return cached source-file/source pair for Agent library KEY."
