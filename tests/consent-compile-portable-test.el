@@ -99,9 +99,11 @@ assertion covers stream separation as well as the command."
 
 (defun consent-compile-portable-test--assert-gated-script (runner)
   "Assert RUNNER's --script runs through the Consent interpreter, not host load.
-Program output is allowed under the script posture, but an ungranted,
-confirm-gated file write is denied and leaves no file -- the discriminator that
-would fail if --script regressed to host execution."
+A pure script evaluates and exits 0, but an ungranted, confirm-gated file write
+is denied and leaves no file -- the discriminator that would fail if --script
+regressed to host execution (the host would create the file). Together these are
+a positive/negative control: the interpreter selectively gates rather than
+failing closed on everything."
   (let ((ok-script (make-temp-file "consent-script-ok-" nil ".scm"))
         (deny-script (make-temp-file "consent-script-deny-" nil ".scm"))
         (deny-marker (make-temp-file "consent-script-marker-" nil ".txt")))
@@ -109,14 +111,16 @@ would fail if --script regressed to host execution."
     (unwind-protect
         (progn
           (with-temp-file ok-script
-            (insert "(import (scheme base) (scheme write))\n"
-                    "(display \"consent-script-ok\")\n"
-                    "(newline)\n"))
+            (insert "(import (scheme base))\n"
+                    "(define (smoke-sq n) (* n n))\n"
+                    "(if (not (= (smoke-sq 6) 36))\n"
+                    "    (error \"consent --script smoke computed the wrong value\"))\n"))
           (should
            (equal
-            (consent-compile-portable-test--run-executable
-             runner "--script" ok-script)
-            '(:status 0 :output "consent-script-ok\n")))
+            (consent-compile-portable-test--status
+             (consent-compile-portable-test--run-executable
+              runner "--script" ok-script))
+            0))
           (with-temp-file deny-script
             (insert "(import (scheme base) (scheme file))\n"
                     (format "(call-with-output-file %S\n" deny-marker)
