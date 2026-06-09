@@ -1333,6 +1333,29 @@
                        (loop (- n 1) (+ acc 1))))"
                 "5")
 
+;; A `let' with an empty binding list must expand: the bindings pattern
+;; ((name val) ...) has to match the empty list of bindings.  Regression for a
+;; syntax-rules matcher that rejected pair patterns against () outright.
+(check-external 'let-empty-bindings
+                "(let () 5)"
+                "5")
+
+(check-external 'let-empty-bindings-with-body-definitions
+                "(let () (define x 6) (* x 7))"
+                "42")
+
+;; Character literals for delimiter and reserved characters: the reader must
+;; take the character after #\\ literally even when it is ( ) [ ] or |, and
+;; char->integer must yield a usable Consent number, not a raw host integer.
+(check-external 'char-literal-open-paren    "(char->integer #\\()" "40")
+(check-external 'char-literal-close-paren   "(char->integer #\\))" "41")
+(check-external 'char-literal-open-bracket  "(char->integer #\\[)" "91")
+(check-external 'char-literal-close-bracket "(char->integer #\\])" "93")
+(check-external 'char-literal-pipe          "(char->integer #\\|)" "124")
+(check-external 'char-literal-named-space   "(char->integer #\\space)" "32")
+(check-external 'char-literal-hex-scalar    "(char->integer #\\x41)" "65")
+(check-external 'char->integer-yields-number "(+ 1 (char->integer #\\a))" "98")
+
 (check-external 'cond-arrow-respects-literal-binding
                 "(list
                    (cond ((assv 'b '((a 1) (b 2))) => cadr)

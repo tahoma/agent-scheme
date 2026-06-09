@@ -1392,34 +1392,45 @@
           (all-chars? token 2 subsequent-char?))
          (else #f))))
 
+    (define (character-name-start? char)
+      "Report whether CHAR (an ASCII letter) can begin a named or #\\x hex literal."
+      (and char
+           (or (and (char<=? #\a char) (char<=? char #\z))
+               (and (char<=? #\A char) (char<=? char #\Z)))))
+
     (define (read-character-literal reader)
       "Read an R7RS character literal after the #\\\\ introducer."
       (advance! reader 2)
       (if (eof? reader)
           (reader-incomplete reader "missing character after #\\"))
-      (let* ((token (read-token reader))
-             (name (if (reader-fold-case reader)
-                       (string-foldcase token)
-                       token)))
-        (cond
-         ((= (string-length token) 0)
-          (reader-error reader "missing character after #\\"))
-         ((and (> (string-length token) 1)
-               (or (char=? (string-ref token 0) #\x)
-                   (char=? (string-ref token 0) #\X)))
-          (hex-scalar->char reader (substring token 1 (string-length token))))
-         ((string=? name "alarm") (integer->char 7))
-         ((string=? name "backspace") (integer->char 8))
-         ((string=? name "delete") (integer->char 127))
-         ((string=? name "escape") (integer->char 27))
-         ((string=? name "newline") #\newline)
-         ((string=? name "null") (integer->char 0))
-         ((string=? name "return") #\return)
-         ((string=? name "space") #\space)
-         ((string=? name "tab") #\tab)
-         ((= (string-length token) 1) (string-ref token 0))
-         (else
-          (reader-error reader "unknown character literal" token)))))
+      (let ((first (peek reader)))
+        (if (not (character-name-start? first))
+            ;; Any non-letter first character — including delimiters and
+            ;; bracket/pipe characters like #\( #\) #\[ #\] #\| — is taken
+            ;; literally per the R7RS grammar #\<any character>. read-token
+            ;; would refuse these (delimiter or reserved), so take it directly.
+            (begin (advance! reader) first)
+            (let* ((token (read-token reader))
+                   (name (if (reader-fold-case reader)
+                             (string-foldcase token)
+                             token)))
+              (cond
+               ((and (> (string-length token) 1)
+                     (or (char=? (string-ref token 0) #\x)
+                         (char=? (string-ref token 0) #\X)))
+                (hex-scalar->char reader (substring token 1 (string-length token))))
+               ((string=? name "alarm") (integer->char 7))
+               ((string=? name "backspace") (integer->char 8))
+               ((string=? name "delete") (integer->char 127))
+               ((string=? name "escape") (integer->char 27))
+               ((string=? name "newline") #\newline)
+               ((string=? name "null") (integer->char 0))
+               ((string=? name "return") #\return)
+               ((string=? name "space") #\space)
+               ((string=? name "tab") #\tab)
+               ((= (string-length token) 1) (string-ref token 0))
+               (else
+                (reader-error reader "unknown character literal" token)))))))
 
     (define (classify-token reader token)
       "Classify a raw token as number, boolean, identifier, or syntax error."
@@ -1553,7 +1564,7 @@
         (note-node! reader)
         (list->vector items)))
 
-    (define (read-bytevector reader depth)
+    (define (read-bytevector-literal reader depth)
       "Read an R7RS bytevector literal and validate byte elements."
       (advance! reader 4)
       (let ((items (read-vector-elements
@@ -1633,7 +1644,7 @@
       "Read a datum introduced by # dispatch syntax."
       (cond
        ((starts-with? reader "#(") (read-vector reader depth))
-       ((starts-with? reader "#u8(") (read-bytevector reader depth))
+       ((starts-with? reader "#u8(") (read-bytevector-literal reader depth))
        ((starts-with? reader "#\\") (read-character-literal reader))
        ((let ((char (peek reader 1)))
           (and char (char>=? char #\0) (char<=? char #\9)))

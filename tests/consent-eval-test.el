@@ -34,6 +34,18 @@
   (should-error (consent-eval-source "()")
                 :type 'consent-eval-error))
 
+(ert-deftest consent-eval-test-let-empty-bindings-and-char-literals ()
+  "Evaluate `let' with empty bindings and delimiter character literals.
+Regression: the syntax-rules matcher must match ((name val) ...) against ();
+the reader must read #\\( #\\| etc. literally; char->integer must yield a number."
+  (should (equal (consent-eval-test--external "(let () 5)") "5"))
+  (should (equal (consent-eval-test--external
+                  "(let () (define x 6) (* x 7))")
+                 "42"))
+  (should (equal (consent-eval-test--external "(char->integer #\\()") "40"))
+  (should (equal (consent-eval-test--external "(char->integer #\\|)") "124"))
+  (should (equal (consent-eval-test--external "(+ 1 (char->integer #\\a))") "98")))
+
 (ert-deftest consent-eval-test-variables-definitions-and-calls ()
   "Evaluate top-level definitions, variable references, and calls."
   (should

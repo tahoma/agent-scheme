@@ -432,7 +432,11 @@ keyword."
           (consent--syntax-bind-pattern-variable
            bindings name input path)))))
      ((consp pattern)
-      (and (consp input)
+      ;; A pair pattern can still match the empty list when it is wholly
+      ;; collapsible through an ellipsis, e.g. ((name val) ...) against ()
+      ;; as in (let () body ...).  `consent--match-pattern-elements' rejects
+      ;; pairs that genuinely require elements, so admitting nil input is safe.
+      (and (or (consp input) (null input))
            (let* ((pattern-list
                    (consent--list-elements-tail pattern))
                   (input-list

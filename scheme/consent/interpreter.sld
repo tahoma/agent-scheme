@@ -2934,8 +2934,9 @@ condition does not."
 
     (define (primitive-char->integer arguments context)
       "Implement the `char->integer` primitive with argument validation and Consent Scheme values."
-      (char->integer
-       (expect-character (car arguments) "char->integer")))
+      (consent-make-canonical-integer
+       (char->integer
+        (expect-character (car arguments) "char->integer"))))
 
     (define (primitive-integer->char arguments context)
       "Implement the `integer->char` primitive with argument validation and Consent Scheme values."

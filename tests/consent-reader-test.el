@@ -64,7 +64,14 @@
   (should
    (= (consent-character-code
        (consent-read "#!fold-case #\\Space"))
-      32)))
+      32))
+  ;; Delimiter and reserved characters are valid single-character literals: the
+  ;; reader must take the character after #\ literally even when it is ( ) [ ] |.
+  (should (= (consent-character-code (consent-read "#\\(")) 40))
+  (should (= (consent-character-code (consent-read "#\\)")) 41))
+  (should (= (consent-character-code (consent-read "#\\[")) 91))
+  (should (= (consent-character-code (consent-read "#\\]")) 93))
+  (should (= (consent-character-code (consent-read "#\\|")) 124)))
 
 (ert-deftest consent-reader-test-character-writer-canonical-forms ()
   "Write named, printable, Unicode, and control character forms."
