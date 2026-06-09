@@ -131,10 +131,11 @@ write_embedded_source_module() {
   } > "$out_file"
 }
 
-write_racket_main() {
-  main_file=$1
-
-  cat > "$main_file" <<'EOF'
+# Emit the shared Racket main body: imports plus every helper and the dispatch,
+# but not the startup expression. The product binary and the non-shipped
+# host-execution test runner append their own startup, keeping one import list.
+write_racket_main_common() {
+  cat <<'EOF'
 #lang r7rs
 
 ;; Prefix imports keep script-time R7RS and project libraries linked into the
@@ -201,8 +202,8 @@ write_racket_main() {
   (display "Commands:\n")
   (display "  --help          Show this help.\n")
   (display "  --version       Print the Consent Scheme runtime version.\n")
-  (display "  --eval SOURCE   Evaluate a pure Consent Scheme expression.\n")
-  (display "  --script FILE   Run an R7RS Scheme source file.\n")
+  (display "  --eval SOURCE   Evaluate a Consent Scheme expression.\n")
+  (display "  --script FILE   Run a Consent Scheme script file (capability-gated).\n")
   (display "  --repl          Start the portable terminal REPL shell.\n")
   (display "  FILE            Run FILE as a script (same as --script FILE),\n")
   (display "                  so a #!/usr/bin/env consent shebang runs directly.\n")
@@ -240,7 +241,10 @@ write_racket_main() {
            (write condition (current-error-port))
            (newline (current-error-port))
            (exit 1)))
-    (load path (environment))))
+    ;; Run the script through the Consent interpreter with the non-interactive
+    ;; fail-closed posture (capability-gated; no raw host objects exposed) -- the
+    ;; same gated path as --eval and the Emacs `consent-script-run-file' twin.
+    (consent-main:cli-script:cli-script-run-file path)))
 
 (define (consent-main args)
   (cond
@@ -270,6 +274,15 @@ write_racket_main() {
     ;; This lets a #!/usr/bin/env consent shebang run a file with no flag,
     ;; avoiding the kernel single-argument rule that breaks a flagged shebang.
     (consent-main-script (car args)))))
+EOF
+}
+
+write_racket_main() {
+  main_file=$1
+
+  {
+    write_racket_main_common
+    cat <<'EOF'
 
 ;; Register the embedded bootstrap source (prelude, syntax prelude, and runtime
 ;; source-libraries) so the interpreter boots from this standalone binary even
@@ -280,14 +293,36 @@ write_racket_main() {
   (consent-main
    (if (null? arguments) '() (cdr arguments))))
 EOF
+  } > "$main_file"
 }
 
-write_gambit_main() {
+# Non-shipped host-execution test runner: runs an R7RS program on the host
+# substrate so the compiled test shard can exercise the compiled libraries'
+# white-box tests, which import internal modules (e.g. (consent interpreter)) and
+# cannot run through the consent interpreter. This is NOT the consent sandbox and
+# is never installed or shipped (make install/dist copy only bin/consent).
+write_racket_host_runner_main() {
   main_file=$1
-  search_dir=$2
 
-  printf '#!gsi -:r7rs,search=%s\n' "$search_dir" > "$main_file"
-  cat >> "$main_file" <<'EOF'
+  {
+    write_racket_main_common
+    cat <<'EOF'
+
+(let ((arguments (command-line)))
+  (if (and (pair? arguments) (pair? (cdr arguments)))
+      (load (cadr arguments) (environment))
+      (begin
+        (display "consent-host-runner: expected a script file argument\n"
+                 (current-error-port))
+        (exit 2))))
+EOF
+  } > "$main_file"
+}
+
+# Emit the shared Gambit main body (imports + helpers + dispatch, no startup),
+# shared by the product binary and the non-shipped host-execution test runner.
+write_gambit_main_common() {
+  cat <<'EOF'
 
 ;; Gambit R7RS main program for the host-compiled Consent Scheme runner.
 
@@ -353,8 +388,8 @@ write_gambit_main() {
   (display "Commands:\n")
   (display "  --help          Show this help.\n")
   (display "  --version       Print the Consent Scheme runtime version.\n")
-  (display "  --eval SOURCE   Evaluate a pure Consent Scheme expression.\n")
-  (display "  --script FILE   Run an R7RS Scheme source file.\n")
+  (display "  --eval SOURCE   Evaluate a Consent Scheme expression.\n")
+  (display "  --script FILE   Run a Consent Scheme script file (capability-gated).\n")
   (display "  --repl          Start the portable terminal REPL shell.\n")
   (display "  FILE            Run FILE as a script (same as --script FILE),\n")
   (display "                  so a #!/usr/bin/env consent shebang runs directly.\n")
@@ -392,7 +427,10 @@ write_gambit_main() {
            (write condition (current-error-port))
            (newline (current-error-port))
            (exit 1)))
-    (load path)))
+    ;; Run the script through the Consent interpreter with the non-interactive
+    ;; fail-closed posture (capability-gated; no raw host objects exposed) -- the
+    ;; same gated path as --eval and the Emacs `consent-script-run-file' twin.
+    (consent-main:cli-script:cli-script-run-file path)))
 
 (define (consent-main args)
   (cond
@@ -422,6 +460,17 @@ write_gambit_main() {
     ;; This lets a #!/usr/bin/env consent shebang run a file with no flag,
     ;; avoiding the kernel single-argument rule that breaks a flagged shebang.
     (consent-main-script (car args)))))
+EOF
+}
+
+write_gambit_main() {
+  main_file=$1
+  search_dir=$2
+
+  printf '#!gsi -:r7rs,search=%s\n' "$search_dir" > "$main_file"
+  {
+    write_gambit_main_common
+    cat <<'EOF'
 
 ;; Register the embedded bootstrap source (prelude, syntax prelude, and runtime
 ;; source-libraries) so the interpreter boots from this standalone binary even
@@ -432,6 +481,30 @@ write_gambit_main() {
   (consent-main
    (if (null? arguments) '() (cdr arguments))))
 EOF
+  } >> "$main_file"
+}
+
+# Non-shipped host-execution test runner (Gambit). See the Racket twin above:
+# runs an R7RS program on the host substrate for the gambit-native test shard;
+# not the consent sandbox, never installed or shipped.
+write_gambit_host_runner_main() {
+  main_file=$1
+  search_dir=$2
+
+  printf '#!gsi -:r7rs,search=%s\n' "$search_dir" > "$main_file"
+  {
+    write_gambit_main_common
+    cat <<'EOF'
+
+(let ((arguments (command-line)))
+  (if (and (pair? arguments) (pair? (cdr arguments)))
+      (load (cadr arguments))
+      (begin
+        (display "consent-host-runner: expected a script file argument\n"
+                 (current-error-port))
+        (exit 2))))
+EOF
+  } >> "$main_file"
 }
 
 generate_racket_collections() {
@@ -459,8 +532,6 @@ run_smoke() {
     || die "compiled runner failed --version; see $log_file.version.err"
   eval_output=$("$runner" --eval "(+ 1 2)" 2>"$log_file.eval.err") \
     || die "compiled runner failed --eval; see $log_file.eval.err"
-  script_output=$("$runner" --script "$repo_root/tests/scheme/consent-reader-test.scm" 2>"$log_file.script.err") \
-    || die "compiled runner failed --script reader smoke; see $log_file.script.err"
 
   if [ "$version_output" != "Consent Scheme $expected_version" ]; then
     die "compiled runner --version returned '$version_output', expected 'Consent Scheme $expected_version'"
@@ -470,9 +541,47 @@ run_smoke() {
     die "compiled runner --eval returned '$eval_output', expected '3'"
   fi
 
-  if [ "$script_output" != "Scheme reader tests passed" ]; then
-    die "compiled runner --script returned '$script_output', expected 'Scheme reader tests passed'"
+  # --script and --eval must run through the Consent interpreter, NOT host load.
+  # Discriminator: the script posture allows program output but denies an
+  # ungranted, confirm-gated host capability. Under host execution the write
+  # would succeed; under the interpreter it is denied and leaves no file. These
+  # smokes fail if any entry point ever regresses to the host evaluator.
+  smoke_dir=$(mktemp -d "${TMPDIR:-/tmp}/consent-smoke.XXXXXX") \
+    || die "could not create a temporary directory for the script smokes"
+
+  ok_script="$smoke_dir/ok.scm"
+  cat > "$ok_script" <<'EOF'
+(import (scheme base) (scheme write))
+(display "consent-script-ok")
+(newline)
+EOF
+  script_output=$("$runner" --script "$ok_script" 2>"$log_file.script.err") \
+    || die "compiled runner failed --script interpreter smoke; see $log_file.script.err"
+  if [ "$script_output" != "consent-script-ok" ]; then
+    die "compiled runner --script returned '$script_output', expected 'consent-script-ok'"
   fi
+
+  deny_marker="$smoke_dir/denied-file"
+  deny_script="$smoke_dir/deny.scm"
+  cat > "$deny_script" <<EOF
+(import (scheme base) (scheme file))
+(call-with-output-file "$deny_marker"
+  (lambda (port) (write-char #\\x port)))
+EOF
+  if "$runner" --script "$deny_script" >"$log_file.script-deny.out" 2>"$log_file.script-deny.err"; then
+    die "compiled runner --script allowed an ungranted file write (host execution leaked); see $log_file.script-deny.err"
+  fi
+  if [ -e "$deny_marker" ]; then
+    die "compiled runner --script created a denied file at $deny_marker (host execution leaked)"
+  fi
+  if "$runner" --eval "(begin (import (scheme file)) (call-with-output-file \"$deny_marker\" (lambda (port) (write-char #\\x port))))" \
+       >"$log_file.eval-deny.out" 2>"$log_file.eval-deny.err"; then
+    die "compiled runner --eval allowed an ungranted file write (host execution leaked); see $log_file.eval-deny.err"
+  fi
+  if [ -e "$deny_marker" ]; then
+    die "compiled runner --eval created a denied file at $deny_marker (host execution leaked)"
+  fi
+  rm -rf "$smoke_dir"
 
   # Executable-script smokes (#399): prove the runner runs a real on-disk
   # shebang script end to end, exercising the OS-level dispatch that the
@@ -560,6 +669,18 @@ compile_racket() {
     || die "raco exe did not create $runner; see $logs_dir/raco-exe.log"
   chmod +x "$runner"
   run_smoke "$runner" "$smoke_log" "$version"
+
+  # Non-shipped host-execution test runner (not installed; see make install/dist).
+  host_runner_main="$src_dir/consent-host-runner.rkt"
+  host_runner="$bin_dir/consent-host-runner"
+  write_racket_host_runner_main "$host_runner_main"
+  PLTCOLLECTS="$collections_dir:${PLTCOLLECTS:-}" \
+    "$raco" exe --cs ++lang r7rs -o "$host_runner" "$host_runner_main" \
+    >"$logs_dir/raco-exe-host-runner.log" 2>&1 \
+    || die "raco exe (host runner) failed; see $logs_dir/raco-exe-host-runner.log"
+  [ -f "$host_runner" ] \
+    || die "raco exe did not create $host_runner; see $logs_dir/raco-exe-host-runner.log"
+  chmod +x "$host_runner"
 
   printf '%s\n' "$runner"
 }
@@ -818,6 +939,23 @@ compile_gambit() {
   (compile-seconds $((compile_finished - compile_started))))
 EOF
   run_smoke "$runner" "$smoke_log" "$version"
+
+  # Non-shipped host-execution test runner (not installed; see make install/dist).
+  host_runner_main="$src_dir/consent-host-runner.scm"
+  host_runner_main_c="$src_dir/consent-host-runner.c"
+  host_runner="$bin_dir/consent-host-runner"
+  write_gambit_host_runner_main "$host_runner_main" "$src_dir"
+  "$gsc" -:r7rs,search="$scheme_dir",search="$src_dir" \
+    -c -o "$host_runner_main_c" "$host_runner_main" \
+    >>"$logs_dir/gsc-modules.log" 2>&1 \
+    || die "gsc failed while compiling the Gambit host runner; see $logs_dir/gsc-modules.log"
+  # shellcheck disable=SC2086
+  "$gsc" -:r7rs,search="$scheme_dir" -exe -o "$host_runner" -nopreload $gambit_c_files "$host_runner_main_c" \
+    >"$logs_dir/gsc-exe-host-runner.log" 2>&1 \
+    || die "gsc -exe (host runner) failed; see $logs_dir/gsc-exe-host-runner.log"
+  [ -f "$host_runner" ] \
+    || die "gsc -exe did not create $host_runner; see $logs_dir/gsc-exe-host-runner.log"
+  chmod +x "$host_runner"
 
   printf '%s\n' "$runner"
 }

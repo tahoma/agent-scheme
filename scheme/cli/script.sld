@@ -24,8 +24,13 @@
 
 (define-library (cli script)
   (export cli-script-shebang-line?
-          cli-script-strip-shebang)
-  (import (scheme base))
+          cli-script-strip-shebang
+          cli-script-source-from-file
+          cli-script-run-file)
+  (import (scheme base)
+          (scheme file)
+          (consent reader)
+          (consent eval))
 
   (begin
 
@@ -57,6 +62,51 @@
           (substring source
                      (script--line-terminator-index source)
                      (string-length source))
-          source))))
+          source))
+
+    (define (script--read-file-string path)
+      "Return the contents of PATH as a string."
+      (call-with-input-file path
+        (lambda (port)
+          (let loop ((chars '()))
+            (let ((char (read-char port)))
+              (if (eof-object? char)
+                  (list->string (reverse chars))
+                  (loop (cons char chars))))))))
+
+    (define (cli-script-source-from-file path)
+      "Return PATH's contents with any leading executable-script shebang removed, ready for the reader."
+      (cli-script-strip-shebang (script--read-file-string path)))
+
+    (define (script--result-status result)
+      "Return the status symbol of an evaluation-result datum, or #f."
+      (let ((entry (and (pair? result) (assq 'status (cdr result)))))
+        (and entry (cadr entry))))
+
+    (define (cli-script-run-file path . rest)
+      "Run executable Consent Scheme script PATH through the Consent interpreter and return its last evaluation result.
+A leading shebang line is consumed before reading. Evaluation runs through a
+durable interaction context (REST may supply session-id/policy-actions/grants),
+which carries the non-interactive script posture: program output is captured and
+re-emitted on the host's standard output, while confirm-gated host capabilities
+(filesystem mutation, network, process control, ...) are denied without an
+explicit grant. A form whose result carries an error status raises, so a CLI
+caller's guard can exit non-zero. This is the host-neutral peer of the Emacs
+`consent-script-run-file' and shares the REPL's interaction-context posture."
+      (let* ((options (if (pair? rest) (car rest) '()))
+             (interaction (consent-make-interaction-context options))
+             (forms (consent-read-all (cli-script-source-from-file path)))
+             (out-port (current-output-port)))
+        (let loop ((remaining forms) (last-result #f))
+          (if (null? remaining)
+              last-result
+              (let ((result
+                     (consent-interaction-eval-form interaction (car remaining))))
+                (let ((output (consent-interaction-program-output interaction)))
+                  (when (> (string-length output) 0)
+                    (write-string output out-port)))
+                (if (eq? (script--result-status result) 'error)
+                    (error "consent script evaluation failed" result)
+                    (loop (cdr remaining) last-result))))))))) ; last value unused by CLI
 
 ;;; script.sld ends here
