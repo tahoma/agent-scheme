@@ -200,6 +200,43 @@ OPTIONS are evaluator options.  Return the ordered contract records."
                     "display")
                    "3"))))
 
+;;;; The continuation prompt is emitted before the read it requests
+
+(ert-deftest consent-repl-stream-continuation-prompt-precedes-read ()
+  "The continuation gutter is emitted before the blocking read it requests.
+A continuation prompt is a request for more input, so it must be emitted before
+the read that supplies the continued line; on a live TTY a prompt emitted after
+the read would land glued to the next result line.  The record-stream order
+alone cannot see this -- a fully buffered string never blocks -- so instrument
+the read/emit interleaving directly and assert exactly one chunk is read before
+the prompt is emitted."
+  (let* ((chunks (list "(+ 1\n" "2)\n"))
+         (events '())
+         (read-chunk
+          (lambda ()
+            (if (null chunks)
+                consent-repl-stream--eof
+              (let ((chunk (car chunks)))
+                (setq chunks (cdr chunks))
+                (push (list 'read chunk) events)
+                chunk)))))
+    (consent-repl-stream-run
+     read-chunk
+     (lambda (record)
+       (when (and (consent-repl-stream-test--kind-p record "repl-prompt")
+                  (equal (consent-repl-stream-test--sym
+                          (consent-repl-stream-test--field record "state"))
+                         "continuation"))
+         (push 'continuation-prompt events)))
+     (lambda (_output) nil)
+     "repl-main")
+    ;; The first chunk is read, then the gutter is emitted, then the continued
+    ;; line is read: the prompt fronts the second line rather than trailing it.
+    (should (equal (reverse events)
+                   (list (list 'read "(+ 1\n")
+                         'continuation-prompt
+                         (list 'read "2)\n"))))))
+
 ;;;; EOF mid-form closes with the documented error status
 
 (ert-deftest consent-repl-stream-eof-mid-form ()
