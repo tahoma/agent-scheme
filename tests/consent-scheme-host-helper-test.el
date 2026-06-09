@@ -50,7 +50,7 @@
     '("--eval" "(+ 1 2)"))))
 
 (ert-deftest consent-portable-host-helper-test-builds-gambit-native-arguments ()
-  "Build Gambit native runner arguments for R7RS test files."
+  "Build Gambit-compiled runner arguments for R7RS test files."
   (should
    (equal
     (consent--scheme-host-arguments
@@ -64,7 +64,7 @@
     '("--eval" "(+ 1 2)"))))
 
 (ert-deftest consent-portable-host-helper-test-expands-gambit-native-runner-path ()
-  "Expand repository-relative configured Gambit native runner paths."
+  "Expand repository-relative configured Gambit-compiled runner paths."
   (let ((prior (getenv "CONSENT_GAMBIT_NATIVE"))
         (consent--test-root "/tmp/consent-root/"))
     (unwind-protect

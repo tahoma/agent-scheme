@@ -18,10 +18,10 @@
   (consent--scheme-host-run-suite 'gambit "gambit"))
 
 (ert-deftest consent-scheme-gambit-native-host-test-r7rs-suite ()
-  "Run the full portable R7RS suite with the Gambit native Consent Scheme runner."
+  "Run the full portable R7RS suite with the Gambit-compiled Consent Scheme runner."
   (consent--scheme-host-run-suite
    'gambit-native
-   "Gambit native Consent Scheme"))
+   "Gambit-compiled Consent Scheme"))
 
 (ert-deftest consent-scheme-racket-host-test-r7rs-suite ()
   "Run the full portable R7RS suite with Racket's R7RS package."
@@ -36,8 +36,8 @@
   (consent--scheme-host-run-suite 'gauche "gauche"))
 
 (ert-deftest consent-scheme-compiled-host-test-r7rs-suite ()
-  "Run the full portable R7RS suite with the compiled Consent Scheme runner."
-  (consent--scheme-host-run-suite 'compiled "compiled Consent Scheme"))
+  "Run the full portable R7RS suite with the Racket-compiled Consent Scheme runner."
+  (consent--scheme-host-run-suite 'compiled "Racket-compiled Consent Scheme"))
 
 (ert-deftest consent-scheme-chibi-host-test-r7rs-suite ()
   "Run the full portable R7RS suite with Chibi Scheme."
