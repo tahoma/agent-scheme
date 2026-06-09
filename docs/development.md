@@ -308,7 +308,9 @@ using external Scheme host compiler toolchains. This path packages the current
 portable implementation through mature host compilers; it is not the future
 Consent Scheme LLIR/native compiler backend tracked by #115 through #121.
 
-The default compile host is Racket CS:
+The default compile host is Gambit, whose `gsc -exe -nopreload` produces a
+standalone native executable with no runtime dependency — the artifact suitable
+for `make install`:
 
 ```sh
 make compile
@@ -317,9 +319,13 @@ make compile
 Select a host explicitly with `CONSENT_COMPILE_HOST`:
 
 ```sh
-CONSENT_COMPILE_HOST=racket make compile
 CONSENT_COMPILE_HOST=gambit make compile
+CONSENT_COMPILE_HOST=racket make compile
 ```
+
+The Racket binary (`raco exe --cs`) is relocatable as a file but loads boot files
+from the installed Racket, so it runs only where Racket is present (see the
+Installing section's caveat).
 
 The Racket path requires both `racket` and `raco`; override discovery with:
 
@@ -426,14 +432,14 @@ doing nothing:
 make clean-compile && make install   # exits 2: "run `make compile` first"
 ```
 
-Choose the host with `CONSENT_COMPILE_HOST`. The **Gambit** binary
-(`gsc -exe -nopreload`) is a standalone native executable: relocatable, with no
-runtime dependency, so it is the recommended host for an install that must work
-on a machine without a Scheme toolchain:
+The host is chosen with `CONSENT_COMPILE_HOST`, which **defaults to Gambit**. The
+Gambit binary (`gsc -exe -nopreload`) is a standalone native executable:
+relocatable, with no runtime dependency, so the default install flow produces an
+artifact that works on a machine without a Scheme toolchain:
 
 ```sh
-CONSENT_COMPILE_HOST=gambit make compile
-sudo CONSENT_COMPILE_HOST=gambit make install
+make compile        # CONSENT_COMPILE_HOST defaults to gambit
+sudo make install
 ```
 
 The **Racket** binary (`raco exe --cs`) is relocatable as a file but still loads
