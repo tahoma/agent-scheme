@@ -7,13 +7,13 @@ EMACS ?= emacs
 CONSENT_COMPILE_HOST ?= gambit
 CONSENT_COMPILE_BUILD_DIR ?= build/compile
 # Build the non-shipped host-execution test runner used by the compiled and
-# gambit-native white-box shards (a full second host-compiler link -- the single
-# largest build cost). A plain `make compile' never builds it. The compiled and
-# gambit-native shard targets default it ON for local repeated builds, so
-# `make test-portable-compiled' actually exercises the compiled artifact; set it
-# empty to skip (the per-push CI lane sets `CONSENT_BUILD_TEST_RUNNER=' so the
-# ephemeral runner is not rebuilt on every push, while the scheduled lane keeps
-# it on). Pass `CONSENT_BUILD_TEST_RUNNER=1 make compile' to build it directly.
+# gambit-native white-box shards (a full second host-compiler link). It runs the
+# white-box suite against the COMPILED interpreter -- the coverage those shards
+# exist for -- so the `test-portable-compiled' / `test-portable-gambit-native'
+# targets default it ON (on every lane, including per-push CI). A plain
+# `make compile' (the install path) leaves it empty and never builds it; pass
+# `CONSENT_BUILD_TEST_RUNNER=1 make compile' to build it directly, or empty to a
+# shard target to skip it.
 CONSENT_BUILD_TEST_RUNNER ?=
 # GNU-standard installation variables (see the GNU Coding Standards). `make
 # install` stages the host-compiled binary selected by CONSENT_COMPILE_HOST under
@@ -138,7 +138,7 @@ help:
 	@printf '  %-50s %s\n' 'EMACS=emacs' 'Emacs command used by make test.'
 	@printf '  %-50s %s\n' 'CONSENT_COMPILE_HOST=gambit|racket' 'Host compiler selected by make compile (default gambit: standalone binary).'
 	@printf '  %-50s %s\n' 'CONSENT_COMPILE_BUILD_DIR=build/compile' 'Output tree used by make compile.'
-	@printf '  %-50s %s\n' 'CONSENT_BUILD_TEST_RUNNER=1' 'Build the non-shipped host-execution test runner (compiled shards default on; empty to skip).'
+	@printf '  %-50s %s\n' 'CONSENT_BUILD_TEST_RUNNER=1' 'Build the non-shipped host-execution test runner (compiled/gambit-native shards default on; off for plain make compile).'
 	@printf '  %-50s %s\n' 'PREFIX=/usr/local' 'Install prefix for make install/uninstall.'
 	@printf '  %-50s %s\n' 'DESTDIR=' 'Staging root prepended to install/uninstall paths.'
 	@printf '  %-50s %s\n' 'bindir=$$(PREFIX)/bin' 'Directory make install writes the consent binary to.'

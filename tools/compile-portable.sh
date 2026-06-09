@@ -803,10 +803,10 @@ compile_racket() {
   run_smoke "$runner" "$smoke_log" "$version"
 
   # Non-shipped host-execution test runner (not installed; see make install/dist).
-  # Opt-in: a full second `raco exe' link is wasted work for a plain build or the
-  # per-push CI lane, so it is built only when CONSENT_BUILD_TEST_RUNNER is set
-  # (the scheduled/full lane and local opt-in). When absent, the compiled host
-  # white-box shard skips; the product binary is still smoke-verified above.
+  # Built when CONSENT_BUILD_TEST_RUNNER is set: the compiled white-box shard runs
+  # the suite against it to test the COMPILED interpreter (every lane, including
+  # per-push). A plain `make compile' (the install path) leaves it unset and skips
+  # the second `raco exe' link.
   if [ -n "${CONSENT_BUILD_TEST_RUNNER:-}" ]; then
     host_runner_main="$src_dir/consent-host-runner.rkt"
     host_runner="$bin_dir/consent-host-runner"
@@ -1081,12 +1081,11 @@ compile_gambit() {
 EOF
   run_smoke "$runner" "$smoke_log" "$version"
 
-  # Non-shipped host-execution test runner. Opt-in via CONSENT_BUILD_TEST_RUNNER:
-  # the second full `gsc -exe' link recompiles the entire module set and is the
-  # single largest build cost, wasted on a plain build or the per-push CI lane.
-  # Built only for the scheduled/full lane and local opt-in; when absent the
-  # gambit-native white-box shard skips, and the product binary is still
-  # smoke-verified above.
+  # Non-shipped host-execution test runner. Built when CONSENT_BUILD_TEST_RUNNER is
+  # set: the gambit-native white-box shard runs the suite against it to test the
+  # COMPILED interpreter (every lane, including per-push). A plain `make compile'
+  # (the install path) leaves it unset and skips this second full `gsc -exe' link,
+  # which recompiles the entire module set and is the single largest build cost.
   if [ -n "${CONSENT_BUILD_TEST_RUNNER:-}" ]; then
     host_runner_main="$src_dir/consent-host-runner.scm"
     host_runner_main_c="$src_dir/consent-host-runner.c"
