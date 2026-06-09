@@ -114,7 +114,11 @@ ones."
 
 (defun consent--scheme-documentation-procedure-leading-comment-errors
     (file)
-  "Return errors for procedure definitions in FILE prefixed by comments."
+  "Return errors for procedures in FILE documented only by a leading comment.
+A leading ;; comment block before a procedure definition is allowed -- it can
+carry section or mechanism context -- so long as the procedure still carries a
+body docstring. The rule only fires when a procedure is preceded by a comment
+AND has no docstring, i.e. the comment is standing in for the docstring."
   (let* ((text (with-temp-buffer
                  (insert-file-contents file)
                  (buffer-string)))
@@ -127,9 +131,11 @@ ones."
                        (consent--scheme-documentation-procedure-definition-line-p
                         line)
                        (consent--scheme-documentation-comment-line-p
-                        (nth (1- index) lines)))
+                        (nth (1- index) lines))
+                       (not (consent--scheme-documentation-procedure-docstring-p
+                             file lines index)))
              do
-             (push (format "%s:%d use a procedure docstring instead of a leading ;; comment before %s"
+             (push (format "%s:%d document with a procedure docstring, not only a leading ;; comment before %s"
                            relative-file
                            index
                            (string-trim line))
