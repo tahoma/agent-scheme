@@ -50,12 +50,16 @@
     ('gambit
      (consent--scheme-host-configured-command "CONSENT_GAMBIT" "gsi"))
     ('gambit-native
+     ;; White-box suite files import internal modules (e.g. (consent
+     ;; interpreter)) and cannot run through the consent interpreter, so the
+     ;; gambit-native shard runs them on the non-shipped host-execution test
+     ;; runner, not the product binary's capability-gated --script.
      (or (consent--scheme-host-configured-command
           "CONSENT_GAMBIT_NATIVE"
-          "consent")
+          "consent-host-runner")
          (let ((runner
                 (expand-file-name
-                 "build/compile/gambit/bin/consent"
+                 "build/compile/gambit/bin/consent-host-runner"
                  consent--test-root)))
            (and (file-executable-p runner) runner))))
     ('racket
@@ -65,12 +69,14 @@
     ('guile
      (consent--scheme-host-configured-command "CONSENT_GUILE" "guile"))
     ('compiled
+     ;; See gambit-native: the white-box suite runs on the non-shipped
+     ;; host-execution test runner, not the product binary's gated --script.
      (or (consent--scheme-host-configured-command
           "CONSENT_COMPILED"
-          "consent")
+          "consent-host-runner")
          (let ((runner
                 (expand-file-name
-                 "build/compile/racket/bin/consent"
+                 "build/compile/racket/bin/consent-host-runner"
                  consent--test-root)))
            (and (file-executable-p runner) runner))))
     ('chibi
@@ -106,7 +112,7 @@ RACKET-COLLECTION-ROOT is required when HOST is `racket'."
       test-file))
     ('gambit-native
      (ignore library-directory racket-collection-root)
-     (list "--script" test-file))
+     (list test-file))
     ('racket
      (unless racket-collection-root
        (error "Racket collection root is required"))
@@ -117,7 +123,7 @@ RACKET-COLLECTION-ROOT is required when HOST is `racket'."
      (list "--no-auto-compile" "--r7rs" "-L" library-directory test-file))
     ('compiled
      (ignore library-directory racket-collection-root)
-     (list "--script" test-file))
+     (list test-file))
     ('chibi
      (ignore racket-collection-root)
      (list "-A" library-directory test-file))
@@ -174,21 +180,27 @@ RACKET-COLLECTION-ROOT is accepted for API symmetry with test arguments."
 
 (defun consent--scheme-host-r7rs-available-p
     (host runner library-directory &optional racket-collection-root)
-  "Return non-nil when RUNNER accepts HOST's R7RS arguments."
-  (with-temp-buffer
-    (condition-case nil
-        (equal 0
-               (apply
-                #'process-file
-                runner
-                nil
-                t
-                nil
-                (consent--scheme-host-probe-arguments
-                 host
-                 library-directory
-                 racket-collection-root)))
-      (file-error nil))))
+  "Return non-nil when RUNNER accepts HOST's R7RS arguments.
+The compiled and gambit-native shards run on the non-shipped host-execution test
+runner, which takes a script file as its sole argument rather than a probe flag,
+and is smoke-verified at build time; for those hosts availability is simply that
+the runner exists and is executable."
+  (if (memq host '(compiled gambit-native))
+      (and runner (file-executable-p runner))
+    (with-temp-buffer
+      (condition-case nil
+          (equal 0
+                 (apply
+                  #'process-file
+                  runner
+                  nil
+                  t
+                  nil
+                  (consent--scheme-host-probe-arguments
+                   host
+                   library-directory
+                   racket-collection-root)))
+        (file-error nil)))))
 
 (defun consent--scheme-host-run-suite (host display-name)
   "Run the full portable Scheme suite on HOST named DISPLAY-NAME."
