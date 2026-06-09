@@ -369,6 +369,11 @@ Remove generated compile artifacts with:
 make clean-compile
 ```
 
+Architecturally, this pipeline is a compiler front-end with a borrowed
+code-generation backend, and the embedded source store is a
+capability-addressable virtual filesystem underlay; see
+[host-compiled-staging.md](host-compiled-staging.md).
+
 ## Installing
 
 `make install` puts the host-compiled binary on `PATH`. It installs the binary
