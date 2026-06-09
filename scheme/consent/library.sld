@@ -482,6 +482,48 @@ and install manifest from, so the build never hand-maintains a parallel list."
          environment
          context)))
 
+    ;; Host posture: any internal `(consent X)' / `(cli X)' library can be loaded
+    ;; as a source library so a trusted program can import the runtime's own
+    ;; implementation. This is the capability that lets the compiled runtime act
+    ;; as a full Scheme host for the portable white-box tests (self-hosting).
+    (define (host-library-key? key)
+      "Report whether KEY names a runtime-internal source library exposable under the host posture."
+      (and (pair? key)
+           (memq (car key) '(consent cli))
+           (not (member key consent-library-keys))
+           (not (equal? key scheme-base-library-key))))
+
+    (define (host-library-relative-path key)
+      "Return the datadir/source-relative path for host library KEY: (consent reader) -> consent/reader.sld."
+      (let loop ((parts key) (acc ""))
+        (if (null? (cdr parts))
+            (string-append acc (symbol->string (car parts)) ".sld")
+            (loop (cdr parts)
+                  (string-append acc (symbol->string (car parts)) "/")))))
+
+    (define (host-library-source-entry key)
+      "Return the (path . text) source entry for host library KEY, or #f."
+      (let ((relative (host-library-relative-path key)))
+        (resolve-source-entry
+         relative
+         (list (string-append "scheme/" relative) relative))))
+
+    (define (host-library-available? key context)
+      "Report whether KEY is loadable under an active host-libraries grant.
+Requires the grant, an internal library key, and resolvable source so that
+programs that merely define their own (consent ...) libraries are unaffected."
+      (and (context-internal-libraries-allowed? context)
+           (host-library-key? key)
+           (host-library-source-entry key)
+           #t))
+
+    (define (register-host-source-library! key context environment)
+      "Load and register runtime-internal library KEY from its source."
+      (let ((entry (host-library-source-entry key)))
+        (if entry
+            (register-source-library! (cdr entry) context environment)
+            (eval-error "host source library not found" key))))
+
     (define (find-library-export name exports)
       "Return NAME's binding from EXPORTS, or #f when absent."
       (cond
@@ -1255,7 +1297,8 @@ and install manifest from, so the build never hand-maintains a parallel list."
             (member key agent-library-keys)
             (member key consent-library-keys)
             (member key empty-emacs-capability-library-keys)
-            (and (library-registry-ref context key) #t))))
+            (and (library-registry-ref context key) #t)
+            (host-library-available? key context))))
 
     (define (resolve-library name context environment)
       "Resolve NAME to a library, registering lazy standard libraries as needed."
@@ -1270,7 +1313,10 @@ and install manifest from, so the build never hand-maintains a parallel list."
          ((member key consent-library-keys)
           (register-consent-library! key context environment))
          ((member key empty-emacs-capability-library-keys)
-          (register-empty-emacs-capability-library! key context)))
+          (register-empty-emacs-capability-library! key context))
+         ((and (not (library-registry-ref context key))
+               (host-library-available? key context))
+          (register-host-source-library! key context environment)))
         (or (library-registry-ref context key)
             (eval-error "unknown library" key))))
 
