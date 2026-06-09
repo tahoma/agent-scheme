@@ -7065,7 +7065,8 @@ condition does not."
                      (bytevector-length bytevector)
                      "bytevector-u8-ref"
                      #f)))
-        (bytevector-u8-ref bytevector index)))
+        (consent-make-canonical-integer
+         (bytevector-u8-ref bytevector index))))
 
     (define (primitive-bytevector-u8-set! arguments context)
       "Implement the `bytevector-u8-set!` primitive with argument validation and Consent Scheme values."
