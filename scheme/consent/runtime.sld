@@ -160,6 +160,7 @@
           context-include-directory
           set-context-include-directory!
           context-file-paths
+          context-internal-libraries-allowed?
           context-docstring-retention
           context-policy-actions
           context-policy-confirmation-function
@@ -589,7 +590,8 @@
                          conversation-summary
                          interaction-environment
                          base-syntax-installed next-syntax-id
-                         exception-handlers dynamic-winds)
+                         exception-handlers dynamic-winds
+                         internal-libraries-allowed)
       eval-context?
       (steps context-steps set-context-steps!)
       (maximum-steps context-maximum-steps)
@@ -636,7 +638,11 @@
       (next-syntax-id context-next-syntax-id set-context-next-syntax-id!)
       (exception-handlers context-exception-handlers
                           set-context-exception-handlers!)
-      (dynamic-winds context-dynamic-winds set-context-dynamic-winds!))
+      (dynamic-winds context-dynamic-winds set-context-dynamic-winds!)
+      ;; When true, imported programs may load the runtime's own internal
+      ;; libraries ((consent ...)/(cli ...)) from source -- the host capability
+      ;; grant that lets the compiled runtime act as a full Scheme host runner.
+      (internal-libraries-allowed context-internal-libraries-allowed?))
 
     ;; Syntax transformers remember their definition environments; expansion
     ;; relies on this for syntax-rules hygiene instead of host macro state.
@@ -2279,7 +2285,8 @@
        #f
        0
        '()
-       '())))
+       '()
+       (option-ref options 'internal-libraries-allowed #f))))
 
     (define (record-audit-event! context event fields)
       "Record a Scheme-readable audit EVENT with FIELDS in CONTEXT."
