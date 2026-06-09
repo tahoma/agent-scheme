@@ -1,6 +1,13 @@
 EMACS ?= emacs
 CONSENT_COMPILE_HOST ?= racket
 CONSENT_COMPILE_BUILD_DIR ?= build/compile
+# Build the non-shipped host-execution test runner used by the compiled and
+# gambit-native white-box shards. It is a full second host-compiler link (the
+# single largest build cost), so it is opt-in: empty (the default, plain builds
+# and the per-push CI lane) skips it and those shards skip; set to 1 (the
+# scheduled/full lane, make test-full) to build it and run the full white-box
+# suite on the compiled artifact.
+CONSENT_BUILD_TEST_RUNNER ?=
 # GNU-standard installation variables (see the GNU Coding Standards). `make
 # install` stages the host-compiled binary selected by CONSENT_COMPILE_HOST under
 # $(DESTDIR)$(bindir); `make uninstall` removes exactly those paths. DESTDIR is
@@ -194,6 +201,7 @@ compile:
 	CONSENT_COMPILE_HOST='$(CONSENT_COMPILE_HOST)' \
 	CONSENT_COMPILE_BUILD_DIR='$(CONSENT_COMPILE_BUILD_DIR)' \
 	CONSENT_INSTALL_DATADIR='$(consentlibdir)' \
+	CONSENT_BUILD_TEST_RUNNER='$(CONSENT_BUILD_TEST_RUNNER)' \
 	CONSENT_RACKET='$(CONSENT_RACKET)' \
 	CONSENT_RACO='$(CONSENT_RACO)' \
 	CONSENT_GAMBIT='$(CONSENT_GAMBIT)' \
@@ -336,7 +344,7 @@ endif
 # Use before landing axis-sensitive reader/writer/docstring changes, and as the
 # scheduled CI lane's local equivalent.
 test-full:
-	$(CONSENT_PARALLEL_MAKE) -j$(CONSENT_FULL_TEST_JOBS) $(CONSENT_FULL_TEST_SHARD_TARGETS)
+	CONSENT_BUILD_TEST_RUNNER=1 $(CONSENT_PARALLEL_MAKE) -j$(CONSENT_FULL_TEST_JOBS) $(CONSENT_FULL_TEST_SHARD_TARGETS)
 
 ifneq ($(filter environment command line override,$(origin CONSENT_PORTABLE_TEST_SELECTOR)),)
 test-portable:
