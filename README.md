@@ -42,13 +42,14 @@ non-Emacs UI surfaces.
 Build the host-compiled `consent` binary and put it on `PATH`:
 
 ```sh
-CONSENT_COMPILE_HOST=gambit make compile
-sudo CONSENT_COMPILE_HOST=gambit make install
+make compile
+sudo make install
 consent --version
 ```
 
-The Gambit binary is a standalone native executable; the Racket binary
-(`make compile`'s default) runs only while Racket stays installed. `consent
+`make compile` defaults to the Gambit host, a standalone native executable;
+the Racket host (`CONSENT_COMPILE_HOST=racket`) runs only while Racket stays
+installed. `consent
 --script FILE` (and a `#!/usr/bin/env consent` shebang) runs the file through the
 capability-gated Consent interpreter, not the host Scheme. `make install` honors
 the GNU `PREFIX`/`DESTDIR`/`bindir`/`mandir`/`datadir` variables and also installs
