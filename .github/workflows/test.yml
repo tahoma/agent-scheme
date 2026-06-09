@@ -100,7 +100,7 @@ jobs:
       CONSENT_CI_LOG_FILE: portable-gambit-${{ matrix.combo.source_metadata }}-docstrings-${{ matrix.combo.docstring_retention }}.log
       CONSENT_CI_NATIVE_LOG_FILE: portable-gambit-native-${{ matrix.combo.source_metadata }}-docstrings-${{ matrix.combo.docstring_retention }}.log
       CONSENT_CI_SHARD_SUMMARY_NAME: Portable R7RS Gambit full suite / source metadata ${{ matrix.combo.source_metadata }} / docstrings ${{ matrix.combo.docstring_retention }}
-      CONSENT_CI_NATIVE_SHARD_SUMMARY_NAME: Portable R7RS Gambit native Consent Scheme full suite / source metadata ${{ matrix.combo.source_metadata }} / docstrings ${{ matrix.combo.docstring_retention }}
+      CONSENT_CI_NATIVE_SHARD_SUMMARY_NAME: Portable R7RS Gambit-compiled Consent Scheme full suite / source metadata ${{ matrix.combo.source_metadata }} / docstrings ${{ matrix.combo.docstring_retention }}
     strategy:
       fail-fast: false
       # Per-push lane: canonical on/full on both shards plus a single fully-stripped
@@ -163,7 +163,7 @@ jobs:
           } >> "ci-logs/${CONSENT_CI_LOG_FILE}"
           exit "$status"
 
-      - name: Run portable R7RS Gambit native shard
+      - name: Run portable R7RS Gambit-compiled shard
         if: ${{ matrix.combo.native }}
         shell: bash
         run: |
@@ -188,7 +188,7 @@ jobs:
           path: ci-logs/${{ env.CONSENT_CI_LOG_FILE }}
           if-no-files-found: warn
 
-      - name: Upload portable Gambit native shard log
+      - name: Upload portable Gambit-compiled shard log
         if: ${{ always() && matrix.combo.native }}
         uses: actions/upload-artifact@v7
         with:
@@ -244,10 +244,10 @@ jobs:
             summary_name: Portable R7RS Racket full suite
             selector: '"^consent-scheme-racket-host-test-r7rs-suite$"'
           - host: compiled
-            host_name: Compiled Consent Scheme
+            host_name: Racket-compiled Consent Scheme
             apt_package: racket
             make_target: test-portable-compiled
-            summary_name: Portable R7RS Compiled Consent Scheme full suite
+            summary_name: Portable R7RS Racket-compiled Consent Scheme full suite
             selector: '"^consent-scheme-compiled-host-test-r7rs-suite$"'
           - host: guile
             host_name: Guile
