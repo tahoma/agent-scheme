@@ -61,8 +61,8 @@ the ERT *is* the signal, with no `Ran`-growth guard to apply).
 | Racket | 1 | 20.0s | 11.8–26.3s | 20s |
 | Guile | 1 | 23.5s | 15.1–26.6s | 24s |
 | Gauche | 1 | 10.0s | 8.8–10.8s | 10s |
-| Compiled Consent Scheme | 1 | 6.6s | 3.8–7.9s | **48s** |
-| Gambit native Consent Scheme | 1 | 2.2s | 1.7–2.5s | **185s** |
+| Racket-compiled Consent Scheme | 1 | 6.6s | 3.8–7.9s | **48s** |
+| Gambit-compiled Consent Scheme | 1 | 2.2s | 1.7–2.5s | **185s** |
 
 ## Observations
 

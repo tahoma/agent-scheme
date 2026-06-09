@@ -120,9 +120,9 @@ help:
 	@printf '  %-26s %s\n' 'test-portable' 'Run the default portable R7RS host shards.'
 	@printf '  %-26s %s\n' 'test-portable-chibi' 'Run the optional portable R7RS Chibi full-suite host shard.'
 	@printf '  %-26s %s\n' 'test-portable-gambit' 'Run the portable R7RS Gambit full-suite host shard.'
-	@printf '  %-26s %s\n' 'test-portable-gambit-native' 'Build and run the Gambit-native Consent Scheme full-suite host shard.'
+	@printf '  %-26s %s\n' 'test-portable-gambit-native' 'Build and run the Gambit-compiled Consent Scheme full-suite host shard.'
 	@printf '  %-26s %s\n' 'test-portable-racket' 'Run the portable R7RS Racket full-suite host shard.'
-	@printf '  %-26s %s\n' 'test-portable-compiled' 'Build and run the compiled Consent Scheme full-suite host shard.'
+	@printf '  %-26s %s\n' 'test-portable-compiled' 'Build and run the Racket-compiled Consent Scheme full-suite host shard.'
 	@printf '  %-26s %s\n' 'test-portable-guile' 'Run the portable R7RS Guile full-suite host shard.'
 	@printf '  %-26s %s\n' 'test-portable-gauche' 'Run the portable R7RS Gauche full-suite host shard.'
 	@printf '  %-26s %s\n' 'test-emacs-hosted' 'Run all non-portable Emacs-hosted ERT tests.'
@@ -365,7 +365,7 @@ test-portable-gambit-native:
 	@if command -v '$(CONSENT_GAMBIT)' >/dev/null 2>&1 && command -v '$(CONSENT_GAMBIT_COMPILER)' >/dev/null 2>&1; then \
 		CONSENT_BUILD_TEST_RUNNER="$${CONSENT_BUILD_TEST_RUNNER-1}" CONSENT_COMPILE_HOST=gambit $(CONSENT_PARALLEL_MAKE) compile; \
 	else \
-		printf '%s\n' 'Gambit compile prerequisites are not available; Gambit native host shard will skip if no runner exists.'; \
+		printf '%s\n' 'Gambit compile prerequisites are not available; Gambit-compiled host shard will skip if no runner exists.'; \
 	fi
 	@if [ -f '$(CONSENT_COMPILE_BUILD_DIR)/gambit/logs/compile.log' ]; then cat '$(CONSENT_COMPILE_BUILD_DIR)/gambit/logs/compile.log'; fi
 	@if [ -f '$(CONSENT_COMPILE_BUILD_DIR)/gambit/logs/smoke.log' ]; then cat '$(CONSENT_COMPILE_BUILD_DIR)/gambit/logs/smoke.log'; fi

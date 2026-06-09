@@ -216,7 +216,7 @@
                                         :ert-seconds 12.0
                                         :wall-seconds 13.0
                                         :tests nil))
-         (portable-compiled-shard '(:name "Portable R7RS Compiled Consent Scheme full suite"
+         (portable-compiled-shard '(:name "Portable R7RS Racket-compiled Consent Scheme full suite"
                                           :selector "portable-compiled"
                                           :ran 1
                                           :expected 1
@@ -239,7 +239,7 @@
              "| Racket | full suite | 0 | 0 | 12\\.000s | 13\\.000s |"
              above-fold))
     (should (string-match-p
-             "| Compiled Consent Scheme | full suite | 0 | 0 | 10\\.000s | 11\\.000s |"
+             "| Racket-compiled Consent Scheme | full suite | 0 | 0 | 10\\.000s | 11\\.000s |"
              above-fold))
     (should-not (string-match-p "Chibi is split" above-fold))
     (should-not (string-match-p "| Chibi |" above-fold))))
@@ -412,11 +412,11 @@
     (should (string-match-p "host: compiled" workflow))
     (should (string-match-p "make test-portable-gambit-native" workflow))
     (should (string-match-p
-             "Portable R7RS Gambit native Consent Scheme full suite"
+             "Portable R7RS Gambit-compiled Consent Scheme full suite"
              workflow))
     (should (string-match-p "make_target: test-portable-compiled" workflow))
     (should (string-match-p
-             "Portable R7RS Compiled Consent Scheme full suite"
+             "Portable R7RS Racket-compiled Consent Scheme full suite"
              workflow))
     ;; Emacs-core indexes its log through the combo too; the other Emacs shards
     ;; keep the bare matrix axes.
@@ -461,7 +461,7 @@
     (should (string-match-p
              "|| fromJSON('\\[{\"source_metadata\":\"on\",\"docstring_retention\":\"full\"},{\"source_metadata\":\"off\",\"docstring_retention\":\"none\"}\\]')"
              workflow))
-    ;; The recompile-bound Gambit native shard runs on/full only per push: its
+    ;; The recompile-bound Gambit-compiled shard runs on/full only per push: its
     ;; combo carries a `native` flag that gates the native step, false on the
     ;; off/none smoke leg.
     (should (string-match-p
@@ -531,7 +531,7 @@
                                         :wall-seconds 1.0
                                         :tests nil))
          (portable-gambit-native-shard
-          '(:name "Portable R7RS Gambit native Consent Scheme full suite"
+          '(:name "Portable R7RS Gambit-compiled Consent Scheme full suite"
             :selector "portable-gambit-native"
             :ran 1
             :expected 1
@@ -549,7 +549,7 @@
                                         :ert-seconds 1.0
                                         :wall-seconds 1.0
                                         :tests nil))
-         (portable-compiled-shard '(:name "Portable R7RS Compiled Consent Scheme full suite"
+         (portable-compiled-shard '(:name "Portable R7RS Racket-compiled Consent Scheme full suite"
                                           :selector "portable-compiled"
                                           :ran 1
                                           :expected 1
@@ -598,7 +598,7 @@
                  portable-eval-shard))))
     (should
      (string-match-p
-      "| Portable R7RS Chibi evaluator subset |.*\n| Portable R7RS Chibi non-evaluator subset |.*\n| Portable R7RS Gambit full suite |.*\n| Portable R7RS Gambit native Consent Scheme full suite |.*\n| Portable R7RS Racket full suite |.*\n| Portable R7RS Compiled Consent Scheme full suite |.*\n| Portable R7RS Guile full suite |.*\n| Portable R7RS Gauche full suite |.*\n| Emacs tools/docs/integration |"
+      "| Portable R7RS Chibi evaluator subset |.*\n| Portable R7RS Chibi non-evaluator subset |.*\n| Portable R7RS Gambit full suite |.*\n| Portable R7RS Gambit-compiled Consent Scheme full suite |.*\n| Portable R7RS Racket full suite |.*\n| Portable R7RS Racket-compiled Consent Scheme full suite |.*\n| Portable R7RS Guile full suite |.*\n| Portable R7RS Gauche full suite |.*\n| Emacs tools/docs/integration |"
       markdown))))
 
 ;;; Structured per-run record (#465)

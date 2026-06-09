@@ -638,7 +638,7 @@ canary of it (#481):
 Every host and every Emacs shard is still represented at least once, so
 cross-host parity coverage is preserved; only the redundant metadata/docstring
 fan-out collapses. The exhaustive matrix — every host and shard across all six
-combos, including the Gambit native cross — runs nightly on the `schedule` lane
+combos, including the Gambit-compiled cross — runs nightly on the `schedule` lane
 and on demand through `workflow_dispatch`. Trigger it before landing
 axis-sensitive changes to the reader, writer, or docstring machinery: open the
 **Actions → Test** workflow and use **Run workflow** (`workflow_dispatch`), or
