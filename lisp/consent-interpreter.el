@@ -4139,6 +4139,26 @@ Advance when ADVANCEP is non-nil.  Signal errors using DESCRIPTION."
       (funcall consent-time-current-second-function)
       "current-second"))))
 
+(defun consent--primitive-get-environment-variable (arguments context)
+  "Primitive get-environment-variable over ARGUMENTS."
+  (consent-capability-authorize-process-environment
+   "get-environment-variable" context)
+  (let ((value (getenv (consent--expect-string
+                        (car arguments) "get-environment-variable"))))
+    (if value value consent-false)))
+
+(defun consent--primitive-get-environment-variables (_arguments context)
+  "Primitive get-environment-variables over _ARGUMENTS."
+  (consent-capability-authorize-process-environment
+   "get-environment-variables" context)
+  (mapcar
+   (lambda (entry)
+     (if (string-match "=" entry)
+         (cons (substring entry 0 (match-beginning 0))
+               (substring entry (match-end 0)))
+       (cons entry "")))
+   process-environment))
+
 (defun consent--primitive-current-jiffy (_arguments context)
   "Primitive current-jiffy over _ARGUMENTS."
   (consent--call-authorized-clock

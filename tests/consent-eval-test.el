@@ -34,6 +34,28 @@
   (should-error (consent-eval-source "()")
                 :type 'consent-eval-error))
 
+(ert-deftest consent-eval-test-process-environment-capability ()
+  "Environment reads are denied by default and supplied under a grant.
+An unset variable read under the process-environment grant returns #f rather
+than raising, which keeps the allow path deterministic."
+  (should-error
+   (consent-eval-source
+    "(import (scheme base) (scheme process-context))
+     (get-environment-variable \"CONSENT_UNSET_ENV_PROBE\")")
+   :type 'consent-eval-error)
+  (should
+   (equal
+    (consent-eval-test--external
+     "(import (scheme base) (scheme process-context))
+      (get-environment-variable \"CONSENT_UNSET_ENV_PROBE\")"
+     '(:capability-grants
+       ((capability-grant
+         (id host-environment)
+         (domain process-environment)
+         (operations read)
+         (expires never)))))
+    "#f")))
+
 (ert-deftest consent-eval-test-let-empty-bindings-and-char-literals ()
   "Evaluate `let' with empty bindings and delimiter character literals.
 Regression: the syntax-rules matcher must match ((name val) ...) against ();
