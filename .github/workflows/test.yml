@@ -20,13 +20,13 @@ permissions:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-  # Build the non-shipped host-execution test runner (a full second host-compiler
-  # link) only on the scheduled / workflow_dispatch lane, where the compiled and
-  # gambit-native shards run the full white-box suite on the compiled artifact.
-  # The per-push lane skips it: the product binary is still compiled and
-  # smoke-verified (including the gated --script / deny discriminators), and the
-  # white-box suite runs on the interpreted hosts.
-  CONSENT_BUILD_TEST_RUNNER: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '1' || '' }}
+  # The compiled and gambit-native shard targets build the non-shipped
+  # host-execution test runner and run the white-box suite against the COMPILED
+  # interpreter on every lane, including per-push: that compiled-interpreter
+  # coverage (did gsc/raco miscompile the evaluator?) is the reason those shards
+  # exist, and the interpreted hosts only cover the host-agnostic source logic, so
+  # it must not be skipped. (A plain `make compile`, the install path, still does
+  # not build the runner.)
 
 jobs:
   license-reuse:
