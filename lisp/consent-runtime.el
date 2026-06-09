@@ -1177,6 +1177,10 @@ SEEN prevents infinite recursion over cyclic host structures."
         (consent-symbol-p value)
         (consent--identifier-p value)
         (consent-character-p value)
+        ;; Raw host numbers reach here legitimately: public accessors such as
+        ;; `consent-number-value' unwrap canonical numbers to host numbers, and
+        ;; such a value can be an evaluation result.
+        (numberp value)
         (consent-number-p value)
         (consent-procedure-p value)
         (consent-primitive-procedure-p value)

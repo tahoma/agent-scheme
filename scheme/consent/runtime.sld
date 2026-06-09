@@ -2342,6 +2342,10 @@
             (symbol? value)
             (identifier? value)
             (char? value)
+            ;; Raw host numbers reach here legitimately: public accessors such
+            ;; as `consent-number-value' unwrap canonical numbers to host
+            ;; integers/reals, and such a value can be an evaluation result.
+            (number? value)
             (consent-number? value)
             (consent-unspecified? value)
             (consent-procedure? value)
