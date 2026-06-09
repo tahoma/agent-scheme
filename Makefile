@@ -326,7 +326,7 @@ test-portable-gambit-native:
 	fi
 	@if [ -f '$(CONSENT_COMPILE_BUILD_DIR)/gambit/logs/compile.log' ]; then cat '$(CONSENT_COMPILE_BUILD_DIR)/gambit/logs/compile.log'; fi
 	@if [ -f '$(CONSENT_COMPILE_BUILD_DIR)/gambit/logs/smoke.log' ]; then cat '$(CONSENT_COMPILE_BUILD_DIR)/gambit/logs/smoke.log'; fi
-	CONSENT_GAMBIT_NATIVE='$(abspath $(CONSENT_COMPILE_BUILD_DIR)/gambit/bin/consent)' CONSENT_TEST_SELECTOR='$(CONSENT_PORTABLE_GAMBIT_NATIVE_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
+	CONSENT_GAMBIT_NATIVE='$(abspath $(CONSENT_COMPILE_BUILD_DIR)/gambit/bin/consent-host-runner)' CONSENT_TEST_SELECTOR='$(CONSENT_PORTABLE_GAMBIT_NATIVE_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
 
 test-portable-racket:
 	CONSENT_TEST_SELECTOR='$(CONSENT_PORTABLE_RACKET_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
@@ -337,7 +337,7 @@ test-portable-compiled:
 	else \
 		printf '%s\n' 'Racket compile prerequisites are not available; compiled host shard will skip if no runner exists.'; \
 	fi
-	CONSENT_COMPILED='$(abspath $(CONSENT_COMPILE_BUILD_DIR)/racket/bin/consent)' CONSENT_TEST_SELECTOR='$(CONSENT_PORTABLE_COMPILED_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
+	CONSENT_COMPILED='$(abspath $(CONSENT_COMPILE_BUILD_DIR)/racket/bin/consent-host-runner)' CONSENT_TEST_SELECTOR='$(CONSENT_PORTABLE_COMPILED_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
 
 test-portable-guile:
 	CONSENT_TEST_SELECTOR='$(CONSENT_PORTABLE_GUILE_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
