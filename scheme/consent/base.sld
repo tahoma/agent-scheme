@@ -13,6 +13,8 @@
           base-syntax-forms
           read-port-string
           read-all-datums
+          resolve-source-text
+          resolve-source-entry
           define-primitive!
           ensure-base-syntax!
           consent-make-base-environment
@@ -566,35 +568,60 @@
       "Read and parse all datums from PORT."
       (consent-read-all (read-port-string port)))
 
+    (define (try-read-file-text path)
+      "Return PATH's contents as a string, or #f when it cannot be read."
+      (guard (condition (else #f))
+        (call-with-input-file path read-port-string)))
+
+    (define (resolve-source-entry relative-path default-paths)
+      "Return (RESOLVED-PATH . TEXT) for logical RELATIVE-PATH from the first source that works, or #f.
+Search order matches the host/core resolution contract: host-injected search
+directories (CONSENT_LIBRARY_PATH, datadir, executable-relative) highest, then
+the built-in cwd-relative DEFAULT-PATHS (source tree), then embedded source (the
+zero-dependency floor). RESOLVED-PATH is the on-disk path read, or RELATIVE-PATH
+for embedded source."
+      (let loop-dirs ((dirs (consent-library-search-directory-list)))
+        (if (pair? dirs)
+            (let* ((path (string-append (car dirs) "/" relative-path))
+                   (text (try-read-file-text path)))
+              (if text
+                  (cons path text)
+                  (loop-dirs (cdr dirs))))
+            (let loop-defaults ((paths default-paths))
+              (if (pair? paths)
+                  (let ((text (try-read-file-text (car paths))))
+                    (if text
+                        (cons (car paths) text)
+                        (loop-defaults (cdr paths))))
+                  (let ((embedded (consent-embedded-source-ref relative-path)))
+                    (and embedded (cons relative-path embedded))))))))
+
+    (define (resolve-source-text relative-path default-paths)
+      "Return runtime source TEXT for logical RELATIVE-PATH, or #f when none is found."
+      (let ((entry (resolve-source-entry relative-path default-paths)))
+        (and entry (cdr entry))))
+
     (define (base-prelude-forms)
       "Prelude forms are cached after reader validation; metadata extraction depends on each top-level form remaining one define."
       (or base-prelude-forms-cache
-          (let ((forms
-                 (let try ((paths consent-base-prelude-load-paths))
-                   (if (null? paths)
-                       (eval-error "unable to load base prelude")
-                       (guard (condition
-                               (else (try (cdr paths))))
-                         (call-with-input-file
-                             (car paths)
-                           read-all-datums))))))
-            (set! base-prelude-forms-cache forms)
-            forms)))
+          (let ((text (resolve-source-text "consent/base-prelude.scm"
+                                           consent-base-prelude-load-paths)))
+            (if text
+                (let ((forms (consent-read-all text)))
+                  (set! base-prelude-forms-cache forms)
+                  forms)
+                (eval-error "unable to load base prelude")))))
 
     (define (base-syntax-forms)
       "Syntax prelude forms are cached separately because they install into the current syntax environment, not the value environment."
       (or base-syntax-forms-cache
-          (let ((forms
-                 (let try ((paths consent-base-syntax-load-paths))
-                   (if (null? paths)
-                       (eval-error "unable to load base syntax prelude")
-                       (guard (condition
-                               (else (try (cdr paths))))
-                         (call-with-input-file
-                             (car paths)
-                           read-all-datums))))))
-            (set! base-syntax-forms-cache forms)
-            forms)))
+          (let ((text (resolve-source-text "consent/base-syntax.scm"
+                                           consent-base-syntax-load-paths)))
+            (if text
+                (let ((forms (consent-read-all text)))
+                  (set! base-syntax-forms-cache forms)
+                  forms)
+                (eval-error "unable to load base syntax prelude")))))
 
     (define (formals-arity formals)
       "Return minimum and maximum arity metadata for Scheme formals."

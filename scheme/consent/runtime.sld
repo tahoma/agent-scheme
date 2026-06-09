@@ -12,6 +12,10 @@
           consent-default-maximum-host-callbacks
           consent-version-components
           consent-version
+          consent-set-library-search-directories!
+          consent-library-search-directory-list
+          consent-register-embedded-source!
+          consent-embedded-source-ref
           consent-make-empty-environment
           consent-unspecified
           consent-unspecified?
@@ -302,6 +306,43 @@
     (define consent-default-maximum-events 1000)
     ;; Default maximum reachable value graph size for one event record.
     (define consent-default-maximum-event-nodes 100000)
+
+    ;; Host-injected library/source resolution context (host/core boundary).
+    ;; The portable core reads its prelude, syntax prelude, and source-backed
+    ;; libraries by trying, for each logical relative path, every configured
+    ;; search-directory prefix in order, then the core's built-in cwd-relative
+    ;; defaults, then embedded source. A compiled or installed host injects its
+    ;; CONSENT_LIBRARY_PATH, datadir, and executable-relative directories here at
+    ;; startup, where host facilities exist; an in-repo/source run leaves this
+    ;; empty and falls through to the cwd defaults, preserving the original
+    ;; behavior. Embedded source is the zero-dependency floor, consulted only
+    ;; when no on-disk copy is found.
+    (define consent-library-search-directories '())
+
+    (define (consent-set-library-search-directories! directories)
+      "Replace the host-injected library search-directory prefixes, highest precedence first."
+      (set! consent-library-search-directories directories)
+      consent-unspecified)
+
+    (define (consent-library-search-directory-list)
+      "Return the host-injected library search-directory prefixes."
+      consent-library-search-directories)
+
+    ;; Embedded runtime source registered by a compiled host's linked-in
+    ;; `(consent embedded-source)' module: an alist of logical-relative-path to
+    ;; source text. Empty for interpreted/source runs.
+    (define consent-embedded-source-entries '())
+
+    (define (consent-register-embedded-source! relative-path text)
+      "Register embedded source TEXT for logical RELATIVE-PATH (the zero-dependency floor)."
+      (set! consent-embedded-source-entries
+            (cons (cons relative-path text) consent-embedded-source-entries))
+      consent-unspecified)
+
+    (define (consent-embedded-source-ref relative-path)
+      "Return registered embedded source text for RELATIVE-PATH, or #f when absent."
+      (let ((entry (assoc relative-path consent-embedded-source-entries)))
+        (and entry (cdr entry))))
 
     (define (consent-version-components)
       "Return the Consent Scheme version as exact non-negative host integers."
