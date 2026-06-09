@@ -15,6 +15,11 @@ case "$build_dir" in
 esac
 scheme_dir="$repo_root/scheme"
 version_file="$scheme_dir/consent/version.sld"
+# Install datadir baked into the binary as a runtime library search directory so
+# an installed library tree is resolved ahead of the embedded floor. Empty for a
+# plain `make compile' (then only CONSENT_LIBRARY_PATH and the embedded floor
+# apply); the Makefile passes the configured $(consentlibdir).
+install_datadir=${CONSENT_INSTALL_DATADIR:-}
 
 die() {
   printf '%s\n' "consent compile: $*" >&2
@@ -116,9 +121,10 @@ write_embedded_source_module() {
       printf '%s\n' "$lang_header"
     fi
     printf '%s\n' '(define-library (consent embedded-source)'
-    printf '%s\n' '  (export consent-install-embedded-source!)'
+    printf '%s\n' '  (export consent-install-embedded-source! consent-embedded-datadir)'
     printf '%s\n' '  (import (scheme base) (consent runtime))'
     printf '%s\n' '  (begin'
+    printf '    (define consent-embedded-datadir "%s")\n' "$install_datadir"
     printf '%s\n' '    (define (consent-install-embedded-source!)'
     embedded_source_specs | while IFS= read -r relative
     do
@@ -274,6 +280,37 @@ write_racket_main_common() {
     ;; This lets a #!/usr/bin/env consent shebang run a file with no flag,
     ;; avoiding the kernel single-argument rule that breaks a flagged shebang.
     (consent-main-script (car args)))))
+
+(define (consent-main--split-search-path value)
+  ;; Split a colon-separated path string into directory components.
+  (let loop ((chars (string->list value)) (current '()) (parts '()))
+    (cond
+     ((null? chars)
+      (reverse (if (null? current)
+                   parts
+                   (cons (list->string (reverse current)) parts))))
+     ((char=? (car chars) #\:)
+      (loop (cdr chars) '()
+            (if (null? current)
+                parts
+                (cons (list->string (reverse current)) parts))))
+     (else
+      (loop (cdr chars) (cons (car chars) current) parts)))))
+
+(define (consent-main--library-search-directories)
+  ;; Host-injected runtime library search directories, highest precedence first:
+  ;; CONSENT_LIBRARY_PATH (explicit override), then the install datadir baked at
+  ;; compile time. The core resolver consults these ahead of the source tree and
+  ;; the embedded floor.
+  (let ((env (get-environment-variable "CONSENT_LIBRARY_PATH"))
+        (datadir consent-main:embedded:consent-embedded-datadir))
+    (append
+     (if (and env (> (string-length env) 0))
+         (consent-main--split-search-path env)
+         '())
+     (if (> (string-length datadir) 0)
+         (list datadir)
+         '()))))
 EOF
 }
 
@@ -288,6 +325,12 @@ write_racket_main() {
 ;; source-libraries) so the interpreter boots from this standalone binary even
 ;; when relocated outside a source tree.
 (consent-main:embedded:consent-install-embedded-source!)
+
+;; Inject the host's runtime library search directories (CONSENT_LIBRARY_PATH and
+;; the baked install datadir) so an installed or overridden library tree is
+;; resolved ahead of the embedded floor.
+(consent-main:runtime:consent-set-library-search-directories!
+ (consent-main--library-search-directories))
 
 (let ((arguments (command-line)))
   (consent-main
@@ -460,6 +503,37 @@ write_gambit_main_common() {
     ;; This lets a #!/usr/bin/env consent shebang run a file with no flag,
     ;; avoiding the kernel single-argument rule that breaks a flagged shebang.
     (consent-main-script (car args)))))
+
+(define (consent-main--split-search-path value)
+  ;; Split a colon-separated path string into directory components.
+  (let loop ((chars (string->list value)) (current '()) (parts '()))
+    (cond
+     ((null? chars)
+      (reverse (if (null? current)
+                   parts
+                   (cons (list->string (reverse current)) parts))))
+     ((char=? (car chars) #\:)
+      (loop (cdr chars) '()
+            (if (null? current)
+                parts
+                (cons (list->string (reverse current)) parts))))
+     (else
+      (loop (cdr chars) (cons (car chars) current) parts)))))
+
+(define (consent-main--library-search-directories)
+  ;; Host-injected runtime library search directories, highest precedence first:
+  ;; CONSENT_LIBRARY_PATH (explicit override), then the install datadir baked at
+  ;; compile time. The core resolver consults these ahead of the source tree and
+  ;; the embedded floor.
+  (let ((env (get-environment-variable "CONSENT_LIBRARY_PATH"))
+        (datadir consent-main:embedded:consent-embedded-datadir))
+    (append
+     (if (and env (> (string-length env) 0))
+         (consent-main--split-search-path env)
+         '())
+     (if (> (string-length datadir) 0)
+         (list datadir)
+         '()))))
 EOF
 }
 
@@ -476,6 +550,12 @@ write_gambit_main() {
 ;; source-libraries) so the interpreter boots from this standalone binary even
 ;; when relocated outside a source tree.
 (consent-main:embedded:consent-install-embedded-source!)
+
+;; Inject the host's runtime library search directories (CONSENT_LIBRARY_PATH and
+;; the baked install datadir) so an installed or overridden library tree is
+;; resolved ahead of the embedded floor.
+(consent-main:runtime:consent-set-library-search-directories!
+ (consent-main--library-search-directories))
 
 (let ((arguments (command-line)))
   (consent-main
