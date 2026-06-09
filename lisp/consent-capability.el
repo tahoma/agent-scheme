@@ -2206,6 +2206,28 @@ AUTHORIZATION is the approved file authorization that created PORT."
      context
      reason)))
 
+(defun consent--process-environment-capability-grant-p (grant)
+  "Return non-nil when GRANT is an active process-environment-domain grant."
+  (and (equal (consent--file-capability-symbol-name
+               (consent--capability-grant-field-value grant "domain"))
+              "process-environment")
+       (consent--capability-grant-active-p grant)))
+
+(defun consent--process-environment-granted-p (context)
+  "Return non-nil when CONTEXT carries an active process-environment grant."
+  (cl-some #'consent--process-environment-capability-grant-p
+           (consent--capability-context-grants context)))
+
+(defun consent-capability-authorize-process-environment (binding context)
+  "Authorize a policy-gated `(scheme process-context)' environment read.
+BINDING names the operation. Host environment access is denied unless CONTEXT
+carries an active process-environment capability grant, so it stays opt-in and
+revocable while remaining available to a caller that deliberately grants it."
+  (if (consent--process-environment-granted-p context)
+      t
+    (consent--eval-error
+     "%s requires policy-gated host access" binding)))
+
 (defun consent-capability-authorize-clock
     (binding context &optional operation)
   "Authorize a `(scheme time)` clock read for BINDING.

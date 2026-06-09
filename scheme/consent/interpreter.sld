@@ -42,6 +42,9 @@
                   (current-second host-current-second)
                   (current-jiffy host-current-jiffy)
                   (jiffies-per-second host-jiffies-per-second))
+          (rename (scheme process-context)
+                  (get-environment-variable host-get-environment-variable)
+                  (get-environment-variables host-get-environment-variables))
           (scheme write)
           (consent reader)
           (consent runtime)
@@ -5859,6 +5862,19 @@ condition does not."
           (host-current-second)
           "current-second"))))
 
+    (define (primitive-get-environment-variable arguments context)
+      "Implement `get-environment-variable` through a policy-gated host read."
+      (authorize-process-environment-capability
+       "get-environment-variable" context)
+      (host-get-environment-variable
+       (expect-string (car arguments) "get-environment-variable")))
+
+    (define (primitive-get-environment-variables arguments context)
+      "Implement `get-environment-variables` through a policy-gated host read."
+      (authorize-process-environment-capability
+       "get-environment-variables" context)
+      (host-get-environment-variables))
+
     (define (primitive-current-jiffy arguments context)
       "Implement R7RS `current-jiffy` through a policy-gated clock read."
       (call-authorized-clock
@@ -7332,6 +7348,10 @@ condition does not."
        (cons 'primitive-current-second primitive-current-second)
        (cons 'primitive-current-jiffy primitive-current-jiffy)
        (cons 'primitive-jiffies-per-second primitive-jiffies-per-second)
+       (cons 'primitive-get-environment-variable
+             primitive-get-environment-variable)
+       (cons 'primitive-get-environment-variables
+             primitive-get-environment-variables)
        (cons 'primitive-read primitive-read)
        (cons 'primitive-display primitive-display)
        (cons 'primitive-write primitive-write)

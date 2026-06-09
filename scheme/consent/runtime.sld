@@ -247,6 +247,7 @@
           process-capability-handle
           process-port-capability-handle
           authorize-process-capability
+          authorize-process-environment-capability
           audit-process-capability-result!
           network-capability-effect
           network-capability-request
@@ -1339,6 +1340,52 @@
                operation
                grant
                "clock request denied by policy")))))
+
+    (define (process-environment-capability-grant? grant)
+      "Report whether GRANT is an active process-environment-domain grant."
+      (and (pair? grant)
+           (eq? (car grant) 'capability-grant)
+           (eq? (capability-field-value grant 'domain) 'process-environment)
+           (capability-grant-active? grant)))
+
+    (define (process-environment-granted? context)
+      "Report whether CONTEXT carries an active process-environment grant."
+      (let loop ((grants (context-capability-grants context)))
+        (and (pair? grants)
+             (or (process-environment-capability-grant? (car grants))
+                 (loop (cdr grants))))))
+
+    (define (authorize-process-environment-capability binding context)
+      "Authorize a policy-gated `(scheme process-context)' environment read.
+Host environment access is denied unless CONTEXT carries an active
+process-environment capability grant, so it stays opt-in and revocable while
+remaining available to a caller that deliberately grants it. Records the
+capability decision for the audit trail and raises on denial."
+      (record-audit-event!
+       context
+       'capability-request
+       (list (list 'domain 'process-environment)
+             (list 'operation binding)))
+      (if (process-environment-granted? context)
+          (begin
+            (record-audit-event!
+             context
+             'policy-decision
+             (list (list 'category 'standard-host-effect)
+                   (list 'operation binding)
+                   (list 'decision 'allowed)
+                   (list 'domain 'process-environment)))
+            #t)
+          (begin
+            (record-audit-event!
+             context
+             'policy-decision
+             (list (list 'category 'standard-host-effect)
+                   (list 'operation binding)
+                   (list 'decision 'denied)
+                   (list 'domain 'process-environment)))
+            (eval-error
+             (string-append binding " requires policy-gated host access")))))
 
     (define (authorize-clock-capability binding context)
       "Authorize a policy-gated `(scheme time)` clock read."

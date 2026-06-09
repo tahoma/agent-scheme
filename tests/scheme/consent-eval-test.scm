@@ -3512,6 +3512,28 @@
              (interaction-environment)"))))
        #t)
 
+;; Environment reads are denied by default and supplied only under an explicit
+;; process-environment capability grant. An unset variable read under the grant
+;; returns #f (no denial), which makes the allow path deterministic.
+(check 'process-environment-read-denied-by-default
+       (raises?
+        (lambda ()
+          (consent-eval-source
+           "(import (scheme base) (scheme process-context))
+            (get-environment-variable \"CONSENT_UNSET_ENV_PROBE\")")))
+       #t)
+
+(check-external/options 'process-environment-read-allowed-under-grant
+                        "(import (scheme base) (scheme process-context))
+                         (get-environment-variable \"CONSENT_UNSET_ENV_PROBE\")"
+                        '((capability-grants
+                           (capability-grant
+                            (id host-environment)
+                            (domain process-environment)
+                            (operations read)
+                            (expires never))))
+                        "#f")
+
 ;; Self-hosting: the runtime's own internal libraries ((consent ...)/(cli ...))
 ;; are denied to imported programs by default (fail-closed), and become
 ;; available only under an explicit internal-libraries-allowed grant -- the

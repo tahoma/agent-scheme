@@ -814,12 +814,22 @@ programs that merely define their own (consent ...) libraries are unaffected."
        ((equal? key '(scheme process-context))
         (register-primitive-library!
          key
-         (map policy-denied-spec
-              '(command-line
-                emergency-exit
-                exit
-                get-environment-variable
-                get-environment-variables))
+         (append
+          (map policy-denied-spec
+               '(command-line
+                 emergency-exit
+                 exit))
+          ;; Environment reads are real, policy-gated primitives: denied unless
+          ;; the context carries an active process-environment capability grant.
+          (list
+           (library-primitive-spec 'get-environment-variable
+                                   'primitive-get-environment-variable
+                                   1
+                                   1)
+           (library-primitive-spec 'get-environment-variables
+                                   'primitive-get-environment-variables
+                                   0
+                                   0)))
          context))
        ((equal? key '(scheme read))
         (register-primitive-library!

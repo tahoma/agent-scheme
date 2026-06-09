@@ -112,10 +112,12 @@ with, the Emacs `consent-script-run-file'."
 ROOT becomes the include directory and the sole file-access root, so a host
 runner reads fixtures and writes scratch files only under that working-tree
 subtree. The file capability system matches by absolute path containment, so
-ROOT must be absolute. A first-class (persisted) capability grant is used rather
+ROOT must be absolute. First-class (persisted) capability grants are used rather
 than the transient legacy file-paths allow-list so that port handles opened by
 `call-with-input-file' and friends revalidate against an active grant on every
-read/write rather than failing closed mid-stream."
+read/write rather than failing closed mid-stream. A process-environment grant is
+included so a host-runner test can read its CI configuration from the host
+environment; that capability remains denied to ordinary scripts."
       (cons (cons 'include-directory root)
             (cons (list 'capability-grants
                         (list 'capability-grant
@@ -128,6 +130,11 @@ read/write rather than failing closed mid-stream."
                                     (list 'paths (list "."))
                                     (list 'remote 'denied)
                                     (list 'symlinks 'resolve-within-root))
+                              (list 'expires 'never))
+                        (list 'capability-grant
+                              (list 'id 'host-run-process-environment-grant)
+                              (list 'domain 'process-environment)
+                              (cons 'operations '(read))
                               (list 'expires 'never)))
                   cli-script-host-run-base-options)))
 
