@@ -1,0 +1,108 @@
+name: Release
+
+# Tag-triggered binary distribution for the host-compiled portable runtime
+# (#470). Pushing a `v*` tag builds the standalone Gambit binary, runs the
+# existing smoke/native test gates against it, packages a `make dist` tarball,
+# verifies a staged `make install`, and uploads the tarball as a GitHub Release
+# asset. `workflow_dispatch` rebuilds and re-attaches assets to an existing tag.
+# Gambit is the release host because its `gsc -exe -nopreload` binary is a
+# standalone native executable with no runtime dependency; the Racket binary
+# still needs Racket present on the target, so it is not published here.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build and attach release assets to."
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release-gambit:
+    name: Build and publish the standalone Gambit binary
+    runs-on: ubuntu-latest
+    env:
+      # Pin the Gambit toolchain to the same version/digest the test workflow
+      # builds, so released binaries come from a known-good compiler.
+      CONSENT_GAMBIT_VERSION: "4.9.7"
+      CONSENT_GAMBIT_SHA256: "0da7c9772a2186dab1fba6bf6c777afe7424f40beacadf1b117d5cc825fe2db3"
+      CONSENT_COMPILE_HOST: gambit
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Resolve release tag
+        id: tag
+        run: |
+          tag="${{ github.event.inputs.tag || github.ref_name }}"
+          printf 'tag=%s\n' "$tag" >> "$GITHUB_OUTPUT"
+          # Soft consistency check: the tag (minus a leading `v`) should match
+          # version.sld so the published asset name lines up with the tag. A
+          # mismatch is surfaced as a warning rather than failing the release.
+          version=$(make -s --no-print-directory print-version 2>/dev/null || true)
+          if [ -n "$version" ] && [ "${tag#v}" != "$version" ]; then
+            printf '::warning::release tag %s does not match version.sld %s\n' "$tag" "$version"
+          fi
+
+      - name: Cache Gambit
+        id: cache-gambit
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.tool_cache }}/gambit/${{ env.CONSENT_GAMBIT_VERSION }}
+          key: ${{ runner.os }}-gambit-${{ env.CONSENT_GAMBIT_VERSION }}
+
+      - name: Install Gambit
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y emacs-nox build-essential ca-certificates curl libssl-dev
+
+          gambit_prefix="${RUNNER_TOOL_CACHE}/gambit/${CONSENT_GAMBIT_VERSION}"
+          if [ ! -x "${gambit_prefix}/bin/gsi" ]; then
+            curl -fsSL \
+              "https://github.com/gambit/gambit/archive/refs/tags/v${CONSENT_GAMBIT_VERSION}.tar.gz" \
+              -o /tmp/gambit.tar.gz
+            printf '%s  %s\n' "${CONSENT_GAMBIT_SHA256}" /tmp/gambit.tar.gz | sha256sum -c -
+
+            rm -rf /tmp/gambit-src
+            mkdir -p /tmp/gambit-src "${gambit_prefix}"
+            tar -xzf /tmp/gambit.tar.gz -C /tmp/gambit-src --strip-components=1
+            cd /tmp/gambit-src
+            ./configure --prefix="${gambit_prefix}" --enable-single-host --enable-openssl
+            make -j"$(nproc)"
+            make install
+          fi
+
+          echo "${gambit_prefix}/bin" >> "$GITHUB_PATH"
+          "${gambit_prefix}/bin/gsi" -v
+          "${gambit_prefix}/bin/gsc" -v
+          "${gambit_prefix}/bin/gsi" -:r7rs -e '(import (scheme base) (scheme write)) (write (+ 1 2)) (newline)'
+
+      - name: Build and test the standalone Gambit runtime
+        # Builds the Gambit binary (running compile-time smoke gates) and runs
+        # the full Gambit-native Consent Scheme suite against it.
+        run: make test-portable-gambit-native
+
+      - name: Build the distribution tarball
+        run: make dist
+
+      - name: Verify a staged install
+        run: |
+          make install DESTDIR=/tmp/consent-release-stage
+          staged=/tmp/consent-release-stage/usr/local/bin/consent
+          "$staged" --version
+          make uninstall DESTDIR=/tmp/consent-release-stage
+
+      - name: Publish the release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag='${{ steps.tag.outputs.tag }}'
+          tarball=$(ls build/compile/dist/consent-*-gambit.tar.gz)
+          gh release view "$tag" >/dev/null 2>&1 \
+            || gh release create "$tag" --title "Consent Scheme $tag" --generate-notes
+          gh release upload "$tag" "$tarball" --clobber
