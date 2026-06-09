@@ -784,16 +784,22 @@ compile_racket() {
   run_smoke "$runner" "$smoke_log" "$version"
 
   # Non-shipped host-execution test runner (not installed; see make install/dist).
-  host_runner_main="$src_dir/consent-host-runner.rkt"
-  host_runner="$bin_dir/consent-host-runner"
-  write_racket_host_runner_main "$host_runner_main"
-  PLTCOLLECTS="$collections_dir:${PLTCOLLECTS:-}" \
-    "$raco" exe --cs ++lang r7rs -o "$host_runner" "$host_runner_main" \
-    >"$logs_dir/raco-exe-host-runner.log" 2>&1 \
-    || die "raco exe (host runner) failed; see $logs_dir/raco-exe-host-runner.log"
-  [ -f "$host_runner" ] \
-    || die "raco exe did not create $host_runner; see $logs_dir/raco-exe-host-runner.log"
-  chmod +x "$host_runner"
+  # Opt-in: a full second `raco exe' link is wasted work for a plain build or the
+  # per-push CI lane, so it is built only when CONSENT_BUILD_TEST_RUNNER is set
+  # (the scheduled/full lane and local opt-in). When absent, the compiled host
+  # white-box shard skips; the product binary is still smoke-verified above.
+  if [ -n "${CONSENT_BUILD_TEST_RUNNER:-}" ]; then
+    host_runner_main="$src_dir/consent-host-runner.rkt"
+    host_runner="$bin_dir/consent-host-runner"
+    write_racket_host_runner_main "$host_runner_main"
+    PLTCOLLECTS="$collections_dir:${PLTCOLLECTS:-}" \
+      "$raco" exe --cs ++lang r7rs -o "$host_runner" "$host_runner_main" \
+      >"$logs_dir/raco-exe-host-runner.log" 2>&1 \
+      || die "raco exe (host runner) failed; see $logs_dir/raco-exe-host-runner.log"
+    [ -f "$host_runner" ] \
+      || die "raco exe did not create $host_runner; see $logs_dir/raco-exe-host-runner.log"
+    chmod +x "$host_runner"
+  fi
 
   printf '%s\n' "$runner"
 }
@@ -1054,22 +1060,29 @@ compile_gambit() {
 EOF
   run_smoke "$runner" "$smoke_log" "$version"
 
-  # Non-shipped host-execution test runner (not installed; see make install/dist).
-  host_runner_main="$src_dir/consent-host-runner.scm"
-  host_runner_main_c="$src_dir/consent-host-runner.c"
-  host_runner="$bin_dir/consent-host-runner"
-  write_gambit_host_runner_main "$host_runner_main" "$src_dir"
-  "$gsc" -:r7rs,search="$scheme_dir",search="$src_dir" \
-    -c -o "$host_runner_main_c" "$host_runner_main" \
-    >>"$logs_dir/gsc-modules.log" 2>&1 \
-    || die "gsc failed while compiling the Gambit host runner; see $logs_dir/gsc-modules.log"
-  # shellcheck disable=SC2086
-  "$gsc" -:r7rs,search="$scheme_dir" -exe -o "$host_runner" -nopreload $gambit_c_files "$host_runner_main_c" \
-    >"$logs_dir/gsc-exe-host-runner.log" 2>&1 \
-    || die "gsc -exe (host runner) failed; see $logs_dir/gsc-exe-host-runner.log"
-  [ -f "$host_runner" ] \
-    || die "gsc -exe did not create $host_runner; see $logs_dir/gsc-exe-host-runner.log"
-  chmod +x "$host_runner"
+  # Non-shipped host-execution test runner. Opt-in via CONSENT_BUILD_TEST_RUNNER:
+  # the second full `gsc -exe' link recompiles the entire module set and is the
+  # single largest build cost, wasted on a plain build or the per-push CI lane.
+  # Built only for the scheduled/full lane and local opt-in; when absent the
+  # gambit-native white-box shard skips, and the product binary is still
+  # smoke-verified above.
+  if [ -n "${CONSENT_BUILD_TEST_RUNNER:-}" ]; then
+    host_runner_main="$src_dir/consent-host-runner.scm"
+    host_runner_main_c="$src_dir/consent-host-runner.c"
+    host_runner="$bin_dir/consent-host-runner"
+    write_gambit_host_runner_main "$host_runner_main" "$src_dir"
+    "$gsc" -:r7rs,search="$scheme_dir",search="$src_dir" \
+      -c -o "$host_runner_main_c" "$host_runner_main" \
+      >>"$logs_dir/gsc-modules.log" 2>&1 \
+      || die "gsc failed while compiling the Gambit host runner; see $logs_dir/gsc-modules.log"
+    # shellcheck disable=SC2086
+    "$gsc" -:r7rs,search="$scheme_dir" -exe -o "$host_runner" -nopreload $gambit_c_files "$host_runner_main_c" \
+      >"$logs_dir/gsc-exe-host-runner.log" 2>&1 \
+      || die "gsc -exe (host runner) failed; see $logs_dir/gsc-exe-host-runner.log"
+    [ -f "$host_runner" ] \
+      || die "gsc -exe did not create $host_runner; see $logs_dir/gsc-exe-host-runner.log"
+    chmod +x "$host_runner"
+  fi
 
   printf '%s\n' "$runner"
 }
