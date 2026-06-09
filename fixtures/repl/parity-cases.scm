@@ -186,7 +186,12 @@
      (options ())
      (input "(+ 1\n")
      (expect
+       ;; The continuation prompt is a request for more input, emitted before the
+       ;; read that then returns EOF: reaching the incomplete branch always means
+       ;; a partial form is buffered, so the gutter is shown and the user then
+       ;; ends input (Ctrl-D).
        ((repl-prompt (ordinal 1) (state ready) (pending #f))
+        (repl-prompt (ordinal 1) (state continuation) (pending #t))
         (repl-submission (id sub-1) (ordinal 1) (source "(+ 1") (complete #f) (eof #t))
         (repl-condition (id cond-1) (submission sub-1) (phase read) (recoverable #f)
                         (condition (condition (type reader-error))))

@@ -342,15 +342,22 @@
                     (values 'eof #f buffer)
                     (acquire (string-append buffer chunk) ordinal))))
              (else                       ; incomplete
+              ;; A partial form is buffered, so the continuation gutter is a
+              ;; request for more input: emit (and flush) it *before* the
+              ;; blocking read that supplies the continued line.  On a live TTY
+              ;; the prompt must front the input the user is about to type;
+              ;; emitting it after the read glues the gutter to the next result
+              ;; line instead (#448).  Reaching this branch always means a
+              ;; partial form is buffered, so the prompt is always warranted --
+              ;; including before an EOF-mid-form, where the gutter was shown and
+              ;; the user then hit Ctrl-D.
+              (emit (repl--prompt-record session ordinal 'continuation #t))
               (let ((chunk (read-chunk)))
                 (if (eof-object? chunk)
                     (if (repl--blank? buffer)
                         (values 'eof #f buffer)
                         (values 'eof-incomplete buffer buffer))
-                    (begin
-                      (emit (repl--prompt-record session ordinal
-                                                 'continuation #t))
-                      (acquire (string-append buffer chunk) ordinal))))))))
+                    (acquire (string-append buffer chunk) ordinal)))))))
         (define (skip-to-boundary buffer)
           "Return BUFFER past the next newline so a malformed datum does not wedge the session."
           (let ((length (string-length buffer)))

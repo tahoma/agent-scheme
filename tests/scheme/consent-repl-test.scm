@@ -163,6 +163,43 @@
                                      'display)
          "3"))
 
+;;;; The continuation prompt is emitted before the read it requests
+
+;; A continuation gutter is a request for more input, so it must be emitted (and
+;; flushed) *before* the blocking read that supplies the continued line -- on a
+;; live TTY a prompt emitted after the read would land glued to the next result
+;; line instead of fronting the continued input.  The record-stream order alone
+;; cannot capture this: a fully-buffered string never blocks, so the emission
+;; order of records is identical either way.  Instrument the read/emit
+;; interleaving directly -- log each chunk read alongside the continuation prompt
+;; -- and assert exactly one chunk is read before the prompt is emitted.
+(let* ((chunks (list "(+ 1\n" "2)\n"))
+       (events '())
+       (note (lambda (event) (set! events (cons event events))))
+       (read-chunk
+        (lambda ()
+          (if (null? chunks)
+              (eof-object)
+              (let ((chunk (car chunks)))
+                (set! chunks (cdr chunks))
+                (note (list 'read chunk))
+                chunk)))))
+  (cli-repl-run
+   read-chunk
+   (lambda (record)
+     (when (and (eq? (kind record) 'repl-prompt)
+                (eq? (field record 'state) 'continuation))
+       (note 'continuation-prompt)))
+   (lambda (output) output)
+   "repl-main")
+  ;; The first chunk is read, then the gutter is emitted, then the continued
+  ;; line is read: the prompt fronts the second line rather than trailing it.
+  (check 'continuation-prompt-precedes-read
+         (reverse events)
+         (list (list 'read "(+ 1\n")
+               'continuation-prompt
+               (list 'read "2)\n"))))
+
 ;;;; EOF mid-form closes with the documented error status
 
 (let ((records (drive "(+ 1\n")))

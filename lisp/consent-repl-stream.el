@@ -351,15 +351,23 @@ EMIT-OUTPUT on separate streams, under SESSION and evaluator OPTIONS."
                       (list 'eof nil buffer)
                     (acquire (concat buffer chunk) ordinal))))
                (_                       ; incomplete
+                ;; A partial form is buffered, so the continuation gutter is a
+                ;; request for more input: emit (and flush) it *before* the
+                ;; blocking read that supplies the continued line.  On a live
+                ;; TTY the prompt must front the input the user is about to
+                ;; type; emitting it after the read glues the gutter to the next
+                ;; result line instead (#448).  Reaching this branch always
+                ;; means a partial form is buffered, so the prompt is always
+                ;; warranted -- including before an EOF-mid-form, where the
+                ;; gutter was shown and the user then hit Ctrl-D.
+                (emit (consent-repl-stream--prompt-record
+                       session ordinal "continuation" t))
                 (let ((chunk (next-chunk)))
                   (if (eof-chunk-p chunk)
                       (if (consent-repl-stream--blank-p buffer)
                           (list 'eof nil buffer)
                         (list 'eof-incomplete buffer buffer))
-                    (progn
-                      (emit (consent-repl-stream--prompt-record
-                             session ordinal "continuation" t))
-                      (acquire (concat buffer chunk) ordinal)))))))))
+                    (acquire (concat buffer chunk) ordinal))))))))
       (let ((buffer "") (ordinal 1) (count 0) (closed nil))
         (while (not closed)
           (emit (consent-repl-stream--prompt-record session ordinal "ready" nil))
