@@ -37,6 +37,23 @@ Emacs remains the first host adapter while R7RS-small remains the portable
 language contract for future Scheme implementations, compiled backends, and
 non-Emacs UI surfaces.
 
+## Installing
+
+Build the host-compiled `consent` binary and put it on `PATH`:
+
+```sh
+CONSENT_COMPILE_HOST=gambit make compile
+sudo CONSENT_COMPILE_HOST=gambit make install
+consent --version
+```
+
+The Gambit binary is a standalone native executable; the Racket binary
+(`make compile`'s default) runs only while Racket stays installed. `make install`
+honors the GNU `PREFIX`/`DESTDIR`/`bindir`/`mandir` variables, `make uninstall`
+reverses it, and `make dist` plus the tag-triggered release workflow publish a
+binary tarball. See [docs/development.md](docs/development.md#installing) for the
+full flow, the Racket caveat, and distribution details.
+
 ## Design Rules
 
 - Think in Lisp/Scheme first for internal APIs and examples.

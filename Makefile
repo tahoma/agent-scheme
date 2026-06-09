@@ -1,6 +1,25 @@
 EMACS ?= emacs
 CONSENT_COMPILE_HOST ?= racket
 CONSENT_COMPILE_BUILD_DIR ?= build/compile
+# GNU-standard installation variables (see the GNU Coding Standards). `make
+# install` stages the host-compiled binary selected by CONSENT_COMPILE_HOST under
+# $(DESTDIR)$(bindir); `make uninstall` removes exactly those paths. DESTDIR is
+# the staging-root prefix used by packagers and the verification flow.
+PREFIX ?= /usr/local
+DESTDIR ?=
+bindir ?= $(PREFIX)/bin
+mandir ?= $(PREFIX)/share/man
+INSTALL ?= install
+# The host-compiled binary `make install`/`make dist` operate on, the optional
+# generated man page (#458 owns its content; install/dist degrade gracefully
+# without it), and the versioned distribution output tree.
+CONSENT_VERSION_FILE ?= scheme/consent/version.sld
+CONSENT_VERSION := $(shell awk 'match($$0, /\(consent-version [0-9]+ [0-9]+ [0-9]+\)/) { text = substr($$0, RSTART + 1, RLENGTH - 2); split(text, parts, " "); print parts[2] "." parts[3] "." parts[4]; exit }' $(CONSENT_VERSION_FILE))
+CONSENT_COMPILE_BINARY = $(CONSENT_COMPILE_BUILD_DIR)/$(CONSENT_COMPILE_HOST)/bin/consent
+CONSENT_COMPILE_MANIFEST = $(CONSENT_COMPILE_BUILD_DIR)/$(CONSENT_COMPILE_HOST)/manifest.scm
+CONSENT_MANPAGE ?= docs/consent.1
+CONSENT_DIST_DIR ?= $(CONSENT_COMPILE_BUILD_DIR)/dist
+CONSENT_DIST_NAME = consent-$(CONSENT_VERSION)-$(CONSENT_COMPILE_HOST)
 CONSENT_LINT_BUILD_DIR ?= build/lint
 CONSENT_PORTABLE_LINT_BUILD_DIR ?= build/lint-portable
 CONSENT_GUILE ?= guile
@@ -51,7 +70,7 @@ CONSENT_FULL_TEST_JOBS ?= $(words $(CONSENT_FULL_TEST_SHARD_TARGETS))
 
 .DEFAULT_GOAL := help
 
-.PHONY: help clean clean-compile compile compile-elisp lint-elisp lint-portable repl test test-full test-portable test-portable-chibi test-portable-gambit test-portable-gambit-native test-portable-racket test-portable-compiled test-portable-guile test-portable-gauche test-emacs-hosted test-emacs-core test-emacs-library test-emacs-capabilities test-emacs-tools test-parity test-live-model-ci test-live-model conformance-oracle
+.PHONY: help print-version clean clean-compile compile install uninstall dist compile-elisp lint-elisp lint-portable repl test test-full test-portable test-portable-chibi test-portable-gambit test-portable-gambit-native test-portable-racket test-portable-compiled test-portable-guile test-portable-gauche test-emacs-hosted test-emacs-core test-emacs-library test-emacs-capabilities test-emacs-tools test-parity test-live-model-ci test-live-model conformance-oracle
 
 help:
 	@printf '%s\n' 'Consent Scheme top-level actions:'
@@ -59,6 +78,10 @@ help:
 	@printf '  %-26s %s\n' 'clean' 'Remove generated Elisp bytecode.'
 	@printf '  %-26s %s\n' 'clean-compile' 'Remove host-compiled portable executable outputs.'
 	@printf '  %-26s %s\n' 'compile' 'Build host-compiled portable executable artifacts.'
+	@printf '  %-26s %s\n' 'install' 'Install the host-compiled binary (run make compile first).'
+	@printf '  %-26s %s\n' 'uninstall' 'Remove an installed host-compiled binary and man page.'
+	@printf '  %-26s %s\n' 'dist' 'Build a versioned distribution tarball of the compiled binary.'
+	@printf '  %-26s %s\n' 'print-version' 'Print the canonical runtime version from version.sld.'
 	@printf '  %-26s %s\n' 'compile-elisp' 'Byte-compile checked-in Elisp sources.'
 	@printf '  %-26s %s\n' 'lint-elisp' 'Byte-compile Elisp sources with warnings-as-errors.'
 	@printf '  %-26s %s\n' 'lint-portable' 'Compile portable libraries under Guile with warnings-as-errors.'
@@ -86,6 +109,13 @@ help:
 	@printf '  %-50s %s\n' 'EMACS=emacs' 'Emacs command used by make test.'
 	@printf '  %-50s %s\n' 'CONSENT_COMPILE_HOST=racket|gambit' 'Host compiler path selected by make compile.'
 	@printf '  %-50s %s\n' 'CONSENT_COMPILE_BUILD_DIR=build/compile' 'Output tree used by make compile.'
+	@printf '  %-50s %s\n' 'PREFIX=/usr/local' 'Install prefix for make install/uninstall.'
+	@printf '  %-50s %s\n' 'DESTDIR=' 'Staging root prepended to install/uninstall paths.'
+	@printf '  %-50s %s\n' 'bindir=$$(PREFIX)/bin' 'Directory make install writes the consent binary to.'
+	@printf '  %-50s %s\n' 'mandir=$$(PREFIX)/share/man' 'Directory make install writes the man page to.'
+	@printf '  %-50s %s\n' 'INSTALL=install' 'install(1) command used by make install/dist.'
+	@printf '  %-50s %s\n' 'CONSENT_MANPAGE=docs/consent.1' 'Optional man page installed/packaged when present.'
+	@printf '  %-50s %s\n' 'CONSENT_DIST_DIR=build/compile/dist' 'Output tree used by make dist.'
 	@printf '  %-50s %s\n' 'CONSENT_TEST_TARGET_ROOT=DIR' 'Optional portable Scheme implementation root for the current harness.'
 	@printf '  %-50s %s\n' 'CONSENT_TEST_SOURCE_METADATA=on|off' 'Default source metadata mode injected by CI matrix shards.'
 	@printf '  %-50s %s\n' 'CONSENT_TEST_DOCSTRING_RETENTION=full|simple|none' 'Default docstring retention mode injected by CI matrix shards.'
@@ -126,6 +156,11 @@ help:
 	@printf '  %-50s %s\n' 'CONSENT_ORACLE_STATUSES=a,b' 'Optional comma-separated oracle report status filter.'
 	@printf '  %-50s %s\n' 'CONSENT_ORACLE_SUMMARY=1' 'Print an oracle status summary before report lines.'
 
+# Print the canonical runtime version (the dotted form derived from
+# version.sld). Used by the release workflow to cross-check the release tag.
+print-version:
+	@printf '%s\n' '$(CONSENT_VERSION)'
+
 clean:
 	find lisp -name '*.elc' -exec rm -f {} +
 
@@ -140,6 +175,71 @@ compile:
 	CONSENT_GAMBIT='$(CONSENT_GAMBIT)' \
 	CONSENT_GAMBIT_COMPILER='$(CONSENT_GAMBIT_COMPILER)' \
 	tools/compile-portable.sh
+
+# GNU-style install of the host-compiled binary selected by CONSENT_COMPILE_HOST.
+# Install deliberately does not run `compile`: it is commonly run under `sudo`,
+# where a build step would create root-owned artifacts in the source tree. The
+# documented flow is `make compile && sudo make install`. The recipe guards on
+# the prebuilt binary the same way test-portable-compiled does, stages it with
+# `install`, installs the generated man page only when one exists (#458), and
+# then runs the staged binary's --version to confirm it executes and matches
+# version.sld — catching a non-executable staging path or a Racket binary
+# installed where Racket is absent.
+install:
+	@if [ ! -x '$(CONSENT_COMPILE_BINARY)' ]; then \
+		printf '%s\n' 'consent install: no compiled binary at $(CONSENT_COMPILE_BINARY).' >&2; \
+		printf '%s\n' 'consent install: run `make compile` first (CONSENT_COMPILE_HOST=gambit for a standalone binary), then `sudo make install`.' >&2; \
+		exit 2; \
+	fi
+	$(INSTALL) -d '$(DESTDIR)$(bindir)'
+	$(INSTALL) -m 755 '$(CONSENT_COMPILE_BINARY)' '$(DESTDIR)$(bindir)/consent'
+	@if [ -f '$(CONSENT_MANPAGE)' ]; then \
+		$(INSTALL) -d '$(DESTDIR)$(mandir)/man1'; \
+		$(INSTALL) -m 644 '$(CONSENT_MANPAGE)' '$(DESTDIR)$(mandir)/man1/consent.1'; \
+		printf '%s\n' 'consent install: installed man page to $(DESTDIR)$(mandir)/man1/consent.1'; \
+	else \
+		printf '%s\n' 'consent install: no man page at $(CONSENT_MANPAGE); skipping (generated by #458).'; \
+	fi
+	@staged='$(DESTDIR)$(bindir)/consent'; \
+	version_output=$$("$$staged" --version 2>/dev/null) \
+		|| { printf '%s\n' "consent install: staged $$staged failed --version" >&2; exit 1; }; \
+	if [ "$$version_output" != 'Consent Scheme $(CONSENT_VERSION)' ]; then \
+		printf '%s\n' "consent install: staged --version returned '$$version_output', expected 'Consent Scheme $(CONSENT_VERSION)'" >&2; \
+		exit 1; \
+	fi; \
+	printf '%s\n' "consent install: installed $$staged ($$version_output)"
+
+# Remove exactly the paths `install` writes. Idempotent (`rm -f`); per GNU
+# convention it does not rmdir shared directories such as $(bindir).
+uninstall:
+	rm -f '$(DESTDIR)$(bindir)/consent'
+	rm -f '$(DESTDIR)$(mandir)/man1/consent.1'
+
+# Build a versioned distribution tarball of the host-compiled binary plus its
+# manifest, README, license, and the man page when present. Named from
+# version.sld and CONSENT_COMPILE_HOST under $(CONSENT_DIST_DIR). A standalone
+# CONSENT_COMPILE_HOST=gambit binary is the relocatable artifact; a Racket
+# tarball still requires Racket on the target (documented caveat).
+dist:
+	@if [ ! -x '$(CONSENT_COMPILE_BINARY)' ]; then \
+		printf '%s\n' 'consent dist: no compiled binary at $(CONSENT_COMPILE_BINARY).' >&2; \
+		printf '%s\n' 'consent dist: run `make compile` first.' >&2; \
+		exit 2; \
+	fi
+	@stage='$(CONSENT_DIST_DIR)/$(CONSENT_DIST_NAME)'; \
+	rm -rf "$$stage"; \
+	$(INSTALL) -d "$$stage/bin"; \
+	$(INSTALL) -m 755 '$(CONSENT_COMPILE_BINARY)' "$$stage/bin/consent"; \
+	$(INSTALL) -m 644 '$(CONSENT_COMPILE_MANIFEST)' "$$stage/manifest.scm"; \
+	$(INSTALL) -m 644 README.md "$$stage/README.md"; \
+	$(INSTALL) -m 644 LICENSE "$$stage/LICENSE"; \
+	if [ -f '$(CONSENT_MANPAGE)' ]; then \
+		$(INSTALL) -d "$$stage/share/man/man1"; \
+		$(INSTALL) -m 644 '$(CONSENT_MANPAGE)' "$$stage/share/man/man1/consent.1"; \
+	fi; \
+	tarball='$(CONSENT_DIST_DIR)/$(CONSENT_DIST_NAME).tar.gz'; \
+	tar -czf "$$tarball" -C '$(CONSENT_DIST_DIR)' '$(CONSENT_DIST_NAME)'; \
+	printf '%s\n' "consent dist: wrote $$tarball"
 
 compile-elisp:
 	$(EMACS) -Q --batch -L lisp --eval "(setq load-prefer-newer t)" -f batch-byte-compile $(CONSENT_ELISP_SOURCES)
