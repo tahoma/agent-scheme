@@ -81,6 +81,56 @@ write_manifest() {
 EOF
 }
 
+# Logical-relative-path / source-file (relative to scheme/) entries embedded into
+# the compiled binary as the zero-dependency bootstrap floor. The host/core
+# resolver in base.sld/library.sld consults these registered strings when no
+# on-disk copy is found, so a relocated binary runs its own interpreter without a
+# source tree. The relative paths match the resolver's logical keys and the
+# installed datadir layout.
+embedded_source_specs() {
+  cat <<'SPECS'
+consent/base-prelude.scm
+consent/base-syntax.scm
+standard-library/case-lambda.sld
+standard-library/lazy.sld
+agent/diff.sld
+agent/vcs.sld
+agent/network.sld
+agent/test.sld
+agent/transcript.sld
+consent/capability.sld
+SPECS
+}
+
+# Write a `(consent embedded-source)' library whose exported installer registers
+# each embedded source string with the runtime. The source text is emitted as a
+# Scheme string literal by escaping only backslash and double-quote (R7RS string
+# literals admit literal newlines), so the embedded text round-trips byte-for-byte
+# back through the reader. LANG_HEADER is `#lang r7rs' for Racket, empty for Gambit.
+write_embedded_source_module() {
+  out_file=$1
+  lang_header=$2
+
+  {
+    if [ -n "$lang_header" ]; then
+      printf '%s\n' "$lang_header"
+    fi
+    printf '%s\n' '(define-library (consent embedded-source)'
+    printf '%s\n' '  (export consent-install-embedded-source!)'
+    printf '%s\n' '  (import (scheme base) (consent runtime))'
+    printf '%s\n' '  (begin'
+    printf '%s\n' '    (define (consent-install-embedded-source!)'
+    embedded_source_specs | while IFS= read -r relative
+    do
+      [ -n "$relative" ] || continue
+      printf '      (consent-register-embedded-source! "%s" "' "$relative"
+      sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' "$scheme_dir/$relative"
+      printf '")\n'
+    done
+    printf '%s\n' '      #t)))'
+  } > "$out_file"
+}
+
 write_racket_main() {
   main_file=$1
 
@@ -126,6 +176,7 @@ write_racket_main() {
         (prefix (cli repl-chrome) consent-main:cli-repl-chrome:)
         (prefix (cli repl-shell) consent-main:cli-repl-shell:)
         (prefix (cli script) consent-main:cli-script:)
+        (prefix (consent embedded-source) consent-main:embedded:)
         (only (consent eval)
               consent-eval-source
               consent-value->external)
@@ -220,6 +271,11 @@ write_racket_main() {
     ;; avoiding the kernel single-argument rule that breaks a flagged shebang.
     (consent-main-script (car args)))))
 
+;; Register the embedded bootstrap source (prelude, syntax prelude, and runtime
+;; source-libraries) so the interpreter boots from this standalone binary even
+;; when relocated outside a source tree.
+(consent-main:embedded:consent-install-embedded-source!)
+
 (let ((arguments (command-line)))
   (consent-main
    (if (null? arguments) '() (cdr arguments))))
@@ -272,6 +328,7 @@ write_gambit_main() {
         (prefix (cli repl-chrome) consent-main:cli-repl-chrome:)
         (prefix (cli repl-shell) consent-main:cli-repl-shell:)
         (prefix (cli script) consent-main:cli-script:)
+        (prefix (consent embedded-source) consent-main:embedded:)
         (only (consent eval)
               consent-eval-source
               consent-value->external)
@@ -365,6 +422,11 @@ write_gambit_main() {
     ;; This lets a #!/usr/bin/env consent shebang run a file with no flag,
     ;; avoiding the kernel single-argument rule that breaks a flagged shebang.
     (consent-main-script (car args)))))
+
+;; Register the embedded bootstrap source (prelude, syntax prelude, and runtime
+;; source-libraries) so the interpreter boots from this standalone binary even
+;; when relocated outside a source tree.
+(consent-main:embedded:consent-install-embedded-source!)
 
 (let ((arguments (command-line)))
   (consent-main
@@ -484,6 +546,8 @@ compile_racket() {
 
   mkdir -p "$src_dir" "$collections_dir" "$bin_dir" "$logs_dir"
   generate_racket_collections "$collections_dir"
+  mkdir -p "$collections_dir/consent"
+  write_embedded_source_module "$collections_dir/consent/embedded-source.rkt" '#lang r7rs'
   write_racket_main "$main_file"
   write_manifest "$host_root" racket "$version"
 
@@ -614,6 +678,7 @@ compile_gambit() {
 
   write_gambit_main "$main_file" "$src_dir"
   write_manifest "$host_root" gambit "$version"
+  write_embedded_source_module "$src_dir/consent/embedded-source.sld" ''
   : >"$logs_dir/gsc-modules.log"
 
   compile_started=$(date +%s)
@@ -728,8 +793,12 @@ compile_gambit() {
     cli/script \
     "$scheme_dir/cli/script.sld" \
     "$src_dir/cli/script.c"
+  compile_gambit_module \
+    consent/embedded-source \
+    "$src_dir/consent/embedded-source.sld" \
+    "$src_dir/consent/embedded-source.c"
 
-  "$gsc" -:r7rs,search="$scheme_dir" \
+  "$gsc" -:r7rs,search="$scheme_dir",search="$src_dir" \
     -c -o "$main_c" "$main_file" \
     >>"$logs_dir/gsc-modules.log" 2>&1 \
     || die "gsc failed while compiling the Gambit main program; see $logs_dir/gsc-modules.log"
