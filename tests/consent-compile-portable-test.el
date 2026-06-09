@@ -299,6 +299,188 @@ assertion covers stream separation as well as the command."
         (when (file-directory-p build-dir)
           (delete-directory build-dir t))))))
 
+(defun consent-compile-portable-test--exercise-distribution (host build-dir)
+  "Exercise `make install', `uninstall', and `dist' for HOST.
+BUILD-DIR holds a freshly built executable under HOST.  Stages an install into
+a throwaway DESTDIR without writing to the real system, round-trips the man-page
+and binary install, uninstalls, and packages a versioned tarball."
+  (let* ((version-string (consent-compile-portable-test--version-string))
+         (dest-dir (make-temp-file "consent-install-dest-" t))
+         (man-file (make-temp-file "consent-man-" nil ".1"))
+         (staged-bin (expand-file-name "usr/local/bin/consent" dest-dir))
+         (staged-man
+          (expand-file-name "usr/local/share/man/man1/consent.1" dest-dir)))
+    (unwind-protect
+        (progn
+          (with-temp-file man-file (insert ".TH CONSENT 1\n"))
+          ;; Install with no man page: succeeds, prints the skip notice, stages
+          ;; an executable binary whose --version matches version.sld.
+          (let ((result
+                 (consent-compile-portable-test--run-make
+                  "-s"
+                  (format "CONSENT_COMPILE_BUILD_DIR=%s" build-dir)
+                  (format "CONSENT_COMPILE_HOST=%s" host)
+                  (format "DESTDIR=%s" dest-dir)
+                  "CONSENT_MANPAGE=/no/such/consent.1"
+                  "install")))
+            (should (equal (consent-compile-portable-test--status result) 0))
+            (should
+             (string-match-p
+              "no man page"
+              (consent-compile-portable-test--output result)))
+            (should (file-executable-p staged-bin))
+            (should-not (file-exists-p staged-man))
+            (should
+             (equal
+              (consent-compile-portable-test--run-executable
+               staged-bin "--version")
+              (list :status 0
+                    :output (format "Consent Scheme %s\n" version-string)))))
+          ;; Install with a man page present: stages the page alongside.
+          (let ((result
+                 (consent-compile-portable-test--run-make
+                  "-s"
+                  (format "CONSENT_COMPILE_BUILD_DIR=%s" build-dir)
+                  (format "CONSENT_COMPILE_HOST=%s" host)
+                  (format "DESTDIR=%s" dest-dir)
+                  (format "CONSENT_MANPAGE=%s" man-file)
+                  "install")))
+            (should (equal (consent-compile-portable-test--status result) 0))
+            (should (file-exists-p staged-man)))
+          ;; Uninstall removes exactly the staged paths and is idempotent.
+          (let ((result
+                 (consent-compile-portable-test--run-make
+                  "-s"
+                  (format "CONSENT_COMPILE_HOST=%s" host)
+                  (format "DESTDIR=%s" dest-dir)
+                  "uninstall")))
+            (should (equal (consent-compile-portable-test--status result) 0))
+            (should-not (file-exists-p staged-bin))
+            (should-not (file-exists-p staged-man)))
+          ;; Package a versioned tarball carrying the expected members.
+          (let* ((dist-dir (make-temp-file "consent-dist-" t))
+                 (result
+                  (consent-compile-portable-test--run-make
+                   "-s"
+                   (format "CONSENT_COMPILE_BUILD_DIR=%s" build-dir)
+                   (format "CONSENT_COMPILE_HOST=%s" host)
+                   (format "CONSENT_DIST_DIR=%s" dist-dir)
+                   "dist"))
+                 (stem (format "consent-%s-%s" version-string host))
+                 (tarball
+                  (expand-file-name (format "%s.tar.gz" stem) dist-dir)))
+            (unwind-protect
+                (progn
+                  (should
+                   (equal (consent-compile-portable-test--status result) 0))
+                  (should (file-exists-p tarball))
+                  (let ((listing
+                         (consent-compile-portable-test--run-executable
+                          "tar" "-tzf" tarball)))
+                    (should
+                     (equal
+                      (consent-compile-portable-test--status listing) 0))
+                    (dolist (member
+                             (list (format "%s/bin/consent" stem)
+                                   (format "%s/manifest.scm" stem)
+                                   (format "%s/README.md" stem)
+                                   (format "%s/LICENSE" stem)))
+                      (should
+                       (string-match-p
+                        (regexp-quote member)
+                        (consent-compile-portable-test--output listing))))))
+              (when (file-directory-p dist-dir)
+                (delete-directory dist-dir t)))))
+      (ignore-errors (delete-file man-file))
+      (when (file-directory-p dest-dir)
+        (delete-directory dest-dir t)))))
+
+(ert-deftest consent-compile-portable-test-install-without-binary-fails ()
+  "Fail `make install' with setup guidance when no binary has been built."
+  (let* ((build-dir
+          (make-temp-file "consent-install-missing-" t))
+         (dest-dir
+          (make-temp-file "consent-install-missing-dest-" t))
+         (result
+          (consent-compile-portable-test--run-make
+           "-s"
+           (format "CONSENT_COMPILE_BUILD_DIR=%s" build-dir)
+           (format "DESTDIR=%s" dest-dir)
+           "install")))
+    (unwind-protect
+        (progn
+          (should (equal (consent-compile-portable-test--status result) 2))
+          (should
+           (string-match-p
+            "no compiled binary"
+            (consent-compile-portable-test--output result)))
+          (should
+           (string-match-p
+            "make compile"
+            (consent-compile-portable-test--output result))))
+      (when (file-directory-p build-dir)
+        (delete-directory build-dir t))
+      (when (file-directory-p dest-dir)
+        (delete-directory dest-dir t)))))
+
+(ert-deftest consent-compile-portable-test-racket-install-and-dist ()
+  "Install, uninstall, and package a Racket-hosted binary."
+  (let ((racket
+         (consent-compile-portable-test--command
+          "CONSENT_RACKET" "racket"))
+        (raco
+         (consent-compile-portable-test--command
+          "CONSENT_RACO" "raco")))
+    (unless (and racket raco)
+      (ert-skip "Racket and raco are not available"))
+    (let* ((build-dir
+            (make-temp-file "consent-install-racket-" t))
+           (result
+            (consent-compile-portable-test--run-make
+             "-s"
+             (format "CONSENT_COMPILE_BUILD_DIR=%s" build-dir)
+             "CONSENT_COMPILE_HOST=racket"
+             (format "CONSENT_RACKET=%s" racket)
+             (format "CONSENT_RACO=%s" raco)
+             "compile")))
+      (unwind-protect
+          (progn
+            (should
+             (equal (consent-compile-portable-test--status result) 0))
+            (consent-compile-portable-test--exercise-distribution
+             "racket" build-dir))
+        (when (file-directory-p build-dir)
+          (delete-directory build-dir t))))))
+
+(ert-deftest consent-compile-portable-test-gambit-install-and-dist ()
+  "Install, uninstall, and package a Gambit-hosted binary."
+  (let ((gsi
+         (consent-compile-portable-test--command
+          "CONSENT_GAMBIT" "gsi"))
+        (gsc
+         (consent-compile-portable-test--command
+          "CONSENT_GAMBIT_COMPILER" "gsc")))
+    (unless (and gsi gsc)
+      (ert-skip "Gambit gsi and gsc are not available"))
+    (let* ((build-dir
+            (make-temp-file "consent-install-gambit-" t))
+           (result
+            (consent-compile-portable-test--run-make
+             "-s"
+             (format "CONSENT_COMPILE_BUILD_DIR=%s" build-dir)
+             "CONSENT_COMPILE_HOST=gambit"
+             (format "CONSENT_GAMBIT=%s" gsi)
+             (format "CONSENT_GAMBIT_COMPILER=%s" gsc)
+             "compile")))
+      (unwind-protect
+          (progn
+            (should
+             (equal (consent-compile-portable-test--status result) 0))
+            (consent-compile-portable-test--exercise-distribution
+             "gambit" build-dir))
+        (when (file-directory-p build-dir)
+          (delete-directory build-dir t))))))
+
 (provide 'consent-compile-portable-test)
 
 ;;; consent-compile-portable-test.el ends here
