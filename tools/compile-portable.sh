@@ -100,35 +100,52 @@ write_manifest() {
 EOF
 }
 
-# Logical-relative-path / source-file (relative to scheme/) entries embedded into
-# the compiled binary as the zero-dependency bootstrap floor. The host/core
-# resolver in base.sld/library.sld consults these registered strings when no
-# on-disk copy is found, so a relocated binary runs its own interpreter without a
-# source tree. The relative paths match the resolver's logical keys and the
-# installed datadir layout.
-embedded_source_specs() {
-  cat <<'SPECS'
-consent/base-prelude.scm
-consent/base-syntax.scm
-standard-library/case-lambda.sld
-standard-library/lazy.sld
-agent/diff.sld
-agent/vcs.sld
-agent/network.sld
-agent/test.sld
-agent/transcript.sld
-consent/capability.sld
-SPECS
+# Enumerate the runtime-provided source files (canonical relative paths) by asking
+# the runtime itself, via the compile host's interpreter, so the embed and install
+# manifest is single-sourced from the interpreter's library declarations
+# (base.sld prelude/syntax paths + library.sld source-library tables) rather than
+# hand-maintained. gsi reads the source tree directly; racket reads the generated
+# collections, so the Racket call must run after generate_racket_collections.
+enumerate_runtime_source_files() {
+  enum_prog='(import (scheme base) (scheme write) (consent library)) (for-each (lambda (p) (display p) (newline)) (consent-runtime-source-files))'
+  case "$compile_host" in
+    gambit)
+      "$gsi" -:r7rs,search="$scheme_dir" -e "$enum_prog" \
+        || die "could not enumerate runtime source files via gsi"
+      ;;
+    racket)
+      enum_file="$build_dir/consent-runtime-source-files.rkt"
+      { printf '%s\n' '#lang r7rs'; printf '%s\n' "$enum_prog"; } > "$enum_file"
+      PLTCOLLECTS="$collections_dir:${PLTCOLLECTS:-}" "$racket" "$enum_file" \
+        || { rm -f "$enum_file"; die "could not enumerate runtime source files via racket"; }
+      rm -f "$enum_file"
+      ;;
+    *)
+      die "cannot enumerate runtime source files for host $compile_host"
+      ;;
+  esac
+}
+
+# Write the runtime-source manifest (one canonical relative path per line) into
+# the host build root, so `make install'/`make dist' consume the same enumeration
+# as the embedded floor rather than a hand-maintained list.
+write_runtime_source_manifest() {
+  manifest_root=$1
+  source_list=$2
+  printf '%s\n' "$source_list" > "$manifest_root/runtime-source-manifest"
 }
 
 # Write a `(consent embedded-source)' library whose exported installer registers
-# each embedded source string with the runtime. The source text is emitted as a
-# Scheme string literal by escaping only backslash and double-quote (R7RS string
-# literals admit literal newlines), so the embedded text round-trips byte-for-byte
-# back through the reader. LANG_HEADER is `#lang r7rs' for Racket, empty for Gambit.
+# each embedded source string with the runtime. SOURCE_LIST is the newline-
+# separated set of canonical relative paths from enumerate_runtime_source_files
+# (the zero-dependency bootstrap floor). The source text is emitted as a Scheme
+# string literal by escaping only backslash and double-quote (R7RS string literals
+# admit literal newlines), so the embedded text round-trips byte-for-byte back
+# through the reader. LANG_HEADER is `#lang r7rs' for Racket, empty for Gambit.
 write_embedded_source_module() {
   out_file=$1
   lang_header=$2
+  source_list=$3
 
   {
     if [ -n "$lang_header" ]; then
@@ -140,7 +157,7 @@ write_embedded_source_module() {
     printf '%s\n' '  (begin'
     printf '    (define consent-embedded-datadir "%s")\n' "$install_datadir"
     printf '%s\n' '    (define (consent-install-embedded-source!)'
-    embedded_source_specs | while IFS= read -r relative
+    printf '%s\n' "$source_list" | while IFS= read -r relative
     do
       [ -n "$relative" ] || continue
       printf '      (consent-register-embedded-source! "%s" "' "$relative"
@@ -767,8 +784,10 @@ compile_racket() {
 
   mkdir -p "$src_dir" "$collections_dir" "$bin_dir" "$logs_dir"
   generate_racket_collections "$collections_dir"
+  runtime_source_list=$(enumerate_runtime_source_files)
   mkdir -p "$collections_dir/consent"
-  write_embedded_source_module "$collections_dir/consent/embedded-source.rkt" '#lang r7rs'
+  write_embedded_source_module "$collections_dir/consent/embedded-source.rkt" '#lang r7rs' "$runtime_source_list"
+  write_runtime_source_manifest "$host_root" "$runtime_source_list"
   write_racket_main "$main_file"
   assert_product_main_gated "$main_file"
   write_manifest "$host_root" racket "$version"
@@ -919,7 +938,9 @@ compile_gambit() {
   write_gambit_main "$main_file" "$src_dir"
   assert_product_main_gated "$main_file"
   write_manifest "$host_root" gambit "$version"
-  write_embedded_source_module "$src_dir/consent/embedded-source.sld" ''
+  runtime_source_list=$(enumerate_runtime_source_files)
+  write_runtime_source_manifest "$host_root" "$runtime_source_list"
+  write_embedded_source_module "$src_dir/consent/embedded-source.sld" '' "$runtime_source_list"
   : >"$logs_dir/gsc-modules.log"
 
   compile_started=$(date +%s)

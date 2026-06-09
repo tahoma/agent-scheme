@@ -7,6 +7,7 @@
 
 (define-library (consent library)
   (export consent-standard-source-library-specs
+          consent-runtime-source-files
           consent-install-library-backend!
           import-form?
           define-library-form?
@@ -235,6 +236,20 @@
       (if (null? (cdr paths))
           (car paths)
           (source-library-relative-path (cdr paths))))
+
+    (define (consent-runtime-source-files)
+      "Return the canonical relative paths of every runtime-provided source file the interpreter loads as data: the base prelude and syntax prelude, then the standard, agent, and consent source-libraries.
+This is the single source of truth the host-compiled staging extracts its embed
+and install manifest from, so the build never hand-maintains a parallel list."
+      (append
+       (list (source-library-relative-path consent-base-prelude-load-paths)
+             (source-library-relative-path consent-base-syntax-load-paths))
+       (map (lambda (entry) (source-library-relative-path (cdr entry)))
+            standard-source-library-load-paths)
+       (map (lambda (entry) (source-library-relative-path (cdr entry)))
+            agent-source-library-load-paths)
+       (map (lambda (entry) (source-library-relative-path (cdr entry)))
+            consent-source-library-load-paths)))
 
     (define (load-standard-source-library-source key)
       "Read KEY's source through the host/core resolution contract (search dirs, source tree, embedded)."

@@ -27,20 +27,13 @@ INSTALL ?= install
 # datadir resolves it ahead of the embedded copy. Version-scoped so multiple
 # installed runtimes do not collide.
 consentlibdir = $(datadir)/consent/$(CONSENT_VERSION)
-# Runtime library files, named by their resolver-logical / datadir-relative path
-# (each lives at scheme/<path> in the source tree). Keep in sync with the
-# embedded set in tools/compile-portable.sh and the resolver in base.sld/library.sld.
-CONSENT_RUNTIME_LIBRARY_FILES ?= \
-	consent/base-prelude.scm \
-	consent/base-syntax.scm \
-	consent/capability.sld \
-	standard-library/case-lambda.sld \
-	standard-library/lazy.sld \
-	agent/diff.sld \
-	agent/vcs.sld \
-	agent/network.sld \
-	agent/test.sld \
-	agent/transcript.sld
+# Runtime library files (resolver-logical / datadir-relative paths; each lives at
+# scheme/<path> in the source tree). Single-sourced from the runtime's own library
+# declarations: `make compile' enumerates `consent-runtime-source-files' and writes
+# the per-host manifest, which install/dist read here. Empty before a compile has
+# run (install guards on the prebuilt binary first), so install/dist work only
+# after `make compile' for the matching CONSENT_COMPILE_HOST.
+CONSENT_RUNTIME_LIBRARY_FILES := $(shell cat '$(CONSENT_COMPILE_BUILD_DIR)/$(CONSENT_COMPILE_HOST)/runtime-source-manifest' 2>/dev/null)
 # The host-compiled binary `make install`/`make dist` operate on, the optional
 # generated man page (#458 owns its content; install/dist degrade gracefully
 # without it), and the versioned distribution output tree.

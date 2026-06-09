@@ -27,24 +27,27 @@ own LLIR/native backend (the Milestone M5 compiler chunks; the roadmap's
 `#115`–`#121`). Recognizing this reframes the host-compiled path (Chunk 0.15) as
 the staging layer those chunks plug into, not a parallel mechanism.
 
-**The seam to make principled.** A real front-end computes the module/dependency
-closure from the program; it does not hand-maintain it. Today the same graph is
-transcribed in several places that must agree:
-
-- the Gambit `compile_gambit_module …` sequence in `tools/compile-portable.sh`,
-- both generated mains' prefix-import lists,
-- `embedded_source_specs()` and the `Makefile`'s `CONSENT_RUNTIME_LIBRARY_FILES`.
-
-Tellingly, the Racket path already *derives* its set (`generate_racket_collections`
-globs every `.sld`) while the Gambit path hand-enumerates — the inconsistency a
-staging script shows before it recognizes itself as a front-end. The runtime
-already declares this set as data: `base.sld` owns
+**The seam, made principled (in part).** A real front-end computes the
+module/dependency closure from the program; it does not hand-maintain it. The
+runtime already declares its runtime-loaded source set as data — `base.sld` owns
 `consent-base-prelude-load-paths` / `consent-base-syntax-load-paths`, and
-`library.sld` owns the `standard/agent/consent-source-library-load-paths` tables
-and exports `consent-standard-source-library-specs`. The clean direction is a
-single source of truth — the runtime's own declarations — that the build
-*extracts* the staging manifest from, with the backend behind an interface rather
-than two parallel hardcoded code paths.
+`library.sld` owns the `standard/agent/consent-source-library-load-paths` tables —
+and now exposes it through one accessor, `consent-runtime-source-files`. The
+embed/install manifest is **derived** from that accessor: `make compile`
+enumerates it through the compile host's interpreter, writes a per-host
+`runtime-source-manifest`, and both the embedded `(consent embedded-source)`
+module and the `Makefile`'s install/dist rules read from it. The runtime is the
+single source of truth; the hand-synced `embedded_source_specs()` /
+`CONSENT_RUNTIME_LIBRARY_FILES` copies are gone.
+
+Two manifests of the same graph remain hand-maintained, and are the next steps to
+fold into the same derivation: the Gambit `compile_gambit_module …` sequence and
+the generated mains' prefix-import lists. (Tellingly, the Racket path already
+*derives* its module set — `generate_racket_collections` globs every `.sld` —
+while the Gambit path still hand-enumerates: the inconsistency a staging script
+shows before it fully recognizes itself as a front-end.) The remaining clean
+direction is to compute those from the same closure, with the code-generation
+backend behind an interface rather than two parallel hardcoded code paths.
 
 ## 2. The embedded source store is a capability-addressable VFS underlay
 
@@ -108,9 +111,10 @@ What exists today: the embedded store backs bootstrap library resolution; gated
 file capabilities resolve against the host filesystem. The reframes above are
 design directions whose seeds and seams are already present and named here —
 the embedded store, the `authorize-file-capability` chokepoint, the
-`context-file-paths` grant table, the runtime's library-declaration tables. The
-near-term, self-contained cleanup is §1's manifest single-sourcing (extract the
-staging manifest from the runtime's declarations); the larger surfaces
-(VFS-backed file capabilities, staged native sandboxes, a pluggable code-gen
-backend) are future work that should build on these seams rather than reinvent
-them.
+`context-file-paths` grant table, the runtime's library-declaration tables. §1's
+manifest single-sourcing is **done** — the embed/install manifest is derived from
+`consent-runtime-source-files`. The remaining work — folding the Gambit module
+list and the generated mains' imports into the same closure, a pluggable code-gen
+backend, and the larger §2 surfaces (VFS-backed file capabilities, staged native
+sandboxes; tracked as a separate issue) — should build on these seams rather than
+reinvent them.

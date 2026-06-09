@@ -11,6 +11,8 @@
           base-primitive-registry
           base-prelude-forms
           base-syntax-forms
+          consent-base-prelude-load-paths
+          consent-base-syntax-load-paths
           read-port-string
           read-all-datums
           resolve-source-text
