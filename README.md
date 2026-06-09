@@ -48,11 +48,15 @@ consent --version
 ```
 
 The Gambit binary is a standalone native executable; the Racket binary
-(`make compile`'s default) runs only while Racket stays installed. `make install`
-honors the GNU `PREFIX`/`DESTDIR`/`bindir`/`mandir` variables, `make uninstall`
-reverses it, and `make dist` plus the tag-triggered release workflow publish a
-binary tarball. See [docs/development.md](docs/development.md#installing) for the
-full flow, the Racket caveat, and distribution details.
+(`make compile`'s default) runs only while Racket stays installed. `consent
+--script FILE` (and a `#!/usr/bin/env consent` shebang) runs the file through the
+capability-gated Consent interpreter, not the host Scheme. `make install` honors
+the GNU `PREFIX`/`DESTDIR`/`bindir`/`mandir`/`datadir` variables and also installs
+the runtime library tree (the binary embeds a copy so it runs standalone);
+`make uninstall` reverses it, and `make dist` plus the tag-triggered release
+workflow publish a binary tarball. See
+[docs/development.md](docs/development.md#installing) for the full flow, the
+Racket caveat, the library search path, and distribution details.
 
 ## Design Rules
 
