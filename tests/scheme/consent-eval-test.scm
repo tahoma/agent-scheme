@@ -3512,6 +3512,36 @@
              (interaction-environment)"))))
        #t)
 
+;; Self-hosting: the runtime's own internal libraries ((consent ...)/(cli ...))
+;; are denied to imported programs by default (fail-closed), and become
+;; available only under an explicit internal-libraries-allowed grant -- the
+;; capability that lets the compiled runtime act as a full Scheme host runner.
+(check 'internal-library-import-denied-by-default
+       (raises?
+        (lambda ()
+          (consent-eval-source
+           "(import (consent reader)) 'ok")))
+       #t)
+
+;; Under the grant the runtime loads and interprets its own reader from source
+;; and the imported reader actually parses input -- metacircular self-hosting.
+(check-external/options 'internal-library-self-hosts-reader
+                        "(import (consent reader))
+                         (length (consent-read-all \"(a b c)\"))"
+                        '((internal-libraries-allowed . #t))
+                        "1")
+
+;; The grant only exposes libraries that actually exist as runtime source; it
+;; does not turn every (consent ...) name into a phantom library.
+(check 'internal-library-grant-unknown-still-denied
+       (raises?
+        (lambda ()
+          (consent-eval-source
+           "(import (consent no-such-internal-library)) 'ok"
+           #f
+           '((internal-libraries-allowed . #t)))))
+       #t)
+
 (check-external 'standard-r5rs-import
                 "(import (scheme r5rs))
                  (list (+ 1 2)
