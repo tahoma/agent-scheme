@@ -20,6 +20,13 @@ permissions:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  # Build the non-shipped host-execution test runner (a full second host-compiler
+  # link) only on the scheduled / workflow_dispatch lane, where the compiled and
+  # gambit-native shards run the full white-box suite on the compiled artifact.
+  # The per-push lane skips it: the product binary is still compiled and
+  # smoke-verified (including the gated --script / deny discriminators), and the
+  # white-box suite runs on the interpreted hosts.
+  CONSENT_BUILD_TEST_RUNNER: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '1' || '' }}
 
 jobs:
   license-reuse:
