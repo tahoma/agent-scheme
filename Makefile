@@ -1,5 +1,10 @@
 EMACS ?= emacs
-CONSENT_COMPILE_HOST ?= racket
+# Gambit is the default compile host: `gsc -exe -nopreload' produces a standalone
+# native executable with no runtime dependency, so the default `make compile'
+# artifact is the one suitable for `make install'. Racket remains available with
+# CONSENT_COMPILE_HOST=racket (relocatable as a file, but it loads boot files from
+# the installed Racket, so it only runs where Racket is present).
+CONSENT_COMPILE_HOST ?= gambit
 CONSENT_COMPILE_BUILD_DIR ?= build/compile
 # Build the non-shipped host-execution test runner used by the compiled and
 # gambit-native white-box shards (a full second host-compiler link -- the single
@@ -131,7 +136,7 @@ help:
 	@printf '  %-26s %s\n' 'conformance-oracle' 'Compare pure shared fixtures with reference R7RS implementations.'
 	@printf '\n%s\n' 'Variables:'
 	@printf '  %-50s %s\n' 'EMACS=emacs' 'Emacs command used by make test.'
-	@printf '  %-50s %s\n' 'CONSENT_COMPILE_HOST=racket|gambit' 'Host compiler path selected by make compile.'
+	@printf '  %-50s %s\n' 'CONSENT_COMPILE_HOST=gambit|racket' 'Host compiler selected by make compile (default gambit: standalone binary).'
 	@printf '  %-50s %s\n' 'CONSENT_COMPILE_BUILD_DIR=build/compile' 'Output tree used by make compile.'
 	@printf '  %-50s %s\n' 'CONSENT_BUILD_TEST_RUNNER=1' 'Build the non-shipped host-execution test runner (compiled shards default on; empty to skip).'
 	@printf '  %-50s %s\n' 'PREFIX=/usr/local' 'Install prefix for make install/uninstall.'

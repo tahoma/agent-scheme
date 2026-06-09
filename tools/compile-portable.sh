@@ -7,7 +7,7 @@ set -eu
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 repo_root=$(CDPATH= cd -- "$script_dir/.." && pwd)
 
-compile_host=${CONSENT_COMPILE_HOST:-racket}
+compile_host=${CONSENT_COMPILE_HOST:-gambit}
 build_dir=${CONSENT_COMPILE_BUILD_DIR:-"$repo_root/build/compile"}
 case "$build_dir" in
   /*) ;;
