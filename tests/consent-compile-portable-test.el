@@ -97,6 +97,40 @@ assertion covers stream separation as well as the command."
   "Return RESULT's captured process output."
   (plist-get result :output))
 
+(defun consent-compile-portable-test--assert-gated-script (runner)
+  "Assert RUNNER's --script runs through the Consent interpreter, not host load.
+Program output is allowed under the script posture, but an ungranted,
+confirm-gated file write is denied and leaves no file -- the discriminator that
+would fail if --script regressed to host execution."
+  (let ((ok-script (make-temp-file "consent-script-ok-" nil ".scm"))
+        (deny-script (make-temp-file "consent-script-deny-" nil ".scm"))
+        (deny-marker (make-temp-file "consent-script-marker-" nil ".txt")))
+    (delete-file deny-marker)
+    (unwind-protect
+        (progn
+          (with-temp-file ok-script
+            (insert "(import (scheme base) (scheme write))\n"
+                    "(display \"consent-script-ok\")\n"
+                    "(newline)\n"))
+          (should
+           (equal
+            (consent-compile-portable-test--run-executable
+             runner "--script" ok-script)
+            '(:status 0 :output "consent-script-ok\n")))
+          (with-temp-file deny-script
+            (insert "(import (scheme base) (scheme file))\n"
+                    (format "(call-with-output-file %S\n" deny-marker)
+                    "  (lambda (port) (write-char #\\x port)))\n"))
+          (let ((deny-result
+                 (consent-compile-portable-test--run-executable
+                  runner "--script" deny-script)))
+            (should-not
+             (equal (consent-compile-portable-test--status deny-result) 0))
+            (should-not (file-exists-p deny-marker))))
+      (ignore-errors (delete-file ok-script))
+      (ignore-errors (delete-file deny-script))
+      (ignore-errors (delete-file deny-marker)))))
+
 (ert-deftest consent-compile-portable-test-rejects-unknown-host ()
   "Reject unknown compile hosts with an actionable setup message."
   (let* ((build-dir
@@ -168,11 +202,7 @@ assertion covers stream separation as well as the command."
               (consent-compile-portable-test--run-executable
                runner "--eval" "(+ 1 2)")
               '(:status 0 :output "3\n")))
-            (should
-             (equal
-              (consent-compile-portable-test--run-executable
-               runner "--script" "tests/scheme/consent-reader-test.scm")
-              '(:status 0 :output "Scheme reader tests passed\n")))
+            (consent-compile-portable-test--assert-gated-script runner)
             (should
              (equal
               (consent-compile-portable-test--run-repl
@@ -283,11 +313,7 @@ assertion covers stream separation as well as the command."
               (consent-compile-portable-test--run-executable
                runner "--eval" "(+ 1 2)")
               '(:status 0 :output "3\n")))
-            (should
-             (equal
-              (consent-compile-portable-test--run-executable
-               runner "--script" "tests/scheme/consent-reader-test.scm")
-              '(:status 0 :output "Scheme reader tests passed\n")))
+            (consent-compile-portable-test--assert-gated-script runner)
             (should
              (equal
               (consent-compile-portable-test--run-repl
