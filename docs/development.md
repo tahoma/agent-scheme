@@ -390,11 +390,29 @@ make install bindir=$HOME/.local/bin                 # user-local, no sudo
 ```
 
 `DESTDIR` is prepended to every install path (the packaging/staging convention);
-`PREFIX` (default `/usr/local`), `bindir` (default `$(PREFIX)/bin`), and `mandir`
-(default `$(PREFIX)/share/man`) select the final locations. After staging the
-binary, `install` runs the *staged* `consent --version` and fails unless it
-matches `version.sld`, catching a non-executable staging path or a Racket binary
-installed where Racket is absent.
+`PREFIX` (default `/usr/local`), `bindir` (default `$(PREFIX)/bin`), `mandir`
+(default `$(PREFIX)/share/man`), and `datadir` (default `$(PREFIX)/share`) select
+the final locations. After staging the binary, `install` runs the *staged*
+`consent --version` and fails unless it matches `version.sld`, catching a
+non-executable staging path or a Racket binary installed where Racket is absent.
+
+`install` also lays the runtime-provided Consent Scheme library tree (the base
+prelude, syntax prelude, and source-libraries) under the versioned
+`$(datadir)/consent/$(version)`. The binary carries an **embedded** copy of these
+as a zero-dependency floor, so it runs standalone even when relocated; the
+installed tree lets you inspect or override them. At startup the binary resolves
+runtime libraries in order: `CONSENT_LIBRARY_PATH` (colon-separated, an explicit
+override), then the install datadir baked in at compile time, then the source
+tree (in a checkout), then the embedded floor. So an installed or overridden tree
+wins over the embedded copy; a bare copied binary still works via the floor.
+(Keep `PREFIX` consistent between `make compile` and `make install` so the baked
+datadir matches the install location, or point `CONSENT_LIBRARY_PATH` at the
+installed tree.)
+
+`consent --script FILE` (and a `#!/usr/bin/env consent` shebang) runs the file
+through the Consent interpreter under the non-interactive fail-closed posture —
+**not** the host Scheme — at parity with the Emacs `consent-script-run-file`; see
+[executable-scripts.md](executable-scripts.md).
 
 If no binary has been built, `install` exits with guidance instead of silently
 doing nothing:
@@ -432,16 +450,19 @@ sudo make uninstall                                 # removes /usr/local/bin/con
 make uninstall DESTDIR=/tmp/stage PREFIX=/usr/local
 ```
 
-`uninstall` removes exactly the paths `install` writes and is idempotent; per GNU
-convention it does not remove shared directories such as `bindir`.
+`uninstall` removes exactly the paths `install` writes — the binary, the man page,
+and the versioned `$(datadir)/consent/$(version)` library tree — and is
+idempotent; per GNU convention it does not remove shared directories such as
+`bindir`.
 
 ### Distribution
 
 `make dist` packages the compiled binary into a versioned tarball under
 `$(CONSENT_DIST_DIR)` (default `build/compile/dist/`), named from `version.sld`
 and the compile host (for example `consent-<version>-gambit.tar.gz`). The
-tarball contains the binary, its `manifest.scm`, `README.md`, `LICENSE`, and the
-man page when present:
+tarball contains the binary, its `manifest.scm`, `README.md`, `LICENSE`, the
+runtime library tree under `share/consent/<version>/`, and the man page when
+present:
 
 ```sh
 CONSENT_COMPILE_HOST=gambit make compile
