@@ -26,10 +26,13 @@
   (export cli-script-shebang-line?
           cli-script-strip-shebang
           cli-script-source-from-file
-          cli-script-run-file)
+          cli-script-run-file
+          cli-script-host-run-options
+          cli-script-host-run-file)
   (import (scheme base)
           (scheme file)
-          (consent eval))
+          (consent eval)
+          (only (consent reader) consent-read-all))
 
   (begin
 
@@ -87,6 +90,46 @@ capabilities -- including program output -- are denied without an explicit grant
 policy file, or preloaded approval, and a denial or error raises so a CLI caller
 exits non-zero. This is the host-neutral peer of, and byte-for-byte posture match
 with, the Emacs `consent-script-run-file'."
-      (apply consent-eval-source (cli-script-source-from-file path) rest))))
+      (apply consent-eval-source (cli-script-source-from-file path) rest))
+
+    ;; Host-runner posture: the deliberate capability bundle that lets the
+    ;; compiled runtime act as a Consent-Scheme host runner for portable test
+    ;; programs. It grants access to the runtime's own internal libraries and
+    ;; raises the per-run budgets so a test file that drives the runtime hard
+    ;; can complete. It does NOT relax the policy/output posture: program output
+    ;; is captured per form through the interaction context rather than written
+    ;; to a raw host port, so the host runner stays inside the capability model.
+    (define cli-script-host-run-options
+      '((internal-libraries-allowed . #t)
+        (max-steps . 1000000000)
+        (max-host-callbacks . 1000000000)
+        (max-events . 1000000000)
+        (max-event-nodes . 1000000000)
+        (max-value-nodes . 1000000000)))
+
+    (define (script--result-field datum name)
+      "Return the single value of field NAME in tagged-list DATUM, or #f."
+      (let ((entry (assq name (cdr datum))))
+        (and entry (pair? (cdr entry)) (cadr entry))))
+
+    (define (cli-script-host-run-file path emit)
+      "Run host-runner test file PATH on this Consent runtime, form by form.
+Each form is evaluated through a durable interaction context under the host-run
+capability bundle; EMIT is called with the program output each form produced so
+the host can stream it to real stdout. Returns #t when every form completes, or
+the failing `evaluation-result' datum at the first error -- so a CLI caller exits
+non-zero exactly when a captured test assertion raised."
+      (let ((source (cli-script-source-from-file path))
+            (interaction
+             (consent-make-interaction-context cli-script-host-run-options)))
+        (let loop ((rest (consent-read-all source)))
+          (if (null? rest)
+              #t
+              (let ((result
+                     (consent-interaction-eval-form interaction (car rest))))
+                (emit (consent-interaction-program-output interaction))
+                (if (eq? (script--result-field result 'status) 'error)
+                    result
+                    (loop (cdr rest))))))))))
 
 ;;; script.sld ends here
