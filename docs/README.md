@@ -20,6 +20,7 @@ project pitch and examples, see the top-level [README](../README.md).
 - [GitHub Issue Taxonomy](issue-taxonomy.md) — the label taxonomy for where and how an issue can be worked.
 - [Licensing Policy](licensing.md) — the project's Apache-2.0 + SPDX licensing policy.
 - [Resolved Graph Invariants](resolved-graph-invariants.md) — the roadmap dependency-graph invariants the resolved order must satisfy.
+- [Host-Compiled Staging and the Embedded VFS](host-compiled-staging.md) — the `make compile` pipeline as a borrowed-backend compiler front-end, and the embedded source store as a capability-addressable virtual filesystem.
 
 ## Language & Conformance
 
