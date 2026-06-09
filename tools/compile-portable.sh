@@ -299,6 +299,11 @@ write_racket_main_common() {
     (let ((outcome
            (consent-main:cli-script:cli-script-host-run-file
             path
+            ;; Scope file access and includes to the invoking working directory.
+            ;; PWD is the shell-provided absolute cwd; fall back to "." so a run
+            ;; that performs no file I/O (e.g. the reader suite) still works.
+            (let ((pwd (get-environment-variable "PWD")))
+              (if (and pwd (> (string-length pwd) 0)) pwd "."))
             (lambda (chunk) (display chunk)))))
       (if (eq? outcome #t)
           (exit 0)
@@ -561,6 +566,11 @@ write_gambit_main_common() {
     (let ((outcome
            (consent-main:cli-script:cli-script-host-run-file
             path
+            ;; Scope file access and includes to the invoking working directory.
+            ;; PWD is the shell-provided absolute cwd; fall back to "." so a run
+            ;; that performs no file I/O (e.g. the reader suite) still works.
+            (let ((pwd (get-environment-variable "PWD")))
+              (if (and pwd (> (string-length pwd) 0)) pwd "."))
             (lambda (chunk) (display chunk)))))
       (if (eq? outcome #t)
           (exit 0)

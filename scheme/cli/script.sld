@@ -96,10 +96,10 @@ with, the Emacs `consent-script-run-file'."
     ;; compiled runtime act as a Consent-Scheme host runner for portable test
     ;; programs. It grants access to the runtime's own internal libraries and
     ;; raises the per-run budgets so a test file that drives the runtime hard
-    ;; can complete. It does NOT relax the policy/output posture: program output
-    ;; is captured per form through the interaction context rather than written
-    ;; to a raw host port, so the host runner stays inside the capability model.
-    (define cli-script-host-run-options
+    ;; can complete. Program output is captured per form through the interaction
+    ;; context rather than written to a raw host port, so the host runner stays
+    ;; inside the capability model.
+    (define cli-script-host-run-base-options
       '((internal-libraries-allowed . #t)
         (max-steps . 1000000000)
         (max-host-callbacks . 1000000000)
@@ -107,21 +107,48 @@ with, the Emacs `consent-script-run-file'."
         (max-event-nodes . 1000000000)
         (max-value-nodes . 1000000000)))
 
+    (define (cli-script-host-run-options root)
+      "Return the host-run capability options rooted at absolute directory ROOT.
+ROOT becomes the include directory and the sole file-access root, so a host
+runner reads fixtures and writes scratch files only under that working-tree
+subtree. The file capability system matches by absolute path containment, so
+ROOT must be absolute. A first-class (persisted) capability grant is used rather
+than the transient legacy file-paths allow-list so that port handles opened by
+`call-with-input-file' and friends revalidate against an active grant on every
+read/write rather than failing closed mid-stream."
+      (cons (cons 'include-directory root)
+            (cons (list 'capability-grants
+                        (list 'capability-grant
+                              (list 'id 'host-run-file-grant)
+                              (list 'domain 'file)
+                              (cons 'operations
+                                    '(read create write metadata delete load))
+                              (list 'scope
+                                    (list 'file-root root)
+                                    (list 'paths (list "."))
+                                    (list 'remote 'denied)
+                                    (list 'symlinks 'resolve-within-root))
+                              (list 'expires 'never)))
+                  cli-script-host-run-base-options)))
+
     (define (script--result-field datum name)
       "Return the single value of field NAME in tagged-list DATUM, or #f."
       (let ((entry (assq name (cdr datum))))
         (and entry (pair? (cdr entry)) (cadr entry))))
 
-    (define (cli-script-host-run-file path emit)
+    (define (cli-script-host-run-file path root emit)
       "Run host-runner test file PATH on this Consent runtime, form by form.
-Each form is evaluated through a durable interaction context under the host-run
-capability bundle; EMIT is called with the program output each form produced so
-the host can stream it to real stdout. Returns #t when every form completes, or
-the failing `evaluation-result' datum at the first error -- so a CLI caller exits
-non-zero exactly when a captured test assertion raised."
+ROOT is the absolute working directory the run is scoped to (file access and
+include resolution). Each form is evaluated through a durable interaction
+context under the host-run capability bundle; EMIT is called with the program
+output each form produced so the host can stream it to real stdout. Returns #t
+when every form completes, or the failing `evaluation-result' datum at the first
+error -- so a CLI caller exits non-zero exactly when a captured test assertion
+raised."
       (let ((source (cli-script-source-from-file path))
             (interaction
-             (consent-make-interaction-context cli-script-host-run-options)))
+             (consent-make-interaction-context
+              (cli-script-host-run-options root))))
         (let loop ((rest (consent-read-all source)))
           (if (null? rest)
               #t
