@@ -9,7 +9,29 @@ PREFIX ?= /usr/local
 DESTDIR ?=
 bindir ?= $(PREFIX)/bin
 mandir ?= $(PREFIX)/share/man
+datadir ?= $(PREFIX)/share
 INSTALL ?= install
+# Version-scoped install location for the runtime-provided Consent Scheme library
+# tree (prelude, syntax prelude, and source-libraries). The host-compiled binary
+# carries an embedded copy as a zero-dependency floor; installing the tree here
+# lets it be inspected and overridden, and the binary baked with the matching
+# datadir resolves it ahead of the embedded copy. Version-scoped so multiple
+# installed runtimes do not collide.
+consentlibdir = $(datadir)/consent/$(CONSENT_VERSION)
+# Runtime library files, named by their resolver-logical / datadir-relative path
+# (each lives at scheme/<path> in the source tree). Keep in sync with the
+# embedded set in tools/compile-portable.sh and the resolver in base.sld/library.sld.
+CONSENT_RUNTIME_LIBRARY_FILES ?= \
+	consent/base-prelude.scm \
+	consent/base-syntax.scm \
+	consent/capability.sld \
+	standard-library/case-lambda.sld \
+	standard-library/lazy.sld \
+	agent/diff.sld \
+	agent/vcs.sld \
+	agent/network.sld \
+	agent/test.sld \
+	agent/transcript.sld
 # The host-compiled binary `make install`/`make dist` operate on, the optional
 # generated man page (#458 owns its content; install/dist degrade gracefully
 # without it), and the versioned distribution output tree.
@@ -113,6 +135,7 @@ help:
 	@printf '  %-50s %s\n' 'DESTDIR=' 'Staging root prepended to install/uninstall paths.'
 	@printf '  %-50s %s\n' 'bindir=$$(PREFIX)/bin' 'Directory make install writes the consent binary to.'
 	@printf '  %-50s %s\n' 'mandir=$$(PREFIX)/share/man' 'Directory make install writes the man page to.'
+	@printf '  %-50s %s\n' 'datadir=$$(PREFIX)/share' 'Base dir for the installed runtime library tree.'
 	@printf '  %-50s %s\n' 'INSTALL=install' 'install(1) command used by make install/dist.'
 	@printf '  %-50s %s\n' 'CONSENT_MANPAGE=docs/consent.1' 'Optional man page installed/packaged when present.'
 	@printf '  %-50s %s\n' 'CONSENT_DIST_DIR=build/compile/dist' 'Output tree used by make dist.'
@@ -170,6 +193,7 @@ clean-compile:
 compile:
 	CONSENT_COMPILE_HOST='$(CONSENT_COMPILE_HOST)' \
 	CONSENT_COMPILE_BUILD_DIR='$(CONSENT_COMPILE_BUILD_DIR)' \
+	CONSENT_INSTALL_DATADIR='$(consentlibdir)' \
 	CONSENT_RACKET='$(CONSENT_RACKET)' \
 	CONSENT_RACO='$(CONSENT_RACO)' \
 	CONSENT_GAMBIT='$(CONSENT_GAMBIT)' \
@@ -193,6 +217,11 @@ install:
 	fi
 	$(INSTALL) -d '$(DESTDIR)$(bindir)'
 	$(INSTALL) -m 755 '$(CONSENT_COMPILE_BINARY)' '$(DESTDIR)$(bindir)/consent'
+	@for relpath in $(CONSENT_RUNTIME_LIBRARY_FILES); do \
+		$(INSTALL) -d "$(DESTDIR)$(consentlibdir)/$$(dirname "$$relpath")"; \
+		$(INSTALL) -m 644 "scheme/$$relpath" "$(DESTDIR)$(consentlibdir)/$$relpath"; \
+	done
+	@printf '%s\n' 'consent install: installed runtime library tree to $(DESTDIR)$(consentlibdir)'
 	@if [ -f '$(CONSENT_MANPAGE)' ]; then \
 		$(INSTALL) -d '$(DESTDIR)$(mandir)/man1'; \
 		$(INSTALL) -m 644 '$(CONSENT_MANPAGE)' '$(DESTDIR)$(mandir)/man1/consent.1'; \
@@ -214,6 +243,7 @@ install:
 uninstall:
 	rm -f '$(DESTDIR)$(bindir)/consent'
 	rm -f '$(DESTDIR)$(mandir)/man1/consent.1'
+	rm -rf '$(DESTDIR)$(consentlibdir)'
 
 # Build a versioned distribution tarball of the host-compiled binary plus its
 # manifest, README, license, and the man page when present. Named from
@@ -233,6 +263,10 @@ dist:
 	$(INSTALL) -m 644 '$(CONSENT_COMPILE_MANIFEST)' "$$stage/manifest.scm"; \
 	$(INSTALL) -m 644 README.md "$$stage/README.md"; \
 	$(INSTALL) -m 644 LICENSE "$$stage/LICENSE"; \
+	for relpath in $(CONSENT_RUNTIME_LIBRARY_FILES); do \
+		$(INSTALL) -d "$$stage/share/consent/$(CONSENT_VERSION)/$$(dirname "$$relpath")"; \
+		$(INSTALL) -m 644 "scheme/$$relpath" "$$stage/share/consent/$(CONSENT_VERSION)/$$relpath"; \
+	done; \
 	if [ -f '$(CONSENT_MANPAGE)' ]; then \
 		$(INSTALL) -d "$$stage/share/man/man1"; \
 		$(INSTALL) -m 644 '$(CONSENT_MANPAGE)' "$$stage/share/man/man1/consent.1"; \
