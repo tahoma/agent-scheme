@@ -257,7 +257,7 @@ write_racket_main_common() {
   (newline (current-error-port))
   (exit 2))
 
-(define (consent-main-eval source)
+(define (consent-main-eval source options)
   (guard (condition
           (else
            (display "consent: evaluation failed" (current-error-port))
@@ -267,10 +267,10 @@ write_racket_main_common() {
            (exit 1)))
     (display
      (consent-value->external
-      (consent-eval-source source)))
+      (consent-eval-source source #f options)))
     (newline)))
 
-(define (consent-main-script path)
+(define (consent-main-script path options)
   (guard (condition
           (else
            (display "consent: script failed" (current-error-port))
@@ -281,36 +281,75 @@ write_racket_main_common() {
     ;; Run the script through the Consent interpreter with the non-interactive
     ;; fail-closed posture (capability-gated; no raw host objects exposed) -- the
     ;; same gated path as --eval and the Emacs `consent-script-run-file' twin.
-    (consent-main:cli-script:cli-script-run-file path)))
+    (consent-main:cli-script:cli-script-run-file path #f options)))
+
+(define (consent-main-host-run path)
+  ;; Run a Consent-Scheme host-runner test file on THIS runtime: every form is
+  ;; evaluated through the runtime's own interpreter under the host-run
+  ;; capability bundle, program output is streamed to real stdout, and the exit
+  ;; code is non-zero exactly when a captured test assertion raised. This is the
+  ;; product serving as its own host runner -- no separate host-load binary.
+  (guard (condition
+          (else
+           (display "consent: host-run failed" (current-error-port))
+           (display ": " (current-error-port))
+           (write condition (current-error-port))
+           (newline (current-error-port))
+           (exit 1)))
+    (let ((outcome
+           (consent-main:cli-script:cli-script-host-run-file
+            path
+            (lambda (chunk) (display chunk)))))
+      (if (eq? outcome #t)
+          (exit 0)
+          (begin
+            (display "consent: host-run failed: " (current-error-port))
+            (write outcome (current-error-port))
+            (newline (current-error-port))
+            (exit 1))))))
 
 (define (consent-main args)
-  (cond
-   ((null? args)
-    (consent-main-help))
-   ((string=? (car args) "--help")
-    (consent-main-help))
-   ((string=? (car args) "--version")
-    (display (consent-main-version-string))
-    (newline))
-   ((string=? (car args) "--eval")
-    (if (null? (cdr args))
-        (consent-main-error "--eval requires SOURCE")
-        (consent-main-eval (cadr args))))
-   ((string=? (car args) "--script")
-    (if (null? (cdr args))
-        (consent-main-error "--script requires FILE")
-        (consent-main-script (cadr args))))
-   ((string=? (car args) "--repl")
-    (consent-main:cli-repl-shell:cli-repl-main))
-   ((and (> (string-length (car args)) 0)
-         (char=? (string-ref (car args) 0) #\-))
-    (consent-main-error
-     (string-append "unknown option " (car args))))
-   (else
-    ;; A bare path is a script file: consent FILE == consent --script FILE.
-    ;; This lets a #!/usr/bin/env consent shebang run a file with no flag,
-    ;; avoiding the kernel single-argument rule that breaks a flagged shebang.
-    (consent-main-script (car args)))))
+  ;; A leading --internal-libraries grant lets the program import the runtime's
+  ;; own (consent ...)/(cli ...) libraries from source -- the deliberate host
+  ;; capability that turns the product into a Consent-Scheme host runner. It is
+  ;; off by default, keeping the bare command surface fail-closed.
+  (let* ((host? (and (pair? args)
+                     (string=? (car args) "--internal-libraries")))
+         (options (if host? '((internal-libraries-allowed . #t)) '()))
+         (args (if host? (cdr args) args)))
+    (cond
+     ((null? args)
+      (consent-main-help))
+     ((string=? (car args) "--help")
+      (consent-main-help))
+     ((string=? (car args) "--version")
+      (display (consent-main-version-string))
+      (newline))
+     ((string=? (car args) "--eval")
+      (if (null? (cdr args))
+          (consent-main-error "--eval requires SOURCE")
+          (consent-main-eval (cadr args) options)))
+     ((string=? (car args) "--script")
+      (if (null? (cdr args))
+          (consent-main-error "--script requires FILE")
+          (consent-main-script (cadr args) options)))
+     ((string=? (car args) "--host-run")
+      ;; Run FILE as a host-runner test on this runtime (internal libraries,
+      ;; captured program output, raised budgets, exit code from assertions).
+      (if (null? (cdr args))
+          (consent-main-error "--host-run requires FILE")
+          (consent-main-host-run (cadr args))))
+     ((string=? (car args) "--repl")
+      (consent-main:cli-repl-shell:cli-repl-main))
+     ((and (> (string-length (car args)) 0)
+           (char=? (string-ref (car args) 0) #\-))
+      (consent-main-error
+       (string-append "unknown option " (car args))))
+     (else
+      ;; A bare path is a script file: consent FILE == consent --script FILE.
+      ;; This lets a #!/usr/bin/env consent shebang run a file with no flag,
+      ;; avoiding the kernel single-argument rule that breaks a flagged shebang.
+      (consent-main-script (car args) options)))))
 
 (define (consent-main--split-search-path value)
   ;; Split a colon-separated path string into directory components.
@@ -480,7 +519,7 @@ write_gambit_main_common() {
   (newline (current-error-port))
   (exit 2))
 
-(define (consent-main-eval source)
+(define (consent-main-eval source options)
   (guard (condition
           (else
            (display "consent: evaluation failed" (current-error-port))
@@ -490,10 +529,10 @@ write_gambit_main_common() {
            (exit 1)))
     (display
      (consent-value->external
-      (consent-eval-source source)))
+      (consent-eval-source source #f options)))
     (newline)))
 
-(define (consent-main-script path)
+(define (consent-main-script path options)
   (guard (condition
           (else
            (display "consent: script failed" (current-error-port))
@@ -504,36 +543,75 @@ write_gambit_main_common() {
     ;; Run the script through the Consent interpreter with the non-interactive
     ;; fail-closed posture (capability-gated; no raw host objects exposed) -- the
     ;; same gated path as --eval and the Emacs `consent-script-run-file' twin.
-    (consent-main:cli-script:cli-script-run-file path)))
+    (consent-main:cli-script:cli-script-run-file path #f options)))
+
+(define (consent-main-host-run path)
+  ;; Run a Consent-Scheme host-runner test file on THIS runtime: every form is
+  ;; evaluated through the runtime's own interpreter under the host-run
+  ;; capability bundle, program output is streamed to real stdout, and the exit
+  ;; code is non-zero exactly when a captured test assertion raised. This is the
+  ;; product serving as its own host runner -- no separate host-load binary.
+  (guard (condition
+          (else
+           (display "consent: host-run failed" (current-error-port))
+           (display ": " (current-error-port))
+           (write condition (current-error-port))
+           (newline (current-error-port))
+           (exit 1)))
+    (let ((outcome
+           (consent-main:cli-script:cli-script-host-run-file
+            path
+            (lambda (chunk) (display chunk)))))
+      (if (eq? outcome #t)
+          (exit 0)
+          (begin
+            (display "consent: host-run failed: " (current-error-port))
+            (write outcome (current-error-port))
+            (newline (current-error-port))
+            (exit 1))))))
 
 (define (consent-main args)
-  (cond
-   ((null? args)
-    (consent-main-help))
-   ((string=? (car args) "--help")
-    (consent-main-help))
-   ((string=? (car args) "--version")
-    (display (consent-main-version-string))
-    (newline))
-   ((string=? (car args) "--eval")
-    (if (null? (cdr args))
-        (consent-main-error "--eval requires SOURCE")
-        (consent-main-eval (cadr args))))
-   ((string=? (car args) "--script")
-    (if (null? (cdr args))
-        (consent-main-error "--script requires FILE")
-        (consent-main-script (cadr args))))
-   ((string=? (car args) "--repl")
-    (consent-main:cli-repl-shell:cli-repl-main))
-   ((and (> (string-length (car args)) 0)
-         (char=? (string-ref (car args) 0) #\-))
-    (consent-main-error
-     (string-append "unknown option " (car args))))
-   (else
-    ;; A bare path is a script file: consent FILE == consent --script FILE.
-    ;; This lets a #!/usr/bin/env consent shebang run a file with no flag,
-    ;; avoiding the kernel single-argument rule that breaks a flagged shebang.
-    (consent-main-script (car args)))))
+  ;; A leading --internal-libraries grant lets the program import the runtime's
+  ;; own (consent ...)/(cli ...) libraries from source -- the deliberate host
+  ;; capability that turns the product into a Consent-Scheme host runner. It is
+  ;; off by default, keeping the bare command surface fail-closed.
+  (let* ((host? (and (pair? args)
+                     (string=? (car args) "--internal-libraries")))
+         (options (if host? '((internal-libraries-allowed . #t)) '()))
+         (args (if host? (cdr args) args)))
+    (cond
+     ((null? args)
+      (consent-main-help))
+     ((string=? (car args) "--help")
+      (consent-main-help))
+     ((string=? (car args) "--version")
+      (display (consent-main-version-string))
+      (newline))
+     ((string=? (car args) "--eval")
+      (if (null? (cdr args))
+          (consent-main-error "--eval requires SOURCE")
+          (consent-main-eval (cadr args) options)))
+     ((string=? (car args) "--script")
+      (if (null? (cdr args))
+          (consent-main-error "--script requires FILE")
+          (consent-main-script (cadr args) options)))
+     ((string=? (car args) "--host-run")
+      ;; Run FILE as a host-runner test on this runtime (internal libraries,
+      ;; captured program output, raised budgets, exit code from assertions).
+      (if (null? (cdr args))
+          (consent-main-error "--host-run requires FILE")
+          (consent-main-host-run (cadr args))))
+     ((string=? (car args) "--repl")
+      (consent-main:cli-repl-shell:cli-repl-main))
+     ((and (> (string-length (car args)) 0)
+           (char=? (string-ref (car args) 0) #\-))
+      (consent-main-error
+       (string-append "unknown option " (car args))))
+     (else
+      ;; A bare path is a script file: consent FILE == consent --script FILE.
+      ;; This lets a #!/usr/bin/env consent shebang run a file with no flag,
+      ;; avoiding the kernel single-argument rule that breaks a flagged shebang.
+      (consent-main-script (car args) options)))))
 
 (define (consent-main--split-search-path value)
   ;; Split a colon-separated path string into directory components.
