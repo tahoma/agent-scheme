@@ -67,6 +67,20 @@ version_datum() {
   printf '(consent-version %s)\n' "$(printf '%s\n' "$components" | tr '.' ' ')"
 }
 
+# Structural guard: the product main must route --script through the gated
+# Consent interpreter (cli-script-run-file) and must NOT host-load user input.
+# This fails the build if the product entry point ever regresses to host
+# execution. (The non-shipped host-runner main legitimately uses host `load' and
+# is checked separately.)
+assert_product_main_gated() {
+  main_file=$1
+  grep -q 'cli-script-run-file' "$main_file" \
+    || die "product main does not route --script through the gated cli-script-run-file: $main_file"
+  if grep -Eq '\(load[[:space:]]' "$main_file"; then
+    die "product main contains a host (load ...) call; --script must not host-load user input: $main_file"
+  fi
+}
+
 write_manifest() {
   host_root=$1
   host=$2
@@ -629,17 +643,19 @@ run_smoke() {
   smoke_dir=$(mktemp -d "${TMPDIR:-/tmp}/consent-smoke.XXXXXX") \
     || die "could not create a temporary directory for the script smokes"
 
+  # Positive: a pure script (no gated capabilities) evaluates through the
+  # interpreter and exits 0. Program output is fail-closed under the script
+  # posture, so the smoke proves evaluation by exit status, not stdout.
   ok_script="$smoke_dir/ok.scm"
   cat > "$ok_script" <<'EOF'
-(import (scheme base) (scheme write))
-(display "consent-script-ok")
-(newline)
+(import (scheme base))
+(define (smoke-sq n) (* n n))
+(if (not (= (smoke-sq 6) 36))
+    (error "consent --script smoke computed the wrong value"))
 EOF
-  script_output=$("$runner" --script "$ok_script" 2>"$log_file.script.err") \
+  "$runner" --script "$ok_script" >"$log_file.script.out" 2>"$log_file.script.err" \
     || die "compiled runner failed --script interpreter smoke; see $log_file.script.err"
-  if [ "$script_output" != "consent-script-ok" ]; then
-    die "compiled runner --script returned '$script_output', expected 'consent-script-ok'"
-  fi
+  script_output=ok
 
   deny_marker="$smoke_dir/denied-file"
   deny_script="$smoke_dir/deny.scm"
@@ -672,16 +688,15 @@ EOF
   # Bare-path form: kernel runs `consent FILE`; the runner skips the shebang
   # line and runs the file as a script with no `--script` flag.
   bare_script="$shebang_dir/bare.scm"
-  cat > "$bare_script" <<EOF
+  cat > "$bare_script" <<'EOF'
 #!/usr/bin/env consent
-(import (scheme base) (scheme write))
-(display "shebang-bare-ok\n")
+(import (scheme base))
+(if (not (= (+ 40 2) 42))
+    (error "bare-path shebang smoke failed"))
 EOF
-  bare_output=$("$runner" "$bare_script" 2>"$log_file.bare.err") \
+  "$runner" "$bare_script" >"$log_file.bare.out" 2>"$log_file.bare.err" \
     || die "compiled runner failed bare-path shebang smoke; see $log_file.bare.err"
-  if [ "$bare_output" != "shebang-bare-ok" ]; then
-    die "compiled runner bare-path shebang returned '$bare_output', expected 'shebang-bare-ok'"
-  fi
+  bare_output=ok
 
   # sh-polyglot form: kernel runs /bin/sh, whose `exec` re-launches the runner
   # on the same file; the runner skips the shebang and reads the `#| exec |#`
@@ -692,14 +707,31 @@ EOF
 #|
 exec "$runner" --script "\$0" "\$@"
 |#
-(import (scheme base) (scheme write))
-(display "shebang-polyglot-ok\n")
+(import (scheme base))
+(if (not (= (+ 40 2) 42))
+    (error "sh-polyglot shebang smoke failed"))
 EOF
   chmod +x "$polyglot_script"
-  polyglot_output=$("$polyglot_script" 2>"$log_file.polyglot.err") \
+  "$polyglot_script" >"$log_file.polyglot.out" 2>"$log_file.polyglot.err" \
     || die "compiled runner failed sh-polyglot shebang smoke; see $log_file.polyglot.err"
-  if [ "$polyglot_output" != "shebang-polyglot-ok" ]; then
-    die "sh-polyglot shebang returned '$polyglot_output', expected 'shebang-polyglot-ok'"
+  polyglot_output=ok
+
+  # Bare-path deny discriminator: a bare-path script (consent FILE) attempting an
+  # ungranted file write must be denied and leave no file -- proving the bare /
+  # shebang dispatch also lands in the gated interpreter, not host execution.
+  bare_deny_marker="$shebang_dir/bare-denied-file"
+  bare_deny_script="$shebang_dir/bare-deny.scm"
+  cat > "$bare_deny_script" <<EOF
+#!/usr/bin/env consent
+(import (scheme base) (scheme file))
+(call-with-output-file "$bare_deny_marker"
+  (lambda (port) (write-char #\\x port)))
+EOF
+  if "$runner" "$bare_deny_script" >"$log_file.bare-deny.out" 2>"$log_file.bare-deny.err"; then
+    die "bare-path script allowed an ungranted file write (host execution leaked); see $log_file.bare-deny.err"
+  fi
+  if [ -e "$bare_deny_marker" ]; then
+    die "bare-path script created a denied file at $bare_deny_marker (host execution leaked)"
   fi
   rm -rf "$shebang_dir"
   smoke_finished=$(date +%s)
@@ -738,6 +770,7 @@ compile_racket() {
   mkdir -p "$collections_dir/consent"
   write_embedded_source_module "$collections_dir/consent/embedded-source.rkt" '#lang r7rs'
   write_racket_main "$main_file"
+  assert_product_main_gated "$main_file"
   write_manifest "$host_root" racket "$version"
 
   PLTCOLLECTS="$collections_dir:${PLTCOLLECTS:-}" \
@@ -878,6 +911,7 @@ compile_gambit() {
     || die "Gambit gsi does not accept R7RS mode with the Consent Scheme library search path; see $logs_dir/gsi-r7rs-probe.log"
 
   write_gambit_main "$main_file" "$src_dir"
+  assert_product_main_gated "$main_file"
   write_manifest "$host_root" gambit "$version"
   write_embedded_source_module "$src_dir/consent/embedded-source.sld" ''
   : >"$logs_dir/gsc-modules.log"
