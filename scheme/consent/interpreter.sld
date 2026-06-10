@@ -7478,6 +7478,13 @@ condition does not."
        make-empty-syntax-environment
        syntax-environment-ref
        with-syntax-environment))
+
+    ;; Install the applier the library layer uses to call interpreted closures
+    ;; that programs pass as callbacks into natively bound library procedures.
+    (define native-applier-installed
+      (consent-install-native-applier!
+       (lambda (procedure arguments context)
+         (apply-procedure procedure arguments context #f))))
     ;; Map base registry implementation names to interpreter procedures.
     (define base-primitive-implementation-table
       (list

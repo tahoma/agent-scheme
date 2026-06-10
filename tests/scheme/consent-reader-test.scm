@@ -94,9 +94,15 @@
  character-writer-cases)
 
 (check-external 'integer "42" "42")
+;; Agent ownership means read numbers share the canonical constructors'
+;; representation class. Compare against a canonical integer rather than
+;; hardcoding what the surrounding Scheme's `number?' answers: on a reference
+;; host both are records (#f and #f); when this file runs on the Consent
+;; runtime itself via --host-run, agent-owned numbers ARE the runtime's numbers
+;; (#t and #t). The invariant is the agreement, not the host's answer.
 (check 'integer-is-agent-owned
        (number? (consent-read "42"))
-       #f)
+       (number? (consent-make-canonical-integer 42)))
 (check-external 'hex-integer "#x2a" "42")
 (check-external 'rational "3/4" "3/4")
 (check-external 'decimal "1.5" "1.5")

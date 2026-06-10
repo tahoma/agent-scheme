@@ -146,7 +146,17 @@
       (exactness consent-number-exactness)
       (radix consent-number-radix)
       (kind consent-number-kind)
-      (value consent-number-value))
+      (value consent-number-value-field))
+
+    (define (consent-number-value datum)
+      "Return the host payload of canonical number DATUM.
+A plain host number is returned unchanged: values that cross the compiled
+host-runner boundary arrive unwrapped to host representation, so the public
+accessor accepts both forms with the same answer on every posture."
+      (cond
+       ((consent-number? datum) (consent-number-value-field datum))
+       ((number? datum) datum)
+       (else (error "consent-number-value expected a canonical number" datum))))
 
     ;; Portable record metadata belongs to Consent Scheme, not the host record
     ;; system, so evaluator-created records remain printable datums.
@@ -235,6 +245,16 @@
       (let ((cell (assq key options)))
         (if cell (cdr cell) default)))
 
+    (define (option-count options key default)
+      "Return numeric option KEY as a host count.
+A canonical number record is unwrapped: an options alist that crossed the
+compiled host-runner boundary carries canonical numbers where a native call
+site would have written host literals."
+      (let ((value (option-ref options key default)))
+        (if (consent-number? value)
+            (consent-number-value-field value)
+            value)))
+
     (define (source-line-starts source)
       "Return a vector of zero-based offsets where each source line starts."
       (let ((length (string-length source)))
@@ -260,18 +280,18 @@
                          #f
                          0
                          '()
-                         (option-ref options 'max-depth
-                                     consent-default-maximum-depth)
-                         (option-ref options 'max-list-length
-                                     consent-default-maximum-list-length)
-                         (option-ref options 'max-vector-length
-                                     consent-default-maximum-vector-length)
-                         (option-ref options 'max-bytevector-length
-                                     consent-default-maximum-bytevector-length)
-                         (option-ref options 'max-string-size
-                                     consent-default-maximum-string-size)
-                         (option-ref options 'max-total-nodes
-                                     consent-default-maximum-total-nodes)
+                         (option-count options 'max-depth
+                                       consent-default-maximum-depth)
+                         (option-count options 'max-list-length
+                                       consent-default-maximum-list-length)
+                         (option-count options 'max-vector-length
+                                       consent-default-maximum-vector-length)
+                         (option-count options 'max-bytevector-length
+                                       consent-default-maximum-bytevector-length)
+                         (option-count options 'max-string-size
+                                       consent-default-maximum-string-size)
+                         (option-count options 'max-total-nodes
+                                       consent-default-maximum-total-nodes)
                          (if source-metadata
                              (option-ref options 'source-id #f)
                              #f)
@@ -663,17 +683,22 @@
               (quotient (cdr adjusted) divisor))))
 
     (define (consent-make-canonical-integer value . rest)
-      "Canonical number constructors are the public boundary for agent-owned numeric values created by readers, primitives, and result renderers."
-      (let ((exactness (if (null? rest) 'exact (car rest)))
-            (radix (if (or (null? rest) (null? (cdr rest)))
-                       10
-                       (cadr rest))))
-        (make-consent-number
-         (consent-integer->radix-string value 10)
-         exactness
-         radix
-         'integer
-         value)))
+      "Canonical number constructors are the public boundary for agent-owned numeric values created by readers, primitives, and result renderers.
+An already-canonical number is returned unchanged, so a call site whose
+argument crossed the compiled host-runner boundary as a canonical record gets
+the same answer it would on a reference host with a host literal."
+      (if (consent-number? value)
+          value
+          (let ((exactness (if (null? rest) 'exact (car rest)))
+                (radix (if (or (null? rest) (null? (cdr rest)))
+                           10
+                           (cadr rest))))
+            (make-consent-number
+             (consent-integer->radix-string value 10)
+             exactness
+             radix
+             'integer
+             value))))
 
     (define (host-inexact-special-kind value)
       "Classify host inexact special numbers as infinity, NaN, or ordinary."
@@ -683,24 +708,40 @@
        ((= value (/ -1.0 0.0)) "-inf.0")
        (else #f)))
 
+    (define (canonical-component value)
+      "Return numeric component VALUE as a host number.
+An already-canonical record is unwrapped: constructor arguments that crossed
+the compiled host-runner boundary arrive as canonical records where a native
+call site would have written host literals."
+      (if (consent-number? value)
+          (consent-number-value-field value)
+          value))
+
     (define (consent-make-canonical-decimal value . maybe-lexeme)
-      "Public constructor for canonical inexact decimal number records."
-      (let ((special-kind (host-inexact-special-kind value)))
-        (if special-kind
-            (consent-make-canonical-infnan special-kind)
-            (make-consent-number
-             (if (null? maybe-lexeme)
-                 (number->string value)
-                 (car maybe-lexeme))
-             'inexact
-             10
-             'decimal
-             value))))
+      "Public constructor for canonical inexact decimal number records.
+An already-canonical number is returned unchanged (see
+consent-make-canonical-integer)."
+      (if (consent-number? value)
+          value
+          (let ((special-kind (host-inexact-special-kind value)))
+            (if special-kind
+                (consent-make-canonical-infnan special-kind)
+                (make-consent-number
+                 (if (null? maybe-lexeme)
+                     (number->string value)
+                     (car maybe-lexeme))
+                 'inexact
+                 10
+                 'decimal
+                 value)))))
 
     (define (consent-make-canonical-rational
-             numerator denominator . rest)
-      "Public constructor for normalized rational number records."
-      (let* ((pair (normalize-rational-pair numerator denominator))
+             raw-numerator raw-denominator . rest)
+      "Public constructor for normalized rational number records.
+Canonical-record components are unwrapped to their host payloads."
+      (let* ((numerator (canonical-component raw-numerator))
+             (denominator (canonical-component raw-denominator))
+             (pair (normalize-rational-pair numerator denominator))
              (normalized-numerator (car pair))
              (normalized-denominator (cdr pair))
              (exactness (if (null? rest) 'exact (car rest)))
@@ -1789,6 +1830,7 @@
 
     (define (consent-read-from-string-at source position . maybe-options)
       "Incremental read entry point for ports and REPL-like callers; the cdr of the result is the next source offset no matter which datum was returned."
+      (set! position (canonical-component position))
       (if (not (string? source))
           (error "consent reader source must be a string" source))
       (if (or (not (integer? position))
@@ -1818,6 +1860,7 @@
 
     (define (consent-resync-to-next-form source position)
       "Form-level batch resync strategy: return the offset of the next top-level form strictly after POSITION.  A top-level form is anchored to a line start whose first character is neither whitespace nor a closing parenthesis; when none remains, return the end of SOURCE.  This is the default recovery resync strategy; callers may supply their own (for example a lexer-level or editor-grade strategy) through the `resync` option."
+      (set! position (canonical-component position))
       (let ((length (string-length source)))
         (let loop ((index position))
           (cond
@@ -2002,6 +2045,7 @@
 
     (define (consent-read-recover-from-string-at source position . maybe-options)
       "Recovery-aware single-form read for interactive and streaming callers (REPL, editor adapters).  Returns a <consent-recovery-step> whose STATUS is `datum`, `invalid`, `incomplete`, or `eof`, and whose NEXT offset is where the caller should resume.  Incomplete input is surfaced as its own status so auto-indent and continuation prompts never confuse a valid prefix with a syntax error."
+      (set! position (canonical-component position))
       (if (not (string? source))
           (error "consent reader source must be a string" source))
       (if (or (not (integer? position))
@@ -2029,7 +2073,7 @@
     (define (validate-datum datum options validation depth seen)
       "Datum validation protects the evaluator from host-constructed values that bypassed lexical reader checks, including cycles and oversized objects."
       (if (> depth
-             (option-ref options 'max-depth
+             (option-count options 'max-depth
                          consent-default-maximum-depth))
           (error "consent datum limit error: datum depth exceeds maximum depth"
                  depth))
@@ -2041,18 +2085,18 @@
         (validation-note-node! validation))
        ((string? datum)
         (if (> (string-length datum)
-               (option-ref options 'max-string-size
+               (option-count options 'max-string-size
                            consent-default-maximum-string-size))
             (error "consent datum limit error: string size exceeds maximum string size"
-                   (option-ref options 'max-string-size
+                   (option-count options 'max-string-size
                                consent-default-maximum-string-size)))
         (validation-note-node! validation))
        ((bytevector? datum)
         (if (> (bytevector-length datum)
-               (option-ref options 'max-bytevector-length
+               (option-count options 'max-bytevector-length
                            consent-default-maximum-bytevector-length))
             (error "consent datum limit error: bytevector length exceeds maximum bytevector length"
-                   (option-ref options 'max-bytevector-length
+                   (option-count options 'max-bytevector-length
                                consent-default-maximum-bytevector-length)))
         (let loop ((index 0))
           (if (< index (bytevector-length datum))
@@ -2076,10 +2120,10 @@
                ((pair? cursor)
                 (let ((next-count (+ count 1)))
                   (if (> next-count
-                         (option-ref options 'max-list-length
+                         (option-count options 'max-list-length
                                      consent-default-maximum-list-length))
                       (error "consent datum limit error: list length exceeds maximum list length"
-                             (option-ref options 'max-list-length
+                             (option-count options 'max-list-length
                                          consent-default-maximum-list-length)))
                   (validation-note-node! validation)
                   (validate-datum (car cursor)
@@ -2102,10 +2146,10 @@
             #t
             (begin
               (if (> (vector-length datum)
-                     (option-ref options 'max-vector-length
+                     (option-count options 'max-vector-length
                                  consent-default-maximum-vector-length))
                   (error "consent datum limit error: vector length exceeds maximum vector length"
-                         (option-ref options 'max-vector-length
+                         (option-count options 'max-vector-length
                                      consent-default-maximum-vector-length)))
               (validation-note-node! validation)
               (let loop ((index 0))
@@ -2127,7 +2171,7 @@
              (validation
               (make-validation
                0
-               (option-ref options 'max-total-nodes
+               (option-count options 'max-total-nodes
                            consent-default-maximum-total-nodes))))
         (validate-datum datum options validation 0 '())
         datum))

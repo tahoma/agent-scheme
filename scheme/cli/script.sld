@@ -135,6 +135,16 @@ environment; that capability remains denied to ordinary scripts."
                               (list 'id 'host-run-process-environment-grant)
                               (list 'domain 'process-environment)
                               (cons 'operations '(read))
+                              (list 'expires 'never))
+                        ;; Host-runner tests time their checks through
+                        ;; (scheme time), so the bundle grants clock reads.
+                        (list 'capability-grant
+                              (list 'id 'host-run-clock-grant)
+                              (list 'domain 'clock)
+                              (cons 'operations
+                                    '(current-second
+                                      current-jiffy
+                                      jiffies-per-second))
                               (list 'expires 'never)))
                   cli-script-host-run-base-options)))
 
