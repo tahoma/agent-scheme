@@ -23,6 +23,7 @@
               consent-syntax-source)
         (only (consent reader)
               consent-datum->external
+              consent-make-canonical-integer
               consent-read)
         (only (consent version)
               consent-version-datum)
@@ -756,9 +757,14 @@
         #f)))))
 
 (check-external 'literal-number "42" "42")
+;; Agent ownership means evaluated numbers share the canonical constructors'
+;; representation class (see the reader suite's integer-is-agent-owned): the
+;; invariant is agreement with a canonical integer, not the surrounding
+;; Scheme's own number? answer, which legitimately differs when this file runs
+;; on the Consent runtime itself via --host-run.
 (check 'literal-number-is-agent-owned
        (number? (consent-eval-source "42"))
-       #f)
+       (number? (consent-make-canonical-integer 42)))
 (check-external 'literal-string "\"ok\"" "\"ok\"")
 (check-external 'quote-symbol "'alpha" "alpha")
 (check-external 'quote-list "'(1 2 3)" "(1 2 3)")
