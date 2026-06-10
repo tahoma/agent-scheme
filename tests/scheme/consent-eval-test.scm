@@ -3545,13 +3545,17 @@
            "(import (consent reader)) 'ok")))
        #t)
 
-;; Under the grant the runtime loads and interprets its own reader from source
-;; and the imported reader actually parses input -- metacircular self-hosting.
-(check-external/options 'internal-library-self-hosts-reader
-                        "(import (consent reader))
-                         (length (consent-read-all \"(a b c)\"))"
+;; Under the grant the runtime loads and interprets one of its own internal
+;; libraries from source and the imported binding is usable -- the metacircular
+;; self-hosting mechanism (resolve -> register-source-library! -> bind). A tiny
+;; library keeps this cheap on every portable host; the heavy proof that a full
+;; library (the reader) self-hosts lives in the compiled `--host-run' path, where
+;; the native interpreter loads it quickly rather than being re-interpreted.
+(check-external/options 'internal-library-self-hosts-from-source
+                        "(import (consent version))
+                         (length consent-version-datum)"
                         '((internal-libraries-allowed . #t))
-                        "1")
+                        "4")
 
 ;; The grant only exposes libraries that actually exist as runtime source; it
 ;; does not turn every (consent ...) name into a phantom library.
