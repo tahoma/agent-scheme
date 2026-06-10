@@ -645,6 +645,7 @@ continuation-passing primitive dispatch names."
           ;; numbers.
           (native-result-value value '())))
 
+    ;; Cache pairing each registered native value with its shared binding cell.
     (define native-binding-cells '())
 
     (define (native-binding-cell name value)

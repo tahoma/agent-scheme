@@ -11,6 +11,7 @@
 ;;; Code:
 
 (require 'ert)
+(require 'scheme)
 
 (defun consent-scheme-module-ownership-test--read (path)
   "Return repository-relative PATH contents."
@@ -19,8 +20,25 @@
     (buffer-string)))
 
 (defun consent-scheme-module-ownership-test--imports-eval-p (source)
-  "Return non-nil when SOURCE imports the portable evaluator module."
-  (string-match-p "(consent eval)" source))
+  "Return non-nil when SOURCE imports the portable evaluator module.
+Only actual import forms count; prose mentions of the library name in
+comments or docstrings do not."
+  (with-temp-buffer
+    (insert source)
+    (scheme-mode)
+    (goto-char (point-min))
+    (let (found)
+      (while (and (not found)
+                  (re-search-forward "(import\\_>" nil t))
+        (let ((start (match-beginning 0)))
+          (unless (nth 8 (syntax-ppss start))
+            (goto-char start)
+            (forward-sexp)
+            (setq found
+                  (string-match-p
+                   "(consent eval)"
+                   (buffer-substring-no-properties start (point)))))))
+      found)))
 
 (ert-deftest consent-scheme-module-ownership-test-runtime-result-own-definitions ()
   "Keep runtime values and result rendering out of the portable evaluator."
