@@ -135,6 +135,114 @@ write_runtime_source_manifest() {
   printf '%s\n' "$source_list" > "$manifest_root/runtime-source-manifest"
 }
 
+# Internal libraries whose compiled modules the generated main registers in the
+# runtime's native-library registry: library key | path under scheme/ | the
+# main's import prefix. Under the internal-libraries grant the resolver binds
+# imports of these keys to the compiled modules directly (the product serving
+# as its own host runner) instead of re-interpreting their source.
+native_library_table() {
+  cat <<'EOF'
+(agent task)|agent/task.sld|consent-main:agent-task:
+(agent transcript)|agent/transcript.sld|consent-main:agent-transcript:
+(consent approval)|consent/approval.sld|consent-main:approval:
+(consent base)|consent/base.sld|consent-main:base:
+(consent context)|consent/context.sld|consent-main:context:
+(consent eval)|consent/eval.sld|consent-main:eval:
+(consent helper)|consent/helper.sld|consent-main:helper:
+(consent interpreter)|consent/interpreter.sld|consent-main:interpreter:
+(consent job)|consent/job.sld|consent-main:job:
+(consent library)|consent/library.sld|consent-main:library:
+(consent macro)|consent/macro.sld|consent-main:macro:
+(consent memory)|consent/memory.sld|consent-main:memory:
+(consent plan)|consent/plan.sld|consent-main:plan:
+(consent reader)|consent/reader.sld|consent-main:reader:
+(consent redaction)|consent/redaction.sld|consent-main:redaction:
+(consent runtime)|consent/runtime.sld|consent-main:runtime:
+(consent session)|consent/session.sld|consent-main:session:
+(consent version)|consent/version.sld|consent-main:version:
+(cli native-cli)|cli/native-cli.sld|consent-main:cli-native-cli:
+(cli process-host)|cli/process-host.sld|consent-main:cli-process-host:
+(cli repl-chrome)|cli/repl-chrome.sld|consent-main:cli-repl-chrome:
+(cli repl-shell)|cli/repl-shell.sld|consent-main:cli-repl-shell:
+(cli script)|cli/script.sld|consent-main:cli-script:
+EOF
+}
+
+# Generate the native-library registration forms the generated main evaluates at
+# startup. Export lists are extracted from each library's define-library form by
+# the compile host's own reader (handling (rename internal external) clauses), so
+# the registry is single-sourced from the .sld files rather than hand-maintained.
+write_native_library_registrations() {
+  registrations_file=$1
+
+  extract_file="$build_dir/native-library-exports-extract.scm"
+  {
+    printf '%s\n' '(import (scheme base) (scheme file) (scheme read) (scheme write))'
+    printf '%s\n' '(define library-files'
+    printf '%s\n' '  (list'
+    native_library_table | while IFS='|' read -r key path prefix; do
+      [ -n "$key" ] || continue
+      printf '    "%s/%s"\n' "$scheme_dir" "$path"
+    done
+    printf '%s\n' '    ))'
+    cat <<'EOF'
+(for-each
+ (lambda (path)
+   (call-with-input-file path
+     (lambda (port)
+       (let ((form (read port)))
+         (for-each
+          (lambda (clause)
+            (if (and (pair? clause) (eq? (car clause) 'export))
+                (for-each
+                 (lambda (entry)
+                   (display path)
+                   (display "\t")
+                   (write (if (pair? entry) (car (cddr entry)) entry))
+                   (newline))
+                 (cdr clause))))
+          (cddr form))))))
+ library-files)
+EOF
+  } > "$extract_file"
+
+  case "$compile_host" in
+    gambit)
+      exports=$("$gsi" -:r7rs "$extract_file") \
+        || die "could not extract native library exports via gsi"
+      ;;
+    racket)
+      extract_rkt="$build_dir/native-library-exports-extract.rkt"
+      { printf '%s\n' '#lang r7rs'; cat "$extract_file"; } > "$extract_rkt"
+      exports=$("$racket" "$extract_rkt") \
+        || { rm -f "$extract_rkt"; die "could not extract native library exports via racket"; }
+      rm -f "$extract_rkt"
+      ;;
+    *)
+      die "cannot extract native library exports for host $compile_host"
+      ;;
+  esac
+
+  [ -n "$exports" ] || die "native library export extraction produced no entries"
+
+  {
+    printf '\n%s\n' ';; Register the compiled internal libraries in the native-library registry'
+    printf '%s\n' ';; so imports made under the internal-libraries grant bind to the modules'
+    printf '%s\n' ';; linked into this executable (the product serving as its own host runner).'
+    native_library_table | while IFS='|' read -r key path prefix; do
+      [ -n "$key" ] || continue
+      printf '(consent-main:runtime:consent-register-native-library!\n'
+      printf " '%s\n" "$key"
+      printf ' (list\n'
+      printf '%s\n' "$exports" | awk -F'\t' -v p="$scheme_dir/$path" -v prefix="$prefix" '
+        $1 == p && !seen[$2]++ {
+          printf "  (cons (quote %s) %s%s)\n", $2, prefix, $2
+        }'
+      printf '  ))\n'
+    done
+  } > "$registrations_file"
+}
+
 # Write a `(consent embedded-source)' library whose exported installer registers
 # each embedded source string with the runtime. SOURCE_LIST is the newline-
 # separated set of canonical relative paths from enumerate_runtime_source_files
@@ -198,7 +306,9 @@ write_racket_main_common() {
         (prefix (consent approval) consent-main:approval:)
         (prefix (consent base) consent-main:base:)
         (prefix (consent context) consent-main:context:)
+        (prefix (consent eval) consent-main:eval:)
         (prefix (consent helper) consent-main:helper:)
+        (prefix (consent interpreter) consent-main:interpreter:)
         (prefix (consent job) consent-main:job:)
         (prefix (consent library) consent-main:library:)
         (prefix (consent macro) consent-main:macro:)
@@ -209,6 +319,7 @@ write_racket_main_common() {
         (prefix (consent result) consent-main:result:)
         (prefix (consent runtime) consent-main:runtime:)
         (prefix (consent session) consent-main:session:)
+        (prefix (consent version) consent-main:version:)
         (prefix (cli process-host) consent-main:cli-process-host:)
         (prefix (cli native-cli) consent-main:cli-native-cli:)
         (prefix (cli repl-chrome) consent-main:cli-repl-chrome:)
@@ -391,9 +502,11 @@ EOF
 
 write_racket_main() {
   main_file=$1
+  registrations_file=$2
 
   {
     write_racket_main_common
+    cat "$registrations_file"
     cat <<'EOF'
 
 ;; Register the embedded bootstrap source (prelude, syntax prelude, and runtime
@@ -465,7 +578,9 @@ write_gambit_main_common() {
         (prefix (consent approval) consent-main:approval:)
         (prefix (consent base) consent-main:base:)
         (prefix (consent context) consent-main:context:)
+        (prefix (consent eval) consent-main:eval:)
         (prefix (consent helper) consent-main:helper:)
+        (prefix (consent interpreter) consent-main:interpreter:)
         (prefix (consent job) consent-main:job:)
         (prefix (consent library) consent-main:library:)
         (prefix (consent macro) consent-main:macro:)
@@ -476,6 +591,7 @@ write_gambit_main_common() {
         (prefix (consent result) consent-main:result:)
         (prefix (consent runtime) consent-main:runtime:)
         (prefix (consent session) consent-main:session:)
+        (prefix (consent version) consent-main:version:)
         (prefix (cli process-host) consent-main:cli-process-host:)
         (prefix (cli native-cli) consent-main:cli-native-cli:)
         (prefix (cli repl-chrome) consent-main:cli-repl-chrome:)
@@ -659,10 +775,12 @@ EOF
 write_gambit_main() {
   main_file=$1
   search_dir=$2
+  registrations_file=$3
 
   printf '#!gsi -:r7rs,search=%s\n' "$search_dir" > "$main_file"
   {
     write_gambit_main_common
+    cat "$registrations_file"
     cat <<'EOF'
 
 ;; Register the embedded bootstrap source (prelude, syntax prelude, and runtime
@@ -876,7 +994,9 @@ compile_racket() {
   mkdir -p "$collections_dir/consent"
   write_embedded_source_module "$collections_dir/consent/embedded-source.rkt" '#lang r7rs' "$runtime_source_list"
   write_runtime_source_manifest "$host_root" "$runtime_source_list"
-  write_racket_main "$main_file"
+  registrations_file="$src_dir/native-library-registrations.scm"
+  write_native_library_registrations "$registrations_file"
+  write_racket_main "$main_file" "$registrations_file"
   assert_product_main_gated "$main_file"
   write_manifest "$host_root" racket "$version"
 
@@ -1023,7 +1143,9 @@ compile_gambit() {
     >"$logs_dir/gsi-r7rs-probe.log" 2>&1 \
     || die "Gambit gsi does not accept R7RS mode with the Consent Scheme library search path; see $logs_dir/gsi-r7rs-probe.log"
 
-  write_gambit_main "$main_file" "$src_dir"
+  registrations_file="$src_dir/native-library-registrations.scm"
+  write_native_library_registrations "$registrations_file"
+  write_gambit_main "$main_file" "$src_dir" "$registrations_file"
   assert_product_main_gated "$main_file"
   write_manifest "$host_root" gambit "$version"
   runtime_source_list=$(enumerate_runtime_source_files)
