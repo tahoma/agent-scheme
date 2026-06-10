@@ -510,11 +510,13 @@ and install manifest from, so the build never hand-maintains a parallel list."
 
     (define (host-library-available? key context)
       "Report whether KEY is loadable under an active host-libraries grant.
-Requires the grant, an internal library key, and resolvable source so that
-programs that merely define their own (consent ...) libraries are unaffected."
+Requires the grant, an internal library key, and either a compiled-in native
+bindings table or resolvable source, so that programs that merely define their
+own (consent ...) libraries are unaffected."
       (and (context-internal-libraries-allowed? context)
            (host-library-key? key)
-           (host-library-source-entry key)
+           (or (consent-native-library-ref key)
+               (host-library-source-entry key))
            #t))
 
     (define (register-host-source-library! key context environment)
@@ -523,6 +525,166 @@ programs that merely define their own (consent ...) libraries are unaffected."
         (if entry
             (register-source-library! (cdr entry) context environment)
             (eval-error "host source library not found" key))))
+
+    (define (native-callback-shim value context)
+      "Wrap interpreted callable VALUE as a host procedure applying it in CONTEXT."
+      (let ((applier (consent-native-applier-ref)))
+        (lambda arguments
+          (applier value arguments context))))
+
+    (define (native-argument-value value context seen)
+      "Convert one argument crossing into native code.
+Interpreted callables become host callbacks; pairs and vectors are walked
+copy-on-write so callbacks nested in data (for example a
+policy-confirmation-function inside an options alist) are converted while
+untouched structure keeps its identity. SEEN guards against cyclic data, which
+is returned unchanged on revisit."
+      (cond
+       ((or (consent-procedure? value)
+            (consent-primitive-procedure? value)
+            (continuation? value)
+            (consent-parameter? value))
+        (native-callback-shim value context))
+       ((pair? value)
+        (if (memq value seen)
+            value
+            (let* ((next-seen (cons value seen))
+                   (head (native-argument-value (car value) context next-seen))
+                   (tail (native-argument-value (cdr value) context next-seen)))
+              (if (and (eq? head (car value)) (eq? tail (cdr value)))
+                  value
+                  (cons head tail)))))
+       ((vector? value)
+        (if (memq value seen)
+            value
+            (let* ((next-seen (cons value seen))
+                   (length (vector-length value))
+                   (converted
+                    (let loop ((index 0) (acc '()) (changed #f))
+                      (if (= index length)
+                          (and changed (reverse acc))
+                          (let* ((element (vector-ref value index))
+                                 (next (native-argument-value
+                                        element context next-seen)))
+                            (loop (+ index 1)
+                                  (cons next acc)
+                                  (or changed (not (eq? next element)))))))))
+              (if converted (list->vector converted) value))))
+       (else value)))
+
+    (define (native-result-scalar value)
+      "Wrap a host-number scalar as a canonical number record, else pass through."
+      (cond
+       ((not (number? value)) value)
+       ((and (exact? value) (integer? value))
+        (consent-make-canonical-integer value))
+       ((exact? value)
+        (consent-make-canonical-rational (numerator value) (denominator value)))
+       ((real? value)
+        (consent-make-canonical-decimal value))
+       (else value)))
+
+    (define (native-result-value value seen)
+      "Convert one native RESULT for interpreted use.
+Native unwrap accessors return raw host numbers (consent-number-value, read
+positions); interpreted callers expect canonical records, mirroring how
+char->integer wraps at the primitive boundary. Pairs and vectors are walked
+copy-on-write -- canonical structure passes through untouched and keeps its
+identity -- and SEEN returns cyclic data unchanged on revisit."
+      (cond
+       ((number? value) (native-result-scalar value))
+       ((pair? value)
+        (if (memq value seen)
+            value
+            (let* ((next-seen (cons value seen))
+                   (head (native-result-value (car value) next-seen))
+                   (tail (native-result-value (cdr value) next-seen)))
+              (if (and (eq? head (car value)) (eq? tail (cdr value)))
+                  value
+                  (cons head tail)))))
+       ((vector? value)
+        (if (memq value seen)
+            value
+            (let* ((next-seen (cons value seen))
+                   (length (vector-length value))
+                   (converted
+                    (let loop ((index 0) (acc '()) (changed #f))
+                      (if (= index length)
+                          (and changed (reverse acc))
+                          (let* ((element (vector-ref value index))
+                                 (next (native-result-value element next-seen)))
+                            (loop (+ index 1)
+                                  (cons next acc)
+                                  (or changed (not (eq? next element)))))))))
+              (if converted (list->vector converted) value))))
+       (else value)))
+
+    (define (native-binding-value name value)
+      "Wrap native VALUE for interpreted use.
+Host procedures become primitives whose arguments are converted so interpreted
+closures can cross as callbacks and whose results are converted so raw host
+numbers come back canonical; every other value binds directly, because the
+compiled internal libraries share the runtime's value representations. The
+primitive name is prefixed so it can never collide with the interpreter's
+continuation-passing primitive dispatch names."
+      (if (procedure? value)
+          (make-primitive-procedure
+           (string->symbol (string-append "native:" (symbol->string name)))
+           (lambda (arguments context)
+             (native-result-value
+              (apply value
+                     (map (lambda (argument)
+                            (native-argument-value argument context '()))
+                          arguments))
+              '()))
+           0
+           #f)
+          ;; Exported data values (for example consent-version-datum) may carry
+          ;; raw host numbers a native reader would consume directly; convert
+          ;; them once at registration so interpreted callers see canonical
+          ;; numbers.
+          (native-result-value value '())))
+
+    (define native-binding-cells '())
+
+    (define (native-binding-cell name value)
+      "Return the shared binding cell for native VALUE, creating it on first use.
+Internal libraries re-export one another's bindings ((consent eval) re-exports
+the (consent runtime) predicates, for example), and importing two such
+libraries into one program is only compatible when both export records carry
+the same cell, so the cache is keyed by the native value itself."
+      (let ((entry (assq value native-binding-cells)))
+        (if entry
+            (cdr entry)
+            (let ((cell (make-cell (native-binding-value name value))))
+              (set! native-binding-cells
+                    (cons (cons value cell) native-binding-cells))
+              cell))))
+
+    (define (register-native-library! key bindings context)
+      "Register internal library KEY from its compiled-in native BINDINGS table."
+      (let ((value-environment (consent-make-empty-environment))
+            (syntax-environment (library-make-empty-syntax-environment #f)))
+        (for-each
+         (lambda (binding)
+           (set-environment-frame!
+            value-environment
+            (cons (cons (car binding)
+                        (native-binding-cell (car binding) (cdr binding)))
+                  (environment-frame value-environment))))
+         bindings)
+        (library-registry-set!
+         context
+         key
+         (make-library
+          key
+          key
+          (snapshot-library-bindings
+           value-environment
+           syntax-environment
+           key)
+          value-environment
+          syntax-environment))))
 
     (define (find-library-export name exports)
       "Return NAME's binding from EXPORTS, or #f when absent."
@@ -1326,7 +1488,14 @@ programs that merely define their own (consent ...) libraries are unaffected."
           (register-empty-emacs-capability-library! key context))
          ((and (not (library-registry-ref context key))
                (host-library-available? key context))
-          (register-host-source-library! key context environment)))
+          ;; Prefer the compiled-in native bindings (the product serving as its
+          ;; own host runner at native speed); fall back to interpreting the
+          ;; library's source where no native table is registered (interpreted
+          ;; hosts, or libraries outside the compiled link set).
+          (let ((bindings (consent-native-library-ref key)))
+            (if bindings
+                (register-native-library! key bindings context)
+                (register-host-source-library! key context environment)))))
         (or (library-registry-ref context key)
             (eval-error "unknown library" key))))
 

@@ -16,6 +16,10 @@
           consent-library-search-directory-list
           consent-register-embedded-source!
           consent-embedded-source-ref
+          consent-register-native-library!
+          consent-native-library-ref
+          consent-install-native-applier!
+          consent-native-applier-ref
           consent-make-empty-environment
           consent-unspecified
           consent-unspecified?
@@ -345,6 +349,40 @@
       "Return registered embedded source text for RELATIVE-PATH, or #f when absent."
       (let ((entry (assoc relative-path consent-embedded-source-entries)))
         (and entry (cdr entry))))
+
+    ;; Native-library registry: a compiled host's generated main registers, once
+    ;; at startup, name->value tables for the internal libraries linked into the
+    ;; executable. Under the internal-libraries grant the resolver binds those
+    ;; imports to the compiled modules directly instead of re-interpreting their
+    ;; source, which is what lets the product binary serve as its own host
+    ;; runner at native speed. Empty for interpreted/source runs, which keep the
+    ;; source-loading path.
+    (define consent-native-library-entries '())
+
+    (define (consent-register-native-library! key bindings)
+      "Register native BINDINGS, an alist of (name . value), for internal library KEY."
+      (set! consent-native-library-entries
+            (cons (cons key bindings) consent-native-library-entries))
+      consent-unspecified)
+
+    (define (consent-native-library-ref key)
+      "Return the native bindings registered for library KEY, or #f when absent."
+      (let ((entry (assoc key consent-native-library-entries)))
+        (and entry (cdr entry))))
+
+    ;; Native applier hook: installed by the interpreter at load time so the
+    ;; library layer can apply interpreted closures that a program passes as
+    ;; callbacks into natively bound library procedures.
+    (define consent-native-applier-procedure #f)
+
+    (define (consent-install-native-applier! applier)
+      "Install APPLIER, called as (APPLIER procedure arguments context), for native callbacks."
+      (set! consent-native-applier-procedure applier)
+      consent-unspecified)
+
+    (define (consent-native-applier-ref)
+      "Return the installed native callback applier, or #f when absent."
+      consent-native-applier-procedure)
 
     (define (consent-version-components)
       "Return the Consent Scheme version as exact non-negative host integers."
@@ -2274,6 +2312,16 @@ capability decision for the audit trail and raises on denial."
              (path-normalize (path-join directory path)))
            paths))
 
+    (define (option-count options key default)
+      "Return numeric option KEY as a host count.
+A canonical number record is unwrapped: a caller whose options alist crossed
+the compiled host-runner boundary carries canonical numbers where a native
+call site would have written host literals."
+      (let ((value (option-ref options key default)))
+        (if (consent-number? value)
+            (consent-number-value value)
+            value)))
+
     (define (new-eval-context options)
       "Create a fresh evaluation context from user option overrides."
       (let ((include-directory
@@ -2282,17 +2330,17 @@ capability decision for the audit trail and raises on denial."
       (make-eval-context
        0
        (if (assq 'max-steps options)
-           (option-ref options 'max-steps consent-default-maximum-steps)
-           (option-ref options
-                       'max-non-tail-steps
-                       consent-default-maximum-steps))
-       (option-ref options
-                   'max-value-nodes
-                   consent-default-maximum-value-nodes)
+           (option-count options 'max-steps consent-default-maximum-steps)
+           (option-count options
+                         'max-non-tail-steps
+                         consent-default-maximum-steps))
+       (option-count options
+                     'max-value-nodes
+                     consent-default-maximum-value-nodes)
        0
-       (option-ref options
-                   'max-host-callbacks
-                   consent-default-maximum-host-callbacks)
+       (option-count options
+                     'max-host-callbacks
+                     consent-default-maximum-host-callbacks)
        (make-syntax-environment '() #f '())
        '()
        (normalize-include-paths
@@ -2309,12 +2357,12 @@ capability decision for the audit trail and raises on denial."
        (option-ref options 'capability-grants '())
        '()
        0
-       (option-ref options
-                   'max-events
-                   consent-default-maximum-events)
-       (option-ref options
-                   'max-event-nodes
-                   consent-default-maximum-event-nodes)
+       (option-count options
+                     'max-events
+                     consent-default-maximum-events)
+       (option-count options
+                     'max-event-nodes
+                     consent-default-maximum-event-nodes)
        '()
        #f
        #f
@@ -2381,78 +2429,90 @@ capability decision for the audit trail and raises on denial."
           (budget-error "host callback budget exceeded"
                         (primitive-procedure-name primitive))))
 
-    (define (value-node-count value seen)
-      "Count the reachable nodes in VALUE while tolerating cycles."
-      (cond
-       ((or (boolean? value)
-            (null? value)
-            (symbol? value)
-            (identifier? value)
-            (char? value)
-            ;; Raw host numbers reach here legitimately: public accessors such
-            ;; as `consent-number-value' unwrap canonical numbers to host
-            ;; integers/reals, and such a value can be an evaluation result.
-            (number? value)
-            (consent-number? value)
-            (consent-unspecified? value)
-            (consent-procedure? value)
-            (consent-primitive-procedure? value)
-            (consent-parameter? value)
-            (continuation? value)
-            (consent-error-object? value)
-            (consent-eof-object? value)
-            (consent-port? value)
-            (environment-specifier? value)
-            (string-output-port? value)
-            (consent-record-type? value))
-        1)
-       ((consent-record? value)
-        (if (memq value seen)
-            0
-            (let ((fields (consent-record-fields value)))
+    (define (value-node-count value seen . maybe-tolerant)
+      "Count the reachable nodes in VALUE while tolerating cycles.
+An optional truthy MAYBE-TOLERANT argument counts unrecognized host values as
+opaque leaves instead of raising: under the internal-libraries grant, natively
+bound library procedures legitimately return their own host record types, so
+the canonical-value tripwire is relaxed only for that trusted posture."
+      (let ((tolerant (and (pair? maybe-tolerant) (car maybe-tolerant))))
+        (cond
+         ((or (boolean? value)
+              (null? value)
+              (symbol? value)
+              (identifier? value)
+              (char? value)
+              ;; Raw host numbers reach here legitimately: public accessors such
+              ;; as `consent-number-value' unwrap canonical numbers to host
+              ;; integers/reals, and such a value can be an evaluation result.
+              (number? value)
+              (consent-number? value)
+              (consent-unspecified? value)
+              (consent-procedure? value)
+              (consent-primitive-procedure? value)
+              (consent-parameter? value)
+              (continuation? value)
+              (consent-error-object? value)
+              (consent-eof-object? value)
+              (consent-port? value)
+              (environment-specifier? value)
+              (string-output-port? value)
+              (consent-record-type? value))
+          1)
+         ((consent-record? value)
+          (if (memq value seen)
+              0
+              (let ((fields (consent-record-fields value)))
+                (let loop ((index 0) (count 1))
+                  (if (= index (vector-length fields))
+                      count
+                      (loop (+ index 1)
+                            (+ count
+                               (value-node-count
+                                (vector-ref fields index)
+                                (cons value seen)
+                                tolerant))))))))
+         ((multiple-values? value)
+          (+ 1
+             (let loop ((rest (multiple-values-values value)) (count 0))
+               (if (null? rest)
+                   count
+                   (loop (cdr rest)
+                         (+ count
+                            (value-node-count (car rest) seen tolerant)))))))
+         ((string? value)
+          (+ 1 (string-length value)))
+         ((bytevector? value)
+          (+ 1 (bytevector-length value)))
+         ((pair? value)
+          (if (memq value seen)
+              0
+              (+ 1
+                 (value-node-count (car value) (cons value seen) tolerant)
+                 (value-node-count (cdr value) (cons value seen) tolerant))))
+         ((vector? value)
+          (if (memq value seen)
+              0
               (let loop ((index 0) (count 1))
-                (if (= index (vector-length fields))
+                (if (= index (vector-length value))
                     count
                     (loop (+ index 1)
                           (+ count
                              (value-node-count
-                              (vector-ref fields index)
-                              (cons value seen)))))))))
-       ((multiple-values? value)
-        (+ 1
-           (let loop ((rest (multiple-values-values value)) (count 0))
-             (if (null? rest)
-                 count
-                 (loop (cdr rest)
-                       (+ count
-                          (value-node-count (car rest) seen)))))))
-       ((string? value)
-        (+ 1 (string-length value)))
-       ((bytevector? value)
-        (+ 1 (bytevector-length value)))
-       ((pair? value)
-        (if (memq value seen)
-            0
-            (+ 1
-               (value-node-count (car value) (cons value seen))
-               (value-node-count (cdr value) (cons value seen)))))
-       ((vector? value)
-        (if (memq value seen)
-            0
-            (let loop ((index 0) (count 1))
-              (if (= index (vector-length value))
-                  count
-                  (loop (+ index 1)
-                        (+ count
-                           (value-node-count
-                            (vector-ref value index)
-                            (cons value seen))))))))
-       (else
-        (eval-error "unsupported Scheme value" value))))
+                              (vector-ref value index)
+                              (cons value seen)
+                              tolerant)))))))
+         (tolerant 1)
+         (else
+          (eval-error "unsupported Scheme value" value)))))
 
     (define (check-value-budget value context)
       "Reject VALUE when its reachable node count exceeds the result budget."
-      (let ((count (value-node-count value '())))
+      (let ((count (value-node-count
+                    value
+                    '()
+                    (and context
+                         (context-internal-libraries-allowed? context)))))
         (if (> count (context-maximum-value-nodes context))
             (budget-error "value node budget exceeded"
                           count
