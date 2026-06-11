@@ -151,6 +151,24 @@
       (regexp-quote "(events ((yield (first))))")
       result))))
 
+(ert-deftest consent-agent-io-test-event-count-limit-uncatchable-by-guard ()
+  "Keep budget enforcement uncatchable by interpreted guard.
+Interpreted guard converts host conditions from primitives into catchable
+raises, but budget conditions must keep failing closed."
+  (let ((result
+         (consent-agent-io-test--eval-result-string
+          "(import (scheme base) (agent io))
+           (guard (condition (#t 'swallowed))
+             (agent-yield '(first))
+             (agent-yield '(second))
+             'unreachable)"
+          '(:max-events 1))))
+    (should (string-match-p (regexp-quote "(status error)") result))
+    (should
+     (string-match-p
+      (regexp-quote "event count budget exceeded")
+      result))))
+
 (ert-deftest consent-agent-io-test-event-node-limit-fails-closed ()
   "Reject oversized event records before adding them to the result payload."
   (let ((result

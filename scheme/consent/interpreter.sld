@@ -653,6 +653,67 @@
            (let ((maximum (primitive-procedure-maximum-arity primitive)))
              (or (not maximum) (<= count maximum)))))
 
+    ;; Unique marker distinguishing a caught host condition from a value.
+    (define host-condition-tag (list 'host-condition))
+
+    (define (host-condition-budget? condition)
+      "Report whether CONDITION carries a Consent budget diagnostic.
+Budget enforcement fails closed, so budget conditions stay host-level and
+uncatchable by interpreted exception handlers."
+      (and (error-object? condition)
+           (let ((message (error-object-message condition))
+                 (prefix "consent budget error: "))
+             (and (string? message)
+                  (>= (string-length message) (string-length prefix))
+                  (string=? (substring message 0 (string-length prefix))
+                            prefix)))))
+
+    (define (host-condition->consent-condition condition)
+      "Return CONDITION as a value interpreted exception handlers can inspect.
+Host error objects become interpreter error objects so guard clauses can
+use error-object? and the message and irritant accessors; any other raised
+host value crosses unchanged."
+      (if (error-object? condition)
+          (make-consent-error-object
+           (error-object-message condition)
+           (error-object-irritants condition))
+          condition))
+
+    (define (native-primitive-name? name)
+      "Report whether NAME marks a natively bound library procedure shim."
+      (let ((text (symbol->string name)))
+        (and (>= (string-length text) 7)
+             (string=? (substring text 0 7) "native:"))))
+
+    (define (apply-host-primitive/k
+             function arguments context continuation native?)
+      "Invoke host primitive FUNCTION and deliver its budgeted result.
+A host condition escaping FUNCTION (a primitive argument error, a native
+module raise) becomes an interpreted raise that walks the context's
+exception handlers, so interpreted guard catches primitive errors the way
+it catches interpreted raises. Budget conditions from the interpreter's
+own primitives enforce this context's budgets and propagate unchanged so
+enforcement stays uncatchable; a budget condition surfacing from a NATIVE?
+call is a nested evaluation's error result (a consent-eval-source running
+its own budgeted context) and converts like any other condition. When the
+handler stack empties before the condition surfaces it also propagates
+unchanged, preserving top-level diagnostics."
+      (let ((outcome
+             (guard (condition
+                     ((and (pair? (context-exception-handlers context))
+                           (or native?
+                               (not (host-condition-budget? condition))))
+                      (cons host-condition-tag condition)))
+               (cons 'value (function arguments context)))))
+        (if (eq? (car outcome) host-condition-tag)
+            (primitive-raise/k
+             (list (host-condition->consent-condition (cdr outcome)))
+             context
+             continuation)
+            (continue
+             continuation
+             (check-value-budget (cdr outcome) context)))))
+
     (define (apply-procedure procedure arguments context tail? . maybe-continuation)
       "All callable values pass through this boundary so primitive callbacks, parameter procedures, compound procedures, and continuations share arity, budget, tail-position, and trampoline behavior."
       (let ((direct-call? (null? maybe-continuation))
@@ -715,11 +776,18 @@
               ((eq? name 'make-parameter)
                (primitive-make-parameter/k arguments context continuation))
               (else
-               (continue
-                continuation
-                (check-value-budget
-                 (function arguments context)
-                 context)))))))
+               ;; The guarded path costs a host guard per call, so reserve
+               ;; it for dynamic extents with installed interpreted
+               ;; handlers; without them conversion would be a no-op.
+               (if (pair? (context-exception-handlers context))
+                   (apply-host-primitive/k
+                    function arguments context continuation
+                    (native-primitive-name? name))
+                   (continue
+                    continuation
+                    (check-value-budget
+                     (function arguments context)
+                     context))))))))
          ((consent-parameter? procedure)
           (finish
            (apply-parameter/k procedure arguments context continuation)))
