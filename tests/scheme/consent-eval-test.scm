@@ -1642,33 +1642,33 @@
       (expires never)))))
 
 ;; Host-side temporary file path used for portable delete-file coverage.
-(define delete-test-path "/tmp/consent-delete-capability.scm")
+(define delete-test-path "tests/scheme/scratch/consent-delete-capability.scm")
 
 ;; Host-side temporary paths used for portable file port capability coverage.
-(define port-test-input-path "/tmp/consent-port-input.scm")
+(define port-test-input-path "tests/scheme/scratch/consent-port-input.scm")
 ;; Host-side temporary file path used for portable open-output-file coverage.
-(define port-test-output-path "/tmp/consent-port-output.scm")
+(define port-test-output-path "tests/scheme/scratch/consent-port-output.scm")
 ;; Host-side temporary file path used for portable call-with-output-file coverage.
-(define port-test-call-output-path "/tmp/consent-port-call-output.scm")
+(define port-test-call-output-path "tests/scheme/scratch/consent-port-call-output.scm")
 ;; Host-side temporary file path used for portable with-output-to-file coverage.
-(define port-test-with-output-path "/tmp/consent-port-with-output.scm")
+(define port-test-with-output-path "tests/scheme/scratch/consent-port-with-output.scm")
 ;; Host-side temporary file path used for portable close-limit coverage.
-(define port-test-close-output-path "/tmp/consent-port-close-output.scm")
+(define port-test-close-output-path "tests/scheme/scratch/consent-port-close-output.scm")
 ;; Host-side temporary input file path used for portable binary port coverage.
-(define port-test-binary-input-path "/tmp/consent-port-input.bin")
+(define port-test-binary-input-path "tests/scheme/scratch/consent-port-input.bin")
 ;; Host-side temporary output file path used for portable binary port coverage.
-(define port-test-binary-output-path "/tmp/consent-port-output.bin")
+(define port-test-binary-output-path "tests/scheme/scratch/consent-port-output.bin")
 
 ;; First-class file grant that allows the portable evaluator to delete only
 ;; the host-side temporary file above, plus metadata checks after deletion.
 (define delete-file-grant-options
-  '((include-directory . "/tmp")
+  '((include-directory . "tests/scheme/scratch")
     (capability-grants
      (capability-grant
       (id portable-delete-grant)
       (domain file)
       (operations metadata delete)
-      (scope (file-root "/tmp")
+      (scope (file-root "tests/scheme/scratch")
              (paths ("consent-delete-capability.scm"))
              (remote denied)
              (symlinks resolve-within-root))
@@ -1809,13 +1809,13 @@
 
 ;; First-class file grants for host-backed file port reads and creations.
 (define file-port-grant-options
-  '((include-directory . "/tmp")
+  '((include-directory . "tests/scheme/scratch")
     (capability-grants
      (capability-grant
       (id portable-port-grant)
       (domain file)
       (operations read create)
-      (scope (file-root "/tmp")
+      (scope (file-root "tests/scheme/scratch")
              (paths ("consent-port-input.scm"
                      "consent-port-output.scm"
                      "consent-port-call-output.scm"
@@ -2590,7 +2590,7 @@
                (id portable-revoked-port-grant)
                (domain file)
                (operations read)
-               (scope (file-root \"/tmp\")
+               (scope (file-root \"tests/scheme/scratch\")
                       (paths (\"consent-port-input.scm\"))
                       (remote denied)
                       (symlinks portable-unresolved))
@@ -2600,7 +2600,7 @@
               (grant-revoke! 'portable-revoked-port-grant)
               (read-char port))"
            #f
-           '((include-directory . "/tmp")))))
+           '((include-directory . "tests/scheme/scratch")))))
        #t)
 
 (check 'standard-file-port-read-limit-is-enforced
@@ -2613,7 +2613,7 @@
                (id portable-limited-port-grant)
                (domain file)
                (operations read)
-               (scope (file-root \"/tmp\")
+               (scope (file-root \"tests/scheme/scratch\")
                       (paths (\"consent-port-input.scm\"))
                       (remote denied)
                       (symlinks portable-unresolved))
@@ -2624,7 +2624,7 @@
               (read-char port)
               (read-char port))"
            #f
-           '((include-directory . "/tmp")))))
+           '((include-directory . "tests/scheme/scratch")))))
        #t)
 
 (check-external/options 'standard-file-port-close-limit-allows-close
@@ -2635,7 +2635,7 @@
                             (id portable-close-limited-port-grant)
                             (domain file)
                             (operations create)
-                            (scope (file-root \"/tmp\")
+                            (scope (file-root \"tests/scheme/scratch\")
                                    (paths
                                     (\"consent-port-close-output.scm\"))
                                    (remote denied)
@@ -2647,7 +2647,7 @@
                            (write-string \"x\" port)
                            (close-port port)
                            (output-port-open? port))"
-                        '((include-directory . "/tmp"))
+                        '((include-directory . "tests/scheme/scratch"))
                         "#f")
 
 (check 'standard-file-port-close-limit-writes-host-file
@@ -2819,6 +2819,25 @@
               (string=? (consent-result->external
                          (list 'events events))
                         "(events ((yield (first))))")
+              (string=? (field-value error-field 'message)
+                        "consent budget error: event count budget exceeded")
+              #t)
+         #t))
+
+;; Interpreted guard converts host conditions from primitives into
+;; catchable raises, but budget enforcement must stay uncatchable.
+(let* ((result
+        (consent-eval-source-result
+         "(import (scheme base) (agent io))
+          (guard (condition (#t 'swallowed))
+            (agent-yield '(first))
+            (agent-yield '(second))
+            'unreachable)"
+         #f
+         '((max-events . 1))))
+       (error-field (assq 'error (cdr result))))
+  (check 'agent-io-event-count-limit-uncatchable-by-guard
+         (and (equal? (field-value result 'status) 'error)
               (string=? (field-value error-field 'message)
                         "consent budget error: event count budget exceeded")
               #t)

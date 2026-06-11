@@ -327,25 +327,27 @@
 (define (values-expectation? expect)
   (and (pair? expect) (eq? (car expect) 'values)))
 
-;; Decode the portable evaluator's `(values ...)' external wrapper when a case
-;; expects multiple values.
-(define (external-values external)
-  (let ((datum (consent-read external)))
-    (if (and (pair? datum) (eq? (car datum) 'values))
-        (map consent-datum->external (cdr datum))
-        #f)))
-
 ;; Evaluate SOURCE with OPTIONS and normalize the result for expectation checks.
+;; Values expectations evaluate through the result API: a raw multiple-values
+;; return cannot cross the call boundary as one datum when this runner is
+;; itself hosted on the consent runtime (consent --host-run), while the result
+;; record carries the values as data on every posture.
 (define (eval-actual source options expect)
-  (let ((external
-         (consent-value->external
-          (consent-eval-source source #f options))))
-    (if (values-expectation? expect)
-        (let ((values (external-values external)))
-          (if values
-              (list 'values values)
-              (list 'value external)))
-        (list 'value external))))
+  (if (values-expectation? expect)
+      (let* ((result (consent-eval-source-result source #f options))
+             (values-field (assq 'values (cdr result)))
+             (value-field (assq 'value (cdr result))))
+        (cond
+         (values-field
+          (list 'values
+                (map consent-result->external (cadr values-field))))
+         (value-field
+          (list 'value (consent-result->external (cadr value-field))))
+         (else
+          (list 'error result))))
+      (list 'value
+            (consent-value->external
+             (consent-eval-source source #f options)))))
 
 ;; Run CASE through the selected phase and return a normalized actual record.
 (define (actual case)

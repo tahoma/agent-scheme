@@ -246,10 +246,11 @@
                "portable-stderr\n"))
 
       ;; A host-backed stdin port reaches the child while the approval prompt
-      ;; stays on the diagnostic stream, never on the record stream.
-      (let ((stdin-file (string-append
-                         (or (get-environment-variable "TMPDIR") "/tmp")
-                         "/consent-native-cli-portable-stdin")))
+      ;; stays on the diagnostic stream, never on the record stream. Scratch
+      ;; lives inside the working tree so the capability-scoped self-hosted
+      ;; runner (consent --host-run) can write it too.
+      (let ((stdin-file
+             "tests/scheme/scratch/consent-native-cli-portable-stdin"))
         ;; `call-with-output-file' errors on an existing file under some hosts,
         ;; so clear any leftover from a previous host run before writing.
         (if (file-exists? stdin-file) (delete-file stdin-file))
