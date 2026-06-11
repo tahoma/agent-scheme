@@ -6,15 +6,6 @@ EMACS ?= emacs
 # the installed Racket, so it only runs where Racket is present).
 CONSENT_COMPILE_HOST ?= gambit
 CONSENT_COMPILE_BUILD_DIR ?= build/compile
-# Build the non-shipped host-execution test runner used by the compiled and
-# gambit-native white-box shards (a full second host-compiler link). It runs the
-# white-box suite against the COMPILED interpreter -- the coverage those shards
-# exist for -- so the `test-portable-compiled' / `test-portable-gambit-native'
-# targets default it ON (on every lane, including per-push CI). A plain
-# `make compile' (the install path) leaves it empty and never builds it; pass
-# `CONSENT_BUILD_TEST_RUNNER=1 make compile' to build it directly, or empty to a
-# shard target to skip it.
-CONSENT_BUILD_TEST_RUNNER ?=
 # GNU-standard installation variables (see the GNU Coding Standards). `make
 # install` stages the host-compiled binary selected by CONSENT_COMPILE_HOST under
 # $(DESTDIR)$(bindir); `make uninstall` removes exactly those paths. DESTDIR is
@@ -138,7 +129,6 @@ help:
 	@printf '  %-50s %s\n' 'EMACS=emacs' 'Emacs command used by make test.'
 	@printf '  %-50s %s\n' 'CONSENT_COMPILE_HOST=gambit|racket' 'Host compiler selected by make compile (default gambit: standalone binary).'
 	@printf '  %-50s %s\n' 'CONSENT_COMPILE_BUILD_DIR=build/compile' 'Output tree used by make compile.'
-	@printf '  %-50s %s\n' 'CONSENT_BUILD_TEST_RUNNER=1' 'Build the non-shipped host-execution test runner (compiled/gambit-native shards default on; off for plain make compile).'
 	@printf '  %-50s %s\n' 'PREFIX=/usr/local' 'Install prefix for make install/uninstall.'
 	@printf '  %-50s %s\n' 'DESTDIR=' 'Staging root prepended to install/uninstall paths.'
 	@printf '  %-50s %s\n' 'bindir=$$(PREFIX)/bin' 'Directory make install writes the consent binary to.'
@@ -202,7 +192,6 @@ compile:
 	CONSENT_COMPILE_HOST='$(CONSENT_COMPILE_HOST)' \
 	CONSENT_COMPILE_BUILD_DIR='$(CONSENT_COMPILE_BUILD_DIR)' \
 	CONSENT_INSTALL_DATADIR='$(consentlibdir)' \
-	CONSENT_BUILD_TEST_RUNNER='$(CONSENT_BUILD_TEST_RUNNER)' \
 	CONSENT_RACKET='$(CONSENT_RACKET)' \
 	CONSENT_RACO='$(CONSENT_RACO)' \
 	CONSENT_GAMBIT='$(CONSENT_GAMBIT)' \
@@ -363,24 +352,24 @@ test-portable-gambit:
 
 test-portable-gambit-native:
 	@if command -v '$(CONSENT_GAMBIT)' >/dev/null 2>&1 && command -v '$(CONSENT_GAMBIT_COMPILER)' >/dev/null 2>&1; then \
-		CONSENT_BUILD_TEST_RUNNER="$${CONSENT_BUILD_TEST_RUNNER-1}" CONSENT_COMPILE_HOST=gambit $(CONSENT_PARALLEL_MAKE) compile; \
+		CONSENT_COMPILE_HOST=gambit $(CONSENT_PARALLEL_MAKE) compile; \
 	else \
 		printf '%s\n' 'Gambit compile prerequisites are not available; Gambit-compiled host shard will skip if no runner exists.'; \
 	fi
 	@if [ -f '$(CONSENT_COMPILE_BUILD_DIR)/gambit/logs/compile.log' ]; then cat '$(CONSENT_COMPILE_BUILD_DIR)/gambit/logs/compile.log'; fi
 	@if [ -f '$(CONSENT_COMPILE_BUILD_DIR)/gambit/logs/smoke.log' ]; then cat '$(CONSENT_COMPILE_BUILD_DIR)/gambit/logs/smoke.log'; fi
-	CONSENT_GAMBIT_NATIVE='$(abspath $(CONSENT_COMPILE_BUILD_DIR)/gambit/bin/consent-host-runner)' CONSENT_TEST_SELECTOR='$(CONSENT_PORTABLE_GAMBIT_NATIVE_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
+	CONSENT_GAMBIT_NATIVE='$(abspath $(CONSENT_COMPILE_BUILD_DIR)/gambit/bin/consent)' CONSENT_TEST_SELECTOR='$(CONSENT_PORTABLE_GAMBIT_NATIVE_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
 
 test-portable-racket:
 	CONSENT_TEST_SELECTOR='$(CONSENT_PORTABLE_RACKET_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
 
 test-portable-compiled:
 	@if command -v '$(CONSENT_RACKET)' >/dev/null 2>&1 && command -v '$(CONSENT_RACO)' >/dev/null 2>&1; then \
-		CONSENT_BUILD_TEST_RUNNER="$${CONSENT_BUILD_TEST_RUNNER-1}" CONSENT_COMPILE_HOST=racket $(CONSENT_PARALLEL_MAKE) compile; \
+		CONSENT_COMPILE_HOST=racket $(CONSENT_PARALLEL_MAKE) compile; \
 	else \
 		printf '%s\n' 'Racket compile prerequisites are not available; compiled host shard will skip if no runner exists.'; \
 	fi
-	CONSENT_COMPILED='$(abspath $(CONSENT_COMPILE_BUILD_DIR)/racket/bin/consent-host-runner)' CONSENT_TEST_SELECTOR='$(CONSENT_PORTABLE_COMPILED_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
+	CONSENT_COMPILED='$(abspath $(CONSENT_COMPILE_BUILD_DIR)/racket/bin/consent)' CONSENT_TEST_SELECTOR='$(CONSENT_PORTABLE_COMPILED_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
 
 test-portable-guile:
 	CONSENT_TEST_SELECTOR='$(CONSENT_PORTABLE_GUILE_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)

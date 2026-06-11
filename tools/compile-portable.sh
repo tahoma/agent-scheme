@@ -70,8 +70,7 @@ version_datum() {
 # Structural guard: the product main must route --script through the gated
 # Consent interpreter (cli-script-run-file) and must NOT host-load user input.
 # This fails the build if the product entry point ever regresses to host
-# execution. (The non-shipped host-runner main legitimately uses host `load' and
-# is checked separately.)
+# execution.
 assert_product_main_gated() {
   main_file=$1
   grep -q 'cli-script-run-file' "$main_file" \
@@ -527,31 +526,7 @@ EOF
   } > "$main_file"
 }
 
-# Non-shipped host-execution test runner: runs an R7RS program on the host
-# substrate so the compiled test shard can exercise the compiled libraries'
-# white-box tests, which import internal modules (e.g. (consent interpreter)) and
-# cannot run through the consent interpreter. This is NOT the consent sandbox and
-# is never installed or shipped (make install/dist copy only bin/consent).
-write_racket_host_runner_main() {
-  main_file=$1
-
-  {
-    write_racket_main_common
-    cat <<'EOF'
-
-(let ((arguments (command-line)))
-  (if (and (pair? arguments) (pair? (cdr arguments)))
-      (load (cadr arguments) (environment))
-      (begin
-        (display "consent-host-runner: expected a script file argument\n"
-                 (current-error-port))
-        (exit 2))))
-EOF
-  } > "$main_file"
-}
-
-# Emit the shared Gambit main body (imports + helpers + dispatch, no startup),
-# shared by the product binary and the non-shipped host-execution test runner.
+# Emit the shared Gambit main body (imports + helpers + dispatch, no startup).
 write_gambit_main_common() {
   cat <<'EOF'
 
@@ -801,29 +776,6 @@ EOF
   } >> "$main_file"
 }
 
-# Non-shipped host-execution test runner (Gambit). See the Racket twin above:
-# runs an R7RS program on the host substrate for the gambit-native test shard;
-# not the consent sandbox, never installed or shipped.
-write_gambit_host_runner_main() {
-  main_file=$1
-  search_dir=$2
-
-  printf '#!gsi -:r7rs,search=%s\n' "$search_dir" > "$main_file"
-  {
-    write_gambit_main_common
-    cat <<'EOF'
-
-(let ((arguments (command-line)))
-  (if (and (pair? arguments) (pair? (cdr arguments)))
-      (load (cadr arguments))
-      (begin
-        (display "consent-host-runner: expected a script file argument\n"
-                 (current-error-port))
-        (exit 2))))
-EOF
-  } >> "$main_file"
-}
-
 generate_racket_collections() {
   collections_dir=$1
 
@@ -1009,24 +961,6 @@ compile_racket() {
     || die "raco exe did not create $runner; see $logs_dir/raco-exe.log"
   chmod +x "$runner"
   run_smoke "$runner" "$smoke_log" "$version"
-
-  # Non-shipped host-execution test runner (not installed; see make install/dist).
-  # Built when CONSENT_BUILD_TEST_RUNNER is set: the compiled white-box shard runs
-  # the suite against it to test the COMPILED interpreter (every lane, including
-  # per-push). A plain `make compile' (the install path) leaves it unset and skips
-  # the second `raco exe' link.
-  if [ -n "${CONSENT_BUILD_TEST_RUNNER:-}" ]; then
-    host_runner_main="$src_dir/consent-host-runner.rkt"
-    host_runner="$bin_dir/consent-host-runner"
-    write_racket_host_runner_main "$host_runner_main"
-    PLTCOLLECTS="$collections_dir:${PLTCOLLECTS:-}" \
-      "$raco" exe --cs ++lang r7rs -o "$host_runner" "$host_runner_main" \
-      >"$logs_dir/raco-exe-host-runner.log" 2>&1 \
-      || die "raco exe (host runner) failed; see $logs_dir/raco-exe-host-runner.log"
-    [ -f "$host_runner" ] \
-      || die "raco exe did not create $host_runner; see $logs_dir/raco-exe-host-runner.log"
-    chmod +x "$host_runner"
-  fi
 
   printf '%s\n' "$runner"
 }
@@ -1290,29 +1224,6 @@ compile_gambit() {
   (compile-seconds $((compile_finished - compile_started))))
 EOF
   run_smoke "$runner" "$smoke_log" "$version"
-
-  # Non-shipped host-execution test runner. Built when CONSENT_BUILD_TEST_RUNNER is
-  # set: the gambit-native white-box shard runs the suite against it to test the
-  # COMPILED interpreter (every lane, including per-push). A plain `make compile'
-  # (the install path) leaves it unset and skips this second full `gsc -exe' link,
-  # which recompiles the entire module set and is the single largest build cost.
-  if [ -n "${CONSENT_BUILD_TEST_RUNNER:-}" ]; then
-    host_runner_main="$src_dir/consent-host-runner.scm"
-    host_runner_main_c="$src_dir/consent-host-runner.c"
-    host_runner="$bin_dir/consent-host-runner"
-    write_gambit_host_runner_main "$host_runner_main" "$src_dir"
-    "$gsc" -:r7rs,search="$scheme_dir",search="$src_dir" \
-      -c -o "$host_runner_main_c" "$host_runner_main" \
-      >>"$logs_dir/gsc-modules.log" 2>&1 \
-      || die "gsc failed while compiling the Gambit host runner; see $logs_dir/gsc-modules.log"
-    # shellcheck disable=SC2086
-    "$gsc" -:r7rs,search="$scheme_dir" -exe -o "$host_runner" -nopreload $gambit_c_files "$host_runner_main_c" \
-      >"$logs_dir/gsc-exe-host-runner.log" 2>&1 \
-      || die "gsc -exe (host runner) failed; see $logs_dir/gsc-exe-host-runner.log"
-    [ -f "$host_runner" ] \
-      || die "gsc -exe did not create $host_runner; see $logs_dir/gsc-exe-host-runner.log"
-    chmod +x "$host_runner"
-  fi
 
   printf '%s\n' "$runner"
 }
