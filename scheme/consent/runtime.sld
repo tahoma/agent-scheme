@@ -2003,36 +2003,56 @@ capability decision for the audit trail and raises on denial."
          (else
           (loop (cdr grants) kept)))))
 
+    (define (capability-number-payload value)
+      "Return VALUE's host number payload for capability scope comparisons.
+Canonical number records arrive in grant and resource datum positions when
+requests cross the native import boundary; comparing payloads makes record
+and host forms match the same way on every posture."
+      (if (consent-number? value) (consent-number-value value) value))
+
     (define (network-scope-denial grant resource)
       "Return a network scope denial reason, or #f when RESOURCE is in scope."
       (let ((schemes (capability-scope-values grant 'schemes))
             (hosts (capability-scope-values grant 'hosts))
-            (ports (capability-scope-values grant 'ports))
+            (ports (map capability-number-payload
+                        (capability-scope-values grant 'ports)))
             (methods (capability-scope-values grant 'methods))
             (header-classes (capability-scope-values grant 'header-classes))
             (payload-classes (capability-scope-values grant 'payload-classes))
             (max-response-bytes
-             (capability-scope-value grant 'max-response-bytes))
-            (max-redirects (capability-scope-value grant 'max-redirects))
-            (max-timeout-ms (capability-scope-value grant 'max-timeout-ms))
+             (capability-number-payload
+              (capability-scope-value grant 'max-response-bytes)))
+            (max-redirects
+             (capability-number-payload
+              (capability-scope-value grant 'max-redirects)))
+            (max-timeout-ms
+             (capability-number-payload
+              (capability-scope-value grant 'max-timeout-ms)))
             (max-stream-lifetime-ms
-             (capability-scope-value grant 'stream-lifetime-ms))
+             (capability-number-payload
+              (capability-scope-value grant 'stream-lifetime-ms)))
             (scheme (network-resource-value resource 'scheme))
             (host (network-resource-value resource 'host))
-            (port (network-resource-value resource 'port))
+            (port (capability-number-payload
+                   (network-resource-value resource 'port)))
             (method (network-resource-value resource 'method))
             (resource-header-classes
              (network-resource-values resource 'header-classes))
             (payload-class
              (network-resource-value resource 'payload-class))
             (response-size
-             (network-resource-value resource 'response-size))
+             (capability-number-payload
+              (network-resource-value resource 'response-size)))
             (redirects
-             (or (network-resource-value resource 'redirects) 0))
+             (or (capability-number-payload
+                  (network-resource-value resource 'redirects))
+                 0))
             (timeout-ms
-             (network-resource-value resource 'timeout-ms))
+             (capability-number-payload
+              (network-resource-value resource 'timeout-ms)))
             (stream-lifetime-ms
-             (network-resource-value resource 'stream-lifetime-ms)))
+             (capability-number-payload
+              (network-resource-value resource 'stream-lifetime-ms))))
         (cond
          ((not (network-value-covered? scheme schemes))
           "scheme is outside approved network grant scope")
