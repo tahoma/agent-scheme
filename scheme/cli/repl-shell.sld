@@ -53,6 +53,7 @@
           (consent eval)
           (consent reader)
           (consent result)
+          (only (consent library) consent-apply-callable)
           (cli repl-chrome))
 
   ;; The one host-specific obligation of the chrome layer: deciding whether a
@@ -176,11 +177,14 @@
           session
           (string->symbol session)))
 
+    ;; Contract records are consent data: numeric fields embed canonical
+    ;; number records (matching the Emacs twin's consent-repl-stream--int)
+    ;; so the record stream renders through the consent writer.
     (define (repl--prompt-record session ordinal state pending)
       "Build a `repl-prompt' record for SESSION at ORDINAL with STATE and PENDING."
       (list 'repl-prompt
             (list 'session (repl--session-field session))
-            (list 'ordinal ordinal)
+            (list 'ordinal (consent-make-canonical-integer ordinal))
             (list 'state state)
             (list 'pending pending)))
 
@@ -189,7 +193,7 @@
       (list 'repl-submission
             (list 'id (repl--tag "sub" ordinal))
             (list 'session (repl--session-field session))
-            (list 'ordinal ordinal)
+            (list 'ordinal (consent-make-canonical-integer ordinal))
             (list 'source source)
             (list 'complete complete)
             (list 'eof eof)))
@@ -221,7 +225,7 @@
             (list 'session (repl--session-field session))
             (list 'reason reason)
             (list 'status status)
-            (list 'count count)
+            (list 'count (consent-make-canonical-integer count))
             (list 'detail detail)))
 
     ;;;; Evaluation-result inspection
@@ -310,9 +314,21 @@
 
     ;;;; The interaction loop
 
+    (define (repl--callable callback)
+      "Return CALLBACK as a directly applicable host procedure.
+A self-hosted caller (consent --host-run) passes interpreted closures as
+engine callbacks; consent-apply-callable runs those in the calling
+program's context while host procedures pass through untouched."
+      (if (procedure? callback)
+          callback
+          (lambda arguments (consent-apply-callable callback arguments))))
+
     (define (repl--engine read-chunk emit-record emit-output session options)
       "Run the host-neutral loop: read from READ-CHUNK, send records to EMIT-RECORD and program output to EMIT-OUTPUT under SESSION/OPTIONS, returning the close-status exit code."
-      (let* ((session-id (if (symbol? session)
+      (let* ((read-chunk (repl--callable read-chunk))
+             (emit-record (repl--callable emit-record))
+             (emit-output (repl--callable emit-output))
+             (session-id (if (symbol? session)
                              (symbol->string session)
                              session))
              (interaction

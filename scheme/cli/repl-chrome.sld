@@ -32,7 +32,10 @@
           cli-repl-chrome-paint
           cli-repl-chrome-color?)
   (import (scheme base)
-          (scheme write))
+          (scheme write)
+          (only (consent reader)
+                consent-datum->external
+                consent-number-value))
 
   (begin
 
@@ -110,7 +113,9 @@ interactive case."
                      '()
                      (list (chrome--seg 'prompt-session (symbol->string session))
                            (chrome--furniture ":")))
-                 (list (chrome--seg 'prompt-ordinal (number->string ordinal))
+                 (list (chrome--seg 'prompt-ordinal
+                                    (number->string
+                                     (consent-number-value ordinal)))
                        (chrome--furniture " |# "))))))
          ((eq? kind 'repl-submission)
           ;; Echo a whole form as bare code so it replays; leave an incomplete
@@ -146,10 +151,10 @@ interactive case."
     (define (chrome--datum record)
       "Render RECORD as the canonical raw datum stream, one datum per line.
 Returns a plain string, so the painter never colors it: the datum chrome is the
-byte-for-byte raw record stream regardless of the color setting."
-      (let ((port (open-output-string)))
-        (write record port)
-        (string-append (get-output-string port) "\n")))
+byte-for-byte raw record stream regardless of the color setting. The consent
+writer renders it so canonical number records inside the contract data come
+out Scheme-readable (the Emacs twin renders its stream the same way)."
+      (string-append (consent-datum->external record) "\n"))
 
     ;;;; The `classic' chrome: `>'/`|' prompts and bare values
 

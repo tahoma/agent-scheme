@@ -21,6 +21,7 @@
         (scheme file)
         (scheme read)
         (scheme write)
+        (only (consent reader) consent-number? consent-number-value)
         (cli repl-shell))
 
 ;; Count failed checks so the runner can report every mismatch in one run.
@@ -154,12 +155,19 @@
 
 ;; Return #t when ACTUAL satisfies EXPECTED, which is either an atom (compared
 ;; with equal?) or a nested record pattern `(KIND (field value) ...)'.
+;; Numeric contract fields embed canonical number records while the corpus
+;; writes plain literals, so numbers compare by host payload on every host.
 (define (value-match? actual expected)
-  (if (pair? expected)
-      (and (pair? actual)
-           (eq? (kind actual) (kind expected))
-           (fields-match? actual (cdr expected)))
-      (equal? actual expected)))
+  (cond
+   ((pair? expected)
+    (and (pair? actual)
+         (eq? (kind actual) (kind expected))
+         (fields-match? actual (cdr expected))))
+   ((or (number? expected) (consent-number? expected))
+    (and (or (number? actual) (consent-number? actual))
+         (equal? (consent-number-value actual)
+                 (consent-number-value expected))))
+   (else (equal? actual expected))))
 
 ;; Return #t when RECORD's fields all satisfy the FIELDS expectation list.
 (define (fields-match? record fields)
