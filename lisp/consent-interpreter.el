@@ -614,6 +614,40 @@ Return a cons cell (FORMALS . INITIALIZER-EXPRESSION)."
               (consent-primitive-procedure-maximum-arity primitive)))
          (or (null maximum) (<= count maximum)))))
 
+(defun consent--host-condition->condition (condition)
+  "Return elisp CONDITION as a value interpreted handlers can inspect.
+The signal becomes an interpreter error object so guard clauses can use
+`error-object?' and the message and irritant accessors."
+  (consent--make-error-object (error-message-string condition) nil))
+
+(defun consent--apply-host-primitive/k (function arguments context continuation)
+  "Invoke host primitive FUNCTION and deliver its budgeted result.
+An elisp signal escaping FUNCTION (a primitive argument error, a native
+module raise) becomes an interpreted raise that walks the context's
+exception handlers, so interpreted guard catches primitive errors the way
+it catches interpreted raises.  Budget, cancellation, and interrupt
+signals propagate unchanged so enforcement stays uncatchable, and when
+the handler stack empties before the signal surfaces it also propagates
+unchanged, preserving top-level diagnostics."
+  (let ((outcome
+         (condition-case condition
+             (cons :value (funcall function arguments context))
+           ((consent-budget-error consent-cancelled-error
+                                  consent-interrupt-error)
+            (signal (car condition) (cdr condition)))
+           (error
+            (if (consent--eval-context-exception-handlers context)
+                (cons :condition condition)
+              (signal (car condition) (cdr condition)))))))
+    (if (eq (car outcome) :condition)
+        (consent--primitive-raise/k
+         (list (consent--host-condition->condition (cdr outcome)))
+         context
+         continuation)
+      (consent--continue
+       continuation
+       (consent--check-value-budget (cdr outcome) context)))))
+
 (defun consent--apply-procedure
     (procedure arguments context _tailp &optional continuation)
   "Apply PROCEDURE to ARGUMENTS.
@@ -686,11 +720,17 @@ any resulting bounce to preserve existing direct-call helper behavior."
             ((eq function #'consent--primitive-make-parameter)
              (consent--primitive-make-parameter/k arguments context next))
             (t
-             (consent--continue
-              next
-              (consent--check-value-budget
-               (funcall function arguments context)
-               context)))))))
+             ;; The guarded path costs a `condition-case' per call, so
+             ;; reserve it for dynamic extents with installed interpreted
+             ;; handlers; without them conversion would be a no-op.
+             (if (consent--eval-context-exception-handlers context)
+                 (consent--apply-host-primitive/k
+                  function arguments context next)
+               (consent--continue
+                next
+                (consent--check-value-budget
+                 (funcall function arguments context)
+                 context))))))))
        ((consent-parameter-p procedure)
         (finish
          (consent--apply-parameter/k procedure arguments context next)))
