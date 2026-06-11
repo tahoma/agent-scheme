@@ -19,3 +19,8 @@ dist/
 build/
 target/
 vendor/cache/
+
+# White-box suite scratch files (tests/scheme/consent-eval-test.scm); the
+# directory itself is tracked via .gitkeep so every shard can write here.
+tests/scheme/scratch/*
+!tests/scheme/scratch/.gitkeep
