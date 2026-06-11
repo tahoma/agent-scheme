@@ -11,6 +11,9 @@
 
 (import (scheme base)
         (scheme write)
+        (only (consent reader)
+              consent-datum->external
+              consent-number-value)
         (cli repl-shell)
         (cli repl-chrome))
 
@@ -84,12 +87,14 @@
   (let ((prompt (car (records-of records 'repl-prompt))))
     (check 'simple-eval-prompt-state (field prompt 'state) 'ready)
     (check 'simple-eval-prompt-pending (field prompt 'pending) #f)
-    (check 'simple-eval-prompt-ordinal (field prompt 'ordinal) 1))
+    (check 'simple-eval-prompt-ordinal
+           (consent-number-value (field prompt 'ordinal)) 1))
   (check 'simple-eval-one-exit (count-of records 'repl-exit) 1)
   (let ((exit (car (records-of records 'repl-exit))))
     (check 'simple-eval-exit-reason (field exit 'reason) 'eof)
     (check 'simple-eval-exit-status (field exit 'status) 'closed-ok)
-    (check 'simple-eval-exit-count (field exit 'count) 1)))
+    (check 'simple-eval-exit-count
+           (consent-number-value (field exit 'count)) 1)))
 
 ;;;; Definitions, imports, and macros persist across submissions
 
@@ -155,7 +160,7 @@
     (check 'continuation-second-prompt-pending
            (field (list-ref prompts 1) 'pending) #t)
     (check 'continuation-keeps-ordinal
-           (field (list-ref prompts 1) 'ordinal) 1))
+           (consent-number-value (field (list-ref prompts 1) 'ordinal)) 1))
   (let ((submission (car (records-of records 'repl-submission))))
     (check 'continuation-submission-complete (field submission 'complete) #t)
     (check 'continuation-submission-source (field submission 'source) "(+ 1\n2)"))
@@ -221,7 +226,8 @@
   (let ((exit (car (records-of records 'repl-exit))))
     (check 'explicit-exit-reason (field exit 'reason) 'explicit)
     (check 'explicit-exit-status (field exit 'status) 'closed-ok)
-    (check 'explicit-exit-count (field exit 'count) 2)))
+    (check 'explicit-exit-count
+           (consent-number-value (field exit 'count)) 2)))
 
 ;;;; Default policy denies an ungranted host effect, fail closed
 
@@ -310,7 +316,10 @@
 ;; Render RECORDS as the raw datum stream the `datum' chrome must reproduce.
 (define (datum-stream records)
   (let ((port (open-output-string)))
-    (for-each (lambda (record) (write record port) (newline port)) records)
+    (for-each (lambda (record)
+                (write-string (consent-datum->external record) port)
+                (newline port))
+              records)
     (get-output-string port)))
 
 ;; Return the ordered `display' strings of the `repl-result' records in RECORDS.
