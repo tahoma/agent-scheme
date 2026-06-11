@@ -13,12 +13,17 @@
 (require 'ert)
 
 (defun consent--scheme-documentation-files ()
-  "Return portable Scheme source and fixture files that carry source comments."
+  "Return portable Scheme source and fixture files that carry source comments.
+The white-box suites' scratch directory holds gitignored runtime
+artifacts, not source, so it is excluded."
   (cl-loop for directory in '("scheme" "tests/scheme" "fixtures/r7rs")
            append
-           (directory-files-recursively
-            (expand-file-name directory consent--test-root)
-            "\\.s\\(?:cm\\|ld\\)\\'")))
+           (cl-remove-if
+            (lambda (file)
+              (string-match-p "/tests/scheme/scratch/" file))
+            (directory-files-recursively
+             (expand-file-name directory consent--test-root)
+             "\\.s\\(?:cm\\|ld\\)\\'"))))
 
 (defun consent--scheme-documentation-source-files ()
   "Return portable Scheme source files in the runtime/library tree."
