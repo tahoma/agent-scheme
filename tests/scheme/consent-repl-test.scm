@@ -523,6 +523,88 @@
 ;; unrecognized argument are ignored, leaving the defaults intact.
 (let ((options (cli-repl-parse-options (list "--repl"))))
   (check 'parse-ignores-repl-token (cdr (assq 'chrome options)) 'comment))
+;; `--replay FILE' carries the transcript path; the default is #f (stdin session).
+(check 'parse-replay
+       (cdr (assq 'replay (cli-repl-parse-options (list "--replay" "t.scm"))))
+       "t.scm")
+(check 'parse-replay-default
+       (cdr (assq 'replay (cli-repl-parse-options '())))
+       #f)
+
+;;;; Transcript capture and replay (docs/repl-interaction-contract.md)
+
+;; Serialize a record stream through the consent writer -- the canonical capture
+;; form.  Comparing serialized streams is host-portable: value-equal canonical
+;; numbers render identically, so two streams serialize the same exactly when
+;; they carry the same data, sidestepping per-host record identity.
+(define (serialize records)
+  (map consent-datum->external records))
+
+;; A captured transcript, serialized to the datum stream, reloads with the
+;; standard reader (plain data) and carries exactly the complete submissions a
+;; replay re-feeds, so the saved-file round-trip replays to the same stream.
+(let* ((captured (drive "(define base 7)\n(* base 3)\n"))
+       (text (apply string-append
+                    (map (lambda (r)
+                           (string-append (consent-datum->external r) "\n"))
+                         captured)))
+       (reloaded (cli-repl-records-from-datum-stream text)))
+  (check 'reload-record-count (length reloaded) (length captured))
+  (check 'reload-extracts-submissions
+         (cli-repl-submissions-from-records reloaded)
+         '("(define base 7)" "(* base 3)"))
+  ;; Replaying the reloaded transcript reproduces the captured record stream.
+  (check 'reload-replays-equal
+         (serialize (cli-repl-replay-records reloaded "project-main"))
+         (serialize captured)))
+
+;; An EOF-truncated partial form is not a complete submission, so it contributes
+;; no replayable source.
+(check 'submissions-skip-incomplete
+       (cli-repl-submissions-from-records (drive "(+ 1\n"))
+       '())
+
+;; A pure transcript replays to an EQUAL record stream, and the report says so.
+(let* ((captured (drive "(import (scheme base))\n(define base 20)\n(* base 3)\n"))
+       (replayed (cli-repl-replay-records captured "project-main"))
+       (report (cli-repl-replay-report captured replayed)))
+  (check 'replay-input
+         (cli-repl-replay-input captured)
+         "(import (scheme base))\n(define base 20)\n(* base 3)\n")
+  (check 'replay-pure-roundtrip (serialize replayed) (serialize captured))
+  (check 'replay-report-reproduced (field report 'status) 'reproduced)
+  (check 'replay-report-no-divergences (field report 'divergences) '())
+  (check 'replay-report-submission-count
+         (consent-number-value (field report 'submissions)) 3))
+
+;; A live host effect cannot be reproduced under a weaker replay posture.  A
+;; submission that resolved the session interaction environment as a result when
+;; captured fails closed as a condition when replayed under a denying posture;
+;; the report records that divergence rather than letting it pass silently
+;; (docs "Capture and Replay": effectful forms fail closed, not silently).
+(let* ((captured (drive (string-append
+                         "(import (scheme base) (scheme repl))\n"
+                         "(interaction-environment)\n")))
+       (replayed (cli-repl-replay-records
+                  captured "project-main"
+                  '((policy-actions (standard-host-effect . deny)))))
+       (report (cli-repl-replay-report captured replayed)))
+  ;; Capture: both forms succeeded (two results, no conditions).
+  (check 'replay-effect-captured-results (count-of captured 'repl-result) 2)
+  (check 'replay-effect-captured-no-conditions
+         (count-of captured 'repl-condition) 0)
+  ;; Replay denied the effect: the interaction-environment form is a condition.
+  (check 'replay-effect-replayed-results (count-of replayed 'repl-result) 1)
+  (check 'replay-effect-replayed-conditions (count-of replayed 'repl-condition) 1)
+  ;; The report flags the result -> condition divergence with its source.
+  (check 'replay-report-status-diverged (field report 'status) 'diverged)
+  (let ((divergence (car (field report 'divergences))))
+    (check 'replay-divergence-source
+           (field divergence 'source) "(interaction-environment)")
+    (check 'replay-divergence-captured-kind
+           (field (assq 'captured (cdr divergence)) 'kind) 'result)
+    (check 'replay-divergence-replayed-kind
+           (field (assq 'replayed (cdr divergence)) 'kind) 'condition)))
 
 (if (> failures 0)
     (error "portable terminal REPL tests failed" failures))

@@ -163,6 +163,24 @@ EXPECTED is either an atom (compared with `equal') or a nested record pattern
       (ert-fail (format "case %s record %s field %s: expected %S, got %S"
                         id kind fname expected got))))
 
+(defun consent-repl-parity-test--serialize (records)
+  "Serialize RECORDS through the consent writer for a host-portable stream compare."
+  (mapcar #'consent-result->external records))
+
+(defun consent-repl-parity-test--run-roundtrip (case raw session options)
+  "Replay RAW (the captured records) to a fresh SESSION and assert the round-trip.
+A `reproduced' case must replay to an EQUAL serialized stream; a `partial' case
+must NOT (it drops an unreplayable bare reader condition or EOF-truncated form).
+Serializing through the consent writer makes the compare representation-stable."
+  (let* ((mode (consent-repl-parity-test--case-field case 'replay))
+         (replayed (consent-repl-stream-replay-records raw session options))
+         (same (equal (consent-repl-parity-test--serialize raw)
+                      (consent-repl-parity-test--serialize replayed))))
+    (should mode)
+    (if (eq mode 'reproduced)
+        (should same)
+      (should-not same))))
+
 (defun consent-repl-parity-test--run-case (case)
   "Drive one CASE against the Emacs REPL and assert its expected records."
   (let* ((id (consent-repl-parity-test--case-field case 'id))
@@ -170,9 +188,8 @@ EXPECTED is either an atom (compared with `equal') or a nested record pattern
          (session (consent-repl-parity-test--case-field case 'session))
          (options (consent-repl-parity-test--case-options case))
          (expect (consent-repl-parity-test--case-field case 'expect))
-         (actual (mapcar #'consent-test-fixture-host-datum
-                         (consent-repl-stream-records-from-string
-                          input session options)))
+         (raw (consent-repl-stream-records-from-string input session options))
+         (actual (mapcar #'consent-test-fixture-host-datum raw))
          (queues (make-hash-table :test #'eq)))
     ;; Per-kind record counts must match exactly: an extra, missing, or
     ;; mis-kinded record is a divergence.
@@ -193,7 +210,8 @@ EXPECTED is either an atom (compared with `equal') or a nested record pattern
           (let ((record (car (gethash kind queues))))
             (should record)
             (puthash kind (cdr (gethash kind queues)) queues)
-            (consent-repl-parity-test--match-record id pattern record)))))))
+            (consent-repl-parity-test--match-record id pattern record)))))
+    (consent-repl-parity-test--run-roundtrip case raw session options)))
 
 ;;;; Tests
 

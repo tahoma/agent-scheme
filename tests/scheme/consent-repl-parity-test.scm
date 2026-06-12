@@ -21,7 +21,8 @@
         (scheme file)
         (scheme read)
         (scheme write)
-        (only (consent reader) consent-number? consent-number-value)
+        (only (consent reader)
+              consent-number? consent-number-value consent-datum->external)
         (cli repl-shell))
 
 ;; Count failed checks so the runner can report every mismatch in one run.
@@ -215,7 +216,32 @@
              (if rec
                  (match-record id pattern rec)
                  (record-failure (list id (kind pattern)) 'present 'missing)))))
-     expect)))
+     expect)
+    (run-roundtrip id case actual session options)))
+
+;;;; Capture/replay round-trip (docs/repl-interaction-contract.md, "Capture and Replay")
+
+;; Serialize a record stream through the consent writer.  Comparing serialized
+;; streams is host-portable: value-equal canonical numbers render identically,
+;; so two streams are byte-equal exactly when they read back the same data,
+;; sidestepping per-host record identity.
+(define (serialize-records records)
+  (map consent-datum->external records))
+
+;; Replay the captured record stream to a fresh session with the same options
+;; and compare.  A `reproduced' case must replay to an EQUAL stream (every input
+;; chunk became a complete submission); a `partial' case must NOT (it drops an
+;; unreplayable bare reader condition or EOF-truncated incomplete form), so the
+;; contract's reproduces-vs-cannot split is asserted in both directions.
+(define (run-roundtrip id case actual session options)
+  (let* ((mode (case-field case 'replay))
+         (replayed (cli-repl-replay-records actual session options))
+         (same? (equal? (serialize-records actual)
+                        (serialize-records replayed))))
+    (check-true (list id 'has-replay-field) (if mode #t #f))
+    (if (eq? mode 'reproduced)
+        (check-true (list id 'replay-reproduced) same?)
+        (check-true (list id 'replay-partial) (not same?)))))
 
 ;;;; Stream-separation parity check (not record-stream shaped, asserted directly)
 

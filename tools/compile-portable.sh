@@ -359,7 +359,9 @@ write_racket_main_common() {
   (display "  --session NAME  Name the REPL session id.\n")
   (display "  --chrome NAME   Presentation chrome: comment (default), datum,\n")
   (display "                  classic, quiet, or silent.\n")
-  (display "  --color=WHEN    Colorize chrome: auto (default), always, never.\n"))
+  (display "  --color=WHEN    Colorize chrome: auto (default), always, never.\n")
+  (display "  --replay FILE   Replay a captured transcript, exiting non-zero if\n")
+  (display "                  the replay diverged from the captured outcomes.\n"))
 
 (define (consent-main-error message)
   (display "consent: " (current-error-port))
@@ -607,7 +609,9 @@ write_gambit_main_common() {
   (display "  --session NAME  Name the REPL session id.\n")
   (display "  --chrome NAME   Presentation chrome: comment (default), datum,\n")
   (display "                  classic, quiet, or silent.\n")
-  (display "  --color=WHEN    Colorize chrome: auto (default), always, never.\n"))
+  (display "  --color=WHEN    Colorize chrome: auto (default), always, never.\n")
+  (display "  --replay FILE   Replay a captured transcript, exiting non-zero if\n")
+  (display "                  the replay diverged from the captured outcomes.\n"))
 
 (define (consent-main-error message)
   (display "consent: " (current-error-port))

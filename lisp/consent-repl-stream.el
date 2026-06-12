@@ -484,6 +484,176 @@ Return the ordered contract records for SESSION under evaluator OPTIONS."
     (consent-repl-stream--split-lines input))
    session options))
 
+;;;; Transcript capture and replay
+
+;; The canonical capture format is the `datum' chrome's record stream: one
+;; contract record datum per line, written by the consent writer
+;; (`consent-result->external').  Reload reads those datums back with the consent
+;; reader, so a reloaded record carries the same consent-data representation the
+;; live loop emits and the extraction below works on either.  Replay
+;; reconstructs the interaction input from the complete submissions and re-drives
+;; a FRESH session, so a transcript doubles as a reproducible bug report and a
+;; fixture capture.  Live host effects are NOT reproduced: a replay session
+;; carries only the authority it is granted, so an effect that succeeded under
+;; the captured authority fails closed as a `repl-condition' under a weaker
+;; replay posture -- a divergence `consent-repl-stream-replay-report' records
+;; rather than letting it pass silently.  This is the Emacs parity twin of the
+;; portable `(cli repl-shell)' capture/replay surface
+;; (docs/repl-interaction-contract.md, "Capture and Replay").
+
+;;;###autoload
+(defun consent-repl-stream-records-from-datum-stream (text)
+  "Reload a captured `datum'-chrome record stream TEXT into the list of contract records, reading with the consent reader the capture format is written for."
+  (consent-read-all text))
+
+(defun consent-repl-stream--sym-name (datum)
+  "Return DATUM's symbol name when DATUM is a consent symbol, else nil."
+  (and (consent-symbol-p datum) (consent-symbol-name datum)))
+
+(defun consent-repl-stream--complete-submission-p (record)
+  "Return non-nil when RECORD is a `repl-submission' with `(complete #t)'."
+  (and (consp record)
+       (equal (consent-repl-stream--sym-name (car record)) "repl-submission")
+       (let ((complete (consent-repl-stream--field record "complete")))
+         (and (consent-boolean-p complete) (consent-boolean-value complete)))))
+
+;;;###autoload
+(defun consent-repl-stream-submissions-from-records (records)
+  "Return the external source text of each complete submission in RECORDS, in order.
+A `repl-submission' with `(complete #t)' contributes its `source'; an incomplete
+\(EOF-truncated) submission, prompts, results, conditions, and the exit record
+contribute nothing, so the result is exactly the forms a replay can re-feed."
+  (let (sources)
+    (dolist (record records (nreverse sources))
+      (when (consent-repl-stream--complete-submission-p record)
+        (push (consent-repl-stream--field record "source") sources)))))
+
+;;;###autoload
+(defun consent-repl-stream-replay-input (records)
+  "Reconstruct the interaction-input string that replays RECORDS.
+Each complete submission's source is followed by a newline, so a fresh loop
+reads the same forms."
+  (mapconcat (lambda (source) (concat source "\n"))
+             (consent-repl-stream-submissions-from-records records)
+             ""))
+
+;;;###autoload
+(defun consent-repl-stream-replay-records (records session &optional options)
+  "Replay captured RECORDS by re-feeding their complete submissions to a fresh SESSION.
+Return the new contract record stream.  Reproduces submissions, ordering, the
+close record, and deterministic results/conditions; a live host effect the
+replay posture does not grant fails closed as a `repl-condition' rather than
+reproducing the recorded value (compare `consent-repl-stream-replay-report')."
+  (consent-repl-stream-records-from-string
+   (consent-repl-stream-replay-input records) session options))
+
+;; A submission outcome is the list (SOURCE KIND DISPLAY), where KIND is
+;; `result', `condition', or `none' (an exit form has no outcome) and DISPLAY is
+;; the outcome's human-readable rendering.  KIND and DISPLAY are the
+;; contract-meaningful, representation-stable fields the replay report compares,
+;; so the comparison holds whether a stream came from the live loop or a
+;; reloaded datum-stream text.
+(defun consent-repl-stream--outcome-for (records submission-id)
+  "Return (KIND . DISPLAY) for the result/condition correlated to SUBMISSION-ID in RECORDS, or (none) when neither is present."
+  (let ((target (consent-repl-stream--sym-name submission-id)))
+    (or (catch 'done
+          (dolist (record records)
+            (when (and (consp record)
+                       (member (consent-repl-stream--sym-name (car record))
+                               '("repl-result" "repl-condition"))
+                       (equal (consent-repl-stream--sym-name
+                               (consent-repl-stream--field record "submission"))
+                              target))
+              (throw 'done
+                     (cons (if (equal (consent-repl-stream--sym-name (car record))
+                                      "repl-result")
+                               'result 'condition)
+                           (consent-repl-stream--field record "display")))))
+          nil)
+        (cons 'none nil))))
+
+(defun consent-repl-stream--submission-outcomes (records)
+  "Return the ordered list of (SOURCE KIND DISPLAY) triples for each complete submission in RECORDS, correlating each to its result/condition by submission id."
+  (let (outcomes)
+    (dolist (record records (nreverse outcomes))
+      (when (consent-repl-stream--complete-submission-p record)
+        (let ((outcome (consent-repl-stream--outcome-for
+                        records (consent-repl-stream--field record "id"))))
+          (push (list (consent-repl-stream--field record "source")
+                      (car outcome) (cdr outcome))
+                outcomes))))))
+
+(defun consent-repl-stream--outcome-fields (outcome)
+  "Render an outcome triple OUTCOME as `(kind K) (display D)' fields, or `(kind absent)' when OUTCOME is nil (no paired submission)."
+  (if outcome
+      (list (list (consent-repl-stream--sym "kind")
+                  (consent-repl-stream--sym (symbol-name (nth 1 outcome))))
+            (list (consent-repl-stream--sym "display") (nth 2 outcome)))
+    (list (list (consent-repl-stream--sym "kind")
+                (consent-repl-stream--sym "absent")))))
+
+(defun consent-repl-stream--divergence (index source captured replayed)
+  "Build a `repl-replay-divergence' datum for the submission at INDEX."
+  (list (consent-repl-stream--sym "repl-replay-divergence")
+        (list (consent-repl-stream--sym "index")
+              (consent-repl-stream--int index))
+        (list (consent-repl-stream--sym "source") source)
+        (cons (consent-repl-stream--sym "captured")
+              (consent-repl-stream--outcome-fields captured))
+        (cons (consent-repl-stream--sym "replayed")
+              (consent-repl-stream--outcome-fields replayed))))
+
+(defun consent-repl-stream--outcome-divergences (captured replayed index acc)
+  "Walk the CAPTURED and REPLAYED outcome triples in parallel from INDEX.
+Accumulate a divergence datum for each kind/display mismatch or unpaired
+submission into ACC."
+  (cond
+   ((and (null captured) (null replayed)) (nreverse acc))
+   ((null captured)
+    (consent-repl-stream--outcome-divergences
+     nil (cdr replayed) (1+ index)
+     (cons (consent-repl-stream--divergence index (car (car replayed))
+                                            nil (car replayed))
+           acc)))
+   ((null replayed)
+    (consent-repl-stream--outcome-divergences
+     (cdr captured) nil (1+ index)
+     (cons (consent-repl-stream--divergence index (car (car captured))
+                                            (car captured) nil)
+           acc)))
+   (t
+    (let ((c (car captured)) (r (car replayed)))
+      (if (and (eq (nth 1 c) (nth 1 r))
+               (equal (nth 2 c) (nth 2 r)))
+          (consent-repl-stream--outcome-divergences
+           (cdr captured) (cdr replayed) (1+ index) acc)
+        (consent-repl-stream--outcome-divergences
+         (cdr captured) (cdr replayed) (1+ index)
+         (cons (consent-repl-stream--divergence index (car c) c r) acc)))))))
+
+;;;###autoload
+(defun consent-repl-stream-replay-report (captured replayed)
+  "Compare the per-submission outcomes of CAPTURED and REPLAYED record streams.
+Return a `repl-replay-report' datum.  Each complete submission's outcome is its
+result/condition `kind' (`result', `condition', or `none') and `display'
+rendering, correlated by submission id and compared by position.  The report is
+`reproduced' when every compared submission matches in kind and display;
+otherwise `diverged', with one `repl-replay-divergence' per mismatched or
+unpaired submission.  A captured `result' that replays as a `condition' is the
+documented fail-closed signal for a live host effect the replay posture does not
+grant."
+  (let* ((captured-outcomes (consent-repl-stream--submission-outcomes captured))
+         (replayed-outcomes (consent-repl-stream--submission-outcomes replayed))
+         (divergences (consent-repl-stream--outcome-divergences
+                       captured-outcomes replayed-outcomes 1 nil)))
+    (list (consent-repl-stream--sym "repl-replay-report")
+          (list (consent-repl-stream--sym "status")
+                (consent-repl-stream--sym
+                 (if divergences "diverged" "reproduced")))
+          (list (consent-repl-stream--sym "submissions")
+                (consent-repl-stream--int (length captured-outcomes)))
+          (list (consent-repl-stream--sym "divergences") divergences))))
+
 ;;;; Shared chrome presentation
 
 ;;;###autoload
@@ -539,6 +709,39 @@ run under `emacs -Q --batch -l consent-repl-stream -f consent-repl-stream-main'.
            #'consent-repl-stream--batch-read-chunk
            write-record write-output session)))
     (kill-emacs exit-code)))
+
+;;;###autoload
+(defun consent-repl-stream-replay-main ()
+  "Batch entry point: reload a captured transcript and replay it to a fresh session.
+The transcript path is the first remaining command-line argument.  Replay its
+complete submissions to a fresh `consent-repl-stream-default-session', write the
+replayed contract record stream and the `repl-replay-report' to the error
+stream, and exit Emacs with 0 when the replay reproduced the captured outcomes
+or 1 when it diverged.  This is the Emacs parity twin of the portable shell's
+`--replay FILE' mode.  Intended to be run under
+`emacs -Q --batch -l consent-repl-stream -f consent-repl-stream-replay-main FILE'."
+  (let ((path (car command-line-args-left))
+        (session consent-repl-stream-default-session))
+    (unless path
+      (princ "consent-repl-stream-replay: missing transcript FILE\n"
+             #'external-debugging-output)
+      (kill-emacs 2))
+    (let* ((text (with-temp-buffer
+                   (insert-file-contents path)
+                   (buffer-string)))
+           (captured (consent-repl-stream-records-from-datum-stream text))
+           (replayed (consent-repl-stream-replay-records captured session))
+           (report (consent-repl-stream-replay-report captured replayed)))
+      (dolist (record replayed)
+        (princ (concat (consent-result->external record) "\n")
+               #'external-debugging-output))
+      (princ (concat (consent-result->external report) "\n")
+             #'external-debugging-output)
+      (kill-emacs
+       (if (equal (consent-repl-stream--sym-name
+                   (consent-repl-stream--field report "status"))
+                  "reproduced")
+           0 1)))))
 
 ;;;; Interactive command
 

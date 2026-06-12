@@ -33,6 +33,20 @@
 ;; pinned.  Host-specific text (condition `message'/`display' strings, the opaque
 ;; `value'/`budget' payloads) is intentionally NOT asserted, since the contract
 ;; fixes the record shape, not a host's exact human-readable rendering.
+;;
+;; Each case also carries a `replay' field describing the capture/replay
+;; round-trip (docs/repl-interaction-contract.md, "Capture and Replay"): the
+;; runners capture the case's record stream, reconstruct the interaction input
+;; from its complete submissions, replay it to a fresh session with the same
+;; options, and compare.  `(replay reproduced)' means the replay re-emits the
+;; same record stream -- every input chunk became a complete submission, so the
+;; transcript round-trips byte for byte on each host.  `(replay (partial (reason
+;; R)))' marks the cases replay cannot reproduce, because some input is not a
+;; replayable submission: a bare reader condition (no `repl-submission' is
+;; emitted) or an EOF-truncated incomplete form (`(complete #f)').  Those carry
+;; their submissions forward but drop the unreplayable artifact, so replay is a
+;; strict subset, not an equal stream.  The reproduced/partial split is exactly
+;; what replay can and cannot reproduce, and the runners assert both directions.
 
 (consent-fixture-suite
   (kind repl-parity)
@@ -46,6 +60,7 @@
 
     ((id repl-eval-simple)
      (description "A simple expression renders its value and closes cleanly on EOF.")
+     (replay reproduced)
      (session "project-main")
      (options ())
      (input "(+ 1 2)\n")
@@ -60,6 +75,7 @@
 
     ((id repl-session-persistence)
      (description "Imports, definitions, and macros persist across separately submitted forms.")
+     (replay reproduced)
      (session "project-main")
      (options ())
      (input "(import (scheme base))\n(define base 20)\n(define-syntax inc (syntax-rules () ((_ v) (+ v 1))))\n(inc base)\n")
@@ -86,6 +102,7 @@
 
     ((id repl-recoverable-eval-condition)
      (description "A recoverable evaluator condition keeps the session open for the next form.")
+     (replay reproduced)
      (session "project-main")
      (options ())
      (input "undefined-name\n(+ 4 5)\n")
@@ -103,6 +120,7 @@
 
     ((id repl-recoverable-read-condition)
      (description "A recoverable reader condition resynchronizes and keeps the session open.")
+     (replay (partial (reason "a bare reader condition emits no submission to re-feed")))
      (session "project-main")
      (options ())
      (input ")\n(+ 6 7)\n")
@@ -120,6 +138,7 @@
 
     ((id repl-incomplete-continuation)
      (description "An incomplete form is continued under one submission, not reported as a hard error.")
+     (replay reproduced)
      (session "project-main")
      (options ())
      (input "(+ 1\n2)\n")
@@ -135,6 +154,7 @@
 
     ((id repl-continuation-nesting-depth)
      (description "A continuation prompt carries the reader's pending nesting depth and innermost construct kind, narrowing as constructs close.")
+     (replay reproduced)
      (session "project-main")
      (options ())
      (input "(+ (* 2\n3)\n4)\n")
@@ -153,6 +173,7 @@
 
     ((id repl-continuation-pending-string)
      (description "An unterminated string reports the string as the innermost pending construct on the continuation prompt.")
+     (replay reproduced)
      (session "project-main")
      (options ())
      (input "(string-length \"a\nb\")\n")
@@ -169,6 +190,7 @@
 
     ((id repl-multiple-forms-one-chunk)
      (description "Several complete forms in one input chunk evaluate in order, one submission each.")
+     (replay reproduced)
      (session "project-main")
      (options ())
      (input "(+ 1 2) (* 3 4)\n")
@@ -188,6 +210,7 @@
 
     ((id repl-multiple-values)
      (description "A multiple-value result renders through the values evaluation-result datum.")
+     (replay reproduced)
      (session "project-main")
      (options ())
      (input "(values 1 2)\n")
@@ -202,6 +225,7 @@
 
     ((id repl-zero-values)
      (description "A zero-value result renders the empty values evaluation-result datum.")
+     (replay reproduced)
      (session "project-main")
      (options ())
      (input "(values)\n")
@@ -216,6 +240,7 @@
 
     ((id repl-eof-mid-form)
      (description "EOF while a partial form is buffered closes with the documented error status.")
+     (replay (partial (reason "an EOF-truncated incomplete form is not a replayable submission")))
      (session "project-main")
      (options ())
      (input "(+ 1\n")
@@ -234,6 +259,7 @@
 
     ((id repl-explicit-exit)
      (description "An explicit exit request closes the session after the current submission.")
+     (replay reproduced)
      (session "project-main")
      (options ())
      (input "(+ 1 2)\n(exit)\n")
@@ -249,6 +275,7 @@
 
     ((id repl-policy-denied-default)
      (description "The default policy denies an ungranted host effect, failing closed without ending the session.")
+     (replay reproduced)
      (session "project-main")
      (options ())
      (input "(begin (import (scheme file)) (open-output-file \"/tmp/consent-repl-parity-denied\"))\n")
@@ -264,6 +291,7 @@
 
     ((id repl-policy-denied-interaction-environment)
      (description "A session-policy denial of the interaction environment fails closed as a policy denial.")
+     (replay reproduced)
      (session "project-main")
      (options ((policy-actions ((standard-host-effect deny)))))
      (input "(import (scheme base) (scheme repl))\n(interaction-environment)\n")

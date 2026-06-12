@@ -152,6 +152,7 @@ see the contract's "Host-specific obligations" section.
 | Ungranted host effect fails closed, session survives | capability condition as `repl-condition` | capability condition as `repl-condition` | `repl-policy-denied-default` |
 | Interaction environment fails closed without `repl` grant | session-policy denial | session-policy denial | `repl-policy-denied-interaction-environment` |
 | Stream separation (program output vs interaction) | program output on stdout, records on stderr | program output on stdout, records on error stream | exercised across cases; see below |
+| Capture/replay round-trip of the record stream | `cli-repl-replay-records`, `--replay FILE` | `consent-repl-stream-replay-records`, batch replay | every case's `replay` field (`reproduced`/`partial`) |
 
 Every conforming session also emits exactly one `repl-exit`, and the runners
 correlate a `repl-result`/`repl-condition` to its submission by the
@@ -208,6 +209,48 @@ of its own. On both hosts:
 - No record exposes a raw host object. Live environments, buffers, ports,
   processes, and continuations appear only through the stable renderings of
   `(consent result)` and the session/handle vocabulary.
+
+## Capturing and replaying sessions
+
+A session's record stream is a first-class, reloadable artifact. Capture it with
+the `datum` chrome — the canonical, machine-readable surface — and replay it to a
+fresh session to reproduce the run, so a transcript doubles as a reproducible bug
+report or a fixture capture. The behavioral rules (capture format, what replay
+reproduces versus cannot, and how a divergence is reported) are the contract's
+[Capture and Replay](repl-interaction-contract.md#capture-and-replay) section;
+this is the task-oriented summary.
+
+Capture on either host by selecting the `datum` chrome and redirecting the
+control channel:
+
+```sh
+printf '(+ 1 2)\n(define base 7)\n(* base 3)\n(exit)\n' \
+  | tools/consent-repl --chrome datum 2>session.scm
+```
+
+Replay re-feeds the captured **complete submissions** to a fresh session:
+
+```sh
+tools/consent-repl --replay session.scm --chrome datum   # portable shell
+# or, on a host-compiled binary:
+build/compile/gambit/bin/consent --repl --replay session.scm --chrome datum
+# Emacs batch twin:
+emacs -Q --batch -l consent-repl-stream -f consent-repl-stream-replay-main session.scm
+```
+
+`--replay` emits the replayed record stream through the selected chrome, appends
+a `repl-replay-report` datum comparing the captured and replayed outcomes per
+submission, and **exits non-zero when the replay diverged**. A pure transcript
+reproduces an equal stream (exit `0`); a transcript whose result depended on
+authority the replay session lacks fails closed — the effect's recorded
+`repl-result` replays as a `repl-condition`, which the report flags rather than
+silently reproducing the recorded value. Both hosts also expose the driver as
+library procedures (`cli-repl-replay-records` / `cli-repl-replay-report` and the
+`consent-repl-stream-replay-*` twins) for programmatic capture/replay.
+
+Restoring a session's *live* environment (its bound definitions, imports, and
+macros) without re-running the submissions is a separate capability tracked with
+session management, not part of this record round-trip.
 
 ## Limitations
 

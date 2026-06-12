@@ -12,7 +12,8 @@
 # This is the first interactive non-Emacs entrypoint; the Emacs incremental REPL
 # entry is its parity twin.
 #
-# Usage: tools/consent-repl [--session NAME]
+# Usage: tools/consent-repl [--session NAME] [--chrome NAME] [--color=WHEN]
+#        tools/consent-repl --replay FILE   (replay a captured datum transcript)
 # Host:  CONSENT_REPL_HOST=chibi|guile|gauche (default: auto-detect)
 # See scheme/cli/repl-shell.sld for the emitted record vocabulary.
 

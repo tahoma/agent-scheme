@@ -576,6 +576,93 @@ the plain two-column gutter."
       (should (eq (get-text-property marker 'face faced)
                   'consent-repl-chrome-result-marker)))))
 
+;;;; Transcript capture and replay (docs/repl-interaction-contract.md)
+
+(defun consent-repl-stream-test--serialize (records)
+  "Serialize RECORDS through the consent writer for a host-portable stream compare."
+  (mapcar #'consent-result->external records))
+
+(defun consent-repl-stream-test--group (record name)
+  "Return the sub-list (NAME ...) of RECORD whose tag name is NAME, or nil."
+  (seq-find (lambda (entry)
+              (and (consp entry)
+                   (equal (consent-repl-stream-test--sym (car entry)) name)))
+            (cdr-safe record)))
+
+(ert-deftest consent-repl-stream-replay-reload-and-replay ()
+  "A captured transcript serializes, reloads, and replays to the same stream."
+  (let* ((captured (consent-repl-stream-test--drive
+                    "(define base 7)\n(* base 3)\n"))
+         (text (mapconcat (lambda (r) (concat (consent-result->external r) "\n"))
+                          captured ""))
+         (reloaded (consent-repl-stream-records-from-datum-stream text)))
+    (should (= (length reloaded) (length captured)))
+    (should (equal (consent-repl-stream-submissions-from-records reloaded)
+                   '("(define base 7)" "(* base 3)")))
+    ;; Replaying the reloaded transcript reproduces the captured record stream.
+    (should (equal (consent-repl-stream-test--serialize
+                    (consent-repl-stream-replay-records reloaded "project-main"))
+                   (consent-repl-stream-test--serialize captured)))))
+
+(ert-deftest consent-repl-stream-replay-skips-incomplete ()
+  "An EOF-truncated partial form is not a replayable submission."
+  (should-not (consent-repl-stream-submissions-from-records
+               (consent-repl-stream-test--drive "(+ 1\n"))))
+
+(ert-deftest consent-repl-stream-replay-pure-roundtrip ()
+  "A pure transcript replays to an equal record stream and the report says so."
+  (let* ((captured (consent-repl-stream-test--drive
+                    "(import (scheme base))\n(define base 20)\n(* base 3)\n"))
+         (replayed (consent-repl-stream-replay-records captured "project-main"))
+         (report (consent-repl-stream-replay-report captured replayed)))
+    (should (equal (consent-repl-stream-replay-input captured)
+                   "(import (scheme base))\n(define base 20)\n(* base 3)\n"))
+    (should (equal (consent-repl-stream-test--serialize replayed)
+                   (consent-repl-stream-test--serialize captured)))
+    (should (equal (consent-repl-stream-test--sym
+                    (consent-repl-stream-test--field report "status"))
+                   "reproduced"))
+    (should-not (consent-repl-stream-test--field report "divergences"))
+    (should (= (consent-repl-stream-test--int
+                (consent-repl-stream-test--field report "submissions"))
+               3))))
+
+(ert-deftest consent-repl-stream-replay-effect-fails-closed ()
+  "A live host effect that succeeded under capture authority fails closed on a
+weaker replay posture, and the report records that divergence rather than
+silently reproducing the recorded value."
+  (let* ((captured (consent-repl-stream-test--drive
+                    (concat "(import (scheme base) (scheme repl))\n"
+                            "(interaction-environment)\n")))
+         (replayed (consent-repl-stream-replay-records
+                    captured "project-main"
+                    '(:policy-actions ((standard-host-effect . deny)))))
+         (report (consent-repl-stream-replay-report captured replayed)))
+    ;; Capture: both forms succeeded (two results, no conditions).
+    (should (= (consent-repl-stream-test--count captured "repl-result") 2))
+    (should (= (consent-repl-stream-test--count captured "repl-condition") 0))
+    ;; Replay denied the effect: the interaction-environment form is a condition.
+    (should (= (consent-repl-stream-test--count replayed "repl-result") 1))
+    (should (= (consent-repl-stream-test--count replayed "repl-condition") 1))
+    ;; The report flags the result -> condition divergence with its source.
+    (should (equal (consent-repl-stream-test--sym
+                    (consent-repl-stream-test--field report "status"))
+                   "diverged"))
+    (let ((divergence (car (consent-repl-stream-test--field
+                            report "divergences"))))
+      (should (equal (consent-repl-stream-test--field divergence "source")
+                     "(interaction-environment)"))
+      (should (equal (consent-repl-stream-test--sym
+                      (consent-repl-stream-test--field
+                       (consent-repl-stream-test--group divergence "captured")
+                       "kind"))
+                     "result"))
+      (should (equal (consent-repl-stream-test--sym
+                      (consent-repl-stream-test--field
+                       (consent-repl-stream-test--group divergence "replayed")
+                       "kind"))
+                     "condition")))))
+
 (provide 'consent-repl-stream-test)
 
 ;;; consent-repl-stream-test.el ends here

@@ -379,6 +379,134 @@ authority of its own.
   records, so a scripted consumer of the REPL never receives unwrapped host
   authority.
 
+## Capture and Replay
+
+Because the entire interaction surface is Scheme-readable records, a captured
+session is, in principle, a replayable program. This section makes that
+round-trip a defined capability: a capture format and a replay driver on both
+hosts, with an explicit statement of what replay reproduces, what it cannot, and
+how a divergence is reported. A captured transcript therefore doubles as a
+reproducible bug report and a test-fixture capture.
+
+### Capture format
+
+The canonical capture format is the `datum` chrome's record stream: every
+contract record (`repl-prompt`, `repl-submission`, `repl-result`,
+`repl-condition`, `repl-exit`) written by the consent writer, one datum per line.
+This is the same canonical surface the parity corpus asserts against, so capture
+introduces no new vocabulary — it is the record stream, persisted. On the
+portable host:
+
+```sh
+printf '(+ 1 2)\n(define base 7)\n(* base 3)\n(exit)\n' \
+  | tools/consent-repl --chrome datum 2>session.scm
+```
+
+The stream is plain Scheme data, so it reloads with an ordinary reader. Binary
+and non-record transcript formats are deliberately out of scope; the record
+stream is the only capture format.
+
+### Replay model
+
+Replay reconstructs the interaction input from the captured **complete
+submissions** — each `repl-submission` with `(complete #t)` contributes its
+`source`, in order — and re-feeds that input to a **fresh session**. The loop
+re-reads and re-evaluates each form exactly as if it had been typed; replay adds
+no new evaluation path. The capture's own results and conditions are *not*
+re-applied: replay re-derives them, which is what makes a divergence meaningful.
+
+The driver is exposed as library procedures on both hosts and as a terminal
+mode:
+
+- Portable: `cli-repl-records-from-datum-stream`, `cli-repl-submissions-from-records`,
+  `cli-repl-replay-records`, and `cli-repl-replay-report` in `(cli repl-shell)`;
+  `tools/consent-repl --replay FILE` (or `consent --repl --replay FILE` on a
+  compiled binary) reloads `FILE`, replays it, and emits the replayed stream
+  through the selected chrome.
+- Emacs: `consent-repl-stream-records-from-datum-stream`,
+  `consent-repl-stream-submissions-from-records`,
+  `consent-repl-stream-replay-records`, and `consent-repl-stream-replay-report`
+  in `consent-repl-stream.el`; `consent-repl-stream-replay-main` is the batch
+  twin of `--replay FILE`.
+
+### What replay reproduces
+
+For a transcript whose every input chunk became a complete submission and whose
+forms are deterministic, replay re-emits an **equal record stream**: the same
+submissions in the same order, the same prompts (including continuation prompts
+and their pending-nesting indicator), the same results and recoverable
+conditions, and the same close record. The `repl-submission` `source` preserves
+each form's external text, including the internal newlines of a continued form,
+so a multi-line or multiple-forms-per-line transcript reproduces the same
+submission boundaries.
+
+### What replay cannot reproduce
+
+Replay is **not** a recording of effects; it is a re-evaluation. Two classes of
+content do not round-trip, and the contract requires that they fail closed
+rather than silently:
+
+- **Input that produced no replayable submission.** A bare reader condition (a
+  malformed datum) emits a `repl-condition` but no `repl-submission`, and an
+  EOF-truncated form is a submission with `(complete #f)`. Neither is a
+  replayable source, so for such a transcript replay is a strict subset: it
+  carries the complete submissions forward and drops the unreplayable artifact.
+- **Live host effects.** A replay session carries only the authority it is
+  granted (see [Policy-Gated Host Effects](#policy-gated-host-effects)). A form
+  whose captured `repl-result` depended on a capability grant is re-evaluated
+  under the replay posture; without the same grant it **fails closed** with its
+  normal capability condition, surfaced as a `repl-condition`. Replay never
+  re-performs a recorded effect from the transcript and never fabricates the
+  recorded value. A non-deterministic effect (clock, randomness, external state)
+  may also differ even when the grant is present.
+
+### Reporting divergence
+
+A replay report compares the captured and replayed streams **per submission** by
+outcome `kind` (`result`, `condition`, or `none`) and `display` rendering, and
+records each mismatch:
+
+```scheme
+(repl-replay-report
+  (status diverged)        ; reproduced | diverged
+  (submissions 1)          ; complete submissions compared
+  (divergences
+    ((repl-replay-divergence
+       (index 1)
+       (source "(begin (import (scheme file)) (open-output-file \"out\"))")
+       (captured (kind result) (display "(port (kind output))"))
+       (replayed (kind condition) (display "... file capability denied ..."))))))
+```
+
+A captured `result` that replays as a `condition` is the canonical fail-closed
+signal: the effect could not be reproduced under the replay posture, and the
+report says so rather than letting the divergence pass. The `--replay FILE`
+terminal mode (and the Emacs batch twin) emit the replayed record stream, append
+the `repl-replay-report` datum, and exit non-zero when the report is `diverged`,
+so a scripted consumer gets the same fail-closed signal as an exit code. Because
+capture and replay run on the **same host**, a reproduced transcript replays to
+a byte-identical record stream; the comparison is over the serialized stream, so
+value-equal canonical numbers compare equal across hosts.
+
+### Live-state restore is separate
+
+Replay-of-records needs nothing beyond the contract: it re-feeds submissions and
+re-evaluates. Restoring a session's *live* interaction environment — its
+already-bound definitions, imports, and macros — without re-evaluating the
+submissions that built them is a distinct capability that coordinates with
+[Scheme-callable session management](session-lifecycle.md) and is **not** part of
+this round-trip. Replay reconstructs state by re-running the forms; live-state
+restore would snapshot and reload it.
+
+### Conformance
+
+The [#392 corpus](../fixtures/repl/parity-cases.scm) marks each case with a
+`replay` field — `(replay reproduced)` for a transcript that round-trips to an
+equal stream, or `(replay (partial (reason R)))` for one whose input includes an
+unreplayable artifact — and both parity runners assert the round-trip in both
+directions on both hosts, so the reproduces-versus-cannot split is itself
+parity-checked.
+
 ## Parity Versus Host-Specific Obligations
 
 The contract is meaningful only if it is clear which obligations both hosts must
