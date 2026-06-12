@@ -64,9 +64,9 @@ build/compile/racket/bin/consent --repl                # or the gambit binary
 printf '(+ 1 2)\n(exit)\n' | build/compile/gambit/bin/consent --repl --session demo
 ```
 
-`--repl` accepts the same `--session NAME`, `--chrome NAME`, and `--color=WHEN`
-options and uses the same stream separation (chrome on stderr, program output on
-stdout) and close-status exit code as the interpreted launcher.
+`--repl` accepts the same `--session NAME`, `--chrome NAME`, `--color=WHEN`, and
+`--replay FILE` options and uses the same stream separation (chrome on stderr,
+program output on stdout) and close-status exit code as the interpreted launcher.
 
 The setup such a binary needs is at *build* time, not run time: the compile
 toolchain documented in [development.md](development.md) — Gambit (`gsi`/`gsc`),
@@ -146,6 +146,32 @@ terminal-port predicate it uses for `--color=auto`, applied to **stdin** rather
 than the control channel. The other chromes do not echo submissions, so they are
 unaffected, and `--chrome datum` always reproduces the raw record stream
 verbatim.
+
+#### Capturing and replaying a session
+
+The `datum` chrome stream is the canonical capture format, and `--replay FILE`
+reloads and replays a captured transcript to a fresh session — so a transcript
+doubles as a reproducible bug report or a fixture capture. Capture the record
+stream by redirecting the control channel, then replay it:
+
+```sh
+printf '(+ 1 2)\n(define base 7)\n(* base 3)\n(exit)\n' \
+  | tools/consent-repl --chrome datum 2>session.scm        # capture
+tools/consent-repl --replay session.scm --chrome datum     # replay
+```
+
+Replay reconstructs the interaction input from the captured **complete
+submissions** and re-evaluates them in a fresh session, then appends a
+`repl-replay-report` datum and **exits non-zero if the replay diverged** from the
+captured outcomes. A pure transcript reproduces an equal stream; a result that
+depended on a capability grant the replay session lacks fails closed — its
+recorded `repl-result` replays as a `repl-condition`, which the report flags
+rather than silently reproducing the recorded value. The full capture format,
+the reproduces-versus-cannot rules, and the report shape are specified in the
+interaction contract's
+[Capture and Replay](repl-interaction-contract.md#capture-and-replay) section;
+`(cli repl-shell)` exposes the same driver as the library procedures
+`cli-repl-replay-records` and `cli-repl-replay-report`.
 
 ### Streams
 
