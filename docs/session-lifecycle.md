@@ -184,24 +184,26 @@ and cancellation and interrupt behavior.
 It creates the native, non-vterm buffer set for the session:
 
 ```text
-*Agent: PROJECT*
+*Consent: PROJECT*
 *Consent Scheme: PROJECT*
-*Agent Events: PROJECT*
-*Agent Audit: PROJECT*
-*Agent Approvals: PROJECT*
+*Consent Events: PROJECT*
+*Consent Audit: PROJECT*
+*Consent Approvals: PROJECT*
 ```
 
-`*Agent: PROJECT*` shows the current session record and status. `*Consent
+`*Consent: PROJECT*` shows the current session record and status. `*Consent
 Scheme: PROJECT*` shows the persistent REPL transcript as Scheme-readable
-`transcript-event` datums. `*Agent Events: PROJECT*` shows recent `(agent io)`
-records, `*Agent Audit: PROJECT*` shows session-scoped audit entries, and
-`*Agent Approvals: PROJECT*` shows pending request events such as approval
+`transcript-event` datums. `*Consent Events: PROJECT*` shows recent `(agent io)`
+records, `*Consent Audit: PROJECT*` shows session-scoped audit entries, and
+`*Consent Approvals: PROJECT*` shows pending request events such as approval
 requests emitted through `(agent-request datum)`.
 
-The `C-c a` dispatch command exposes entries for starting, switching,
+The `consent-dispatch` command exposes entries for starting, switching,
 inspecting, stopping, evaluating in, and opening the native session buffers.
-Buffers include a mode-line status indicator in the form
-`Agent[SESSION:STATUS]`.
+It has no default global key — `C-c LETTER` keys are reserved for users — so
+bind it yourself if you want one; see
+[Getting Started](getting-started.md) for a suggested binding. Buffers include
+a mode-line status indicator in the form `Consent[SESSION:STATUS]`.
 
 The host-neutral read-eval-render loop both the Emacs and portable hosts drive
 over a durable session — incremental reading, session persistence, value/error

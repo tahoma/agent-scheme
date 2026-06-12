@@ -244,7 +244,7 @@
    "approval-main")
   (let ((approvals
          (consent-approval-test--buffer-string
-          (get-buffer "*Agent Approvals: approval-main*"))))
+          (get-buffer "*Consent Approvals: approval-main*"))))
     (should
      (string-match-p
       (regexp-quote "(approval-request (id a-1) (policy buffer-edit)")

@@ -152,7 +152,7 @@
     (should (string-match-p "(tags (plan important))" result))
     (should (string-match-p "(value (plan (id shared)" result)))
   (let ((buffer (consent-plan-open 'project)))
-    (should (equal (buffer-name buffer) "*Agent Plans: project*"))
+    (should (equal (buffer-name buffer) "*Consent Plans: project*"))
     (should (eq (buffer-local-value 'major-mode buffer)
                 'consent-plan-mode))
     (should-not (buffer-local-value 'buffer-read-only buffer))

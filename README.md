@@ -161,7 +161,7 @@ policy explicitly permits automation:
 ```
 
 In Emacs project sessions, pending and resolved records appear in
-`*Agent Approvals: PROJECT*` as Scheme-readable approval datums.
+`*Consent Approvals: PROJECT*` as Scheme-readable approval datums.
 
 Diff records are portable trust data.  `(agent diff)` owns the canonical datum
 shape, proposed-edit previews, unified rendering, and event-channel yield;

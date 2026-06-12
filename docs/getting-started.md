@@ -70,16 +70,23 @@ M-x consent-start-repl
 
 `consent-start-repl` defaults to a project session. From this repository,
 the visible buffers normally use the project label `consent`, such as
-`*Agent: consent*` and `*Consent Scheme: consent*`.
+`*Consent: consent*` and `*Consent Scheme: consent*`.
 
-The native dispatch menu is bound to:
+The session buffers are read-only renderings of session state, not a comint
+buffer you type into. Source is submitted with `consent-repl-eval`, which
+evaluates the active region or prompts in the minibuffer; inside a session
+buffer the same command is on `C-c C-c`.
 
-```text
-C-c a
+The native dispatch menu is `M-x consent-dispatch`. It includes commands for
+starting or switching sessions, inspecting or stopping sessions, opening
+session buffers, and evaluating source in the current session. The package
+binds no global key for it: the Emacs key-binding conventions reserve
+`C-c LETTER` keys for users, so pick your own binding if you want one, for
+example:
+
+```elisp
+(keymap-global-set "C-c d" #'consent-dispatch)
 ```
-
-It includes commands for starting or switching sessions, inspecting or stopping
-sessions, opening session buffers, and evaluating source in the current session.
 
 ## First Evaluation
 
@@ -137,16 +144,18 @@ session:
 
 | Buffer | Role |
 | --- | --- |
-| `*Agent: PROJECT*` | Status and session record view. This is the primary state view for imports, definitions, memory references, handles, status, transcript references, and recent events. |
+| `*Consent: PROJECT*` | Status and session record view. This is the primary state view for imports, definitions, memory references, handles, status, transcript references, and recent events. |
 | `*Consent Scheme: PROJECT*` | Persistent REPL transcript. Evaluations appear as summarized Scheme-readable `transcript-event` datums. |
-| `*Agent Events: PROJECT*` | Recent `(agent io)` events, such as `agent-yield`, `agent-log`, progress, warnings, and request records. |
-| `*Agent Audit: PROJECT*` | Session-scoped audit entries for lifecycle transitions, evaluations, policy decisions, approval records, and capability activity. |
-| `*Agent Approvals: PROJECT*` | Pending and resolved approval request datums for effects that need host or user confirmation. Pure examples normally leave this buffer empty. |
+| `*Consent Events: PROJECT*` | Recent `(agent io)` events, such as `agent-yield`, `agent-log`, progress, warnings, and request records. |
+| `*Consent Audit: PROJECT*` | Session-scoped audit entries for lifecycle transitions, evaluations, policy decisions, approval records, and capability activity. |
+| `*Consent Approvals: PROJECT*` | Pending and resolved approval request datums for effects that need host or user confirmation. Pure examples normally leave this buffer empty. |
 
+These are read-only renderings of session state; submit code with
+`consent-repl-eval` (`C-c C-c` inside a session buffer) as described above.
 Each buffer includes a mode-line status indicator in the form:
 
 ```text
-Agent[SESSION:STATUS]
+Consent[SESSION:STATUS]
 ```
 
 Memory is represented in the session record and through `(agent memory)` when
@@ -484,7 +493,7 @@ consent-switch-session`, or retire the current session with `M-x
 consent-stop-session`.
 
 If a host-effecting example is denied, treat that as the expected safe posture.
-Inspect `*Agent Audit: PROJECT*` and `*Agent Approvals: PROJECT*` to see the
+Inspect `*Consent Audit: PROJECT*` and `*Consent Approvals: PROJECT*` to see the
 request and decision records, then add the smallest explicit grant or policy
 change needed for the experiment.
 
