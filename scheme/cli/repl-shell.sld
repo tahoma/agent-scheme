@@ -38,17 +38,41 @@
 ;;; on the control channel (stderr); program output on stdout is never touched.
 ;;; `--chrome datum' recovers the canonical record stream and is always
 ;;; reachable.
+;;;
+;;; Transcript capture and replay (docs/repl-interaction-contract.md, "Capture
+;;; and Replay") build on that canonical surface.  The `datum' chrome stream is
+;;; the capture format: one contract record datum per line, written by the
+;;; consent writer and reloadable with the standard reader.
+;;; `cli-repl-records-from-datum-stream' reloads a captured stream into records;
+;;; `cli-repl-submissions-from-records' extracts the complete submissions, which
+;;; `cli-repl-replay-records' re-feeds to a FRESH session, so a transcript
+;;; doubles as a reproducible bug report and a fixture capture.  Replay
+;;; reproduces submissions, ordering, and deterministic results/conditions, but
+;;; NOT live host effects: a replay session carries only the authority it is
+;;; granted, so an effect that succeeded under the captured authority fails
+;;; closed under a weaker replay posture -- surfaced as a `repl-condition', not
+;;; the recorded value.  `cli-repl-replay-report' compares the captured and
+;;; replayed per-submission outcomes and reports any such divergence rather than
+;;; letting it pass silently; the `--replay FILE' terminal mode emits the
+;;; replayed stream and that report and exits non-zero on divergence.
 
 (define-library (cli repl-shell)
   (export cli-repl-drive
           cli-repl-records-from-string
+          cli-repl-records-from-datum-stream
+          cli-repl-submissions-from-records
+          cli-repl-replay-input
+          cli-repl-replay-records
+          cli-repl-replay-report
           cli-repl-run
           cli-repl-parse-options
           cli-repl-rendered-from-string
+          cli-repl-replay-main
           cli-repl-main)
   (import (scheme base)
           (scheme write)
           (scheme read)
+          (scheme file)
           (scheme process-context)
           (consent eval)
           (consent reader)
@@ -466,6 +490,148 @@ program's context while host procedures pass through untouched."
              session
              maybe-options))
 
+    ;;;; Transcript capture and replay
+
+    ;; The canonical capture format is the `datum' chrome's record stream: one
+    ;; contract record datum per line, written by the consent writer.  The
+    ;; writer emits plain symbols, numerals, strings, and booleans, so the
+    ;; standard reader reloads each record with the same representation the live
+    ;; loop produces for the fields replay consults (`source', `complete').
+    (define (cli-repl-records-from-datum-stream text)
+      "Reload a captured `datum'-chrome record stream TEXT into the list of contract records, reading with the standard reader the capture format is written for."
+      (let ((port (open-input-string text)))
+        (let loop ((records '()))
+          (let ((datum (read port)))
+            (if (eof-object? datum)
+                (reverse records)
+                (loop (cons datum records)))))))
+
+    (define (cli-repl-submissions-from-records records)
+      "Return the external source text of each complete submission in RECORDS, in order.
+A `repl-submission' with `(complete #t)' contributes its `source'; an incomplete
+(EOF-truncated) submission, prompts, results, conditions, and the exit record
+contribute nothing, so the result is exactly the forms a replay can re-feed."
+      (let loop ((records records) (sources '()))
+        (cond
+         ((null? records) (reverse sources))
+         ((and (pair? (car records))
+               (eq? (car (car records)) 'repl-submission)
+               (eq? (repl--field (car records) 'complete) #t))
+          (loop (cdr records)
+                (cons (repl--field (car records) 'source) sources)))
+         (else (loop (cdr records) sources)))))
+
+    (define (cli-repl-replay-input records)
+      "Reconstruct the interaction-input string that replays RECORDS: each complete submission's source followed by a newline, so a fresh loop reads the same forms."
+      (let loop ((sources (cli-repl-submissions-from-records records)) (parts '()))
+        (if (null? sources)
+            (apply string-append (reverse parts))
+            (loop (cdr sources) (cons "\n" (cons (car sources) parts))))))
+
+    (define (cli-repl-replay-records records session . maybe-options)
+      "Replay the captured RECORDS by re-feeding their complete submissions to a fresh SESSION, returning the new contract record stream.
+Reproduces submissions, ordering, prompts, the close record, and deterministic
+results/conditions; a live host effect the replay posture does not grant fails
+closed as a `repl-condition' rather than reproducing the recorded value (compare
+with `cli-repl-replay-report')."
+      (apply cli-repl-records-from-string
+             (cli-repl-replay-input records)
+             session
+             maybe-options))
+
+    ;; A submission outcome is the triple (SOURCE KIND DISPLAY), where KIND is
+    ;; `result', `condition', or `none' (an exit form has no outcome) and
+    ;; DISPLAY is the outcome's human-readable rendering.  KIND and DISPLAY are
+    ;; the contract-meaningful, representation-stable fields the replay report
+    ;; compares, so the comparison holds whether a stream came from the live
+    ;; loop or from a reloaded datum-stream text.
+    (define (repl--outcome-for records submission-id)
+      "Return (KIND . DISPLAY) for the result/condition correlated to SUBMISSION-ID in RECORDS, or (none . #f) when neither is present."
+      (let loop ((records records))
+        (cond
+         ((null? records) (cons 'none #f))
+         ((and (pair? (car records))
+               (memq (car (car records)) '(repl-result repl-condition))
+               (equal? (repl--field (car records) 'submission) submission-id))
+          (cons (if (eq? (car (car records)) 'repl-result) 'result 'condition)
+                (repl--field (car records) 'display)))
+         (else (loop (cdr records))))))
+
+    (define (repl--submission-outcomes records)
+      "Return the ordered list of (SOURCE KIND DISPLAY) outcome triples for each complete submission in RECORDS, correlating each to its result/condition by submission id."
+      (let loop ((rs records) (outcomes '()))
+        (cond
+         ((null? rs) (reverse outcomes))
+         ((and (pair? (car rs))
+               (eq? (car (car rs)) 'repl-submission)
+               (eq? (repl--field (car rs) 'complete) #t))
+          (let ((outcome (repl--outcome-for
+                          records (repl--field (car rs) 'id))))
+            (loop (cdr rs)
+                  (cons (list (repl--field (car rs) 'source)
+                              (car outcome) (cdr outcome))
+                        outcomes))))
+         (else (loop (cdr rs) outcomes)))))
+
+    (define (repl--outcome-fields outcome)
+      "Render an outcome triple OUTCOME as `(kind K) (display D)' fields, or `(kind absent)' when OUTCOME is #f (no paired submission)."
+      (if outcome
+          (list (list 'kind (cadr outcome))
+                (list 'display (list-ref outcome 2)))
+          (list (list 'kind 'absent))))
+
+    (define (repl--divergence index source captured-outcome replayed-outcome)
+      "Build a `repl-replay-divergence' datum for the submission at INDEX."
+      (append
+       (list 'repl-replay-divergence
+             (list 'index (consent-make-canonical-integer index))
+             (list 'source source))
+       (list (cons 'captured (repl--outcome-fields captured-outcome)))
+       (list (cons 'replayed (repl--outcome-fields replayed-outcome)))))
+
+    (define (repl--outcome-divergences captured replayed index acc)
+      "Walk the CAPTURED and REPLAYED outcome triples in parallel from INDEX, accumulating a divergence datum for each kind/display mismatch or unpaired submission."
+      (cond
+       ((and (null? captured) (null? replayed)) (reverse acc))
+       ((null? captured)
+        (repl--outcome-divergences
+         '() (cdr replayed) (+ index 1)
+         (cons (repl--divergence index (car (car replayed)) #f (car replayed))
+               acc)))
+       ((null? replayed)
+        (repl--outcome-divergences
+         (cdr captured) '() (+ index 1)
+         (cons (repl--divergence index (car (car captured)) (car captured) #f)
+               acc)))
+       (else
+        (let ((c (car captured)) (r (car replayed)))
+          (if (and (eq? (cadr c) (cadr r))
+                   (equal? (list-ref c 2) (list-ref r 2)))
+              (repl--outcome-divergences (cdr captured) (cdr replayed)
+                                         (+ index 1) acc)
+              (repl--outcome-divergences
+               (cdr captured) (cdr replayed) (+ index 1)
+               (cons (repl--divergence index (car c) c r) acc)))))))
+
+    (define (cli-repl-replay-report captured replayed)
+      "Compare the per-submission outcomes of the CAPTURED and REPLAYED record streams and return a `repl-replay-report' datum.
+Each complete submission's outcome is its result/condition `kind' (`result',
+`condition', or `none') and `display' rendering, correlated by submission id and
+compared by position.  The report is `reproduced' when every compared submission
+matches in kind and display; otherwise `diverged', with one
+`repl-replay-divergence' per mismatched or unpaired submission.  A captured
+`result' that replays as a `condition' is the documented fail-closed signal for
+a live host effect the replay posture does not grant."
+      (let* ((captured-outcomes (repl--submission-outcomes captured))
+             (replayed-outcomes (repl--submission-outcomes replayed))
+             (divergences (repl--outcome-divergences
+                           captured-outcomes replayed-outcomes 1 '())))
+        (list 'repl-replay-report
+              (list 'status (if (null? divergences) 'reproduced 'diverged))
+              (list 'submissions
+                    (consent-make-canonical-integer (length captured-outcomes)))
+              (list 'divergences divergences))))
+
     ;;;; Terminal entry
 
     (define (repl--color-inline argument)
@@ -477,23 +643,30 @@ program's context while host procedures pass through untouched."
              (substring argument length (string-length argument)))))
 
     (define (cli-repl-parse-options arguments)
-      "Parse ARGUMENTS into the REPL option alist ((session . S) (chrome . C) (color . M)), honoring --session NAME, --chrome NAME, and --color=auto|always|never (or the spaced --color VALUE); later flags win, unrecognized arguments are ignored, and the caller validates chrome and color against the registry and the known modes."
-      (let loop ((arguments arguments) (session #f) (chrome #f) (color #f))
+      "Parse ARGUMENTS into the REPL option alist ((session . S) (chrome . C) (color . M) (replay . F)), honoring --session NAME, --chrome NAME, --color=auto|always|never (or the spaced --color VALUE), and --replay FILE (reload and replay the captured transcript at FILE, #f for the ordinary stdin session); later flags win, unrecognized arguments are ignored, and the caller validates chrome and color against the registry and the known modes."
+      (let loop ((arguments arguments)
+                 (session #f) (chrome #f) (color #f) (replay #f))
         (cond
          ((null? arguments)
           (list (cons 'session (or session "repl-main"))
                 (cons 'chrome (or chrome (cli-repl-chrome-default-name)))
-                (cons 'color (or color 'auto))))
+                (cons 'color (or color 'auto))
+                (cons 'replay replay)))
          ((and (string=? (car arguments) "--session") (pair? (cdr arguments)))
-          (loop (cddr arguments) (cadr arguments) chrome color))
+          (loop (cddr arguments) (cadr arguments) chrome color replay))
          ((and (string=? (car arguments) "--chrome") (pair? (cdr arguments)))
-          (loop (cddr arguments) session (string->symbol (cadr arguments)) color))
+          (loop (cddr arguments) session (string->symbol (cadr arguments))
+                color replay))
          ((and (string=? (car arguments) "--color") (pair? (cdr arguments)))
-          (loop (cddr arguments) session chrome (string->symbol (cadr arguments))))
+          (loop (cddr arguments) session chrome
+                (string->symbol (cadr arguments)) replay))
+         ((and (string=? (car arguments) "--replay") (pair? (cdr arguments)))
+          (loop (cddr arguments) session chrome color (cadr arguments)))
          ((repl--color-inline (car arguments))
           => (lambda (value)
-               (loop (cdr arguments) session chrome (string->symbol value))))
-         (else (loop (cdr arguments) session chrome color)))))
+               (loop (cdr arguments) session chrome
+                     (string->symbol value) replay)))
+         (else (loop (cdr arguments) session chrome color replay)))))
 
     (define (repl--option options name)
       "Return the value bound to NAME in the parsed OPTIONS alist."
@@ -522,6 +695,34 @@ program's context while host procedures pass through untouched."
            session))
         (get-output-string port)))
 
+    (define (repl--read-file path)
+      "Return the entire contents of the file at PATH as a string."
+      (call-with-input-file path
+        (lambda (port)
+          (let ((out (open-output-string)))
+            (let loop ()
+              (let ((chunk (read-string 4096 port)))
+                (if (eof-object? chunk)
+                    (get-output-string out)
+                    (begin (write-string chunk out) (loop)))))))))
+
+    (define (cli-repl-replay-main path session chrome color? record-port)
+      "Reload the captured transcript at PATH, replay its complete submissions to a fresh SESSION, paint the replayed record stream through CHROME under COLOR? onto RECORD-PORT, append the `repl-replay-report' datum, and return 0 when the replay reproduced the captured outcomes or 1 when it diverged.
+Replay uses the default fail-closed posture, so an effect that needed authority
+the capture had is denied and surfaced as a `repl-condition' -- a divergence the
+report records rather than silently reproducing the recorded value."
+      (let* ((captured (cli-repl-records-from-datum-stream (repl--read-file path)))
+             (replayed (cli-repl-replay-records captured session))
+             (write-record (repl--rendering-writer chrome color? record-port))
+             (report (cli-repl-replay-report captured replayed)))
+        (for-each write-record replayed)
+        ;; The report is a meta-record no interaction chrome renders, so it is
+        ;; written raw (one datum) regardless of the active chrome.
+        (write-string (string-append (consent-datum->external report) "\n")
+                      record-port)
+        (flush-output-port record-port)
+        (if (eq? (repl--field report 'status) 'reproduced) 0 1)))
+
     (define (repl--fatal message detail)
       "Write MESSAGE and DETAIL to the control channel and exit with status 2."
       (let ((port (current-error-port)))
@@ -532,11 +733,15 @@ program's context while host procedures pass through untouched."
         (exit 2)))
 
     (define (cli-repl-main)
-      "Entry point: read forms from stdin, paint each record through the selected chrome onto stderr, leave program output on stdout, then exit with the close-status code."
+      "Entry point: read forms from stdin, paint each record through the selected chrome onto stderr, leave program output on stdout, then exit with the close-status code.
+With `--replay FILE', reload that captured transcript instead of reading stdin,
+replay its submissions to a fresh session, and exit 0 (reproduced) or 1
+(diverged) per the replay report."
       (let* ((options (cli-repl-parse-options (cdr (command-line))))
              (session (repl--option options 'session))
              (chrome-name (repl--option options 'chrome))
              (color-mode (repl--option options 'color))
+             (replay-path (repl--option options 'replay))
              (chrome (cli-repl-chrome-lookup chrome-name))
              (record-port (current-error-port))
              (input-port (current-input-port))
@@ -549,22 +754,28 @@ program's context while host procedures pass through untouched."
                (no-color? (and no-color-value
                                (> (string-length no-color-value) 0)))
                (color? (cli-repl-chrome-color?
-                        color-mode no-color? (repl--port-tty? record-port)))
-               ;; An interactive terminal echoes each typed form in cooked mode,
-               ;; so stdin being a TTY means the form is already on screen; the
-               ;; comment chrome then suppresses its own echo to keep one copy.
-               (input-echoed? (repl--port-tty? input-port))
-               (read-chunk
-                (lambda ()
-                  (let ((line (read-line)))
-                    (if (eof-object? line)
-                        line
-                        (string-append line "\n")))))
-               (write-record (repl--rendering-writer chrome color? record-port))
-               (write-output
-                (lambda (output)
-                  (write-string output output-port)
-                  (flush-output-port output-port))))
-          (exit
-           (parameterize ((cli-repl-chrome-input-echoed? input-echoed?))
-             (cli-repl-run read-chunk write-record write-output session))))))))
+                        color-mode no-color? (repl--port-tty? record-port))))
+          (if replay-path
+              (exit (cli-repl-replay-main replay-path session chrome
+                                          color? record-port))
+              (let* (;; An interactive terminal echoes each typed form in cooked
+                     ;; mode, so stdin being a TTY means the form is already on
+                     ;; screen; the comment chrome then suppresses its own echo
+                     ;; to keep one copy.
+                     (input-echoed? (repl--port-tty? input-port))
+                     (read-chunk
+                      (lambda ()
+                        (let ((line (read-line)))
+                          (if (eof-object? line)
+                              line
+                              (string-append line "\n")))))
+                     (write-record
+                      (repl--rendering-writer chrome color? record-port))
+                     (write-output
+                      (lambda (output)
+                        (write-string output output-port)
+                        (flush-output-port output-port))))
+                (exit
+                 (parameterize ((cli-repl-chrome-input-echoed? input-echoed?))
+                   (cli-repl-run read-chunk write-record
+                                 write-output session))))))))))
