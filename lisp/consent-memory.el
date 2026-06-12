@@ -65,7 +65,7 @@ the user or project opts in explicitly."
 (defvar-local consent--memory-buffer-subject nil
   "Session id or project root represented by the current memory buffer.")
 
-(define-derived-mode consent-memory-mode prog-mode "Agent Memory"
+(define-derived-mode consent-memory-mode prog-mode "Consent Memory"
   "Major mode for editable Consent Scheme memory datum buffers.")
 
 (defun consent--memory-symbol (name)
@@ -562,7 +562,7 @@ When EXISTING is non-nil, preserve its id and creation sequence."
          nil))
   (let* ((label (consent--memory-buffer-label scope subject))
          (buffer (get-buffer-create
-                  (format "*Agent Memory: %s*" label))))
+                  (format "*Consent Memory: %s*" label))))
     (with-current-buffer buffer
       (let ((inhibit-read-only t))
         (erase-buffer)

@@ -152,7 +152,7 @@
            (consent-read
             "((tags (local)) (value \"private memory\"))"))
           (let ((buffer (consent-memory-open 'instance)))
-            (should (equal (buffer-name buffer) "*Agent Memory: instance*"))
+            (should (equal (buffer-name buffer) "*Consent Memory: instance*"))
             (should (eq (buffer-local-value 'major-mode buffer)
                         'consent-memory-mode))
             (should-not (buffer-local-value 'buffer-read-only buffer))
@@ -168,11 +168,11 @@
           (should
            (equal
             (buffer-name (consent-memory-open 'session "memory-buffer"))
-            "*Agent Memory: session: memory-buffer*"))
+            "*Consent Memory: session: memory-buffer*"))
           (should
            (equal
             (buffer-name (consent-memory-open 'project "consent"))
-            "*Agent Memory: project: consent*"))
+            "*Consent Memory: project: consent*"))
           (let ((rules
                  (consent-memory-test--external
                   (consent-memory-storage-rules 'project

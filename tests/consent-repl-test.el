@@ -58,15 +58,16 @@
           (consent-start-repl 'project)))
     (should (equal consent-current-session-id expected-id))
     (should (consent-session-ref expected-id))
-    (should (get-buffer (format "*Agent: %s*" project-label)))
+    (should (get-buffer (format "*Consent: %s*" project-label)))
     (should (get-buffer (format "*Consent Scheme: %s*" project-label)))
-    (should (get-buffer (format "*Agent Events: %s*" project-label)))
-    (should (get-buffer (format "*Agent Audit: %s*" project-label)))
-    (should (get-buffer (format "*Agent Approvals: %s*" project-label)))
-    (should (eq (lookup-key global-map (kbd "C-c a"))
-                #'consent-dispatch))
+    (should (get-buffer (format "*Consent Events: %s*" project-label)))
+    (should (get-buffer (format "*Consent Audit: %s*" project-label)))
+    (should (get-buffer (format "*Consent Approvals: %s*" project-label)))
+    ;; `C-c LETTER' keys are reserved for users; loading the package must
+    ;; not claim a global dispatch binding.
+    (should-not (lookup-key global-map (kbd "C-c a")))
     (should (string-match-p
-             (regexp-quote (format "Agent[%s:new]" expected-id))
+             (regexp-quote (format "Consent[%s:new]" expected-id))
              consent-mode-line-string))
     (should (string-match-p
              (regexp-quote "(session")
@@ -109,10 +110,10 @@
             (get-buffer (format "*Consent Scheme: %s*" project-label))))
           (events
            (consent-repl-test--buffer-string
-            (get-buffer (format "*Agent Events: %s*" project-label))))
+            (get-buffer (format "*Consent Events: %s*" project-label))))
           (audit
            (consent-repl-test--buffer-string
-            (get-buffer (format "*Agent Audit: %s*" project-label)))))
+            (get-buffer (format "*Consent Audit: %s*" project-label)))))
       (should (string-match-p "(transcript-event" transcript))
       (should (string-match-p ";; e-" transcript))
       (should (string-match-p "(kind eval-end)" transcript))
@@ -142,7 +143,7 @@
          (contents (consent-repl-test--buffer-string buffer)))
     (with-current-buffer buffer
       (should (derived-mode-p 'consent-macroexpand-mode)))
-    (should (equal (buffer-name buffer) "*Agent Macroexpand: macro-view*"))
+    (should (equal (buffer-name buffer) "*Consent Macroexpand: macro-view*"))
     (should (string-match-p ";; Original" contents))
     (should (string-match-p ";; Expanded" contents))
     (should (string-match-p
@@ -231,7 +232,7 @@
           (reason \"Replace text?\")))")
     (let ((approvals
            (consent-repl-test--buffer-string
-            (get-buffer "*Agent Approvals: alpha*"))))
+            (get-buffer "*Consent Approvals: alpha*"))))
       (should (string-match-p
                "(approval-request (id a-1) (policy buffer-edit)"
                approvals)))

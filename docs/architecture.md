@@ -612,7 +612,7 @@ agent cannot approve its own restricted buffer, file, process, or UI mutation
 unless the host explicitly grants an automation policy.
 
 The Emacs adapter renders session approval records in
-`*Agent Approvals: PROJECT*` as the same datums.  Confirmation-gated policy
+`*Consent Approvals: PROJECT*` as the same datums.  Confirmation-gated policy
 calls, such as buffer edits, create approval records automatically before the
 confirmation function runs, then resolve those records to `approved` or
 `denied` and write the decision to the audit log.
