@@ -25,6 +25,7 @@
           consent-recovery-step-diagnostic
           consent-recovery-step-span
           consent-recovery-step-next
+          consent-recovery-step-pending
           consent-read-eof
           consent-read-eof?
           consent-datum-source
@@ -81,7 +82,8 @@
       (make-reader source position length line-starts fold-case node-count datum-labels
                    maximum-depth maximum-list-length maximum-vector-length
                    maximum-bytevector-length maximum-string-size
-                   maximum-total-nodes source-id source-metadata recovery)
+                   maximum-total-nodes source-id source-metadata recovery
+                   pending-stack)
       reader?
       (source reader-source)
       (position reader-position set-reader-position!)
@@ -101,7 +103,12 @@
       ;; RECOVERY toggles errors-as-data: when set, reader errors raise a
       ;; structured <reader-condition> the recovery driver can resynchronize
       ;; past instead of unwinding the whole read.
-      (recovery reader-recovery))
+      (recovery reader-recovery)
+      ;; PENDING-STACK tracks the constructs currently open at the cursor,
+      ;; innermost first (`list`, `vector`, `bytevector`, `string`, `symbol`,
+      ;; `comment`).  An incomplete condition snapshots it so interactive
+      ;; callers can render nesting depth and the pending construct kind.
+      (pending-stack reader-pending-stack set-reader-pending-stack!))
 
     ;; Validation records own the post-read resource budget for host datums.
     (define-record-type <validation>
@@ -187,15 +194,18 @@ accessor accepts both forms with the same answer on every posture."
     ;; `invalid` (genuine syntax error), `incomplete` (a valid prefix that needs
     ;; more input, such as an unterminated list at end of input), or `limit` (a
     ;; resource budget was exceeded).  OFFSET is the source position at the point
-    ;; of failure.  In the default raise-on-error mode these conditions are never
-    ;; constructed; reader errors stay plain `error` objects.
+    ;; of failure.  PENDING snapshots the reader's open-construct stack at the
+    ;; raise, innermost first; it is meaningful for `incomplete` conditions.  In
+    ;; the default raise-on-error mode these conditions are never constructed;
+    ;; reader errors stay plain `error` objects.
     (define-record-type <reader-condition>
-      (make-reader-condition kind offset message irritants)
+      (make-reader-condition kind offset message irritants pending)
       reader-condition?
       (kind reader-condition-kind)
       (offset reader-condition-offset)
       (message reader-condition-message)
-      (irritants reader-condition-irritants))
+      (irritants reader-condition-irritants)
+      (pending reader-condition-pending))
 
     ;; Recovery read result for a whole source: a partial datum list plus the
     ;; ordered diagnostics and recovery spans collected along the way.  STATUS is
@@ -212,14 +222,18 @@ accessor accepts both forms with the same answer on every posture."
     ;; Recovery read step for a single form, the substrate interactive callers
     ;; (REPL, editor adapters) drive one form at a time.  STATUS is `datum`,
     ;; `invalid`, `incomplete`, or `eof`.  NEXT is the offset to resume from.
+    ;; PENDING carries the open-construct stack for an `incomplete` step,
+    ;; innermost first (and #f otherwise), so a continuation prompt can render
+    ;; nesting depth without re-deriving the reader's lexical state.
     (define-record-type <consent-recovery-step>
-      (make-recovery-step status datum diagnostic span next)
+      (make-recovery-step status datum diagnostic span next pending)
       consent-recovery-step?
       (status consent-recovery-step-status)
       (datum consent-recovery-step-datum)
       (diagnostic consent-recovery-step-diagnostic)
       (span consent-recovery-step-span)
-      (next consent-recovery-step-next))
+      (next consent-recovery-step-next)
+      (pending consent-recovery-step-pending))
 
     ;; Character constant for R7RS page whitespace.
     (define char-page (integer->char 12))
@@ -296,7 +310,8 @@ site would have written host literals."
                              (option-ref options 'source-id #f)
                              #f)
                          source-metadata
-                         (option-ref options 'recovery #f)))))
+                         (option-ref options 'recovery #f)
+                         '()))))
 
     (define (source-field name value)
       "Build one Scheme-readable source metadata field."
@@ -404,13 +419,24 @@ site would have written host literals."
             (consent-datum-source-set! target metadata))
         target))
 
+    (define (push-pending! reader kind)
+      "Mark a KIND construct open at the reader cursor for nesting snapshots."
+      (set-reader-pending-stack! reader
+                                 (cons kind (reader-pending-stack reader))))
+
+    (define (pop-pending! reader)
+      "Mark the innermost open construct closed after its delimiter is consumed."
+      (set-reader-pending-stack! reader
+                                 (cdr (reader-pending-stack reader))))
+
     (define (raise-reader-condition reader kind prefix message irritants)
       "Raise a reader failure as a structured condition under recovery mode, or as the historical plain error otherwise."
       (if (reader-recovery reader)
           (raise (make-reader-condition kind
                                         (reader-position reader)
                                         message
-                                        irritants))
+                                        irritants
+                                        (reader-pending-stack reader)))
           (apply error
                  (string-append
                   prefix
@@ -543,9 +569,11 @@ site would have written host literals."
           (reader-incomplete reader "unterminated block comment"))
          ((starts-with? reader "#|")
           (advance! reader 2)
+          (push-pending! reader 'comment)
           (loop (+ depth 1)))
          ((starts-with? reader "|#")
           (advance! reader 2)
+          (pop-pending! reader)
           (loop (- depth 1)))
          (else
           (advance! reader)
@@ -1271,6 +1299,7 @@ Canonical-record components are unwrapped to their host payloads."
     (define (read-string-literal reader)
       "Read a quoted string literal, escapes, and line continuations."
       (advance! reader)
+      (push-pending! reader 'string)
       (let ((result '())
             (size 0))
         (define (emit! char)
@@ -1307,6 +1336,7 @@ Canonical-record components are unwrapped to their host payloads."
             (reader-incomplete reader "unterminated string"))
            ((char=? (peek reader) #\")
             (advance! reader)
+            (pop-pending! reader)
             (list->string (reverse result)))
            ((char=? (peek reader) #\\)
             (advance! reader)
@@ -1335,6 +1365,7 @@ Canonical-record components are unwrapped to their host payloads."
     (define (read-vertical-symbol-name reader)
       "Read an escaped vertical-bar symbol name."
       (advance! reader)
+      (push-pending! reader 'symbol)
       (let ((result '()))
         (let loop ()
           (cond
@@ -1342,6 +1373,7 @@ Canonical-record components are unwrapped to their host payloads."
             (reader-incomplete reader "unterminated vertical symbol"))
            ((char=? (peek reader) #\|)
             (advance! reader)
+            (pop-pending! reader)
             (let ((name (list->string (reverse result))))
               (if (reader-fold-case reader)
                   (string-foldcase name)
@@ -1493,6 +1525,7 @@ Canonical-record components are unwrapped to their host payloads."
       "Read a proper or dotted list up to a closing parenthesis."
       (check-depth reader depth)
       (advance! reader)
+      (push-pending! reader 'list)
       (let ((head '())
             (tail '())
             (count 0))
@@ -1517,6 +1550,7 @@ Canonical-record components are unwrapped to their host payloads."
             (reader-incomplete reader "unterminated list"))
            ((char=? (peek reader) #\))
             (advance! reader)
+            (pop-pending! reader)
             (note-node! reader)
             head)
            (else
@@ -1538,6 +1572,7 @@ Canonical-record components are unwrapped to their host payloads."
                         (reader-error reader
                                       "expected closing parenthesis after dotted tail"))
                     (advance! reader)
+                    (pop-pending! reader)
                     (note-node! reader)
                     head)
                   (begin
@@ -1548,6 +1583,7 @@ Canonical-record components are unwrapped to their host payloads."
     (define (read-vector-elements reader depth kind close-char maximum-length)
       "Read vector or bytevector elements under the active length budget."
       (check-depth reader depth)
+      (push-pending! reader (string->symbol kind))
       (let loop ((items '()) (count 0))
         (skip-intertoken-space! reader depth)
         (cond
@@ -1555,6 +1591,7 @@ Canonical-record components are unwrapped to their host payloads."
           (reader-incomplete reader "unterminated sequence" kind))
          ((char=? (peek reader) close-char)
           (advance! reader)
+          (pop-pending! reader)
           (reverse items))
          ((char=? (peek reader) #\.)
           (reader-error reader "dot is not allowed in sequence" kind))
@@ -1945,12 +1982,13 @@ Canonical-record components are unwrapped to their host payloads."
                             "reader error")
                         (if (error-object? condition)
                             (error-object-irritants condition)
-                            '()))))))
+                            '())
+                        '())))))
           (lambda ()
             (cons 'value (thunk)))))))
 
     (define (build-failure-step reader resync line-starts source-id start condition)
-      "Build the <consent-recovery-step> for a reader failure anchored at START.  Incomplete input rewinds to START; a genuine error advances past the malformed region via RESYNC with guaranteed forward progress."
+      "Build the <consent-recovery-step> for a reader failure anchored at START.  Incomplete input rewinds to START and carries the open-construct stack; a genuine error advances past the malformed region via RESYNC with guaranteed forward progress."
       (let ((kind (reader-condition-kind condition))
             (reason (condition-reason condition)))
         (if (eq? kind 'incomplete)
@@ -1961,7 +1999,8 @@ Canonical-record components are unwrapped to their host payloads."
                     (recovery-diagnostic source-id 'incomplete reason range))
                    (span (recovery-span 'incomplete reason range text)))
               (set-reader-position! reader start)
-              (make-recovery-step 'incomplete #f diagnostic span start))
+              (make-recovery-step 'incomplete #f diagnostic span start
+                                  (reader-condition-pending condition)))
             (let* ((proposed (resync (reader-source reader) start))
                    (next (min (reader-length reader)
                               (max proposed (+ start 1))))
@@ -1971,10 +2010,13 @@ Canonical-record components are unwrapped to their host payloads."
                     (recovery-diagnostic source-id 'invalid reason range))
                    (span (recovery-span 'invalid reason range text)))
               (set-reader-position! reader next)
-              (make-recovery-step 'invalid #f diagnostic span next)))))
+              (make-recovery-step 'invalid #f diagnostic span next #f)))))
 
     (define (recover-step! reader resync line-starts source-id options)
       "Read one form in recovery mode and return a <consent-recovery-step>.  Leading trivia is skipped first so a malformed region is anchored at the datum start, not at preceding whitespace; trivia-level failures (such as an unterminated block comment) are anchored where the trivia began."
+      ;; A prior step that unwound mid-construct leaves stale open-construct
+      ;; entries behind; each step starts from a balanced cursor, so reset.
+      (set-reader-pending-stack! reader '())
       (let* ((pre (reader-position reader))
              (skip-outcome
               (guard-reader-failure
@@ -1985,7 +2027,7 @@ Canonical-record components are unwrapped to their host payloads."
           (build-failure-step reader resync line-starts source-id
                               pre (cdr skip-outcome)))
          ((eof? reader)
-          (make-recovery-step 'eof #f #f #f (reader-position reader)))
+          (make-recovery-step 'eof #f #f #f (reader-position reader) #f))
          (else
           (let* ((start (reader-position reader))
                  (read-outcome
@@ -2000,7 +2042,7 @@ Canonical-record components are unwrapped to their host payloads."
                        datum)))))
             (if (eq? (car read-outcome) 'value)
                 (make-recovery-step 'datum (cdr read-outcome) #f #f
-                                    (reader-position reader))
+                                    (reader-position reader) #f)
                 (build-failure-step reader resync line-starts source-id
                                     start (cdr read-outcome))))))))
 

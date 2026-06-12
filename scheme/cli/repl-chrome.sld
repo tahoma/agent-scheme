@@ -11,9 +11,10 @@
 ;;; A chrome is a pure procedure `(render record) -> #f | <text> | <segments>'.
 ;;; `#f' suppresses the record; a string is emitted verbatim and never colored;
 ;;; a list of `(role . text)' segments expresses styling as named **semantic
-;;; roles** (`furniture', `prompt-session', `prompt-ordinal', `result-marker',
-;;; `result-value', `error-marker', `error-text', `exit-status', and the neutral
-;;; `submission' role for echoed source).  Roles -- never raw ANSI -- are the
+;;; roles** (`furniture', `prompt-session', `prompt-ordinal', `prompt-nesting',
+;;; `result-marker', `result-value', `error-marker', `error-text',
+;;; `exit-status', and the neutral `submission' role for echoed source).
+;;; Roles -- never raw ANSI -- are the
 ;;; contract a host realizes, so the Emacs renderer (#425) can map the same model
 ;;; to faces.  The terminal substrate here maps roles to ANSI SGR through
 ;;; `cli-repl-chrome-paint'.
@@ -53,6 +54,11 @@
     (define (chrome--display record)
       "Return RECORD's human-readable `display' string, or the empty string."
       (or (chrome--field record 'display) ""))
+
+    (define (chrome--nesting record)
+      "Return RECORD's pending-nesting depth as a host integer, or #f."
+      (let ((value (chrome--field record 'nesting)))
+        (and value (consent-number-value value))))
 
     ;; The lone default session id, emitted when no `--session NAME' was given.
     ;; The `comment' chrome shows the ordinal alone for it and grows a session
@@ -104,7 +110,16 @@ interactive case."
         (cond
          ((eq? kind 'repl-prompt)
           (if (eq? (chrome--field record 'state) 'continuation)
-              (list (chrome--furniture "#| ... |# "))
+              ;; At nesting depth two or more the ellipsis carries the count of
+              ;; still-open constructs (`#| ...2 |# '); a single open form keeps
+              ;; the plain gutter the gutter itself already implies.
+              (let ((nesting (chrome--nesting record)))
+                (if (and nesting (> nesting 1))
+                    (list (chrome--furniture "#| ...")
+                          (chrome--seg 'prompt-nesting
+                                       (number->string nesting))
+                          (chrome--furniture " |# "))
+                    (list (chrome--furniture "#| ... |# "))))
               (let ((session (chrome--field record 'session))
                     (ordinal (chrome--field record 'ordinal)))
                 (append
@@ -166,9 +181,17 @@ values, with submissions and the exit record suppressed."
          ((eq? kind 'repl-prompt)
           ;; `> ' and `| ' are both two columns wide, so a continued form's code
           ;; aligns under the first submission's code; `| ' reads as a
-          ;; continuation gutter rule.
+          ;; continuation gutter rule.  At nesting depth two or more the gutter
+          ;; carries the count of still-open constructs (`|2 '), trading exact
+          ;; alignment for the depth feedback a deep continuation needs.
           (if (eq? (chrome--field record 'state) 'continuation)
-              (list (chrome--furniture "| "))
+              (let ((nesting (chrome--nesting record)))
+                (if (and nesting (> nesting 1))
+                    (list (chrome--furniture "|")
+                          (chrome--seg 'prompt-nesting
+                                       (number->string nesting))
+                          (chrome--furniture " "))
+                    (list (chrome--furniture "| "))))
               (list (chrome--furniture "> "))))
          ((eq? kind 'repl-result)
           (list (chrome--seg 'result-value (chrome--display record))
@@ -238,6 +261,7 @@ the user."
        ((eq? role 'furniture) "90")        ; bright black / gray punctuation
        ((eq? role 'prompt-session) "36")   ; cyan
        ((eq? role 'prompt-ordinal) "34")   ; blue
+       ((eq? role 'prompt-nesting) "35")   ; magenta
        ((eq? role 'result-marker) "32")    ; green
        ((eq? role 'error-marker) "31")     ; red
        ((eq? role 'error-text) "31")       ; red

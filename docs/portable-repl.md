@@ -86,9 +86,9 @@ Select a chrome with `--chrome NAME`:
 
 | Chrome    | Intent                                                                    |
 | --------- | ------------------------------------------------------------------------- |
-| `comment` | **Default.** Prompts, results, and diagnostics are block comments and submitted forms are echoed as bare code, so the whole stream is valid Consent Scheme that *replays* to the same evaluation apart from program output. On an interactive terminal the chrome suppresses its own echo (the terminal already echoed the typed form) so a captured transcript still holds exactly one copy of each form; see [Replayable transcripts and input echo](#replayable-transcripts-and-input-echo). The prompt shows the ordinal alone for the lone default session and grows a session label when the session is named. |
+| `comment` | **Default.** Prompts, results, and diagnostics are block comments and submitted forms are echoed as bare code, so the whole stream is valid Consent Scheme that *replays* to the same evaluation apart from program output. On an interactive terminal the chrome suppresses its own echo (the terminal already echoed the typed form) so a captured transcript still holds exactly one copy of each form; see [Replayable transcripts and input echo](#replayable-transcripts-and-input-echo). The prompt shows the ordinal alone for the lone default session and grows a session label when the session is named. A continuation prompt's ellipsis carries the count of still-open constructs at nesting depth two or more (`#| ...2 |#`). |
 | `datum`   | The raw record stream, one datum per line — the canonical machine-readable surface. Never colored. Always reachable, regardless of the default. |
-| `classic` | A `>`/`|` prompt (aligned two columns; `|` is a continuation gutter) and bare result values. |
+| `classic` | A `>`/`|` prompt (aligned two columns; `|` is a continuation gutter) and bare result values. At nesting depth two or more the gutter carries the count of still-open constructs (`|2`), from the prompt record's pending-nesting indicator. |
 | `quiet`   | No prompts; results and conditions only.                                  |
 | `silent`  | Suppresses all interaction records; only program output reaches stdout.   |
 
