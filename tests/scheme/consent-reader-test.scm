@@ -289,6 +289,43 @@
          (consent-recovery-step-status eof-step)
          'eof))
 
+;; An incomplete step carries the reader's open-construct stack, innermost
+;; first, so interactive callers can render nesting depth and the pending
+;; construct kind; complete, invalid, and eof steps carry no stack.
+(let ((nested-step (consent-read-recover-from-string-at "(+ (* 1" 0))
+      (string-step (consent-read-recover-from-string-at "(display \"abc" 0))
+      (vector-step (consent-read-recover-from-string-at "(a #(1" 0))
+      (comment-step (consent-read-recover-from-string-at "#| a #| b" 0))
+      (prefix-step (consent-read-recover-from-string-at "'" 0))
+      (datum-step (consent-read-recover-from-string-at "(a b)" 0))
+      (invalid-step (consent-read-recover-from-string-at ")" 0)))
+  (check 'step-pending-nested-lists
+         (consent-recovery-step-pending nested-step)
+         '(list list))
+  (check 'step-pending-string-innermost
+         (consent-recovery-step-pending string-step)
+         '(string list))
+  (check 'step-pending-vector-innermost
+         (consent-recovery-step-pending vector-step)
+         '(vector list))
+  (check 'step-pending-nested-block-comment
+         (consent-recovery-step-pending comment-step)
+         '(comment comment))
+  ;; A pending datum prefix is incomplete with no construct open: the stack
+  ;; is empty rather than absent.
+  (check 'step-pending-datum-prefix-status
+         (consent-recovery-step-status prefix-step)
+         'incomplete)
+  (check 'step-pending-datum-prefix-empty
+         (consent-recovery-step-pending prefix-step)
+         '())
+  (check 'step-pending-datum-none
+         (consent-recovery-step-pending datum-step)
+         #f)
+  (check 'step-pending-invalid-none
+         (consent-recovery-step-pending invalid-step)
+         #f))
+
 ;; Recovery spans are deterministic: two reads of the same source produce the
 ;; same ordered offset pairs, so cached editor diagnostics do not flicker.
 (let ((first (consent-read-recover "(a ]\n(b }\n(c)\n"))
