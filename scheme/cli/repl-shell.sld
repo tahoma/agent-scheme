@@ -297,7 +297,11 @@ datum prefix is pending with no construct open."
           "reader error"))
 
     (define (repl--try-read buffer)
-      "Read one datum from BUFFER at position 0 over the recovery-aware reader, returning (empty), (complete DATUM NEXT), (incomplete PENDING), or (malformed MESSAGE).  An incomplete read carries the reader's open-construct stack so the continuation prompt can render nesting depth, mirroring the Emacs twin's recovery-step read path."
+      "Read one datum from BUFFER at position 0 over the recovery-aware reader.
+Return (empty), (complete DATUM NEXT), (incomplete PENDING), or
+(malformed MESSAGE).  An incomplete read carries the reader's open-construct
+stack so the continuation prompt can render nesting depth, mirroring the
+Emacs twin's recovery-step read path."
       (let* ((step (consent-read-recover-from-string-at buffer 0))
              (status (consent-recovery-step-status step)))
         (cond
