@@ -118,6 +118,6 @@ native session event buffers.
 
 From a native REPL session, `M-x consent-repl-macroexpand-source` reads the
 selected region or a prompted form, expands it in the current session, and opens
-an `*Agent Macroexpand: SESSION*` buffer. The buffer shows the original form,
+an `*Consent Macroexpand: SESSION*` buffer. The buffer shows the original form,
 expanded form, individual expansion steps, and the complete record for direct
 comparison.

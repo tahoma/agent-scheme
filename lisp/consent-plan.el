@@ -56,7 +56,7 @@
 (defvar-local consent--plan-buffer-subject nil
   "Session id or project root represented by the current plan buffer.")
 
-(define-derived-mode consent-plan-mode prog-mode "Agent Plans"
+(define-derived-mode consent-plan-mode prog-mode "Consent Plans"
   "Major mode for editable Consent Scheme plan datum buffers.")
 
 (defun consent--plan-name (value)
@@ -629,7 +629,7 @@ When EXISTING is non-nil, preserve its id and creation sequence."
          nil))
   (let* ((label (consent--plan-buffer-label scope subject))
          (buffer (get-buffer-create
-                  (format "*Agent Plans: %s*" label))))
+                  (format "*Consent Plans: %s*" label))))
     (with-current-buffer buffer
       (let ((inhibit-read-only t))
         (erase-buffer)
