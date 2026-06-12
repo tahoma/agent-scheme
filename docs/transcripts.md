@@ -4,6 +4,18 @@ Consent Scheme transcripts record session and runtime activity as
 Scheme-readable data. They are not terminal logs: raw transcript datums remain
 the canonical state, and human-readable summaries are views over those datums.
 
+This document covers the `(agent transcript)` library: a session's *evaluation
+activity* as `transcript-event` records (`eval-start` / `eval-end` /
+`eval-error`) with replay classification, retention, and fixture export. That is
+a distinct surface from the REPL *interaction record stream* — the
+`repl-submission` / `repl-result` / `repl-condition` contract records the
+`datum` chrome emits. Capturing and replaying that record stream (a captured
+session re-fed to a fresh REPL) is specified separately in the interaction
+contract's
+[Capture and Replay](repl-interaction-contract.md#capture-and-replay) section.
+The two share the principle that raw datums are canonical and replay is
+re-evaluation under policy, not effect playback.
+
 ## Event Shape
 
 Transcript entries use `transcript-event` records:
