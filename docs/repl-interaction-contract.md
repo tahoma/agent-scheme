@@ -412,8 +412,8 @@ records and behavior above are unchanged:
   diagnostics inline on one TTY; the Emacs batch entry writes the canonical
   record stream to the error/control channel and program output to stdout, while
   the in-editor surface renders across its native session buffers
-  (`*Consent Scheme: PROJECT*`, `*Agent Events: PROJECT*`,
-  `*Agent Approvals: PROJECT*`). Both must preserve the logical channel
+  (`*Consent Scheme: PROJECT*`, `*Consent Events: PROJECT*`,
+  `*Consent Approvals: PROJECT*`). Both must preserve the logical channel
   separation.
 - **Close-status encoding.** The portable terminal maps `repl-exit` status to a
   process exit code; the Emacs batch entry maps it to the `emacs --batch` exit

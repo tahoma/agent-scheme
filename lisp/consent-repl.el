@@ -47,20 +47,20 @@
     map)
   "Keymap for `consent-repl-mode'.")
 
-(define-derived-mode consent-status-mode special-mode "Agent"
+(define-derived-mode consent-status-mode special-mode "Consent"
   "Major mode for Consent Scheme session status buffers.")
 
 (define-derived-mode consent-repl-mode special-mode "Consent Scheme"
   "Major mode for Consent Scheme REPL transcript buffers.")
 
-(define-derived-mode consent-events-mode special-mode "Agent Events"
+(define-derived-mode consent-events-mode special-mode "Consent Events"
   "Major mode for Consent Scheme event timeline buffers.")
 
 (define-derived-mode consent-macroexpand-mode special-mode
-  "Agent Macroexpand"
+  "Consent Macroexpand"
   "Major mode for Consent Scheme macro expansion buffers.")
 
-(define-derived-mode consent-approvals-mode special-mode "Agent Approvals"
+(define-derived-mode consent-approvals-mode special-mode "Consent Approvals"
   "Major mode for Consent Scheme approval request buffers.")
 
 (defun consent-repl--project-root ()
@@ -156,13 +156,13 @@
   "Return native buffer name for KIND and session ID."
   (let ((label (consent-repl--session-label id)))
     (pcase kind
-      ('status (format "*Agent: %s*" label))
+      ('status (format "*Consent: %s*" label))
       ('repl (format "*Consent Scheme: %s*" label))
-      ('events (format "*Agent Events: %s*" label))
-      ('macroexpand (format "*Agent Macroexpand: %s*" label))
-      ('audit (format "*Agent Audit: %s*" label))
-      ('approvals (format "*Agent Approvals: %s*" label))
-      (_ (format "*Agent %s: %s*" kind label)))))
+      ('events (format "*Consent Events: %s*" label))
+      ('macroexpand (format "*Consent Macroexpand: %s*" label))
+      ('audit (format "*Consent Audit: %s*" label))
+      ('approvals (format "*Consent Approvals: %s*" label))
+      (_ (format "*Consent %s: %s*" kind label)))))
 
 (defun consent-repl--insert-datum (datum)
   "Insert DATUM as Scheme-readable text."
@@ -229,7 +229,7 @@
   (let* ((session (consent-repl--session id))
          (status (consent-session-status session)))
     (setq consent-mode-line-string
-          (format "Agent[%s:%s]" id status))
+          (format "Consent[%s:%s]" id status))
     (force-mode-line-update t)))
 
 (defun consent-repl--install-buffer-mode-line (id)
@@ -572,7 +572,9 @@ passed to the macro expansion introspection primitive."
     ("RET" "eval source" consent-repl-eval)
     ("m" "macroexpand" consent-repl-macroexpand-source)]])
 
-(define-key global-map (kbd "C-c a") #'consent-dispatch)
+;; Per the Emacs key-binding conventions, `C-c LETTER' keys are reserved
+;; for users, so this package binds no global dispatch key.  Users opt in
+;; with, for example: (keymap-global-set "C-c d" #'consent-dispatch)
 
 (provide 'consent-repl)
 
