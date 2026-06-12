@@ -64,8 +64,10 @@
 KIND is `invalid' (genuine syntax error), `incomplete' (a valid prefix
 needing more input, such as an unterminated list at end of input), or
 `limit' (a resource budget was exceeded).  OFFSET is the failure position
-and MESSAGE is the human-readable reason without the offset prefix."
-  kind offset message)
+and MESSAGE is the human-readable reason without the offset prefix.
+PENDING snapshots the reader's open-construct stack at the raise,
+innermost first; it is meaningful for `incomplete' conditions."
+  kind offset message pending)
 
 (cl-defstruct (consent-recovery-result
                (:constructor consent--make-recovery-result
@@ -80,12 +82,16 @@ when the trailing region is a valid prefix awaiting more input."
 
 (cl-defstruct (consent-recovery-step
                (:constructor consent--make-recovery-step
-                             (status datum diagnostic span next))
+                             (status datum diagnostic span next
+                                     &optional pending))
                (:copier nil))
   "Recovery read step for a single form.
 Interactive callers drive one form at a time.  STATUS is `datum',
-`invalid', `incomplete', or `eof'; NEXT is the offset to resume from."
-  status datum diagnostic span next)
+`invalid', `incomplete', or `eof'; NEXT is the offset to resume from.
+PENDING carries the open-construct stack for an `incomplete' step,
+innermost first (and nil otherwise), so a continuation prompt can render
+nesting depth without re-deriving the reader's lexical state."
+  status datum diagnostic span next pending)
 
 (cl-defstruct (consent-boolean
                (:constructor consent--make-boolean (value))
@@ -184,7 +190,12 @@ per-run resource limits."
   ;; RECOVERY toggles errors-as-data: when non-nil, reader errors signal a
   ;; structured `consent--reader-condition' the recovery driver resynchronizes
   ;; past instead of unwinding the whole read.
-  recovery)
+  recovery
+  ;; PENDING-STACK tracks the constructs currently open at the cursor,
+  ;; innermost first (`list', `vector', `bytevector', `string', `symbol',
+  ;; `comment').  An incomplete condition snapshots it so interactive callers
+  ;; can render nesting depth and the pending construct kind.
+  (pending-stack nil))
 
 (defvar consent--symbol-table (make-hash-table :test #'equal)
   "Intern table for Scheme symbol datums.")
@@ -385,6 +396,14 @@ When OVERWRITE is nil, keep TARGET's existing source metadata."
       (consent--set-datum-source target metadata)))
   target)
 
+(defun consent--reader-pending-push (reader kind)
+  "Mark a KIND construct open at READER's cursor for nesting snapshots."
+  (push kind (consent--reader-pending-stack reader)))
+
+(defun consent--reader-pending-pop (reader)
+  "Mark READER's innermost open construct closed after its delimiter."
+  (pop (consent--reader-pending-stack reader)))
+
 (defun consent--raise-reader-condition (reader kind error-symbol formatted)
   "Raise a reader failure of KIND for READER.
 In recovery mode this signals a structured `consent--reader-condition' the
@@ -395,7 +414,8 @@ with the historical offset-prefixed FORMATTED message."
               (list (consent--make-reader-condition
                      :kind kind
                      :offset (consent--reader-position reader)
-                     :message formatted)))
+                     :message formatted
+                     :pending (consent--reader-pending-stack reader))))
     (signal error-symbol
             (list (format "at offset %d: %s"
                           (consent--reader-position reader)
@@ -507,10 +527,12 @@ MESSAGE and ARGS are passed to `format'."
         (consent--reader-incomplete reader "unterminated block comment"))
        ((consent--starts-with-p reader "#|")
         (cl-incf depth)
-        (consent--advance reader 2))
+        (consent--advance reader 2)
+        (consent--reader-pending-push reader 'comment))
        ((consent--starts-with-p reader "|#")
         (cl-decf depth)
-        (consent--advance reader 2))
+        (consent--advance reader 2)
+        (consent--reader-pending-pop reader))
        (t
         (consent--advance reader))))))
 
@@ -609,6 +631,7 @@ DEPTH is used when reading a datum comment's discarded datum."
 (defun consent--read-string (reader)
   "Read a string datum from READER."
   (consent--advance reader)
+  (consent--reader-pending-push reader 'string)
   (let ((result nil)
         (size 0))
     (cl-labels
@@ -662,11 +685,13 @@ DEPTH is used when reading a datum comment's discarded datum."
             (consent--advance reader)
             (emit char)))))
       (consent--advance reader)
+      (consent--reader-pending-pop reader)
       (apply #'string (nreverse result)))))
 
 (defun consent--read-vertical-symbol-name (reader)
   "Read a vertical-bar symbol name from READER."
   (consent--advance reader)
+  (consent--reader-pending-push reader 'symbol)
   (let (result)
     (while (not (eq (consent--peek reader) ?|))
       (when (consent--eof-p reader)
@@ -687,6 +712,7 @@ DEPTH is used when reading a datum comment's discarded datum."
           (consent--advance reader)
           (push char result)))))
     (consent--advance reader)
+    (consent--reader-pending-pop reader)
     (let ((name (apply #'string (nreverse result))))
       (if (consent--reader-fold-case reader)
           (downcase name)
@@ -1214,6 +1240,7 @@ The return value is (BODY EXACTNESS RADIX), or nil."
   "Read a list datum from READER at DEPTH."
   (consent--check-depth reader depth)
   (consent--advance reader)
+  (consent--reader-pending-push reader 'list)
   (let ((head nil)
         (tail nil)
         (count 0)
@@ -1258,6 +1285,7 @@ The return value is (BODY EXACTNESS RADIX), or nil."
                     (setcdr tail cell)
                   (setq head cell))
                 (setq tail cell))))))))
+    (consent--reader-pending-pop reader)
     (consent--note-node reader)
     head))
 
@@ -1266,6 +1294,7 @@ The return value is (BODY EXACTNESS RADIX), or nil."
   "Read sequence elements for vector-like KIND until CLOSE-CHAR.
 Signal if the sequence exceeds MAXIMUM-LENGTH."
   (consent--check-depth reader depth)
+  (consent--reader-pending-push reader (intern kind))
   (let ((items nil)
         (count 0)
         done)
@@ -1289,6 +1318,7 @@ Signal if the sequence exceeds MAXIMUM-LENGTH."
            kind
            kind
            maximum-length)))))
+    (consent--reader-pending-pop reader)
     (nreverse items)))
 
 (defun consent--read-vector (reader depth)
@@ -1683,7 +1713,9 @@ malformed region via RESYNC with guaranteed forward progress."
                 (consent--recovery-diagnostic source-id 'incomplete reason range))
                (span (consent--recovery-span 'incomplete reason range text)))
           (setf (consent--reader-position reader) start)
-          (consent--make-recovery-step 'incomplete nil diagnostic span start))
+          (consent--make-recovery-step
+           'incomplete nil diagnostic span start
+           (consent--reader-condition-pending condition)))
       (let* ((proposed (funcall resync source start))
              (next (min length (max proposed (1+ start))))
              (range (consent--recovery-range line-starts start next))
@@ -1701,6 +1733,9 @@ datum start, not at preceding whitespace; trivia-level failures (such as an
 unterminated block comment) are anchored where the trivia began.  RESYNC is
 the resync strategy, LINE-STARTS positions diagnostics, SOURCE-ID labels
 them, and OPTIONS carries reader limits."
+  ;; A prior step that unwound mid-construct leaves stale open-construct
+  ;; entries behind; each step starts from a balanced cursor, so reset.
+  (setf (consent--reader-pending-stack reader) nil)
   (let* ((pre (consent--reader-position reader))
          (skip-outcome
           (consent--guard-reader-failure

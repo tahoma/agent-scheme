@@ -139,6 +139,7 @@ see the contract's "Host-specific obligations" section.
 | One-complete-form-at-a-time reading | `(cli repl-shell)` over the shared reader | `consent-repl-stream` over the shared reader | `repl-eval-simple` |
 | Multiple forms in one input chunk, evaluated in order | one submission per form | one submission per form | `repl-multiple-forms-one-chunk` |
 | Incomplete form continued as one submission | continuation prompt, buffered text | continuation prompt, buffered text | `repl-incomplete-continuation` |
+| Continuation prompt carries pending nesting depth and construct kind | `nesting`/`pending-kind` from the recovery step | `nesting`/`pending-kind` from the recovery step | `repl-continuation-nesting-depth`, `repl-continuation-pending-string` |
 | Durable session: definitions/imports/macros persist | session interaction environment | `consent-make-interaction-context` session | `repl-session-persistence` |
 | Recoverable evaluator condition keeps session open | rendered, loop continues | rendered, loop continues | `repl-recoverable-eval-condition` |
 | Recoverable reader condition resynchronizes | resync to next form boundary | resync to next form boundary | `repl-recoverable-read-condition` |

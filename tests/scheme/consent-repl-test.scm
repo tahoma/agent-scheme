@@ -168,6 +168,42 @@
                                      'display)
          "3"))
 
+;;;; The continuation prompt carries the reader's pending-nesting indicator
+
+;; The depth narrows as constructs close (two open lists, then one), the kind
+;; names the innermost pending construct, and a ready prompt omits both fields.
+(let ((records (drive "(+ (* 2\n3)\n4)\n")))
+  (let ((prompts (records-of records 'repl-prompt)))
+    (check 'nesting-ready-prompt-omits-field
+           (field (list-ref prompts 0) 'nesting) #f)
+    (check 'nesting-depth-two
+           (consent-number-value (field (list-ref prompts 1) 'nesting)) 2)
+    (check 'nesting-kind-list
+           (field (list-ref prompts 1) 'pending-kind) 'list)
+    (check 'nesting-narrows-to-one
+           (consent-number-value (field (list-ref prompts 2) 'nesting)) 1)))
+
+;; An unterminated string is the innermost pending construct even inside a
+;; list, so a chrome can distinguish "inside a string" from list nesting.
+(let ((records (drive "(string-length \"a\nb\")\n")))
+  (let ((prompts (records-of records 'repl-prompt)))
+    (check 'nesting-string-depth
+           (consent-number-value (field (list-ref prompts 1) 'nesting)) 2)
+    (check 'nesting-string-kind
+           (field (list-ref prompts 1) 'pending-kind) 'string)))
+
+;; A pending datum prefix (a lone quote) keeps the session continuing with an
+;; empty construct stack: depth zero and the `datum' pending kind.
+(let ((records (drive "'\n1\n")))
+  (let ((prompts (records-of records 'repl-prompt)))
+    (check 'nesting-datum-prefix-depth
+           (consent-number-value (field (list-ref prompts 1) 'nesting)) 0)
+    (check 'nesting-datum-prefix-kind
+           (field (list-ref prompts 1) 'pending-kind) 'datum))
+  (check 'nesting-datum-prefix-result
+         (field (car (records-of records 'repl-result)) 'display)
+         "1"))
+
 ;;;; The continuation prompt is emitted before the read it requests
 
 ;; A continuation gutter is a request for more input, so it must be emitted (and
@@ -426,6 +462,19 @@
 (check 'classic-continuation-aligns
        (cli-repl-rendered-from-string "(+ 1\n2)\n" "repl-main" 'classic #f)
        "> | 3\n> ")
+;; At nesting depth two or more the gutter carries the open-construct count
+;; from the prompt record's pending-nesting indicator, narrowing as constructs
+;; close; depth one keeps the plain aligned gutter above.
+(check 'classic-continuation-depth-gutter
+       (cli-repl-rendered-from-string "(+ (* 2\n3)\n4)\n" "repl-main"
+                                      'classic #f)
+       "> |2 | 10\n> ")
+;; The comment chrome renders the same depth inside its ellipsis comment.
+(check-true 'comment-continuation-depth
+            (string-contains?
+             (cli-repl-rendered-from-string "(+ (* 2\n3)\n4)\n" "repl-main"
+                                            'comment #f)
+             "#| ...2 |# "))
 (check 'quiet-results-only
        (cli-repl-rendered-from-string "(+ 1 2)\n" "repl-main" 'quiet #f)
        "3\n")

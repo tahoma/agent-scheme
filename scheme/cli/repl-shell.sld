@@ -118,25 +118,6 @@
                   (find-end (- end 1))
                   (substring string start end))))))))
 
-    (define (repl--string-contains? haystack needle)
-      "Return #t when HAYSTACK contains NEEDLE as a substring."
-      (let ((hay (string-length haystack))
-            (need (string-length needle)))
-        (if (zero? need)
-            #t
-            (let loop ((start 0))
-              (cond
-               ((> (+ start need) hay) #f)
-               ((let match ((index 0))
-                  (cond
-                   ((>= index need) #t)
-                   ((char=? (string-ref haystack (+ start index))
-                            (string-ref needle index))
-                    (match (+ index 1)))
-                   (else #f)))
-                #t)
-               (else (loop (+ start 1))))))))
-
     ;;;; Interaction-input chunk sources
 
     (define (repl--list-chunk-source chunks)
@@ -180,13 +161,30 @@
     ;; Contract records are consent data: numeric fields embed canonical
     ;; number records (matching the Emacs twin's consent-repl-stream--int)
     ;; so the record stream renders through the consent writer.
-    (define (repl--prompt-record session ordinal state pending)
-      "Build a `repl-prompt' record for SESSION at ORDINAL with STATE and PENDING."
-      (list 'repl-prompt
-            (list 'session (repl--session-field session))
-            (list 'ordinal (consent-make-canonical-integer ordinal))
-            (list 'state state)
-            (list 'pending pending)))
+    (define (repl--prompt-record session ordinal state pending
+                                 . maybe-pending-stack)
+      "Build a `repl-prompt' record for SESSION at ORDINAL with STATE and PENDING.
+A continuation prompt additionally carries the reader's pending-nesting
+indicator, derived from the optional open-construct stack of the incomplete
+read (innermost first): `nesting' is the open-construct count and
+`pending-kind' the innermost construct kind, or the symbol `datum' when a
+datum prefix is pending with no construct open."
+      (let ((stack (if (and (pair? maybe-pending-stack)
+                            (pair? (car maybe-pending-stack)))
+                       (car maybe-pending-stack)
+                       '())))
+        (append
+         (list 'repl-prompt
+               (list 'session (repl--session-field session))
+               (list 'ordinal (consent-make-canonical-integer ordinal))
+               (list 'state state)
+               (list 'pending pending))
+         (if (eq? state 'continuation)
+             (list (list 'nesting
+                         (consent-make-canonical-integer (length stack)))
+                   (list 'pending-kind
+                         (if (pair? stack) (car stack) 'datum)))
+             '()))))
 
     (define (repl--submission-record session ordinal source complete eof)
       "Build a `repl-submission' record for the SOURCE read at ORDINAL in SESSION."
@@ -293,24 +291,28 @@
 
     ;;;; Incremental reading
 
+    (define (repl--diagnostic-message diagnostic)
+      "Return the human-readable message carried by recovery DIAGNOSTIC."
+      (or (and diagnostic (repl--field diagnostic 'message))
+          "reader error"))
+
     (define (repl--try-read buffer)
-      "Read one datum from BUFFER, returning (empty), (complete DATUM NEXT), (incomplete), or (malformed MESSAGE)."
-      (call/cc
-       (lambda (return)
-         (with-exception-handler
-          (lambda (condition)
-            (let ((message (if (error-object? condition)
-                               (error-object-message condition)
-                               "reader error")))
-              (return
-               (if (repl--string-contains? message "unterminated")
-                   (list 'incomplete)
-                   (list 'malformed message)))))
-          (lambda ()
-            (let ((result (consent-read-from-string-at buffer 0)))
-              (if (consent-read-eof? (car result))
-                  (list 'empty)
-                  (list 'complete (car result) (cdr result)))))))))
+      "Read one datum from BUFFER at position 0 over the recovery-aware reader, returning (empty), (complete DATUM NEXT), (incomplete PENDING), or (malformed MESSAGE).  An incomplete read carries the reader's open-construct stack so the continuation prompt can render nesting depth, mirroring the Emacs twin's recovery-step read path."
+      (let* ((step (consent-read-recover-from-string-at buffer 0))
+             (status (consent-recovery-step-status step)))
+        (cond
+         ((eq? status 'datum)
+          (list 'complete
+                (consent-recovery-step-datum step)
+                (consent-recovery-step-next step)))
+         ((eq? status 'eof)
+          (list 'empty))
+         ((eq? status 'incomplete)
+          (list 'incomplete (consent-recovery-step-pending step)))
+         (else
+          (list 'malformed
+                (repl--diagnostic-message
+                 (consent-recovery-step-diagnostic step)))))))
 
     ;;;; The interaction loop
 
@@ -367,7 +369,8 @@ program's context while host procedures pass through untouched."
               ;; partial form is buffered, so the prompt is always warranted --
               ;; including before an EOF-mid-form, where the gutter was shown and
               ;; the user then hit Ctrl-D.
-              (emit (repl--prompt-record session ordinal 'continuation #t))
+              (emit (repl--prompt-record session ordinal 'continuation #t
+                                         (cadr outcome)))
               (let ((chunk (read-chunk)))
                 (if (eof-object? chunk)
                     (if (repl--blank? buffer)

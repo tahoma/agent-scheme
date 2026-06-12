@@ -99,17 +99,31 @@
 
 ;;;; Contract record constructors
 
-(defun consent-repl-stream--prompt-record (session ordinal state pending)
-  "Build a `repl-prompt' record for SESSION at ORDINAL with STATE and PENDING."
-  (list (consent-repl-stream--sym "repl-prompt")
-        (list (consent-repl-stream--sym "session")
-              (consent-repl-stream--session-field session))
-        (list (consent-repl-stream--sym "ordinal")
-              (consent-repl-stream--int ordinal))
-        (list (consent-repl-stream--sym "state")
-              (consent-repl-stream--sym state))
-        (list (consent-repl-stream--sym "pending")
-              (consent-repl-stream--bool pending))))
+(defun consent-repl-stream--prompt-record (session ordinal state pending
+                                                   &optional pending-stack)
+  "Build a `repl-prompt' record for SESSION at ORDINAL with STATE and PENDING.
+A continuation prompt additionally carries the reader's pending-nesting
+indicator, derived from the optional open-construct stack PENDING-STACK of
+the incomplete read (innermost first): `nesting' is the open-construct count
+and `pending-kind' the innermost construct kind, or the symbol `datum' when a
+datum prefix is pending with no construct open."
+  (append
+   (list (consent-repl-stream--sym "repl-prompt")
+         (list (consent-repl-stream--sym "session")
+               (consent-repl-stream--session-field session))
+         (list (consent-repl-stream--sym "ordinal")
+               (consent-repl-stream--int ordinal))
+         (list (consent-repl-stream--sym "state")
+               (consent-repl-stream--sym state))
+         (list (consent-repl-stream--sym "pending")
+               (consent-repl-stream--bool pending)))
+   (when (equal state "continuation")
+     (let ((stack (and (consp pending-stack) pending-stack)))
+       (list (list (consent-repl-stream--sym "nesting")
+                   (consent-repl-stream--int (length stack)))
+             (list (consent-repl-stream--sym "pending-kind")
+                   (consent-repl-stream--sym
+                    (symbol-name (if stack (car stack) 'datum)))))))))
 
 (defun consent-repl-stream--submission-record (session ordinal source complete eof)
   "Build a `repl-submission' record for SOURCE read at ORDINAL in SESSION."
@@ -261,8 +275,10 @@ reach inside it; this returns the sub-field list for
 
 (defun consent-repl-stream--try-read (buffer)
   "Read one datum from BUFFER at position 0.
-Return one of (complete DATUM NEXT), (empty), (incomplete), or
-(malformed MESSAGE NEXT)."
+Return one of (complete DATUM NEXT), (empty), (incomplete PENDING), or
+(malformed MESSAGE NEXT).  PENDING is the reader's open-construct stack at
+the incomplete read, innermost first, so the continuation prompt can render
+nesting depth."
   (let ((step (consent-read-recover-from-string-at buffer 0)))
     (pcase (consent-recovery-step-status step)
       ('datum
@@ -270,7 +286,7 @@ Return one of (complete DATUM NEXT), (empty), (incomplete), or
              (consent-recovery-step-datum step)
              (consent-recovery-step-next step)))
       ('eof (list 'empty))
-      ('incomplete (list 'incomplete))
+      ('incomplete (list 'incomplete (consent-recovery-step-pending step)))
       ('invalid
        (list 'malformed
              (consent-repl-stream--diagnostic-message
@@ -361,7 +377,7 @@ EMIT-OUTPUT on separate streams, under SESSION and evaluator OPTIONS."
                 ;; warranted -- including before an EOF-mid-form, where the
                 ;; gutter was shown and the user then hit Ctrl-D.
                 (emit (consent-repl-stream--prompt-record
-                       session ordinal "continuation" t))
+                       session ordinal "continuation" t (cadr outcome)))
                 (let ((chunk (next-chunk)))
                   (if (eof-chunk-p chunk)
                       (if (consent-repl-stream--blank-p buffer)
