@@ -184,7 +184,9 @@ Emitted on the `repl-prompt` stream before the loop reads a form.
   (session project-main)
   (ordinal 3)            ; one-based count of the next submission
   (state ready)          ; ready | continuation
-  (pending #f))          ; #t when partial input from a prior turn is buffered
+  (pending #f)           ; #t when partial input from a prior turn is buffered
+  (nesting 2)            ; continuation only: count of still-open constructs
+  (pending-kind list))   ; continuation only: innermost open construct kind
 ```
 
 - `state ready` is the primary prompt for a new submission. `state continuation`
@@ -193,6 +195,16 @@ Emitted on the `repl-prompt` stream before the loop reads a form.
 - `ordinal` counts submissions in the session, not physical lines. A multi-line
   form that needs several continuation prompts keeps the same `ordinal` until it
   is submitted.
+- A continuation prompt carries the reader's **pending-nesting indicator**,
+  derived from the recovery-aware reader's incomplete-form state (#418) rather
+  than re-derived by the loop: `nesting` counts the constructs still open at the
+  end of the buffered input, and `pending-kind` names the innermost one —
+  `list`, `vector`, `bytevector`, `string`, `symbol` (a vertical-bar symbol),
+  `comment` (a block comment), or `datum` when only a datum prefix (such as a
+  quote or `#;`) awaits its datum with no construct open. Both fields are
+  omitted on `state ready` prompts. A chrome may render the depth as a
+  continuation gutter; the fields themselves stay host-neutral and are
+  parity-asserted by #392.
 
 ### `repl-submission`
 
@@ -426,8 +438,8 @@ records and behavior above are unchanged:
 - **Presentation chrome.** The everyday human view rides above the records as a
   *chrome*: a pure function from each record to readable output, with styling
   expressed as named **semantic roles** (`furniture`, `prompt-session`,
-  `prompt-ordinal`, `result-marker`, `result-value`, `error-marker`,
-  `error-text`, `exit-status`). The chrome *model* — the named set
+  `prompt-ordinal`, `prompt-nesting`, `result-marker`, `result-value`,
+  `error-marker`, `error-text`, `exit-status`). The chrome *model* — the named set
   (`comment` default, `datum`, `classic`, `quiet`, `silent`) and the
   record-to-role mapping — is host-neutral and shared; the *substrate* is
   host-specific. The portable terminal renders roles as ANSI SGR

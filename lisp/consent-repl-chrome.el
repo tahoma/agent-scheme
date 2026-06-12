@@ -22,10 +22,11 @@
 ;; `nil' suppresses the record; a string is emitted verbatim and never faced (so
 ;; the `datum' chrome reproduces the raw record stream regardless of styling); a
 ;; list of `(ROLE . TEXT)' segments expresses styling as named semantic roles
-;; (`furniture', `prompt-session', `prompt-ordinal', `result-marker',
-;; `result-value', `error-marker', `error-text', `exit-status', and the neutral
-;; `submission' role for echoed source).  `consent-repl-chrome-paint' realizes a
-;; chrome result as a propertized string, mapping each colored role to a face.
+;; (`furniture', `prompt-session', `prompt-ordinal', `prompt-nesting',
+;; `result-marker', `result-value', `error-marker', `error-text',
+;; `exit-status', and the neutral `submission' role for echoed source).
+;; `consent-repl-chrome-paint' realizes a chrome result as a propertized
+;; string, mapping each colored role to a face.
 ;;
 ;; The built-in chromes are ordinary registered procedures over records, not
 ;; special-cased branches, so a future custom chrome (#426) is the same kind of
@@ -60,6 +61,11 @@
   "Face for the ordinal in a REPL prompt."
   :group 'consent-repl-chrome)
 
+(defface consent-repl-chrome-prompt-nesting
+  '((t :inherit font-lock-builtin-face))
+  "Face for the pending-nesting depth in a continuation prompt."
+  :group 'consent-repl-chrome)
+
 (defface consent-repl-chrome-result-marker
   '((t :inherit success))
   "Face for the result marker (`=> ')."
@@ -88,6 +94,7 @@ return nil, mirroring the portable terminal renderer leaving them uncolored."
     ('furniture 'consent-repl-chrome-furniture)
     ('prompt-session 'consent-repl-chrome-prompt-session)
     ('prompt-ordinal 'consent-repl-chrome-prompt-ordinal)
+    ('prompt-nesting 'consent-repl-chrome-prompt-nesting)
     ('result-marker 'consent-repl-chrome-result-marker)
     ('error-marker 'consent-repl-chrome-error-marker)
     ('error-text 'consent-repl-chrome-error-text)
@@ -129,6 +136,11 @@ return nil, mirroring the portable terminal renderer leaving them uncolored."
   "Return RECORD's `ordinal' field rendered as a decimal string."
   (let ((value (consent-repl-chrome--field record "ordinal")))
     (if value (consent-value->external value) "")))
+
+(defun consent-repl-chrome--nesting (record)
+  "Return RECORD's pending-nesting depth as an integer, or nil."
+  (let ((value (consent-repl-chrome--field record "nesting")))
+    (and (consent-number-p value) (consent-number-value value))))
 
 ;; The lone default session id, emitted when no session was named.  The
 ;; `comment' chrome shows the ordinal alone for it and grows a session label
@@ -184,7 +196,16 @@ in both the piped and the interactive case."
      ((equal kind "repl-prompt")
       (if (equal (consent-repl-chrome--field-symbol-name record "state")
                  "continuation")
-          (list (consent-repl-chrome--furniture "#| ... |# "))
+          ;; At nesting depth two or more the ellipsis carries the count of
+          ;; still-open constructs (`#| ...2 |# '); a single open form keeps
+          ;; the plain gutter the gutter itself already implies.
+          (let ((nesting (consent-repl-chrome--nesting record)))
+            (if (and nesting (> nesting 1))
+                (list (consent-repl-chrome--furniture "#| ...")
+                      (consent-repl-chrome--seg 'prompt-nesting
+                                                (number-to-string nesting))
+                      (consent-repl-chrome--furniture " |# "))
+              (list (consent-repl-chrome--furniture "#| ... |# "))))
         (let ((session (consent-repl-chrome--field-symbol-name record "session"))
               (ordinal (consent-repl-chrome--ordinal-string record)))
           (append
@@ -246,10 +267,18 @@ with submissions and the exit record suppressed."
      ((equal kind "repl-prompt")
       ;; `> ' and `| ' are both two columns wide, so a continued form's code
       ;; aligns under the first submission's code; `| ' reads as a continuation
-      ;; gutter rule.
+      ;; gutter rule.  At nesting depth two or more the gutter carries the
+      ;; count of still-open constructs (`|2 '), trading exact alignment for
+      ;; the depth feedback a deep continuation needs.
       (if (equal (consent-repl-chrome--field-symbol-name record "state")
                  "continuation")
-          (list (consent-repl-chrome--furniture "| "))
+          (let ((nesting (consent-repl-chrome--nesting record)))
+            (if (and nesting (> nesting 1))
+                (list (consent-repl-chrome--furniture "|")
+                      (consent-repl-chrome--seg 'prompt-nesting
+                                                (number-to-string nesting))
+                      (consent-repl-chrome--furniture " "))
+              (list (consent-repl-chrome--furniture "| "))))
         (list (consent-repl-chrome--furniture "> "))))
      ((equal kind "repl-result")
       (list (consent-repl-chrome--seg 'result-value

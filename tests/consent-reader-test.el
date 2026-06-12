@@ -321,6 +321,32 @@
     (should (= (consent-recovery-step-next incomplete-step) 0))
     (should (eq (consent-recovery-step-status eof-step) 'eof))))
 
+(ert-deftest consent-reader-test-recovery-step-pending-stack ()
+  "Carry the open-construct stack, innermost first, on incomplete steps.
+Interactive callers render nesting depth and the pending construct kind from
+it; complete, invalid, and eof steps carry no stack."
+  (should (equal (consent-recovery-step-pending
+                  (consent-read-recover-from-string-at "(+ (* 1" 0))
+                 '(list list)))
+  (should (equal (consent-recovery-step-pending
+                  (consent-read-recover-from-string-at "(display \"abc" 0))
+                 '(string list)))
+  (should (equal (consent-recovery-step-pending
+                  (consent-read-recover-from-string-at "(a #(1" 0))
+                 '(vector list)))
+  (should (equal (consent-recovery-step-pending
+                  (consent-read-recover-from-string-at "#| a #| b" 0))
+                 '(comment comment)))
+  ;; A pending datum prefix is incomplete with no construct open: the stack
+  ;; is empty.
+  (let ((prefix-step (consent-read-recover-from-string-at "'" 0)))
+    (should (eq (consent-recovery-step-status prefix-step) 'incomplete))
+    (should (null (consent-recovery-step-pending prefix-step))))
+  (should-not (consent-recovery-step-pending
+               (consent-read-recover-from-string-at "(a b)" 0)))
+  (should-not (consent-recovery-step-pending
+               (consent-read-recover-from-string-at ")" 0))))
+
 (ert-deftest consent-reader-test-recovery-spans-are-deterministic ()
   "Produce identical ordered spans across repeated reads."
   (let ((first (consent-read-recover "(a ]\n(b }\n(c)\n"))

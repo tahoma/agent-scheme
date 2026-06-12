@@ -200,6 +200,55 @@ OPTIONS are evaluator options.  Return the ordered contract records."
                     "display")
                    "3"))))
 
+;;;; The continuation prompt carries the reader's pending-nesting indicator
+
+(ert-deftest consent-repl-stream-continuation-carries-nesting ()
+  "Carry nesting depth and the innermost pending construct kind on continuation.
+The depth narrows as constructs close (two open lists, then one), the kind
+names the innermost pending construct, and a ready prompt omits both fields."
+  (let* ((records (consent-repl-stream-test--drive "(+ (* 2\n3)\n4)\n"))
+         (prompts (consent-repl-stream-test--of records "repl-prompt")))
+    (should-not (consent-repl-stream-test--field (nth 0 prompts) "nesting"))
+    (should (= (consent-repl-stream-test--int
+                (consent-repl-stream-test--field (nth 1 prompts) "nesting"))
+               2))
+    (should (equal (consent-repl-stream-test--sym
+                    (consent-repl-stream-test--field (nth 1 prompts)
+                                                     "pending-kind"))
+                   "list"))
+    (should (= (consent-repl-stream-test--int
+                (consent-repl-stream-test--field (nth 2 prompts) "nesting"))
+               1))))
+
+(ert-deftest consent-repl-stream-continuation-pending-string-kind ()
+  "Report an unterminated string as the innermost pending construct."
+  (let* ((records (consent-repl-stream-test--drive
+                   "(string-length \"a\nb\")\n"))
+         (prompts (consent-repl-stream-test--of records "repl-prompt")))
+    (should (= (consent-repl-stream-test--int
+                (consent-repl-stream-test--field (nth 1 prompts) "nesting"))
+               2))
+    (should (equal (consent-repl-stream-test--sym
+                    (consent-repl-stream-test--field (nth 1 prompts)
+                                                     "pending-kind"))
+                   "string"))))
+
+(ert-deftest consent-repl-stream-continuation-pending-datum-prefix ()
+  "Continue a pending datum prefix with depth zero and the `datum' kind."
+  (let* ((records (consent-repl-stream-test--drive "'\n1\n"))
+         (prompts (consent-repl-stream-test--of records "repl-prompt")))
+    (should (= (consent-repl-stream-test--int
+                (consent-repl-stream-test--field (nth 1 prompts) "nesting"))
+               0))
+    (should (equal (consent-repl-stream-test--sym
+                    (consent-repl-stream-test--field (nth 1 prompts)
+                                                     "pending-kind"))
+                   "datum"))
+    (should (equal (consent-repl-stream-test--field
+                    (car (consent-repl-stream-test--of records "repl-result"))
+                    "display")
+                   "1"))))
+
 ;;;; The continuation prompt is emitted before the read it requests
 
 (ert-deftest consent-repl-stream-continuation-prompt-precedes-read ()
@@ -488,6 +537,21 @@ flag exists for model symmetry and is exercised here through the rendered hook."
   (should (equal (consent-repl-stream-rendered-from-string
                   "(+ 1 2)\n" "repl-main" 'silent nil)
                  "")))
+
+(ert-deftest consent-repl-stream-chrome-renders-nesting-depth ()
+  "Render the pending-nesting depth at depth two or more, matching portable.
+The classic gutter carries the open-construct count (`|2 ') and the comment
+chrome carries it inside its ellipsis comment (`#| ...2 |# '); depth one keeps
+the plain two-column gutter."
+  (should (equal (consent-repl-stream-rendered-from-string
+                  "(+ (* 2\n3)\n4)\n" "repl-main" 'classic nil)
+                 "> |2 | 10\n> "))
+  (should (equal (consent-repl-stream-rendered-from-string
+                  "(+ 1\n2)\n" "repl-main" 'classic nil)
+                 "> | 3\n> "))
+  (should (string-match-p (regexp-quote "#| ...2 |# ")
+                          (consent-repl-stream-rendered-from-string
+                           "(+ (* 2\n3)\n4)\n" "repl-main" 'comment nil))))
 
 (ert-deftest consent-repl-stream-chrome-condition-marker ()
   "A recoverable condition renders under a human chrome."
