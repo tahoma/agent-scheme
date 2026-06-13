@@ -3830,6 +3830,55 @@
            (list (list 'capability-grants program-input-grant)))))
        #t)
 
+;; Streaming program input: a host `program-input-reader' thunk yields the next
+;; chunk on demand (or #f at end of stream), so a read pulls only as much input
+;; as it needs and an unbounded stream never drains up front.  Parity twin of
+;; the Emacs `consent-eval-test-program-input-streaming'.
+(define (program-input-list-reader chunks)
+  "Return a reader thunk yielding each of CHUNKS once, then #f at end of stream."
+  (lambda ()
+    (if (null? chunks)
+        #f
+        (let ((chunk (car chunks)))
+          (set! chunks (cdr chunks))
+          chunk))))
+
+;; Counts reader pulls so a check can assert a read consumed only what it needed.
+(define program-input-stream-pulls 0)
+(define (program-input-counting-reader chunks)
+  "Like `program-input-list-reader' but counts pulls in `program-input-stream-pulls'."
+  (let ((inner (program-input-list-reader chunks)))
+    (lambda ()
+      (set! program-input-stream-pulls (+ program-input-stream-pulls 1))
+      (inner))))
+
+(set! program-input-stream-pulls 0)
+(check-external/options 'program-input-stream-read-line
+                        "(read-line)"
+                        (list (cons 'program-input-reader
+                                    (program-input-counting-reader
+                                     '("a\n" "b\n" "c\n")))
+                              (list 'capability-grants program-input-grant))
+                        "\"a\"")
+;; Reading one line pulled exactly one chunk -- the stream was not drained.
+(check 'program-input-stream-incremental program-input-stream-pulls 1)
+;; An unbounded reader would hang here if the port drained eagerly; reading a
+;; bounded number of lines completes because refills stop at each newline.
+(check-external/options 'program-input-stream-unbounded
+                        "(list (read-line) (read-line) (read-line))"
+                        (list (cons 'program-input-reader (lambda () "x\n"))
+                              (list 'capability-grants program-input-grant))
+                        "(\"x\" \"x\" \"x\")")
+;; A datum split across chunks is assembled by refilling until the recovery
+;; reader sees a complete form.
+(check-external/options 'program-input-stream-datum
+                        "(import (scheme read)) (read)"
+                        (list (cons 'program-input-reader
+                                    (program-input-list-reader
+                                     '("(1 2" " 3 " "4)")))
+                              (list 'capability-grants program-input-grant))
+                        "(1 2 3 4)")
+
 (if (= failures 0)
     (begin
       (display "Scheme evaluator tests passed")
