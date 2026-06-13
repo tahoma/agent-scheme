@@ -110,6 +110,7 @@
           consent-port-open?
           set-consent-port-open?!
           consent-port-source
+          set-consent-port-source!
           consent-port-position
           set-consent-port-position!
           consent-port-contents
@@ -561,7 +562,7 @@
       (textual? consent-port-textual?)
       (binary? consent-port-binary?)
       (open? consent-port-open? set-consent-port-open?!)
-      (source consent-port-source)
+      (source consent-port-source set-consent-port-source!)
       (position consent-port-position set-consent-port-position!)
       (contents consent-port-contents
                 set-consent-port-contents!)
