@@ -3460,10 +3460,10 @@ DESCRIPTION names the primitive for errors."
 ;; every other host effect: only an active `port'/`read' grant whose scope is
 ;; backed by `stdin' authorizes it, and without the grant the input port stays
 ;; disconnected so a `read'/`read-char'/`read-line' fails closed exactly as it
-;; does today.  The host drains its real stdin to a string at the process
-;; boundary and passes it as the `:program-input' option, so the port serves
-;; buffered characters and no raw host port is exposed to Scheme.  Emacs parity
-;; twin of the portable `(consent interpreter)' `connect-program-input!'.
+;; does today.  When granted, characters are pulled from a host reader on demand
+;; (see the streaming helpers below), so no raw host port is exposed to Scheme.
+;; Emacs parity twin of the portable `(consent interpreter)'
+;; `connect-program-input!'.
 (defun consent--program-input-grant-p (grant)
   "Report whether GRANT authorizes reading the stdin-backed program-input stream."
   (and (consent--capability-grant-datum-p grant)
@@ -3487,8 +3487,8 @@ DESCRIPTION names the primitive for errors."
 ;; A program-input port draws characters from a host reader on demand: a
 ;; zero-argument function returning the next chunk of input as a non-empty
 ;; string, or nil at end of stream.  The host supplies it (its real stdin read,
-;; one line/chunk at a time); a fully-buffered `:program-input' string is just a
-;; one-shot reader that yields the whole string once.  Reads refill only as far
+;; one line/chunk at a time); genuinely finite in-memory input is wrapped as a
+;; one-shot reader by `consent-program-input-from-string'.  Reads refill only as far
 ;; as the current operation needs, so a `(read-line)' filter over a live or
 ;; unbounded pipe processes input incrementally instead of draining it all up
 ;; front.  The reader and an end-of-stream flag ride in the port's mutable
@@ -3499,17 +3499,12 @@ DESCRIPTION names the primitive for errors."
   "Synthetic primitive naming program-input refills for host-callback budgeting.")
 
 (defun consent--program-input-reader-from-options (options)
-  "Return the host input reader for OPTIONS: an explicit `:program-input-reader'
-function, a one-shot reader wrapping `:program-input' string content, or nil."
-  (let ((reader (consent--eval-option options :program-input-reader nil))
-        (content (consent--eval-option options :program-input nil)))
-    (cond
-     ((functionp reader) reader)
-     ((stringp content)
-      (let ((pending content))
-        (lambda ()
-          (prog1 pending (setq pending nil)))))
-     (t nil))))
+  "Return the host input reader thunk from OPTIONS' `:program-input-reader', or nil.
+Program input is always a reader (a stream); a caller with finite in-memory input
+wraps it with `consent-program-input-from-string' rather than passing a raw
+string, so the finite case states its no-time-dimension nature explicitly."
+  (let ((reader (consent--eval-option options :program-input-reader nil)))
+    (and (functionp reader) reader)))
 
 (defun consent--program-input-streaming-p (port)
   "Return non-nil when PORT draws from a host program-input reader."
@@ -3615,12 +3610,11 @@ holding a live host port."
 
 (defun consent--connect-program-input! (context options)
   "Connect CONTEXT's current input port to the granted program-input stream.
-When OPTIONS offer program input (a `:program-input-reader' function or buffered
-`:program-input' string) and CONTEXT holds an active `port'/`read' grant backed
-by `stdin', install a refill-on-demand, capability-gated input port as the
-current input port; otherwise record the denial and leave the input port
-disconnected so reads fail closed.  A no-op when no program input was offered,
-preserving the default fail-closed posture."
+When OPTIONS offer a `:program-input-reader' and CONTEXT holds an active
+`port'/`read' grant backed by `stdin', install a refill-on-demand,
+capability-gated input port as the current input port; otherwise record the
+denial and leave the input port disconnected so reads fail closed.  A no-op when
+no reader was offered, preserving the default fail-closed posture."
   (let ((reader (consent--program-input-reader-from-options options)))
     (when reader
       (let ((grant (consent--find-program-input-grant context)))
