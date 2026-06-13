@@ -177,14 +177,18 @@ is an explicit, granted act:
     (expires never))
   ```
 
-- **Reader.** Program input is pulled from a host **reader** on demand: a
-  zero-argument procedure that returns the next chunk of input as a string, or
-  an end-of-stream indication, supplied to the evaluator as the
-  `program-input-reader` option (`:program-input-reader` on the Emacs host). A
-  caller that already has the whole input in hand instead passes a
-  `program-input` string, which is treated as a one-shot reader yielding that
-  string once. The host's reader does its real stdin read (a line or block per
-  call); no raw host port crosses into Scheme.
+- **Reader.** Program input is always a **reader** — a stream — pulled on
+  demand: a zero-argument procedure that returns the next chunk of input as a
+  string, or an end-of-stream indication, supplied to the evaluator as the
+  `program-input-reader` option (`:program-input-reader` on the Emacs host). The
+  host's reader does its real stdin read (a line or block per call); no raw host
+  port crosses into Scheme. A buffer is a stream with its time dimension
+  collapsed — all input available at once, then immediate end — so a caller with
+  genuinely finite, in-memory input (a fixture or a captured-transcript replay)
+  builds its reader with `consent-program-input-from-string`, which yields the
+  string once and then ends. There is deliberately **no raw-string option**:
+  the finite case is a constructor into the stream type, stated explicitly, not a
+  stdin-shaped shortcut that would invite modelling a live stream as a buffer.
 
 - **Refill on demand (streaming).** The runtime, only when the grant is present,
   installs a `stdio`-backed Consent input port whose buffer is **grown by pulling

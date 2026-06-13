@@ -19,6 +19,7 @@
           consent-interaction-context-session-id
           consent-interaction-program-output
           consent-interaction-eval-form
+          consent-program-input-from-string
           consent-make-empty-environment
           consent-make-base-environment
           consent-base-primitive-names

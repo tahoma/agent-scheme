@@ -89,12 +89,13 @@ inheriting the non-interactive fail-closed policy posture: confirm-gated host
 capabilities -- including program output -- are denied without an explicit grant,
 policy file, or preloaded approval, and a denial or error raises so a CLI caller
 exits non-zero. A script reads its stdin only when REST's options carry a
-`program-input-reader' thunk (or buffered `program-input' content) together with
-an active `port'/`read' grant backed by `stdin' (docs/repl-interaction-contract.md,
-\"Program-Input Stream Model\"); input is pulled from the reader on demand so a
-`(read-line)' filter streams incrementally, and without the grant it fails
-closed. This is the host-neutral peer of, and byte-for-byte posture match with,
-the Emacs `consent-script-run-file'."
+`program-input-reader' thunk together with an active `port'/`read' grant backed
+by `stdin' (docs/repl-interaction-contract.md, \"Program-Input Stream Model\");
+input is pulled from the reader on demand so a `(read-line)' filter streams
+incrementally, and without the grant it fails closed. Finite in-memory input
+uses a reader built with `consent-program-input-from-string'. This is the
+host-neutral peer of, and byte-for-byte posture match with, the Emacs
+`consent-script-run-file'."
       (apply consent-eval-source (cli-script-source-from-file path) rest))
 
     ;; Host-runner posture: the deliberate capability bundle that lets the

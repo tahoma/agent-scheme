@@ -19,6 +19,7 @@
           consent-interaction-context-session-id
           consent-interaction-program-output
           consent-interaction-eval-form
+          consent-program-input-from-string
           consent-make-empty-environment
           consent-make-base-environment
           consent-base-primitive-names
@@ -7805,30 +7806,34 @@ condition does not."
     ;; A program-input port draws characters from a host *reader* on demand: a
     ;; zero-argument procedure returning the next chunk of input as a non-empty
     ;; string, or #f at end of stream.  The host supplies it (its real stdin read,
-    ;; one line/chunk at a time); a fully-buffered `program-input' string is just
-    ;; a one-shot reader that yields the whole string once.  Reads refill only as
-    ;; far as the current operation needs, so a `(read-line)' filter over a live
-    ;; or unbounded pipe processes input incrementally instead of draining it all
-    ;; up front.  The reader and an end-of-stream flag ride in the port's mutable
-    ;; counters alist; the growable buffer is the port `source'.
+    ;; one line/chunk at a time); genuinely finite in-memory input is wrapped as a
+    ;; one-shot reader by `consent-program-input-from-string'.  Reads refill only
+    ;; as far as the current operation needs, so a `(read-line)' filter over a
+    ;; live or unbounded pipe processes input incrementally instead of draining it
+    ;; all up front.  The reader and an end-of-stream flag ride in the port's
+    ;; mutable counters alist; the growable buffer is the port `source'.
     (define program-input-refill-primitive
       (make-primitive-procedure 'program-input-read #f 0 0))
 
+    (define (consent-program-input-from-string content)
+      "Return a one-shot program-input reader that yields CONTENT once, then ends.
+This is the honest finite-input constructor -- a stream whose whole contents are
+available immediately and which then reaches end of stream.  Use it for fixtures,
+captured-transcript replay, and other genuinely in-memory input; it is never a
+way to model a live stdin, which has a time dimension a buffer cannot represent."
+      (let ((pending content))
+        (lambda ()
+          (let ((chunk pending))
+            (set! pending #f)
+            chunk))))
+
     (define (program-input-reader-from-options options)
-      "Return the host input reader for OPTIONS: an explicit `program-input-reader'
-procedure, a one-shot reader wrapping `program-input' string content, or #f when
-neither is offered."
-      (let ((reader (option-ref options 'program-input-reader #f))
-            (content (option-ref options 'program-input #f)))
-        (cond
-         ((procedure? reader) reader)
-         ((string? content)
-          (let ((pending content))
-            (lambda ()
-              (let ((chunk pending))
-                (set! pending #f)
-                chunk))))
-         (else #f))))
+      "Return the host input reader thunk from OPTIONS' `program-input-reader', or #f.
+Program input is always a reader (a stream); a caller with finite in-memory input
+wraps it with `consent-program-input-from-string' rather than passing a raw
+string, so the finite case states its no-time-dimension nature explicitly."
+      (let ((reader (option-ref options 'program-input-reader #f)))
+        (and (procedure? reader) reader)))
 
     (define (program-input-streaming? port)
       "Report whether PORT draws from a host program-input reader."
@@ -7953,12 +7958,11 @@ holding a live host port."
 
     (define (connect-program-input! context options)
       "Connect CONTEXT's current input port to the granted program-input stream.
-When OPTIONS offer program input (a `program-input-reader' procedure or buffered
-`program-input' string) and CONTEXT holds an active `port'/`read' grant backed by
-`stdin', install a refill-on-demand, capability-gated input port as the current
-input port; otherwise record the denial and leave the input port disconnected so
-reads fail closed.  No-op when no program input was offered, preserving the
-default fail-closed posture."
+When OPTIONS offer a `program-input-reader' and CONTEXT holds an active
+`port'/`read' grant backed by `stdin', install a refill-on-demand,
+capability-gated input port as the current input port; otherwise record the
+denial and leave the input port disconnected so reads fail closed.  No-op when no
+reader was offered, preserving the default fail-closed posture."
       (let ((reader (program-input-reader-from-options options)))
         (if reader
             (let ((grant (find-program-input-grant context))
