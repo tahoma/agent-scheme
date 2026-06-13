@@ -73,6 +73,7 @@ and `:max-event-nodes'."
         (input-form (consent-value->external expression)))
     (setf (consent--eval-context-interaction-environment context)
           eval-environment)
+    (consent--connect-program-input! context options)
     (condition-case condition
         (progn
           (consent-policy-authorize
@@ -101,6 +102,7 @@ is the result of the last command or definition."
          (input-form source))
     (setf (consent--eval-context-interaction-environment context)
           eval-environment)
+    (consent--connect-program-input! context options)
     (condition-case condition
         (progn
           (consent-policy-authorize
@@ -201,6 +203,7 @@ agent events, and handle references across calls."
         (input-form (consent-value->external expression)))
     (setf (consent--eval-context-interaction-environment context)
           eval-environment)
+    (consent--connect-program-input! context options)
     (condition-case condition
         (progn
           (consent-policy-authorize
@@ -227,6 +230,7 @@ agent events, and handle references across calls."
         (input-form source))
     (setf (consent--eval-context-interaction-environment context)
           eval-environment)
+    (consent--connect-program-input! context options)
     (condition-case condition
         (progn
           (consent-policy-authorize

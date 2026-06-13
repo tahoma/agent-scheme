@@ -155,6 +155,17 @@ identically — the host-compiled binary is **not** a host R7RS interpreter:
   through the same `consent-eval-source`. The two are byte-for-byte posture
   matches.
 
+Reading **stdin** is gated the same way. By default a script has no current
+input port, so `(read-line)`, `(read-char)`, and `(read)` on
+`(current-input-port)` fail closed. A script reads its standard input only when
+the run supplies the drained input together with an active `port`/`read` grant
+backed by `stdin` — the program-input stream model defined in the
+[cross-host REPL interaction contract](repl-interaction-contract.md#program-input-stream-model).
+The mechanism is in place and host-identical; the command-line affordance that
+requests the grant and drains real stdin in the entrypoints is part of the
+non-interactive script authority work (#400), alongside the promptable-output
+surface below.
+
 White-box tests that `import` the runtime's internal libraries (for example
 `(consent interpreter)`) are **not** scripts and do not run through this path:
 they exercise the compiled libraries on a separate, non-shipped host-execution
