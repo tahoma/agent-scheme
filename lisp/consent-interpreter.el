@@ -3484,21 +3484,122 @@ DESCRIPTION names the primitive for errors."
   (seq-find #'consent--program-input-grant-p
             (consent--capability-context-grants context)))
 
-(defun consent--make-program-input-port (grant content)
-  "Return a buffered, capability-gated textual input port over CONTENT for GRANT.
+;; A program-input port draws characters from a host reader on demand: a
+;; zero-argument function returning the next chunk of input as a non-empty
+;; string, or nil at end of stream.  The host supplies it (its real stdin read,
+;; one line/chunk at a time); a fully-buffered `:program-input' string is just a
+;; one-shot reader that yields the whole string once.  Reads refill only as far
+;; as the current operation needs, so a `(read-line)' filter over a live or
+;; unbounded pipe processes input incrementally instead of draining it all up
+;; front.  The reader and an end-of-stream flag ride in the port's mutable
+;; counters alist; the growable buffer is the port `source'.  Emacs parity twin
+;; of the portable `(consent interpreter)' streaming program-input port.
+(defconst consent--program-input-refill-primitive
+  (consent--make-primitive-procedure 'program-input-read nil 0 0)
+  "Synthetic primitive naming program-input refills for host-callback budgeting.")
+
+(defun consent--program-input-reader-from-options (options)
+  "Return the host input reader for OPTIONS: an explicit `:program-input-reader'
+function, a one-shot reader wrapping `:program-input' string content, or nil."
+  (let ((reader (consent--eval-option options :program-input-reader nil))
+        (content (consent--eval-option options :program-input nil)))
+    (cond
+     ((functionp reader) reader)
+     ((stringp content)
+      (let ((pending content))
+        (lambda ()
+          (prog1 pending (setq pending nil)))))
+     (t nil))))
+
+(defun consent--program-input-streaming-p (port)
+  "Return non-nil when PORT draws from a host program-input reader."
+  (and (consent--port-p port)
+       (eq (consent--port-backing-domain port) 'stdio)
+       (assq 'program-input-reader (consent--port-counters port))
+       t))
+
+(defun consent--program-input-reader-of (port)
+  "Return PORT's host input reader function."
+  (cdr (assq 'program-input-reader (consent--port-counters port))))
+
+(defun consent--program-input-eof-p (port)
+  "Return non-nil when PORT's host reader has reached end of stream."
+  (cdr (assq 'program-input-eof (consent--port-counters port))))
+
+(defun consent--program-input-set-eof! (port)
+  "Mark PORT's host reader as exhausted so it is not called again."
+  (push (cons 'program-input-eof t) (consent--port-counters port)))
+
+(defun consent--program-input-refill! (port context)
+  "Pull one more chunk from PORT's host reader onto its buffer.
+Return non-nil when characters were appended, nil at end of stream.  Each pull is
+charged against the host-callback budget and audited as a port read, so an
+unbounded stream stays budget-bounded and fail-closed like every host effect."
+  (unless (consent--program-input-eof-p port)
+    (consent--note-host-callback context consent--program-input-refill-primitive)
+    (let ((chunk (funcall (consent--program-input-reader-of port))))
+      (if (and (stringp chunk) (> (length chunk) 0))
+          (progn
+            (setf (consent--port-source port)
+                  (concat (consent--port-source port) chunk))
+            (consent-capability-audit-port-result port 'read (length chunk))
+            t)
+        (progn
+          (consent--program-input-set-eof! port)
+          nil)))))
+
+(defun consent--program-input-fill-until! (port context done-p)
+  "Refill PORT from its host reader until DONE-P holds or the stream ends."
+  (while (and (not (funcall done-p))
+              (not (consent--program-input-eof-p port)))
+    (consent--program-input-refill! port context)))
+
+(defun consent--program-input-line-buffered-p (source position)
+  "Return non-nil when SOURCE holds a newline at or after POSITION."
+  (and (string-match-p "\n" (substring source (min position (length source))))
+       t))
+
+(defun consent--program-input-read-streaming (port context)
+  "Read one datum from streaming PORT, refilling until a complete datum is
+buffered, then delegating to the validating raise-on-error reader so streaming
+`read' shares the single datum path."
+  ;; Keep pulling while the buffered prefix is `incomplete' (a valid partial
+  ;; datum) or `eof' (exhausted without a datum yet); stop once a whole `datum'
+  ;; is buffered or the prefix is `invalid'.  `consent--program-input-fill-until!'
+  ;; also stops when the host stream itself ends.
+  (consent--program-input-fill-until!
+   port context
+   (lambda ()
+     (memq (consent-recovery-step-status
+            (consent-read-recover-from-string-at
+             (consent--port-source port)
+             (consent--port-position port)))
+           '(datum invalid))))
+  (let ((result (consent--read-one-from-string-at
+                 (consent--port-source port)
+                 (consent--port-position port))))
+    (setf (consent--port-position port) (cdr result))
+    (consent-capability-audit-port-result port 'read 'datum)
+    (if (eq (car result) consent--read-eof)
+        consent-eof-object
+      (car result))))
+
+(defun consent--make-program-input-port (grant reader)
+  "Return a capability-gated, refill-on-demand textual input port for GRANT.
 The port is backed by the `stdio' domain so every read revalidates GRANT and
-audits the capability operation, but its characters come from the
-already-drained CONTENT string rather than a live host port."
+audits the operation, and pulls characters from READER on demand rather than
+holding a live host port."
   (let* ((grant-id (consent--capability-grant-id grant))
          (limits (consent--port-capability-limits grant))
          (handle-id (consent--port-capability-handle-id))
          (port (consent--make-port
                 :medium 'string :inputp t :outputp nil
                 :textualp t :binaryp nil :openp t
-                :source content :position 0 :contents nil
+                :source "" :position 0 :contents nil
                 :backing-domain 'stdio :operations '(read close)
                 :grant grant-id :limits limits :handle handle-id
-                :status 'open :path 'program-input :counters nil)))
+                :status 'open :path 'program-input
+                :counters (list (cons 'program-input-reader reader)))))
     (consent-audit-record
      'capability-handle
      `((handle . ,(consent--port-capability-datum
@@ -3514,13 +3615,14 @@ already-drained CONTENT string rather than a live host port."
 
 (defun consent--connect-program-input! (context options)
   "Connect CONTEXT's current input port to the granted program-input stream.
-When OPTIONS carry `:program-input' content and CONTEXT holds an active
-`port'/`read' grant backed by `stdin', install a buffered, capability-gated
-input port as the current input port; otherwise record the denial and leave the
-input port disconnected so reads fail closed.  A no-op when no `:program-input'
-content was offered, preserving the default fail-closed posture."
-  (let ((content (consent--eval-option options :program-input nil)))
-    (when (stringp content)
+When OPTIONS offer program input (a `:program-input-reader' function or buffered
+`:program-input' string) and CONTEXT holds an active `port'/`read' grant backed
+by `stdin', install a refill-on-demand, capability-gated input port as the
+current input port; otherwise record the denial and leave the input port
+disconnected so reads fail closed.  A no-op when no program input was offered,
+preserving the default fail-closed posture."
+  (let ((reader (consent--program-input-reader-from-options options)))
+    (when reader
       (let ((grant (consent--find-program-input-grant context)))
         (consent-audit-record
          'capability-request
@@ -3534,7 +3636,7 @@ content was offered, preserving the default fail-closed posture."
                  (backing . stdin)
                  (grant . ,(consent--capability-grant-id grant))))
               (setf (consent--eval-context-current-input-port context)
-                    (consent--make-program-input-port grant content)))
+                    (consent--make-program-input-port grant reader)))
           (consent-audit-record
            'capability-decision
            '((status . denied) (domain . port) (operation . read)
@@ -3762,21 +3864,23 @@ content was offered, preserving the default fail-closed posture."
 
 (defun consent--primitive-read (arguments context)
   "Primitive read over ARGUMENTS."
-  (let* ((port (consent--expect-textual-input-port
-                (if arguments
-                    (car arguments)
-                  (consent--current-input-port-or-deny context "read"))
-                "read"))
-         (result
-          (consent--read-one-from-string-at
-           (consent--port-source port)
-           (consent--port-position port))))
+  (let ((port (consent--expect-textual-input-port
+               (if arguments
+                   (car arguments)
+                 (consent--current-input-port-or-deny context "read"))
+               "read")))
     (consent--port-capability-check port context 'read)
-    (setf (consent--port-position port) (cdr result))
-    (consent-capability-audit-port-result port 'read 'datum)
-    (if (eq (car result) consent--read-eof)
-        consent-eof-object
-      (car result))))
+    (if (consent--program-input-streaming-p port)
+        (consent--program-input-read-streaming port context)
+      (let ((result
+             (consent--read-one-from-string-at
+              (consent--port-source port)
+              (consent--port-position port))))
+        (setf (consent--port-position port) (cdr result))
+        (consent-capability-audit-port-result port 'read 'datum)
+        (if (eq (car result) consent--read-eof)
+            consent-eof-object
+          (car result))))))
 
 (defun consent--text-port-next-code
     (port advancep description context)
@@ -3788,6 +3892,12 @@ Advance when ADVANCEP is non-nil.  Signal errors using DESCRIPTION."
       (consent--eval-error
        "%s host textual input ports are not available" description))
     (consent--port-capability-check input context 'read)
+    (when (consent--program-input-streaming-p input)
+      (consent--program-input-fill-until!
+       input context
+       (lambda ()
+         (> (length (consent--port-source input))
+            (consent--port-position input)))))
     (let ((position (consent--port-position input))
           (source (consent--port-source input)))
       (if (>= position (length source))
@@ -3848,6 +3958,13 @@ Advance when ADVANCEP is non-nil.  Signal errors using DESCRIPTION."
        "read-string host textual input ports are not available"))
      (t
       (consent--port-capability-check port context 'read)
+      (when (consent--program-input-streaming-p port)
+        (consent--program-input-fill-until!
+         port context
+         (lambda ()
+           (>= (- (length (consent--port-source port))
+                  (consent--port-position port))
+               count))))
       (let* ((source (consent--port-source port))
              (position (consent--port-position port))
              (remaining (- (length source) position))
@@ -3873,6 +3990,13 @@ Advance when ADVANCEP is non-nil.  Signal errors using DESCRIPTION."
         (consent--eval-error
          "read-line host textual input ports are not available"))
       (consent--port-capability-check port context 'read)
+      (when (consent--program-input-streaming-p port)
+        (consent--program-input-fill-until!
+         port context
+         (lambda ()
+           (consent--program-input-line-buffered-p
+            (consent--port-source port)
+            (consent--port-position port)))))
       (let* ((source (consent--port-source port))
              (start (consent--port-position port))
              (length (length source))

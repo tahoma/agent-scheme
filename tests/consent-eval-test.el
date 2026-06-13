@@ -105,6 +105,42 @@ portable `program-input-granted-read-line' check."
           (scope (backing stdin)) (expires never)))))
      :type 'consent-eval-error)))
 
+(ert-deftest consent-eval-test-program-input-streaming ()
+  "Program input is pulled from a host reader thunk on demand.
+A `:program-input-reader' yields the next chunk (or nil at end of stream), so a
+read consumes only as much input as it needs and an unbounded stream never
+drains up front.  Parity twin of the portable `program-input-stream-read-line'
+checks."
+  (let ((grants '(:capability-grants
+                  ((capability-grant
+                    (id program-input) (domain port) (operations read close)
+                    (scope (backing stdin)) (expires never))))))
+    ;; Incremental: reading one line pulls exactly one chunk, not the stream.
+    (let* ((pulls 0)
+           (chunks (list "a\n" "b\n" "c\n"))
+           (reader (lambda ()
+                     (setq pulls (1+ pulls))
+                     (and chunks (pop chunks)))))
+      (should (equal (consent-eval-test--external
+                      "(read-line)"
+                      (append (list :program-input-reader reader) grants))
+                     "\"a\""))
+      (should (= pulls 1)))
+    ;; An unbounded reader would hang here if the port drained eagerly; reading
+    ;; a bounded number of lines completes because refills stop at each newline.
+    (should (equal (consent-eval-test--external
+                    "(list (read-line) (read-line) (read-line))"
+                    (append (list :program-input-reader (lambda () "x\n")) grants))
+                   "(\"x\" \"x\" \"x\")"))
+    ;; A datum split across chunks is assembled by refilling until the recovery
+    ;; reader sees a complete form.
+    (let* ((chunks (list "(1 2" " 3 " "4)"))
+           (reader (lambda () (and chunks (pop chunks)))))
+      (should (equal (consent-eval-test--external
+                      "(import (scheme read)) (read)"
+                      (append (list :program-input-reader reader) grants))
+                     "(1 2 3 4)")))))
+
 (ert-deftest consent-eval-test-let-empty-bindings-and-char-literals ()
   "Evaluate `let' with empty bindings and delimiter character literals.
 Regression: the syntax-rules matcher must match ((name val) ...) against ();

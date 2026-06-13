@@ -177,26 +177,39 @@ is an explicit, granted act:
     (expires never))
   ```
 
-- **Content.** The host drains its real process standard input to a Scheme
-  string at the process boundary and offers it as the `program-input` evaluation
-  option (`:program-input` on the Emacs host). The runtime, only when the grant
-  is present, builds a buffered, `stdio`-backed Consent input port over that
-  string and installs it as the current input port; every read then revalidates
-  the grant and audits the port operation, exactly like a host file port. **No
-  raw host port is exposed to Scheme** — reads serve already-drained characters
-  through the capability/policy boundary.
+- **Reader.** Program input is pulled from a host **reader** on demand: a
+  zero-argument procedure that returns the next chunk of input as a string, or
+  an end-of-stream indication, supplied to the evaluator as the
+  `program-input-reader` option (`:program-input-reader` on the Emacs host). A
+  caller that already has the whole input in hand instead passes a
+  `program-input` string, which is treated as a one-shot reader yielding that
+  string once. The host's reader does its real stdin read (a line or block per
+  call); no raw host port crosses into Scheme.
 
-- **Fail closed.** If the content is offered without a covering grant, the
+- **Refill on demand (streaming).** The runtime, only when the grant is present,
+  installs a `stdio`-backed Consent input port whose buffer is **grown by pulling
+  from the reader as reads need more input**. `read-char`/`peek-char` pull until
+  one character is available; `read-line` pulls until a newline (or end of
+  stream); `read-string` pulls until the requested count; `read` pulls until the
+  recovery-aware reader sees a complete datum, then reads it through the ordinary
+  validating reader. So a `(read-line)` filter over a live, slow, or unbounded
+  pipe processes input incrementally and emits as it goes — it never blocks
+  waiting to drain all of stdin first, and an unbounded stream does not hang a
+  bounded read. Every read revalidates the grant and audits the operation exactly
+  like a host file port, and **each refill is charged against the host-callback
+  budget**, so even an unbounded stream stays budget-bounded and fail-closed.
+
+- **Fail closed.** If program input is offered without a covering grant, the
   connection is denied and recorded, and reads fail closed. If a grant is present
-  but no content was offered, the input port stays disconnected. Either way the
+  but no input was offered, the input port stays disconnected. Either way the
   default — no grant — is unchanged: reads deny.
 
 This is the **non-interactive (script / shebang) half** of the program-input
 model, where there is no competing reader for stdin. It is realized identically
 on both hosts in the shared evaluator (`(consent eval)` `consent-eval-source`
-and the `consent-eval.el` twin), so a `--script` / shebang filter that reads its
-stdin under a grant, and is denied without one, behaves the same on the portable
-and Emacs hosts.
+and the `consent-eval.el` twin), so a `--script` / shebang filter that streams
+its stdin under a grant, and is denied without one, behaves the same on the
+portable and Emacs hosts.
 
 #### Remaining work on this issue
 
@@ -212,13 +225,13 @@ rather than as separate parked issues:
   `consent-repl-stream`, and the durable interaction context) therefore do **not**
   connect `program-input` yet, and a program read inside an interactive session
   still fails closed.
-- **CLI grant surface and stdin draining in the entrypoints.** The product main
+- **CLI grant surface and the entrypoint stdin reader.** The product main
   (`consent --script` / bare-path) and the Emacs batch entry do not yet expose a
   flag, policy file, or preloaded approval that requests the stdin-backed grant,
-  nor do they drain real stdin into the `program-input` option. Wiring that
-  end-to-end CLI affordance is coordinated with the non-interactive script
-  authority posture (#400), which owns the promptable-grant surface the script
-  half plugs into.
+  nor do they install a real-stdin reader as the `program-input-reader` option.
+  Wiring that end-to-end CLI affordance is coordinated with the non-interactive
+  script authority posture (#400), which owns the promptable-grant surface the
+  script half plugs into.
 
 ## Record Vocabulary
 
