@@ -56,6 +56,55 @@ than raising, which keeps the allow path deterministic."
          (expires never)))))
     "#f")))
 
+(ert-deftest consent-eval-test-program-input-stream ()
+  "Program input connects current-input-port only under a stdin-backed port grant.
+A `:program-input' string plus an active `port'/`read' grant scoped to `stdin'
+lets `read-line'/`read-char'/`read' draw from the buffered process input; without
+the grant the read fails closed exactly as an unconnected current input port
+does, and offering input with no grant stays disconnected.  Parity twin of the
+portable `program-input-granted-read-line' check."
+  (let ((granted
+         '(:program-input "alpha\nbeta\n"
+           :capability-grants
+           ((capability-grant
+             (id program-input)
+             (domain port)
+             (operations read close)
+             (scope (backing stdin))
+             (expires never)))))
+        (sequence
+         '(:program-input "a\nb\nc"
+           :capability-grants
+           ((capability-grant
+             (id program-input)
+             (domain port)
+             (operations read close)
+             (scope (backing stdin))
+             (expires never))))))
+    ;; Granted: read-line draws the first line from the program input.
+    (should (equal (consent-eval-test--external "(read-line)" granted)
+                   "\"alpha\""))
+    ;; Granted: successive reads advance over the buffered content to EOF.
+    (should
+     (equal
+      (consent-eval-test--external
+       "(list (read-line) (read-line) (read-char) (eof-object? (read-line)))"
+       sequence)
+      "(\"a\" \"b\" #\\c #t)"))
+    ;; Ungranted: input offered but no grant -> read fails closed.
+    (should-error
+     (consent-eval-source "(read-line)" nil '(:program-input "alpha\n"))
+     :type 'consent-eval-error)
+    ;; Grant present but no input offered -> still disconnected (fail closed).
+    (should-error
+     (consent-eval-source
+      "(read-line)" nil
+      '(:capability-grants
+        ((capability-grant
+          (id program-input) (domain port) (operations read close)
+          (scope (backing stdin)) (expires never)))))
+     :type 'consent-eval-error)))
+
 (ert-deftest consent-eval-test-let-empty-bindings-and-char-literals ()
   "Evaluate `let' with empty bindings and delimiter character literals.
 Regression: the syntax-rules matcher must match ((name val) ...) against ();

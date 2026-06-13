@@ -154,6 +154,72 @@ Obligations:
   it crosses the host boundary; the channel names above are the REPL-level view
   of the same separation.
 
+### Program-Input Stream Model
+
+`program-input` is the program's own stdin, and like every other host effect it
+is **capability-gated and fails closed**. By default a session's evaluation
+context carries no current input port, so a form that calls `read`, `read-char`,
+`peek-char`, `read-string`, or `read-line` on `(current-input-port)` is denied
+with the standard *"… requires policy-gated host access"* condition — the same
+posture a `--script` or shebang program runs under. Connecting `program-input`
+is an explicit, granted act:
+
+- **Grant.** An active `port`-domain grant whose `operations` include `read` and
+  whose scope is `(backing stdin)` authorizes the connection. The canonical shape
+  is
+
+  ```scheme
+  (capability-grant
+    (id program-input)
+    (domain port)
+    (operations read close)
+    (scope (backing stdin))
+    (expires never))
+  ```
+
+- **Content.** The host drains its real process standard input to a Scheme
+  string at the process boundary and offers it as the `program-input` evaluation
+  option (`:program-input` on the Emacs host). The runtime, only when the grant
+  is present, builds a buffered, `stdio`-backed Consent input port over that
+  string and installs it as the current input port; every read then revalidates
+  the grant and audits the port operation, exactly like a host file port. **No
+  raw host port is exposed to Scheme** — reads serve already-drained characters
+  through the capability/policy boundary.
+
+- **Fail closed.** If the content is offered without a covering grant, the
+  connection is denied and recorded, and reads fail closed. If a grant is present
+  but no content was offered, the input port stays disconnected. Either way the
+  default — no grant — is unchanged: reads deny.
+
+This is the **non-interactive (script / shebang) half** of the program-input
+model, where there is no competing reader for stdin. It is realized identically
+on both hosts in the shared evaluator (`(consent eval)` `consent-eval-source`
+and the `consent-eval.el` twin), so a `--script` / shebang filter that reads its
+stdin under a grant, and is denied without one, behaves the same on the portable
+and Emacs hosts.
+
+#### Remaining work on this issue
+
+Two slices of the program-input model are deliberately deferred and tracked here
+rather than as separate parked issues:
+
+- **Interactive / piped-into-REPL multiplexing.** When the REPL loop owns stdin
+  to read submission forms, a form that reads `program-input` must draw program
+  data without stealing characters the loop has not yet read as a form (the
+  no-character-stealing obligation above). Defining the TTY and piped-stdin
+  multiplexing between the form reader and the program-input port is the genuine
+  design call; the interactive entry points (`(cli repl-shell)`,
+  `consent-repl-stream`, and the durable interaction context) therefore do **not**
+  connect `program-input` yet, and a program read inside an interactive session
+  still fails closed.
+- **CLI grant surface and stdin draining in the entrypoints.** The product main
+  (`consent --script` / bare-path) and the Emacs batch entry do not yet expose a
+  flag, policy file, or preloaded approval that requests the stdin-backed grant,
+  nor do they drain real stdin into the `program-input` option. Wiring that
+  end-to-end CLI affordance is coordinated with the non-interactive script
+  authority posture (#400), which owns the promptable-grant surface the script
+  half plugs into.
+
 ## Record Vocabulary
 
 All records are Scheme-readable data. They are the shared surface #391, #360, and

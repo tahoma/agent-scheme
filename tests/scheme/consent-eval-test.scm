@@ -3791,6 +3791,45 @@
            '((max-host-callbacks . 0)))))
        #t)
 
+;; Program-input stream (docs/repl-interaction-contract.md, "Stream
+;; Separation"): a non-interactive evaluation connects `(current-input-port)' to
+;; the buffered process input only under an active `port'/`read' grant whose
+;; scope is backed by `stdin'.  Without the grant -- or with no program input
+;; offered at all -- the read fails closed exactly as an unconnected current
+;; input port does.  Parity twin of the Emacs
+;; `consent-eval-test-program-input-stream'.
+(define program-input-grant
+  '(capability-grant (id program-input) (domain port)
+                     (operations read close) (scope (backing stdin))
+                     (expires never)))
+(check-external/options 'program-input-granted-read-line
+                        "(read-line)"
+                        (list (cons 'program-input "alpha\nbeta\n")
+                              (list 'capability-grants program-input-grant))
+                        "\"alpha\"")
+(check-external/options 'program-input-granted-sequence
+                        "(list (read-line) (read-line) (read-char)
+                               (eof-object? (read-line)))"
+                        (list (cons 'program-input "a\nb\nc")
+                              (list 'capability-grants program-input-grant))
+                        "(\"a\" \"b\" #\\c #t)")
+(check 'program-input-ungranted-denies
+       (raises?
+        (lambda ()
+          (consent-eval-source
+           "(read-line)"
+           #f
+           (list (cons 'program-input "alpha\n")))))
+       #t)
+(check 'program-input-no-content-denies
+       (raises?
+        (lambda ()
+          (consent-eval-source
+           "(read-line)"
+           #f
+           (list (list 'capability-grants program-input-grant)))))
+       #t)
+
 (if (= failures 0)
     (begin
       (display "Scheme evaluator tests passed")
