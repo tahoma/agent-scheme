@@ -75,7 +75,10 @@ with `#!/usr/bin/env consent' (or the `/bin/sh' polyglot) reads correctly.
 Evaluation goes through `consent-eval-source' with ENVIRONMENT and OPTIONS in
 the consent runtime, inheriting the noninteractive fail-closed policy posture:
 confirm-gated actions, including program output, are denied without a grant,
-policy file, or preloaded approval."
+policy file, or preloaded approval.  A script reads its stdin only when OPTIONS
+carry the drained `:program-input' content together with an active `port'/`read'
+grant backed by `stdin' (docs/repl-interaction-contract.md, \"Program-Input
+Stream Model\"); without the grant a `(read-line)' fails closed."
   (consent-eval-source
    (consent-script-source-from-file path) environment options))
 

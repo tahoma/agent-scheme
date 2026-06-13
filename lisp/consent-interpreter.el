@@ -3454,6 +3454,93 @@ DESCRIPTION names the primitive for errors."
   (or (and context (consent--eval-context-current-input-port context))
       (consent--policy-denied description context)))
 
+;; Program-input stream (docs/repl-interaction-contract.md, "Stream
+;; Separation"): a non-interactive evaluation may connect its
+;; `(current-input-port)' to the process standard input.  This is gated like
+;; every other host effect: only an active `port'/`read' grant whose scope is
+;; backed by `stdin' authorizes it, and without the grant the input port stays
+;; disconnected so a `read'/`read-char'/`read-line' fails closed exactly as it
+;; does today.  The host drains its real stdin to a string at the process
+;; boundary and passes it as the `:program-input' option, so the port serves
+;; buffered characters and no raw host port is exposed to Scheme.  Emacs parity
+;; twin of the portable `(consent interpreter)' `connect-program-input!'.
+(defun consent--program-input-grant-p (grant)
+  "Report whether GRANT authorizes reading the stdin-backed program-input stream."
+  (and (consent--capability-grant-datum-p grant)
+       (equal (consent--capability-grant-symbol-name
+               (consent--capability-grant-field-value grant "domain"))
+              "port")
+       (consent--capability-grant-active-p grant)
+       (seq-some
+        (lambda (operation)
+          (equal (consent--capability-grant-symbol-name operation) "read"))
+        (consent--capability-grant-field-values grant "operations"))
+       (equal (consent--capability-grant-symbol-name
+               (consent--capability-scope-value grant "backing"))
+              "stdin")))
+
+(defun consent--find-program-input-grant (context)
+  "Return CONTEXT's active stdin-backed program-input grant, or nil."
+  (seq-find #'consent--program-input-grant-p
+            (consent--capability-context-grants context)))
+
+(defun consent--make-program-input-port (grant content)
+  "Return a buffered, capability-gated textual input port over CONTENT for GRANT.
+The port is backed by the `stdio' domain so every read revalidates GRANT and
+audits the capability operation, but its characters come from the
+already-drained CONTENT string rather than a live host port."
+  (let* ((grant-id (consent--capability-grant-id grant))
+         (limits (consent--port-capability-limits grant))
+         (handle-id (consent--port-capability-handle-id))
+         (port (consent--make-port
+                :medium 'string :inputp t :outputp nil
+                :textualp t :binaryp nil :openp t
+                :source content :position 0 :contents nil
+                :backing-domain 'stdio :operations '(read close)
+                :grant grant-id :limits limits :handle handle-id
+                :status 'open :path 'program-input :counters nil)))
+    (consent-audit-record
+     'capability-handle
+     `((handle . ,(consent--port-capability-datum
+                   handle-id 'textual-input 'stdio '(read close)
+                   grant-id limits 'open 'program-input))
+       (domain . port)
+       (kind . textual-input)
+       (backing . stdio)
+       (operations read close)
+       (grant . ,grant-id)
+       (status . open)))
+    port))
+
+(defun consent--connect-program-input! (context options)
+  "Connect CONTEXT's current input port to the granted program-input stream.
+When OPTIONS carry `:program-input' content and CONTEXT holds an active
+`port'/`read' grant backed by `stdin', install a buffered, capability-gated
+input port as the current input port; otherwise record the denial and leave the
+input port disconnected so reads fail closed.  A no-op when no `:program-input'
+content was offered, preserving the default fail-closed posture."
+  (let ((content (consent--eval-option options :program-input nil)))
+    (when (stringp content)
+      (let ((grant (consent--find-program-input-grant context)))
+        (consent-audit-record
+         'capability-request
+         '((domain . port) (operation . read) (backing . stdin)
+           (stream . program-input)))
+        (if grant
+            (progn
+              (consent-audit-record
+               'capability-decision
+               `((status . approved) (domain . port) (operation . read)
+                 (backing . stdin)
+                 (grant . ,(consent--capability-grant-id grant))))
+              (setf (consent--eval-context-current-input-port context)
+                    (consent--make-program-input-port grant content)))
+          (consent-audit-record
+           'capability-decision
+           '((status . denied) (domain . port) (operation . read)
+             (backing . stdin)
+             (reason . "program input requires a port read grant backed by stdin"))))))))
+
 (defun consent--current-output-port-or-deny (context description)
   "Return CONTEXT's current output port or deny host default access."
   (or (and context (consent--eval-context-current-output-port context))
