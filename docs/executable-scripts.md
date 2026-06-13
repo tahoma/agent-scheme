@@ -158,7 +158,8 @@ identically — the host-compiled binary is **not** a host R7RS interpreter:
 Reading **stdin** is gated the same way. By default a script has no current
 input port, so `(read-line)`, `(read-char)`, and `(read)` on
 `(current-input-port)` fail closed. A script reads its standard input only when
-the run supplies a program-input reader (or buffered input) together with an
+the run supplies a program-input reader (or, for genuinely finite in-memory
+input, one built with `consent-program-input-from-string`) together with an
 active `port`/`read` grant backed by `stdin` — the program-input stream model
 defined in the
 [cross-host REPL interaction contract](repl-interaction-contract.md#program-input-stream-model).

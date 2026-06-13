@@ -3804,13 +3804,16 @@
                      (expires never)))
 (check-external/options 'program-input-granted-read-line
                         "(read-line)"
-                        (list (cons 'program-input "alpha\nbeta\n")
+                        (list (cons 'program-input-reader
+                                    (consent-program-input-from-string
+                                     "alpha\nbeta\n"))
                               (list 'capability-grants program-input-grant))
                         "\"alpha\"")
 (check-external/options 'program-input-granted-sequence
                         "(list (read-line) (read-line) (read-char)
                                (eof-object? (read-line)))"
-                        (list (cons 'program-input "a\nb\nc")
+                        (list (cons 'program-input-reader
+                                    (consent-program-input-from-string "a\nb\nc"))
                               (list 'capability-grants program-input-grant))
                         "(\"a\" \"b\" #\\c #t)")
 (check 'program-input-ungranted-denies
@@ -3819,7 +3822,8 @@
           (consent-eval-source
            "(read-line)"
            #f
-           (list (cons 'program-input "alpha\n")))))
+           (list (cons 'program-input-reader
+                       (consent-program-input-from-string "alpha\n"))))))
        #t)
 (check 'program-input-no-content-denies
        (raises?
