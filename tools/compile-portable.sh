@@ -250,9 +250,8 @@ EOF
 # admit literal newlines), so the embedded text round-trips byte-for-byte back
 # through the reader. LANG_HEADER is `#lang r7rs' for Racket, empty for Gambit.
 write_embedded_source_module() {
-  out_file=$1
-  lang_header=$2
-  source_list=$3
+  lang_header=$1
+  source_list=$2
 
   {
     if [ -n "$lang_header" ]; then
@@ -272,7 +271,7 @@ write_embedded_source_module() {
       printf '")\n'
     done
     printf '%s\n' '      #t)))'
-  } > "$out_file"
+  }
 }
 
 # Emit the shared Racket main body: imports plus every helper and the dispatch,
@@ -536,13 +535,11 @@ EOF
 }
 
 write_racket_main() {
-  main_file=$1
-  registrations_file=$2
+  registrations_file=$1
 
-  {
-    write_racket_main_common
-    cat "$registrations_file"
-    cat <<'EOF'
+  write_racket_main_common
+  cat "$registrations_file"
+  cat <<'EOF'
 
 ;; Register the embedded bootstrap source (prelude, syntax prelude, and runtime
 ;; source-libraries) so the interpreter boots from this standalone binary even
@@ -559,7 +556,6 @@ write_racket_main() {
   (consent-main
    (if (null? arguments) '() (cdr arguments))))
 EOF
-  } > "$main_file"
 }
 
 # Emit the shared Gambit main body (imports + helpers + dispatch, no startup).
@@ -848,6 +844,23 @@ EOF
   } >> "$main_file"
 }
 
+# Replace $1 with stdin only when the bytes differ, leaving an unchanged target's
+# mtime intact. The Racket compilation manager keys cached bytecode on source
+# timestamps, so unconditionally rewriting every generated file would invalidate
+# every `.zo' each run; this keeps untouched generated sources stable so `raco
+# make' reuses their bytecode across runs.
+write_if_changed() {
+  wic_target=$1
+  wic_tmp="$wic_target.tmp.$$"
+
+  cat > "$wic_tmp"
+  if [ -f "$wic_target" ] && cmp -s "$wic_tmp" "$wic_target"; then
+    rm -f "$wic_tmp"
+  else
+    mv "$wic_tmp" "$wic_target"
+  fi
+}
+
 generate_racket_collections() {
   collections_dir=$1
 
@@ -859,7 +872,7 @@ generate_racket_collections() {
     {
       printf '%s\n' '#lang r7rs'
       cat "$source"
-    } > "$target"
+    } | write_if_changed "$target"
   done
 }
 
@@ -994,6 +1007,258 @@ EOF
 EOF
 }
 
+# Resolve the parallel-compile width. CONSENT_COMPILE_JOBS overrides; otherwise
+# the online CPU count, falling back to 4 when it cannot be probed and clamping a
+# probed 0 up to 1.
+consent_compile_jobs() {
+  if [ -n "${CONSENT_COMPILE_JOBS:-}" ]; then
+    printf '%s\n' "$CONSENT_COMPILE_JOBS"
+    return
+  fi
+  jobs_n=
+  if command -v nproc >/dev/null 2>&1; then
+    jobs_n=$(nproc 2>/dev/null)
+  elif command -v getconf >/dev/null 2>&1; then
+    jobs_n=$(getconf _NPROCESSORS_ONLN 2>/dev/null)
+  fi
+  case "$jobs_n" in
+    '' | *[!0-9]*) printf '%s\n' 4 ;;
+    0) printf '%s\n' 1 ;;
+    *) printf '%s\n' "$jobs_n" ;;
+  esac
+}
+
+# Content-hash command resolved once into consent_hash_command. It reads stdin and
+# prints a digest as its first whitespace-delimited field. Left empty when no
+# hasher is available, which disables the incremental skip (every module is then
+# recompiled) rather than risking a stale object.
+consent_hash_command=
+detect_hash_command() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    consent_hash_command="sha256sum"
+  elif command -v shasum >/dev/null 2>&1; then
+    consent_hash_command="shasum -a 256"
+  elif command -v cksum >/dev/null 2>&1; then
+    consent_hash_command="cksum"
+  fi
+}
+
+# Print the digest of stdin using the resolved content-hash command.
+hash_stdin() {
+  $consent_hash_command | awk '{print $1; exit}'
+}
+
+# Run worker function $1 once per newline-delimited task read on stdin, at most $2
+# concurrently, using a FIFO token semaphore (POSIX mkfifo/exec/read; no `wait -n`
+# dependency, so it works under dash on the CI runners). The worker receives its
+# task as "$1" and records a failure by creating a file under a stamp directory it
+# shares with the caller, which treats a non-empty stamp directory as a build
+# failure. Each child releases its token from an EXIT trap, so a worker fault can
+# never deadlock the pool.
+run_compile_pool() {
+  pool_worker=$1
+  pool_max=$2
+
+  pool_dir=$(mktemp -d "${TMPDIR:-/tmp}/consent-pool.XXXXXX") \
+    || die "could not create the compile worker pool directory"
+  mkfifo "$pool_dir/tokens" \
+    || { rm -rf "$pool_dir"; die "could not create the compile worker pool semaphore"; }
+  # Open the token FIFO read/write on fd 8 so seeding does not block on a reader.
+  exec 8<>"$pool_dir/tokens"
+  pool_i=0
+  while [ "$pool_i" -lt "$pool_max" ]; do
+    printf '\n' >&8
+    pool_i=$((pool_i + 1))
+  done
+
+  while IFS= read -r pool_task; do
+    [ -n "$pool_task" ] || continue
+    IFS= read -r _ <&8 || break
+    (
+      trap 'printf "\n" >&8 2>/dev/null' EXIT
+      "$pool_worker" "$pool_task" </dev/null
+    ) &
+  done
+
+  wait
+  exec 8>&-
+  rm -rf "$pool_dir"
+}
+
+# Emit the Scheme program that prints, for every compile unit, its transitive
+# project-import closure as a `label<TAB>path ...` line. The closure is the set of
+# project source files the unit's compiled object can depend on: its own source,
+# every project library it imports (transitively, unwrapping only/except/prefix/
+# rename and descending into every cond-expand branch and include), and the
+# single-sourced standard libraries. (consent version) is a structurally-guarded
+# leaf: it is emitted as a fixed sentinel for every dependent, so the
+# every-branch version bump changes only the version unit's own hash (forcing the
+# version module to recompile and the executable to relink) without invalidating
+# any dependent. The runtime reads the version datum at run time through the
+# separately compiled version module, so no dependent bakes the value in.
+write_gambit_closure_program() {
+  program_file=$1
+  all_sld_file=$2
+  units_file=$3
+  version_source=$4
+
+  {
+    printf '%s\n' '(import (scheme base) (scheme file) (scheme read) (scheme write))'
+    printf '(define all-sld-file "%s")\n' "$all_sld_file"
+    printf '(define units-file "%s")\n' "$units_file"
+    printf '(define version-path "%s")\n' "$version_source"
+    cat <<'SCHEME'
+(define sentinel "@@consent-version-structural@@")
+
+(define (read-lines path)
+  (call-with-input-file path
+    (lambda (p)
+      (let loop ((acc '()))
+        (let ((line (read-line p)))
+          (if (eof-object? line)
+              (reverse acc)
+              (loop (if (= 0 (string-length line)) acc (cons line acc)))))))))
+
+(define (split-tab line)
+  (let loop ((i 0))
+    (cond
+     ((>= i (string-length line)) (cons line ""))
+     ((char=? (string-ref line i) #\tab)
+      (cons (substring line 0 i)
+            (substring line (+ i 1) (string-length line))))
+     (else (loop (+ i 1))))))
+
+(define (file->string path)
+  (call-with-input-file path
+    (lambda (p)
+      (let loop ((chunks '()))
+        (let ((chunk (read-string 65536 p)))
+          (if (eof-object? chunk)
+              (apply string-append (reverse chunks))
+              (loop (cons chunk chunks))))))))
+
+(define (strip-shebang s)
+  (if (and (>= (string-length s) 2)
+           (char=? (string-ref s 0) #\#)
+           (char=? (string-ref s 1) #\!))
+      (let loop ((i 0))
+        (cond
+         ((>= i (string-length s)) "")
+         ((char=? (string-ref s i) #\newline)
+          (substring s (+ i 1) (string-length s)))
+         (else (loop (+ i 1)))))
+      s))
+
+(define (forms-of path)
+  (let ((port (open-input-string (strip-shebang (file->string path)))))
+    (let loop ((acc '()))
+      (let ((form (read port)))
+        (if (eof-object? form) (reverse acc) (loop (cons form acc)))))))
+
+(define all-sld (read-lines all-sld-file))
+(define units (map split-tab (read-lines units-file)))
+
+(define name->path
+  (let loop ((files all-sld) (acc '()))
+    (if (null? files)
+        acc
+        (let* ((path (car files))
+               (forms (forms-of path))
+               (form (if (pair? forms) (car forms) #f))
+               (name (and (pair? form)
+                          (eq? (car form) 'define-library)
+                          (cadr form))))
+          (loop (cdr files) (if name (cons (cons name path) acc) acc))))))
+
+(define (resolve-library name)
+  (let ((cell (assoc name name->path)))
+    (and cell (cdr cell))))
+
+(define (dir-of path)
+  (let loop ((i (- (string-length path) 1)))
+    (cond
+     ((< i 0) "")
+     ((char=? (string-ref path i) #\/) (substring path 0 (+ i 1)))
+     (else (loop (- i 1))))))
+
+(define (spec->library spec)
+  (cond
+   ((not (pair? spec)) #f)
+   ((memq (car spec) '(only except prefix rename)) (spec->library (cadr spec)))
+   (else spec)))
+
+(define (collect-deps clause base-dir add!)
+  (when (pair? clause)
+    (let ((head (car clause)))
+      (cond
+       ((eq? head 'import)
+        (for-each
+         (lambda (spec)
+           (let* ((lib (spec->library spec))
+                  (path (and lib (resolve-library lib))))
+             (when path (add! path))))
+         (cdr clause)))
+       ((or (eq? head 'include) (eq? head 'include-ci))
+        (for-each
+         (lambda (f) (when (string? f) (add! (string-append base-dir f))))
+         (cdr clause)))
+       ((eq? head 'cond-expand)
+        (for-each
+         (lambda (branch)
+           (when (pair? branch)
+             (for-each (lambda (c) (collect-deps c base-dir add!)) (cdr branch))))
+         (cdr clause)))
+       (else #f)))))
+
+(define (direct-deps path)
+  (let ((deps '())
+        (base-dir (dir-of path)))
+    (for-each
+     (lambda (form)
+       (cond
+        ((and (pair? form) (eq? (car form) 'import))
+         (collect-deps form base-dir (lambda (d) (set! deps (cons d deps)))))
+        ((and (pair? form) (eq? (car form) 'define-library))
+         (for-each
+          (lambda (clause)
+            (collect-deps clause base-dir (lambda (d) (set! deps (cons d deps)))))
+          (cddr form)))
+        (else #f)))
+     (forms-of path))
+    deps))
+
+(define (closure unit-path)
+  (let loop ((queue (list unit-path)) (seen '()))
+    (cond
+     ((null? queue) seen)
+     ((member (car queue) seen) (loop (cdr queue) seen))
+     (else
+      (let ((cur (car queue)))
+        (loop (append (direct-deps cur) (cdr queue))
+              (cons cur seen)))))))
+
+(for-each
+ (lambda (unit)
+   (let* ((label (car unit))
+          (unit-path (cdr unit))
+          (paths (closure unit-path)))
+     (display label)
+     (write-char #\tab)
+     (let loop ((ps paths) (first #t))
+       (unless (null? ps)
+         (unless first (write-char #\space))
+         (display (let ((p (car ps)))
+                    (if (and (string=? p version-path)
+                             (not (string=? unit-path version-path)))
+                        sentinel
+                        p)))
+         (loop (cdr ps) #f)))
+     (newline)))
+ units)
+SCHEME
+  } > "$program_file"
+}
+
 compile_racket() {
   racket=$(find_command CONSENT_RACKET racket) \
     || die "Racket compile prerequisites are missing; set CONSENT_RACKET to a runnable racket executable."
@@ -1012,17 +1277,41 @@ compile_racket() {
 
   [ -n "$version" ] || die "could not read Consent Scheme version from $version_file"
 
+  racket_jobs=$(consent_compile_jobs)
   mkdir -p "$src_dir" "$collections_dir" "$bin_dir" "$logs_dir"
+
+  # Generate the collection tree write-if-changed so unchanged generated sources
+  # keep their mtime and Racket's compilation manager reuses their bytecode.
   generate_racket_collections "$collections_dir"
+
+  # Build the (consent library) closure to bytecode before enumeration so the
+  # enumeration run reuses the bytecode instead of expanding the library stack in
+  # memory; without this the cold build would expand the stack once here and again
+  # under raco exe.
+  PLTCOLLECTS="$collections_dir:${PLTCOLLECTS:-}" \
+    "$raco" make -j "$racket_jobs" "$collections_dir/consent/library.rkt" \
+    >"$logs_dir/raco-make-library.log" 2>&1 \
+    || die "raco make of the runtime library closure failed; see $logs_dir/raco-make-library.log"
+
   runtime_source_list=$(enumerate_runtime_source_files)
   mkdir -p "$collections_dir/consent"
-  write_embedded_source_module "$collections_dir/consent/embedded-source.rkt" '#lang r7rs' "$runtime_source_list"
+  write_embedded_source_module '#lang r7rs' "$runtime_source_list" \
+    | write_if_changed "$collections_dir/consent/embedded-source.rkt"
   write_runtime_source_manifest "$host_root" "$runtime_source_list"
   registrations_file="$src_dir/native-library-registrations.scm"
   write_native_library_registrations "$registrations_file"
-  write_racket_main "$main_file" "$registrations_file"
+  write_racket_main "$registrations_file" | write_if_changed "$main_file"
   assert_product_main_gated "$main_file"
   write_manifest "$host_root" racket "$version"
+
+  # Build the full product closure to bytecode once; raco exe then links from the
+  # bytecode rather than expanding the library stack a second time. On a warm
+  # cache only the changed modules (for example the every-branch version bump)
+  # recompile, since write-if-changed preserved the other sources' timestamps.
+  PLTCOLLECTS="$collections_dir:${PLTCOLLECTS:-}" \
+    "$raco" make -j "$racket_jobs" "$main_file" \
+    >"$logs_dir/raco-make-main.log" 2>&1 \
+    || die "raco make of the product main failed; see $logs_dir/raco-make-main.log"
 
   PLTCOLLECTS="$collections_dir:${PLTCOLLECTS:-}" \
     "$raco" exe --cs ++lang r7rs -o "$runner" "$main_file" \
@@ -1156,133 +1445,186 @@ compile_gambit() {
   write_manifest "$host_root" gambit "$version"
   runtime_source_list=$(enumerate_runtime_source_files)
   write_runtime_source_manifest "$host_root" "$runtime_source_list"
-  write_embedded_source_module "$src_dir/consent/embedded-source.sld" '' "$runtime_source_list"
-  : >"$logs_dir/gsc-modules.log"
+  write_embedded_source_module '' "$runtime_source_list" > "$src_dir/consent/embedded-source.sld"
+  detect_hash_command
+  compile_jobs=$(consent_compile_jobs)
+  tab=$(printf '\t')
+  version_sentinel='@@consent-version-structural@@'
 
-  compile_started=$(date +%s)
-  gambit_c_files=
+  # Ordered Consent Scheme module list. This is also the executable link order;
+  # the per-module compiled artifacts are $src_dir/<ref>.c and $src_dir/<ref>.o.
+  # (consent embedded-source) is generated into $src_dir; every other module's
+  # source lives under $scheme_dir.
+  gambit_module_order='consent/version consent/reader consent/runtime consent/base consent/library consent/result consent/macro consent/approval consent/context consent/helper consent/job consent/memory consent/plan consent/redaction consent/session agent/task agent/transcript consent/interpreter consent/eval cli/process-host cli/native-cli cli/repl-chrome cli/repl-shell cli/script consent/embedded-source'
 
-  compile_gambit_module() {
-    module_ref=$1
-    source_file=$2
-    target_file=$3
-
-    mkdir -p "$(dirname -- "$target_file")"
-    "$gsc" -:r7rs,search="$scheme_dir" \
-      -c -module-ref "$module_ref" -o "$target_file" "$source_file" \
-      >>"$logs_dir/gsc-modules.log" 2>&1 \
-      || die "gsc failed while compiling module $module_ref; see $logs_dir/gsc-modules.log"
-    gambit_c_files="$gambit_c_files $target_file"
+  gambit_module_source() {
+    case "$1" in
+      consent/embedded-source) printf '%s\n' "$src_dir/consent/embedded-source.sld" ;;
+      *) printf '%s\n' "$scheme_dir/$1.sld" ;;
+    esac
   }
 
-  compile_gambit_module \
-    consent/version \
-    "$scheme_dir/consent/version.sld" \
-    "$src_dir/consent/version.c"
-  compile_gambit_module \
-    consent/reader \
-    "$scheme_dir/consent/reader.sld" \
-    "$src_dir/consent/reader.c"
-  compile_gambit_module \
-    consent/runtime \
-    "$scheme_dir/consent/runtime.sld" \
-    "$src_dir/consent/runtime.c"
-  compile_gambit_module \
-    consent/base \
-    "$scheme_dir/consent/base.sld" \
-    "$src_dir/consent/base.c"
-  compile_gambit_module \
-    consent/library \
-    "$scheme_dir/consent/library.sld" \
-    "$src_dir/consent/library.c"
-  compile_gambit_module \
-    consent/result \
-    "$scheme_dir/consent/result.sld" \
-    "$src_dir/consent/result.c"
-  compile_gambit_module \
-    consent/macro \
-    "$scheme_dir/consent/macro.sld" \
-    "$src_dir/consent/macro.c"
-  compile_gambit_module \
-    consent/approval \
-    "$scheme_dir/consent/approval.sld" \
-    "$src_dir/consent/approval.c"
-  compile_gambit_module \
-    consent/context \
-    "$scheme_dir/consent/context.sld" \
-    "$src_dir/consent/context.c"
-  compile_gambit_module \
-    consent/helper \
-    "$scheme_dir/consent/helper.sld" \
-    "$src_dir/consent/helper.c"
-  compile_gambit_module \
-    consent/job \
-    "$scheme_dir/consent/job.sld" \
-    "$src_dir/consent/job.c"
-  compile_gambit_module \
-    consent/memory \
-    "$scheme_dir/consent/memory.sld" \
-    "$src_dir/consent/memory.c"
-  compile_gambit_module \
-    consent/plan \
-    "$scheme_dir/consent/plan.sld" \
-    "$src_dir/consent/plan.c"
-  compile_gambit_module \
-    consent/redaction \
-    "$scheme_dir/consent/redaction.sld" \
-    "$src_dir/consent/redaction.c"
-  compile_gambit_module \
-    consent/session \
-    "$scheme_dir/consent/session.sld" \
-    "$src_dir/consent/session.c"
-  compile_gambit_module \
-    agent/task \
-    "$scheme_dir/agent/task.sld" \
-    "$src_dir/agent/task.c"
-  compile_gambit_module \
-    agent/transcript \
-    "$scheme_dir/agent/transcript.sld" \
-    "$src_dir/agent/transcript.c"
-  compile_gambit_module \
-    consent/interpreter \
-    "$scheme_dir/consent/interpreter.sld" \
-    "$src_dir/consent/interpreter.c"
-  compile_gambit_module \
-    consent/eval \
-    "$scheme_dir/consent/eval.sld" \
-    "$src_dir/consent/eval.c"
-  compile_gambit_module \
-    cli/process-host \
-    "$scheme_dir/cli/process-host.sld" \
-    "$src_dir/cli/process-host.c"
-  compile_gambit_module \
-    cli/native-cli \
-    "$scheme_dir/cli/native-cli.sld" \
-    "$src_dir/cli/native-cli.c"
-  compile_gambit_module \
-    cli/repl-chrome \
-    "$scheme_dir/cli/repl-chrome.sld" \
-    "$src_dir/cli/repl-chrome.c"
-  compile_gambit_module \
-    cli/repl-shell \
-    "$scheme_dir/cli/repl-shell.sld" \
-    "$src_dir/cli/repl-shell.c"
-  compile_gambit_module \
-    cli/script \
-    "$scheme_dir/cli/script.sld" \
-    "$src_dir/cli/script.c"
-  compile_gambit_module \
-    consent/embedded-source \
-    "$src_dir/consent/embedded-source.sld" \
-    "$src_dir/consent/embedded-source.c"
+  # Compute the per-unit content hashes that drive the incremental skip. The
+  # closure analysis runs the interpreter's own reader, so a future reader-level
+  # construct it cannot parse degrades to a full recompile (the program exits
+  # non-zero) rather than silently under-approximating a dependency.
+  incremental_dir="$host_root/incremental"
+  mkdir -p "$incremental_dir"
+  all_sld_file="$incremental_dir/all-sld.txt"
+  units_file="$incremental_dir/units.txt"
+  closures_file="$incremental_dir/closures.txt"
+  modulehash_file="$incremental_dir/module-hashes.txt"
+  closure_program="$incremental_dir/closure.scm"
+  stamp_dir="$incremental_dir/stamps"
+  rm -rf "$stamp_dir"
+  mkdir -p "$stamp_dir"
 
-  "$gsc" -:r7rs,search="$scheme_dir",search="$src_dir" \
-    -c -o "$main_c" "$main_file" \
-    >>"$logs_dir/gsc-modules.log" 2>&1 \
-    || die "gsc failed while compiling the Gambit main program; see $logs_dir/gsc-modules.log"
+  use_incremental=false
+  if [ -n "$consent_hash_command" ]; then
+    {
+      find "$scheme_dir" -type f -name '*.sld'
+      printf '%s\n' "$src_dir/consent/embedded-source.sld"
+    } | sort > "$all_sld_file"
+    : > "$units_file"
+    for ref in $gambit_module_order; do
+      printf '%s\t%s\n' "$ref" "$(gambit_module_source "$ref")" >> "$units_file"
+    done
+    printf '%s\t%s\n' main "$main_file" >> "$units_file"
+
+    write_gambit_closure_program \
+      "$closure_program" "$all_sld_file" "$units_file" "$scheme_dir/consent/version.sld"
+    if "$gsi" -:r7rs "$closure_program" > "$closures_file" 2>"$logs_dir/gambit-closure.log"; then
+      script_hash=$(hash_stdin < "$script_dir/$(basename -- "$0")" 2>/dev/null || true)
+      gsc_identity=$("$gsc" -v 2>/dev/null | head -n 1)
+      : > "$modulehash_file"
+      # Per unit, fold every closure source file's content hash (the version leaf
+      # as a fixed token), the compiler identity, and this script's text into one
+      # digest. Sorting makes the digest independent of closure traversal order.
+      while IFS="$tab" read -r unit_label unit_paths; do
+        unit_digest=$(
+          {
+            printf 'gsc\t%s\n' "$gsc_identity"
+            printf 'script\t%s\n' "$script_hash"
+            for unit_path in $unit_paths; do
+              if [ "$unit_path" = "$version_sentinel" ]; then
+                printf 'version\tSTRUCTURAL\n'
+              else
+                printf '%s\t%s\n' "$unit_path" "$(hash_stdin < "$unit_path")"
+              fi
+            done
+          } | sort | hash_stdin
+        )
+        printf '%s\t%s\n' "$unit_label" "$unit_digest" >> "$modulehash_file"
+      done < "$closures_file"
+      use_incremental=true
+    else
+      printf '%s\n' "consent compile: Gambit closure analysis failed; recompiling every module (see $logs_dir/gambit-closure.log)" >&2
+    fi
+  fi
+
+  # Compile one unit: skip when its stored hash still matches, else run the
+  # Scheme->C (gsc -c) and C->object (gsc -obj) passes and persist the new hash.
+  # Failures are recorded as stamp files; the parent aggregates them after the
+  # pool drains so one module's error does not abort sibling workers mid-flight.
+  compile_gambit_unit() {
+    cgu_ref=${1%%|*}
+    cgu_rest=${1#*|}
+    cgu_src=${cgu_rest%%|*}
+    cgu_rest=${cgu_rest#*|}
+    cgu_search=${cgu_rest%%|*}
+    cgu_rest=${cgu_rest#*|}
+    cgu_cout=${cgu_rest%%|*}
+    cgu_oout=${cgu_rest#*|}
+    cgu_safe=$(printf '%s' "$cgu_ref" | tr '/' '-')
+    cgu_log="$logs_dir/gsc-$cgu_safe.log"
+    cgu_hashfile="$cgu_oout.hash"
+
+    cgu_expected=
+    if $use_incremental; then
+      cgu_expected=$(awk -F"$tab" -v l="$cgu_ref" '$1 == l { print $2; exit }' "$modulehash_file")
+    fi
+
+    if [ -n "$cgu_expected" ] && [ -f "$cgu_cout" ] && [ -f "$cgu_oout" ] \
+      && [ -f "$cgu_hashfile" ] && [ "$(cat "$cgu_hashfile")" = "$cgu_expected" ]; then
+      return 0
+    fi
+
+    mkdir -p "$(dirname -- "$cgu_cout")"
+    : > "$cgu_log"
+    # Clear the stored hash before recompiling so an interrupted or failed pass
+    # can never leave behind an object that a later run would treat as current;
+    # on failure the partial .c/.o are removed too, so the skip check only ever
+    # finds a complete, hash-matched pair.
+    rm -f "$cgu_hashfile"
+    cgu_moduleflag=
+    if [ "$cgu_ref" != "main" ]; then
+      cgu_moduleflag="-module-ref $cgu_ref"
+    fi
+    # shellcheck disable=SC2086
+    if ! "$gsc" -:r7rs,"$cgu_search" -c $cgu_moduleflag -o "$cgu_cout" "$cgu_src" >>"$cgu_log" 2>&1; then
+      rm -f "$cgu_cout" "$cgu_oout"
+      printf '%s\n' "$cgu_ref" > "$stamp_dir/$cgu_safe.fail"
+      return 0
+    fi
+    if ! "$gsc" -obj -o "$cgu_oout" "$cgu_cout" >>"$cgu_log" 2>&1; then
+      rm -f "$cgu_cout" "$cgu_oout"
+      printf '%s\n' "$cgu_ref" > "$stamp_dir/$cgu_safe.fail"
+      return 0
+    fi
+    if [ -n "$cgu_expected" ]; then
+      printf '%s\n' "$cgu_expected" > "$cgu_hashfile"
+    fi
+    return 0
+  }
+
+  search_default="search=$scheme_dir"
+  search_main="search=$scheme_dir,search=$src_dir"
+
+  compile_started=$(date +%s)
+  {
+    for ref in $gambit_module_order; do
+      printf '%s|%s|%s|%s|%s\n' \
+        "$ref" "$(gambit_module_source "$ref")" "$search_default" \
+        "$src_dir/$ref.c" "$src_dir/$ref.o"
+    done
+    printf '%s|%s|%s|%s|%s\n' \
+      main "$main_file" "$search_main" "$main_c" "$src_dir/consent-main.o"
+  } | run_compile_pool compile_gambit_unit "$compile_jobs"
+
+  if [ -n "$(ls -A "$stamp_dir" 2>/dev/null)" ]; then
+    for stamp in "$stamp_dir"/*.fail; do
+      [ -f "$stamp" ] || continue
+      failed_ref=$(cat "$stamp")
+      failed_safe=$(printf '%s' "$failed_ref" | tr '/' '-')
+      printf 'consent compile: gsc failed while compiling %s:\n' "$failed_ref" >&2
+      [ -f "$logs_dir/gsc-$failed_safe.log" ] && cat "$logs_dir/gsc-$failed_safe.log" >&2
+    done
+    die "gsc failed while compiling one or more Gambit modules; see $logs_dir/gsc-*.log"
+  fi
+
+  # Link the executable once from the shared objects. The link file is generated
+  # and compiled every build (cheap; it is non-deterministic so it is never
+  # cached), then the final link reuses every pre-built object instead of
+  # recompiling the generated C, which is the bulk of the build.
+  gambit_o_files=
+  gambit_c_files=
+  for ref in $gambit_module_order; do
+    gambit_o_files="$gambit_o_files $src_dir/$ref.o"
+    gambit_c_files="$gambit_c_files $src_dir/$ref.c"
+  done
+  link_c="$src_dir/consent-main_.c"
+  link_o="$src_dir/consent-main_.o"
 
   # shellcheck disable=SC2086
-  "$gsc" -:r7rs,search="$scheme_dir" -exe -o "$runner" -nopreload $gambit_c_files "$main_c" \
+  "$gsc" -:r7rs,search="$scheme_dir" -link -o "$link_c" -nopreload $gambit_c_files "$main_c" \
+    >"$logs_dir/gsc-link.log" 2>&1 \
+    || die "gsc -link failed; see $logs_dir/gsc-link.log"
+  "$gsc" -obj -o "$link_o" "$link_c" \
+    >>"$logs_dir/gsc-link.log" 2>&1 \
+    || die "gsc -obj failed for the link file; see $logs_dir/gsc-link.log"
+  # shellcheck disable=SC2086
+  "$gsc" -:r7rs,search="$scheme_dir" -exe -o "$runner" -nopreload \
+    $gambit_o_files "$src_dir/consent-main.o" "$link_o" \
     >"$logs_dir/gsc-exe.log" 2>&1 \
     || die "gsc -exe failed; see $logs_dir/gsc-exe.log"
   compile_finished=$(date +%s)
