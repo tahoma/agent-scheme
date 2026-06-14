@@ -36,7 +36,8 @@ the *set of shards* and the project name are not.
 | B | #356 | multi-host (Gambit/Racket/Guile/Gauche) replaces Chibi | the host fan-out lands |
 | C | #359–#361 | + source-metadata × docstring combo columns | |
 | D | #362–#405 | + Gambit-native compiled shard | still `agent-scheme` |
-| E | #406–present | project renamed to **consent** | current format; shard names gain `Consent Scheme` |
+| E | #406–#518 | project renamed to **consent** | current format; shard names gain `Consent Scheme` |
+| F | #520–present | compiled shards parallel/incremental/cached | build-bound shards' wall time becomes cache-dependent; see the Era F section |
 
 The Era A→B boundary (#355→#356) is a hard discontinuity *for the portable
 side*: the slow single Chibi host (~70s `eval` + a 152s `rest` outlier) was
@@ -67,10 +68,14 @@ the ERT *is* the signal, with no `Ran`-growth guard to apply).
 ## Observations
 
 - **Wall time is dominated by recompiles, not tests.** The two build-bound
-  portable shards run ~2–7s of tests but cost **185s** (Gambit-native) and
-  **48s** (compiled) of wall time — the recompile, not the suite. They are the
-  single largest per-push wall cost and exactly what #481 trimmed off the
-  per-push lane. Track these by *wall* time; their ERT is nearly noise.
+  portable shards run ~2–7s of tests but their wall time is almost entirely the
+  recompile, not the suite. They are the single largest per-push wall cost and
+  exactly what #481 trimmed off the per-push lane. Track these by *wall* time;
+  their ERT is nearly noise. The **185s** (Gambit-native) and **48s** (compiled)
+  recorded above are the Era E sweep values and are now stale: the level rose to
+  ~361s / ~151s before #520, and #520 then made the build parallel, incremental,
+  and cached so the wall time is cache-dependent. See the **Era F** section
+  below.
 
 - **The Emacs shards are the ERT cost center.** Four shards at ~47–57s each
   dominate ERT. They are also where a real test-cost regression would most
@@ -114,3 +119,72 @@ the ERT *is* the signal, with no `Ran`-growth guard to apply).
 - **Portable host ERT is stable and cheap.** Gambit/Gauche sit ~10–15s,
   Racket/Guile ~20–25s, with no drift beyond run-to-run noise. A real per-host
   ERT regression would stand out clearly against these tight bands.
+
+## Era F (PR ≥ #520): compiled shards parallel/incremental/cached
+
+The two build-bound shards changed character at #520. Read this before
+comparing their **wall** time across the boundary; their ERT is unaffected.
+
+### The level shift this corrects
+
+The Era E table above records the Gambit-compiled shard at **185s** wall and the
+Racket-compiled shard at **48s**. Both were stale by #520: the real pre-fix
+level had risen to **~361s** (Gambit-native) and **~151s** (Racket-compiled).
+The rise had two compounding causes, neither a test-cost regression:
+
+- **The per-push host-runner second link.** Each compiled shard linked a second,
+  non-shipped host-execution executable, and each `gsc -exe` / `raco exe`
+  recompiled the full generated-C / library stack from scratch — roughly
+  doubling the build. #518 removed that second executable (the product now serves
+  as its own host runner under `--host-run`).
+- **#516/#518-era growth** in the embedded bootstrap source and the set of
+  natively compiled internal modules, which enlarged the one remaining build.
+
+### What #520 changed
+
+#520 leaves *what* is compiled and tested untouched and changes only *how fast*
+the same work happens:
+
+- **Gambit** (`tools/compile-portable.sh`): the per-module Scheme→C and C→object
+  passes run in a bounded parallel worker pool with per-module logs; the
+  generated C is compiled to objects once and the executable is linked from those
+  shared objects (`gsc -link` + a final `gsc -exe` over the `.o` set) instead of
+  recompiling all generated C at link time; a per-module content-hash incremental
+  skip (source + transitive project-import closure + script text + `gsc` version)
+  rebuilds only what changed, with `(consent version)` treated as a structurally
+  guarded leaf so the every-branch version bump recompiles only the version
+  module and relinks; `actions/cache` keeps the `build/compile/gambit` tree warm
+  with a `restore-keys` fallback.
+- **Racket**: generated collections, the embedded-source module, and the product
+  main are written write-if-changed so unchanged sources keep their timestamps;
+  `raco make -j` builds bytecode once (before enumeration and before `raco exe`)
+  so both reuse it; `actions/cache` keeps `build/compile/racket` (sources and
+  their `compiled/` bytecode) warm.
+- **Workflow**: `pull_request`-only `cancel-in-progress` retires superseded PR
+  runs; pushes to `main`, scheduled runs, and dispatches are never cancelled.
+
+### How to read these shards now
+
+Their wall time is **cache-dependent**, so it is no longer a single level:
+
+- **Warm cache (the common per-push case).** The `restore-keys` fallback restores
+  the previous tree and only the changed modules recompile. For a version-only
+  bump that is the version module plus the relink on Gambit (and the version
+  module plus its bytecode dependents on Racket); the wall is then dominated by
+  cache restore and the final link/`raco exe`, not by a full recompile.
+- **Cold cache (first run on a new branch, or after cache eviction).** Falls back
+  to a full build — parallelized on Gambit, single-`raco exe` on Racket — so it
+  is much higher than a warm run and is expected, not a regression.
+
+When checking these shards for a regression, compare **warm runs against warm
+runs**: a single cold-cache miss reading high is normal. Flag a sustained rise in
+the *warm* wall time (or a fall in the cache hit rate). The base.c C-compile is
+the cold-build long pole on Gambit; a real per-push regression there would show
+as the warm floor creeping up across several merged PRs.
+
+Local indicative figures (a 20-core M-series workstation, not the CI runners, so
+absolute numbers differ — included only to show the *shape*): Gambit clean
+build 159s → 79s; Gambit warm rebuild after a version-only bump ~5s (only the
+version module recompiles); Racket warm rebuild recompiles **0** bytecode files.
+Settle the post-#520 CI levels by reading the warm-cache wall figures from the
+per-PR timing comments once a branch's cache is populated.
