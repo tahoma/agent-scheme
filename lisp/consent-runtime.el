@@ -19,8 +19,12 @@
   :type 'integer
   :group 'consent)
 
-(defcustom consent-eval-maximum-value-nodes 100000
-  "Maximum returned or allocated value nodes allowed during evaluation."
+(defcustom consent-eval-maximum-value-nodes 10000000
+  "Maximum cumulative value nodes a single evaluation run may allocate.
+Value budgets are charged at allocation, so this bounds the total nodes a run
+constructs rather than the size of any single result; it is sized well above the
+comprehensive self-hosted suite's per-run peak while still tripping a runaway
+bulk allocation."
   :type 'integer
   :group 'consent)
 
@@ -308,6 +312,7 @@ base syntax prelude has already been installed."
   steps
   maximum-steps
   maximum-value-nodes
+  (value-nodes 0)
   host-callbacks
   maximum-host-callbacks
   events
@@ -1237,6 +1242,59 @@ SEEN prevents infinite recursion over cyclic host structures."
        "value node budget exceeded: %d > %d"
        count
        (consent--eval-context-maximum-value-nodes context))))
+  value)
+
+(defun consent--note-value-allocation (context count)
+  "Charge COUNT freshly allocated value nodes against CONTEXT's budget.
+Constructors charge what they allocate as they allocate it, so the budget bounds
+cumulative result growth in O(1) per operation rather than re-walking the
+reachable structure of every primitive result.  Enforcement fails closed with
+the unchanged \"value node budget exceeded\" diagnostic so an interpreted `guard'
+cannot catch it."
+  (cl-incf (consent--eval-context-value-nodes context) count)
+  (when (> (consent--eval-context-value-nodes context)
+           (consent--eval-context-maximum-value-nodes context))
+    (consent--budget-error
+     "value node budget exceeded: %d > %d"
+     (consent--eval-context-value-nodes context)
+     (consent--eval-context-maximum-value-nodes context))))
+
+(defun consent--charge-value-allocation (value count context)
+  "Charge COUNT allocated nodes against CONTEXT and return VALUE."
+  (consent--note-value-allocation context count)
+  value)
+
+(defun consent--charge-string-allocation (value context)
+  "Charge a freshly built string VALUE's nodes (1 + length) and return it."
+  (consent--note-value-allocation context (1+ (length value)))
+  value)
+
+(defun consent--charge-bytevector-allocation (value context)
+  "Charge a freshly built bytevector VALUE's nodes (1 + length) and return it."
+  (consent--note-value-allocation
+   context (1+ (length (consent-bytevector-bytes value))))
+  value)
+
+(defun consent--charge-vector-allocation (value context)
+  "Charge a freshly built vector VALUE's nodes (1 + length) and return it."
+  (consent--note-value-allocation context (1+ (length value)))
+  value)
+
+(defun consent--charge-list-allocation (value context)
+  "Charge a freshly consed proper list VALUE's pairs (its length) and return it.
+The shared empty-list tail and the already-charged elements are not recounted."
+  (consent--note-value-allocation context (length value))
+  value)
+
+(defun consent--charge-literal (value context)
+  "Charge a quoted or self-evaluating literal's node count at evaluation.
+Literals are realized from source rather than constructed, so they are budgeted
+by a single bounded walk over the source datum -- off the hot primitive path --
+which keeps the literal result-size fixtures exact while the per-result walk is
+removed from constructor and accessor results."
+  (consent--note-value-allocation
+   context
+   (consent--value-node-count value (make-hash-table :test #'eq)))
   value)
 
 (defun consent--control-reason-string (value)

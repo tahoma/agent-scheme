@@ -290,7 +290,7 @@ Return a cons cell (NAME . INITIALIZER-EXPRESSION)."
          (constructor
           (consent--make-primitive-procedure
            (plist-get spec :constructor-name)
-           (lambda (arguments _context)
+           (lambda (arguments context)
              (let ((values (make-vector (length fields)
                                         consent-unspecified)))
                (cl-loop for field in constructor-fields
@@ -299,7 +299,12 @@ Return a cons cell (NAME . INITIALIZER-EXPRESSION)."
                                  (consent--record-field-index
                                   record-type field)
                                  argument))
-               (consent--make-record record-type values)))
+               ;; Charge the record header plus its field slots; the field
+               ;; values were charged where they were allocated.
+               (consent--charge-value-allocation
+                (consent--make-record record-type values)
+                (1+ (length values))
+                context)))
            (length constructor-fields)
            (length constructor-fields)))
          (predicate
@@ -534,7 +539,8 @@ Return a cons cell (FORMALS . INITIALIZER-EXPRESSION)."
       (when rest
         (consent--define-or-set-record-binding
          environment rest (copy-sequence remaining))
-        (consent--check-value-budget remaining context)))
+        ;; The rest list is freshly copied; charge its pairs as allocation.
+        (consent--note-value-allocation context (length remaining))))
     consent-unspecified))
 
 (defun consent--eval-define-values
@@ -596,7 +602,8 @@ Return a cons cell (FORMALS . INITIALIZER-EXPRESSION)."
       (when rest
         (consent--environment-define
          environment rest (copy-sequence remaining))
-        (consent--check-value-budget remaining context))
+        ;; The rest list is freshly copied; charge its pairs as allocation.
+        (consent--note-value-allocation context (length remaining)))
       environment)))
 
 (defun consent--formals-names (formals)
@@ -644,9 +651,10 @@ unchanged, preserving top-level diagnostics."
          (list (consent--host-condition->condition (cdr outcome)))
          context
          continuation)
-      (consent--continue
-       continuation
-       (consent--check-value-budget (cdr outcome) context)))))
+      ;; Primitive results are no longer walked: allocating primitives charge
+      ;; their own nodes, and an accessor result is a substructure of an
+      ;; already-budgeted argument, so it creates nothing to charge.
+      (consent--continue continuation (cdr outcome)))))
 
 (defun consent--apply-procedure
     (procedure arguments context _tailp &optional continuation)
@@ -728,9 +736,7 @@ any resulting bounce to preserve existing direct-call helper behavior."
                   function arguments context next)
                (consent--continue
                 next
-                (consent--check-value-budget
-                 (funcall function arguments context)
-                 context))))))))
+                (funcall function arguments context))))))))
        ((consent-parameter-p procedure)
         (finish
          (consent--apply-parameter/k procedure arguments context next)))
@@ -1085,12 +1091,15 @@ each initializer."
 	          (consent--eval-error "quote requires exactly one datum"))
 	        (consent--continue
                  continuation
-                 (consent--check-value-budget (cadr parts) context)))
+                 (consent--charge-literal (cadr parts) context)))
 	       ((and (consent--symbol-named-p operator "quasiquote")
 	             (consent--special-operator-active-p operator environment))
+	        ;; The quasiquote builder assembles its result with host cons/append
+	        ;; rather than the charged primitives, so charge the realized result
+	        ;; once -- like any other literal -- off the hot primitive path.
 	        (consent--continue
                  continuation
-                 (consent--check-value-budget
+                 (consent--charge-literal
 	          (consent--eval-quasiquote parts environment context)
 	          context)))
 	       ((and (consent--symbol-named-p operator "lambda")
@@ -1211,7 +1220,7 @@ When TAILP is non-nil, tail calls may return an
             ((consent--self-evaluating-p expression)
              (consent--continue
               next
-              (consent--check-value-budget expression context)))
+              (consent--charge-literal expression context)))
             ((consent--identifier-p expression)
              (consent--continue
               next
@@ -1411,15 +1420,16 @@ Caught escapes still run `dynamic-wind' after thunks via
         (consent--restore-dynamic-state context checkpoint)))))
 
 (defun consent--trampoline (expression environment context)
-  "Evaluate EXPRESSION in ENVIRONMENT using CONTEXT's trampoline."
+  "Evaluate EXPRESSION in ENVIRONMENT using CONTEXT's trampoline.
+The result needs no final budget walk: every node it reaches was charged at the
+allocation that produced it."
   (let ((state
          (consent--make-bounce
           expression
           environment
           (consent--eval-context-syntax-environment context)
           #'consent--identity-continuation)))
-    (setq state (consent--drain-state state context))
-    (consent--check-value-budget state context)))
+    (consent--drain-state state context)))
 
 (defun consent--scheme-boolean (value)
   "Return the canonical Scheme boolean for host truth VALUE."
@@ -2699,9 +2709,15 @@ the maximum endpoint for DESCRIPTION."
           (consent--make-canonical-decimal float-pi)
         (consent--make-canonical-decimal 0.0)))))
 
-(defun consent--primitive-cons (arguments _context)
+(defun consent--primitive-cons (arguments context)
   "Primitive cons over ARGUMENTS."
-  (cons (car arguments) (cadr arguments)))
+  ;; One fresh pair; its car/cdr were charged where they were allocated.
+  ;; Charging `cons' charges every prelude list builder (list, append, reverse,
+  ;; map, ...) that conses, with no walk of the growing result.
+  (consent--charge-value-allocation
+   (cons (car arguments) (cadr arguments))
+   1
+   context))
 
 (defun consent--primitive-car (arguments _context)
   "Primitive car over ARGUMENTS."
@@ -3141,7 +3157,7 @@ DESCRIPTION names the primitive for errors."
         "number->string only supports radix 10 for complex numbers"))
      (consent--number->external number))))
 
-(defun consent--primitive-number->string (arguments _context)
+(defun consent--primitive-number->string (arguments context)
   "Primitive number->string over ARGUMENTS."
   (let ((number (consent--expect-number
                  (car arguments) "number->string"))
@@ -3151,7 +3167,8 @@ DESCRIPTION names the primitive for errors."
                  10)))
     (unless (memq radix '(2 8 10 16))
       (consent--eval-error "number->string radix must be 2, 8, 10, or 16"))
-    (consent--number->string number radix)))
+    (consent--charge-string-allocation
+     (consent--number->string number radix) context)))
 
 (defun consent--primitive-string->number (arguments _context)
   "Primitive string->number over ARGUMENTS."
@@ -3181,11 +3198,12 @@ DESCRIPTION names the primitive for errors."
         value
       consent-false)))
 
-(defun consent--primitive-symbol->string (arguments _context)
+(defun consent--primitive-symbol->string (arguments context)
   "Primitive symbol->string over ARGUMENTS."
   (unless (consent-symbol-p (car arguments))
     (consent--eval-error "symbol->string expected a symbol"))
-  (copy-sequence (consent-symbol-name (car arguments))))
+  (consent--charge-string-allocation
+   (copy-sequence (consent-symbol-name (car arguments))) context))
 
 (defun consent--primitive-string->symbol (arguments _context)
   "Primitive string->symbol over ARGUMENTS."
@@ -3914,12 +3932,14 @@ standard streams are consented by invocation; ambient effects keep gating."
             (consent--expect-string (car arguments) "open-input-string"))
    :position 0))
 
-(defun consent--primitive-get-output-string (arguments _context)
+(defun consent--primitive-get-output-string (arguments context)
   "Primitive get-output-string over ARGUMENTS."
-  (copy-sequence
-   (consent--port-contents
-    (consent--expect-string-output-port
-     (car arguments) "get-output-string"))))
+  (consent--charge-string-allocation
+   (copy-sequence
+    (consent--port-contents
+     (consent--expect-string-output-port
+      (car arguments) "get-output-string")))
+   context))
 
 (defun consent--primitive-open-output-bytevector (_arguments _context)
   "Primitive open-output-bytevector."
@@ -3941,13 +3961,15 @@ standard streams are consented by invocation; ambient effects keep gating."
      :source (copy-sequence (consent-bytevector-bytes bytevector))
      :position 0)))
 
-(defun consent--primitive-get-output-bytevector (arguments _context)
+(defun consent--primitive-get-output-bytevector (arguments context)
   "Primitive get-output-bytevector over ARGUMENTS."
-  (consent--make-bytevector
-   (vconcat
-    (consent--port-contents
-     (consent--expect-bytevector-output-port
-      (car arguments) "get-output-bytevector")))))
+  (consent--charge-bytevector-allocation
+   (consent--make-bytevector
+    (vconcat
+     (consent--port-contents
+      (consent--expect-bytevector-output-port
+       (car arguments) "get-output-bytevector"))))
+   context))
 
 (defun consent--primitive-read (arguments context)
   "Primitive read over ARGUMENTS."
@@ -3957,17 +3979,22 @@ standard streams are consented by invocation; ambient effects keep gating."
                  (consent--current-input-port-or-deny context "read"))
                "read")))
     (consent--port-capability-check port context 'read)
+    ;; `read' realizes fresh structure from external input, so charge the parsed
+    ;; datum once -- like a literal -- to bound oversized input.
     (if (consent--program-input-streaming-p port)
-        (consent--program-input-read-streaming port context)
+        (consent--charge-literal
+         (consent--program-input-read-streaming port context) context)
       (let ((result
              (consent--read-one-from-string-at
               (consent--port-source port)
               (consent--port-position port))))
         (setf (consent--port-position port) (cdr result))
         (consent-capability-audit-port-result port 'read 'datum)
-        (if (eq (car result) consent--read-eof)
-            consent-eof-object
-          (car result))))))
+        (consent--charge-literal
+         (if (eq (car result) consent--read-eof)
+             consent-eof-object
+           (car result))
+         context)))))
 
 (defun consent--text-port-next-code
     (port advancep description context)
@@ -4062,7 +4089,9 @@ Advance when ADVANCEP is non-nil.  Signal errors using DESCRIPTION."
          (t
           (setf (consent--port-position port) (+ position amount))
           (consent-capability-audit-port-result port 'read amount)
-          (substring source position (+ position amount)))))))))
+          (consent--charge-string-allocation
+           (substring source position (+ position amount))
+           context))))))))
 
 (defun consent--primitive-read-line (arguments context)
   "Primitive read-line over ARGUMENTS."
@@ -4105,7 +4134,7 @@ Advance when ADVANCEP is non-nil.  Signal errors using DESCRIPTION."
             (setf (consent--port-position port) position)
             (consent-capability-audit-port-result
              port 'read (length line))
-            line))))))
+            (consent--charge-string-allocation line context)))))))
 
 (defun consent--append-bytes-to-port
     (bytes port description &optional context)
@@ -4202,8 +4231,10 @@ Advance when ADVANCEP is non-nil.  Signal errors using DESCRIPTION."
          (t
           (setf (consent--port-position port) (+ position amount))
           (consent-capability-audit-port-result port 'read amount)
-          (consent--make-bytevector
-           (cl-subseq source position (+ position amount))))))))))
+          (consent--charge-bytevector-allocation
+           (consent--make-bytevector
+            (cl-subseq source position (+ position amount)))
+           context))))))))
 
 (defun consent--primitive-read-bytevector! (arguments context)
   "Primitive read-bytevector! over ARGUMENTS."
@@ -4953,7 +4984,7 @@ Return (FORMS DIRECTORY AUTHORIZATION)."
   "Primitive string? over ARGUMENTS."
   (consent--scheme-boolean (stringp (car arguments))))
 
-(defun consent--primitive-make-string (arguments _context)
+(defun consent--primitive-make-string (arguments context)
   "Primitive make-string over ARGUMENTS."
   (let* ((length (consent--exact-integer->host
                   (car arguments) "make-string"))
@@ -4963,15 +4994,17 @@ Return (FORMS DIRECTORY AUTHORIZATION)."
                  0)))
     (when (< length 0)
       (consent--eval-error "make-string length must be non-negative"))
-    (make-string length fill)))
+    (consent--charge-string-allocation (make-string length fill) context)))
 
-(defun consent--primitive-string (arguments _context)
+(defun consent--primitive-string (arguments context)
   "Primitive string over ARGUMENTS."
-  (apply #'string
-         (mapcar
-          (lambda (argument)
-            (consent--expect-character argument "string"))
-          arguments)))
+  (consent--charge-string-allocation
+   (apply #'string
+          (mapcar
+           (lambda (argument)
+             (consent--expect-character argument "string"))
+           arguments))
+   context))
 
 (defun consent--primitive-string-length (arguments _context)
   "Primitive string-length over ARGUMENTS."
@@ -4996,7 +5029,7 @@ Return (FORMS DIRECTORY AUTHORIZATION)."
     (aset string index code)
     consent-unspecified))
 
-(defun consent--primitive-substring (arguments _context)
+(defun consent--primitive-substring (arguments context)
   "Primitive substring over ARGUMENTS."
   (let* ((string (consent--expect-string (car arguments) "substring"))
          (start (consent--expect-nonnegative-index
@@ -5005,19 +5038,21 @@ Return (FORMS DIRECTORY AUTHORIZATION)."
                (caddr arguments) (length string) "substring" t)))
     (when (> start end)
       (consent--eval-error "substring start exceeds end"))
-    (substring string start end)))
+    (consent--charge-string-allocation (substring string start end) context)))
 
-(defun consent--primitive-string-append (arguments _context)
+(defun consent--primitive-string-append (arguments context)
   "Primitive string-append over ARGUMENTS."
-  (mapconcat
-   #'identity
-   (mapcar
-    (lambda (argument)
-      (consent--expect-string argument "string-append"))
-    arguments)
-   ""))
+  (consent--charge-string-allocation
+   (mapconcat
+    #'identity
+    (mapcar
+     (lambda (argument)
+       (consent--expect-string argument "string-append"))
+     arguments)
+    "")
+   context))
 
-(defun consent--primitive-string->list (arguments _context)
+(defun consent--primitive-string->list (arguments context)
   "Primitive string->list over ARGUMENTS."
   (let* ((string (consent--expect-string (car arguments) "string->list"))
          (range (consent--optional-range
@@ -5026,18 +5061,20 @@ Return (FORMS DIRECTORY AUTHORIZATION)."
     (cl-loop for index from (car range) below (cdr range)
              do (push (consent--make-character (aref string index))
                       result))
-    (nreverse result)))
+    (consent--charge-list-allocation (nreverse result) context)))
 
-(defun consent--primitive-list->string (arguments _context)
+(defun consent--primitive-list->string (arguments context)
   "Primitive list->string over ARGUMENTS."
-  (apply #'string
-         (mapcar
-          (lambda (argument)
-            (consent--expect-character argument "list->string"))
-          (consent--proper-list-elements
-           (car arguments) "list->string"))))
+  (consent--charge-string-allocation
+   (apply #'string
+          (mapcar
+           (lambda (argument)
+             (consent--expect-character argument "list->string"))
+           (consent--proper-list-elements
+            (car arguments) "list->string")))
+   context))
 
-(defun consent--primitive-string->utf8 (arguments _context)
+(defun consent--primitive-string->utf8 (arguments context)
   "Primitive string->utf8 over ARGUMENTS."
   (let* ((string (consent--expect-string (car arguments) "string->utf8"))
          (range (consent--optional-range
@@ -5046,10 +5083,12 @@ Return (FORMS DIRECTORY AUTHORIZATION)."
                  (substring string (car range) (cdr range))
                  'utf-8
                  t)))
-    (consent--make-bytevector
-     (vconcat (mapcar #'identity bytes)))))
+    (consent--charge-bytevector-allocation
+     (consent--make-bytevector
+      (vconcat (mapcar #'identity bytes)))
+     context)))
 
-(defun consent--primitive-utf8->string (arguments _context)
+(defun consent--primitive-utf8->string (arguments context)
   "Primitive utf8->string over ARGUMENTS."
   (let* ((bytevector (consent--expect-bytevector
                       (car arguments) "utf8->string"))
@@ -5060,13 +5099,16 @@ Return (FORMS DIRECTORY AUTHORIZATION)."
                      (append
                       (cl-subseq bytes (car range) (cdr range))
                       nil))))
-    (decode-coding-string raw 'utf-8 t)))
+    (consent--charge-string-allocation
+     (decode-coding-string raw 'utf-8 t) context)))
 
-(defun consent--primitive-string->vector (arguments _context)
+(defun consent--primitive-string->vector (arguments context)
   "Primitive string->vector over ARGUMENTS."
-  (vconcat (consent--primitive-string->list arguments nil)))
+  (consent--charge-vector-allocation
+   (vconcat (consent--primitive-string->list arguments context))
+   context))
 
-(defun consent--primitive-vector->string (arguments _context)
+(defun consent--primitive-vector->string (arguments context)
   "Primitive vector->string over ARGUMENTS."
   (let* ((vector (consent--expect-vector (car arguments) "vector->string"))
          (range (consent--optional-range
@@ -5076,14 +5118,16 @@ Return (FORMS DIRECTORY AUTHORIZATION)."
              do (push (consent--expect-character
                        (aref vector index) "vector->string")
                       codes))
-    (apply #'string (nreverse codes))))
+    (consent--charge-string-allocation
+     (apply #'string (nreverse codes)) context)))
 
-(defun consent--primitive-string-copy (arguments _context)
+(defun consent--primitive-string-copy (arguments context)
   "Primitive string-copy over ARGUMENTS."
   (let* ((string (consent--expect-string (car arguments) "string-copy"))
          (range (consent--optional-range
                  arguments 1 (length string) "string-copy")))
-    (substring string (car range) (cdr range))))
+    (consent--charge-string-allocation
+     (substring string (car range) (cdr range)) context)))
 
 (defun consent--primitive-string-copy! (arguments _context)
   "Primitive string-copy! over ARGUMENTS."
@@ -5249,9 +5293,12 @@ When KEEP-RESULTS is non-nil, return the collected values."
      t
      continuation)))
 
-(defun consent--primitive-values (arguments _context)
+(defun consent--primitive-values (arguments context)
   "Primitive values over ARGUMENTS."
-  (consent--make-multiple-values arguments))
+  ;; One fresh multiple-values wrapper; the values it carries were charged where
+  ;; they were allocated.
+  (consent--charge-value-allocation
+   (consent--make-multiple-values arguments) 1 context))
 
 (defun consent--primitive-call-with-values (arguments context)
   "Primitive call-with-values over ARGUMENTS."
@@ -5546,18 +5593,18 @@ When KEEP-RESULTS is non-nil, return the collected values."
   "Primitive vector? over ARGUMENTS."
   (consent--scheme-boolean (vectorp (car arguments))))
 
-(defun consent--primitive-make-vector (arguments _context)
+(defun consent--primitive-make-vector (arguments context)
   "Primitive make-vector over ARGUMENTS."
   (let* ((length (consent--exact-integer->host
                   (car arguments) "make-vector"))
          (fill (if (cdr arguments) (cadr arguments) consent-unspecified)))
     (when (< length 0)
       (consent--eval-error "make-vector length must be non-negative"))
-    (make-vector length fill)))
+    (consent--charge-vector-allocation (make-vector length fill) context)))
 
-(defun consent--primitive-vector (arguments _context)
+(defun consent--primitive-vector (arguments context)
   "Primitive vector over ARGUMENTS."
-  (vconcat arguments))
+  (consent--charge-vector-allocation (vconcat arguments) context))
 
 (defun consent--primitive-vector-length (arguments _context)
   "Primitive vector-length over ARGUMENTS."
@@ -5580,7 +5627,7 @@ When KEEP-RESULTS is non-nil, return the collected values."
     (aset vector index (caddr arguments))
     consent-unspecified))
 
-(defun consent--primitive-vector->list (arguments _context)
+(defun consent--primitive-vector->list (arguments context)
   "Primitive vector->list over ARGUMENTS."
   (let* ((vector (consent--expect-vector (car arguments) "vector->list"))
          (range (consent--optional-range
@@ -5588,19 +5635,22 @@ When KEEP-RESULTS is non-nil, return the collected values."
          result)
     (cl-loop for index from (car range) below (cdr range)
              do (push (aref vector index) result))
-    (nreverse result)))
+    (consent--charge-list-allocation (nreverse result) context)))
 
-(defun consent--primitive-list->vector (arguments _context)
+(defun consent--primitive-list->vector (arguments context)
   "Primitive list->vector over ARGUMENTS."
-  (vconcat (consent--proper-list-elements
-            (car arguments) "list->vector")))
+  (consent--charge-vector-allocation
+   (vconcat (consent--proper-list-elements
+             (car arguments) "list->vector"))
+   context))
 
-(defun consent--primitive-vector-copy (arguments _context)
+(defun consent--primitive-vector-copy (arguments context)
   "Primitive vector-copy over ARGUMENTS."
   (let* ((vector (consent--expect-vector (car arguments) "vector-copy"))
          (range (consent--optional-range
                  arguments 1 (length vector) "vector-copy")))
-    (cl-subseq vector (car range) (cdr range))))
+    (consent--charge-vector-allocation
+     (cl-subseq vector (car range) (cdr range)) context)))
 
 (defun consent--primitive-vector-copy! (arguments _context)
   "Primitive vector-copy! over ARGUMENTS."
@@ -5618,13 +5668,15 @@ When KEEP-RESULTS is non-nil, return the collected values."
              do (aset to (+ at index) (aref slice index)))
     consent-unspecified))
 
-(defun consent--primitive-vector-append (arguments _context)
+(defun consent--primitive-vector-append (arguments context)
   "Primitive vector-append over ARGUMENTS."
-  (apply #'vconcat
-         (mapcar
-          (lambda (argument)
-            (consent--expect-vector argument "vector-append"))
-          arguments)))
+  (consent--charge-vector-allocation
+   (apply #'vconcat
+          (mapcar
+           (lambda (argument)
+             (consent--expect-vector argument "vector-append"))
+           arguments))
+   context))
 
 (defun consent--primitive-vector-fill! (arguments _context)
   "Primitive vector-fill! over ARGUMENTS."
@@ -5641,7 +5693,7 @@ When KEEP-RESULTS is non-nil, return the collected values."
   (consent--scheme-boolean
    (consent-bytevector-p (car arguments))))
 
-(defun consent--primitive-make-bytevector (arguments _context)
+(defun consent--primitive-make-bytevector (arguments context)
   "Primitive make-bytevector over ARGUMENTS."
   (let* ((length (consent--exact-integer->host
                   (car arguments) "make-bytevector"))
@@ -5651,16 +5703,19 @@ When KEEP-RESULTS is non-nil, return the collected values."
                  0)))
     (when (< length 0)
       (consent--eval-error "make-bytevector length must be non-negative"))
-    (consent--make-bytevector (make-vector length fill))))
+    (consent--charge-bytevector-allocation
+     (consent--make-bytevector (make-vector length fill)) context)))
 
-(defun consent--primitive-bytevector (arguments _context)
+(defun consent--primitive-bytevector (arguments context)
   "Primitive bytevector over ARGUMENTS."
-  (consent--make-bytevector
-   (vconcat
-    (mapcar
-     (lambda (argument)
-       (consent--expect-byte argument "bytevector"))
-     arguments))))
+  (consent--charge-bytevector-allocation
+   (consent--make-bytevector
+    (vconcat
+     (mapcar
+      (lambda (argument)
+        (consent--expect-byte argument "bytevector"))
+      arguments)))
+   context))
 
 (defun consent--primitive-bytevector-length (arguments _context)
   "Primitive bytevector-length over ARGUMENTS."
@@ -5691,15 +5746,17 @@ When KEEP-RESULTS is non-nil, return the collected values."
            (caddr arguments) "bytevector-u8-set! value"))
     consent-unspecified))
 
-(defun consent--primitive-bytevector-copy (arguments _context)
+(defun consent--primitive-bytevector-copy (arguments context)
   "Primitive bytevector-copy over ARGUMENTS."
   (let* ((bytevector (consent--expect-bytevector
                       (car arguments) "bytevector-copy"))
          (bytes (consent-bytevector-bytes bytevector))
          (range (consent--optional-range
                  arguments 1 (length bytes) "bytevector-copy")))
-    (consent--make-bytevector
-     (cl-subseq bytes (car range) (cdr range)))))
+    (consent--charge-bytevector-allocation
+     (consent--make-bytevector
+      (cl-subseq bytes (car range) (cdr range)))
+     context)))
 
 (defun consent--primitive-bytevector-copy! (arguments _context)
   "Primitive bytevector-copy! over ARGUMENTS."
@@ -5720,15 +5777,17 @@ When KEEP-RESULTS is non-nil, return the collected values."
              do (aset to-bytes (+ at index) (aref slice index)))
     consent-unspecified))
 
-(defun consent--primitive-bytevector-append (arguments _context)
+(defun consent--primitive-bytevector-append (arguments context)
   "Primitive bytevector-append over ARGUMENTS."
-  (consent--make-bytevector
-   (apply #'vconcat
-          (mapcar
-           (lambda (argument)
-             (consent-bytevector-bytes
-              (consent--expect-bytevector argument "bytevector-append")))
-           arguments))))
+  (consent--charge-bytevector-allocation
+   (consent--make-bytevector
+    (apply #'vconcat
+           (mapcar
+            (lambda (argument)
+              (consent-bytevector-bytes
+               (consent--expect-bytevector argument "bytevector-append")))
+            arguments)))
+   context))
 
 
 (defun consent--result-field (name &rest values)
