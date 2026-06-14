@@ -31,8 +31,8 @@ just want to start typing forms, start here.
 | --- | --- | --- |
 | Module | `(cli repl-shell)` | `consent-repl-stream.el` |
 | Start (scripted) | `printf '…' \| tools/consent-repl` | `emacs -Q --batch -l consent-repl-stream -f consent-repl-stream-main` |
-| Start (interactive) | `tools/consent-repl` / `make repl` | `M-x consent-repl-stream` |
-| Input source | terminal / stdin byte stream | batch stdin, or a submitted buffer/region |
+| Start (interactive) | `tools/consent-repl` / `make repl` | `M-x consent-repl-comint` (live buffer); `M-x consent-repl-stream` (region) |
+| Input source | terminal / stdin byte stream | a live comint prompt, batch stdin, or a submitted buffer/region |
 | Canonical surface | Scheme-readable record stream | Scheme-readable record stream |
 | Default human view | `comment` chrome (ANSI) | `comment` chrome (Emacs faces) |
 | Close status maps to | process exit code (0 / 1) | `emacs --batch` exit code, or buffer/session disposition |
@@ -65,7 +65,7 @@ them; the parity matrix below references that behavior.
 
 ## Emacs incremental REPL
 
-Emacs has two related interactive surfaces, and it helps to keep them distinct.
+Emacs has three related interactive surfaces, and it helps to keep them distinct.
 
 ### Session UX (`consent-repl.el`)
 
@@ -122,6 +122,55 @@ nil default, and a future echoing Emacs front end would bind it the same way.
 The pure driver `consent-repl-stream-drive` maps an interaction-input chunk
 source to the list of contract records, which is what the conformance corpus and
 the Emacs smoke tests assert against without needing a terminal.
+
+### Live interactive buffer (`consent-repl-comint.el`)
+
+`M-x consent-repl-comint` opens a live, editable REPL prompt in a
+`comint-mode`-derived buffer (`*Consent REPL: SESSION*`) — the in-editor peer of
+the portable terminal REPL. You type a form, press `RET`, and the
+chrome-rendered result appears inline, with line editing, input history
+(`M-p`/`M-n`), kill/yank, and a read-only prompt from comint. It is the surface
+that makes the persistent session *inhabitable*: unlike `consent-repl-stream`,
+which drives one submitted region per invocation, the buffer holds a durable
+prompt you query and extend over time.
+
+Crucially it is **not an island**. It evaluates over the *same* durable session
+the other Emacs eval paths see, via `consent-session-interaction-context`: a
+`(define x 1)` typed here is visible to a later `consent-repl-eval` (`C-c C-c`)
+in the same session, and definitions, imports, and macros made through those
+paths are visible here. By default it binds to the current native session
+(`consent-current-session-id`) when one is active, otherwise to
+`consent-repl-comint-default-session-id` (`repl-main`); a prefix argument prompts
+for the session. Evaluation runs in this Emacs process over the shipped stream
+engine and chrome substrate — *not* a subprocess against the `consent` binary,
+which would evaluate in a separate Scheme process — so the buffer is a peer of
+the other eval paths, sharing their live environment.
+
+- **Multi-line forms.** When the typed input does not yet parse to a complete
+  form, `RET` inserts a newline and shows the contract's continuation gutter
+  (`#| ... |#`, with the still-open construct count for deeper nesting) as a
+  non-editable line prefix, keeping the form pending in the editable region;
+  completing it submits the whole form. `C-j` forces a submission even when the
+  form is incomplete (the reader condition is then reported).
+- **Rendering and the canonical stream.** Records render through the shared
+  chrome model as Emacs faces, defaulting to `comment`; because comint already
+  echoes the typed form, the chrome's submission echo is suppressed (the
+  input-echoed posture, the twin of the portable shell's TTY check). `C-c C-v`
+  (`consent-repl-comint-set-chrome`) switches the chrome, so the canonical
+  `datum` record stream is always reachable.
+- **Program input.** Evaluated reads draw from the same shared stdin cursor as
+  the stream engine (#505): text after a reading form on its line is consumed as
+  program data exactly as in the batch engine. When a read needs more than the
+  current line holds, the buffer blocks for it. As a v1 limitation, that blocking
+  read is collected from the **minibuffer** by default
+  (`consent-repl-comint-program-input-function`), not yet from a subsequent line
+  typed in the buffer itself; the #505 ideal of consuming subsequent in-buffer
+  input is a follow-up. Programmatic and test callers pre-seed
+  `consent-repl-comint--input-queue`, which is drained before any blocking read.
+- **Close.** An `(exit)`/`(emergency-exit)` form closes the session with the
+  documented status, and `C-c C-d` (`consent-repl-comint-send-eof`) closes it
+  with an EOF status. Either leaves the durable session itself intact for the
+  other Emacs eval paths; the buffer simply stops accepting submissions.
 
 ## Parity matrix
 
@@ -257,9 +306,11 @@ session management, not part of this record round-trip.
 These apply to both hosts and are intentionally out of scope for the v1 REPL;
 they are owned by later issues, not omissions to fix here:
 
-- **No line editing, history, or completion.** Input is read line by line; use a
-  terminal wrapper such as `rlwrap` on the portable host for editing
-  convenience.
+- **Line editing, history, and completion.** The Emacs live buffer
+  (`consent-repl-comint`) has line editing and input history from comint;
+  completion is still out of scope on every host. The portable terminal shell
+  and the batch/`consent-repl-stream` entries read line by line — use a terminal
+  wrapper such as `rlwrap` on the portable host for editing convenience.
 - **No meta-command syntax.** Submissions are ordinary Scheme forms;
   introspection and control are ordinary procedures, a deliberate contract
   non-goal (no `,backtrace` / `:doc` / `%time` sigils).
@@ -270,16 +321,21 @@ they are owned by later issues, not omissions to fix here:
   the next is read; a recoverable condition is rendered and the loop continues.
   Asynchronous/streamed evaluation, cancellation, and the nested break loop are
   forward-compatibility points in the contract, not implemented here.
-- **Program input.** The loop consumes the interaction input stream, so a form
-  that reads from the program input port has no separate program-input stream in
-  v1; such a read fails closed.
+- **Program input.** The form reader and an evaluated read share one stdin
+  cursor (#505), so a form that reads from the program input port consumes the
+  program data following its submission rather than the next REPL form; see the
+  contract's
+  [program stream model](repl-interaction-contract.md#program-stream-model).
+  Binary stdio (`read-u8`/`write-u8`) is the one piece still out of scope.
 
 ## Conformance and verification
 
 The portable shell is covered by `tests/scheme/consent-repl-test.scm` (in the
 shared host-suite file list, so it runs on every portable host shard). The Emacs
 incremental entry is covered by its own smoke tests over
-`consent-repl-stream-drive`.
+`consent-repl-stream-drive`, and the Emacs live buffer by
+`tests/consent-repl-comint-test.el` (driving the buffer as a user does). Both
+Emacs suites run under `make test`.
 
 Cross-host parity is enforced by the shared corpus
 [`fixtures/repl/parity-cases.scm`](../fixtures/repl/parity-cases.scm): the

@@ -321,6 +321,59 @@ stdin cursor.  Mirrors the portable `(consent eval)'
      input-port)))
 
 ;;;###autoload
+(defun consent-session-interaction-context (session-id &optional options)
+  "Build a durable interaction context that evaluates over session SESSION-ID.
+Unlike `consent-make-interaction-context', which owns a private base
+environment, the returned context shares session SESSION-ID's live value and
+syntax environments, so definitions, imports, and macros introduced through
+`consent-interaction-eval-form' are visible to -- and see those introduced by --
+`consent-session-eval-source' and the other session-bound Emacs eval paths.  The
+session's capability grants are merged into the evaluation options so a REPL
+surface inherits the authority the session already holds.  OPTIONS may carry
+`:program-input-reader' (and the matching active `port'/`read'/`stdin' grant in
+its `:capability-grants') to connect the shared stdin cursor, plus the other
+evaluator options `consent-make-interaction-context' accepts.  This is the
+substrate the in-editor comint REPL surface drives so it inhabits the same live
+session the rest of Emacs evaluates against, rather than an island."
+  (let* ((session (consent-session--require session-id))
+         (environment (consent-session-environment session))
+         (context (consent-session-context session)))
+    ;; Install base derived syntax into the session's shared syntax environment
+    ;; the same way `consent-session-eval-source' does lazily on first eval, so
+    ;; the first REPL submission can already use derived syntax.  Mirroring its
+    ;; baseline-syntax capture keeps `consent-session--session-macros' honest
+    ;; whether the bridge or an ordinary session eval touches the session first.
+    (let ((base-syntax-installed
+           (consent--eval-context-base-syntax-installed context)))
+      (consent--ensure-base-syntax context environment)
+      (unless base-syntax-installed
+        (setf (consent-session-baseline-syntax session)
+              (consent-session--syntax-current-names
+               (consent--eval-context-syntax-environment context)))))
+    (let* ((syntax-environment (consent--eval-context-syntax-environment context))
+           (caller-grants (plist-get options :capability-grants))
+           ;; Prepended keys win under `plist-get', so the merged session id and
+           ;; capability grants shadow any the caller left in OPTIONS without
+           ;; mutating the caller's plist.
+           (merged-options
+            (append (list :session-id session-id
+                          :capability-grants
+                          (append caller-grants
+                                  (consent-session-capability-grants session)))
+                    options))
+           (eval-context (consent--new-eval-context merged-options))
+           (reader (consent--program-input-reader-from-options merged-options))
+           (grant (and reader
+                       (consent--find-standard-stream-grant
+                        eval-context 'stdin 'read)))
+           (input-port (and reader grant
+                            (consent--make-program-input-port grant reader))))
+      (consent--make-interaction-context-record
+       merged-options environment syntax-environment
+       (consent--primitive-open-output-string nil nil)
+       input-port))))
+
+;;;###autoload
 (defun consent-interaction-program-input-port (interaction)
   "Return INTERACTION's shared program-input port, or nil when disconnected."
   (consent--interaction-context-program-input-port interaction))
