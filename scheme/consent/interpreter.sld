@@ -317,7 +317,12 @@
                    (let loop ((rest-fields constructor-fields)
                               (rest-arguments arguments))
                      (if (null? rest-fields)
-                         (consent-make-record record-type values)
+                         ;; Charge the record header plus its field slots; the
+                         ;; field values were charged where they were allocated.
+                         (charge-value-allocation!
+                          (consent-make-record record-type values)
+                          (+ 1 (vector-length values))
+                          context)
                          (begin
                            (vector-set!
                             values
@@ -643,7 +648,9 @@
                 (if rest
                     (begin
                       (environment-define! environment rest values)
-                      (check-value-budget values context)))
+                      ;; The rest list is freshly consed by the apply machinery;
+                      ;; charge its pairs as the allocation they are.
+                      (note-value-allocation! context (length values))))
                 environment)
               (begin
                 (environment-define! environment
@@ -714,9 +721,10 @@ unchanged, preserving top-level diagnostics."
              (list (host-condition->consent-condition (cdr outcome)))
              context
              continuation)
-            (continue
-             continuation
-             (check-value-budget (cdr outcome) context)))))
+            ;; Primitive results are no longer walked: allocating primitives
+            ;; charge their own nodes, and an accessor result is a substructure
+            ;; of an already-budgeted argument, so it creates nothing to charge.
+            (continue continuation (cdr outcome)))))
 
     (define (apply-procedure procedure arguments context tail? . maybe-continuation)
       "All callable values pass through this boundary so primitive callbacks, parameter procedures, compound procedures, and continuations share arity, budget, tail-position, and trampoline behavior."
@@ -789,9 +797,7 @@ unchanged, preserving top-level diagnostics."
                     (native-primitive-name? name))
                    (continue
                     continuation
-                    (check-value-budget
-                     (function arguments context)
-                     context))))))))
+                    (function arguments context))))))))
          ((consent-parameter? procedure)
           (finish
            (apply-parameter/k procedure arguments context continuation)))
@@ -1152,12 +1158,15 @@ unchanged, preserving top-level diagnostics."
             (if (not (= (length parts) 2))
                 (eval-error "quote requires exactly one datum" parts))
             (continue continuation
-                      (check-value-budget (second parts) context)))
+                      (charge-literal! (second parts) context)))
            ((and (identifier-named? operator 'quasiquote)
                  (special-operator-active? operator environment))
+            ;; The quasiquote builder assembles its result with host cons/append
+            ;; rather than the charged primitives, so charge the realized result
+            ;; once -- like any other literal -- off the hot primitive path.
             (continue
              continuation
-             (check-value-budget
+             (charge-literal!
               (eval-quasiquote parts environment context)
               context)))
            ((and (identifier-named? operator 'lambda)
@@ -1282,7 +1291,7 @@ unchanged, preserving top-level diagnostics."
                                    continuation))))
                 ((self-evaluating? expression)
                  (continue continuation
-                           (check-value-budget expression context)))
+                           (charge-literal! expression context)))
                 ((symbol? expression)
                  (continue
                   continuation
@@ -1489,14 +1498,14 @@ condition does not."
                (restore-dynamic-state context checkpoint))))))
 
     (define (trampoline expression environment context)
-      "Evaluate EXPRESSION in tail-call trampoline mode and budget the result."
-      (check-value-budget
-       (drain-state
-        (make-bounce expression
-                     environment
-                     (context-syntax-environment context)
-                     identity-continuation)
-        context)
+      "Evaluate EXPRESSION in tail-call trampoline mode and return the result.
+The result needs no final budget walk: every node it reaches was charged at the
+allocation that produced it."
+      (drain-state
+       (make-bounce expression
+                    environment
+                    (context-syntax-environment context)
+                    identity-continuation)
        context))
 
     (define (expect-number datum description)
@@ -2692,7 +2701,13 @@ condition does not."
 
     (define (primitive-cons arguments context)
       "Implement the `cons` primitive with argument validation and Consent Scheme values."
-      (cons (car arguments) (second arguments)))
+      ;; One fresh pair; its car/cdr were charged where they were allocated.
+      ;; Charging `cons' charges every prelude list builder (list, append,
+      ;; reverse, map, ...) that conses, with no walk of the growing result.
+      (charge-value-allocation!
+       (cons (car arguments) (second arguments))
+       1
+       context))
 
     (define (primitive-car arguments context)
       "Implement the `car` primitive with argument validation and Consent Scheme values."
@@ -2913,7 +2928,7 @@ condition does not."
                         "number->string radix"))))
         (if (not (or (= radix 2) (= radix 8) (= radix 10) (= radix 16)))
             (eval-error "number->string radix must be 2, 8, 10, or 16"))
-        (number->string/radix number radix)))
+        (charge-string-allocation! (number->string/radix number radix) context)))
 
     (define (explicit-number-prefix? text)
       "Report whether TEXT begins with an explicit reader radix/exactness prefix."
@@ -2964,7 +2979,9 @@ condition does not."
                      1
                      (string-length string)
                      "string->utf8")))
-        (string->utf8 (substring string (car range) (cdr range)))))
+        (charge-bytevector-allocation!
+         (string->utf8 (substring string (car range) (cdr range)))
+         context)))
 
     (define (primitive-utf8->string arguments context)
       "Implement the `utf8->string` primitive with argument validation and Consent Scheme values."
@@ -2974,7 +2991,9 @@ condition does not."
                      1
                      (bytevector-length bytes)
                      "utf8->string")))
-        (utf8->string bytes (car range) (cdr range))))
+        (charge-string-allocation!
+         (utf8->string bytes (car range) (cdr range))
+         context)))
 
     (define (primitive-symbol? arguments context)
       "Implement the `symbol?` primitive with argument validation and Consent Scheme values."
@@ -2984,7 +3003,7 @@ condition does not."
       "Implement the `symbol->string` primitive with argument validation and Consent Scheme values."
       (if (not (symbol? (car arguments)))
           (eval-error "symbol->string expected a symbol"))
-      (symbol->string (car arguments)))
+      (charge-string-allocation! (symbol->string (car arguments)) context))
 
     (define (primitive-string->symbol arguments context)
       "Implement the `string->symbol` primitive with argument validation and Consent Scheme values."
@@ -3635,10 +3654,12 @@ integer there would not render through the consent writer."
 
     (define (primitive-get-output-string arguments context)
       "Implement the `get-output-string` primitive with argument validation and Consent Scheme values."
-      (consent-port-contents
-       (expect-string-output-port
-        (car arguments)
-        "get-output-string")))
+      (charge-string-allocation!
+       (consent-port-contents
+        (expect-string-output-port
+         (car arguments)
+         "get-output-string"))
+       context))
 
     (define (primitive-open-output-bytevector arguments context)
       "Implement the `open-output-bytevector` primitive with argument validation and Consent Scheme values."
@@ -3678,11 +3699,13 @@ integer there would not render through the consent writer."
 
     (define (primitive-get-output-bytevector arguments context)
       "Implement the `get-output-bytevector` primitive with argument validation and Consent Scheme values."
-      (list->bytevector
-       (consent-port-contents
-        (expect-bytevector-output-port
-         (car arguments)
-         "get-output-bytevector"))))
+      (charge-bytevector-allocation!
+       (list->bytevector
+        (consent-port-contents
+         (expect-bytevector-output-port
+          (car arguments)
+          "get-output-bytevector")))
+       context))
 
     (define (primitive-read arguments context)
       "Implement the `read` primitive with argument validation and Consent Scheme values."
@@ -3693,17 +3716,21 @@ integer there would not render through the consent writer."
                   (car arguments))
               "read")))
         (revalidate-port-operation! port context 'read)
+        ;; `read' realizes fresh structure from external input, so charge the
+        ;; parsed datum once -- like a literal -- to bound oversized input.
         (if (program-input-streaming? port)
-            (program-input-read-streaming port context)
+            (charge-literal! (program-input-read-streaming port context) context)
             (let ((result
                    (consent-read-from-string-at
                     (consent-port-source port)
                     (consent-port-position port))))
               (set-consent-port-position! port (cdr result))
               (audit-port-capability-result! context port 'read 'datum #f)
-              (if (consent-read-eof? (car result))
-                  consent-eof-object
-                  (car result))))))
+              (charge-literal!
+               (if (consent-read-eof? (car result))
+                   consent-eof-object
+                   (car result))
+               context)))))
 
     (define (text-port-next-char port advance? description . maybe-context)
       "Return the next character from PORT, optionally advancing its cursor."
@@ -3804,7 +3831,9 @@ integer there would not render through the consent writer."
               (set-consent-port-position! port (+ position amount))
               (audit-port-capability-result!
                context port 'read amount #f)
-              (substring source position (+ position amount)))))))))
+              (charge-string-allocation!
+               (substring source position (+ position amount))
+               context))))))))
 
     (define (primitive-read-line arguments context)
       "Implement the `read-line` primitive with argument validation and Consent Scheme values."
@@ -3850,7 +3879,7 @@ integer there would not render through the consent writer."
                       (set-consent-port-position! port position)
                       (audit-port-capability-result!
                        context port 'read (string-length line) #f)
-                      line)))))))
+                      (charge-string-allocation! line context))))))))
 
     (define (append-bytes-to-port bytes port description . maybe-context)
       "Append BYTES to binary output PORT."
@@ -3972,7 +4001,9 @@ integer there would not render through the consent writer."
              (else
               (set-consent-port-position! port (+ position amount))
               (audit-port-capability-result! context port 'read amount #f)
-              (subbytevector source position (+ position amount)))))))))
+              (charge-bytevector-allocation!
+               (subbytevector source position (+ position amount))
+               context))))))))
 
     (define (primitive-read-bytevector! arguments context)
       "Implement the `read-bytevector!` primitive with argument validation and Consent Scheme values."
@@ -6488,14 +6519,16 @@ integer there would not render through the consent writer."
                        "make-string fill"))))
         (if (< length 0)
             (eval-error "make-string length must be non-negative"))
-        (make-string length fill)))
+        (charge-string-allocation! (make-string length fill) context)))
 
     (define (primitive-string arguments context)
       "Implement the `string` primitive with argument validation and Consent Scheme values."
-      (list->string
-       (map (lambda (argument)
-              (expect-character argument "string"))
-            arguments)))
+      (charge-string-allocation!
+       (list->string
+        (map (lambda (argument)
+               (expect-character argument "string"))
+             arguments))
+       context))
 
     (define (primitive-string-length arguments context)
       "Implement the `string-length` primitive with argument validation and Consent Scheme values."
@@ -6539,14 +6572,16 @@ integer there would not render through the consent writer."
                    #t)))
         (if (> start end)
             (eval-error "substring start exceeds end"))
-        (substring string start end)))
+        (charge-string-allocation! (substring string start end) context)))
 
     (define (primitive-string-append arguments context)
       "Implement the `string-append` primitive with argument validation and Consent Scheme values."
-      (apply string-append
-             (map (lambda (argument)
-                    (expect-string argument "string-append"))
-                  arguments)))
+      (charge-string-allocation!
+       (apply string-append
+              (map (lambda (argument)
+                     (expect-string argument "string-append"))
+                   arguments))
+       context))
 
     (define (primitive-string->list arguments context)
       "Implement the `string->list` primitive with argument validation and Consent Scheme values."
@@ -6558,20 +6593,24 @@ integer there would not render through the consent writer."
                      "string->list")))
         (let loop ((index (car range)) (result '()))
           (if (= index (cdr range))
-              (reverse result)
+              (charge-list-allocation! (reverse result) context)
               (loop (+ index 1)
                     (cons (string-ref string index) result))))))
 
     (define (primitive-list->string arguments context)
       "Implement the `list->string` primitive with argument validation and Consent Scheme values."
-      (list->string
-       (map (lambda (argument)
-              (expect-character argument "list->string"))
-            (proper-list-elements (car arguments) "list->string"))))
+      (charge-string-allocation!
+       (list->string
+        (map (lambda (argument)
+               (expect-character argument "list->string"))
+             (proper-list-elements (car arguments) "list->string")))
+       context))
 
     (define (primitive-string->vector arguments context)
       "Implement the `string->vector` primitive with argument validation and Consent Scheme values."
-      (list->vector (primitive-string->list arguments context)))
+      (charge-vector-allocation!
+       (list->vector (primitive-string->list arguments context))
+       context))
 
     (define (primitive-vector->string arguments context)
       "Implement the `vector->string` primitive with argument validation and Consent Scheme values."
@@ -6583,7 +6622,7 @@ integer there would not render through the consent writer."
                      "vector->string")))
         (let loop ((index (car range)) (result '()))
           (if (= index (cdr range))
-              (list->string (reverse result))
+              (charge-string-allocation! (list->string (reverse result)) context)
               (loop (+ index 1)
                     (cons (expect-character
                            (vector-ref vector index)
@@ -6598,7 +6637,9 @@ integer there would not render through the consent writer."
                      1
                      (string-length string)
                      "string-copy")))
-        (substring string (car range) (cdr range))))
+        (charge-string-allocation!
+         (substring string (car range) (cdr range))
+         context)))
 
     (define (primitive-string-copy! arguments context)
       "Implement the `string-copy!` primitive with argument validation and Consent Scheme values."
@@ -6775,7 +6816,9 @@ integer there would not render through the consent writer."
 
     (define (primitive-values arguments context)
       "Implement the `values` primitive with argument validation and Consent Scheme values."
-      (make-multiple-values arguments))
+      ;; One fresh multiple-values wrapper; the values it carries were charged
+      ;; where they were allocated.
+      (charge-value-allocation! (make-multiple-values arguments) 1 context))
 
     (define (primitive-call-with-values arguments context)
       "Implement the `call-with-values` primitive with argument validation and Consent Scheme values."
@@ -7042,11 +7085,11 @@ integer there would not render through the consent writer."
                       (second arguments))))
         (if (< length 0)
             (eval-error "make-vector length must be non-negative"))
-        (make-vector length fill)))
+        (charge-vector-allocation! (make-vector length fill) context)))
 
     (define (primitive-vector arguments context)
       "Implement the `vector` primitive with argument validation and Consent Scheme values."
-      (list->vector arguments))
+      (charge-vector-allocation! (list->vector arguments) context))
 
     (define (primitive-vector-length arguments context)
       "Implement the `vector-length` primitive with argument validation and Consent Scheme values."
@@ -7084,18 +7127,22 @@ integer there would not render through the consent writer."
                      "vector->list")))
         (let loop ((index (car range)) (result '()))
           (if (= index (cdr range))
-              (reverse result)
+              (charge-list-allocation! (reverse result) context)
               (loop (+ index 1)
                     (cons (vector-ref vector index) result))))))
 
     (define (primitive-list->vector arguments context)
       "Implement the `list->vector` primitive with argument validation and Consent Scheme values."
-      (list->vector
-       (proper-list-elements (car arguments) "list->vector")))
+      (charge-vector-allocation!
+       (list->vector
+        (proper-list-elements (car arguments) "list->vector"))
+       context))
 
     (define (primitive-vector-copy arguments context)
       "Implement the `vector-copy` primitive with argument validation and Consent Scheme values."
-      (list->vector (primitive-vector->list arguments context)))
+      (charge-vector-allocation!
+       (list->vector (primitive-vector->list arguments context))
+       context))
 
     (define (primitive-vector-copy! arguments context)
       "Implement the `vector-copy!` primitive with argument validation and Consent Scheme values."
@@ -7123,12 +7170,14 @@ integer there would not render through the consent writer."
 
     (define (primitive-vector-append arguments context)
       "Implement the `vector-append` primitive with argument validation and Consent Scheme values."
-      (list->vector
-       (apply append
-              (map (lambda (argument)
-                     (vector->list
-                      (expect-vector argument "vector-append")))
-                   arguments))))
+      (charge-vector-allocation!
+       (list->vector
+        (apply append
+               (map (lambda (argument)
+                      (vector->list
+                       (expect-vector argument "vector-append")))
+                    arguments)))
+       context))
 
     (define (primitive-vector-fill! arguments context)
       "Implement the `vector-fill!` primitive with argument validation and Consent Scheme values."
@@ -7160,14 +7209,16 @@ integer there would not render through the consent writer."
                        "make-bytevector fill"))))
         (if (< length 0)
             (eval-error "make-bytevector length must be non-negative"))
-        (make-bytevector length fill)))
+        (charge-bytevector-allocation! (make-bytevector length fill) context)))
 
     (define (primitive-bytevector arguments context)
       "Implement the `bytevector` primitive with argument validation and Consent Scheme values."
-      (apply bytevector
-             (map (lambda (argument)
-                    (expect-byte argument "bytevector"))
-                  arguments)))
+      (charge-bytevector-allocation!
+       (apply bytevector
+              (map (lambda (argument)
+                     (expect-byte argument "bytevector"))
+                   arguments))
+       context))
 
     (define (primitive-bytevector-length arguments context)
       "Implement the `bytevector-length` primitive with argument validation and Consent Scheme values."
@@ -7215,7 +7266,9 @@ integer there would not render through the consent writer."
                      1
                      (bytevector-length bytevector)
                      "bytevector-copy")))
-        (bytevector-copy bytevector (car range) (cdr range))))
+        (charge-bytevector-allocation!
+         (bytevector-copy bytevector (car range) (cdr range))
+         context)))
 
     (define (primitive-bytevector-copy! arguments context)
       "Implement the `bytevector-copy!` primitive with argument validation and Consent Scheme values."
@@ -7242,10 +7295,12 @@ integer there would not render through the consent writer."
 
     (define (primitive-bytevector-append arguments context)
       "Implement the `bytevector-append` primitive with argument validation and Consent Scheme values."
-      (apply bytevector-append
-             (map (lambda (argument)
-                    (expect-bytevector argument "bytevector-append"))
-                  arguments)))
+      (charge-bytevector-allocation!
+       (apply bytevector-append
+              (map (lambda (argument)
+                     (expect-bytevector argument "bytevector-append"))
+                   arguments))
+       context))
 
     (define (primitive-procedure? arguments context)
       "Implement the `procedure?` primitive with argument validation and Consent Scheme values."
