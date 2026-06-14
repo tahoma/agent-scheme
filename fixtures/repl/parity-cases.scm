@@ -305,4 +305,30 @@
         (repl-condition (id cond-2) (submission sub-2) (phase eval) (recoverable #t)
                         (condition (condition (type policy-denial))))
         (repl-prompt (ordinal 3) (state ready) (pending #f))
-        (repl-exit (reason eof) (status closed-ok) (count 2) (detail #f)))))))
+        (repl-exit (reason eof) (status closed-ok) (count 2) (detail #f)))))
+
+    ((id repl-program-input-no-steal)
+     (description "A submitted form reads program input from the shared stdin cursor; the line it reads is consumed as program data, and the following form is still read as its own submission rather than stolen.  A REPL session authorizes its own stdin by invocation, so no grant is set in options.")
+     (replay (partial (reason "program input consumed across the shared cursor is not a replayable submission")))
+     (session "project-main")
+     (options ())
+     (input "(import (scheme base) (scheme read))\n(read-line)\nDATA\n(+ 1 2)\n")
+     (expect
+       ((repl-prompt (ordinal 1) (state ready) (pending #f))
+        (repl-submission (id sub-1) (ordinal 1) (source "(import (scheme base) (scheme read))") (complete #t) (eof #f))
+        (repl-result (id res-1) (submission sub-1)
+                     (evaluation-result (evaluation-result (status ok))))
+        (repl-prompt (ordinal 2) (state ready) (pending #f))
+        (repl-submission (id sub-2) (ordinal 2) (source "(read-line)") (complete #t) (eof #f))
+        ;; res-2 reads the program-data line "DATA"; its rendered value is
+        ;; host-deterministic but left unpinned here -- the eval suites assert the
+        ;; read value.  This case pins the structure: "DATA" is consumed as program
+        ;; data (not a submission) and (+ 1 2) is still read as sub-3, not stolen.
+        (repl-result (id res-2) (submission sub-2)
+                     (evaluation-result (evaluation-result (status ok))))
+        (repl-prompt (ordinal 3) (state ready) (pending #f))
+        (repl-submission (id sub-3) (ordinal 3) (source "(+ 1 2)") (complete #t) (eof #f))
+        (repl-result (id res-3) (submission sub-3)
+                     (evaluation-result (evaluation-result (status ok))))
+        (repl-prompt (ordinal 4) (state ready) (pending #f))
+        (repl-exit (reason eof) (status closed-ok) (count 3) (detail #f)))))))

@@ -235,9 +235,15 @@ are owned by later issues:
   read in the terminal's cooked mode, the terminal driver echoes each typed form;
   the `comment` chrome accounts for that echo (see
   [Replayable transcripts and input echo](#replayable-transcripts-and-input-echo)).
-- **Program input.** The loop consumes standard input as interaction input, so a
-  form that reads from the current input port has no separate program-input
-  stream in this v1 shell; such a read fails closed.
+- **Program input is multiplexed onto one stdin cursor.** A submitted form may
+  read its standard input: the form reader and program reads share a single stdin
+  cursor in time order, so `(display (read-line))` ⏎ then `hello` ⏎ reads
+  `"hello"` and a following form is still read as its own submission, not stolen.
+  The submission's terminating newline is the boundary (not program data), and a
+  REPL session authorizes its own stdin by invocation. See the program stream
+  model in the
+  [REPL interaction contract](repl-interaction-contract.md#program-stream-model).
+  (Binary stdio and live-TTY line editing remain out of scope; see that section.)
 - **Synchronous, flat error model.** Each submission runs to completion before
   the next is read, and a condition is rendered and the loop continues. The
   nested break loop, asynchronous/streamed evaluation, and cancellation are

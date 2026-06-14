@@ -320,6 +320,52 @@ nesting depth."
   "Return non-nil when STRING is empty or only whitespace."
   (string-empty-p (string-trim string)))
 
+(defun consent-repl-stream--horizontal-whitespace-p (char)
+  "Return non-nil when CHAR is space or tab (horizontal whitespace, not a break)."
+  (or (eq char ?\s) (eq char ?\t)))
+
+(defun consent-repl-stream--submission-boundary (buffer next)
+  "Return the index in BUFFER where program input begins after a form ending at NEXT.
+Skip horizontal whitespace after the form; if a newline follows, consume exactly
+that newline as the submission terminator (the Enter that submits a line is not
+program data), so program input begins on the next line.  Otherwise the boundary
+is NEXT and any same-line trailing text is program input for an evaluated read."
+  (let ((length (length buffer))
+        (index next)
+        (result nil))
+    (while (and (not result) (< index length))
+      (let ((char (aref buffer index)))
+        (cond
+         ((consent-repl-stream--horizontal-whitespace-p char)
+          (setq index (1+ index)))
+         ((eq char ?\n) (setq result (1+ index)))
+         (t (setq result next)))))
+    (or result next)))
+
+;; A REPL session is consented by invocation -- the caller handed it this stdin --
+;; so program input is authorized by default with this `port'/`read' grant backed
+;; by `stdin'.  Ambient effects still gate separately.
+(defconst consent-repl-stream--program-input-grant
+  '(capability-grant (id program-input) (domain port)
+                     (operations read close) (scope (backing stdin))
+                     (expires never))
+  "The consent-by-invocation stdin grant a REPL session attaches by default.")
+
+(defun consent-repl-stream--interaction-options (session-id read-chunk options)
+  "Augment REPL OPTIONS with the session id, a program-input reader over
+READ-CHUNK, and the consent-by-invocation stdin grant, so the interaction context
+shares one stdin cursor between the form reader and evaluated reads.  Grants
+already in OPTIONS are preserved by merging into the leading :capability-grants."
+  (let ((reader (lambda ()
+                  (let ((chunk (funcall read-chunk)))
+                    (if (eq chunk consent-repl-stream--eof) nil chunk))))
+        (grants (cons consent-repl-stream--program-input-grant
+                      (plist-get options :capability-grants))))
+    (append (list :session-id session-id
+                  :program-input-reader reader
+                  :capability-grants grants)
+            options)))
+
 ;;;; The interaction loop
 
 (defun consent-repl-stream--engine (read-chunk emit-record emit-output session options)
@@ -334,7 +380,8 @@ EMIT-OUTPUT on separate streams, under SESSION and evaluator OPTIONS."
                            (t (format "%s" session))))
          (interaction
           (consent-make-interaction-context
-           (append (list :session-id session-id) options)))
+           (consent-repl-stream--interaction-options
+            session-id read-chunk options)))
          (exit-code 0))
     (cl-labels
         ((emit (record)
@@ -419,7 +466,11 @@ EMIT-OUTPUT on separate streams, under SESSION and evaluator OPTIONS."
                (let* ((datum (car payload))
                       (next (cadr payload))
                       (source (string-trim (substring current 0 next)))
-                      (rest (substring current next)))
+                      (boundary
+                       (consent-repl-stream--submission-boundary current next))
+                      ;; Everything after the submission's terminating newline is
+                      ;; this turn's program input, shared on the one stdin cursor.
+                      (program-input (substring current boundary)))
                  (cond
                   ((consent-repl-stream--exit-form-p datum)
                    (emit (consent-repl-stream--submission-record
@@ -433,6 +484,12 @@ EMIT-OUTPUT on separate streams, under SESSION and evaluator OPTIONS."
                   (t
                    (emit (consent-repl-stream--submission-record
                           session ordinal source t nil))
+                   ;; Seed the shared cursor so an evaluated read consumes the
+                   ;; input after this form; whatever it leaves unread threads back
+                   ;; as the next form-reading buffer, so neither reader steals the
+                   ;; other's characters.
+                   (consent-interaction-seed-program-input! interaction
+                                                            program-input)
                    (let ((result (consent-interaction-eval-form
                                   interaction datum)))
                      (drain-output!)
@@ -444,7 +501,10 @@ EMIT-OUTPUT on separate streams, under SESSION and evaluator OPTIONS."
                        (emit (consent-repl-stream--result-record
                               session ordinal result
                               (consent-repl-stream--result-display result))))
-                     (setq buffer rest)
+                     (setq buffer
+                           (or (consent-interaction-program-input-remainder
+                                interaction)
+                               program-input))
                      (setq ordinal (1+ ordinal))
                      (setq count (1+ count)))))))))))
       exit-code)))

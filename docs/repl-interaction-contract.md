@@ -154,88 +154,108 @@ Obligations:
   it crosses the host boundary; the channel names above are the REPL-level view
   of the same separation.
 
-### Program-Input Stream Model
+### Program Stream Model
 
-`program-input` is the program's own stdin, and like every other host effect it
-is **capability-gated and fails closed**. By default a session's evaluation
-context carries no current input port, so a form that calls `read`, `read-char`,
-`peek-char`, `read-string`, or `read-line` on `(current-input-port)` is denied
-with the standard *"… requires policy-gated host access"* condition — the same
-posture a `--script` or shebang program runs under. Connecting `program-input`
-is an explicit, granted act:
+The program's own standard streams — `program-input` (stdin),
+`program-output` (stdout), and `program-error` (stderr) — are **consented by
+invocation**. They are what the caller handed the process (a shell pipe, a
+redirection, the terminal the user is driving), so the *host* attaching real
+stdio is the authorization. The runtime itself stays fail-closed: it connects a
+stream only when the host supplies both that stream's device callback and a
+matching active `port` grant. A context with no devices/grants — the daemon/agent
+adapter, the host-run test runner — keeps its streams disconnected/captured, so
+the sandbox is intact wherever there is no user at the other end. **Ambient
+authority is unaffected**: named file opens, processes, network, environment,
+clock, providers, and editor mutation keep gating independently of stdio. No raw
+host port crosses into Scheme — input is pulled through a reader thunk and output
+flushed through a writer thunk.
 
-- **Grant.** An active `port`-domain grant whose `operations` include `read` and
-  whose scope is `(backing stdin)` authorizes the connection. The canonical shape
-  is
+- **Grants.** One active `port`-domain grant per connected stream, distinguished
+  by its scope backing:
 
   ```scheme
-  (capability-grant
-    (id program-input)
-    (domain port)
-    (operations read close)
-    (scope (backing stdin))
-    (expires never))
+  (capability-grant (id program-input)  (domain port) (operations read close)        (scope (backing stdin))  (expires never))
+  (capability-grant (id program-output) (domain port) (operations write flush close) (scope (backing stdout)) (expires never))
+  (capability-grant (id program-error)  (domain port) (operations write flush close) (scope (backing stderr)) (expires never))
   ```
 
-- **Reader.** Program input is always a **reader** — a stream — pulled on
-  demand: a zero-argument procedure that returns the next chunk of input as a
-  string, or an end-of-stream indication, supplied to the evaluator as the
-  `program-input-reader` option (`:program-input-reader` on the Emacs host). The
-  host's reader does its real stdin read (a line or block per call); no raw host
-  port crosses into Scheme. A buffer is a stream with its time dimension
-  collapsed — all input available at once, then immediate end — so a caller with
-  genuinely finite, in-memory input (a fixture or a captured-transcript replay)
-  builds its reader with `consent-program-input-from-string`, which yields the
-  string once and then ends. There is deliberately **no raw-string option**:
-  the finite case is a constructor into the stream type, stated explicitly, not a
-  stdin-shaped shortcut that would invite modelling a live stream as a buffer.
+- **Devices.** The host supplies the stream devices as evaluator options:
+  `program-input-reader` (`:program-input-reader` on Emacs), a zero-argument
+  thunk returning the next input chunk as a string or an end-of-stream
+  indication; and `program-output-writer` / `program-error-writer`, procedures of
+  one string that flush it to the real stream. A buffer is a stream with its time
+  dimension collapsed — all input available at once, then immediate end — so a
+  caller with genuinely finite, in-memory input (a fixture, a captured-transcript
+  replay) builds its reader with `consent-program-input-from-string`. There is
+  deliberately **no raw-string option**: the finite case is a constructor into the
+  stream type, stated explicitly, not a stdin-shaped shortcut that would invite
+  modelling a live stream as a buffer.
 
-- **Refill on demand (streaming).** The runtime, only when the grant is present,
-  installs a `stdio`-backed Consent input port whose buffer is **grown by pulling
-  from the reader as reads need more input**. `read-char`/`peek-char` pull until
-  one character is available; `read-line` pulls until a newline (or end of
-  stream); `read-string` pulls until the requested count; `read` pulls until the
-  recovery-aware reader sees a complete datum, then reads it through the ordinary
-  validating reader. So a `(read-line)` filter over a live, slow, or unbounded
-  pipe processes input incrementally and emits as it goes — it never blocks
-  waiting to drain all of stdin first, and an unbounded stream does not hang a
-  bounded read. Every read revalidates the grant and audits the operation exactly
-  like a host file port, and **each refill is charged against the host-callback
-  budget**, so even an unbounded stream stays budget-bounded and fail-closed.
+- **Input refills on demand.** A connected `stdio`-backed input port grows its
+  buffer by pulling from the reader only as reads need more: `read-char`/
+  `peek-char` pull one character, `read-line` to the next newline, `read-string`
+  to the count, and `read` until the recovery-aware reader sees a complete datum
+  (then reads it through the ordinary validating reader). So a `(read-line)`
+  filter over a live, slow, or unbounded pipe processes input incrementally and
+  never blocks draining all of stdin first; an unbounded stream does not hang a
+  bounded read.
 
-- **Fail closed.** If program input is offered without a covering grant, the
-  connection is denied and recorded, and reads fail closed. If a grant is present
-  but no input was offered, the input port stays disconnected. Either way the
-  default — no grant — is unchanged: reads deny.
+- **Output flushes through (write-through).** A connected `stdio`-backed output
+  port flushes each textual write through the host writer immediately rather than
+  buffering, so a single-form filter loop streams its output as it runs.
+  `current-error-port` is connected the same way under the `stderr` grant.
 
-This is the **non-interactive (script / shebang) half** of the program-input
-model, where there is no competing reader for stdin. It is realized identically
-on both hosts in the shared evaluator (`(consent eval)` `consent-eval-source`
-and the `consent-eval.el` twin), so a `--script` / shebang filter that streams
-its stdin under a grant, and is denied without one, behaves the same on the
-portable and Emacs hosts.
+- **Gated and bounded.** Every read and write revalidates its grant and audits
+  the operation exactly like a host file port, and each input refill and output
+  flush is charged against the host-callback budget, so even an unbounded stream
+  stays budget-bounded and fail-closed. Offering a device without its grant denies
+  and records the denial; without a device the stream is left untouched. The
+  default — no device, no grant — is reads/writes deny.
 
-#### Remaining work on this issue
+This is realized identically on both hosts in the shared evaluator (`(consent
+eval)` and the `consent-eval.el` twin), so a `--script` / shebang filter and a
+`--eval` program behave the same on the portable and Emacs hosts.
 
-Two slices of the program-input model are deliberately deferred and tracked here
-rather than as separate parked issues:
+#### Interactive multiplexing: one shared stdin cursor
 
-- **Interactive / piped-into-REPL multiplexing.** When the REPL loop owns stdin
-  to read submission forms, a form that reads `program-input` must draw program
-  data without stealing characters the loop has not yet read as a form (the
-  no-character-stealing obligation above). Defining the TTY and piped-stdin
-  multiplexing between the form reader and the program-input port is the genuine
-  design call; the interactive entry points (`(cli repl-shell)`,
-  `consent-repl-stream`, and the durable interaction context) therefore do **not**
-  connect `program-input` yet, and a program read inside an interactive session
-  still fails closed.
-- **CLI grant surface and the entrypoint stdin reader.** The product main
-  (`consent --script` / bare-path) and the Emacs batch entry do not yet expose a
-  flag, policy file, or preloaded approval that requests the stdin-backed grant,
-  nor do they install a real-stdin reader as the `program-input-reader` option.
-  Wiring that end-to-end CLI affordance is coordinated with the non-interactive
-  script authority posture (#400), which owns the promptable-grant surface the
-  script half plugs into.
+In a REPL session the form reader and `program-input` share **one stdin cursor**
+in time order, so a submitted form can read its stdin without corrupting the
+loop. The REPL session authorizes its own stdin by invocation, so program input
+is connected by default (symmetric with the session's already-connected program
+output). Each turn:
+
+1. The loop reads one complete form from the cursor.
+2. The submission's terminating newline is consumed as the **submission
+   boundary** — the Enter that submits a line is not program data. (Precisely:
+   after the form, horizontal whitespace then exactly one newline is consumed;
+   text remaining on the form's own line stays program input.)
+3. Evaluation runs; any `read`/`read-line`/`read-char` consumes the input that
+   follows, refilling from stdin as needed.
+4. Whatever the form did not read is threaded back as the next form-reading
+   buffer.
+
+So `(display (read-line))` ⏎ then `hello` ⏎ reads `"hello"`, and a following
+`(+ 1 2)` ⏎ is still read as its own submission, not stolen. "No character
+stealing" is structural: there is exactly one monotonic cursor, the loop never
+re-reads bytes a program already consumed, and a program read never grabs a
+half-read form. (#392 pins this cross-host with the `repl-program-input-no-steal`
+case.) Putting a reading form and more text on a single line is the one corner:
+the read consumes that trailing text as program data.
+
+#### Remaining work
+
+The model above is complete for piped and `--script`/`--eval`/`--repl` use. Three
+extensions are deliberately out of scope here and tracked for their own issues:
+
+- **Promptable runtime stdio grants.** Requesting a stdio grant *at runtime*
+  (rather than by invocation) — a script that asks for stdin/stdout mid-run — is
+  part of the non-interactive script authority posture (#400). The mechanism here
+  is the substrate it builds on.
+- **Binary stdio.** `read-u8`/`write-u8` over a `stdio`-backed binary port (a
+  byte filter) is not connected; the standard streams here are textual.
+- **TTY line editing.** Cooked-mode echo, history, and completion on a live
+  terminal (the in-editor comint surface, #514) ride above this cursor and are
+  not part of the contract.
 
 ## Record Vocabulary
 
