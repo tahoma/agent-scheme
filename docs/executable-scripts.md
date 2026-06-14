@@ -141,34 +141,34 @@ denial is recorded as a Scheme-readable audit record rather than raised as a
 prompt. With no confirmation channel attached, anything that would prompt is
 denied.
 
-Both host script paths now evaluate the file through the Consent interpreter
-(`consent-eval-source`), so the fail-closed posture applies fully and
-identically — the host-compiled binary is **not** a host R7RS interpreter:
+Both host script paths evaluate the file through the Consent interpreter
+(`consent-eval-source`), so the posture applies fully and identically — the
+host-compiled binary is **not** a host R7RS interpreter.
 
-- **Host-compiled binary (`consent FILE` / `--script`).** Evaluated through the
-  Consent interpreter. The standard library is capability-gated, no raw host
-  objects are exposed to script values, and confirm-gated capabilities —
-  including program output (`display`) — are denied in batch without a grant. An
-  `(open-output-file …)` or `(file-exists? …)` is denied and audited; a denial
-  raises and the process exits non-zero.
-- **Emacs batch runner (`consent-script-run-file`).** The identical contract
-  through the same `consent-eval-source`. The two are byte-for-byte posture
-  matches.
+The discriminator is **standard streams vs ambient authority**. The three
+standard streams are *consented by invocation* — they are what the shell handed
+the process — so the CLI attaches them by default; everything else fails closed.
 
-Reading **stdin** is gated the same way. By default a script has no current
-input port, so `(read-line)`, `(read-char)`, and `(read)` on
-`(current-input-port)` fail closed. A script reads its standard input only when
-the run supplies a program-input reader (or, for genuinely finite in-memory
-input, one built with `consent-program-input-from-string`) together with an
-active `port`/`read` grant backed by `stdin` — the program-input stream model
-defined in the
-[cross-host REPL interaction contract](repl-interaction-contract.md#program-input-stream-model).
-Input is pulled from the reader on demand, so a `(read-line)` filter streams a
-live or unbounded pipe incrementally rather than draining it up front. The
-mechanism is in place and host-identical; the command-line affordance that
-requests the grant and installs a real-stdin reader in the entrypoints is part
-of the non-interactive script authority work (#400), alongside the
-promptable-output surface below.
+- **Standard streams work by default.** `consent FILE` / `--script` / `--eval`
+  reads its stdin and writes stdout/stderr, so an ordinary
+  `#!/usr/bin/env consent` filter (`(read-line)` in a loop, `(display …)` per
+  line) just works in a pipe. Input is pulled on demand and output is flushed
+  through immediately, so a filter streams a live or unbounded pipe incrementally
+  rather than draining it up front. This is the program stream model in the
+  [cross-host REPL interaction contract](repl-interaction-contract.md#program-stream-model):
+  the host supplies the stream devices and one `port` grant per stream; the
+  runtime connects `current-input-port`/`current-output-port`/`current-error-port`
+  from them and audits every read/write. No raw host objects are exposed to script
+  values.
+- **Ambient effects still fail closed.** A confirm-gated capability — opening a
+  named file, spawning a process, network, environment, clock, a provider — is
+  denied in batch without a grant, policy file, or preloaded approval. An
+  `(open-output-file …)` is denied and audited; the denial raises and the process
+  exits non-zero. A script can shuttle data between its caller-provided stdin and
+  stdout, but it cannot reach any ambient resource without an explicit grant.
+- **Emacs batch runner (`consent-script-run-file`).** The same contract through
+  the same `consent-eval-source`; a caller that attaches stdio devices and grants
+  gets the identical behavior.
 
 White-box tests that `import` the runtime's internal libraries (for example
 `(consent interpreter)`) are **not** scripts and do not run through this path:
@@ -176,10 +176,12 @@ they exercise the compiled libraries on a separate, non-shipped host-execution
 test runner, never through `consent --script`. Host execution is not on the
 product command surface.
 
-Promptable scripts that call `(prompt …)`, a grant/policy mechanism for
-admitting program output and other capabilities to a trusted script, and a
-normalized host-identical `command-line` contract remain the scope of the
-non-interactive script authority work (#400).
+Promptable scripts that call `(prompt …)`, a grant/policy mechanism for admitting
+*ambient* capabilities to a trusted script, and a normalized host-identical
+`command-line` contract remain the scope of the non-interactive script authority
+work (#400). Requesting a stdio grant at runtime (rather than by invocation) is
+part of that work; connecting the standard streams by invocation is in place
+here.
 
 ## Verification
 

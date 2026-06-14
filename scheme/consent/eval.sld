@@ -19,6 +19,9 @@
           consent-interaction-context-session-id
           consent-interaction-program-output
           consent-interaction-eval-form
+          consent-interaction-program-input-port
+          consent-interaction-seed-program-input!
+          consent-interaction-program-input-remainder
           consent-program-input-from-string
           consent-make-empty-environment
           consent-make-base-environment

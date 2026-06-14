@@ -281,6 +281,17 @@ Port sandboxing rules:
   policy.
 - Default current ports are policy-gated when they resolve to host resources.
   Explicit in-memory ports stay portable.
+- The three **standard streams** (`current-input-port`/`current-output-port`/
+  `current-error-port`) are *consented by invocation*: they are what the caller
+  handed the process, so the host attaching real stdio is the authorization, and
+  it supplies one `port` grant per stream (scope `(backing stdin)`/`stdout`/
+  `stderr`) alongside the stream device. The capability gate exists for *ambient*
+  reaches — named file opens, processes, network, environment, clock, providers,
+  editor mutation — not the stdio a caller explicitly connected. A context handed
+  no stdio devices/grants (the daemon/agent adapter routing through event
+  channels, the host-run test runner) keeps its streams disconnected, so the
+  sandbox holds wherever there is no user at the other end. See the program stream
+  model in [the REPL interaction contract](repl-interaction-contract.md#program-stream-model).
 
 Closing a port invalidates the port handle. Later use of the same handle fails
 closed as stale, even if the original grant remains active.
