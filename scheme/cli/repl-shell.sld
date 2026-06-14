@@ -142,6 +142,26 @@
                   (find-end (- end 1))
                   (substring string start end))))))))
 
+    (define (repl--horizontal-whitespace? char)
+      "Return #t when CHAR is space or tab (horizontal whitespace, not a line break)."
+      (or (char=? char #\space)
+          (char=? char #\tab)))
+
+    (define (repl--submission-boundary buffer next)
+      "Return the index in BUFFER where program input begins after a form ending at NEXT.
+Skip horizontal whitespace after the form; if a newline follows, consume exactly
+that newline as the submission terminator (the Enter that submits a line is not
+program data), so program input begins on the next line.  Otherwise the boundary
+is NEXT and any same-line trailing text is program input for an evaluated read."
+      (let ((length (string-length buffer)))
+        (let loop ((index next))
+          (cond
+           ((>= index length) next)
+           ((repl--horizontal-whitespace? (string-ref buffer index))
+            (loop (+ index 1)))
+           ((char=? (string-ref buffer index) #\newline) (+ index 1))
+           (else next)))))
+
     ;;;; Interaction-input chunk sources
 
     (define (repl--list-chunk-source chunks)
@@ -353,6 +373,36 @@ program's context while host procedures pass through untouched."
           callback
           (lambda arguments (consent-apply-callable callback arguments))))
 
+    ;; The session's program input is the same physical stdin the form reader
+    ;; draws from, shared as one cursor.  A REPL session is consented by
+    ;; invocation -- the caller handed it this stdin -- so program input is
+    ;; authorized by default with this `port'/`read' grant backed by `stdin'
+    ;; (ambient effects still gate separately).
+    (define repl--program-input-grant
+      '(capability-grant (id program-input) (domain port)
+                         (operations read close) (scope (backing stdin))
+                         (expires never)))
+
+    (define (repl--option-value options key default)
+      "Return the value of OPTIONS entry KEY (a (key . values) pair), or DEFAULT."
+      (let ((entry (assq key options)))
+        (if entry (cdr entry) default)))
+
+    (define (repl--interaction-options session-id read-chunk options)
+      "Augment REPL OPTIONS with the session id, a program-input reader over
+READ-CHUNK, and the consent-by-invocation stdin grant, so the interaction context
+shares one stdin cursor between the form reader and evaluated reads.  Any grants
+already in OPTIONS are preserved by merging into the first capability-grants entry."
+      (let ((reader (lambda ()
+                      (let ((chunk (read-chunk)))
+                        (if (eof-object? chunk) #f chunk))))
+            (grants (cons repl--program-input-grant
+                          (repl--option-value options 'capability-grants '()))))
+        (cons (cons 'session-id session-id)
+              (cons (cons 'program-input-reader reader)
+                    (cons (cons 'capability-grants grants)
+                          options)))))
+
     (define (repl--engine read-chunk emit-record emit-output session options)
       "Run the host-neutral loop: read from READ-CHUNK, send records to EMIT-RECORD and program output to EMIT-OUTPUT under SESSION/OPTIONS, returning the close-status exit code."
       (let* ((read-chunk (repl--callable read-chunk))
@@ -363,7 +413,7 @@ program's context while host procedures pass through untouched."
                              session))
              (interaction
               (consent-make-interaction-context
-               (cons (cons 'session-id session-id) options)))
+               (repl--interaction-options session-id read-chunk options)))
              (exit-code 0))
         (define (emit record)
           (when (and (pair? record) (eq? (car record) 'repl-exit))
@@ -442,7 +492,11 @@ program's context while host procedures pass through untouched."
                (let* ((datum (car payload))
                       (next (cadr payload))
                       (source (repl--trim (substring current 0 next)))
-                      (rest (substring current next (string-length current))))
+                      (boundary (repl--submission-boundary current next))
+                      ;; Everything after the submission's terminating newline is
+                      ;; this turn's program input, shared on the one stdin cursor.
+                      (program-input
+                       (substring current boundary (string-length current))))
                  (cond
                   ((repl--exit-form? datum)
                    (emit (repl--submission-record session ordinal source #t #f))
@@ -453,6 +507,12 @@ program's context while host procedures pass through untouched."
                                               (cdr disposition)))))
                   (else
                    (emit (repl--submission-record session ordinal source #t #f))
+                   ;; Seed the shared cursor so an evaluated read consumes the
+                   ;; input after this form; whatever it leaves unread is threaded
+                   ;; back as the next form-reading buffer, so neither reader steals
+                   ;; the other's characters.
+                   (consent-interaction-seed-program-input! interaction
+                                                            program-input)
                    (let ((result (consent-interaction-eval-form
                                   interaction datum)))
                      (drain-output!)
@@ -464,7 +524,10 @@ program's context while host procedures pass through untouched."
                          (emit (repl--result-record
                                 session ordinal result
                                 (repl--result-display result))))
-                     (loop rest (+ ordinal 1) (+ count 1)))))))))))
+                     (loop (or (consent-interaction-program-input-remainder
+                                interaction)
+                               program-input)
+                           (+ ordinal 1) (+ count 1)))))))))))
         exit-code))
 
     (define (cli-repl-run read-chunk write-record write-output session
