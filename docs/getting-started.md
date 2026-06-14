@@ -50,9 +50,10 @@ git remote -v
 
 The current first-use flow loads the Emacs Lisp bootstrap modules from the
 checkout and starts a project session. This section covers the session UX
-(`consent-start-repl` / `consent-repl-eval`). For the incremental, one-form-at-a-time
-entry (`consent-repl-stream`), the portable terminal REPL, and a cross-host
-parity matrix, see [Using the Consent Scheme REPL](repl.md).
+(`consent-start-repl` / `consent-repl-eval`). For the live, editable comint REPL
+buffer (`consent-repl-comint`), the incremental one-form-at-a-time entry
+(`consent-repl-stream`), the portable terminal REPL, and a cross-host parity
+matrix, see [Using the Consent Scheme REPL](repl.md).
 
 From Emacs, add the checkout's `lisp/` directory to `load-path` and load the
 native REPL module:
@@ -72,10 +73,14 @@ M-x consent-start-repl
 the visible buffers normally use the project label `consent`, such as
 `*Consent: consent*` and `*Consent Scheme: consent*`.
 
-The session buffers are read-only renderings of session state, not a comint
-buffer you type into. Source is submitted with `consent-repl-eval`, which
-evaluates the active region or prompts in the minibuffer; inside a session
-buffer the same command is on `C-c C-c`.
+The session buffers are read-only renderings of session state, not buffers you
+type into. Source is submitted with `consent-repl-eval`, which evaluates the
+active region or prompts in the minibuffer; inside a session buffer the same
+command is on `C-c C-c`. If you want a live prompt to type at instead — a comint
+buffer bound to this same durable session — open one with `M-x
+consent-repl-comint`; it shares the session's definitions, imports, and macros
+with `consent-repl-eval`. See [Using the Consent Scheme REPL](repl.md) for that
+surface.
 
 The native dispatch menu is `M-x consent-dispatch`. It includes commands for
 starting or switching sessions, inspecting or stopping sessions, opening
