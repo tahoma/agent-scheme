@@ -18,6 +18,14 @@ permissions:
   issues: write
   pull-requests: write
 
+# Cancel only superseded pull-request runs: a new push to a PR coalesces onto the
+# PR-numbered group and cancels the in-flight run. Pushes to main, scheduled
+# runs, and manual dispatches each get a unique run-id group, so they are never
+# cancelled or coalesced.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   # The compiled and gambit-native shard targets build the non-shipped
@@ -163,6 +171,22 @@ jobs:
           } >> "ci-logs/${CONSENT_CI_LOG_FILE}"
           exit "$status"
 
+      # Warm the incremental Gambit build tree. The exact key changes whenever any
+      # runtime source or the compile script changes (so a content change always
+      # forces the right work); the restore-keys prefix falls back to the most
+      # recent tree so a normal push recompiles only the modules it touched -- in
+      # the common case just the version module plus the relink. Only the
+      # compiling (native) leg participates; the binary is independent of the
+      # source-metadata/docstring matrix axes, so the key omits them.
+      - name: Cache Gambit compiled build tree
+        if: ${{ matrix.combo.native }}
+        uses: actions/cache@v4
+        with:
+          path: build/compile/gambit
+          key: ${{ runner.os }}-gambit-build-v1-${{ env.CONSENT_GAMBIT_VERSION }}-${{ hashFiles('scheme/**', 'tools/compile-portable.sh') }}
+          restore-keys: |
+            ${{ runner.os }}-gambit-build-v1-${{ env.CONSENT_GAMBIT_VERSION }}-
+
       - name: Run portable R7RS Gambit-compiled shard
         if: ${{ matrix.combo.native }}
         shell: bash
@@ -280,6 +304,20 @@ jobs:
             ~/.local/share/racket
             ~/.cache/racket
           key: ${{ runner.os }}-racket-r7rs-v1
+
+      # Warm the Racket compiled build tree (collection sources plus the bytecode
+      # raco make writes under their compiled/ directories). write-if-changed
+      # generation keeps unchanged sources' timestamps stable, so a restore lets
+      # raco make recompile only the modules that actually changed before raco exe
+      # links from the reused bytecode. Only the Racket-compiled host builds it.
+      - name: Cache Racket compiled build tree
+        if: matrix.host.host == 'compiled'
+        uses: actions/cache@v4
+        with:
+          path: build/compile/racket
+          key: ${{ runner.os }}-racket-build-v1-${{ hashFiles('scheme/**', 'tools/compile-portable.sh') }}
+          restore-keys: |
+            ${{ runner.os }}-racket-build-v1-
 
       - name: Install portable R7RS host
         shell: bash
