@@ -73,7 +73,7 @@ and `:max-event-nodes'."
         (input-form (consent-value->external expression)))
     (setf (consent--eval-context-interaction-environment context)
           eval-environment)
-    (consent--connect-program-input! context options)
+    (consent--connect-standard-streams! context options)
     (condition-case condition
         (progn
           (consent-policy-authorize
@@ -102,7 +102,7 @@ is the result of the last command or definition."
          (input-form source))
     (setf (consent--eval-context-interaction-environment context)
           eval-environment)
-    (consent--connect-program-input! context options)
+    (consent--connect-standard-streams! context options)
     (condition-case condition
         (progn
           (consent-policy-authorize
@@ -215,7 +215,7 @@ agent events, and handle references across calls."
         (input-form (consent-value->external expression)))
     (setf (consent--eval-context-interaction-environment context)
           eval-environment)
-    (consent--connect-program-input! context options)
+    (consent--connect-standard-streams! context options)
     (condition-case condition
         (progn
           (consent-policy-authorize
@@ -242,7 +242,7 @@ agent events, and handle references across calls."
         (input-form source))
     (setf (consent--eval-context-interaction-environment context)
           eval-environment)
-    (consent--connect-program-input! context options)
+    (consent--connect-standard-streams! context options)
     (condition-case condition
         (progn
           (consent-policy-authorize
@@ -281,7 +281,7 @@ agent events, and handle references across calls."
 (cl-defstruct (consent--interaction-context
                (:constructor consent--make-interaction-context-record
                              (options environment syntax-environment
-                              program-output-port))
+                              program-output-port program-input-port))
                (:copier nil))
   "Durable state a REPL session reuses across submissions.
 OPTIONS are the evaluator options (carrying `:session-id', `:policy-actions',
@@ -289,25 +289,61 @@ and `:capability-grants').  ENVIRONMENT is the persistent value environment and
 SYNTAX-ENVIRONMENT the persistent syntax environment, so definitions, imports,
 and macros persist across `consent-interaction-eval-form' submissions.
 PROGRAM-OUTPUT-PORT captures what each submission writes to current output,
-separated from the interaction record stream."
-  options environment syntax-environment program-output-port)
+separated from the interaction record stream.  PROGRAM-INPUT-PORT, when present,
+is the shared stdin cursor the REPL form reader and evaluated reads both draw
+from (or nil when program input is not connected)."
+  options environment syntax-environment program-output-port program-input-port)
 
 ;;;###autoload
 (defun consent-make-interaction-context (&optional options)
   "Create a durable interaction context from plist OPTIONS.
 OPTIONS may carry `:session-id', `:policy-actions', and `:capability-grants'
 whose definitions, imports, macros, and program output persist across
-`consent-interaction-eval-form' submissions.  Mirrors the portable
-`(consent eval)' `consent-make-interaction-context'."
+`consent-interaction-eval-form' submissions.  When OPTIONS supply a
+`:program-input-reader' and a matching active `port'/`read' grant backed by
+`stdin', a program-input port is created and shared as the session's single
+stdin cursor.  Mirrors the portable `(consent eval)'
+`consent-make-interaction-context'."
   (let* ((context (consent--new-eval-context options))
-         (environment (consent-make-base-environment)))
+         (environment (consent-make-base-environment))
+         (reader (consent--program-input-reader-from-options options))
+         (grant (and reader
+                     (consent--find-standard-stream-grant context 'stdin 'read)))
+         (input-port (and reader grant
+                          (consent--make-program-input-port grant reader))))
     (setf (consent--eval-context-interaction-environment context)
           environment)
     (consent--ensure-base-syntax context environment)
     (consent--make-interaction-context-record
      options environment
      (consent--eval-context-syntax-environment context)
-     (consent--primitive-open-output-string nil nil))))
+     (consent--primitive-open-output-string nil nil)
+     input-port)))
+
+;;;###autoload
+(defun consent-interaction-program-input-port (interaction)
+  "Return INTERACTION's shared program-input port, or nil when disconnected."
+  (consent--interaction-context-program-input-port interaction))
+
+;;;###autoload
+(defun consent-interaction-seed-program-input! (interaction text)
+  "Seed the shared program-input cursor with TEXT (the post-form remainder).
+An evaluated read then consumes the input that follows the just-read submission.
+A no-op when program input is not connected.  Mirrors the portable twin."
+  (let ((port (consent--interaction-context-program-input-port interaction)))
+    (when port
+      (setf (consent--port-source port) text)
+      (setf (consent--port-position port) 0))))
+
+;;;###autoload
+(defun consent-interaction-program-input-remainder (interaction)
+  "Return the shared program-input cursor's unconsumed remainder, or nil.
+The REPL engine threads this back as the next form-reading buffer so neither
+reader steals the other's characters.  Mirrors the portable twin."
+  (let ((port (consent--interaction-context-program-input-port interaction)))
+    (when port
+      (substring (consent--port-source port)
+                 (consent--port-position port)))))
 
 ;;;###autoload
 (defalias 'consent-interaction-context-p #'consent--interaction-context-p
@@ -339,6 +375,8 @@ the portable `(consent eval)' `consent-interaction-eval-form'."
           (consent--interaction-context-syntax-environment interaction))
          (program-output-port
           (consent--interaction-context-program-output-port interaction))
+         (program-input-port
+          (consent--interaction-context-program-input-port interaction))
          (context (consent--new-eval-context options)))
     (setf (consent--port-contents program-output-port) "")
     (setf (consent--eval-context-syntax-environment context)
@@ -347,6 +385,9 @@ the portable `(consent eval)' `consent-interaction-eval-form'."
           environment)
     (setf (consent--eval-context-current-output-port context)
           program-output-port)
+    (when program-input-port
+      (setf (consent--eval-context-current-input-port context)
+            program-input-port))
     (condition-case condition
         (let ((value
                (consent--trampoline
