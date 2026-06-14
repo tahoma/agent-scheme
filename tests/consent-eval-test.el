@@ -134,6 +134,58 @@ checks."
                       (append (list :program-input-reader reader) grants))
                      "(1 2 3 4)")))))
 
+(ert-deftest consent-eval-test-program-output-streams ()
+  "Program output/error connect only under a stdout/stderr-backed port grant.
+A granted writer receives each write flushed through immediately (write-through,
+not buffered to end of program); an ungranted writer fails closed; an unbounded
+write loop stays bounded by the host-callback budget; and `current-error-port'
+fails closed without a grant.  Parity twin of the portable program-output checks."
+  (let ((out-grant '((capability-grant
+                      (id program-output) (domain port)
+                      (operations write flush close) (scope (backing stdout))
+                      (expires never))))
+        (err-grant '((capability-grant
+                      (id program-error) (domain port)
+                      (operations write flush close) (scope (backing stderr))
+                      (expires never)))))
+    ;; Granted output: each write flushes through, in order.
+    (let* ((flushes 0)
+           (text "")
+           (writer (lambda (chunk)
+                     (setq flushes (1+ flushes))
+                     (setq text (concat text chunk)))))
+      (consent-eval-source
+       "(import (scheme write)) (display \"hi\") (newline)" nil
+       (list :program-output-writer writer :capability-grants out-grant))
+      (should (equal text "hi\n"))
+      ;; display and newline flush separately: write-through, not buffer-to-EOF.
+      (should (= flushes 2)))
+    ;; Ungranted output: a writer offered but no grant -> fails closed.
+    (should-error
+     (consent-eval-source
+      "(import (scheme write)) (display \"x\")" nil
+      (list :program-output-writer (lambda (_chunk) nil)))
+     :type 'consent-eval-error)
+    ;; Unbounded write loop is bounded by the host-callback budget.
+    (should-error
+     (consent-eval-source
+      "(import (scheme base) (scheme write))
+       (let loop ((i 0)) (if (< i 50) (progn (display \"y\") (loop (+ i 1)))))" nil
+      (list :program-output-writer (lambda (_chunk) nil)
+            :max-host-callbacks 5 :capability-grants out-grant))
+     :type 'consent-eval-error)
+    ;; Granted error port captures via the stderr writer.
+    (let* ((text "")
+           (writer (lambda (chunk) (setq text (concat text chunk)))))
+      (consent-eval-source
+       "(write-string \"e!\" (current-error-port))" nil
+       (list :program-error-writer writer :capability-grants err-grant))
+      (should (equal text "e!")))
+    ;; current-error-port fails closed without a grant.
+    (should-error
+     (consent-eval-source "(current-error-port)" nil nil)
+     :type 'consent-eval-error)))
+
 (ert-deftest consent-eval-test-let-empty-bindings-and-char-literals ()
   "Evaluate `let' with empty bindings and delimiter character literals.
 Regression: the syntax-rules matcher must match ((name val) ...) against ();

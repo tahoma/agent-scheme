@@ -369,6 +369,38 @@ write_racket_main_common() {
   (newline (current-error-port))
   (exit 2))
 
+(define (consent-main-stdio-options options)
+  ;; Attach the process standard streams to OPTIONS so an evaluated --eval/--script
+  ;; program reads stdin and writes stdout/stderr.  The standard streams are
+  ;; consented by invocation -- what the shell handed this process -- so the host
+  ;; supplies a stdin reader, stdout/stderr writers, and one port grant per stream,
+  ;; and the runtime connects current-input/output/error from them.  Ambient
+  ;; effects (files, processes, network, ...) still fail closed without a grant,
+  ;; and no raw host port is exposed to Scheme.
+  (append
+   (list
+    (cons 'program-input-reader
+          (lambda ()
+            (let ((line (read-line)))
+              (if (eof-object? line) #f (string-append line "\n")))))
+    (cons 'program-output-writer
+          (lambda (text) (display text) (flush-output-port)))
+    (cons 'program-error-writer
+          (lambda (text)
+            (display text (current-error-port))
+            (flush-output-port (current-error-port))))
+    (list 'capability-grants
+          (list 'capability-grant (list 'id 'program-input) (list 'domain 'port)
+                (cons 'operations '(read close))
+                (list 'scope (list 'backing 'stdin)) (list 'expires 'never))
+          (list 'capability-grant (list 'id 'program-output) (list 'domain 'port)
+                (cons 'operations '(write flush close))
+                (list 'scope (list 'backing 'stdout)) (list 'expires 'never))
+          (list 'capability-grant (list 'id 'program-error) (list 'domain 'port)
+                (cons 'operations '(write flush close))
+                (list 'scope (list 'backing 'stderr)) (list 'expires 'never))))
+   options))
+
 (define (consent-main-eval source options)
   (guard (condition
           (else
@@ -379,7 +411,7 @@ write_racket_main_common() {
            (exit 1)))
     (display
      (consent-value->external
-      (consent-eval-source source #f options)))
+      (consent-eval-source source #f (consent-main-stdio-options options))))
     (newline)))
 
 (define (consent-main-script path options)
@@ -390,10 +422,12 @@ write_racket_main_common() {
            (write condition (current-error-port))
            (newline (current-error-port))
            (exit 1)))
-    ;; Run the script through the Consent interpreter with the non-interactive
-    ;; fail-closed posture (capability-gated; no raw host objects exposed) -- the
-    ;; same gated path as --eval and the Emacs `consent-script-run-file' twin.
-    (consent-main:cli-script:cli-script-run-file path #f options)))
+    ;; Run the script through the Consent interpreter with the standard streams
+    ;; connected by invocation (capability-gated; ambient effects still fail closed;
+    ;; no raw host objects exposed) -- the same gated path as --eval and the Emacs
+    ;; `consent-script-run-file' twin.
+    (consent-main:cli-script:cli-script-run-file
+     path #f (consent-main-stdio-options options))))
 
 (define (consent-main-host-run path)
   ;; Run a Consent-Scheme host-runner test file on THIS runtime: every form is
@@ -619,6 +653,38 @@ write_gambit_main_common() {
   (newline (current-error-port))
   (exit 2))
 
+(define (consent-main-stdio-options options)
+  ;; Attach the process standard streams to OPTIONS so an evaluated --eval/--script
+  ;; program reads stdin and writes stdout/stderr.  The standard streams are
+  ;; consented by invocation -- what the shell handed this process -- so the host
+  ;; supplies a stdin reader, stdout/stderr writers, and one port grant per stream,
+  ;; and the runtime connects current-input/output/error from them.  Ambient
+  ;; effects (files, processes, network, ...) still fail closed without a grant,
+  ;; and no raw host port is exposed to Scheme.
+  (append
+   (list
+    (cons 'program-input-reader
+          (lambda ()
+            (let ((line (read-line)))
+              (if (eof-object? line) #f (string-append line "\n")))))
+    (cons 'program-output-writer
+          (lambda (text) (display text) (flush-output-port)))
+    (cons 'program-error-writer
+          (lambda (text)
+            (display text (current-error-port))
+            (flush-output-port (current-error-port))))
+    (list 'capability-grants
+          (list 'capability-grant (list 'id 'program-input) (list 'domain 'port)
+                (cons 'operations '(read close))
+                (list 'scope (list 'backing 'stdin)) (list 'expires 'never))
+          (list 'capability-grant (list 'id 'program-output) (list 'domain 'port)
+                (cons 'operations '(write flush close))
+                (list 'scope (list 'backing 'stdout)) (list 'expires 'never))
+          (list 'capability-grant (list 'id 'program-error) (list 'domain 'port)
+                (cons 'operations '(write flush close))
+                (list 'scope (list 'backing 'stderr)) (list 'expires 'never))))
+   options))
+
 (define (consent-main-eval source options)
   (guard (condition
           (else
@@ -629,7 +695,7 @@ write_gambit_main_common() {
            (exit 1)))
     (display
      (consent-value->external
-      (consent-eval-source source #f options)))
+      (consent-eval-source source #f (consent-main-stdio-options options))))
     (newline)))
 
 (define (consent-main-script path options)
@@ -640,10 +706,12 @@ write_gambit_main_common() {
            (write condition (current-error-port))
            (newline (current-error-port))
            (exit 1)))
-    ;; Run the script through the Consent interpreter with the non-interactive
-    ;; fail-closed posture (capability-gated; no raw host objects exposed) -- the
-    ;; same gated path as --eval and the Emacs `consent-script-run-file' twin.
-    (consent-main:cli-script:cli-script-run-file path #f options)))
+    ;; Run the script through the Consent interpreter with the standard streams
+    ;; connected by invocation (capability-gated; ambient effects still fail closed;
+    ;; no raw host objects exposed) -- the same gated path as --eval and the Emacs
+    ;; `consent-script-run-file' twin.
+    (consent-main:cli-script:cli-script-run-file
+     path #f (consent-main-stdio-options options))))
 
 (define (consent-main-host-run path)
   ;; Run a Consent-Scheme host-runner test file on THIS runtime: every form is

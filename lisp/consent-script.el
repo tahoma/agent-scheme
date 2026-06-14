@@ -72,15 +72,16 @@ empty string.  SOURCE without a shebang is returned unchanged, leaving
   "Run executable Consent Scheme script PATH and return its last value.
 A leading shebang line is consumed before reading, so a file made executable
 with `#!/usr/bin/env consent' (or the `/bin/sh' polyglot) reads correctly.
-Evaluation goes through `consent-eval-source' with ENVIRONMENT and OPTIONS in
-the consent runtime, inheriting the noninteractive fail-closed policy posture:
-confirm-gated actions, including program output, are denied without a grant,
-policy file, or preloaded approval.  A script reads its stdin only when OPTIONS
-carry a `:program-input-reader' thunk together with an active `port'/`read' grant
-backed by `stdin' (docs/repl-interaction-contract.md, \"Program-Input Stream
-Model\"); input is pulled from the reader on demand so a `(read-line)' filter
-streams incrementally, and without the grant it fails closed.  Finite in-memory
-input uses a reader built with `consent-program-input-from-string'."
+Evaluation goes through `consent-eval-source' with ENVIRONMENT and OPTIONS in the
+consent runtime.  Ambient host capabilities -- opening a named file, a process,
+network -- fail closed without a grant, policy file, or preloaded approval.  The
+standard streams are consented by invocation: when OPTIONS supply the host stream
+devices (`:program-input-reader', `:program-output-writer',
+`:program-error-writer') with one matching `port' grant per stream, the script
+reads stdin and writes stdout/stderr (docs/repl-interaction-contract.md, \"Program
+Stream Model\"); input is pulled from the reader on demand so a `(read-line)'
+filter streams incrementally.  Finite in-memory input uses a reader built with
+`consent-program-input-from-string'."
   (consent-eval-source
    (consent-script-source-from-file path) environment options))
 
