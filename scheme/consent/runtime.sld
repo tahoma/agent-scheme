@@ -150,6 +150,8 @@
           set-context-steps!
           context-maximum-steps
           context-maximum-value-nodes
+          context-value-nodes
+          set-context-value-nodes!
           context-host-callbacks
           set-context-host-callbacks!
           context-maximum-host-callbacks
@@ -267,7 +269,14 @@
           record-agent-event!
           note-step!
           note-host-callback!
+          note-value-allocation!
           value-node-count
+          charge-value-allocation!
+          charge-string-allocation!
+          charge-bytevector-allocation!
+          charge-vector-allocation!
+          charge-list-allocation!
+          charge-literal!
           check-value-budget
           values-list
           single-value
@@ -305,8 +314,12 @@
   (begin
     ;; Default evaluator step budget for one expansion or evaluation run.
     (define consent-default-maximum-steps 100000)
-    ;; Default maximum result value graph size before budget failure.
-    (define consent-default-maximum-value-nodes 100000)
+    ;; Default cumulative value-node allocation budget for one evaluation run.
+    ;; Value budgets are charged at allocation, so this bounds the total nodes a
+    ;; run may construct rather than the size of any single result; it is sized
+    ;; well above the comprehensive self-hosted suite's per-run peak (~0.78M
+    ;; nodes) while still tripping a runaway bulk allocation.
+    (define consent-default-maximum-value-nodes 10000000)
     ;; Default maximum primitive callback count allowed during evaluation.
     (define consent-default-maximum-host-callbacks 10000)
     ;; Default maximum event-channel records allowed during evaluation.
@@ -614,7 +627,7 @@
       ;; A context owns mutable run state: budgets, active syntax bindings,
       ;; lazy library registrations, include policy, and syntax-id allocation.
       (make-eval-context steps maximum-steps
-                         maximum-value-nodes host-callbacks
+                         maximum-value-nodes value-nodes host-callbacks
                          maximum-host-callbacks syntax-environment libraries
                          include-paths include-directory file-paths
                          docstring-retention
@@ -636,6 +649,7 @@
       (steps context-steps set-context-steps!)
       (maximum-steps context-maximum-steps)
       (maximum-value-nodes context-maximum-value-nodes)
+      (value-nodes context-value-nodes set-context-value-nodes!)
       (host-callbacks context-host-callbacks set-context-host-callbacks!)
       (maximum-host-callbacks context-maximum-host-callbacks)
       (event-count context-event-count set-context-event-count!)
@@ -2359,6 +2373,7 @@ call site would have written host literals."
                      'max-value-nodes
                      consent-default-maximum-value-nodes)
        0
+       0
        (option-count options
                      'max-host-callbacks
                      consent-default-maximum-host-callbacks)
@@ -2450,6 +2465,50 @@ call site would have written host literals."
           (budget-error "host callback budget exceeded"
                         (primitive-procedure-name primitive))))
 
+    (define (note-value-allocation! context count)
+      "Charge COUNT freshly allocated value nodes against the result budget.
+Constructors charge what they allocate as they allocate it, so the budget bounds
+cumulative result growth in O(1) per operation rather than re-walking the
+reachable structure of every primitive result.  Enforcement fails closed with
+the unchanged \"value node budget exceeded\" diagnostic so an interpreted `guard`
+cannot catch it."
+      (set-context-value-nodes!
+       context
+       (+ (context-value-nodes context) count))
+      (if (> (context-value-nodes context)
+             (context-maximum-value-nodes context))
+          (budget-error "value node budget exceeded"
+                        (context-value-nodes context)
+                        (context-maximum-value-nodes context))))
+
+    (define (charge-value-allocation! value count context)
+      "Charge COUNT allocated nodes against CONTEXT and return VALUE.
+A convenience wrapper so a constructor charges its allocation inline and still
+yields the constructed value in tail position."
+      (note-value-allocation! context count)
+      value)
+
+    (define (charge-string-allocation! value context)
+      "Charge a freshly built string VALUE's nodes (1 + length) and return it."
+      (note-value-allocation! context (+ 1 (string-length value)))
+      value)
+
+    (define (charge-bytevector-allocation! value context)
+      "Charge a freshly built bytevector VALUE's nodes (1 + length) and return it."
+      (note-value-allocation! context (+ 1 (bytevector-length value)))
+      value)
+
+    (define (charge-vector-allocation! value context)
+      "Charge a freshly built vector VALUE's nodes (1 + length) and return it."
+      (note-value-allocation! context (+ 1 (vector-length value)))
+      value)
+
+    (define (charge-list-allocation! value context)
+      "Charge a freshly consed proper list VALUE's pairs (its length) and return it.
+The shared empty-list tail and the already-charged elements are not recounted."
+      (note-value-allocation! context (length value))
+      value)
+
     (define (value-node-count value seen . maybe-tolerant)
       "Count the reachable nodes in VALUE while tolerating cycles.
 An optional truthy MAYBE-TOLERANT argument counts unrecognized host values as
@@ -2538,6 +2597,20 @@ the canonical-value tripwire is relaxed only for that trusted posture."
             (budget-error "value node budget exceeded"
                           count
                           (context-maximum-value-nodes context))))
+      value)
+
+    (define (charge-literal! value context)
+      "Charge a quoted or self-evaluating literal's node count at evaluation.
+Literals are realized from source rather than constructed, so they are budgeted
+by a single bounded walk over the source datum -- off the hot primitive path --
+which keeps the literal result-size fixtures exact while the per-result walk is
+removed from constructor and accessor results."
+      (note-value-allocation!
+       context
+       (value-node-count
+        value
+        '()
+        (and context (context-internal-libraries-allowed? context))))
       value)
 
     (define (values-list value)
