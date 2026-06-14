@@ -19,6 +19,9 @@
           consent-interaction-context-session-id
           consent-interaction-program-output
           consent-interaction-eval-form
+          consent-interaction-program-input-port
+          consent-interaction-seed-program-input!
+          consent-interaction-program-input-remainder
           consent-program-input-from-string
           consent-make-empty-environment
           consent-make-base-environment
@@ -3320,7 +3323,10 @@ condition does not."
 
     (define (audit-port-capability-result!
              context port operation result error?)
-      "Record the result of a host-backed port capability operation."
+      "Record the result of a host-backed port capability operation.
+A byte/character count is wrapped as a canonical integer so the audit datum stays
+Scheme-readable -- the evaluation-result `events' field carries these, and a host
+integer there would not render through the consent writer."
       (if (and context (consent-port-backing-domain port))
           (record-audit-event!
            context
@@ -3334,7 +3340,9 @@ condition does not."
                  (list 'result
                        (if error?
                            (list 'error result)
-                           (list 'ok result)))))))
+                           (list 'ok (if (integer? result)
+                                         (consent-make-canonical-integer result)
+                                         result))))))))
 
     (define (port-capability-limit-name operation)
       "Return the named operation counter limit for OPERATION."
@@ -3441,6 +3449,11 @@ condition does not."
       (or (and context (context-current-output-port context))
           (policy-denied description context '())))
 
+    (define (current-error-port-or-deny context description)
+      "Return CONTEXT's current error port or deny host default access."
+      (or (and context (context-current-error-port context))
+          (policy-denied description context '())))
+
     (define (primitive-current-input-port arguments context)
       "Implement the `current-input-port` primitive."
       (current-input-port-or-deny context "current-input-port"))
@@ -3451,29 +3464,32 @@ condition does not."
 
     (define (primitive-current-error-port arguments context)
       "Implement the `current-error-port` primitive."
-      (policy-denied "current-error-port" context '()))
+      (current-error-port-or-deny context "current-error-port"))
 
     (define (write-text-to-port text port description . maybe-context)
       "Write text to port data through the Consent Scheme port or datum renderer."
-      (let ((output (expect-textual-output-port port description)))
+      (let ((output (expect-textual-output-port port description))
+            (context (if (null? maybe-context) #f (car maybe-context))))
         (if (not (memq (consent-port-medium output) '(string file)))
             (eval-error
              (string-append description
                             " host textual output ports are not available")
              port))
-        (revalidate-port-operation!
-         output
-         (if (null? maybe-context) #f (car maybe-context))
-         'write)
-        (set-consent-port-contents!
-         output
-         (string-append (consent-port-contents output) text))
+        (revalidate-port-operation! output context 'write)
+        ;; A streaming stdio output port flushes each write through its host
+        ;; writer immediately (so a single-form filter loop streams instead of
+        ;; buffering to end of program), charged against the host-callback budget;
+        ;; an ordinary in-memory port accumulates its contents as before.
+        (if (program-output-streaming? output)
+            (begin
+              (if context
+                  (note-host-callback! context program-output-write-primitive))
+              ((program-output-writer-of output) text))
+            (set-consent-port-contents!
+             output
+             (string-append (consent-port-contents output) text)))
         (audit-port-capability-result!
-         (if (null? maybe-context) #f (car maybe-context))
-         output
-         'write
-         (string-length text)
-         #f)
+         context output 'write (string-length text) #f)
         consent-unspecified))
 
     (define (write-to-output-port value port mode display? . maybe-context)
@@ -7767,16 +7783,20 @@ condition does not."
           '()
           (second rest)))
 
-    ;; Program-input stream (docs/repl-interaction-contract.md, "Stream
-    ;; Separation"): a non-interactive evaluation may connect its
-    ;; `(current-input-port)' to the process standard input.  This is gated like
-    ;; every other host effect: only an active `port'/`read' grant whose scope is
-    ;; backed by `stdin' authorizes it, and without the grant the input port stays
-    ;; disconnected so a `read'/`read-char'/`read-line' fails closed exactly as it
-    ;; does today.  The host drains its real stdin to a Scheme string at the
-    ;; process boundary and passes it as the `program-input' option, so the port
-    ;; serves buffered characters and no raw host port is ever exposed to Scheme.
-    (define (program-input-grant-scope-backing grant)
+    ;; Standard streams (docs/repl-interaction-contract.md, "Stream Separation"):
+    ;; an evaluation may connect its `(current-input-port)',
+    ;; `(current-output-port)', and `(current-error-port)' to the process standard
+    ;; streams.  The standard streams are *consented by invocation* -- they are what
+    ;; the caller handed the process -- so the host that attaches real stdio also
+    ;; supplies, by default, the device callbacks plus one `port' grant per stream
+    ;; (`(backing stdin)'/`stdout'/`stderr'); the core stays fail-closed and connects
+    ;; a stream only when its device and a matching active grant are both present.  A
+    ;; context with no devices/grants (the daemon/agent adapter, the host-run test
+    ;; runner) keeps its streams disconnected/captured.  No raw host port is exposed
+    ;; to Scheme: input is pulled through a reader thunk and output flushed through a
+    ;; writer thunk.  Ambient effects (files, processes, network, env, clock,
+    ;; providers, editor) still gate independently.
+    (define (standard-stream-grant-backing grant)
       "Return GRANT's scope `(backing X)' value, or #f when absent."
       (let loop ((scope (capability-grant-field-values grant 'scope)))
         (cond
@@ -7786,21 +7806,21 @@ condition does not."
             (and (pair? (cdr clause)) (cadr clause))))
          (else (loop (cdr scope))))))
 
-    (define (program-input-grant? grant)
-      "Report whether GRANT authorizes reading the stdin-backed program-input stream."
+    (define (standard-stream-grant? grant backing operation)
+      "Report whether GRANT is an active `port' grant for OPERATION backed by BACKING."
       (and (pair? grant)
            (eq? (car grant) 'capability-grant)
            (eq? (capability-grant-field-value grant 'domain) 'port)
            (eq? (capability-grant-status grant) 'active)
-           (memq 'read (capability-grant-field-values grant 'operations))
-           (eq? (program-input-grant-scope-backing grant) 'stdin)))
+           (memq operation (capability-grant-field-values grant 'operations))
+           (eq? (standard-stream-grant-backing grant) backing)))
 
-    (define (find-program-input-grant context)
-      "Return CONTEXT's active stdin-backed program-input grant, or #f."
+    (define (find-standard-stream-grant context backing operation)
+      "Return CONTEXT's active `port' grant for OPERATION backed by BACKING, or #f."
       (let loop ((grants (context-capability-grants context)))
         (cond
          ((null? grants) #f)
-         ((program-input-grant? (car grants)) (car grants))
+         ((standard-stream-grant? (car grants) backing operation) (car grants))
          (else (loop (cdr grants))))))
 
     ;; A program-input port draws characters from a host *reader* on demand: a
@@ -7956,60 +7976,136 @@ holding a live host port."
                (list 'status 'open)))
         port))
 
-    (define (connect-program-input! context options)
-      "Connect CONTEXT's current input port to the granted program-input stream.
-When OPTIONS offer a `program-input-reader' and CONTEXT holds an active
-`port'/`read' grant backed by `stdin', install a refill-on-demand,
-capability-gated input port as the current input port; otherwise record the
-denial and leave the input port disconnected so reads fail closed.  No-op when no
-reader was offered, preserving the default fail-closed posture."
-      (let ((reader (program-input-reader-from-options options)))
-        (if reader
-            (let ((grant (find-program-input-grant context))
-                  (request
-                   (list 'capability-request
-                         (list 'domain 'port)
-                         (list 'operation 'read)
-                         (list 'backing 'stdin)
-                         (list 'stream 'program-input))))
-              (record-audit-event!
-               context
-               'capability-request
-               (list (list 'request request)
-                     (list 'domain 'port)
-                     (list 'operation 'read)
-                     (list 'backing 'stdin)))
-              (if grant
-                  (begin
-                    (record-audit-event!
-                     context
-                     'capability-decision
-                     (list (list 'request request)
-                           (list 'status 'approved)
-                           (list 'domain 'port)
-                           (list 'operation 'read)
-                           (list 'backing 'stdin)
-                           (list 'grant (capability-grant-id grant))))
-                    (set-context-current-input-port!
-                     context
-                     (make-program-input-port context grant reader)))
+    ;; A program-output / program-error port is the write side of the standard
+    ;; streams: a `stdio'-backed port whose textual writes flush through a host
+    ;; writer thunk immediately (see `write-text-to-port'), so program output is
+    ;; never buffered to end of program and a filter streams as it runs.  The
+    ;; writer rides in the port's counters alist.
+    (define program-output-write-primitive
+      (make-primitive-procedure 'program-output-write #f 0 0))
+
+    (define (program-output-streaming? port)
+      "Report whether PORT flushes through a host program-output writer."
+      (and (consent-port? port)
+           (consent-port-output? port)
+           (eq? (consent-port-backing-domain port) 'stdio)
+           (assq 'program-output-writer (consent-port-counters port))
+           #t))
+
+    (define (program-output-writer-of port)
+      "Return PORT's host output writer procedure."
+      (let ((entry (assq 'program-output-writer (consent-port-counters port))))
+        (and entry (cdr entry))))
+
+    (define (make-program-output-port context grant writer purpose)
+      "Return a capability-gated, write-through textual output port for GRANT.
+PURPOSE is `program-output' or `program-error'.  The port is backed by the
+`stdio' domain so every write revalidates GRANT and audits the operation, and
+flushes through WRITER immediately rather than holding a live host port."
+      (let* ((grant-id (capability-grant-id grant))
+             (limits (capability-grant-field-values grant 'limits))
+             (port
+              (make-consent-port
+               'string #f #t #t #f #t #f 0 ""
+               'stdio
+               '(write flush close)
+               grant-id
+               limits
+               (port-capability-handle-id)
+               'open
+               purpose
+               (list (cons 'program-output-writer writer)))))
+        (record-audit-event!
+         context
+         'capability-handle
+         (list (list 'handle
+                     (port-capability-datum
+                      (consent-port-handle port) 'textual-output 'stdio
+                      (consent-port-operations port) grant-id limits 'open
+                      purpose))
+               (list 'domain 'port)
+               (list 'kind 'textual-output)
+               (list 'backing 'stdio)
+               (cons 'operations (consent-port-operations port))
+               (list 'grant grant-id)
+               (list 'status 'open)))
+        port))
+
+    (define (connect-standard-stream! context device backing operation build install)
+      "Connect one standard stream when DEVICE and a matching grant are present.
+DEVICE is the host reader/writer (or #f); BACKING/OPERATION select the grant;
+BUILD makes the port from (context grant); INSTALL stores it on CONTEXT.  Without
+the grant the connection is denied and recorded; without the device it is a
+no-op, so the default posture stays fail-closed."
+      (if device
+          (let ((grant (find-standard-stream-grant context backing operation))
+                (request
+                 (list 'capability-request
+                       (list 'domain 'port)
+                       (list 'operation operation)
+                       (list 'backing backing))))
+            (record-audit-event!
+             context
+             'capability-request
+             (list (list 'request request)
+                   (list 'domain 'port)
+                   (list 'operation operation)
+                   (list 'backing backing)))
+            (if grant
+                (begin
                   (record-audit-event!
                    context
                    'capability-decision
                    (list (list 'request request)
-                         (list 'status 'denied)
+                         (list 'status 'approved)
                          (list 'domain 'port)
-                         (list 'operation 'read)
-                         (list 'backing 'stdin)
-                         (list 'reason
-                               "program input requires a port read grant backed by stdin"))))))))
+                         (list 'operation operation)
+                         (list 'backing backing)
+                         (list 'grant (capability-grant-id grant))))
+                  (install (build context grant)))
+                (record-audit-event!
+                 context
+                 'capability-decision
+                 (list (list 'request request)
+                       (list 'status 'denied)
+                       (list 'domain 'port)
+                       (list 'operation operation)
+                       (list 'backing backing)
+                       (list 'reason
+                             "standard stream requires a matching port grant")))))))
+
+    (define (connect-standard-streams! context options)
+      "Connect CONTEXT's current input/output/error ports to the granted standard
+streams.  Each stream is wired only when OPTIONS supply its host device (a
+`program-input-reader' thunk, a `program-output-writer', or a
+`program-error-writer') AND CONTEXT holds a matching active `port' grant; absent
+the grant the stream fails closed, absent the device it is left untouched.  The
+standard streams are consented by invocation -- the host attaching them is the
+authorization -- while ambient effects keep gating separately."
+      (let ((reader (program-input-reader-from-options options))
+            (out-writer (option-ref options 'program-output-writer #f))
+            (err-writer (option-ref options 'program-error-writer #f)))
+        (connect-standard-stream!
+         context reader 'stdin 'read
+         (lambda (ctx grant) (make-program-input-port ctx grant reader))
+         (lambda (port) (set-context-current-input-port! context port)))
+        (connect-standard-stream!
+         context (and (procedure? out-writer) out-writer) 'stdout 'write
+         (lambda (ctx grant)
+           (make-program-output-port ctx grant out-writer 'program-output))
+         (lambda (port) (set-context-current-output-port! context port)))
+        (connect-standard-stream!
+         context (and (procedure? err-writer) err-writer) 'stderr 'write
+         (lambda (ctx grant)
+           (make-program-output-port ctx grant err-writer 'program-error))
+         (lambda (port) (set-context-current-error-port! context port)))))
 
     (define (consent-eval expression . rest)
       "Evaluate one already-read expression in the supplied environment, or a fresh base environment when no environment is provided."
       (let ((context (new-eval-context (rest-options rest)))
             (environment (rest-environment rest)))
         (set-context-interaction-environment! context environment)
-        (connect-program-input! context (rest-options rest))
+        (connect-standard-streams! context (rest-options rest))
         (ensure-base-syntax! context environment)
         (trampoline expression environment context)))
 
@@ -8019,7 +8115,7 @@ reader was offered, preserving the default fail-closed posture."
             (environment (rest-environment rest))
             (forms (consent-read-all source (rest-options rest))))
         (set-context-interaction-environment! context environment)
-        (connect-program-input! context (rest-options rest))
+        (connect-standard-streams! context (rest-options rest))
         (ensure-base-syntax! context environment)
         (trampoline (make-sequence forms #t) environment context)))
 
@@ -8040,7 +8136,7 @@ reader was offered, preserving the default fail-closed posture."
       (let ((context (new-eval-context (rest-options rest)))
             (environment (rest-environment rest)))
         (set-context-interaction-environment! context environment)
-        (connect-program-input! context (rest-options rest))
+        (connect-standard-streams! context (rest-options rest))
         (ensure-base-syntax! context environment)
         (call-with-result-condition-handler
          context
@@ -8054,7 +8150,7 @@ reader was offered, preserving the default fail-closed posture."
       (let ((context (new-eval-context (rest-options rest)))
             (environment (rest-environment rest)))
         (set-context-interaction-environment! context environment)
-        (connect-program-input! context (rest-options rest))
+        (connect-standard-streams! context (rest-options rest))
         (ensure-base-syntax! context environment)
         (call-with-result-condition-handler
          context
@@ -8077,12 +8173,17 @@ reader was offered, preserving the default fail-closed posture."
     ;; session evaluator that drives `consent-repl-eval-source'.
     (define-record-type <consent-interaction-context>
       (make-consent-interaction-context options environment syntax-environment
-                                        program-output-port)
+                                        program-output-port program-input-port)
       consent-interaction-context?
       (options interaction-context-options)
       (environment interaction-context-environment)
       (syntax-environment interaction-context-syntax-environment)
-      (program-output-port interaction-context-program-output-port))
+      (program-output-port interaction-context-program-output-port)
+      ;; The session program-input port, shared as the single stdin cursor between
+      ;; the REPL form reader and evaluated reads, or #f when program input is not
+      ;; connected (no reader/grant).  See the REPL engine's submission-boundary
+      ;; hand-off via `consent-interaction-seed-program-input!'.
+      (program-input-port interaction-context-program-input-port))
 
     (define (interaction-context-session-id-from-options options)
       "Return the SESSION-ID configured in OPTIONS, or #f when unsessioned."
@@ -8096,15 +8197,52 @@ reader was offered, preserving the default fail-closed posture."
        #f '() #f '() #f #f #f '()))
 
     (define (consent-make-interaction-context . rest)
-      "Create a durable interaction context from optional REST options (session-id, policy-actions, capability-grants) whose definitions, imports, macros, and program output persist across `consent-interaction-eval-form' submissions."
+      "Create a durable interaction context from optional REST options (session-id, policy-actions, capability-grants) whose definitions, imports, macros, and program output persist across `consent-interaction-eval-form' submissions.
+When OPTIONS supply a `program-input-reader' and a matching active `port'/`read'
+grant backed by `stdin', a program-input port is created and shared as the
+session's single stdin cursor (the REPL form reader and evaluated reads draw from
+it); otherwise program input stays disconnected and reads fail closed."
       (let* ((options (if (null? rest) '() (car rest)))
              (context (new-eval-context options))
-             (environment (consent-make-base-environment)))
+             (environment (consent-make-base-environment))
+             (reader (program-input-reader-from-options options))
+             (grant (and reader
+                         (find-standard-stream-grant context 'stdin 'read)))
+             (input-port (and reader grant
+                              (make-program-input-port context grant reader))))
         (set-context-interaction-environment! context environment)
         (ensure-base-syntax! context environment)
         (make-consent-interaction-context
          options environment (context-syntax-environment context)
-         (make-interaction-program-output-port))))
+         (make-interaction-program-output-port)
+         input-port)))
+
+    (define (consent-interaction-program-input-port interaction)
+      "Return INTERACTION's shared program-input port, or #f when disconnected."
+      (interaction-context-program-input-port interaction))
+
+    (define (consent-interaction-seed-program-input! interaction text)
+      "Seed the shared program-input cursor with TEXT (the post-form remainder) at
+position 0, so an evaluated read consumes the input that follows the just-read
+submission.  A no-op when program input is not connected.  The end-of-stream flag
+is left untouched: once the host stream truly ends, both form and program reads
+are at end."
+      (let ((port (interaction-context-program-input-port interaction)))
+        (if port
+            (begin
+              (set-consent-port-source! port text)
+              (set-consent-port-position! port 0)))))
+
+    (define (consent-interaction-program-input-remainder interaction)
+      "Return the shared program-input cursor's unconsumed remainder (the input the
+evaluated form did not read), or #f when program input is not connected.  The
+REPL engine threads this back as the next form-reading buffer, so neither reader
+steals the other's characters."
+      (let ((port (interaction-context-program-input-port interaction)))
+        (and port
+             (substring (consent-port-source port)
+                        (consent-port-position port)
+                        (string-length (consent-port-source port))))))
 
     (define (consent-interaction-context-session-id interaction)
       "Return the session id INTERACTION evaluates under, or #f when unsessioned."
@@ -8124,11 +8262,15 @@ reader was offered, preserving the default fail-closed posture."
               (interaction-context-syntax-environment interaction))
              (program-output-port
               (interaction-context-program-output-port interaction))
+             (program-input-port
+              (interaction-context-program-input-port interaction))
              (context (new-eval-context options)))
         (set-consent-port-contents! program-output-port "")
         (set-context-syntax-environment! context syntax-environment)
         (set-context-interaction-environment! context environment)
         (set-context-current-output-port! context program-output-port)
+        (if program-input-port
+            (set-context-current-input-port! context program-input-port))
         (call-with-result-condition-handler
          context
          (lambda ()

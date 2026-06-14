@@ -3883,6 +3883,73 @@
                               (list 'capability-grants program-input-grant))
                         "(1 2 3 4)")
 
+;; Program output / error streams (docs/repl-interaction-contract.md): a granted
+;; writer receives each write flushed through immediately (write-through, not
+;; buffered to end of program), an ungranted one fails closed, and an unbounded
+;; write loop stays bounded by the host-callback budget.  Parity twin of the Emacs
+;; program-output/error tests.
+(define program-output-grant
+  '(capability-grant (id program-output) (domain port)
+                     (operations write flush close) (scope (backing stdout))
+                     (expires never)))
+
+;; Stderr-backed grant for the program-error stream tests.
+(define program-error-grant
+  '(capability-grant (id program-error) (domain port)
+                     (operations write flush close) (scope (backing stderr))
+                     (expires never)))
+
+;; Evaluate SOURCE with a capturing writer under GRANT bound to OPTION-KEY,
+;; returning (captured-text . flush-count) so a check can assert write-through.
+(define (run-with-output-writer source option-key grant)
+  (let ((flushes 0) (text ""))
+    (consent-eval-source-result
+     source #f
+     (list (cons option-key
+                 (lambda (chunk)
+                   (set! flushes (+ flushes 1))
+                   (set! text (string-append text chunk))))
+           (list 'capability-grants grant)))
+    (cons text flushes)))
+
+(let ((captured (run-with-output-writer
+                 "(import (scheme write)) (display \"hi\") (newline)"
+                 'program-output-writer program-output-grant)))
+  (check 'program-output-granted-text (car captured) "hi\n")
+  ;; display and newline flush separately: write-through, not buffer-to-EOF.
+  (check 'program-output-granted-flushes (cdr captured) 2))
+
+(check 'program-output-ungranted-denies
+       (raises?
+        (lambda ()
+          (consent-eval-source
+           "(import (scheme write)) (display \"x\")"
+           #f
+           (list (cons 'program-output-writer (lambda (chunk) chunk))))))
+       #t)
+
+(check 'program-output-budget-bounded
+       (raises?
+        (lambda ()
+          (consent-eval-source
+           "(import (scheme base) (scheme write))
+            (let loop ((i 0)) (if (< i 50) (begin (display \"y\") (loop (+ i 1)))))"
+           #f
+           (list (cons 'program-output-writer (lambda (chunk) chunk))
+                 (cons 'max-host-callbacks 5)
+                 (list 'capability-grants program-output-grant)))))
+       #t)
+
+(let ((captured (run-with-output-writer
+                 "(write-string \"e!\" (current-error-port))"
+                 'program-error-writer program-error-grant)))
+  (check 'program-error-granted-text (car captured) "e!"))
+
+(check 'current-error-port-ungranted-denies
+       (raises?
+        (lambda () (consent-eval-source "(current-error-port)" #f '())))
+       #t)
+
 (if (= failures 0)
     (begin
       (display "Scheme evaluator tests passed")

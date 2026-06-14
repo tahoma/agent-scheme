@@ -84,18 +84,18 @@
       "Run executable Consent Scheme script PATH through the Consent interpreter and return its last value.
 A leading shebang line is consumed before reading, so a file made executable with
 `#!/usr/bin/env consent' (or the `/bin/sh' polyglot) reads correctly. Evaluation
-goes through `consent-eval-source' with the optional REST (environment, options),
-inheriting the non-interactive fail-closed policy posture: confirm-gated host
-capabilities -- including program output -- are denied without an explicit grant,
-policy file, or preloaded approval, and a denial or error raises so a CLI caller
-exits non-zero. A script reads its stdin only when REST's options carry a
-`program-input-reader' thunk together with an active `port'/`read' grant backed
-by `stdin' (docs/repl-interaction-contract.md, \"Program-Input Stream Model\");
-input is pulled from the reader on demand so a `(read-line)' filter streams
-incrementally, and without the grant it fails closed. Finite in-memory input
-uses a reader built with `consent-program-input-from-string'. This is the
-host-neutral peer of, and byte-for-byte posture match with, the Emacs
-`consent-script-run-file'."
+goes through `consent-eval-source' with the optional REST (environment, options).
+Ambient host capabilities -- opening a named file, a process, network -- fail
+closed without an explicit grant, policy file, or preloaded approval, and a denial
+or error raises so a CLI caller exits non-zero. The standard streams are
+consented by invocation: when REST's options supply the host stream devices
+(`program-input-reader', `program-output-writer', `program-error-writer') with
+one matching `port' grant per stream, the script reads stdin and writes
+stdout/stderr (docs/repl-interaction-contract.md, \"Program Stream Model\"); the
+product main attaches these by default so a `(read-line)'/`(display ...)' filter
+works in a pipe, streaming incrementally. Finite in-memory input uses a reader
+built with `consent-program-input-from-string'. This is the host-neutral peer of
+the Emacs `consent-script-run-file'."
       (apply consent-eval-source (cli-script-source-from-file path) rest))
 
     ;; Host-runner posture: the deliberate capability bundle that lets the
