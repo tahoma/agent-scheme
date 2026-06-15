@@ -23,6 +23,7 @@
           consent-interaction-seed-program-input!
           consent-interaction-program-input-remainder
           consent-program-input-from-string
+          consent-program-input-from-bytevector
           consent-make-empty-environment
           consent-make-base-environment
           consent-base-primitive-names

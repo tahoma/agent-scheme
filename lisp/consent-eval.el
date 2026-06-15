@@ -142,6 +142,19 @@ Mirrors the portable `(consent eval)' `consent-program-input-from-string'."
       (prog1 pending (setq pending nil)))))
 
 ;;;###autoload
+(defun consent-program-input-from-bytevector (content)
+  "Return a one-shot binary program-input reader yielding CONTENT once, then ends.
+CONTENT is a vector of bytes -- Emacs's host byte-vector container, the
+representation a binary input port buffers -- whose whole finite contents are
+available immediately and then at end of stream.  Binary peer of
+`consent-program-input-from-string'; use it for fixtures and captured byte
+streams, never to model a live byte pipe.  Mirrors the portable `(consent eval)'
+`consent-program-input-from-bytevector'."
+  (let ((pending content))
+    (lambda ()
+      (prog1 pending (setq pending nil)))))
+
+;;;###autoload
 (defun consent-session-eval-source (id source &optional options)
   "Evaluate SOURCE inside persistent session ID.
 OPTIONS may override the session context budgets for this evaluation.  The
