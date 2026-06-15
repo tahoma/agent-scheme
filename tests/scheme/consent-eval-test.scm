@@ -3950,6 +3950,168 @@
         (lambda () (consent-eval-source "(current-error-port)" #f '())))
        #t)
 
+;; Binary program input (#528): the byte peer of the textual program-input
+;; stream.  A `program-input-byte-reader' plus an active `port'/`read' grant
+;; scoped to `stdin' connects `(current-input-port)' to a `stdio'-backed binary
+;; input port that refills *bytes* on demand for `read-u8'/`peek-u8'/
+;; `read-bytevector'; without the grant -- or with no byte reader offered -- the
+;; read fails closed exactly as an unconnected current input port does.  Parity
+;; twin of the Emacs `consent-eval-test-program-binary-input-stream'.
+(check-external/options 'program-binary-input-read-u8
+                        "(list (read-u8 (current-input-port))
+                               (read-u8 (current-input-port))
+                               (eof-object? (read-u8 (current-input-port))))"
+                        (list (cons 'program-input-byte-reader
+                                    (consent-program-input-from-bytevector
+                                     (bytevector 104 105)))
+                              (list 'capability-grants program-input-grant))
+                        "(104 105 #t)")
+;; peek-u8 does not advance the cursor; read-u8 then returns the peeked byte.
+(check-external/options 'program-binary-input-peek-u8
+                        "(let ((port (current-input-port)))
+                           (list (peek-u8 port) (read-u8 port) (read-u8 port)))"
+                        (list (cons 'program-input-byte-reader
+                                    (consent-program-input-from-bytevector
+                                     (bytevector 7 8)))
+                              (list 'capability-grants program-input-grant))
+                        "(7 7 8)")
+;; read-bytevector pulls up to its count across the buffered bytes.
+(check-external/options 'program-binary-input-read-bytevector
+                        "(read-bytevector 3 (current-input-port))"
+                        (list (cons 'program-input-byte-reader
+                                    (consent-program-input-from-bytevector
+                                     (bytevector 1 2 3 4)))
+                              (list 'capability-grants program-input-grant))
+                        "#u8(1 2 3)")
+(check 'program-binary-input-ungranted-denies
+       (raises?
+        (lambda ()
+          (consent-eval-source
+           "(read-u8 (current-input-port))"
+           #f
+           (list (cons 'program-input-byte-reader
+                       (consent-program-input-from-bytevector
+                        (bytevector 9)))))))
+       #t)
+(check 'program-binary-input-no-reader-denies
+       (raises?
+        (lambda ()
+          (consent-eval-source
+           "(read-u8 (current-input-port))"
+           #f
+           (list (list 'capability-grants program-input-grant)))))
+       #t)
+
+;; Streaming binary program input: a host `program-input-byte-reader' thunk
+;; yields the next bytevector chunk on demand (or #f at end of stream), so a read
+;; pulls only as many bytes as it needs and an unbounded byte stream never drains
+;; up front.  Parity twin of the Emacs
+;; `consent-eval-test-program-binary-input-streaming'.
+(define (program-input-byte-list-reader chunks)
+  "Return a reader thunk yielding each of CHUNKS once, then #f at end of stream."
+  (lambda ()
+    (if (null? chunks)
+        #f
+        (let ((chunk (car chunks)))
+          (set! chunks (cdr chunks))
+          chunk))))
+
+;; Counts byte-reader pulls so a check can assert a read consumed only what it needed.
+(define program-input-byte-pulls 0)
+(define (program-input-byte-counting-reader chunks)
+  "Like `program-input-byte-list-reader' but counts pulls in `program-input-byte-pulls'."
+  (let ((inner (program-input-byte-list-reader chunks)))
+    (lambda ()
+      (set! program-input-byte-pulls (+ program-input-byte-pulls 1))
+      (inner))))
+
+(set! program-input-byte-pulls 0)
+(check-external/options 'program-binary-input-stream-read-u8
+                        "(read-u8 (current-input-port))"
+                        (list (cons 'program-input-byte-reader
+                                    (program-input-byte-counting-reader
+                                     (list (bytevector 10)
+                                           (bytevector 20)
+                                           (bytevector 30))))
+                              (list 'capability-grants program-input-grant))
+                        "10")
+;; Reading one byte pulled exactly one chunk -- the stream was not drained.
+(check 'program-binary-input-stream-incremental program-input-byte-pulls 1)
+;; An unbounded byte reader would hang here if the port drained eagerly; reading
+;; a bounded number of bytes completes because refills stop once a byte is buffered.
+(check-external/options 'program-binary-input-stream-unbounded
+                        "(let ((port (current-input-port)))
+                           (list (read-u8 port) (read-u8 port) (read-u8 port)))"
+                        (list (cons 'program-input-byte-reader
+                                    (lambda () (bytevector 120)))
+                              (list 'capability-grants program-input-grant))
+                        "(120 120 120)")
+;; A read-bytevector spanning multiple chunks refills until count bytes buffer.
+(check-external/options 'program-binary-input-stream-read-bytevector
+                        "(read-bytevector 4 (current-input-port))"
+                        (list (cons 'program-input-byte-reader
+                                    (program-input-byte-list-reader
+                                     (list (bytevector 1 2)
+                                           (bytevector 3)
+                                           (bytevector 4 5))))
+                              (list 'capability-grants program-input-grant))
+                        "#u8(1 2 3 4)")
+
+;; Binary program output / error (#528): a granted byte writer receives each
+;; write flushed through immediately (write-through, not buffered to end of
+;; program), an ungranted one fails closed, and an unbounded write loop stays
+;; bounded by the host-callback budget.  Parity twin of the Emacs binary
+;; program-output/error tests.
+
+;; Evaluate SOURCE with a capturing byte writer under GRANT bound to OPTION-KEY,
+;; returning (captured-bytes . flush-count) so a check can assert write-through.
+(define (run-with-byte-writer source option-key grant)
+  (let ((flushes 0) (bytes '()))
+    (consent-eval-source-result
+     source #f
+     (list (cons option-key
+                 (lambda (chunk)
+                   (set! flushes (+ flushes 1))
+                   (set! bytes (append bytes chunk))))
+           (list 'capability-grants grant)))
+    (cons bytes flushes)))
+
+(let ((captured (run-with-byte-writer
+                 "(let ((port (current-output-port)))
+                    (write-u8 104 port)
+                    (write-bytevector #u8(105 33) port))"
+                 'program-output-byte-writer program-output-grant)))
+  (check 'program-binary-output-granted-bytes (car captured) '(104 105 33))
+  ;; write-u8 and write-bytevector flush separately: write-through, not buffer.
+  (check 'program-binary-output-granted-flushes (cdr captured) 2))
+
+(check 'program-binary-output-ungranted-denies
+       (raises?
+        (lambda ()
+          (consent-eval-source
+           "(write-u8 120 (current-output-port))"
+           #f
+           (list (cons 'program-output-byte-writer (lambda (chunk) chunk))))))
+       #t)
+
+(check 'program-binary-output-budget-bounded
+       (raises?
+        (lambda ()
+          (consent-eval-source
+           "(let loop ((i 0))
+              (if (< i 50)
+                  (begin (write-u8 121 (current-output-port)) (loop (+ i 1)))))"
+           #f
+           (list (cons 'program-output-byte-writer (lambda (chunk) chunk))
+                 (cons 'max-host-callbacks 5)
+                 (list 'capability-grants program-output-grant)))))
+       #t)
+
+(let ((captured (run-with-byte-writer
+                 "(write-u8 33 (current-error-port))"
+                 'program-error-byte-writer program-error-grant)))
+  (check 'program-binary-error-granted-bytes (car captured) '(33)))
+
 (if (= failures 0)
     (begin
       (display "Scheme evaluator tests passed")

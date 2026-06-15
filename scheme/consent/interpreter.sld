@@ -23,6 +23,7 @@
           consent-interaction-seed-program-input!
           consent-interaction-program-input-remainder
           consent-program-input-from-string
+          consent-program-input-from-bytevector
           consent-make-empty-environment
           consent-make-base-environment
           consent-base-primitive-names
@@ -3883,25 +3884,28 @@ integer there would not render through the consent writer."
 
     (define (append-bytes-to-port bytes port description . maybe-context)
       "Append BYTES to binary output PORT."
-      (let ((output (expect-binary-output-port port description)))
+      (let ((output (expect-binary-output-port port description))
+            (context (if (null? maybe-context) #f (car maybe-context))))
         (if (not (memq (consent-port-medium output) '(bytevector file)))
             (eval-error
              (string-append description
                             " host binary output ports are not available")
              port))
-        (revalidate-port-operation!
-         output
-         (if (null? maybe-context) #f (car maybe-context))
-         'write)
-        (set-consent-port-contents!
-         output
-         (append (consent-port-contents output) bytes))
+        (revalidate-port-operation! output context 'write)
+        ;; A streaming stdio binary port flushes each byte write through its host
+        ;; byte writer immediately (so a single-form byte filter streams instead of
+        ;; buffering to end of program), charged against the host-callback budget;
+        ;; an ordinary in-memory port accumulates its bytes as before.
+        (if (program-binary-output-streaming? output)
+            (begin
+              (if context
+                  (note-host-callback! context program-binary-output-write-primitive))
+              ((program-binary-output-writer-of output) bytes))
+            (set-consent-port-contents!
+             output
+             (append (consent-port-contents output) bytes)))
         (audit-port-capability-result!
-         (if (null? maybe-context) #f (car maybe-context))
-         output
-         'write
-         (length bytes)
-         #f)
+         context output 'write (length bytes) #f)
         consent-unspecified))
 
     (define (write-byte-to-port byte port description . maybe-context)
@@ -3916,42 +3920,54 @@ integer there would not render through the consent writer."
       "Implement the `read-u8` primitive with argument validation and Consent Scheme values."
       (if (null? arguments)
           consent-eof-object
-          (let* ((port (expect-binary-input-port (car arguments) "read-u8"))
-                 (source (consent-port-source port))
-                 (position (consent-port-position port)))
+          (let ((port (expect-binary-input-port (car arguments) "read-u8")))
             (if (not (memq (consent-port-medium port) '(bytevector file)))
                 (eval-error
                  "read-u8 host binary input ports are not available"))
             (revalidate-port-operation! port context 'read)
-            (if (>= position (bytevector-length source))
-                (begin
-                  (audit-port-capability-result! context port 'read 'eof #f)
-                  consent-eof-object)
-                (begin
-                  (set-consent-port-position! port (+ position 1))
-                  (audit-port-capability-result! context port 'read 1 #f)
-                  (host-number->agent-number
-                   (bytevector-u8-ref source position)))))))
+            ;; A streaming stdio binary port refills bytes on demand: pull one
+            ;; chunk when no byte is buffered, so a byte filter never drains the
+            ;; pipe up front.
+            (if (program-binary-input-streaming? port)
+                (program-binary-input-fill-until!
+                 port context
+                 (lambda () (program-binary-input-buffered>=? port 1))))
+            (let ((source (consent-port-source port))
+                  (position (consent-port-position port)))
+              (if (>= position (bytevector-length source))
+                  (begin
+                    (audit-port-capability-result! context port 'read 'eof #f)
+                    consent-eof-object)
+                  (begin
+                    (set-consent-port-position! port (+ position 1))
+                    (audit-port-capability-result! context port 'read 1 #f)
+                    (host-number->agent-number
+                     (bytevector-u8-ref source position))))))))
 
     (define (primitive-peek-u8 arguments context)
       "Implement the `peek-u8` primitive with argument validation and Consent Scheme values."
       (if (null? arguments)
           consent-eof-object
-          (let* ((port (expect-binary-input-port (car arguments) "peek-u8"))
-                 (source (consent-port-source port))
-                 (position (consent-port-position port)))
+          (let ((port (expect-binary-input-port (car arguments) "peek-u8")))
             (if (not (memq (consent-port-medium port) '(bytevector file)))
                 (eval-error
                  "peek-u8 host binary input ports are not available"))
             (revalidate-port-operation! port context 'read)
-            (if (>= position (bytevector-length source))
-                (begin
-                  (audit-port-capability-result! context port 'read 'eof #f)
-                  consent-eof-object)
-                (begin
-                  (audit-port-capability-result! context port 'read 1 #f)
-                (host-number->agent-number
-                 (bytevector-u8-ref source position)))))))
+            ;; Peeking refills like `read-u8' but does not advance the cursor.
+            (if (program-binary-input-streaming? port)
+                (program-binary-input-fill-until!
+                 port context
+                 (lambda () (program-binary-input-buffered>=? port 1))))
+            (let ((source (consent-port-source port))
+                  (position (consent-port-position port)))
+              (if (>= position (bytevector-length source))
+                  (begin
+                    (audit-port-capability-result! context port 'read 'eof #f)
+                    consent-eof-object)
+                  (begin
+                    (audit-port-capability-result! context port 'read 1 #f)
+                    (host-number->agent-number
+                     (bytevector-u8-ref source position))))))))
 
     (define (primitive-u8-ready? arguments context)
       "Implement the `u8-ready?` primitive with argument validation and Consent Scheme values."
@@ -3991,6 +4007,12 @@ integer there would not render through the consent writer."
           (eval-error "read-bytevector host binary input ports are not available"))
          (else
           (revalidate-port-operation! port context 'read)
+          ;; A streaming stdio binary port refills until COUNT bytes are buffered
+          ;; or the stream ends, so a bounded read pulls only what it needs.
+          (if (program-binary-input-streaming? port)
+              (program-binary-input-fill-until!
+               port context
+               (lambda () (program-binary-input-buffered>=? port count))))
           (let* ((source (consent-port-source port))
                  (position (consent-port-position port))
                  (remaining (- (bytevector-length source) position))
@@ -4034,30 +4056,38 @@ integer there would not render through the consent writer."
             (eval-error "read-bytevector! invalid range"))
         (if (not port)
             consent-eof-object
-            (let* ((source (consent-port-source port))
-                   (position (consent-port-position port))
-                   (capacity (- end start))
-                   (remaining (- (bytevector-length source) position))
-                   (amount (if (< capacity remaining) capacity remaining)))
+            (begin
               (if (not (memq (consent-port-medium port) '(bytevector file)))
                   (eval-error
                    "read-bytevector! host binary input ports are not available"))
               (revalidate-port-operation! port context 'read)
-              (if (= amount 0)
-                  consent-eof-object
-                  (begin
-                    (let loop ((offset 0))
-                      (if (< offset amount)
-                          (begin
-                            (bytevector-u8-set!
-                             target
-                             (+ start offset)
-                             (bytevector-u8-ref source (+ position offset)))
-                            (loop (+ offset 1)))))
-                    (set-consent-port-position! port (+ position amount))
-                    (audit-port-capability-result!
-                     context port 'read amount #f)
-                    (host-number->agent-number amount)))))))
+              ;; A streaming stdio binary port refills until the target range can
+              ;; be filled or the stream ends.
+              (if (program-binary-input-streaming? port)
+                  (program-binary-input-fill-until!
+                   port context
+                   (lambda ()
+                     (program-binary-input-buffered>=? port (- end start)))))
+              (let* ((source (consent-port-source port))
+                     (position (consent-port-position port))
+                     (capacity (- end start))
+                     (remaining (- (bytevector-length source) position))
+                     (amount (if (< capacity remaining) capacity remaining)))
+                (if (= amount 0)
+                    consent-eof-object
+                    (begin
+                      (let loop ((offset 0))
+                        (if (< offset amount)
+                            (begin
+                              (bytevector-u8-set!
+                               target
+                               (+ start offset)
+                               (bytevector-u8-ref source (+ position offset)))
+                              (loop (+ offset 1)))))
+                      (set-consent-port-position! port (+ position amount))
+                      (audit-port-capability-result!
+                       context port 'read amount #f)
+                      (host-number->agent-number amount))))))))
 
     (define (primitive-write-u8 arguments context)
       "Implement the `write-u8` primitive with argument validation and Consent Scheme values."
@@ -7902,6 +7932,23 @@ way to model a live stdin, which has a time dimension a buffer cannot represent.
             (set! pending #f)
             chunk))))
 
+    ;; The binary peer of `consent-program-input-from-string': a one-shot byte
+    ;; reader for genuinely finite in-memory input.  The textual stream's chunk is
+    ;; a string; the binary stream's chunk is a bytevector, so this is the honest
+    ;; finite binary-input constructor (fixtures, captured byte streams) and never
+    ;; a way to model a live stdin, which has a time dimension a buffer cannot
+    ;; represent.
+    (define (consent-program-input-from-bytevector content)
+      "Return a one-shot binary program-input reader yielding CONTENT once, then ends.
+CONTENT is a bytevector whose bytes are the whole finite input, available
+immediately and then at end of stream.  Use it for fixtures and captured byte
+streams; for a live byte pipe the host supplies its own incremental byte reader."
+      (let ((pending content))
+        (lambda ()
+          (let ((chunk pending))
+            (set! pending #f)
+            chunk))))
+
     (define (program-input-reader-from-options options)
       "Return the host input reader thunk from OPTIONS' `program-input-reader', or #f.
 Program input is always a reader (a stream); a caller with finite in-memory input
@@ -8031,6 +8078,111 @@ holding a live host port."
                (list 'status 'open)))
         port))
 
+    ;; The binary peer of the program-input port (#528): a `stdio'-backed binary
+    ;; input port that refills *bytes* on demand from a host byte reader -- a
+    ;; zero-argument procedure returning the next chunk as a non-empty bytevector,
+    ;; or #f at end of stream -- so a byte filter calling `read-u8'/`peek-u8'/
+    ;; `read-bytevector' over a live or unbounded pipe processes input incrementally
+    ;; instead of draining it up front.  The byte reader and an end-of-stream flag
+    ;; ride in the port's counters alist; the growable buffer is the port `source'
+    ;; bytevector.  It is the byte twin of the textual reader thunk and uses a
+    ;; distinct counters key so a binary and a textual stdin port never cross paths.
+    (define program-binary-input-refill-primitive
+      (make-primitive-procedure 'program-binary-input-read #f 0 0))
+
+    (define (program-binary-input-streaming? port)
+      "Report whether PORT draws bytes from a host program-input byte reader."
+      (and (consent-port? port)
+           (eq? (consent-port-backing-domain port) 'stdio)
+           (assq 'program-input-byte-reader (consent-port-counters port))
+           #t))
+
+    (define (program-binary-input-reader-of port)
+      "Return PORT's host input byte reader procedure."
+      (let ((entry (assq 'program-input-byte-reader (consent-port-counters port))))
+        (and entry (cdr entry))))
+
+    (define (program-binary-input-eof? port)
+      "Report whether PORT's host byte reader has reached end of stream."
+      (let ((entry (assq 'program-input-byte-eof (consent-port-counters port))))
+        (and entry (cdr entry))))
+
+    (define (program-binary-input-set-eof! port)
+      "Mark PORT's host byte reader as exhausted so it is not called again."
+      (set-consent-port-counters!
+       port
+       (cons (cons 'program-input-byte-eof #t) (consent-port-counters port))))
+
+    (define (program-binary-input-refill! port context)
+      "Pull one more chunk from PORT's host byte reader onto its buffer.
+Return #t when bytes were appended, #f at end of stream.  Each pull is charged
+against the host-callback budget and audited as a port read, so an unbounded byte
+stream stays budget-bounded and fail-closed like every host effect."
+      (if (program-binary-input-eof? port)
+          #f
+          (begin
+            (note-host-callback! context program-binary-input-refill-primitive)
+            (let ((chunk ((program-binary-input-reader-of port))))
+              (if (and (bytevector? chunk) (> (bytevector-length chunk) 0))
+                  (begin
+                    (set-consent-port-source!
+                     port
+                     (bytevector-append (consent-port-source port) chunk))
+                    (audit-port-capability-result!
+                     context port 'read (bytevector-length chunk) #f)
+                    #t)
+                  (begin
+                    (program-binary-input-set-eof! port)
+                    #f))))))
+
+    (define (program-binary-input-fill-until! port context done?)
+      "Refill PORT from its host byte reader until DONE? holds or the stream ends."
+      (let loop ()
+        (if (and (not (done?)) (not (program-binary-input-eof? port)))
+            (begin
+              (program-binary-input-refill! port context)
+              (loop)))))
+
+    (define (program-binary-input-buffered>=? port amount)
+      "Report whether PORT has at least AMOUNT unread bytes buffered."
+      (>= (- (bytevector-length (consent-port-source port))
+             (consent-port-position port))
+          amount))
+
+    (define (make-program-binary-input-port context grant reader)
+      "Return a capability-gated, refill-on-demand binary input port for GRANT.
+The port is backed by the `stdio' domain so every read revalidates GRANT and
+audits the operation, and pulls bytes from READER on demand rather than holding a
+live host port.  It is the binary twin of `make-program-input-port'."
+      (let* ((grant-id (capability-grant-id grant))
+             (limits (capability-grant-field-values grant 'limits))
+             (port
+              (make-consent-port
+               'bytevector #t #f #f #t #t (make-bytevector 0 0) 0 #f
+               'stdio
+               '(read close)
+               grant-id
+               limits
+               (port-capability-handle-id)
+               'open
+               'program-input
+               (list (cons 'program-input-byte-reader reader)))))
+        (record-audit-event!
+         context
+         'capability-handle
+         (list (list 'handle
+                     (port-capability-datum
+                      (consent-port-handle port) 'binary-input 'stdio
+                      (consent-port-operations port) grant-id limits 'open
+                      'program-input))
+               (list 'domain 'port)
+               (list 'kind 'binary-input)
+               (list 'backing 'stdio)
+               (cons 'operations (consent-port-operations port))
+               (list 'grant grant-id)
+               (list 'status 'open)))
+        port))
+
     ;; A program-output / program-error port is the write side of the standard
     ;; streams: a `stdio'-backed port whose textual writes flush through a host
     ;; writer thunk immediately (see `write-text-to-port'), so program output is
@@ -8086,6 +8238,65 @@ flushes through WRITER immediately rather than holding a live host port."
                (list 'status 'open)))
         port))
 
+    ;; The binary peer of the program-output / program-error port (#528): a
+    ;; `stdio'-backed binary output port whose byte writes flush through a host
+    ;; byte writer immediately (see `append-bytes-to-port'), so a `write-u8'/
+    ;; `write-bytevector' filter streams as it runs instead of buffering to end of
+    ;; program.  The byte writer receives each flush as a list of byte integers --
+    ;; the representation `append-bytes-to-port' already accumulates -- and rides in
+    ;; the port's counters under a distinct key from the textual writer.
+    (define program-binary-output-write-primitive
+      (make-primitive-procedure 'program-binary-output-write #f 0 0))
+
+    (define (program-binary-output-streaming? port)
+      "Report whether PORT flushes through a host program-output byte writer."
+      (and (consent-port? port)
+           (consent-port-output? port)
+           (eq? (consent-port-backing-domain port) 'stdio)
+           (assq 'program-output-byte-writer (consent-port-counters port))
+           #t))
+
+    (define (program-binary-output-writer-of port)
+      "Return PORT's host output byte writer procedure."
+      (let ((entry (assq 'program-output-byte-writer
+                         (consent-port-counters port))))
+        (and entry (cdr entry))))
+
+    (define (make-program-binary-output-port context grant writer purpose)
+      "Return a capability-gated, write-through binary output port for GRANT.
+PURPOSE is `program-output' or `program-error'.  The port is backed by the
+`stdio' domain so every write revalidates GRANT and audits the operation, and
+flushes bytes through WRITER immediately.  Binary twin of
+`make-program-output-port'."
+      (let* ((grant-id (capability-grant-id grant))
+             (limits (capability-grant-field-values grant 'limits))
+             (port
+              (make-consent-port
+               'bytevector #f #t #f #t #t #f 0 '()
+               'stdio
+               '(write flush close)
+               grant-id
+               limits
+               (port-capability-handle-id)
+               'open
+               purpose
+               (list (cons 'program-output-byte-writer writer)))))
+        (record-audit-event!
+         context
+         'capability-handle
+         (list (list 'handle
+                     (port-capability-datum
+                      (consent-port-handle port) 'binary-output 'stdio
+                      (consent-port-operations port) grant-id limits 'open
+                      purpose))
+               (list 'domain 'port)
+               (list 'kind 'binary-output)
+               (list 'backing 'stdio)
+               (cons 'operations (consent-port-operations port))
+               (list 'grant grant-id)
+               (list 'status 'open)))
+        port))
+
     (define (connect-standard-stream! context device backing operation build install)
       "Connect one standard stream when DEVICE and a matching grant are present.
 DEVICE is the host reader/writer (or #f); BACKING/OPERATION select the grant;
@@ -8132,17 +8343,31 @@ no-op, so the default posture stays fail-closed."
     (define (connect-standard-streams! context options)
       "Connect CONTEXT's current input/output/error ports to the granted standard
 streams.  Each stream is wired only when OPTIONS supply its host device (a
-`program-input-reader' thunk, a `program-output-writer', or a
-`program-error-writer') AND CONTEXT holds a matching active `port' grant; absent
-the grant the stream fails closed, absent the device it is left untouched.  The
+textual `program-input-reader' thunk / `program-output-writer' /
+`program-error-writer', or the binary `program-input-byte-reader' /
+`program-output-byte-writer' / `program-error-byte-writer' peers) AND CONTEXT
+holds a matching active `port' grant; absent the grant the stream fails closed,
+absent the device it is left untouched.  A stream is textual or binary, not both
+within a run: the binary device connects only when the textual device for the
+same stream is absent, so the established textual path takes precedence and the
+binary peer is purely additive (a byte filter offers byte devices instead).  The
 standard streams are consented by invocation -- the host attaching them is the
 authorization -- while ambient effects keep gating separately."
       (let ((reader (program-input-reader-from-options options))
             (out-writer (option-ref options 'program-output-writer #f))
-            (err-writer (option-ref options 'program-error-writer #f)))
+            (err-writer (option-ref options 'program-error-writer #f))
+            (byte-reader (option-ref options 'program-input-byte-reader #f))
+            (out-byte-writer (option-ref options 'program-output-byte-writer #f))
+            (err-byte-writer (option-ref options 'program-error-byte-writer #f)))
         (connect-standard-stream!
          context reader 'stdin 'read
          (lambda (ctx grant) (make-program-input-port ctx grant reader))
+         (lambda (port) (set-context-current-input-port! context port)))
+        (connect-standard-stream!
+         context (and (not reader) (procedure? byte-reader) byte-reader)
+         'stdin 'read
+         (lambda (ctx grant)
+           (make-program-binary-input-port ctx grant byte-reader))
          (lambda (port) (set-context-current-input-port! context port)))
         (connect-standard-stream!
          context (and (procedure? out-writer) out-writer) 'stdout 'write
@@ -8150,9 +8375,25 @@ authorization -- while ambient effects keep gating separately."
            (make-program-output-port ctx grant out-writer 'program-output))
          (lambda (port) (set-context-current-output-port! context port)))
         (connect-standard-stream!
+         context (and (not (procedure? out-writer))
+                      (procedure? out-byte-writer) out-byte-writer)
+         'stdout 'write
+         (lambda (ctx grant)
+           (make-program-binary-output-port
+            ctx grant out-byte-writer 'program-output))
+         (lambda (port) (set-context-current-output-port! context port)))
+        (connect-standard-stream!
          context (and (procedure? err-writer) err-writer) 'stderr 'write
          (lambda (ctx grant)
            (make-program-output-port ctx grant err-writer 'program-error))
+         (lambda (port) (set-context-current-error-port! context port)))
+        (connect-standard-stream!
+         context (and (not (procedure? err-writer))
+                      (procedure? err-byte-writer) err-byte-writer)
+         'stderr 'write
+         (lambda (ctx grant)
+           (make-program-binary-output-port
+            ctx grant err-byte-writer 'program-error))
          (lambda (port) (set-context-current-error-port! context port)))))
 
     (define (consent-eval expression . rest)
