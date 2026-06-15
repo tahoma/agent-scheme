@@ -3631,6 +3631,99 @@ holding a live host port."
        (status . open)))
     port))
 
+;; The binary peer of the program-input port (#528): a `stdio'-backed binary
+;; input port that refills *bytes* on demand from a host byte reader -- a
+;; zero-argument function returning the next chunk as a non-empty vector of bytes,
+;; or nil at end of stream -- so a byte filter calling `read-u8'/`peek-u8'/
+;; `read-bytevector' over a live or unbounded pipe processes input incrementally
+;; instead of draining it up front.  The byte reader and an end-of-stream flag
+;; ride in the port's counters alist; the growable buffer is the port `source'
+;; byte vector.  Byte twin of the textual reader thunk, with a distinct counters
+;; key so a binary and a textual stdin port never cross paths.  Emacs parity twin
+;; of the portable `(consent interpreter)' streaming binary program-input port.
+(defconst consent--program-binary-input-refill-primitive
+  (consent--make-primitive-procedure 'program-binary-input-read nil 0 0)
+  "Synthetic primitive naming binary program-input refills for budgeting.")
+
+(defun consent--program-binary-input-streaming-p (port)
+  "Return non-nil when PORT draws bytes from a host program-input byte reader."
+  (and (consent--port-p port)
+       (eq (consent--port-backing-domain port) 'stdio)
+       (assq 'program-input-byte-reader (consent--port-counters port))
+       t))
+
+(defun consent--program-binary-input-reader-of (port)
+  "Return PORT's host input byte reader function."
+  (cdr (assq 'program-input-byte-reader (consent--port-counters port))))
+
+(defun consent--program-binary-input-eof-p (port)
+  "Return non-nil when PORT's host byte reader has reached end of stream."
+  (cdr (assq 'program-input-byte-eof (consent--port-counters port))))
+
+(defun consent--program-binary-input-set-eof! (port)
+  "Mark PORT's host byte reader as exhausted so it is not called again."
+  (push (cons 'program-input-byte-eof t) (consent--port-counters port)))
+
+(defun consent--program-binary-input-refill! (port context)
+  "Pull one more chunk from PORT's host byte reader onto its buffer.
+Return non-nil when bytes were appended, nil at end of stream.  Each pull is
+charged against the host-callback budget and audited as a port read, so an
+unbounded byte stream stays budget-bounded and fail-closed like every host effect."
+  (unless (consent--program-binary-input-eof-p port)
+    (consent--note-host-callback
+     context consent--program-binary-input-refill-primitive)
+    (let ((chunk (funcall (consent--program-binary-input-reader-of port))))
+      (if (and (vectorp chunk) (> (length chunk) 0))
+          (progn
+            (setf (consent--port-source port)
+                  (vconcat (consent--port-source port) chunk))
+            (consent-capability-audit-port-result port 'read (length chunk))
+            t)
+        (progn
+          (consent--program-binary-input-set-eof! port)
+          nil)))))
+
+(defun consent--program-binary-input-fill-until! (port context done-p)
+  "Refill PORT from its host byte reader until DONE-P holds or the stream ends."
+  (while (and (not (funcall done-p))
+              (not (consent--program-binary-input-eof-p port)))
+    (consent--program-binary-input-refill! port context)))
+
+(defun consent--program-binary-input-buffered>= (port amount)
+  "Return non-nil when PORT has at least AMOUNT unread bytes buffered."
+  (>= (- (length (consent--port-source port))
+         (consent--port-position port))
+      amount))
+
+(defun consent--make-program-binary-input-port (grant reader)
+  "Return a capability-gated, refill-on-demand binary input port for GRANT.
+The port is backed by the `stdio' domain so every read revalidates GRANT and
+audits the operation, and pulls bytes from READER on demand rather than holding a
+live host port.  Binary twin of `consent--make-program-input-port'."
+  (let* ((grant-id (consent--capability-grant-id grant))
+         (limits (consent--port-capability-limits grant))
+         (handle-id (consent--port-capability-handle-id))
+         (port (consent--make-port
+                :medium 'bytevector :inputp t :outputp nil
+                :textualp nil :binaryp t :openp t
+                :source [] :position 0 :contents nil
+                :backing-domain 'stdio :operations '(read close)
+                :grant grant-id :limits limits :handle handle-id
+                :status 'open :path 'program-input
+                :counters (list (cons 'program-input-byte-reader reader)))))
+    (consent-audit-record
+     'capability-handle
+     `((handle . ,(consent--port-capability-datum
+                   handle-id 'binary-input 'stdio '(read close)
+                   grant-id limits 'open 'program-input))
+       (domain . port)
+       (kind . binary-input)
+       (backing . stdio)
+       (operations read close)
+       (grant . ,grant-id)
+       (status . open)))
+    port))
+
 ;; A program-output / program-error port is the write side of the standard
 ;; streams: a `stdio'-backed port whose textual writes flush through a host writer
 ;; thunk immediately (see `consent--write-text-to-port'), so program output is
@@ -3680,6 +3773,59 @@ flushes through WRITER immediately rather than holding a live host port."
        (status . open)))
     port))
 
+;; The binary peer of the program-output / program-error port (#528): a
+;; `stdio'-backed binary output port whose byte writes flush through a host byte
+;; writer immediately (see `consent--append-bytes-to-port'), so a `write-u8'/
+;; `write-bytevector' filter streams as it runs instead of buffering to end of
+;; program.  The byte writer receives each flush as a list of byte integers -- the
+;; representation `consent--append-bytes-to-port' already accumulates -- under a
+;; distinct counters key from the textual writer.
+(defconst consent--program-binary-output-write-primitive
+  (consent--make-primitive-procedure 'program-binary-output-write nil 0 0)
+  "Synthetic primitive naming binary program-output writes for budgeting.")
+
+(defun consent--program-binary-output-streaming-p (port)
+  "Report whether PORT flushes through a host program-output byte writer."
+  (and (consent--port-p port)
+       (consent--port-outputp port)
+       (eq (consent--port-backing-domain port) 'stdio)
+       (assq 'program-output-byte-writer (consent--port-counters port))
+       t))
+
+(defun consent--program-binary-output-writer-of (port)
+  "Return PORT's host output byte writer function."
+  (cdr (assq 'program-output-byte-writer (consent--port-counters port))))
+
+(defun consent--make-program-binary-output-port (grant writer purpose)
+  "Return a capability-gated, write-through binary output port for GRANT.
+PURPOSE is `program-output' or `program-error'.  The port is backed by the
+`stdio' domain so every write revalidates GRANT and audits the operation, and
+flushes bytes through WRITER immediately.  Binary twin of
+`consent--make-program-output-port'."
+  (let* ((grant-id (consent--capability-grant-id grant))
+         (limits (consent--port-capability-limits grant))
+         (handle-id (consent--port-capability-handle-id))
+         (port (consent--make-port
+                :medium 'bytevector :inputp nil :outputp t
+                :textualp nil :binaryp t :openp t
+                :source nil :position 0 :contents nil
+                :backing-domain 'stdio :operations '(write flush close)
+                :grant grant-id :limits limits :handle handle-id
+                :status 'open :path purpose
+                :counters (list (cons 'program-output-byte-writer writer)))))
+    (consent-audit-record
+     'capability-handle
+     `((handle . ,(consent--port-capability-datum
+                   handle-id 'binary-output 'stdio '(write flush close)
+                   grant-id limits 'open purpose))
+       (domain . port)
+       (kind . binary-output)
+       (backing . stdio)
+       (operations write flush close)
+       (grant . ,grant-id)
+       (status . open)))
+    port))
+
 (defun consent--connect-standard-stream!
     (context device backing operation build install)
   "Connect one standard stream when DEVICE and a matching grant are present.
@@ -3707,17 +3853,33 @@ the connection is denied and recorded; without the device it is a no-op."
 
 (defun consent--connect-standard-streams! (context options)
   "Connect CONTEXT's current input/output/error ports to the granted standard
-streams.  Each stream is wired only when OPTIONS supply its host device (a
-`:program-input-reader' thunk, a `:program-output-writer', or a
-`:program-error-writer') AND CONTEXT holds a matching active `port' grant; absent
-the grant the stream fails closed, absent the device it is left untouched.  The
-standard streams are consented by invocation; ambient effects keep gating."
+streams.  Each stream is wired only when OPTIONS supply its host device (a textual
+`:program-input-reader' thunk / `:program-output-writer' / `:program-error-writer',
+or the binary `:program-input-byte-reader' / `:program-output-byte-writer' /
+`:program-error-byte-writer' peers) AND CONTEXT holds a matching active `port'
+grant; absent the grant the stream fails closed, absent the device it is left
+untouched.  A stream is textual or binary, not both within a run: the binary
+device connects only when the textual device for the same stream is absent, so the
+established textual path takes precedence and the binary peer is purely additive.
+The standard streams are consented by invocation; ambient effects keep gating."
   (let ((reader (consent--program-input-reader-from-options options))
         (out-writer (consent--eval-option options :program-output-writer nil))
-        (err-writer (consent--eval-option options :program-error-writer nil)))
+        (err-writer (consent--eval-option options :program-error-writer nil))
+        (byte-reader
+         (consent--eval-option options :program-input-byte-reader nil))
+        (out-byte-writer
+         (consent--eval-option options :program-output-byte-writer nil))
+        (err-byte-writer
+         (consent--eval-option options :program-error-byte-writer nil)))
     (consent--connect-standard-stream!
      context reader 'stdin 'read
      (lambda (grant) (consent--make-program-input-port grant reader))
+     (lambda (port)
+       (setf (consent--eval-context-current-input-port context) port)))
+    (consent--connect-standard-stream!
+     context (and (not reader) (functionp byte-reader) byte-reader) 'stdin 'read
+     (lambda (grant)
+       (consent--make-program-binary-input-port grant byte-reader))
      (lambda (port)
        (setf (consent--eval-context-current-input-port context) port)))
     (consent--connect-standard-stream!
@@ -3727,9 +3889,27 @@ standard streams are consented by invocation; ambient effects keep gating."
      (lambda (port)
        (setf (consent--eval-context-current-output-port context) port)))
     (consent--connect-standard-stream!
+     context (and (not (functionp out-writer))
+                  (functionp out-byte-writer) out-byte-writer)
+     'stdout 'write
+     (lambda (grant)
+       (consent--make-program-binary-output-port
+        grant out-byte-writer 'program-output))
+     (lambda (port)
+       (setf (consent--eval-context-current-output-port context) port)))
+    (consent--connect-standard-stream!
      context (and (functionp err-writer) err-writer) 'stderr 'write
      (lambda (grant)
        (consent--make-program-output-port grant err-writer 'program-error))
+     (lambda (port)
+       (setf (consent--eval-context-current-error-port context) port)))
+    (consent--connect-standard-stream!
+     context (and (not (functionp err-writer))
+                  (functionp err-byte-writer) err-byte-writer)
+     'stderr 'write
+     (lambda (grant)
+       (consent--make-program-binary-output-port
+        grant err-byte-writer 'program-error))
      (lambda (port)
        (setf (consent--eval-context-current-error-port context) port)))))
 
@@ -4144,8 +4324,18 @@ Advance when ADVANCEP is non-nil.  Signal errors using DESCRIPTION."
       (consent--eval-error
        "%s host binary output ports are not available" description))
     (consent--port-capability-check output context 'write)
-    (setf (consent--port-contents output)
-          (append (consent--port-contents output) bytes))
+    ;; A streaming stdio binary port flushes each byte write through its host byte
+    ;; writer immediately (so a single-form byte filter streams instead of
+    ;; buffering to end of program), charged against the host-callback budget; an
+    ;; ordinary in-memory port accumulates its bytes as before.
+    (if (consent--program-binary-output-streaming-p output)
+        (progn
+          (when context
+            (consent--note-host-callback
+             context consent--program-binary-output-write-primitive))
+          (funcall (consent--program-binary-output-writer-of output) bytes))
+      (setf (consent--port-contents output)
+            (append (consent--port-contents output) bytes)))
     (consent-capability-audit-port-result
      output 'write (length bytes)))
   consent-unspecified)
@@ -4160,38 +4350,49 @@ Advance when ADVANCEP is non-nil.  Signal errors using DESCRIPTION."
   "Primitive read-u8 over ARGUMENTS."
   (if (null arguments)
       consent-eof-object
-    (let* ((port (consent--expect-binary-input-port
-                  (car arguments) "read-u8"))
-           (source (consent--port-source port))
-           (position (consent--port-position port)))
+    (let ((port (consent--expect-binary-input-port
+                 (car arguments) "read-u8")))
       (unless (memq (consent--port-medium port) '(bytevector file))
         (consent--eval-error
          "read-u8 host binary input ports are not available"))
       (consent--port-capability-check port context 'read)
-      (if (>= position (length source))
-          (prog1 consent-eof-object
-            (consent-capability-audit-port-result port 'read 'eof))
-        (setf (consent--port-position port) (1+ position))
-        (consent-capability-audit-port-result port 'read 1)
-        (consent--number-from-host (aref source position))))))
+      ;; A streaming stdio binary port refills bytes on demand: pull one chunk
+      ;; when no byte is buffered, so a byte filter never drains the pipe up front.
+      (when (consent--program-binary-input-streaming-p port)
+        (consent--program-binary-input-fill-until!
+         port context
+         (lambda () (consent--program-binary-input-buffered>= port 1))))
+      (let ((source (consent--port-source port))
+            (position (consent--port-position port)))
+        (if (>= position (length source))
+            (prog1 consent-eof-object
+              (consent-capability-audit-port-result port 'read 'eof))
+          (setf (consent--port-position port) (1+ position))
+          (consent-capability-audit-port-result port 'read 1)
+          (consent--number-from-host (aref source position)))))))
 
 (defun consent--primitive-peek-u8 (arguments context)
   "Primitive peek-u8 over ARGUMENTS."
   (if (null arguments)
       consent-eof-object
-    (let* ((port (consent--expect-binary-input-port
-                  (car arguments) "peek-u8"))
-           (source (consent--port-source port))
-           (position (consent--port-position port)))
+    (let ((port (consent--expect-binary-input-port
+                 (car arguments) "peek-u8")))
       (unless (memq (consent--port-medium port) '(bytevector file))
         (consent--eval-error
          "peek-u8 host binary input ports are not available"))
       (consent--port-capability-check port context 'read)
-      (if (>= position (length source))
-          (prog1 consent-eof-object
-            (consent-capability-audit-port-result port 'read 'eof))
-        (consent-capability-audit-port-result port 'read 1)
-        (consent--number-from-host (aref source position))))))
+      ;; Peeking refills like `read-u8' but does not advance the cursor.
+      (when (consent--program-binary-input-streaming-p port)
+        (consent--program-binary-input-fill-until!
+         port context
+         (lambda () (consent--program-binary-input-buffered>= port 1))))
+      (let ((source (consent--port-source port))
+            (position (consent--port-position port)))
+        (if (>= position (length source))
+            (prog1 consent-eof-object
+              (consent-capability-audit-port-result port 'read 'eof))
+          (consent-capability-audit-port-result port 'read 1)
+          (consent--number-from-host (aref source position)))))))
 
 (defun consent--primitive-u8-ready? (arguments _context)
   "Primitive u8-ready? over ARGUMENTS."
@@ -4219,6 +4420,12 @@ Advance when ADVANCEP is non-nil.  Signal errors using DESCRIPTION."
        "read-bytevector host binary input ports are not available"))
      (t
       (consent--port-capability-check port context 'read)
+      ;; A streaming stdio binary port refills until COUNT bytes are buffered or
+      ;; the stream ends, so a bounded read pulls only what it needs.
+      (when (consent--program-binary-input-streaming-p port)
+        (consent--program-binary-input-fill-until!
+         port context
+         (lambda () (consent--program-binary-input-buffered>= port count))))
       (let* ((source (consent--port-source port))
              (position (consent--port-position port))
              (remaining (- (length source) position))
@@ -4257,13 +4464,20 @@ Advance when ADVANCEP is non-nil.  Signal errors using DESCRIPTION."
       (consent--eval-error "read-bytevector! invalid range"))
     (if (null port)
         consent-eof-object
+      (unless (memq (consent--port-medium port) '(bytevector file))
+        (consent--eval-error
+         "read-bytevector! host binary input ports are not available"))
+      (consent--port-capability-check port context 'read)
+      ;; A streaming stdio binary port refills until the target range can be
+      ;; filled or the stream ends.
+      (when (consent--program-binary-input-streaming-p port)
+        (consent--program-binary-input-fill-until!
+         port context
+         (lambda ()
+           (consent--program-binary-input-buffered>= port (- end start)))))
       (let* ((source (consent--port-source port))
              (position (consent--port-position port))
              (amount (min (- end start) (- (length source) position))))
-        (unless (memq (consent--port-medium port) '(bytevector file))
-          (consent--eval-error
-           "read-bytevector! host binary input ports are not available"))
-        (consent--port-capability-check port context 'read)
         (if (zerop amount)
             consent-eof-object
           (dotimes (offset amount)
