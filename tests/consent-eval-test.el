@@ -186,6 +186,150 @@ fails closed without a grant.  Parity twin of the portable program-output checks
      (consent-eval-source "(current-error-port)" nil nil)
      :type 'consent-eval-error)))
 
+(ert-deftest consent-eval-test-program-binary-input-stream ()
+  "Binary program input connects current-input-port under a stdin-backed grant.
+A `:program-input-byte-reader' plus an active `port'/`read' grant scoped to
+`stdin' lets `read-u8'/`peek-u8'/`read-bytevector' draw bytes from the program
+input; without the grant -- or offering a byte reader with no grant -- the read
+fails closed exactly as an unconnected current input port does.  Parity twin of
+the portable `program-binary-input-read-u8' check."
+  (let ((grants '((capability-grant
+                   (id program-input)
+                   (domain port)
+                   (operations read close)
+                   (scope (backing stdin))
+                   (expires never)))))
+    ;; Granted: successive read-u8 advance over the bytes to EOF.
+    (should
+     (equal
+      (consent-eval-test--external
+       "(list (read-u8 (current-input-port))
+              (read-u8 (current-input-port))
+              (eof-object? (read-u8 (current-input-port))))"
+       (list :program-input-byte-reader
+             (consent-program-input-from-bytevector [104 105])
+             :capability-grants grants))
+      "(104 105 #t)"))
+    ;; peek-u8 does not advance the cursor; read-u8 then returns the peeked byte.
+    (should
+     (equal
+      (consent-eval-test--external
+       "(let ((port (current-input-port)))
+          (list (peek-u8 port) (read-u8 port) (read-u8 port)))"
+       (list :program-input-byte-reader
+             (consent-program-input-from-bytevector [7 8])
+             :capability-grants grants))
+      "(7 7 8)"))
+    ;; read-bytevector pulls up to its count across the buffered bytes.
+    (should
+     (equal
+      (consent-eval-test--external
+       "(read-bytevector 3 (current-input-port))"
+       (list :program-input-byte-reader
+             (consent-program-input-from-bytevector [1 2 3 4])
+             :capability-grants grants))
+      "#u8(1 2 3)"))
+    ;; Ungranted: a byte reader offered but no grant -> read fails closed.
+    (should-error
+     (consent-eval-source
+      "(read-u8 (current-input-port))" nil
+      (list :program-input-byte-reader
+            (consent-program-input-from-bytevector [9])))
+     :type 'consent-eval-error)
+    ;; Grant present but no byte reader offered -> still disconnected.
+    (should-error
+     (consent-eval-source
+      "(read-u8 (current-input-port))" nil (list :capability-grants grants))
+     :type 'consent-eval-error)))
+
+(ert-deftest consent-eval-test-program-binary-input-streaming ()
+  "Binary program input is pulled from a host byte reader thunk on demand.
+A `:program-input-byte-reader' yields the next bytevector chunk (or nil at end of
+stream), so a read consumes only as many bytes as it needs and an unbounded byte
+stream never drains up front.  Parity twin of the portable
+`program-binary-input-stream-read-u8' checks."
+  (let ((grants '(:capability-grants
+                  ((capability-grant
+                    (id program-input) (domain port) (operations read close)
+                    (scope (backing stdin)) (expires never))))))
+    ;; Incremental: reading one byte pulls exactly one chunk, not the stream.
+    (let* ((pulls 0)
+           (chunks (list [10] [20] [30]))
+           (reader (lambda ()
+                     (setq pulls (1+ pulls))
+                     (and chunks (pop chunks)))))
+      (should (equal (consent-eval-test--external
+                      "(read-u8 (current-input-port))"
+                      (append (list :program-input-byte-reader reader) grants))
+                     "10"))
+      (should (= pulls 1)))
+    ;; An unbounded reader would hang here if the port drained eagerly; reading a
+    ;; bounded number of bytes completes because refills stop once a byte buffers.
+    (should (equal (consent-eval-test--external
+                    "(let ((port (current-input-port)))
+                       (list (read-u8 port) (read-u8 port) (read-u8 port)))"
+                    (append (list :program-input-byte-reader (lambda () [120]))
+                            grants))
+                   "(120 120 120)"))
+    ;; A read-bytevector spanning multiple chunks refills until count bytes buffer.
+    (let* ((chunks (list [1 2] [3] [4 5]))
+           (reader (lambda () (and chunks (pop chunks)))))
+      (should (equal (consent-eval-test--external
+                      "(read-bytevector 4 (current-input-port))"
+                      (append (list :program-input-byte-reader reader) grants))
+                     "#u8(1 2 3 4)")))))
+
+(ert-deftest consent-eval-test-program-binary-output-streams ()
+  "Binary program output/error connect only under a stdout/stderr-backed grant.
+A granted byte writer receives each write flushed through immediately
+(write-through, not buffered to end of program); an ungranted writer fails closed;
+an unbounded write loop stays bounded by the host-callback budget.  Parity twin of
+the portable binary program-output checks."
+  (let ((out-grant '((capability-grant
+                      (id program-output) (domain port)
+                      (operations write flush close) (scope (backing stdout))
+                      (expires never))))
+        (err-grant '((capability-grant
+                      (id program-error) (domain port)
+                      (operations write flush close) (scope (backing stderr))
+                      (expires never)))))
+    ;; Granted output: each byte write flushes through, in order.
+    (let* ((flushes 0)
+           (bytes nil)
+           (writer (lambda (chunk)
+                     (setq flushes (1+ flushes))
+                     (setq bytes (append bytes chunk)))))
+      (consent-eval-source
+       "(let ((port (current-output-port)))
+          (write-u8 104 port)
+          (write-bytevector #u8(105 33) port))" nil
+       (list :program-output-byte-writer writer :capability-grants out-grant))
+      (should (equal bytes '(104 105 33)))
+      ;; write-u8 and write-bytevector flush separately: write-through.
+      (should (= flushes 2)))
+    ;; Ungranted output: a byte writer offered but no grant -> fails closed.
+    (should-error
+     (consent-eval-source
+      "(write-u8 120 (current-output-port))" nil
+      (list :program-output-byte-writer (lambda (_chunk) nil)))
+     :type 'consent-eval-error)
+    ;; Unbounded write loop is bounded by the host-callback budget.
+    (should-error
+     (consent-eval-source
+      "(let loop ((i 0))
+         (if (< i 50)
+             (progn (write-u8 121 (current-output-port)) (loop (+ i 1)))))" nil
+      (list :program-output-byte-writer (lambda (_chunk) nil)
+            :max-host-callbacks 5 :capability-grants out-grant))
+     :type 'consent-eval-error)
+    ;; Granted error port captures via the stderr byte writer.
+    (let* ((bytes nil)
+           (writer (lambda (chunk) (setq bytes (append bytes chunk)))))
+      (consent-eval-source
+       "(write-u8 33 (current-error-port))" nil
+       (list :program-error-byte-writer writer :capability-grants err-grant))
+      (should (equal bytes '(33))))))
+
 (ert-deftest consent-eval-test-let-empty-bindings-and-char-literals ()
   "Evaluate `let' with empty bindings and delimiter character literals.
 Regression: the syntax-rules matcher must match ((name val) ...) against ();

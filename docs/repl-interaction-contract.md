@@ -191,19 +191,35 @@ flushed through a writer thunk.
   stream type, stated explicitly, not a stdin-shaped shortcut that would invite
   modelling a live stream as a buffer.
 
+- **Binary devices.** A byte filter offers the binary peers instead (#528):
+  `program-input-byte-reader` (`:program-input-byte-reader` on Emacs), a thunk
+  returning the next chunk as a *bytevector* or an end-of-stream indication; and
+  `program-output-byte-writer` / `program-error-byte-writer`, procedures of one
+  byte chunk that flush it to the real stream. The finite in-memory constructor is
+  `consent-program-input-from-bytevector`, the byte twin of
+  `consent-program-input-from-string`. A stream is textual or binary, not both
+  within a run: a binary device connects only when the same stream's textual
+  device is absent, so the textual path takes precedence and the binary peer is
+  purely additive (different streams may still mix — a binary stdin alongside a
+  textual stdout).
+
 - **Input refills on demand.** A connected `stdio`-backed input port grows its
   buffer by pulling from the reader only as reads need more: `read-char`/
   `peek-char` pull one character, `read-line` to the next newline, `read-string`
   to the count, and `read` until the recovery-aware reader sees a complete datum
-  (then reads it through the ordinary validating reader). So a `(read-line)`
+  (then reads it through the ordinary validating reader). The binary port refills
+  the same way by bytes: `read-u8`/`peek-u8` pull one byte and `read-bytevector`
+  (and `read-bytevector!`) to its count. So a `(read-line)` or `(read-u8 …)`
   filter over a live, slow, or unbounded pipe processes input incrementally and
   never blocks draining all of stdin first; an unbounded stream does not hang a
   bounded read.
 
 - **Output flushes through (write-through).** A connected `stdio`-backed output
-  port flushes each textual write through the host writer immediately rather than
-  buffering, so a single-form filter loop streams its output as it runs.
-  `current-error-port` is connected the same way under the `stderr` grant.
+  port flushes each write through the host writer immediately rather than
+  buffering — each textual write on a textual port, each `write-u8`/
+  `write-bytevector` on a binary port — so a single-form filter loop streams its
+  output as it runs. `current-error-port` is connected the same way under the
+  `stderr` grant.
 
 - **Gated and bounded.** Every read and write revalidates its grant and audits
   the operation exactly like a host file port, and each input refill and output
@@ -244,18 +260,21 @@ the read consumes that trailing text as program data.
 
 #### Remaining work
 
-The model above is complete for piped and `--script`/`--eval`/`--repl` use. Three
-extensions are deliberately out of scope here and tracked for their own issues:
+The model above is complete for piped and `--script`/`--eval`/`--repl` use, for
+textual and binary streams alike. Two extensions are deliberately out of scope
+here and tracked for their own issues:
 
 - **Promptable runtime stdio grants.** Requesting a stdio grant *at runtime*
   (rather than by invocation) — a script that asks for stdin/stdout mid-run — is
   part of the non-interactive script authority posture (#400). The mechanism here
   is the substrate it builds on.
-- **Binary stdio.** `read-u8`/`write-u8` over a `stdio`-backed binary port (a
-  byte filter) is not connected; the standard streams here are textual.
 - **TTY line editing.** Cooked-mode echo, history, and completion on a live
   terminal (the in-editor comint surface, #514) ride above this cursor and are
   not part of the contract.
+
+(Binary stdio — `read-u8`/`peek-u8`/`read-bytevector` and `write-u8`/
+`write-bytevector` over a `stdio`-backed byte port — was the third extension and
+is now connected as of #528, described in the Program Stream Model above.)
 
 ## Record Vocabulary
 
