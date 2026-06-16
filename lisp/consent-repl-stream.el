@@ -141,7 +141,10 @@ datum prefix is pending with no construct open."
               (consent-repl-stream--bool eof))))
 
 (defun consent-repl-stream--result-record (session ordinal evaluation-result display)
-  "Build a `repl-result' record wrapping EVALUATION-RESULT and DISPLAY at ORDINAL."
+  "Build a `repl-result' record wrapping EVALUATION-RESULT and DISPLAY at ORDINAL.
+The `ordinal' field mirrors `repl-prompt' so a pure chrome can right-align the
+result marker to the prompt-gutter width without coupling to the `submission' id
+format."
   (list (consent-repl-stream--sym "repl-result")
         (list (consent-repl-stream--sym "id")
               (consent-repl-stream--tag "res" ordinal))
@@ -149,12 +152,16 @@ datum prefix is pending with no construct open."
               (consent-repl-stream--tag "sub" ordinal))
         (list (consent-repl-stream--sym "session")
               (consent-repl-stream--session-field session))
+        (list (consent-repl-stream--sym "ordinal")
+              (consent-repl-stream--int ordinal))
         (list (consent-repl-stream--sym "evaluation-result") evaluation-result)
         (list (consent-repl-stream--sym "display") display)))
 
 (defun consent-repl-stream--condition-record
     (session ordinal phase recoverable condition display)
-  "Build a `repl-condition' record for PHASE/RECOVERABLE CONDITION at ORDINAL."
+  "Build a `repl-condition' record for PHASE/RECOVERABLE CONDITION at ORDINAL.
+The `ordinal' field mirrors `repl-prompt' so a pure chrome can right-align the
+condition marker to the prompt-gutter width."
   (list (consent-repl-stream--sym "repl-condition")
         (list (consent-repl-stream--sym "id")
               (consent-repl-stream--tag "cond" ordinal))
@@ -162,6 +169,8 @@ datum prefix is pending with no construct open."
               (consent-repl-stream--tag "sub" ordinal))
         (list (consent-repl-stream--sym "session")
               (consent-repl-stream--session-field session))
+        (list (consent-repl-stream--sym "ordinal")
+              (consent-repl-stream--int ordinal))
         (list (consent-repl-stream--sym "phase")
               (consent-repl-stream--sym phase))
         (list (consent-repl-stream--sym "recoverable")
@@ -492,7 +501,12 @@ EMIT-OUTPUT on separate streams, under SESSION and evaluator OPTIONS."
                                                             program-input)
                    (let ((result (consent-interaction-eval-form
                                   interaction datum)))
-                     (drain-output!)
+                     ;; Drain this turn's program output before the result
+                     ;; record, binding the ordinal so the `comment' chrome's
+                     ;; output formatter aligns its `;;   :: ' gutter to this
+                     ;; turn's result marker.
+                     (let ((consent-repl-chrome-output-ordinal ordinal))
+                       (drain-output!))
                      (if (consent-repl-stream--error-result-p result)
                          (emit (consent-repl-stream--condition-record
                                 session ordinal "eval" t
@@ -717,30 +731,56 @@ grant."
 ;;;; Shared chrome presentation
 
 ;;;###autoload
-(defun consent-repl-stream-rendered-from-string
+(defun consent-repl-stream-capture-from-string
     (input session chrome-name &optional apply-faces options input-echoed)
-  "Drive a REPL over INPUT under SESSION and return the CHROME-NAME chrome's text.
-Each contract record is rendered through the named chrome from
-`consent-repl-chrome.el' and concatenated into the control-channel text;
-program output is discarded.  Faces are applied when APPLY-FACES is non-nil, so
-omitting it recovers the plain text.  INPUT-ECHOED models a host that already
-echoes interaction input -- an interactive TTY -- so the comment chrome
-suppresses its own submission echo.  This is the host-neutral, buffer-free hook
-the chrome tests assert against, the Emacs twin of the portable
-`cli-repl-rendered-from-string'."
+  "Drive a REPL over INPUT under SESSION and return the cons (CONTROL . PROGRAM-OUTPUT).
+CONTROL is the painted control-channel text (records, plus -- under the `comment'
+chrome -- its commented `;;   :: ' rendering of program output) and PROGRAM-OUTPUT
+is the raw program-output stream, the two halves the live binary keeps on stderr
+and stdout.  Under `comment' program output is in CONTROL (commented) and
+PROGRAM-OUTPUT is empty; under every other chrome program output is raw in
+PROGRAM-OUTPUT and CONTROL carries records only.  Faces are applied when
+APPLY-FACES is non-nil.  INPUT-ECHOED models a host that already echoes
+interaction input.  The Emacs twin of the portable `cli-repl-capture-from-string'."
   (let ((chrome (consent-repl-chrome-lookup chrome-name))
+        (echo (consent-repl-chrome-output-formatter chrome-name session))
         (consent-repl-chrome-input-echoed input-echoed)
-        (parts nil))
+        (control nil)
+        (program-output nil))
     (consent-repl-stream-run
      (consent-repl-stream--list-chunk-source
       (consent-repl-stream--split-lines input))
      (lambda (record)
        (let ((painted (consent-repl-chrome-paint
                        (funcall chrome record) apply-faces)))
-         (when painted (push painted parts))))
-     #'ignore
+         (when painted (push painted control))))
+     ;; The `comment' chrome owns program output (commented, onto the control
+     ;; channel); every other chrome leaves it raw on its own stream.
+     (lambda (output)
+       (let ((segments (funcall echo output)))
+         (if segments
+             (let ((painted (consent-repl-chrome-paint segments apply-faces)))
+               (when painted (push painted control)))
+           (push output program-output))))
      session options)
-    (apply #'concat (nreverse parts))))
+    (cons (apply #'concat (nreverse control))
+          (apply #'concat (nreverse program-output)))))
+
+;;;###autoload
+(defun consent-repl-stream-rendered-from-string
+    (input session chrome-name &optional apply-faces options input-echoed)
+  "Drive a REPL over INPUT under SESSION and return the CHROME-NAME chrome's
+control-channel text -- the full replayable transcript: records, plus -- under
+the `comment' chrome -- its commented `;;   :: ' rendering of program output (which
+`comment' owns).  The raw program-output stream is the cdr of
+`consent-repl-stream-capture-from-string' and is dropped here.  Faces are applied
+when APPLY-FACES is non-nil, so omitting it recovers the plain text.  INPUT-ECHOED
+models a host that already echoes interaction input -- an interactive TTY -- so
+the comment chrome suppresses its own submission echo.  This is the host-neutral,
+buffer-free hook the chrome tests assert against, the Emacs twin of the portable
+`cli-repl-rendered-from-string'."
+  (car (consent-repl-stream-capture-from-string
+        input session chrome-name apply-faces options input-echoed)))
 
 ;;;; Terminal/batch entry
 

@@ -153,6 +153,19 @@ Obligations:
   CLI/daemon contract. A REPL interaction stream lowers to those event kinds when
   it crosses the host boundary; the channel names above are the REPL-level view
   of the same separation.
+- A chrome MAY *own* `program-output` — relocating its presentation onto the
+  control channel — when that serves the chrome's contract. The default
+  `comment` chrome does this: because its whole reason for being is a wholly
+  replayable transcript, it renders each line of `program-output` as an aligned
+  `;;   :: ` line comment **on the control channel** (where the records are), so a
+  captured control-channel transcript with `(display …)` replays to the same
+  forms instead of re-evaluating the printed text — and under `comment`,
+  `program-output` (stdout) is therefore empty. Every other chrome (`classic`,
+  `quiet`, `silent`, `datum`) leaves `program-output` raw on stdout, so a
+  consumer that wants byte-exact program output selects one of those (`silent`
+  for program output alone). This is a per-chrome policy, applied by the output
+  formatter; it changes which stream carries the output presentation, not the
+  record vocabulary.
 
 ### Program Stream Model
 
@@ -365,6 +378,7 @@ reshaping, the existing `evaluation-result` datum.
   (id res-3)
   (submission sub-3)
   (session project-main)
+  (ordinal 3)                   ; the submission's one-based count, mirroring repl-prompt
   (evaluation-result
     (evaluation-result
       (status ok)
@@ -378,6 +392,11 @@ reshaping, the existing `evaluation-result` datum.
   `ok-result-datum` — `status ok` with a single rendered `value`, or
   `status values` with a rendered `values` list (the empty list for zero
   values). The REPL adds no fields to it.
+- `ordinal` is the submission's one-based count, the same value the correlated
+  `repl-prompt` carries. It lets a pure per-record chrome align the result
+  marker to the prompt-gutter width without parsing the `submission` id. (A
+  chrome may also derive it from the `(submission sub-N)` id; the field makes
+  that a contract guarantee rather than a coupling to the id format.)
 - `display` is an optional convenience string for terminal/buffer presentation,
   derived from `consent-value->external`. It is never the canonical result; the
   embedded `evaluation-result` datum is.
@@ -396,6 +415,7 @@ fixtures can assert that a session keeps running after a recoverable condition.
   (id cond-4)
   (submission sub-4)
   (session project-main)
+  (ordinal 4)            ; the submission's one-based count, mirroring repl-prompt
   (phase eval)           ; read | eval
   (recoverable #t)       ; #t when the session continues; #f when it must close
   (condition
@@ -418,6 +438,16 @@ fixtures can assert that a session keeps running after a recoverable condition.
   continues. `recoverable #f` is reserved for conditions that force the session to
   close (for example, loss of the interaction environment); it is immediately
   followed by a `repl-exit`.
+- `ordinal` is the submission's one-based count, as on `repl-result`, so a chrome
+  aligns the condition marker the same way.
+- `display` is the optional human-readable diagnostic. An evaluator/budget error
+  renders with the host-neutral canonical prefix both twins build —
+  `consent eval error: <message>` / `consent budget error: <message>` — so the
+  diagnostic is byte-identical across hosts wherever the inner `<message>`
+  wording agrees. Converging that inner wording across the two interpreters (for
+  example `unbound identifier` vs `unbound identifier: NAME`) is tracked
+  separately as a runtime-parity follow-up; until then a fixture pins the marker
+  and prefix, not the full message, for conditions whose wording still differs.
 
 ### `repl-exit`
 
@@ -689,7 +719,8 @@ records and behavior above are unchanged:
   *chrome*: a pure function from each record to readable output, with styling
   expressed as named **semantic roles** (`furniture`, `prompt-session`,
   `prompt-ordinal`, `prompt-nesting`, `result-marker`, `result-value`,
-  `error-marker`, `error-text`, `exit-status`). The chrome *model* — the named set
+  `error-marker`, `error-text`, `exit-marker`, `exit-status`, `output-marker`,
+  `output-text`). The chrome *model* — the named set
   (`comment` default, `datum`, `classic`, `quiet`, `silent`) and the
   record-to-role mapping — is host-neutral and shared; the *substrate* is
   host-specific. The portable terminal renders roles as ANSI SGR
@@ -697,7 +728,14 @@ records and behavior above are unchanged:
   buffer (`consent-repl-chrome.el`). This is familiarity, not byte-identity:
   forcing ANSI into a buffer (or faces onto a TTY) would fight both hosts. The
   `datum` chrome reproduces the canonical record stream and is always reachable
-  on every host, so no chrome can suppress the parity surface.
+  on every host, so no chrome can suppress the parity surface. The chromes treat
+  `program-output` by a per-chrome policy carried by an **output formatter**
+  (`cli-repl-chrome-output-formatter` / `consent-repl-chrome-output-formatter`):
+  the replayable `comment` chrome *owns* it, rendering each line as an aligned
+  `;;   :: ` comment on the control channel (so the transcript replays the output
+  and stdout stays clean), while `classic`, `quiet`, `silent`, and `datum` leave
+  it raw on stdout. The formatter is presentation, not a record; the engine stays
+  chrome-agnostic (see [Stream Separation](#stream-separation)).
 - **Scheduling.** Foreground versus background/job-driven evaluation and any
   buffer or daemon bookkeeping are host concerns, provided submissions are
   evaluated in order and each produces its contract records.

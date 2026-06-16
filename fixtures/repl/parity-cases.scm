@@ -67,7 +67,7 @@
      (expect
        ((repl-prompt (ordinal 1) (state ready) (pending #f))
         (repl-submission (id sub-1) (ordinal 1) (source "(+ 1 2)") (complete #t) (eof #f))
-        (repl-result (id res-1) (submission sub-1)
+        (repl-result (id res-1) (submission sub-1) (ordinal 1)
                      (evaluation-result (evaluation-result (status ok)))
                      (display "3"))
         (repl-prompt (ordinal 2) (state ready) (pending #f))
@@ -109,10 +109,10 @@
      (expect
        ((repl-prompt (ordinal 1) (state ready) (pending #f))
         (repl-submission (id sub-1) (ordinal 1) (source "undefined-name") (complete #t) (eof #f))
-        (repl-condition (id cond-1) (submission sub-1) (phase eval) (recoverable #t))
+        (repl-condition (id cond-1) (submission sub-1) (ordinal 1) (phase eval) (recoverable #t))
         (repl-prompt (ordinal 2) (state ready) (pending #f))
         (repl-submission (id sub-2) (ordinal 2) (source "(+ 4 5)") (complete #t) (eof #f))
-        (repl-result (id res-2) (submission sub-2)
+        (repl-result (id res-2) (submission sub-2) (ordinal 2)
                      (evaluation-result (evaluation-result (status ok)))
                      (display "9"))
         (repl-prompt (ordinal 3) (state ready) (pending #f))
