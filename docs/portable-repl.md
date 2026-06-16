@@ -86,9 +86,9 @@ Select a chrome with `--chrome NAME`:
 
 | Chrome    | Intent                                                                    |
 | --------- | ------------------------------------------------------------------------- |
-| `comment` | **Default.** Prompts, results, and diagnostics are block comments and submitted forms are echoed as bare code, so the whole stream is valid Consent Scheme that *replays* to the same evaluation apart from program output. On an interactive terminal the chrome suppresses its own echo (the terminal already echoed the typed form) so a captured transcript still holds exactly one copy of each form; see [Replayable transcripts and input echo](#replayable-transcripts-and-input-echo). The prompt shows the ordinal alone for the lone default session and grows a session label when the session is named. A continuation prompt's ellipsis carries the count of still-open constructs at nesting depth two or more (`#| ...2 |#`). |
+| `comment` | **Default.** The prompt is block-comment furniture (`#\| 1 \|# `); a submitted form is echoed as bare code; and each result, condition, exit, and line of program output is its own `;;` line comment whose marker right-aligns under the echoed form — `;;   => ` for a value, `;;   !! ` for a condition, `;;   :: ` for program output, `;;   __ exit <status>` to close — each followed by a `;;` separator. `comment` **owns** program output: it renders each printed line as a `;;   :: ` comment on the control channel (stderr) and leaves stdout empty, so the **whole** captured transcript is valid Consent Scheme that *replays* to the same forms (replay is now unconditional, not "apart from program output"). To get raw program output on stdout, use `silent` (or any non-`comment` chrome). On an interactive terminal the chrome suppresses its own echo (the terminal already echoed the typed form) so a captured transcript holds exactly one copy of each form; see [Replayable transcripts and input echo](#replayable-transcripts-and-input-echo). The prompt shows the ordinal alone for the lone default session and grows a session label when named; a continuation prompt is width-matched alignment dots (`#\| . \|# `), no nesting count. |
 | `datum`   | The raw record stream, one datum per line — the canonical machine-readable surface. Never colored. Always reachable, regardless of the default. |
-| `classic` | A `>`/`|` prompt (aligned two columns; `|` is a continuation gutter) and bare result values. At nesting depth two or more the gutter carries the count of still-open constructs (`|2`), from the prompt record's pending-nesting indicator. |
+| `classic` | A familiar terminal-REPL look: a `>` prompt, a `.` continuation gutter (both two columns, no nesting count), the whole form echoed as bare source (TTY-gated like `comment`), and single-column `= `/`! `/`_ ` markers on the value, condition, and exit lines, with a blank line between turns. Unlike `comment` it makes no replay claim, so program output stays **raw and interleaved**, exactly as a real REPL shows it. |
 | `quiet`   | No prompts; results and conditions only.                                  |
 | `silent`  | Suppresses all interaction records; only program output reaches stdout.   |
 
@@ -98,10 +98,45 @@ printf '(+ 1 2)\n(exit)\n' | tools/consent-repl --chrome datum   # raw records
 make repl ARGS='--chrome quiet'
 ```
 
+The same printing session under `comment` (default) and `classic`. Note how
+`comment` renders the `(display …)` output as a `;;   :: ` line comment — so the
+transcript stays replayable — while `classic` leaves it raw:
+
+```
+#| 1 |# (define (greet who) (display "hi ")(display who)(newline))
+;;   => (unspecified)
+;;
+#| 2 |# (greet "world")
+;;   :: hi world
+;;   => (unspecified)
+;;
+#| 3 |# (+ 2 3)
+;;   => 5
+;;
+#| 4 |# (exit)
+;;   __ exit closed-ok
+```
+
+```
+> (define (greet who) (display "hi ")(display who)(newline))
+= (unspecified)
+
+> (greet "world")
+hi world
+= (unspecified)
+
+> (+ 2 3)
+= 5
+
+> (exit)
+_ exit closed-ok
+```
+
 Styling is expressed as named **semantic roles** (`furniture`, `prompt-session`,
 `prompt-ordinal`, `result-marker`, `result-value`, `error-marker`, `error-text`,
-`exit-status`), never raw ANSI, so another host realizes the same roles on its
-own substrate. The terminal renderer maps roles to ANSI SGR; the Emacs host maps
+`exit-marker`, `exit-status`, `output-marker`, `output-text`), never raw ANSI, so
+another host realizes the same roles on its own substrate. The terminal renderer
+maps roles to ANSI SGR; the Emacs host maps
 the same named set and record-to-role mapping to faces in its session buffer
 (`consent-repl-chrome.el`), so the standalone shell and the in-editor REPL share
 a presentation. The built-in chromes are ordinary registered procedures over
@@ -123,10 +158,16 @@ spaced form `--color always` is also accepted.
 
 #### Replayable transcripts and input echo
 
-The `comment` chrome's replay guarantee — a captured control-channel stream is
-valid Consent Scheme that re-evaluates to the same session — depends on each
-submitted form appearing **exactly once** in the transcript. Who supplies that
-one copy depends on whether the interaction input is itself echoed:
+The `comment` chrome's replay guarantee — a captured transcript is valid Consent
+Scheme that re-evaluates to the same session — holds for the **whole** stream:
+prompts, results, conditions, the exit, and program output are all `;;` line
+comments or `;;` blanks, and the only bare source is the submitted forms
+themselves. (Program output is commented as `;;   :: ` lines precisely so a
+`(display …)` transcript replays instead of re-evaluating the printed text;
+re-evaluation regenerates the same output, itself inert on replay, so replay is
+idempotent.) The guarantee depends on each submitted form appearing **exactly
+once** in the transcript. Who supplies that one copy depends on whether the
+interaction input is itself echoed:
 
 - **Piped or redirected stdin** is not echoed by any terminal, so the chrome
   echoes each complete submission as bare code. That chrome echo is the single
@@ -143,9 +184,10 @@ the terminal echo plus the chrome echo — and replaying it would evaluate every
 form twice, diverging from the original session for any definition, mutation, or
 side effect. The shell decides which mode it is in with the same per-host
 terminal-port predicate it uses for `--color=auto`, applied to **stdin** rather
-than the control channel. The other chromes do not echo submissions, so they are
-unaffected, and `--chrome datum` always reproduces the raw record stream
-verbatim.
+than the control channel. `classic` echoes submissions through the same gate (so
+it does not double-echo on a live TTY either); `quiet`, `silent`, and `datum` do
+not echo submissions, so they are unaffected, and `--chrome datum` always
+reproduces the raw record stream verbatim.
 
 #### Capturing and replaying a session
 

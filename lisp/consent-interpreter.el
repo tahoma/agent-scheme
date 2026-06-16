@@ -6163,7 +6163,7 @@ objects so result records can be rendered by `consent-datum->external'."
             (consent--syntax-symbol condition-name))
            (consent--result-field
             "message"
-            (error-message-string condition)))
+            (consent--condition-message condition)))
           (consent--result-field
            "events"
            (consent--context-events context))

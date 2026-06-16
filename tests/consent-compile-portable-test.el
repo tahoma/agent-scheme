@@ -70,7 +70,11 @@ Return a plist containing :status and :output."
   "Run compiled PROGRAM's `--repl' with INPUT fed on standard input.
 Return a plist with :status and :output, where :output is the program-output
 stream (stdout) only; the interaction record stream (stderr) is discarded so the
-assertion covers stream separation as well as the command."
+assertion covers stream separation as well as the command.  Runs under `--chrome
+silent', the chrome whose job is exactly raw program output on stdout: the
+default `comment' chrome instead owns program output and renders it on the
+control channel, so stdout would be empty there (see the
+`(cli repl-chrome)' program-output policy)."
   (let ((in-file (make-temp-file "consent-repl-input-"))
         (err-file (make-temp-file "consent-repl-stderr-"))
         (buffer (generate-new-buffer " *consent-compiled-repl-test*")))
@@ -80,7 +84,7 @@ assertion covers stream separation as well as the command."
           (let ((status
                  (let ((default-directory consent--test-root))
                    (process-file program in-file (list buffer err-file) nil
-                                 "--repl"))))
+                                 "--repl" "--chrome" "silent"))))
             (list :status status
                   :output
                   (with-current-buffer buffer

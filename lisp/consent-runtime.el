@@ -133,6 +133,24 @@ bulk allocation."
   "Consent Scheme evaluation interrupted"
   'consent-eval-error)
 
+(defun consent--condition-message (condition)
+  "Render CONDITION as the canonical, host-neutral Consent Scheme diagnostic string.
+A Consent evaluator or budget error renders with the same `consent eval error: '
+/ `consent budget error: ' prefix the portable twin's `eval-error'/`budget-error'
+build (CONDITION's message string follows the prefix unquoted), so the error
+`message' both hosts surface is identical for an error whose inner wording
+already agrees.  A non-Consent host condition falls back to
+`error-message-string'.  This is the cross-host convergence of the prefix-and-
+quoting layer; per-message inner-wording parity is tracked separately."
+  (let ((type (car condition))
+        (data (cdr condition)))
+    (cond
+     ((and (eq type 'consent-budget-error) (stringp (car-safe data)))
+      (concat "consent budget error: " (car data)))
+     ((and (eq type 'consent-eval-error) (stringp (car-safe data)))
+      (concat "consent eval error: " (car data)))
+     (t (error-message-string condition)))))
+
 (cl-defstruct (consent-unspecified
                (:constructor consent--make-unspecified)
                (:copier nil))
