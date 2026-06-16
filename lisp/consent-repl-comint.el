@@ -156,6 +156,21 @@ echoes the typed form (`consent-repl-chrome-input-echoed' is bound on)."
          t)
         "")))
 
+(defun consent-repl-comint--render-output (text ordinal)
+  "Return program-output TEXT for the live buffer (the single-stream transcript).
+Under `comment' the chrome's output formatter yields the aligned `;;   :: ' echo
+for ORDINAL's turn; under every other chrome the formatter yields nil, so TEXT is
+inserted raw, exactly as a real REPL interleaves it."
+  (let ((consent-repl-chrome-output-ordinal ordinal))
+    (or (consent-repl-chrome-paint
+         (funcall (consent-repl-chrome-output-formatter
+                   (or consent-repl-comint--chrome
+                       (consent-repl-chrome-default-name))
+                   consent-repl-comint--session-id)
+                  text)
+         t)
+        text)))
+
 (defun consent-repl-comint--insert (string)
   "Insert STRING as comint output at the process mark.
 The trailing line of STRING, if it does not end in a newline, becomes the
@@ -181,7 +196,9 @@ BUFFER is interaction input terminated by a newline.  Each complete form emits a
 durable interaction context -- so definitions, imports, and macros persist and
 are shared with the session -- and emits a `repl-result' or `repl-condition'.
 An exit form emits a `repl-exit' and closes the session.  Program output written
-during evaluation is interleaved before the form's result, and the shared stdin
+during evaluation is interleaved before the form's result -- formatted through
+the active chrome's output formatter, so `comment' renders it as the aligned
+`;;   :: ' gutter and every other chrome leaves it raw -- and the shared stdin
 cursor is seeded with the post-form program input so an evaluated read consumes
 it (#505).  An incomplete trailing form (reached only on a forced send) is
 reported as a recoverable unterminated-form read condition rather than swallowed.
@@ -220,7 +237,11 @@ Advances the ordinal/count as it goes."
                (let ((program-output (consent-interaction-program-output
                                       consent-repl-comint--interaction)))
                  (when (> (length program-output) 0)
-                   (setq output (concat output program-output))))
+                   (setq output
+                         (concat output
+                                 (consent-repl-comint--render-output
+                                  program-output
+                                  consent-repl-comint--ordinal)))))
                (setq output
                      (concat
                       output

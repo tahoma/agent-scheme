@@ -35,9 +35,14 @@
 ;;; already echoed -- an interactive TTY echoes each typed form in cooked mode --
 ;;; so the `comment' chrome suppresses its own submission echo and a captured
 ;;; transcript keeps exactly one replayable copy of each form.  Chrome text stays
-;;; on the control channel (stderr); program output on stdout is never touched.
-;;; `--chrome datum' recovers the canonical record stream and is always
-;;; reachable.
+;;; on the control channel (stderr).  Program output follows a per-chrome policy:
+;;; the replayable `comment' chrome OWNS it, rendering each chunk as a commented
+;;; (`;;   :: ') line on the control channel so a captured transcript replays the
+;;; output too, leaving stdout clean; every other chrome
+;;; (`classic'/`quiet'/`silent'/`datum') leaves program output raw on stdout.  So
+;;; a consumer that wants raw program output on stdout selects one of those (or
+;;; `--chrome silent' for output alone).  `--chrome datum' recovers the canonical
+;;; record stream and is always reachable.
 ;;;
 ;;; Transcript capture and replay (docs/repl-interaction-contract.md, "Capture
 ;;; and Replay") build on that canonical surface.  The `datum' chrome stream is
@@ -67,6 +72,7 @@
           cli-repl-run
           cli-repl-parse-options
           cli-repl-rendered-from-string
+          cli-repl-capture-from-string
           cli-repl-replay-main
           cli-repl-main)
   (import (scheme base)
@@ -241,21 +247,28 @@ datum prefix is pending with no construct open."
             (list 'eof eof)))
 
     (define (repl--result-record session ordinal evaluation-result display)
-      "Build a `repl-result' record wrapping EVALUATION-RESULT and DISPLAY at ORDINAL."
+      "Build a `repl-result' record wrapping EVALUATION-RESULT and DISPLAY at ORDINAL.
+The `ordinal' field mirrors `repl-prompt' so a pure chrome can right-align the
+result marker to the prompt-gutter width without coupling to the `submission' id
+format."
       (list 'repl-result
             (list 'id (repl--tag "res" ordinal))
             (list 'submission (repl--tag "sub" ordinal))
             (list 'session (repl--session-field session))
+            (list 'ordinal (consent-make-canonical-integer ordinal))
             (list 'evaluation-result evaluation-result)
             (list 'display display)))
 
     (define (repl--condition-record session ordinal phase recoverable
                                     condition display)
-      "Build a `repl-condition' record for PHASE/RECOVERABLE CONDITION at ORDINAL."
+      "Build a `repl-condition' record for PHASE/RECOVERABLE CONDITION at ORDINAL.
+The `ordinal' field mirrors `repl-prompt' so a pure chrome can right-align the
+condition marker to the prompt-gutter width."
       (list 'repl-condition
             (list 'id (repl--tag "cond" ordinal))
             (list 'submission (repl--tag "sub" ordinal))
             (list 'session (repl--session-field session))
+            (list 'ordinal (consent-make-canonical-integer ordinal))
             (list 'phase phase)
             (list 'recoverable recoverable)
             (list 'condition condition)
@@ -515,7 +528,12 @@ already in OPTIONS are preserved by merging into the first capability-grants ent
                                                             program-input)
                    (let ((result (consent-interaction-eval-form
                                   interaction datum)))
-                     (drain-output!)
+                     ;; Drain this turn's program output before the result
+                     ;; record, binding the ordinal so the `comment' chrome's
+                     ;; output formatter aligns its `;;   :: ' gutter to this
+                     ;; turn's result marker.
+                     (parameterize ((cli-repl-chrome-output-ordinal ordinal))
+                       (drain-output!))
                      (if (repl--error-result? result)
                          (emit (repl--condition-record
                                 session ordinal 'eval #t
@@ -743,20 +761,50 @@ a live host effect the replay posture does not grant."
             (write-string painted port)
             (flush-output-port port)))))
 
-    (define (cli-repl-rendered-from-string input session chrome-name color?
-                                           . maybe-input-echoed?)
-      "Drive a REPL over INPUT under SESSION and return the CHROME-NAME chrome's control-channel text, painted when COLOR? is true and discarding program output; the host-neutral, TTY-free hook the tests assert chrome output against.  The optional INPUT-ECHOED? flag (default #f) models a host that already echoes interaction input -- an interactive TTY -- so the comment chrome suppresses its own submission echo just as the live terminal entry does."
+    (define (repl--output-writer echo color? output-port record-port)
+      "Return a write-output procedure realizing the program-output policy.  The
+`comment' chrome OWNS program output: it renders each chunk commented (`;;   :: ')
+and aligned onto RECORD-PORT (the control channel) so the captured transcript
+replays it, and writes nothing to stdout.  Every other chrome leaves program
+output raw on OUTPUT-PORT (stdout) and untouched by the control channel.  ECHO --
+the chrome's output formatter -- yields the comment chrome's control-channel
+segments, or #f for a chrome that keeps output raw; that #f is the switch between
+the two streams.  The engine stays chrome-agnostic; this writer carries the
+policy."
+      (lambda (output)
+        (let ((segments (echo output)))
+          (if segments
+              (let ((painted (cli-repl-chrome-paint segments color?)))
+                (when painted
+                  (write-string painted record-port)
+                  (flush-output-port record-port)))
+              (begin
+                (write-string output output-port)
+                (flush-output-port output-port))))))
+
+    (define (cli-repl-capture-from-string input session chrome-name color?
+                                          . maybe-input-echoed?)
+      "Drive a REPL over INPUT under SESSION and return the pair (CONTROL . PROGRAM-OUTPUT): the painted control-channel text and the raw program-output (stdout) stream, kept on the two ports the live binary uses.  This is how the program-output policy is asserted: under the `comment' chrome program output is rendered, commented, into CONTROL and PROGRAM-OUTPUT is empty; under every other chrome program output is raw in PROGRAM-OUTPUT and CONTROL carries records only.  COLOR? paints the control channel; the optional INPUT-ECHOED? flag (default #f) models a host that already echoes interaction input."
       (let ((chrome (cli-repl-chrome-lookup chrome-name))
-            (port (open-output-string))
+            (echo (cli-repl-chrome-output-formatter chrome-name session))
+            (control-port (open-output-string))
+            (output-port (open-output-string))
             (input-echoed? (and (pair? maybe-input-echoed?)
                                 (car maybe-input-echoed?))))
         (parameterize ((cli-repl-chrome-input-echoed? input-echoed?))
           (cli-repl-run
            (repl--list-chunk-source (repl--split-lines input))
-           (repl--rendering-writer chrome color? port)
-           (lambda (output) output)
+           (repl--rendering-writer chrome color? control-port)
+           (repl--output-writer echo color? output-port control-port)
            session))
-        (get-output-string port)))
+        (cons (get-output-string control-port)
+              (get-output-string output-port))))
+
+    (define (cli-repl-rendered-from-string input session chrome-name color?
+                                           . maybe-input-echoed?)
+      "Drive a REPL over INPUT under SESSION and return the CHROME-NAME chrome's control-channel text, painted when COLOR? is true; the host-neutral, TTY-free hook the tests assert chrome output against.  The control channel is the full replayable transcript: records, plus -- under the `comment' chrome -- the commented `;;   :: ' rendering of any program output (which `comment' owns).  The raw program-output stream is the cdr of `cli-repl-capture-from-string' and is dropped here.  The optional INPUT-ECHOED? flag (default #f) models a host that already echoes interaction input -- an interactive TTY -- so the comment chrome suppresses its own submission echo just as the live terminal entry does."
+      (car (apply cli-repl-capture-from-string
+                  input session chrome-name color? maybe-input-echoed?)))
 
     (define (repl--read-file path)
       "Return the entire contents of the file at PATH as a string."
@@ -834,10 +882,14 @@ replay its submissions to a fresh session, and exit 0 (reproduced) or 1
                               (string-append line "\n")))))
                      (write-record
                       (repl--rendering-writer chrome color? record-port))
+                     ;; The `comment' chrome owns program output, rendering it
+                     ;; commented onto the control channel (stderr) so the
+                     ;; transcript replays and stdout stays clean; every other
+                     ;; chrome leaves program output raw on stdout.
                      (write-output
-                      (lambda (output)
-                        (write-string output output-port)
-                        (flush-output-port output-port))))
+                      (repl--output-writer
+                       (cli-repl-chrome-output-formatter chrome-name session)
+                       color? output-port record-port)))
                 (exit
                  (parameterize ((cli-repl-chrome-input-echoed? input-echoed?))
                    (cli-repl-run read-chunk write-record
