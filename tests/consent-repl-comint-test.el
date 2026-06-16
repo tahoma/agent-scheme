@@ -131,14 +131,16 @@ The session id is bound to `id' for sharing assertions."
     (with-current-buffer buffer
       (should (= consent-repl-comint--count 1)))))
 
-(ert-deftest consent-repl-comint-continuation-gutter-carries-nesting ()
-  "A deeper continuation gutter renders the still-open construct count."
+(ert-deftest consent-repl-comint-continuation-gutter-is-aligned-dots ()
+  "A continuation gutter is clean width-matched alignment dots, no nesting count."
   (consent-repl-comint-test--with-buffer buffer
     (consent-repl-comint-test--submit buffer "(list (vector 1")
     (with-current-buffer buffer
       (let ((gutter (get-text-property (1- (point-max)) 'line-prefix)))
         (should (stringp gutter))
-        (should (string-match-p "2" gutter))))))
+        ;; Width-matched dots inside the block comment, and no digit count.
+        (should (string-match-p "#| \\.+ |#" gutter))
+        (should-not (string-match-p "[0-9]" gutter))))))
 
 ;;;; Recoverable conditions keep the session open
 

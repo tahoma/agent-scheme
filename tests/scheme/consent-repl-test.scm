@@ -426,10 +426,10 @@
          '())
   (check-true 'comment-piped-still-echoes
               (> (length (result-displays (drive piped))) 0))
-  ;; Prompts, results, and diagnostics are still rendered as block comments;
+  ;; Prompts, results, and diagnostics are still rendered as line comments;
   ;; only the redundant submission echo is dropped.
   (check-true 'comment-echoed-keeps-result-comments
-              (string-contains? echoed "#| => "))
+              (string-contains? echoed ";;   => "))
   ;; The single replayable copy lives in the terminal echo (the input itself);
   ;; replaying input + the echo-suppressed chrome evaluates each form exactly
   ;; once, matching the original session.
@@ -437,44 +437,70 @@
          (result-displays (drive input))
          (result-displays (drive (string-append input echoed)))))
 
-;; The default-session prompt shows the ordinal alone; a named session grows a
-;; session label.
+;; The default-session prompt shows the ordinal alone; the result is its own
+;; `;;'-aligned line comment followed by a `;;' separator, and the EOF exit is a
+;; `;;   __ ' line aligned from the close count.
 (check 'comment-default-session-prompt
        (cli-repl-rendered-from-string "(+ 1 2)\n" "repl-main" 'comment #f)
-       "#| 1 |# (+ 1 2)\n#| => 3 |#\n#| 2 |# #| exit closed-ok |#\n")
+       "#| 1 |# (+ 1 2)\n;;   => 3\n;;\n#| 2 |# ;;   __ exit closed-ok\n")
 ;; Under the input-echoed posture the same session drops the bare submission
 ;; echo: the terminal's own echo lands in that exact slot after the prompt.
 (check 'comment-echoed-default-session-prompt
        (cli-repl-rendered-from-string "(+ 1 2)\n" "repl-main" 'comment #f #t)
-       "#| 1 |# #| => 3 |#\n#| 2 |# #| exit closed-ok |#\n")
+       "#| 1 |# ;;   => 3\n;;\n#| 2 |# ;;   __ exit closed-ok\n")
+;; A named session grows a `<session>:<ordinal>' body, and the markers align to
+;; that wider gutter so the value still lands under the echoed form.
 (check 'comment-named-session-prompt
        (cli-repl-rendered-from-string "(+ 1 2)\n" "project-main" 'comment #f)
-       (string-append "#| project-main:1 |# (+ 1 2)\n#| => 3 |#\n"
-                      "#| project-main:2 |# #| exit closed-ok |#\n"))
+       (string-append
+        "#| project-main:1 |# (+ 1 2)\n;;                => 3\n;;\n"
+        "#| project-main:2 |# ;;                __ exit closed-ok\n"))
+;; Marker alignment tracks the ordinal width: a 1-digit ordinal gives `;;   => '
+;; (3 pad) and a 2-digit ordinal `;;    => ' (4 pad), with the continuation dots
+;; widening to match.
+(check 'comment-two-digit-ordinal-alignment
+       (cli-repl-rendered-from-string
+        "1\n2\n3\n4\n5\n6\n7\n8\n9\n(+ 1 1)\n" "repl-main" 'comment #f)
+       (string-append
+        "#| 1 |# 1\n;;   => 1\n;;\n#| 2 |# 2\n;;   => 2\n;;\n"
+        "#| 3 |# 3\n;;   => 3\n;;\n#| 4 |# 4\n;;   => 4\n;;\n"
+        "#| 5 |# 5\n;;   => 5\n;;\n#| 6 |# 6\n;;   => 6\n;;\n"
+        "#| 7 |# 7\n;;   => 7\n;;\n#| 8 |# 8\n;;   => 8\n;;\n"
+        "#| 9 |# 9\n;;   => 9\n;;\n#| 10 |# (+ 1 1)\n;;    => 2\n;;\n"
+        "#| 11 |# ;;    __ exit closed-ok\n"))
 
 ;;;; The `classic', `quiet', and `silent' chromes
 
+;; `classic' echoes the whole form after `> ', marks the value with `= ', and
+;; closes with a `_ ' exit line; a blank line separates turns.
 (check 'classic-prompts-and-values
        (cli-repl-rendered-from-string "(+ 1 2)\n" "repl-main" 'classic #f)
-       "> 3\n> ")
-;; `> ' and `| ' are both two columns, so a continued form's code aligns with
-;; the first submission's code.
+       "> (+ 1 2)\n= 3\n\n> _ exit closed-ok\n")
+;; A condition is marked `! ' (not `- '), so it pops in a colorless capture.  The
+;; diagnostic text is now cross-host identical for an error whose wording agrees
+;; (the `consent eval error: ' prefix matches the Emacs twin after its message
+;; convergence), so assert the whole line exactly.
+(check 'classic-condition-marker
+       (cli-repl-rendered-from-string "(/ 1 0)\n" "repl-main" 'classic #f)
+       (string-append "> (/ 1 0)\n! consent eval error: / division by zero"
+                      "\n\n> _ exit closed-ok\n"))
+;; `> ' and `. ' are both two columns, so a continued form's code aligns with
+;; the first submission's code; the open-construct count is dropped.
 (check 'classic-continuation-aligns
        (cli-repl-rendered-from-string "(+ 1\n2)\n" "repl-main" 'classic #f)
-       "> | 3\n> ")
-;; At nesting depth two or more the gutter carries the open-construct count
-;; from the prompt record's pending-nesting indicator, narrowing as constructs
-;; close; depth one keeps the plain aligned gutter above.
-(check 'classic-continuation-depth-gutter
+       "> . (+ 1\n2)\n= 3\n\n> _ exit closed-ok\n")
+;; A deeper continuation just adds another `. ' gutter -- no nesting count.
+(check 'classic-continuation-no-count
        (cli-repl-rendered-from-string "(+ (* 2\n3)\n4)\n" "repl-main"
                                       'classic #f)
-       "> |2 | 10\n> ")
-;; The comment chrome renders the same depth inside its ellipsis comment.
-(check-true 'comment-continuation-depth
+       "> . . (+ (* 2\n3)\n4)\n= 10\n\n> _ exit closed-ok\n")
+;; The comment chrome's continuation gutter is width-matched alignment dots
+;; (one dot per ordinal digit), with no nesting count.
+(check-true 'comment-continuation-dots
             (string-contains?
              (cli-repl-rendered-from-string "(+ (* 2\n3)\n4)\n" "repl-main"
                                             'comment #f)
-             "#| ...2 |# "))
+             "#| . |# "))
 (check 'quiet-results-only
        (cli-repl-rendered-from-string "(+ 1 2)\n" "repl-main" 'quiet #f)
        "3\n")
@@ -487,7 +513,70 @@
 (let ((rendered
        (cli-repl-rendered-from-string "undefined-name\n" "repl-main"
                                       'comment #f)))
-  (check-true 'comment-condition-marker (string-contains? rendered "#| !! ")))
+  (check-true 'comment-condition-marker (string-contains? rendered ";;   !! ")))
+
+;;;; Program output: `comment' owns it (control channel), others keep it raw
+
+;; Every R7RS host's display/newline needs the write/base bindings; importing
+;; them first makes the program-output cases deterministic across hosts.
+(define output-prelude "(import (scheme base) (scheme write))\n")
+
+;; `comment' renders each printed line as a `;;   :: ' comment aligned to the
+;; result marker, on the control channel, so the whole transcript -- program
+;; output included -- is line comments and bare source.
+(check 'comment-output-on-control-channel
+       (cli-repl-rendered-from-string
+        (string-append output-prelude "(display \"hi\\n\")\n(+ 1 1)\n")
+        "repl-main" 'comment #f)
+       (string-append
+        "#| 1 |# (import (scheme base) (scheme write))\n;;   => (unspecified)\n;;\n"
+        "#| 2 |# (display \"hi\\n\")\n;;   :: hi\n;;   => (unspecified)\n;;\n"
+        "#| 3 |# (+ 1 1)\n;;   => 2\n;;\n#| 4 |# ;;   __ exit closed-ok\n"))
+;; Because `comment' owns program output, stdout (the program-output stream)
+;; carries nothing under it.
+(check 'comment-output-leaves-stdout-clean
+       (cdr (cli-repl-capture-from-string
+             (string-append output-prelude "(display \"hi\\n\")\n(+ 1 1)\n")
+             "repl-main" 'comment #f))
+       "")
+;; Multi-line output is one `;;   :: ' comment per line.
+(check-true 'comment-output-multi-line
+            (string-contains?
+             (cli-repl-rendered-from-string
+              (string-append output-prelude
+                             "(begin (display \"a\")(newline)(display \"b\")"
+                             "(newline) 0)\n")
+              "repl-main" 'comment #f)
+             ";;   :: a\n;;   :: b\n;;   => 0"))
+;; Output that ends without a newline still gets a terminating one so the comment
+;; closes before the result line.
+(check-true 'comment-output-no-trailing-newline
+            (string-contains?
+             (cli-repl-rendered-from-string
+              (string-append output-prelude "(begin (display \"x\") 5)\n")
+              "repl-main" 'comment #f)
+             ";;   :: x\n;;   => 5"))
+;; `classic' (and every non-`comment' chrome) leaves program output raw on its
+;; own stream; the control channel carries records only, not the printed text.
+;; The printed value (12321) is computed so it is absent from the echoed source.
+(let ((classic (cli-repl-capture-from-string
+                (string-append output-prelude
+                               "(begin (display (* 111 111))(newline) 1)\n")
+                "repl-main" 'classic #f)))
+  (check 'classic-output-raw-on-stdout (cdr classic) "12321\n")
+  (check-false 'classic-output-not-on-control-channel
+               (string-contains? (car classic) "12321")))
+;; The `comment' control-channel transcript round-trips through a fresh session:
+;; the commented output is inert on replay and the re-evaluated forms regenerate
+;; it, so the per-submission results match the original input's.
+(let* ((input (string-append output-prelude
+                             "(display \"hello\\n\")\n"
+                             "(begin (display \"x\")(newline) 42)\n"
+                             "(+ 2 3)\n"))
+       (transcript (cli-repl-rendered-from-string input "repl-main" 'comment #f)))
+  (check 'comment-output-transcript-replays
+         (result-displays (drive transcript))
+         (result-displays (drive input))))
 
 ;;;; Color is TTY-gated, overridable, and strips when piped or NO_COLOR is set
 

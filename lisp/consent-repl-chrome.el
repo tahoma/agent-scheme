@@ -24,9 +24,17 @@
 ;; list of `(ROLE . TEXT)' segments expresses styling as named semantic roles
 ;; (`furniture', `prompt-session', `prompt-ordinal', `prompt-nesting',
 ;; `result-marker', `result-value', `error-marker', `error-text',
-;; `exit-status', and the neutral `submission' role for echoed source).
+;; `exit-marker', `exit-status', `output-marker', `output-text', and the
+;; neutral `submission' role for echoed source).
 ;; `consent-repl-chrome-paint' realizes a chrome result as a propertized
-;; string, mapping each colored role to a face.
+;; string, mapping each faced role to a face.
+;;
+;; Program output is not a record: it rides its own stream, and its presentation
+;; follows a per-chrome policy carried by `consent-repl-chrome-output-formatter'.
+;; The replayable `comment' chrome OWNS program output, rendering each chunk as a
+;; commented (`;;   :: ') line for the control channel where the records live, so
+;; a captured transcript replays it; every other chrome's formatter returns nil,
+;; leaving program output raw on its own stream.
 ;;
 ;; The built-in chromes are ordinary registered procedures over records, not
 ;; special-cased branches, so a future custom chrome (#426) is the same kind of
@@ -81,15 +89,26 @@
   "Face for condition (error/diagnostic) text."
   :group 'consent-repl-chrome)
 
+(defface consent-repl-chrome-exit-marker
+  '((t :inherit warning))
+  "Face for the exit marker (`__ ' / `_ ')."
+  :group 'consent-repl-chrome)
+
 (defface consent-repl-chrome-exit-status
   '((t :inherit warning))
   "Face for the close status in an exit record."
   :group 'consent-repl-chrome)
 
+(defface consent-repl-chrome-output-marker
+  '((t :inherit shadow))
+  "Face for the comment chrome's program-output gutter marker (`:: ')."
+  :group 'consent-repl-chrome)
+
 (defun consent-repl-chrome--role-face (role)
   "Return the face realizing ROLE, or nil for an unfaced role.
-The neutral `result-value' and `submission' roles -- and any unknown role --
-return nil, mirroring the portable terminal renderer leaving them uncolored."
+The neutral `result-value', `submission', and `output-text' roles -- and any
+unknown role -- return nil, mirroring the portable terminal renderer leaving
+them uncolored."
   (pcase role
     ('furniture 'consent-repl-chrome-furniture)
     ('prompt-session 'consent-repl-chrome-prompt-session)
@@ -98,7 +117,9 @@ return nil, mirroring the portable terminal renderer leaving them uncolored."
     ('result-marker 'consent-repl-chrome-result-marker)
     ('error-marker 'consent-repl-chrome-error-marker)
     ('error-text 'consent-repl-chrome-error-text)
+    ('exit-marker 'consent-repl-chrome-exit-marker)
     ('exit-status 'consent-repl-chrome-exit-status)
+    ('output-marker 'consent-repl-chrome-output-marker)
     (_ nil)))
 
 ;;;; Record field access (the records are the shared cross-host vocabulary)
@@ -132,15 +153,10 @@ return nil, mirroring the portable terminal renderer leaving them uncolored."
   "Return RECORD's human-readable `display' string, or the empty string."
   (or (consent-repl-chrome--field record "display") ""))
 
-(defun consent-repl-chrome--ordinal-string (record)
-  "Return RECORD's `ordinal' field rendered as a decimal string."
-  (let ((value (consent-repl-chrome--field record "ordinal")))
-    (if value (consent-value->external value) "")))
-
-(defun consent-repl-chrome--nesting (record)
-  "Return RECORD's pending-nesting depth as an integer, or nil."
-  (let ((value (consent-repl-chrome--field record "nesting")))
-    (and (consent-number-p value) (consent-number-value value))))
+(defun consent-repl-chrome--field-integer (record name default)
+  "Return integer field NAME in RECORD as an integer, or DEFAULT when absent."
+  (let ((value (consent-repl-chrome--field record name)))
+    (if (consent-number-p value) (consent-number-value value) default)))
 
 ;; The lone default session id, emitted when no session was named.  The
 ;; `comment' chrome shows the ordinal alone for it and grows a session label
@@ -180,41 +196,82 @@ return nil, mirroring the portable terminal renderer leaving them uncolored."
 When non-nil, the `comment' chrome suppresses its own submission echo so a
 captured transcript holds exactly one replayable copy of each form.")
 
+;;;; Per-turn ordinal for program-output alignment
+
+;; Program output is drained inside the loop, where the active form's ordinal is
+;; known, but it reaches the chrome's output formatter outside that scope.  The
+;; host driver binds this around each drain so the `comment' chrome aligns its
+;; `;;   :: ' output gutter to the same column as that turn's result marker.
+;; The Emacs twin of the portable `cli-repl-chrome-output-ordinal' parameter.
+(defvar consent-repl-chrome-output-ordinal 1
+  "Ordinal of the turn whose program output is being formatted.")
+
+;;;; Comment-chrome alignment
+
+;; The `comment' chrome right-aligns its result/condition/output/exit markers
+;; and pads its continuation dots to the ready-prompt gutter, so a turn's echoed
+;; form, printed output, and value all begin in the same column.  Both widths
+;; derive from the prompt body -- the `<ordinal>' (lone default session) or
+;; `<session>:<ordinal>' (named session) between the `#| ' and ` |#' furniture.
+
+(defun consent-repl-chrome--comment-body-width (session ordinal)
+  "Width of the comment prompt body for SESSION (a name string) at ORDINAL.
+The continuation gutter fills this width with dots so continued source aligns
+under the first line."
+  (+ (if (consent-repl-chrome--anonymous-session-p session)
+         0
+       (1+ (length session)))
+     (length (number-to-string ordinal))))
+
+(defun consent-repl-chrome--comment-marker-pad (session ordinal marker)
+  "Return the `;;'-plus-spaces furniture right-aligning MARKER to the gutter.
+MARKER (such as `=> ') ends in the column after SESSION/ORDINAL's ready-prompt
+gutter width, so the text after it starts under the echoed form; at least one
+space follows `;;'."
+  (let* ((gutter (+ 7 (consent-repl-chrome--comment-body-width session ordinal)))
+         (pad (- gutter 2 (length marker))))
+    (concat ";;" (make-string (max 1 pad) ?\s))))
+
 ;;;; The `comment' chrome (default): block-comment furniture, replayable
 
 (defun consent-repl-chrome--comment (record)
   "Render RECORD under the default `comment' chrome.
-Every prompt, result, and diagnostic is a block comment and a complete
-submission is echoed as bare source, so the whole control-channel stream is
-valid Consent Scheme that replays to the same evaluation apart from program
-output.  The submission echo is suppressed when
-`consent-repl-chrome-input-echoed' is non-nil (the host already echoes the typed
-form), so a captured transcript holds exactly one replayable copy of each form
-in both the piped and the interactive case."
+The prompt is block-comment furniture; a complete submission is echoed as bare
+source; and each result, condition, exit, and line of program output is its own
+`;;' line comment whose marker right-aligns so the value, text, or printed
+output starts in the same column as the echoed form.  The whole transcript --
+program output included -- is therefore valid Consent Scheme that replays to the
+same forms (program output is reformatted by
+`consent-repl-chrome-output-formatter', not rendered here).  The submission echo
+is suppressed when `consent-repl-chrome-input-echoed' is non-nil (the host
+already echoes the typed form), so a captured transcript holds exactly one
+replayable copy of each form in both the piped and the interactive case."
   (let ((kind (consent-repl-chrome--kind record)))
     (cond
      ((equal kind "repl-prompt")
-      (if (equal (consent-repl-chrome--field-symbol-name record "state")
-                 "continuation")
-          ;; At nesting depth two or more the ellipsis carries the count of
-          ;; still-open constructs (`#| ...2 |# '); a single open form keeps
-          ;; the plain gutter the gutter itself already implies.
-          (let ((nesting (consent-repl-chrome--nesting record)))
-            (if (and nesting (> nesting 1))
-                (list (consent-repl-chrome--furniture "#| ...")
-                      (consent-repl-chrome--seg 'prompt-nesting
-                                                (number-to-string nesting))
-                      (consent-repl-chrome--furniture " |# "))
-              (list (consent-repl-chrome--furniture "#| ... |# "))))
-        (let ((session (consent-repl-chrome--field-symbol-name record "session"))
-              (ordinal (consent-repl-chrome--ordinal-string record)))
+      (let ((session (consent-repl-chrome--field-symbol-name record "session"))
+            (ordinal (consent-repl-chrome--field-integer record "ordinal" 1)))
+        (if (equal (consent-repl-chrome--field-symbol-name record "state")
+                   "continuation")
+            ;; Width-matched alignment dots as wide as the prompt body, so the
+            ;; gutter equals the ready-prompt width and continued source aligns
+            ;; under the first line.  The open-construct count is dropped here
+            ;; (it stays on the record for the `datum' chrome).
+            (list (consent-repl-chrome--furniture
+                   (concat "#| "
+                           (make-string
+                            (consent-repl-chrome--comment-body-width
+                             session ordinal)
+                            ?.)
+                           " |# ")))
           (append
            (list (consent-repl-chrome--furniture "#| "))
            (if (consent-repl-chrome--anonymous-session-p session)
                nil
              (list (consent-repl-chrome--seg 'prompt-session session)
                    (consent-repl-chrome--furniture ":")))
-           (list (consent-repl-chrome--seg 'prompt-ordinal ordinal)
+           (list (consent-repl-chrome--seg 'prompt-ordinal
+                                           (number-to-string ordinal))
                  (consent-repl-chrome--furniture " |# "))))))
      ((equal kind "repl-submission")
       ;; Echo a whole form as bare code so it replays; leave an incomplete
@@ -229,25 +286,87 @@ in both the piped and the interactive case."
                 (consent-repl-chrome--furniture "\n"))
         nil))
      ((equal kind "repl-result")
-      (list (consent-repl-chrome--furniture "#| ")
-            (consent-repl-chrome--seg 'result-marker "=> ")
-            (consent-repl-chrome--seg 'result-value
-                                      (consent-repl-chrome--display record))
-            (consent-repl-chrome--furniture " |#\n")))
+      ;; A `;;'-aligned line comment, then a `;;' blank separator line.
+      (let ((session (consent-repl-chrome--field-symbol-name record "session"))
+            (ordinal (consent-repl-chrome--field-integer record "ordinal" 1)))
+        (list (consent-repl-chrome--furniture
+               (consent-repl-chrome--comment-marker-pad session ordinal "=> "))
+              (consent-repl-chrome--seg 'result-marker "=> ")
+              (consent-repl-chrome--seg 'result-value
+                                        (consent-repl-chrome--display record))
+              (consent-repl-chrome--furniture "\n;;\n"))))
      ((equal kind "repl-condition")
-      (list (consent-repl-chrome--furniture "#| ")
-            (consent-repl-chrome--seg 'error-marker "!! ")
-            (consent-repl-chrome--seg 'error-text
-                                      (consent-repl-chrome--display record))
-            (consent-repl-chrome--furniture " |#\n")))
+      (let ((session (consent-repl-chrome--field-symbol-name record "session"))
+            (ordinal (consent-repl-chrome--field-integer record "ordinal" 1)))
+        (list (consent-repl-chrome--furniture
+               (consent-repl-chrome--comment-marker-pad session ordinal "!! "))
+              (consent-repl-chrome--seg 'error-marker "!! ")
+              (consent-repl-chrome--seg 'error-text
+                                        (consent-repl-chrome--display record))
+              (consent-repl-chrome--furniture "\n;;\n"))))
      ((equal kind "repl-exit")
-      (list (consent-repl-chrome--furniture "#| exit ")
-            (consent-repl-chrome--seg
-             'exit-status
-             (or (consent-repl-chrome--field-symbol-name record "status")
-                 "closed-ok"))
-            (consent-repl-chrome--furniture " |#\n")))
+      ;; The exit line aligns from the close `count' and carries no separator.
+      (let ((session (consent-repl-chrome--field-symbol-name record "session"))
+            (count (consent-repl-chrome--field-integer record "count" 1)))
+        (list (consent-repl-chrome--furniture
+               (consent-repl-chrome--comment-marker-pad session count "__ "))
+              (consent-repl-chrome--seg 'exit-marker "__ ")
+              (consent-repl-chrome--furniture "exit ")
+              (consent-repl-chrome--seg
+               'exit-status
+               (or (consent-repl-chrome--field-symbol-name record "status")
+                   "closed-ok"))
+              (consent-repl-chrome--furniture "\n"))))
      (t nil))))
+
+;;;; Program-output formatting (the `comment' chrome's `;;   :: ' gutter)
+
+(defun consent-repl-chrome--split-output-lines (text)
+  "Split program-output TEXT into its lines for per-line comment rendering.
+Drop the empty tail a trailing newline produces, so `(display \"x\\n\")' yields
+exactly one line and a line lacking a trailing newline still renders."
+  (let ((length (length text)) (start 0) (index 0) (lines nil))
+    (while (< index length)
+      (when (eq (aref text index) ?\n)
+        (push (substring text start index) lines)
+        (setq start (1+ index)))
+      (setq index (1+ index)))
+    (when (> index start)
+      (push (substring text start index) lines))
+    (nreverse lines)))
+
+(defun consent-repl-chrome--comment-output (text session ordinal)
+  "Render program-output TEXT as `;;   :: ' comment-line segments.
+Each output line becomes one newline-terminated comment aligned to SESSION/
+ORDINAL's gutter, so the comment closes before the following result line.  Empty
+TEXT yields no segments."
+  (let ((pad (consent-repl-chrome--comment-marker-pad session ordinal ":: "))
+        (segments nil))
+    (dolist (line (consent-repl-chrome--split-output-lines text)
+                  (nreverse segments))
+      (push (consent-repl-chrome--furniture pad) segments)
+      (push (consent-repl-chrome--seg 'output-marker ":: ") segments)
+      (push (consent-repl-chrome--seg 'output-text line) segments)
+      (push (consent-repl-chrome--furniture "\n") segments))))
+
+(defun consent-repl-chrome-output-formatter (name session)
+  "Return chrome NAME's program-output formatter bound to SESSION.
+The replayable `comment' chrome OWNS program output: this returns a procedure
+mapping each chunk to its `;;   :: ' control-channel rendering -- segments aligned
+to SESSION and the per-turn `consent-repl-chrome-output-ordinal' -- so a captured
+transcript replays the output and stdout stays clean.  Every other chrome returns
+a procedure yielding nil, so the host leaves program output raw on its own stream.
+The Emacs twin of the portable `cli-repl-chrome-output-formatter'."
+  (let ((symbol (if (stringp name) (intern name) name))
+        (session-name (cond ((consent-symbol-p session)
+                             (consent-symbol-name session))
+                            ((symbolp session) (symbol-name session))
+                            (t session))))
+    (if (eq symbol 'comment)
+        (lambda (text)
+          (consent-repl-chrome--comment-output
+           text session-name consent-repl-chrome-output-ordinal))
+      (lambda (_text) nil))))
 
 ;;;; The `datum' chrome: the canonical record stream, one datum per line
 
@@ -257,36 +376,56 @@ Returns a plain string, so the painter never faces it: the datum chrome is the
 raw record stream regardless of styling."
   (concat (consent-result->external record) "\n"))
 
-;;;; The `classic' chrome: `>'/`|' prompts and bare values
+;;;; The `classic' chrome: `>'/`.' prompts and marked values
 
 (defun consent-repl-chrome--classic (record)
-  "Render RECORD under the `classic' chrome: a `>'/`|' prompt and bare values,
-with submissions and the exit record suppressed."
+  "Render RECORD under the `classic' chrome: a familiar terminal-REPL look.
+A `> ' prompt, a `. ' continuation gutter, the whole form echoed as bare source
+\(TTY-gated like the `comment' chrome), and single-column `= '/`! '/`_ ' markers
+on the value, condition, and exit lines.  Unlike `comment', `classic' makes no
+replay claim -- its bare marked lines are not Scheme -- so program output stays
+raw and interleaved, exactly as a real REPL shows it; the markers earn their
+keep instead by disambiguating result, condition, and program output in a
+colorless capture."
   (let ((kind (consent-repl-chrome--kind record)))
     (cond
      ((equal kind "repl-prompt")
-      ;; `> ' and `| ' are both two columns wide, so a continued form's code
-      ;; aligns under the first submission's code; `| ' reads as a continuation
-      ;; gutter rule.  At nesting depth two or more the gutter carries the
-      ;; count of still-open constructs (`|2 '), trading exact alignment for
-      ;; the depth feedback a deep continuation needs.
+      ;; `> ' and `. ' are both two columns wide, so a continued form's code
+      ;; aligns under the first submission's code.  The open-construct count is
+      ;; dropped (it stays on the record for the `datum' chrome).
       (if (equal (consent-repl-chrome--field-symbol-name record "state")
                  "continuation")
-          (let ((nesting (consent-repl-chrome--nesting record)))
-            (if (and nesting (> nesting 1))
-                (list (consent-repl-chrome--furniture "|")
-                      (consent-repl-chrome--seg 'prompt-nesting
-                                                (number-to-string nesting))
-                      (consent-repl-chrome--furniture " "))
-              (list (consent-repl-chrome--furniture "| "))))
+          (list (consent-repl-chrome--furniture ". "))
         (list (consent-repl-chrome--furniture "> "))))
+     ((equal kind "repl-submission")
+      ;; Echo the whole form as bare source after `> ', so a piped or captured
+      ;; session shows the forms; suppress it when the host already echoes input
+      ;; (#447), so a live TTY does not double-echo.
+      (if (and (consent-repl-chrome--field-true-p record "complete")
+               (not consent-repl-chrome-input-echoed))
+          (list (consent-repl-chrome--seg
+                 'submission (consent-repl-chrome--field record "source"))
+                (consent-repl-chrome--furniture "\n"))
+        nil))
      ((equal kind "repl-result")
-      (list (consent-repl-chrome--seg 'result-value
+      (list (consent-repl-chrome--seg 'result-marker "= ")
+            (consent-repl-chrome--seg 'result-value
                                       (consent-repl-chrome--display record))
-            (consent-repl-chrome--furniture "\n")))
+            (consent-repl-chrome--furniture "\n\n")))
      ((equal kind "repl-condition")
-      (list (consent-repl-chrome--seg 'error-text
+      ;; `! ' (not `- ') so an error pops in a colorless capture and rhymes
+      ;; with the `comment' chrome's `!! '.
+      (list (consent-repl-chrome--seg 'error-marker "! ")
+            (consent-repl-chrome--seg 'error-text
                                       (consent-repl-chrome--display record))
+            (consent-repl-chrome--furniture "\n\n")))
+     ((equal kind "repl-exit")
+      (list (consent-repl-chrome--seg 'exit-marker "_ ")
+            (consent-repl-chrome--furniture "exit ")
+            (consent-repl-chrome--seg
+             'exit-status
+             (or (consent-repl-chrome--field-symbol-name record "status")
+                 "closed-ok"))
             (consent-repl-chrome--furniture "\n")))
      (t nil))))
 

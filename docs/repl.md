@@ -147,11 +147,12 @@ which would evaluate in a separate Scheme process — so the buffer is a peer of
 the other eval paths, sharing their live environment.
 
 - **Multi-line forms.** When the typed input does not yet parse to a complete
-  form, `RET` inserts a newline and shows the contract's continuation gutter
-  (`#| ... |#`, with the still-open construct count for deeper nesting) as a
-  non-editable line prefix, keeping the form pending in the editable region;
-  completing it submits the whole form. `C-j` forces a submission even when the
-  form is incomplete (the reader condition is then reported).
+  form, `RET` inserts a newline and shows the continuation gutter — under the
+  default `comment` chrome, width-matched alignment dots (`#| . |#`, widening
+  with the ordinal, no nesting count) — as a non-editable line prefix, keeping
+  the form pending in the editable region; completing it submits the whole form.
+  `C-j` forces a submission even when the form is incomplete (the reader
+  condition is then reported).
 - **Rendering and the canonical stream.** Records render through the shared
   chrome model as Emacs faces, defaulting to `comment`; because comint already
   echoes the typed form, the chrome's submission echo is suppressed (the

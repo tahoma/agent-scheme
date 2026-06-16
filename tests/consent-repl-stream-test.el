@@ -424,9 +424,9 @@ the prompt is emitted."
   (let ((records (consent-repl-stream "(+ 1 2)\n")))
     (should (= (consent-repl-stream-test--count records "repl-result") 1))
     (with-current-buffer consent-repl-stream-buffer-name
-      ;; The default `comment' chrome renders block comments, not the raw tags.
-      (should (string-match-p (regexp-quote "#| => 3 |#") (buffer-string)))
-      (should (string-match-p (regexp-quote "#| exit closed-ok |#")
+      ;; The default `comment' chrome renders aligned line comments, not raw tags.
+      (should (string-match-p (regexp-quote ";;   => 3") (buffer-string)))
+      (should (string-match-p (regexp-quote ";;   __ exit closed-ok")
                               (buffer-string)))
       (should-not (string-match-p "repl-result" (buffer-string)))
       ;; Faces realize the chrome roles in the buffer.
@@ -493,14 +493,29 @@ the prompt is emitted."
                     (consent-repl-stream-records-from-string input "repl-main"))))))
 
 (ert-deftest consent-repl-stream-chrome-comment-prompt-shapes ()
-  "The default session shows the ordinal alone; a named session grows a label."
+  "The default session shows the ordinal alone; a named session grows a label.
+The result is a `;;'-aligned line comment plus a `;;' separator, and the EOF
+exit is a `;;   __ ' line, byte-identical to the portable renderer."
   (should (equal (consent-repl-stream-rendered-from-string
                   "(+ 1 2)\n" "repl-main" 'comment nil)
-                 "#| 1 |# (+ 1 2)\n#| => 3 |#\n#| 2 |# #| exit closed-ok |#\n"))
+                 "#| 1 |# (+ 1 2)\n;;   => 3\n;;\n#| 2 |# ;;   __ exit closed-ok\n"))
   (should (equal (consent-repl-stream-rendered-from-string
                   "(+ 1 2)\n" "project-main" 'comment nil)
-                 (concat "#| project-main:1 |# (+ 1 2)\n#| => 3 |#\n"
-                         "#| project-main:2 |# #| exit closed-ok |#\n"))))
+                 (concat
+                  "#| project-main:1 |# (+ 1 2)\n;;                => 3\n;;\n"
+                  "#| project-main:2 |# ;;                __ exit closed-ok\n"))))
+
+(ert-deftest consent-repl-stream-chrome-comment-marker-alignment ()
+  "Result/output markers track the ordinal width, matching the portable shell."
+  (should (equal (consent-repl-stream-rendered-from-string
+                  "1\n2\n3\n4\n5\n6\n7\n8\n9\n(+ 1 1)\n" "repl-main" 'comment nil)
+                 (concat
+                  "#| 1 |# 1\n;;   => 1\n;;\n#| 2 |# 2\n;;   => 2\n;;\n"
+                  "#| 3 |# 3\n;;   => 3\n;;\n#| 4 |# 4\n;;   => 4\n;;\n"
+                  "#| 5 |# 5\n;;   => 5\n;;\n#| 6 |# 6\n;;   => 6\n;;\n"
+                  "#| 7 |# 7\n;;   => 7\n;;\n#| 8 |# 8\n;;   => 8\n;;\n"
+                  "#| 9 |# 9\n;;   => 9\n;;\n#| 10 |# (+ 1 1)\n;;    => 2\n;;\n"
+                  "#| 11 |# ;;    __ exit closed-ok\n"))))
 
 (ert-deftest consent-repl-stream-chrome-comment-input-echoed-suppresses-echo ()
   "When the host already echoes input, the comment chrome drops its own echo.
@@ -518,19 +533,29 @@ flag exists for model symmetry and is exercised here through the rendered hook."
     (should (equal (consent-repl-stream-test--result-displays
                     (consent-repl-stream-records-from-string echoed "repl-main"))
                    nil))
-    ;; Prompts and results still render as block comments; only the redundant
+    ;; Prompts and results still render as line comments; only the redundant
     ;; submission echo is dropped.
-    (should (string-match-p (regexp-quote "#| => ") echoed))
+    (should (string-match-p (regexp-quote ";;   => ") echoed))
     ;; The bare submission echo lands in the prompt slot the terminal echo fills.
     (should (equal (consent-repl-stream-rendered-from-string
                     "(+ 1 2)\n" "repl-main" 'comment nil nil t)
-                   "#| 1 |# #| => 3 |#\n#| 2 |# #| exit closed-ok |#\n"))))
+                   "#| 1 |# ;;   => 3\n;;\n#| 2 |# ;;   __ exit closed-ok\n"))))
 
 (ert-deftest consent-repl-stream-chrome-classic-quiet-silent ()
-  "The `classic', `quiet', and `silent' chromes match the portable rendering."
+  "The `classic', `quiet', and `silent' chromes match the portable rendering.
+`classic' echoes the whole form after `> ', marks the value `= ', and closes
+with a `_ ' exit line; a `! ' marks a condition."
   (should (equal (consent-repl-stream-rendered-from-string
                   "(+ 1 2)\n" "repl-main" 'classic nil)
-                 "> 3\n> "))
+                 "> (+ 1 2)\n= 3\n\n> _ exit closed-ok\n"))
+  ;; The condition is marked `! ', and its diagnostic text is now byte-identical
+  ;; to the portable twin for an error whose wording agrees (the Emacs runtime
+  ;; renders the `consent eval error: ' prefix unquoted, matching portable), so
+  ;; assert the whole line exactly across hosts.
+  (should (equal (consent-repl-stream-rendered-from-string
+                  "(/ 1 0)\n" "repl-main" 'classic nil)
+                 (concat "> (/ 1 0)\n! consent eval error: / division by zero"
+                         "\n\n> _ exit closed-ok\n")))
   (should (equal (consent-repl-stream-rendered-from-string
                   "(+ 1 2)\n" "repl-main" 'quiet nil)
                  "3\n"))
@@ -538,27 +563,82 @@ flag exists for model symmetry and is exercised here through the rendered hook."
                   "(+ 1 2)\n" "repl-main" 'silent nil)
                  "")))
 
-(ert-deftest consent-repl-stream-chrome-renders-nesting-depth ()
-  "Render the pending-nesting depth at depth two or more, matching portable.
-The classic gutter carries the open-construct count (`|2 ') and the comment
-chrome carries it inside its ellipsis comment (`#| ...2 |# '); depth one keeps
-the plain two-column gutter."
+(ert-deftest consent-repl-stream-chrome-continuation-gutters ()
+  "Continuation gutters are clean, width-matched, and carry no nesting count.
+The classic gutter is `. ' (one per continuation read) and the comment gutter
+is alignment dots as wide as the prompt body, matching the portable renderer."
   (should (equal (consent-repl-stream-rendered-from-string
                   "(+ (* 2\n3)\n4)\n" "repl-main" 'classic nil)
-                 "> |2 | 10\n> "))
+                 "> . . (+ (* 2\n3)\n4)\n= 10\n\n> _ exit closed-ok\n"))
   (should (equal (consent-repl-stream-rendered-from-string
                   "(+ 1\n2)\n" "repl-main" 'classic nil)
-                 "> | 3\n> "))
-  (should (string-match-p (regexp-quote "#| ...2 |# ")
+                 "> . (+ 1\n2)\n= 3\n\n> _ exit closed-ok\n"))
+  (should (string-match-p (regexp-quote "#| . |# ")
                           (consent-repl-stream-rendered-from-string
                            "(+ (* 2\n3)\n4)\n" "repl-main" 'comment nil))))
 
 (ert-deftest consent-repl-stream-chrome-condition-marker ()
   "A recoverable condition renders under a human chrome."
   (should (string-match-p
-           (regexp-quote "#| !! ")
+           (regexp-quote ";;   !! ")
            (consent-repl-stream-rendered-from-string
             "undefined-name\n" "repl-main" 'comment nil))))
+
+(ert-deftest consent-repl-stream-chrome-program-output ()
+  "`comment' owns program output (commented, on the control channel); every other
+chrome leaves it raw on its own stream.  Matches the portable renderer, and the
+comment transcript still replays."
+  (let ((prelude "(import (scheme base) (scheme write))\n"))
+    ;; A printed line becomes an aligned `;;   :: ' comment before the result, on
+    ;; the control channel.
+    (should (equal (consent-repl-stream-rendered-from-string
+                    (concat prelude "(display \"hi\\n\")\n(+ 1 1)\n")
+                    "repl-main" 'comment nil)
+                   (concat
+                    "#| 1 |# (import (scheme base) (scheme write))\n"
+                    ";;   => (unspecified)\n;;\n"
+                    "#| 2 |# (display \"hi\\n\")\n;;   :: hi\n"
+                    ";;   => (unspecified)\n;;\n"
+                    "#| 3 |# (+ 1 1)\n;;   => 2\n;;\n"
+                    "#| 4 |# ;;   __ exit closed-ok\n")))
+    ;; Because `comment' owns it, the raw program-output stream is empty.
+    (should (equal (cdr (consent-repl-stream-capture-from-string
+                         (concat prelude "(display \"hi\\n\")\n(+ 1 1)\n")
+                         "repl-main" 'comment nil))
+                   ""))
+    ;; Multi-line output is one comment per line; a missing trailing newline gains
+    ;; one so the comment closes before the result.
+    (should (string-match-p
+             (regexp-quote ";;   :: a\n;;   :: b\n;;   => 0")
+             (consent-repl-stream-rendered-from-string
+              (concat prelude
+                      "(begin (display \"a\")(newline)(display \"b\")(newline) 0)\n")
+              "repl-main" 'comment nil)))
+    (should (string-match-p
+             (regexp-quote ";;   :: x\n;;   => 5")
+             (consent-repl-stream-rendered-from-string
+              (concat prelude "(begin (display \"x\") 5)\n")
+              "repl-main" 'comment nil)))
+    ;; `classic' leaves program output raw on its own stream (the printed value
+    ;; 12321 is computed so it is absent from the echoed source); the control
+    ;; channel carries records only.
+    (let ((classic (consent-repl-stream-capture-from-string
+                    (concat prelude "(begin (display (* 111 111))(newline) 1)\n")
+                    "repl-main" 'classic nil)))
+      (should (equal (cdr classic) "12321\n"))
+      (should-not (string-match-p "12321" (car classic))))
+    ;; The comment control-channel transcript round-trips: commented output is
+    ;; inert on replay and the re-evaluated forms regenerate it, so results match.
+    (let* ((input (concat prelude
+                          "(display \"hello\\n\")\n"
+                          "(begin (display \"x\")(newline) 42)\n(+ 2 3)\n"))
+           (transcript (consent-repl-stream-rendered-from-string
+                        input "repl-main" 'comment nil)))
+      (should (equal (consent-repl-stream-test--result-displays
+                      (consent-repl-stream-records-from-string transcript "repl-main"))
+                     (consent-repl-stream-test--result-displays
+                      (consent-repl-stream-records-from-string
+                       input "repl-main")))))))
 
 (ert-deftest consent-repl-stream-chrome-faces-realize-roles ()
   "Faces are applied when requested and absent from the plain rendering."
