@@ -189,3 +189,50 @@ for completeness.
 - 0.15.8 — #387 reduce the runtime-version update footprint to version.sld alone
 - 0.15.9 — #68 relicense to Apache-2.0 with SPDX headers and NOTICE
 - 0.15.10 — #389 rename Agent Scheme to Consent Scheme
+
+## 0.16 Functional R7RS REPL and Cross-Host Parity
+
+Ordinals follow this chunk's positions in #53. Version `0.16.5` was accidentally
+burned during versioning and left as a gap so `0.16.6` onward keep their
+already-assigned versions; the issue that briefly held the slot (#388) was moved
+to the end of the chunk.
+
+- 0.16.1 — #404 trim the make test default matrix and standard CI shard set
+- 0.16.2 — #390 define shared cross-host REPL interaction contract
+- 0.16.3 — #229 add native CLI daemon adapter manifest fixture
+- 0.16.4 — #230 add native CLI daemon mock adapter tests
+- 0.16.5 — _skipped_
+- 0.16.6 — #231 add native CLI process boundary harness
+- 0.16.7 — #360 add portable R7RS terminal REPL shell
+- 0.16.8 — #418 reader recovery and errors-as-data: resync past malformed forms
+- 0.16.9 — #399 support shebang-style executable script handling
+- 0.16.10 — #424 add a pluggable chrome layer for the portable REPL
+- 0.16.11 — #391 add Emacs incremental stdin REPL parity entry
+- 0.16.12 — #425 render the Emacs REPL with the shared chrome model
+- 0.16.13 — #392 add shared cross-host REPL parity conformance fixtures
+- 0.16.14 — #374 promote in-repo Emacs-Lisp ↔ portable-Scheme parity diffing to a CI gate
+- 0.16.15 — #465 record a structured, versioned per-PR CI run record for longitudinal analysis
+- 0.16.16 — #453 add a documentation index (table of contents) for docs/
+- 0.16.17 — #460 curate REPL and interactive-environment references in docs/references.md
+- 0.16.18 — #393 document REPL usage and cross-host parity
+- 0.16.19 — #407 fix source-comment standard violations on the optional portable shard
+- 0.16.20 — #412 re-home host-independent consent-scheme-* ERT tests stranded on the opt-in Chibi shard
+- 0.16.21 — #411 converge the Chibi portable host onto the shared host-suite harness
+- 0.16.22 — #415 wire Emacs byte-compile warnings-as-errors (and checkdoc) into make test and CI
+- 0.16.23 — #421 wire portable-host compiler warnings-as-errors into make test and CI
+- 0.16.24 — #481 trim the per-push de-feature test cross to a single smoke leg
+- 0.16.25 — #388 dev rule: background-monitor CI after committing to an open PR, and watch for timing regressions
+- 0.16.26 — #447 fix comment chrome double-echoing interactive input
+- 0.16.27 — #448 fix classic chrome continuation prompt landing on the result line
+- 0.16.28 — #470 add make install/uninstall and a distribution path for the host-compiled runtime
+- 0.16.29 — #518 bind internal-library imports to compiled native modules under the host-run grant
+- 0.16.30 — #515 finish the Agent→Consent rename on the Emacs REPL surface and fix the user-reserved dispatch keybinding
+- 0.16.31 — #506 surface reader nesting depth / pending-form state on the REPL prompt record
+- 0.16.32 — #507 formalize REPL transcript capture and replay over the Scheme-readable record stream
+- 0.16.33 — #505 define the REPL program-input stream model
+- 0.16.34 — #514 add a comint-style interactive Emacs REPL buffer
+- 0.16.35 — #522 charge value budgets at allocation instead of re-walking every primitive result
+- 0.16.36 — #520 make the compiled-shard CI builds parallel, incremental, and cached; cancel superseded PR runs
+- 0.16.37 — #528 connect binary standard streams (read-u8/write-u8 over stdio-backed ports)
+- 0.16.38 — #529 refine the comment and classic REPL chrome rendering
+- 0.16.39 — #556 rebalance local make test shards: isolate native-build tests, cache the compile-portable build, raise -j

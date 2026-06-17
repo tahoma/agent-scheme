@@ -1,12 +1,15 @@
 # Scheme References
 
 This document collects external references that are useful while building
-Consent Scheme: Scheme-language references for the runtime core, and — in
+Consent Scheme: Scheme-language references for the runtime core; in
 [REPL and Interactive-Environment References](#repl-and-interactive-environment-references)
-— prior art on REPLs and interactive programming environments for the Chunk 0.16
-interactive-surface work. Keep project-specific decisions in this repository's
-own design docs; use these references for language context, historical grounding,
-and implementation techniques.
+prior art on REPLs and interactive programming environments for the Chunk 0.16
+interactive-surface work; and in
+[Agentic Harness and Language-Agent References](#agentic-harness-and-language-agent-references)
+prior art on agentic harnesses and language agents for the Chunk 0.17 Milestone M2
+*REPL Agent Harness — Minimal Loop* work. Keep project-specific decisions in this
+repository's own design docs; use these references for language context, historical
+grounding, and implementation techniques.
 
 ## Canonical External Scheme References
 
@@ -176,3 +179,115 @@ and [debugger.md](debugger.md)).
   Lisp model for recoverable, interactive error handling. Directly relevant to
   reader recovery / errors-as-data, the debugger
   ([debugger.md](debugger.md)), and graceful REPL resync.
+
+## Agentic Harness and Language-Agent References
+
+These collect external prior art on agentic harnesses and language agents,
+grounding the Chunk 0.17 Milestone M2 *REPL Agent Harness — Minimal Loop* work —
+the minimal task runner control loop, agent abstraction/registry/selection, the
+`(agent prompt)` REPL verbs, the consent/capability/audit loop they run inside,
+and the harness quick-start guide. They are prior art for grounding and
+technique, **not** authority. Consent Scheme's distinctive stance — Lisp-first
+internal data, explicit host capabilities, inspectable Scheme-readable agent
+state, and consent/approval gating — stays defined in this repository's own
+design docs ([control-loop.md](control-loop.md) and the *Agent Layer* section of
+[architecture.md](architecture.md), plus [session-lifecycle.md](session-lifecycle.md)
+and the capability and approval material in [architecture.md](architecture.md)).
+
+### Foundations and Surveys
+
+- [Cognitive Architectures for Language Agents (CoALA)](https://arxiv.org/abs/2309.02427)
+  (Sumers, Yao, Narasimhan, Griffiths) frames a language agent as modular memory
+  (working + long-term), an action space split into internal and external
+  actions, and a planning/execution decision loop. The closest external map to
+  the project's agent-layer split between session memory, host capabilities, and
+  the task control loop.
+- [The Rise and Potential of Large Language Model Based Agents: A Survey](https://arxiv.org/abs/2309.07864)
+  (Xi et al.) is a broad landscape survey (brain, perception, action) for
+  orienting and locating subtopics.
+- [A Survey on Large Language Model based Autonomous Agents](https://arxiv.org/abs/2308.11432)
+  (Wang et al.) organizes agent construction along profile/memory/planning/
+  action and catalogs evaluation strategies; a complementary index.
+
+### Reasoning and Acting Loop
+
+- [ReAct: Synergizing Reasoning and Acting in Language Models](https://arxiv.org/abs/2210.03629)
+  (Yao et al., ICLR 2023) interleaves reasoning traces with environment-affecting
+  actions in one loop; the canonical shape behind the reason/act/observe cycle
+  and the `agent-yield` observation channel.
+- [Reflexion: Language Agents with Verbal Reinforcement Learning](https://arxiv.org/abs/2303.11366)
+  (Shinn et al., NeurIPS 2023) has agents reflect on failures in natural language
+  and store reflections in episodic memory; relevant to scoped session memory
+  and self-correction without weight updates.
+- [Tree of Thoughts: Deliberate Problem Solving with Large Language Models](https://arxiv.org/abs/2305.10601)
+  (Yao et al., NeurIPS 2023) generalizes chain-of-thought into a searchable tree
+  with self-evaluation; for when a control loop needs lookahead/backtracking.
+
+### Tool Use and Function Calling
+
+- [Toolformer: Language Models Can Teach Themselves to Use Tools](https://arxiv.org/abs/2302.04761)
+  (Schick et al.) is an early demonstration of deciding which API to call, when,
+  and with what arguments; the tool-invocation problem the capability layer
+  gates.
+- [Gorilla: Large Language Model Connected with Massive APIs](https://arxiv.org/abs/2305.15334)
+  (Patil et al., NeurIPS 2024) addresses accurate selection from large, changing
+  tool/API sets via retrieval; its
+  [Berkeley Function-Calling Leaderboard](https://github.com/ShishirPatil/gorilla)
+  is a running evaluation of tool-calling behavior.
+- [Model Context Protocol specification](https://modelcontextprotocol.io/specification)
+  and its [announcement](https://www.anthropic.com/news/model-context-protocol)
+  define the open protocol for exposing tools/resources/prompts to model clients.
+  The project's intended external tool boundary; MCP is a wire encoding over
+  Scheme-readable result/event datums, not the canonical internal model.
+
+### Code as Action and Agent-Computer Interfaces
+
+Closest prior art to the REPL-as-agent-surface thesis: the action space is
+executable code in a live interpreter.
+
+- [Executable Code Actions Elicit Better LLM Agents (CodeAct)](https://arxiv.org/abs/2402.01030)
+  (Wang et al., ICML 2024) argues the action space should be executable code in
+  an interpreter rather than per-call JSON, with multi-turn observe-and-revise;
+  the central external argument for a Scheme REPL as the agent harness.
+- [SWE-agent: Agent-Computer Interfaces Enable Automated Software Engineering](https://arxiv.org/abs/2405.15793)
+  (Yang et al., NeurIPS 2024) finds a deliberately designed agent-computer
+  interface dominates raw model capability; prior art for the REPL interaction
+  contract and `(agent ...)` verb surface.
+- [Voyager: An Open-Ended Embodied Agent with Large Language Models](https://arxiv.org/abs/2305.16291)
+  (Wang et al.) builds an ever-growing library of executable, composable skills
+  with iterative self-verification; a model for promoting validated helper
+  libraries.
+
+### Memory and Reflection
+
+- [Generative Agents: Interactive Simulacra of Human Behavior](https://arxiv.org/abs/2304.03442)
+  (Park et al., UIST 2023) runs an observation/planning/reflection loop over a
+  retrievable memory stream; how reflection synthesizes durable memory.
+- [MemGPT: Towards LLMs as Operating Systems](https://arxiv.org/abs/2310.08560)
+  (Packer et al.) treats tiered memory under explicit control flow; analogy for
+  keeping canonical Scheme-readable memory distinct from rebuildable
+  in-context sets.
+
+### Multi-Agent and Orchestration
+
+- [AutoGen: Enabling Next-Gen LLM Applications via Multi-Agent Conversation](https://arxiv.org/abs/2308.08155)
+  (Wu et al.) models applications as conversations among customizable agents
+  mixing model calls, tools, and human input; multi-agent / human-in-the-loop
+  prior art.
+- [Building Effective Agents](https://www.anthropic.com/engineering/building-effective-agents)
+  (Anthropic engineering) draws the workflows-vs-agents distinction, lists
+  composable patterns, and biases toward the simplest design that works;
+  applicable to scoping the minimal harness.
+
+### Evaluation and Benchmarks
+
+- [SWE-bench: Can Language Models Resolve Real-World GitHub Issues?](https://arxiv.org/abs/2310.06770)
+  (Jimenez et al., ICLR 2024) runs end-to-end code-editing agents against real
+  issues and their tests; outcome-based, execution-verified evaluation.
+- [GAIA: a benchmark for General AI Assistants](https://arxiv.org/abs/2311.12983)
+  (Mialon et al.) poses questions simple for humans but requiring multi-step
+  tool use, browsing, and multimodality.
+- [τ-bench: A Benchmark for Tool-Agent-User Interaction in Real-World Domains](https://arxiv.org/abs/2406.12045)
+  (Sierra) scores agents on following domain rules/policy during multi-turn user
+  interaction, final-state correctness, and reliability across trials; closely
+  aligned with the project's policy-following and auditable-behavior emphasis.
