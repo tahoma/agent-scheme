@@ -577,7 +577,9 @@ Return the ordered contract records for SESSION under evaluator OPTIONS."
 
 ;;;###autoload
 (defun consent-repl-stream-records-from-datum-stream (text)
-  "Reload a captured `datum'-chrome record stream TEXT into the list of contract records, reading with the consent reader the capture format is written for."
+  "Reload a captured `datum'-chrome record stream TEXT into the list of
+contract records, reading with the consent reader the capture format is
+written for."
   (consent-read-all text))
 
 (defun consent-repl-stream--sym-name (datum)
@@ -628,7 +630,8 @@ reproducing the recorded value (compare `consent-repl-stream-replay-report')."
 ;; so the comparison holds whether a stream came from the live loop or a
 ;; reloaded datum-stream text.
 (defun consent-repl-stream--outcome-for (records submission-id)
-  "Return (KIND . DISPLAY) for the result/condition correlated to SUBMISSION-ID in RECORDS, or (none) when neither is present."
+  "Return (KIND . DISPLAY) for the result/condition correlated to
+SUBMISSION-ID in RECORDS, or (none) when neither is present."
   (let ((target (consent-repl-stream--sym-name submission-id)))
     (or (catch 'done
           (dolist (record records)
@@ -647,7 +650,9 @@ reproducing the recorded value (compare `consent-repl-stream-replay-report')."
         (cons 'none nil))))
 
 (defun consent-repl-stream--submission-outcomes (records)
-  "Return the ordered list of (SOURCE KIND DISPLAY) triples for each complete submission in RECORDS, correlating each to its result/condition by submission id."
+  "Return the ordered list of (SOURCE KIND DISPLAY) triples for each
+complete submission in RECORDS, correlating each to its result/condition by
+submission id."
   (let (outcomes)
     (dolist (record records (nreverse outcomes))
       (when (consent-repl-stream--complete-submission-p record)
@@ -658,7 +663,8 @@ reproducing the recorded value (compare `consent-repl-stream-replay-report')."
                 outcomes))))))
 
 (defun consent-repl-stream--outcome-fields (outcome)
-  "Render an outcome triple OUTCOME as `(kind K) (display D)' fields, or `(kind absent)' when OUTCOME is nil (no paired submission)."
+  "Render an outcome triple OUTCOME as `(kind K) (display D)' fields, or
+`(kind absent)' when OUTCOME is nil (no paired submission)."
   (if outcome
       (list (list (consent-repl-stream--sym "kind")
                   (consent-repl-stream--sym (symbol-name (nth 1 outcome))))

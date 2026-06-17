@@ -239,7 +239,9 @@ accessor accepts both forms with the same answer on every posture."
     (define char-page (integer->char 12))
 
     (define (consent-integer->radix-string integer radix)
-      "Exported writer helper used by the reader, evaluator, and tests whenever Consent Scheme needs canonical integer text independent of host formatting."
+      "Exported writer helper used by the reader, evaluator, and tests whenever"
+      "Consent Scheme needs canonical integer text independent of host"
+      "formatting."
       (let ((digits "0123456789abcdef")
             (negative? (< integer 0))
             (value (abs integer)))
@@ -409,7 +411,8 @@ site would have written host literals."
         (if cell (cdr cell) #f)))
 
     (define (consent-copy-datum-source! target source . maybe-overwrite)
-      "Copy source metadata from SOURCE to TARGET, preserving existing metadata by default."
+      "Copy source metadata from SOURCE to TARGET, preserving existing metadata"
+      "by default."
       (let ((metadata (datum-source-metadata source))
             (overwrite? (and (not (null? maybe-overwrite))
                              (car maybe-overwrite))))
@@ -430,7 +433,8 @@ site would have written host literals."
                                  (cdr (reader-pending-stack reader))))
 
     (define (raise-reader-condition reader kind prefix message irritants)
-      "Raise a reader failure as a structured condition under recovery mode, or as the historical plain error otherwise."
+      "Raise a reader failure as a structured condition under recovery mode, or"
+      "as the historical plain error otherwise."
       (if (reader-recovery reader)
           (raise (make-reader-condition kind
                                         (reader-position reader)
@@ -454,7 +458,9 @@ site would have written host literals."
                               message irritants))
 
     (define (reader-incomplete reader message . irritants)
-      "Raise a reader failure for a valid prefix that needs more input.  The default error text is identical to `reader-error`; only recovery mode tells the two apart."
+      "Raise a reader failure for a valid prefix that needs more input.  The"
+      "default error text is identical to `reader-error`; only recovery mode"
+      "tells the two apart."
       (raise-reader-condition reader 'incomplete
                               "consent reader error at offset "
                               message irritants))
@@ -711,10 +717,13 @@ site would have written host literals."
               (quotient (cdr adjusted) divisor))))
 
     (define (consent-make-canonical-integer value . rest)
-      "Canonical number constructors are the public boundary for agent-owned numeric values created by readers, primitives, and result renderers.
-An already-canonical number is returned unchanged, so a call site whose
-argument crossed the compiled host-runner boundary as a canonical record gets
-the same answer it would on a reference host with a host literal."
+      "Canonical number constructors are the public boundary for"
+      "agent-owned numeric values created by readers, primitives, and"
+      "result renderers."
+      "An already-canonical number is returned unchanged, so a call site"
+      "whose argument crossed the compiled host-runner boundary as a"
+      "canonical record gets the same answer it would on a reference host"
+      "with a host literal."
       (if (consent-number? value)
           value
           (let ((exactness (if (null? rest) 'exact (car rest)))
@@ -820,7 +829,8 @@ Canonical-record components are unwrapped to their host payloads."
          (cons real imaginary))))
 
     (define (consent-number-zero? number)
-      "Numeric predicates and helpers inspect the agent-owned representation instead of asking the host whether wrapped numbers are ordinary numbers."
+      "Numeric predicates and helpers inspect the agent-owned representation"
+      "instead of asking the host whether wrapped numbers are ordinary numbers."
       (and (consent-number? number)
            (cond
             ((eq? (consent-number-kind number) 'integer)
@@ -1832,7 +1842,8 @@ Canonical-record components are unwrapped to their host payloads."
       (if (null? maybe-options) '() (car maybe-options)))
 
     (define (consent-read source . maybe-options)
-      "Read one datum from SOURCE, enforce complete input consumption, and validate the resulting host data against Consent Scheme resource limits."
+      "Read one datum from SOURCE, enforce complete input consumption, and"
+      "validate the resulting host data against Consent Scheme resource limits."
       (let* ((options (options-from-rest maybe-options))
              (reader (reader-from-source source options)))
         (set-reader-datum-labels! reader '())
@@ -1845,7 +1856,8 @@ Canonical-record components are unwrapped to their host payloads."
           datum)))
 
     (define (consent-read-all source . maybe-options)
-      "Read a source body into datums for program/library evaluation.  Datum labels are scoped per datum, matching R7RS external representations."
+      "Read a source body into datums for program/library evaluation.  Datum"
+      "labels are scoped per datum, matching R7RS external representations."
       (let* ((options (options-from-rest maybe-options))
              (reader (reader-from-source source options)))
         (let loop ((datums '()))
@@ -1866,7 +1878,8 @@ Canonical-record components are unwrapped to their host payloads."
                             datums)))))))
 
     (define (consent-read-from-string-at source position . maybe-options)
-      "Incremental read entry point for ports and REPL-like callers; the cdr of the result is the next source offset no matter which datum was returned."
+      "Incremental read entry point for ports and REPL-like callers; the cdr of"
+      "the result is the next source offset no matter which datum was returned."
       (set! position (canonical-component position))
       (if (not (string? source))
           (error "consent reader source must be a string" source))
@@ -1896,7 +1909,13 @@ Canonical-record components are unwrapped to their host payloads."
                (char=? char #\)))))
 
     (define (consent-resync-to-next-form source position)
-      "Form-level batch resync strategy: return the offset of the next top-level form strictly after POSITION.  A top-level form is anchored to a line start whose first character is neither whitespace nor a closing parenthesis; when none remains, return the end of SOURCE.  This is the default recovery resync strategy; callers may supply their own (for example a lexer-level or editor-grade strategy) through the `resync` option."
+      "Form-level batch resync strategy: return the offset of the next"
+      "top-level form strictly after POSITION.  A top-level form is anchored to"
+      "a line start whose first character is neither whitespace nor a closing"
+      "parenthesis; when none remains, return the end of SOURCE.  This is the"
+      "default recovery resync strategy; callers may supply their own (for"
+      "example a lexer-level or editor-grade strategy) through the `resync`"
+      "option."
       (set! position (canonical-component position))
       (let ((length (string-length source)))
         (let loop ((index position))
@@ -1931,7 +1950,8 @@ Canonical-record components are unwrapped to their host payloads."
              (join (map render-irritant irritants) " ")))))
 
     (define (recovery-range line-starts start end)
-      "Build a diagnostic-range datum spanning START..END using LINE-STARTS.  The shape matches `(agent diagnostics)` `make-diagnostic-range`."
+      "Build a diagnostic-range datum spanning START..END using LINE-STARTS. "
+      "The shape matches `(agent diagnostics)` `make-diagnostic-range`."
       (let ((start-position (line-starts-line-column line-starts start))
             (end-position (line-starts-line-column line-starts end)))
         (list 'diagnostic-range
@@ -1944,7 +1964,10 @@ Canonical-record components are unwrapped to their host payloads."
                     (consent-make-canonical-integer (cdr end-position))))))
 
     (define (recovery-diagnostic source-id kind reason range)
-      "Build a Scheme-readable diagnostic datum for a recovery event.  The shape matches `(agent diagnostics)` `make-diagnostic`; KIND (`invalid` or `incomplete`) rides in the metadata so every host adapter consumes it identically."
+      "Build a Scheme-readable diagnostic datum for a recovery event.  The"
+      "shape matches `(agent diagnostics)` `make-diagnostic`; KIND (`invalid`"
+      "or `incomplete`) rides in the metadata so every host adapter consumes it"
+      "identically."
       (list 'diagnostic
             (list 'severity 'error)
             (list 'message reason)
@@ -1957,7 +1980,10 @@ Canonical-record components are unwrapped to their host payloads."
                         (list 'phase 'read)))))
 
     (define (recovery-span kind reason range text)
-      "Build a recovery span datum recording one skipped or incomplete region.  TEXT preserves the source bytes so recovery never silently drops input; the range vocabulary is shared with comment trivia and CST recovery nodes."
+      "Build a recovery span datum recording one skipped or incomplete region. "
+      "TEXT preserves the source bytes so recovery never silently drops input;"
+      "the range vocabulary is shared with comment trivia and CST recovery"
+      "nodes."
       (list 'recovery-span
             (list 'kind kind)
             (list 'reason reason)
@@ -1965,7 +1991,9 @@ Canonical-record components are unwrapped to their host payloads."
             (list 'text text)))
 
     (define (guard-reader-failure reader thunk)
-      "Run THUNK, returning its value tagged (value . V), or (condition . C) when it raises.  Non-reader conditions are normalized to an `invalid` reader condition at the current offset."
+      "Run THUNK, returning its value tagged (value . V), or (condition . C)"
+      "when it raises.  Non-reader conditions are normalized to an `invalid`"
+      "reader condition at the current offset."
       (call/cc
        (lambda (return)
          (with-exception-handler
@@ -1988,7 +2016,10 @@ Canonical-record components are unwrapped to their host payloads."
             (cons 'value (thunk)))))))
 
     (define (build-failure-step reader resync line-starts source-id start condition)
-      "Build the <consent-recovery-step> for a reader failure anchored at START.  Incomplete input rewinds to START and carries the open-construct stack; a genuine error advances past the malformed region via RESYNC with guaranteed forward progress."
+      "Build the <consent-recovery-step> for a reader failure anchored at"
+      "START.  Incomplete input rewinds to START and carries the open-construct"
+      "stack; a genuine error advances past the malformed region via RESYNC"
+      "with guaranteed forward progress."
       (let ((kind (reader-condition-kind condition))
             (reason (condition-reason condition)))
         (if (eq? kind 'incomplete)
@@ -2013,7 +2044,10 @@ Canonical-record components are unwrapped to their host payloads."
               (make-recovery-step 'invalid #f diagnostic span next #f)))))
 
     (define (recover-step! reader resync line-starts source-id options)
-      "Read one form in recovery mode and return a <consent-recovery-step>.  Leading trivia is skipped first so a malformed region is anchored at the datum start, not at preceding whitespace; trivia-level failures (such as an unterminated block comment) are anchored where the trivia began."
+      "Read one form in recovery mode and return a <consent-recovery-step>. "
+      "Leading trivia is skipped first so a malformed region is anchored at the"
+      "datum start, not at preceding whitespace; trivia-level failures (such as"
+      "an unterminated block comment) are anchored where the trivia began."
       ;; A prior step that unwound mid-construct leaves stale open-construct
       ;; entries behind; each step starts from a balanced cursor, so reset.
       (set-reader-pending-stack! reader '())
@@ -2051,7 +2085,12 @@ Canonical-record components are unwrapped to their host payloads."
       (reader-from-source source (cons (cons 'recovery #t) options)))
 
     (define (consent-read-recover source . maybe-options)
-      "Read SOURCE in recovery mode, collecting every readable datum plus an ordered diagnostics list and recovery spans instead of aborting on the first malformed form.  The result's STATUS is `incomplete` when the trailing region is a valid prefix awaiting more input, otherwise `complete`.  The resync point is caller-selectable through the `resync` option (defaulting to `consent-resync-to-next-form`)."
+      "Read SOURCE in recovery mode, collecting every readable datum plus an"
+      "ordered diagnostics list and recovery spans instead of aborting on the"
+      "first malformed form.  The result's STATUS is `incomplete` when the"
+      "trailing region is a valid prefix awaiting more input, otherwise"
+      "`complete`.  The resync point is caller-selectable through the `resync`"
+      "option (defaulting to `consent-resync-to-next-form`)."
       (if (not (string? source))
           (error "consent reader source must be a string" source))
       (let* ((options (options-from-rest maybe-options))
@@ -2086,7 +2125,12 @@ Canonical-record components are unwrapped to their host payloads."
                     (cons (consent-recovery-step-span step) spans))))))))
 
     (define (consent-read-recover-from-string-at source position . maybe-options)
-      "Recovery-aware single-form read for interactive and streaming callers (REPL, editor adapters).  Returns a <consent-recovery-step> whose STATUS is `datum`, `invalid`, `incomplete`, or `eof`, and whose NEXT offset is where the caller should resume.  Incomplete input is surfaced as its own status so auto-indent and continuation prompts never confuse a valid prefix with a syntax error."
+      "Recovery-aware single-form read for interactive and streaming callers"
+      "(REPL, editor adapters).  Returns a <consent-recovery-step> whose STATUS"
+      "is `datum`, `invalid`, `incomplete`, or `eof`, and whose NEXT offset is"
+      "where the caller should resume.  Incomplete input is surfaced as its own"
+      "status so auto-indent and continuation prompts never confuse a valid"
+      "prefix with a syntax error."
       (set! position (canonical-component position))
       (if (not (string? source))
           (error "consent reader source must be a string" source))
@@ -2113,7 +2157,9 @@ Canonical-record components are unwrapped to their host payloads."
                  (validation-maximum-total-nodes validation))))
 
     (define (validate-datum datum options validation depth seen)
-      "Datum validation protects the evaluator from host-constructed values that bypassed lexical reader checks, including cycles and oversized objects."
+      "Datum validation protects the evaluator from host-constructed values"
+      "that bypassed lexical reader checks, including cycles and oversized"
+      "objects."
       (if (> depth
              (option-count options 'max-depth
                          consent-default-maximum-depth))
@@ -2208,7 +2254,8 @@ Canonical-record components are unwrapped to their host payloads."
                datum))))
 
     (define (consent-validate-datum datum . maybe-options)
-      "Public validation returns DATUM unchanged so callers can place it inline in read/evaluate pipelines while still enforcing depth and size budgets."
+      "Public validation returns DATUM unchanged so callers can place it inline"
+      "in read/evaluate pipelines while still enforcing depth and size budgets."
       (let* ((options (options-from-rest maybe-options))
              (validation
               (make-validation
@@ -2299,7 +2346,8 @@ Canonical-record components are unwrapped to their host payloads."
        (else (cons (car alist) (remove-assq key (cdr alist))))))
 
     (define (consent-datum->external datum . maybe-options)
-      "Render Consent Scheme datums with stable external syntax, including shared and circular structure labels for write/shared mode."
+      "Render Consent Scheme datums with stable external syntax, including"
+      "shared and circular structure labels for write/shared mode."
       (let ((mode (if (null? maybe-options) 'write (car maybe-options)))
             (display? (if (or (null? maybe-options)
                               (null? (cdr maybe-options)))

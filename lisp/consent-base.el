@@ -725,12 +725,14 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
      :policy deny :test-categories (file policy))
     (:name "open-binary-input-file" :library "(scheme file)" :minimum-arity 1
      :maximum-arity 1 :source host-capability :effect host-file
-     :required-capability file-system :emacs-hook consent--primitive-open-binary-input-file
+     :required-capability file-system
+     :emacs-hook consent--primitive-open-binary-input-file
      :portable-hook primitive-open-binary-input-file :emitter-hook capability-file
      :policy deny :test-categories (file policy))
     (:name "open-binary-output-file" :library "(scheme file)" :minimum-arity 1
      :maximum-arity 1 :source host-capability :effect host-file
-     :required-capability file-system :emacs-hook consent--primitive-open-binary-output-file
+     :required-capability file-system
+     :emacs-hook consent--primitive-open-binary-output-file
      :portable-hook primitive-open-binary-output-file :emitter-hook capability-file
      :policy deny :test-categories (file policy))
     (:name "open-input-file" :library "(scheme file)" :minimum-arity 1

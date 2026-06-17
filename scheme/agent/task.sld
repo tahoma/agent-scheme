@@ -127,7 +127,8 @@
       (member-eq? state task-states))
 
     (define (option-ref options key default)
-      "Return KEY from OPTIONS, or DEFAULT if absent.  OPTIONS may contain dotted alist cells or two-element Scheme option records."
+      "Return KEY from OPTIONS, or DEFAULT if absent.  OPTIONS may contain"
+      "dotted alist cells or two-element Scheme option records."
       (let ((cell (assq key options)))
         (if cell
             (let ((value (cdr cell)))
