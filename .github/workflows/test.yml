@@ -398,11 +398,37 @@ jobs:
             make_target: test-emacs-capabilities
             summary_name: Emacs capabilities/policy
             selector: '(or "consent-agent-io.*" "consent-approval.*" "consent-capability.*" "consent-context.*" "consent-memory.*" "consent-models.*" "consent-network.*" "consent-policy.*" "consent-redaction.*" "consent-session.*")'
+          # #556 split the heavyweight Emacs-hosted integration surface (REPL,
+          # VCS, reflect, native-CLI daemon) out of the tools shard into
+          # test-emacs-integration, and stranded the four full host-compile +
+          # install/dist tests into test-emacs-native-build. The tools shard's
+          # summary_name is left format-stable per the #404/#520 stability
+          # constraint even though its content narrowed; the integration and
+          # native-build shards get their own new summary names below.
           - shard: emacs-tools
             label: tools/docs/integration
             make_target: test-emacs-tools
             summary_name: Emacs tools/docs/integration
-            selector: '(or "consent-ci.*" "consent-compile.*" "consent-control-loop-doc.*" "consent-debugger.*" "consent-diagnostics.*" "consent-diff.*" "consent-feature-reflection-doc.*" "consent-job.*" "consent-native-cli-daemon-doc.*" "consent-reflect.*" "consent-repl.*" "consent-skill.*" "consent-smoke.*" "consent-vcs.*" "consent-scheme-documentation-test-.*" "consent-scheme-module-ownership-test-.*" "^consent-scheme-eval-test-bootstrap-avoids-host-call/cc$" "^consent-scheme-module-boundary-test-runtime-version-loads-outside-repo$")'
+            selector: '(and (or "consent-ci.*" "consent-compile.*" "consent-control-loop-doc.*" "consent-debugger.*" "consent-diagnostics.*" "consent-diff.*" "consent-feature-reflection-doc.*" "consent-job.*" "consent-skill.*" "consent-smoke.*" "consent-scheme-documentation-test-.*" "consent-scheme-module-ownership-test-.*" "^consent-scheme-eval-test-bootstrap-avoids-host-call/cc$" "^consent-scheme-module-boundary-test-runtime-version-loads-outside-repo$") (not "^consent-compile-portable-test-\(racket\|gambit\)-\(builds-runner\|install-and-dist\)$"))'
+          - shard: emacs-integration
+            label: integration/REPL
+            make_target: test-emacs-integration
+            summary_name: Emacs integration/REPL
+            selector: '(or "consent-native-cli-daemon.*" "consent-reflect.*" "consent-repl.*" "consent-vcs.*")'
+          # The native-build shard isolates the four full host-compile +
+          # install/dist tests so they only run in `make test-full' locally
+          # (#556). On CI's emacs-hosted runners neither gsc/gsi nor raco/racket
+          # is installed, so the four tests skip; the shard is still included
+          # so the matrix mirrors `make test-full' and so the install/dist
+          # capability surface re-runs once a compiler is provisioned in this
+          # job. The non-build tests in `consent-compile-portable-test.el'
+          # (rejects-unknown-host, *-missing-tools-fail,
+          # install-without-binary-fails) remain in the tools shard above.
+          - shard: emacs-native-build
+            label: native-build/install-dist
+            make_target: test-emacs-native-build
+            summary_name: Emacs native-build/install-dist
+            selector: '"^consent-compile-portable-test-\(racket\|gambit\)-\(builds-runner\|install-and-dist\)$"'
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
