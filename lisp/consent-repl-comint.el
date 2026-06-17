@@ -510,16 +510,19 @@ Switching to `datum' recovers the canonical record stream in the buffer."
 (define-derived-mode consent-repl-comint-mode comint-mode "Consent REPL"
   "Major mode for a live, interactive Consent Scheme REPL buffer.
 
-Type a form at the prompt and press \\<consent-repl-comint-mode-map>\\[consent-repl-comint-return] to evaluate it in a durable
-session; the result renders inline through the active chrome.  An incomplete
-form continues on a new line with a continuation gutter until it is complete.
+Type a form at the prompt and press
+\\<consent-repl-comint-mode-map>\\[consent-repl-comint-return] to evaluate it
+in a durable session; the result renders inline through the active chrome.  An
+incomplete form continues on a new line with a continuation gutter until it is
+complete.
 
 Definitions, imports, and macros persist across submissions and are shared with
 the session the other Emacs eval paths (`consent-repl-eval') see.
 
 \\[consent-repl-comint-send-input] forces a submission even when the form is incomplete.
 \\[consent-repl-comint-send-eof] closes the session.
-\\[consent-repl-comint-set-chrome] switches the rendering chrome (`datum' recovers the raw records).
+\\[consent-repl-comint-set-chrome] switches the rendering chrome (`datum'
+recovers the raw records).
 
 \\{consent-repl-comint-mode-map}"
   (setq-local comint-prompt-regexp consent-repl-comint--prompt-regexp)

@@ -406,7 +406,8 @@ the user."
        ((eq? role 'exit-marker) "33")      ; yellow, matching exit-status
        ((eq? role 'exit-status) "33")      ; yellow
        ((eq? role 'output-marker) "90")    ; gray gutter, like the `;;' furniture
-       (else #f)))                         ; result-value, submission, output-text, unknown
+       ; result-value, submission, output-text, unknown
+       (else #f)))
 
     (define (chrome--wrap code text)
       "Wrap TEXT in the SGR escape for CODE, resetting afterward."
@@ -422,7 +423,9 @@ the user."
             text)))
 
     (define (cli-repl-chrome-paint result color?)
-      "Render a chrome RESULT (#f, a string, or `(role . text)' segments) to a string or #f, applying ANSI SGR per role when COLOR? is true; a plain string is returned verbatim and never colored."
+      "Render a chrome RESULT (#f, a string, or `(role . text)' segments)"
+      "to a string or #f, applying ANSI SGR per role when COLOR? is true; a"
+      "plain string is returned verbatim and never colored."
       (cond
        ((not result) #f)
        ((string? result) result)

@@ -525,7 +525,9 @@
                      (base-primitive-documentation name))))))
 
     (define (consent-base-primitive-names)
-      "Primitive metadata is exported for tests and future conformance reports; it describes the kernel surface without exposing implementation closures."
+      "Primitive metadata is exported for tests and future conformance reports;"
+      "it describes the kernel surface without exposing implementation"
+      "closures."
       (map car base-primitive-registry))
 
     (define (consent-base-primitive-specs)
@@ -576,12 +578,14 @@
         (call-with-input-file path read-port-string)))
 
     (define (resolve-source-entry relative-path default-paths)
-      "Return (RESOLVED-PATH . TEXT) for logical RELATIVE-PATH from the first source that works, or #f.
-Search order matches the host/core resolution contract: host-injected search
-directories (CONSENT_LIBRARY_PATH, datadir, executable-relative) highest, then
-the built-in cwd-relative DEFAULT-PATHS (source tree), then embedded source (the
-zero-dependency floor). RESOLVED-PATH is the on-disk path read, or RELATIVE-PATH
-for embedded source."
+      "Return (RESOLVED-PATH . TEXT) for logical RELATIVE-PATH from the"
+      "first source that works, or #f."
+      "Search order matches the host/core resolution contract:"
+      "host-injected search directories (CONSENT_LIBRARY_PATH, datadir,"
+      "executable-relative) highest, then the built-in cwd-relative"
+      "DEFAULT-PATHS (source tree), then embedded source (the"
+      "zero-dependency floor). RESOLVED-PATH is the on-disk path read, or"
+      "RELATIVE-PATH for embedded source."
       (let loop-dirs ((dirs (consent-library-search-directory-list)))
         (if (pair? dirs)
             (let* ((path (string-append (car dirs) "/" relative-path))
@@ -604,7 +608,8 @@ for embedded source."
         (and entry (cdr entry))))
 
     (define (base-prelude-forms)
-      "Prelude forms are cached after reader validation; metadata extraction depends on each top-level form remaining one define."
+      "Prelude forms are cached after reader validation; metadata extraction"
+      "depends on each top-level form remaining one define."
       (or base-prelude-forms-cache
           (let ((text (resolve-source-text "consent/base-prelude.scm"
                                            consent-base-prelude-load-paths)))
@@ -615,7 +620,8 @@ for embedded source."
                 (eval-error "unable to load base prelude")))))
 
     (define (base-syntax-forms)
-      "Syntax prelude forms are cached separately because they install into the current syntax environment, not the value environment."
+      "Syntax prelude forms are cached separately because they install into the"
+      "current syntax environment, not the value environment."
       (or base-syntax-forms-cache
           (let ((text (resolve-source-text "consent/base-syntax.scm"
                                            consent-base-syntax-load-paths)))
@@ -643,7 +649,8 @@ for embedded source."
             (eval-error "prelude definition has invalid formals")))))))
 
     (define (base-body-definition-form? form)
-      "Report whether FORM is a definition-like body form for documentation prefix detection."
+      "Report whether FORM is a definition-like body form for documentation"
+      "prefix detection."
       (and (pair? form)
            (or (eq? (car form) 'define)
                (eq? (car form) 'define-values)
@@ -707,7 +714,8 @@ for embedded source."
            form)))))
 
     (define (consent-base-prelude-binding-specs)
-      "Prelude binding specs identify derived procedures separately from kernel primitives so tests can catch accidental boundary movement."
+      "Prelude binding specs identify derived procedures separately from kernel"
+      "primitives so tests can catch accidental boundary movement."
       (map prelude-definition-spec (base-prelude-forms)))
 
     (define (consent-base-prelude-binding-names)
@@ -1076,7 +1084,8 @@ for embedded source."
         name function minimum-arity maximum-arity)))
 
     (define (consent-make-base-environment)
-      "The base environment installs primitive kernel bindings first, then evaluates derived Scheme definitions in the same environment."
+      "The base environment installs primitive kernel bindings first, then"
+      "evaluates derived Scheme definitions in the same environment."
       (let ((environment (consent-make-empty-environment)))
         (let loop ((rest base-primitive-registry))
           (if (null? rest)

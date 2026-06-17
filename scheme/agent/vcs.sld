@@ -265,7 +265,8 @@
             (vcs-field 'system system)
             (vcs-field 'files files)))
 
-    (define (make-vcs-diff-file status path orig-path old-mode new-mode old-object new-object score)
+    (define (make-vcs-diff-file status path orig-path old-mode new-mode
+                                old-object new-object score)
       "Return one file-level raw diff summary."
       #((parameters . ((status . "Normalized file diff status symbol.")
                        (path . "Current repository-relative path.")
@@ -568,7 +569,8 @@
                        (approvals . "Explicit approval decision datums to check when grants do not authorize the request.")))
         (returns . "A VCS capability decision approving or denying REQUEST with an explanatory reason.")
         (effects . (pure))
-        (see-also . (make-vcs-capability-request make-vcs-capability-grant make-vcs-approval-decision)))
+        (see-also . (make-vcs-capability-request make-vcs-capability-grant
+                     make-vcs-approval-decision)))
       (let ((operation (vcs-capability-request-operation request)))
         (let ((required-authority (vcs-operation-required-authority operation))
               (requested-authority (vcs-field-value request 'authority #f)))
@@ -1078,7 +1080,8 @@
       #((parameters . ((text . "NUL-delimited output from `git diff --raw -z` or compatible Git raw diff command.")))
         (returns . "A `vcs-diff-summary` datum containing file-level diff records.")
         (effects . (pure))
-        (see-also . (make-vcs-diff-summary make-vcs-diff-file parse-git-status-porcelain-v2-z)))
+        (see-also . (make-vcs-diff-summary make-vcs-diff-file
+                     parse-git-status-porcelain-v2-z)))
       (let loop ((tokens (vcs-split-nul text))
                  (files '()))
         (cond
