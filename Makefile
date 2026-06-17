@@ -64,12 +64,35 @@ CONSENT_EMACS_HOSTED_TEST_SELECTOR ?= (not "consent-scheme-.*")
 CONSENT_EMACS_CORE_TEST_SELECTOR ?= (or "consent-base.*" "consent-eval.*" "consent-interpreter-module.*" "consent-macro.*" "consent-reader.*" "consent-result.*" "consent-runtime.*")
 CONSENT_EMACS_LIBRARY_TEST_SELECTOR ?= (or "consent-conformance.*" "consent-fixture.*" "consent-host-adapter-fixture.*" "consent-library.*" "consent-oracle.*")
 CONSENT_EMACS_CAPABILITY_TEST_SELECTOR ?= (or "consent-agent-io.*" "consent-approval.*" "consent-capability.*" "consent-context.*" "consent-helper.*" "consent-memory.*" "consent-models.*" "consent-network.*" "consent-plan.*" "consent-policy.*" "consent-redaction.*" "consent-session.*" "consent-task.*" "consent-test.*" "consent-transcript.*")
-CONSENT_EMACS_TOOLS_TEST_SELECTOR ?= (or "consent-ci.*" "consent-compile.*" "consent-control-loop-doc.*" "consent-debugger.*" "consent-diagnostics.*" "consent-diff.*" "consent-docstring-metadata-doc.*" "consent-feature-reflection-doc.*" "consent-job.*" "consent-native-cli-daemon.*" "consent-reflect.*" "consent-repl.*" "consent-script.*" "consent-skill.*" "consent-smoke.*" "consent-vcs.*" "consent-scheme-documentation-test-.*" "consent-scheme-module-ownership-test-.*" "^consent-scheme-eval-test-bootstrap-avoids-host-call/cc$$" "^consent-scheme-module-boundary-test-runtime-version-loads-outside-repo$$")
+# The tools shard keeps the lighter Emacs-hosted tools/docs surface (CI, compile,
+# diagnostics, doc-pass tests, ...) after #556 split the heavier integration
+# surface (REPL, VCS, reflect, native-CLI daemon) into `test-emacs-integration'
+# and stranded the four full-native-build tests into `test-emacs-native-build'.
+# The trailing `(not ...)' clause keeps the native-build tests out of the trimmed
+# `make test' default even though `consent-compile.*' is the broader pattern this
+# selector uses; the dedicated build shard runs them in `make test-full' and the
+# exhaustive CI lane.
+CONSENT_EMACS_TOOLS_TEST_SELECTOR ?= (and (or "consent-ci.*" "consent-compile.*" "consent-control-loop-doc.*" "consent-debugger.*" "consent-diagnostics.*" "consent-diff.*" "consent-docstring-metadata-doc.*" "consent-feature-reflection-doc.*" "consent-job.*" "consent-script.*" "consent-skill.*" "consent-smoke.*" "consent-scheme-documentation-test-.*" "consent-scheme-module-ownership-test-.*" "^consent-scheme-eval-test-bootstrap-avoids-host-call/cc$$" "^consent-scheme-module-boundary-test-runtime-version-loads-outside-repo$$") (not "^consent-compile-portable-test-\\(racket\\|gambit\\)-\\(builds-runner\\|install-and-dist\\)$$"))
+# The integration shard takes the heavyweight Emacs-hosted runtime surfaces
+# split out of `test-emacs-tools' by #556 -- REPL, VCS, reflect, and the
+# native-CLI daemon -- so they overlap with the other Emacs shards rather than
+# stretching one shard's wall time past the rest of the trimmed default.
+CONSENT_EMACS_INTEGRATION_TEST_SELECTOR ?= (or "consent-native-cli-daemon.*" "consent-reflect.*" "consent-repl.*" "consent-vcs.*")
+# The native-build shard isolates the four full host-compile + install/dist
+# tests (gambit/racket builds-runner and install-and-dist) so they only run in
+# the exhaustive `make test-full' loop. The native build path is already
+# exercised separately by `test-portable-gambit-native' and
+# `test-portable-compiled'; these ERT cases additionally cover the install/dist
+# packaging surface, which belongs in the exhaustive set rather than the trimmed
+# inner loop (#556). Tests in `consent-compile-portable-test.el' that do not
+# shell out to gsc/raco (rejects-unknown-host, *-missing-tools-fail,
+# install-without-binary-fails) stay in `test-emacs-tools' since they are fast.
+CONSENT_EMACS_NATIVE_BUILD_TEST_SELECTOR ?= "^consent-compile-portable-test-\\(racket\\|gambit\\)-\\(builds-runner\\|install-and-dist\\)$$"
 CONSENT_PARITY_TEST_SELECTOR ?= "^consent-parity-test-.*"
 CONSENT_LIVE_MODEL_CI_SELECTOR ?= consent-models-test-live-local-openai-compatible-completion
 CONSENT_LIVE_MODEL_SELECTOR ?= "consent-models-test-live-local-.*"
 CONSENT_PORTABLE_TEST_SHARD_TARGETS ?= test-portable-gambit test-portable-gambit-native test-portable-racket test-portable-compiled test-portable-guile test-portable-gauche
-CONSENT_EMACS_TEST_SHARD_TARGETS ?= test-emacs-core test-emacs-library test-emacs-capabilities test-emacs-tools
+CONSENT_EMACS_TEST_SHARD_TARGETS ?= test-emacs-core test-emacs-library test-emacs-capabilities test-emacs-tools test-emacs-integration
 # Representative portable host kept in the trimmed default make test shard set.
 # The reader/writer/docstring machinery exercised by the portable shards is
 # host-independent, so one host is enough for the fast local loop; the full host
@@ -77,20 +100,27 @@ CONSENT_EMACS_TEST_SHARD_TARGETS ?= test-emacs-core test-emacs-library test-emac
 CONSENT_DEFAULT_PORTABLE_TEST_SHARD_TARGETS ?= test-portable-racket
 # Trimmed default: the Emacs byte-compile lint gate, the portable-host compiler
 # warnings gate, one representative portable host, the full Emacs shard set, and
-# the cross-implementation parity gate (#374).
+# the cross-implementation parity gate (#374). `test-emacs-native-build' is
+# deliberately not here -- the four full host-compile + install/dist tests
+# dominated the old single-shard tools target's wall time, so #556 stranded them
+# in an opt-in shard that only runs in the exhaustive `make test-full' loop.
 CONSENT_TEST_SHARD_TARGETS ?= lint-elisp lint-portable $(CONSENT_DEFAULT_PORTABLE_TEST_SHARD_TARGETS) $(CONSENT_EMACS_TEST_SHARD_TARGETS) test-parity
 # Exhaustive opt-in set: the Emacs byte-compile lint gate, the portable-host
-# compiler warnings gate, every portable host shard, every Emacs shard, and the
-# parity gate.
-CONSENT_FULL_TEST_SHARD_TARGETS ?= lint-elisp lint-portable $(CONSENT_PORTABLE_TEST_SHARD_TARGETS) $(CONSENT_EMACS_TEST_SHARD_TARGETS) test-parity
+# compiler warnings gate, every portable host shard, every Emacs shard, the
+# native-build install/dist shard isolated by #556, and the parity gate.
+CONSENT_FULL_TEST_SHARD_TARGETS ?= lint-elisp lint-portable $(CONSENT_PORTABLE_TEST_SHARD_TARGETS) $(CONSENT_EMACS_TEST_SHARD_TARGETS) test-emacs-native-build test-parity
 CONSENT_PORTABLE_TEST_JOBS ?= $(words $(CONSENT_PORTABLE_TEST_SHARD_TARGETS))
 CONSENT_EMACS_TEST_JOBS ?= $(words $(CONSENT_EMACS_TEST_SHARD_TARGETS))
-CONSENT_TEST_JOBS ?= $(words $(CONSENT_TEST_SHARD_TARGETS))
-CONSENT_FULL_TEST_JOBS ?= $(words $(CONSENT_FULL_TEST_SHARD_TARGETS))
+# Default `make test' parallelism (#556): raised from the shard-count fallback
+# to 16 so the per-shard ERT processes can overlap on hosts with more
+# performance cores than there are shards, instead of being bounded by the
+# shard count alone. Override CONSENT_TEST_JOBS to tune for narrower hardware.
+CONSENT_TEST_JOBS ?= 16
+CONSENT_FULL_TEST_JOBS ?= 16
 
 .DEFAULT_GOAL := help
 
-.PHONY: help print-version clean clean-compile compile install uninstall dist compile-elisp lint-elisp lint-portable repl test test-full test-portable test-portable-chibi test-portable-gambit test-portable-gambit-native test-portable-racket test-portable-compiled test-portable-guile test-portable-gauche test-emacs-hosted test-emacs-core test-emacs-library test-emacs-capabilities test-emacs-tools test-parity test-live-model-ci test-live-model conformance-oracle
+.PHONY: help print-version clean clean-compile compile install uninstall dist compile-elisp lint-elisp lint-portable repl test test-full test-portable test-portable-chibi test-portable-gambit test-portable-gambit-native test-portable-racket test-portable-compiled test-portable-guile test-portable-gauche test-emacs-hosted test-emacs-core test-emacs-library test-emacs-capabilities test-emacs-tools test-emacs-integration test-emacs-native-build test-parity test-live-model-ci test-live-model conformance-oracle
 
 help:
 	@printf '%s\n' 'Consent Scheme top-level actions:'
@@ -120,7 +150,9 @@ help:
 	@printf '  %-26s %s\n' 'test-emacs-core' 'Run the Emacs-hosted core language/runtime shard.'
 	@printf '  %-26s %s\n' 'test-emacs-library' 'Run the Emacs-hosted library/conformance shard.'
 	@printf '  %-26s %s\n' 'test-emacs-capabilities' 'Run the Emacs-hosted capability and policy shard.'
-	@printf '  %-26s %s\n' 'test-emacs-tools' 'Run the Emacs-hosted tools, docs, and integration shard.'
+	@printf '  %-26s %s\n' 'test-emacs-tools' 'Run the Emacs-hosted tools and docs shard.'
+	@printf '  %-26s %s\n' 'test-emacs-integration' 'Run the Emacs-hosted REPL/VCS/reflect/native-CLI integration shard.'
+	@printf '  %-26s %s\n' 'test-emacs-native-build' 'Run the Emacs-hosted full host-compile + install/dist shard (opt-in).'
 	@printf '  %-26s %s\n' 'test-parity' 'Diff the Emacs and portable cores over the shared corpus (#374).'
 	@printf '  %-26s %s\n' 'test-live-model-ci' 'Run the CI live local model smoke test.'
 	@printf '  %-26s %s\n' 'test-live-model' 'Run all opt-in live local model tests.'
@@ -157,6 +189,8 @@ help:
 	@printf '  %-50s %s\n' 'CONSENT_EMACS_LIBRARY_TEST_SELECTOR=SEL' 'ERT selector used by make test-emacs-library.'
 	@printf '  %-50s %s\n' 'CONSENT_EMACS_CAPABILITY_TEST_SELECTOR=SEL' 'ERT selector used by make test-emacs-capabilities.'
 	@printf '  %-50s %s\n' 'CONSENT_EMACS_TOOLS_TEST_SELECTOR=SEL' 'ERT selector used by make test-emacs-tools.'
+	@printf '  %-50s %s\n' 'CONSENT_EMACS_INTEGRATION_TEST_SELECTOR=SEL' 'ERT selector used by make test-emacs-integration.'
+	@printf '  %-50s %s\n' 'CONSENT_EMACS_NATIVE_BUILD_TEST_SELECTOR=SEL' 'ERT selector used by make test-emacs-native-build.'
 	@printf '  %-50s %s\n' 'CONSENT_PARITY_TEST_SELECTOR=SEL' 'ERT selector used by make test-parity.'
 	@printf '  %-50s %s\n' 'CONSENT_PARITY_HOST=chibi|gauche|guile' 'Portable host that runs the parity emitter (auto-discovered when unset).'
 	@printf '  %-50s %s\n' 'CONSENT_LIVE_MODEL_CI_SELECTOR=SEL' 'ERT selector used by make test-live-model-ci.'
@@ -396,6 +430,16 @@ test-emacs-capabilities:
 
 test-emacs-tools:
 	CONSENT_TEST_SELECTOR='$(CONSENT_EMACS_TOOLS_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
+
+test-emacs-integration:
+	CONSENT_TEST_SELECTOR='$(CONSENT_EMACS_INTEGRATION_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
+
+# Opt-in native-build shard (#556): the four full host-compile + install/dist
+# tests that dominated the old tools-shard wall time. Not part of the trimmed
+# `make test' default; included in `make test-full' and the exhaustive CI lane
+# so the install/dist packaging surface remains covered.
+test-emacs-native-build:
+	CONSENT_TEST_SELECTOR='$(CONSENT_EMACS_NATIVE_BUILD_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
 
 # Cross-implementation parity gate: run the shared fixture corpus through the
 # Emacs-hosted and portable cores and fail on any result divergence (#374). The

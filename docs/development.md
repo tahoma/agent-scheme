@@ -498,11 +498,30 @@ make test
 
 `make test` runs a trimmed default shard set for a fast local loop: one
 representative portable host (`test-portable-racket`,
-`CONSENT_DEFAULT_PORTABLE_TEST_SHARD_TARGETS`) plus all four Emacs-hosted shards
-(`test-emacs-core`, `test-emacs-library`, `test-emacs-capabilities`,
-`test-emacs-tools`). The portable reader/writer/docstring machinery that the
-source-metadata and docstring-retention modes exercise is host-independent, so
-one portable host is enough for the default loop.
+`CONSENT_DEFAULT_PORTABLE_TEST_SHARD_TARGETS`) plus all five Emacs-hosted
+trimmed shards (`test-emacs-core`, `test-emacs-library`,
+`test-emacs-capabilities`, `test-emacs-tools`, `test-emacs-integration`). The
+portable reader/writer/docstring machinery that the source-metadata and
+docstring-retention modes exercise is host-independent, so one portable host is
+enough for the default loop.
+
+The Emacs-hosted surface is split across multiple shards (#556) so the
+parallelizer can overlap them on hosts with more cores than there were once
+shards: `test-emacs-tools` keeps the tools and docs cluster (CI, compile,
+diagnostics, doc-pass tests, ...), while `test-emacs-integration` carries the
+heavier integration surface (REPL, VCS, reflect, native-CLI daemon) that used
+to dominate `test-emacs-tools`'s wall time. The four full host-compile +
+install/dist tests in `consent-compile-portable-test.el` are stranded into the
+opt-in `test-emacs-native-build` shard, which `make test` skips and `make
+test-full` runs. The native build path is already exercised separately by
+`test-portable-gambit-native` and `test-portable-compiled`; the
+`test-emacs-native-build` shard additionally covers the install/dist packaging
+surface against a single shared host build per host (built once per Emacs
+process, reused across the runner-smoke and install/dist tests).
+
+`make test` defaults to `-j16` so up to 16 shard processes can run in parallel
+on a many-core host. Override with `CONSENT_TEST_JOBS=N make test` on narrower
+hardware.
 
 The default set also runs `test-parity`, the cross-implementation parity gate
 (#374). It runs the shared fixture corpus through both in-repo cores — the
@@ -674,8 +693,13 @@ make test-emacs-core
 make test-emacs-library
 make test-emacs-capabilities
 make test-emacs-tools
+make test-emacs-integration
 CONSENT_PARITY_HOST=guile make test-parity
 ```
+
+The opt-in `test-emacs-native-build` shard runs the four full host-compile +
+install/dist tests when invoked directly (`make test-emacs-native-build`) or
+through `make test-full`; the trimmed `make test` skips it.
 
 `make test` runs those shard targets in parallel by default. `make
 test-portable` remains available as the local aggregate for the default
