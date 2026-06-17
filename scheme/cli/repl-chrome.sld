@@ -128,19 +128,20 @@
     ;; session) or `<session>:<ordinal>' (named session) between the `#| ' and
     ;; ` |#' furniture.
     (define (chrome--comment-body-width session ordinal)
-      "Character width of the comment prompt body for SESSION at ORDINAL: the
-`<ordinal>' digits alone, or `<session>:<ordinal>' for a named session.  The
-continuation gutter fills this width with dots so continued source aligns under
-the first line."
+      "Character width of the comment prompt body for SESSION at ORDINAL: the"
+      "`<ordinal>' digits alone, or `<session>:<ordinal>' for a named session."
+      "The continuation gutter fills this width with dots so continued source"
+      "aligns under the first line."
       (+ (if (chrome--anonymous-session? session)
              0
              (+ (string-length (symbol->string session)) 1))
          (string-length (number->string ordinal))))
 
     (define (chrome--comment-marker-pad session ordinal marker)
-      "Return the `;;'-plus-spaces furniture that right-aligns MARKER (such as
-`=> ') to SESSION/ORDINAL's ready-prompt gutter width, so the text after MARKER
-starts in the same column as the echoed form.  At least one space follows `;;'."
+      "Return the `;;'-plus-spaces furniture that right-aligns MARKER (such as"
+      "`=> ') to SESSION/ORDINAL's ready-prompt gutter width, so the text after"
+      "MARKER starts in the same column as the echoed form.  At least one space"
+      "follows `;;'."
       (let* ((gutter (+ 7 (chrome--comment-body-width session ordinal)))
              (pad (- gutter 2 (string-length marker))))
         (string-append ";;" (make-string (max 1 pad) #\space))))
@@ -148,17 +149,18 @@ starts in the same column as the echoed form.  At least one space follows `;;'."
     ;;;; The `comment' chrome (default): block-comment furniture, replayable
 
     (define (chrome--comment record)
-      "Render RECORD under the default `comment' chrome.  The prompt is block-
-comment furniture; a complete submission is echoed as bare source; and each
-result, condition, exit, and line of program output is its own `;;' line comment
-whose marker right-aligns so the value, text, or printed output starts in the
-same column as the echoed form.  The whole transcript -- program output included
--- is therefore valid Consent Scheme that replays to the same forms (program
-output is reformatted by `cli-repl-chrome-output-formatter', not rendered here).
-The submission echo is suppressed when `cli-repl-chrome-input-echoed?' is true
-(the host -- an interactive TTY -- already echoes the typed form), so a captured
-transcript holds exactly one replayable copy of each form in both the piped and
-the interactive case."
+      "Render RECORD under the default `comment' chrome.  The prompt is block-"
+      "comment furniture; a complete submission is echoed as bare source; and"
+      "each result, condition, exit, and line of program output is its own `;;'"
+      "line comment whose marker right-aligns so the value, text, or printed"
+      "output starts in the same column as the echoed form.  The whole"
+      "transcript -- program output included -- is therefore valid Consent"
+      "Scheme that replays to the same forms (program output is reformatted by"
+      "`cli-repl-chrome-output-formatter', not rendered here).  The submission"
+      "echo is suppressed when `cli-repl-chrome-input-echoed?' is true (the"
+      "host -- an interactive TTY -- already echoes the typed form), so a"
+      "captured transcript holds exactly one replayable copy of each form in"
+      "both the piped and the interactive case."
       (let ((kind (chrome--kind record)))
         (cond
          ((eq? kind 'repl-prompt)
@@ -230,9 +232,10 @@ the interactive case."
     ;;;; Program-output formatting (the `comment' chrome's `;;   :: ' gutter)
 
     (define (chrome--split-output-lines text)
-      "Split program-output TEXT into its lines for per-line comment rendering,
-dropping the empty tail a trailing newline produces so `(display \"x\\n\")'
-yields exactly one line and a line lacking a trailing newline still renders."
+      "Split program-output TEXT into its lines for per-line comment rendering,"
+      "dropping the empty tail a trailing newline produces so `(display"
+      "\"x\\n\")' yields exactly one line and a line lacking a trailing newline"
+      "still renders."
       (let ((length (string-length text)))
         (let loop ((start 0) (index 0) (lines '()))
           (cond
@@ -246,10 +249,10 @@ yields exactly one line and a line lacking a trailing newline still renders."
            (else (loop start (+ index 1) lines))))))
 
     (define (chrome--comment-output text session ordinal)
-      "Render program-output TEXT as `;;   :: ' comment-line segments aligned to
-SESSION/ORDINAL's gutter -- one comment line per output line, each newline-
-terminated so the comment closes before the following result line.  Empty TEXT
-yields no segments."
+      "Render program-output TEXT as `;;   :: ' comment-line segments aligned"
+      "to SESSION/ORDINAL's gutter -- one comment line per output line, each"
+      "newline-terminated so the comment closes before the following result"
+      "line.  Empty TEXT yields no segments."
       (let ((pad (chrome--comment-marker-pad session ordinal ":: ")))
         (let loop ((lines (chrome--split-output-lines text)) (segments '()))
           (if (null? lines)
@@ -262,14 +265,16 @@ yields no segments."
                                             segments)))))))))
 
     (define (cli-repl-chrome-output-formatter name session)
-      "Return chrome NAME's program-output formatter bound to SESSION: a procedure
-mapping one program-output chunk to control-channel painter input, or #f when the
-chrome keeps program output raw on its own stream.  The replayable `comment'
-chrome OWNS program output -- this returns its `;;   :: ' rendering, aligned to
-SESSION and the per-turn `cli-repl-chrome-output-ordinal', for the control
-channel (where the records live), so a captured transcript replays the output and
-stdout stays clean.  Every other chrome returns #f, so the host wiring leaves
-program output raw on stdout.  The #f is the switch between the two streams."
+      "Return chrome NAME's program-output formatter bound to SESSION: a"
+      "procedure mapping one program-output chunk to control-channel painter"
+      "input, or #f when the chrome keeps program output raw on its own stream."
+      "The replayable `comment' chrome OWNS program output -- this returns its"
+      "`;;   :: ' rendering, aligned to SESSION and the per-turn"
+      "`cli-repl-chrome-output-ordinal', for the control channel (where the"
+      "records live), so a captured transcript replays the output and stdout"
+      "stays clean.  Every other chrome returns #f, so the host wiring leaves"
+      "program output raw on stdout.  The #f is the switch between the two"
+      "streams."
       (let ((symbol (if (string? name) (string->symbol name) name))
             (session-symbol (if (string? session)
                                 (string->symbol session)
@@ -283,24 +288,26 @@ program output raw on stdout.  The #f is the switch between the two streams."
     ;;;; The `datum' chrome: the canonical record stream, one datum per line
 
     (define (chrome--datum record)
-      "Render RECORD as the canonical raw datum stream, one datum per line.
-Returns a plain string, so the painter never colors it: the datum chrome is the
-byte-for-byte raw record stream regardless of the color setting. The consent
-writer renders it so canonical number records inside the contract data come
-out Scheme-readable (the Emacs twin renders its stream the same way)."
+      "Render RECORD as the canonical raw datum stream, one datum per line."
+      "Returns a plain string, so the painter never colors it: the datum chrome"
+      "is the byte-for-byte raw record stream regardless of the color setting."
+      "The consent writer renders it so canonical number records inside the"
+      "contract data come out Scheme-readable (the Emacs twin renders its"
+      "stream the same way)."
       (string-append (consent-datum->external record) "\n"))
 
     ;;;; The `classic' chrome: `>'/`.' prompts and marked values
 
     (define (chrome--classic record)
-      "Render RECORD under the `classic' chrome: a familiar terminal-REPL look
-with a `> ' prompt, a `. ' continuation gutter, the whole form echoed as bare
-source (TTY-gated like the `comment' chrome), and single-column `= '/`! '/`_ '
-markers on the value, condition, and exit lines.  Unlike `comment', `classic'
-makes no replay claim -- its bare marked lines are not Scheme -- so program
-output stays raw and interleaved, exactly as a real REPL shows it; the markers
-earn their keep instead by disambiguating result, condition, and program output
-in a colorless capture."
+      "Render RECORD under the `classic' chrome: a familiar terminal-REPL look"
+      "with a `> ' prompt, a `. ' continuation gutter, the whole form echoed as"
+      "bare source (TTY-gated like the `comment' chrome), and single-column"
+      "`= '/`! '/`_ ' markers on the value, condition, and exit lines.  Unlike"
+      "`comment', `classic' makes no replay claim -- its bare marked lines are"
+      "not Scheme -- so program output stays raw and interleaved, exactly as a"
+      "real REPL shows it; the markers earn their keep instead by"
+      "disambiguating result, condition, and program output in a colorless"
+      "capture."
       (let ((kind (chrome--kind record)))
         (cond
          ((eq? kind 'repl-prompt)
@@ -342,8 +349,8 @@ in a colorless capture."
     ;;;; The `quiet' chrome: no prompts; results and conditions only
 
     (define (chrome--quiet record)
-      "Render RECORD under the `quiet' chrome: results and conditions only, with
-prompts, submissions, and the exit record suppressed."
+      "Render RECORD under the `quiet' chrome: results and conditions only,"
+      "with prompts, submissions, and the exit record suppressed."
       (let ((kind (chrome--kind record)))
         (cond
          ((eq? kind 'repl-result)
@@ -357,9 +364,9 @@ prompts, submissions, and the exit record suppressed."
     ;;;; The `silent' chrome: suppress every interaction record
 
     (define (chrome--silent record)
-      "Render RECORD under the `silent' chrome: emit nothing for any record, so
-only program output (carried by the shell on the program-output stream) reaches
-the user."
+      "Render RECORD under the `silent' chrome: emit nothing for any record, so"
+      "only program output (carried by the shell on the program-output stream)"
+      "reaches the user."
       (and record #f))
 
     ;;;; Chrome registry
@@ -441,11 +448,11 @@ the user."
     ;;;; Color decision
 
     (define (cli-repl-chrome-color? mode no-color? tty?)
-      "Return whether to colorize for MODE (`auto', `always', or `never').
-`never' is always off and `always' is always on (an explicit override).  `auto'
-colorizes only on a TTY with NO_COLOR unset, so output is plain when piped or
-redirected: NO-COLOR? is #t when the NO_COLOR environment variable is set, and
-TTY? is #t when the control channel is a terminal."
+      "Return whether to colorize for MODE (`auto', `always', or `never')."
+      "`never' is always off and `always' is always on (an explicit override)."
+      "`auto' colorizes only on a TTY with NO_COLOR unset, so output is plain"
+      "when piped or redirected: NO-COLOR? is #t when the NO_COLOR environment"
+      "variable is set, and TTY? is #t when the control channel is a terminal."
       (cond
        ((eq? mode 'never) #f)
        ((eq? mode 'always) #t)
