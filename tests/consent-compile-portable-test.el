@@ -20,6 +20,76 @@
      (t
       (executable-find fallback)))))
 
+;; Process-global cache of host builds shared by the four full-native-build
+;; tests (#556). Each call to `make compile' for the gambit or racket host takes
+;; tens of seconds; the runner-smoke and install/dist tests for a given host
+;; both exercise the same compiled tree, so the second test in each pair reuses
+;; the first one's build instead of rebuilding identical artifacts. Entries are
+;; plists with :build-dir, :status, and :output. Cleanup runs once at Emacs
+;; exit via `kill-emacs-hook'.
+(defvar consent-compile-portable-test--shared-builds
+  (make-hash-table :test 'eq)
+  "Map of host symbol to a shared build plist.
+Keys are `racket' or `gambit'; values are plists with :build-dir, :status, and
+:output captured from a single `make compile' run.  Both tests for a host
+reuse the cached entry instead of rebuilding.")
+
+(defun consent-compile-portable-test--cleanup-shared-builds ()
+  "Delete all shared build directories captured during the session."
+  (maphash
+   (lambda (_host entry)
+     (let ((dir (plist-get entry :build-dir)))
+       (when (and dir (file-directory-p dir))
+         (ignore-errors (delete-directory dir t)))))
+   consent-compile-portable-test--shared-builds)
+  (clrhash consent-compile-portable-test--shared-builds))
+
+(add-hook 'kill-emacs-hook
+          #'consent-compile-portable-test--cleanup-shared-builds)
+
+(defun consent-compile-portable-test--ensure-shared-build (host)
+  "Return the shared build plist for HOST, building once and caching the result.
+HOST must be `racket' or `gambit'.  Returns a plist with :build-dir, :status,
+and :output.  The first call for HOST runs `make compile' into a fresh temp
+directory; subsequent calls return the cached entry verbatim, so the build
+status and output assertions stay deterministic across tests."
+  (or (gethash host consent-compile-portable-test--shared-builds)
+      (let* ((host-name (symbol-name host))
+             (build-dir
+              (make-temp-file
+               (format "consent-compile-shared-%s-" host-name) t))
+             (host-args
+              (cond
+               ((eq host 'racket)
+                (list
+                 (format "CONSENT_RACKET=%s"
+                         (consent-compile-portable-test--command
+                          "CONSENT_RACKET" "racket"))
+                 (format "CONSENT_RACO=%s"
+                         (consent-compile-portable-test--command
+                          "CONSENT_RACO" "raco"))))
+               ((eq host 'gambit)
+                (list
+                 (format "CONSENT_GAMBIT=%s"
+                         (consent-compile-portable-test--command
+                          "CONSENT_GAMBIT" "gsi"))
+                 (format "CONSENT_GAMBIT_COMPILER=%s"
+                         (consent-compile-portable-test--command
+                          "CONSENT_GAMBIT_COMPILER" "gsc"))))
+               (t (error "Unknown compile host: %S" host))))
+             (result
+              (apply #'consent-compile-portable-test--run-make
+                     "-s"
+                     (format "CONSENT_COMPILE_BUILD_DIR=%s" build-dir)
+                     (format "CONSENT_COMPILE_HOST=%s" host-name)
+                     (append host-args (list "compile"))))
+             (entry
+              (list :build-dir build-dir
+                    :status (plist-get result :status)
+                    :output (plist-get result :output))))
+        (puthash host entry consent-compile-portable-test--shared-builds)
+        entry)))
+
 (defun consent-compile-portable-test--run-make (&rest arguments)
   "Run make with ARGUMENTS from the repository root.
 Return a plist containing :status and :output."
@@ -170,57 +240,45 @@ failing closed on everything."
           "CONSENT_RACO" "raco")))
     (unless (and racket raco)
       (ert-skip "Racket and raco are not available"))
-    (let* ((build-dir
-            (make-temp-file "consent-compile-racket-" t))
-           (result
-            (consent-compile-portable-test--run-make
-             "-s"
-             (format "CONSENT_COMPILE_BUILD_DIR=%s" build-dir)
-             "CONSENT_COMPILE_HOST=racket"
-             (format "CONSENT_RACKET=%s" racket)
-             (format "CONSENT_RACO=%s" raco)
-             "compile"))
+    (let* ((entry
+            (consent-compile-portable-test--ensure-shared-build 'racket))
+           (build-dir (plist-get entry :build-dir))
            (host-root (expand-file-name "racket" build-dir))
            (runner (expand-file-name "bin/consent" host-root))
            (manifest (expand-file-name "manifest.scm" host-root))
            (smoke-log (expand-file-name "logs/smoke.log" host-root))
            (version-string
             (consent-compile-portable-test--version-string)))
-      (unwind-protect
-          (progn
-            (should
-             (equal (consent-compile-portable-test--status result) 0))
-            (should (file-executable-p runner))
-            (should (file-exists-p manifest))
-            (should (file-exists-p smoke-log))
-            (should
-             (string-match-p
-              "(compile-host racket)"
-              (with-temp-buffer
-                (insert-file-contents manifest)
-                (buffer-string))))
-            (should
-             (equal
-              (consent-compile-portable-test--run-executable
-               runner "--version")
-              (list :status 0
-                    :output (format "Consent Scheme %s\n" version-string))))
-            (should
-             (equal
-              (consent-compile-portable-test--run-executable
-               runner "--eval" "(+ 1 2)")
-              '(:status 0 :output "3\n")))
-            (consent-compile-portable-test--assert-gated-script runner)
-            (should
-             (equal
-              (consent-compile-portable-test--run-repl
-               runner
-               (concat "(import (scheme base) (scheme write))\n"
-                       "(display \"ok\")(newline)\n"
-                       "(exit)\n"))
-              '(:status 0 :output "ok\n"))))
-        (when (file-directory-p build-dir)
-          (delete-directory build-dir t))))))
+      (should (equal (plist-get entry :status) 0))
+      (should (file-executable-p runner))
+      (should (file-exists-p manifest))
+      (should (file-exists-p smoke-log))
+      (should
+       (string-match-p
+        "(compile-host racket)"
+        (with-temp-buffer
+          (insert-file-contents manifest)
+          (buffer-string))))
+      (should
+       (equal
+        (consent-compile-portable-test--run-executable
+         runner "--version")
+        (list :status 0
+              :output (format "Consent Scheme %s\n" version-string))))
+      (should
+       (equal
+        (consent-compile-portable-test--run-executable
+         runner "--eval" "(+ 1 2)")
+        '(:status 0 :output "3\n")))
+      (consent-compile-portable-test--assert-gated-script runner)
+      (should
+       (equal
+        (consent-compile-portable-test--run-repl
+         runner
+         (concat "(import (scheme base) (scheme write))\n"
+                 "(display \"ok\")(newline)\n"
+                 "(exit)\n"))
+        '(:status 0 :output "ok\n"))))))
 
 (ert-deftest consent-compile-portable-test-racket-missing-tools-fail ()
   "Fail explicit Racket compile requests with setup guidance."
@@ -278,60 +336,48 @@ failing closed on everything."
           "CONSENT_GAMBIT_COMPILER" "gsc")))
     (unless (and gsi gsc)
       (ert-skip "Gambit gsi and gsc are not available"))
-    (let* ((build-dir
-            (make-temp-file "consent-compile-gambit-" t))
-           (result
-            (consent-compile-portable-test--run-make
-             "-s"
-             (format "CONSENT_COMPILE_BUILD_DIR=%s" build-dir)
-             "CONSENT_COMPILE_HOST=gambit"
-             (format "CONSENT_GAMBIT=%s" gsi)
-             (format "CONSENT_GAMBIT_COMPILER=%s" gsc)
-             "compile"))
+    (let* ((entry
+            (consent-compile-portable-test--ensure-shared-build 'gambit))
+           (build-dir (plist-get entry :build-dir))
            (host-root (expand-file-name "gambit" build-dir))
            (runner (expand-file-name "bin/consent" host-root))
            (manifest (expand-file-name "manifest.scm" host-root))
            (smoke-log (expand-file-name "logs/smoke.log" host-root))
            (version-string
             (consent-compile-portable-test--version-string)))
-      (unwind-protect
-          (progn
-            (should
-             (equal (consent-compile-portable-test--status result) 0))
-            (should (file-executable-p runner))
-            (should (file-exists-p manifest))
-            (should (file-exists-p smoke-log))
-            (should
-             (file-directory-p
-              (expand-file-name "src" host-root)))
-            (should
-             (string-match-p
-              "(compile-host gambit)"
-              (with-temp-buffer
-                (insert-file-contents manifest)
-                (buffer-string))))
-            (should
-             (equal
-              (consent-compile-portable-test--run-executable
-               runner "--version")
-              (list :status 0
-                    :output (format "Consent Scheme %s\n" version-string))))
-            (should
-             (equal
-              (consent-compile-portable-test--run-executable
-               runner "--eval" "(+ 1 2)")
-              '(:status 0 :output "3\n")))
-            (consent-compile-portable-test--assert-gated-script runner)
-            (should
-             (equal
-              (consent-compile-portable-test--run-repl
-               runner
-               (concat "(import (scheme base) (scheme write))\n"
-                       "(display \"ok\")(newline)\n"
-                       "(exit)\n"))
-              '(:status 0 :output "ok\n"))))
-        (when (file-directory-p build-dir)
-          (delete-directory build-dir t))))))
+      (should (equal (plist-get entry :status) 0))
+      (should (file-executable-p runner))
+      (should (file-exists-p manifest))
+      (should (file-exists-p smoke-log))
+      (should
+       (file-directory-p
+        (expand-file-name "src" host-root)))
+      (should
+       (string-match-p
+        "(compile-host gambit)"
+        (with-temp-buffer
+          (insert-file-contents manifest)
+          (buffer-string))))
+      (should
+       (equal
+        (consent-compile-portable-test--run-executable
+         runner "--version")
+        (list :status 0
+              :output (format "Consent Scheme %s\n" version-string))))
+      (should
+       (equal
+        (consent-compile-portable-test--run-executable
+         runner "--eval" "(+ 1 2)")
+        '(:status 0 :output "3\n")))
+      (consent-compile-portable-test--assert-gated-script runner)
+      (should
+       (equal
+        (consent-compile-portable-test--run-repl
+         runner
+         (concat "(import (scheme base) (scheme write))\n"
+                 "(display \"ok\")(newline)\n"
+                 "(exit)\n"))
+        '(:status 0 :output "ok\n"))))))
 
 (defun consent-compile-portable-test--exercise-distribution (host build-dir)
   "Exercise `make install', `uninstall', and `dist' for HOST.
@@ -467,24 +513,12 @@ and binary install, uninstalls, and packages a versioned tarball."
           "CONSENT_RACO" "raco")))
     (unless (and racket raco)
       (ert-skip "Racket and raco are not available"))
-    (let* ((build-dir
-            (make-temp-file "consent-install-racket-" t))
-           (result
-            (consent-compile-portable-test--run-make
-             "-s"
-             (format "CONSENT_COMPILE_BUILD_DIR=%s" build-dir)
-             "CONSENT_COMPILE_HOST=racket"
-             (format "CONSENT_RACKET=%s" racket)
-             (format "CONSENT_RACO=%s" raco)
-             "compile")))
-      (unwind-protect
-          (progn
-            (should
-             (equal (consent-compile-portable-test--status result) 0))
-            (consent-compile-portable-test--exercise-distribution
-             "racket" build-dir))
-        (when (file-directory-p build-dir)
-          (delete-directory build-dir t))))))
+    (let* ((entry
+            (consent-compile-portable-test--ensure-shared-build 'racket))
+           (build-dir (plist-get entry :build-dir)))
+      (should (equal (plist-get entry :status) 0))
+      (consent-compile-portable-test--exercise-distribution
+       "racket" build-dir))))
 
 (ert-deftest consent-compile-portable-test-gambit-install-and-dist ()
   "Install, uninstall, and package a Gambit-hosted binary."
@@ -496,24 +530,12 @@ and binary install, uninstalls, and packages a versioned tarball."
           "CONSENT_GAMBIT_COMPILER" "gsc")))
     (unless (and gsi gsc)
       (ert-skip "Gambit gsi and gsc are not available"))
-    (let* ((build-dir
-            (make-temp-file "consent-install-gambit-" t))
-           (result
-            (consent-compile-portable-test--run-make
-             "-s"
-             (format "CONSENT_COMPILE_BUILD_DIR=%s" build-dir)
-             "CONSENT_COMPILE_HOST=gambit"
-             (format "CONSENT_GAMBIT=%s" gsi)
-             (format "CONSENT_GAMBIT_COMPILER=%s" gsc)
-             "compile")))
-      (unwind-protect
-          (progn
-            (should
-             (equal (consent-compile-portable-test--status result) 0))
-            (consent-compile-portable-test--exercise-distribution
-             "gambit" build-dir))
-        (when (file-directory-p build-dir)
-          (delete-directory build-dir t))))))
+    (let* ((entry
+            (consent-compile-portable-test--ensure-shared-build 'gambit))
+           (build-dir (plist-get entry :build-dir)))
+      (should (equal (plist-get entry :status) 0))
+      (consent-compile-portable-test--exercise-distribution
+       "gambit" build-dir))))
 
 (provide 'consent-compile-portable-test)
 
