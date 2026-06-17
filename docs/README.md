@@ -60,6 +60,7 @@ project pitch and examples, see the top-level [README](../README.md).
 ## Reference
 
 - [Scheme References](references.md) — external Scheme references useful while building Consent Scheme.
+- [Agentic-Harness and Language-Agent Prior-Art Synthesis](agentic-harness-ideas.md) — non-normative idea bank derived from the curated agentic references: experiments, features, and design decisions for the M2 REPL agent harness.
 - [Release Notes](release-notes.md) — the historical record of completed roadmap chunks.
 - [CI Run Record](ci-run-record.md) — the structured, machine-readable per-run record emitted by the test workflow.
 - [CI Timing Baselines](ci-timing-baselines.md) — recorded per-shard timing baselines and observations the regression heuristic compares against.
