@@ -379,7 +379,8 @@
     ("current-region-context" ,#'consent-context--primitive-current-region-context 0 0)
     ("current-buffer-context" ,#'consent-context--primitive-current-buffer-context 0 0)
     ("current-project-context" ,#'consent-context--primitive-current-project-context 0 0)
-    ("current-conversation-summary" ,#'consent-context--primitive-current-conversation-summary 0 0)
+    ("current-conversation-summary"
+     ,#'consent-context--primitive-current-conversation-summary 0 0)
     ("context-yield" ,#'consent-context--primitive-context-yield 1 1)))
 
 (provide 'consent-context)

@@ -397,7 +397,8 @@
                        (approvals . "Explicit approval decision datums to check when grants do not authorize the request.")))
         (returns . "A network capability decision approving or denying REQUEST with an explanatory reason.")
         (effects . (pure))
-        (see-also . (make-network-request make-network-grant make-network-approval-decision)))
+        (see-also . (make-network-request make-network-grant
+                     make-network-approval-decision)))
       (let ((match (network-find-grant request grants)))
         (cond
          ((and match (eq? (car match) 'approved))
