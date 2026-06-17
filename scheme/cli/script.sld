@@ -127,16 +127,18 @@
         (max-value-nodes . 1000000000)))
 
     (define (cli-script-host-run-options root)
-      "Return the host-run capability options rooted at absolute directory ROOT.
-ROOT becomes the include directory and the sole file-access root, so a host
-runner reads fixtures and writes scratch files only under that working-tree
-subtree. The file capability system matches by absolute path containment, so
-ROOT must be absolute. First-class (persisted) capability grants are used rather
-than the transient legacy file-paths allow-list so that port handles opened by
-`call-with-input-file' and friends revalidate against an active grant on every
-read/write rather than failing closed mid-stream. A process-environment grant is
-included so a host-runner test can read its CI configuration from the host
-environment; that capability remains denied to ordinary scripts."
+      "Return the host-run capability options rooted at absolute directory"
+      "ROOT.  ROOT becomes the include directory and the sole file-access"
+      "root, so a host runner reads fixtures and writes scratch files only"
+      "under that working-tree subtree. The file capability system matches by"
+      "absolute path containment, so ROOT must be absolute. First-class"
+      "(persisted) capability grants are used rather than the transient legacy"
+      "file-paths allow-list so that port handles opened by"
+      "`call-with-input-file' and friends revalidate against an active grant"
+      "on every read/write rather than failing closed mid-stream. A"
+      "process-environment grant is included so a host-runner test can read"
+      "its CI configuration from the host environment; that capability remains"
+      "denied to ordinary scripts."
       (cons (cons 'include-directory root)
             (cons (list 'capability-grants
                         (list 'capability-grant
@@ -173,14 +175,14 @@ environment; that capability remains denied to ordinary scripts."
         (and entry (pair? (cdr entry)) (cadr entry))))
 
     (define (cli-script-host-run-file path root emit)
-      "Run host-runner test file PATH on this Consent runtime, form by form.
-ROOT is the absolute working directory the run is scoped to (file access and
-include resolution). Each form is evaluated through a durable interaction
-context under the host-run capability bundle; EMIT is called with the program
-output each form produced so the host can stream it to real stdout. Returns #t
-when every form completes, or the failing `evaluation-result' datum at the first
-error -- so a CLI caller exits non-zero exactly when a captured test assertion
-raised."
+      "Run host-runner test file PATH on this Consent runtime, form by form."
+      "ROOT is the absolute working directory the run is scoped to (file access"
+      "and include resolution). Each form is evaluated through a durable"
+      "interaction context under the host-run capability bundle; EMIT is called"
+      "with the program output each form produced so the host can stream it to"
+      "real stdout. Returns #t when every form completes, or the failing"
+      "`evaluation-result' datum at the first error -- so a CLI caller exits"
+      "non-zero exactly when a captured test assertion raised."
       (let ((source (cli-script-source-from-file path))
             (interaction
              (consent-make-interaction-context

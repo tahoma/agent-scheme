@@ -154,11 +154,12 @@
           (char=? char #\tab)))
 
     (define (repl--submission-boundary buffer next)
-      "Return the index in BUFFER where program input begins after a form ending at NEXT.
-Skip horizontal whitespace after the form; if a newline follows, consume exactly
-that newline as the submission terminator (the Enter that submits a line is not
-program data), so program input begins on the next line.  Otherwise the boundary
-is NEXT and any same-line trailing text is program input for an evaluated read."
+      "Return the index in BUFFER where program input begins after a form"
+      "ending at NEXT.  Skip horizontal whitespace after the form; if a newline"
+      "follows, consume exactly that newline as the submission terminator (the"
+      "Enter that submits a line is not program data), so program input begins"
+      "on the next line.  Otherwise the boundary is NEXT and any same-line"
+      "trailing text is program input for an evaluated read."
       (let ((length (string-length buffer)))
         (let loop ((index next))
           (cond
@@ -213,12 +214,13 @@ is NEXT and any same-line trailing text is program input for an evaluated read."
     ;; so the record stream renders through the consent writer.
     (define (repl--prompt-record session ordinal state pending
                                  . maybe-pending-stack)
-      "Build a `repl-prompt' record for SESSION at ORDINAL with STATE and PENDING.
-A continuation prompt additionally carries the reader's pending-nesting
-indicator, derived from the optional open-construct stack of the incomplete
-read (innermost first): `nesting' is the open-construct count and
-`pending-kind' the innermost construct kind, or the symbol `datum' when a
-datum prefix is pending with no construct open."
+      "Build a `repl-prompt' record for SESSION at ORDINAL with STATE and"
+      "PENDING.  A continuation prompt additionally carries the reader's"
+      "pending-nesting indicator, derived from the optional open-construct"
+      "stack of the incomplete read (innermost first): `nesting' is the"
+      "open-construct count and `pending-kind' the innermost construct kind,"
+      "or the symbol `datum' when a datum prefix is pending with no construct"
+      "open."
       (let ((stack (if (and (pair? maybe-pending-stack)
                             (pair? (car maybe-pending-stack)))
                        (car maybe-pending-stack)
@@ -247,10 +249,10 @@ datum prefix is pending with no construct open."
             (list 'eof eof)))
 
     (define (repl--result-record session ordinal evaluation-result display)
-      "Build a `repl-result' record wrapping EVALUATION-RESULT and DISPLAY at ORDINAL.
-The `ordinal' field mirrors `repl-prompt' so a pure chrome can right-align the
-result marker to the prompt-gutter width without coupling to the `submission' id
-format."
+      "Build a `repl-result' record wrapping EVALUATION-RESULT and DISPLAY at"
+      "ORDINAL.  The `ordinal' field mirrors `repl-prompt' so a pure chrome can"
+      "right-align the result marker to the prompt-gutter width without"
+      "coupling to the `submission' id format."
       (list 'repl-result
             (list 'id (repl--tag "res" ordinal))
             (list 'submission (repl--tag "sub" ordinal))
@@ -261,9 +263,9 @@ format."
 
     (define (repl--condition-record session ordinal phase recoverable
                                     condition display)
-      "Build a `repl-condition' record for PHASE/RECOVERABLE CONDITION at ORDINAL.
-The `ordinal' field mirrors `repl-prompt' so a pure chrome can right-align the
-condition marker to the prompt-gutter width."
+      "Build a `repl-condition' record for PHASE/RECOVERABLE CONDITION at"
+      "ORDINAL.  The `ordinal' field mirrors `repl-prompt' so a pure chrome can"
+      "right-align the condition marker to the prompt-gutter width."
       (list 'repl-condition
             (list 'id (repl--tag "cond" ordinal))
             (list 'submission (repl--tag "sub" ordinal))
@@ -356,11 +358,11 @@ condition marker to the prompt-gutter width."
           "reader error"))
 
     (define (repl--try-read buffer)
-      "Read one datum from BUFFER at position 0 over the recovery-aware reader.
-Return (empty), (complete DATUM NEXT), (incomplete PENDING), or
-(malformed MESSAGE).  An incomplete read carries the reader's open-construct
-stack so the continuation prompt can render nesting depth, mirroring the
-Emacs twin's recovery-step read path."
+      "Read one datum from BUFFER at position 0 over the recovery-aware reader."
+      "Return (empty), (complete DATUM NEXT), (incomplete PENDING), or"
+      "(malformed MESSAGE).  An incomplete read carries the reader's"
+      "open-construct stack so the continuation prompt can render nesting"
+      "depth, mirroring the Emacs twin's recovery-step read path."
       (let* ((step (consent-read-recover-from-string-at buffer 0))
              (status (consent-recovery-step-status step)))
         (cond
@@ -380,10 +382,10 @@ Emacs twin's recovery-step read path."
     ;;;; The interaction loop
 
     (define (repl--callable callback)
-      "Return CALLBACK as a directly applicable host procedure.
-A self-hosted caller (consent --host-run) passes interpreted closures as
-engine callbacks; consent-apply-callable runs those in the calling
-program's context while host procedures pass through untouched."
+      "Return CALLBACK as a directly applicable host procedure."
+      "A self-hosted caller (consent --host-run) passes interpreted closures as"
+      "engine callbacks; consent-apply-callable runs those in the calling"
+      "program's context while host procedures pass through untouched."
       (if (procedure? callback)
           callback
           (lambda arguments (consent-apply-callable callback arguments))))
@@ -404,10 +406,11 @@ program's context while host procedures pass through untouched."
         (if entry (cdr entry) default)))
 
     (define (repl--interaction-options session-id read-chunk options)
-      "Augment REPL OPTIONS with the session id, a program-input reader over
-READ-CHUNK, and the consent-by-invocation stdin grant, so the interaction context
-shares one stdin cursor between the form reader and evaluated reads.  Any grants
-already in OPTIONS are preserved by merging into the first capability-grants entry."
+      "Augment REPL OPTIONS with the session id, a program-input reader over"
+      "READ-CHUNK, and the consent-by-invocation stdin grant, so the"
+      "interaction context shares one stdin cursor between the form reader and"
+      "evaluated reads.  Any grants already in OPTIONS are preserved by merging"
+      "into the first capability-grants entry."
       (let ((reader (lambda ()
                       (let ((chunk (read-chunk)))
                         (if (eof-object? chunk) #f chunk))))
@@ -600,10 +603,11 @@ already in OPTIONS are preserved by merging into the first capability-grants ent
                 (loop (cons datum records)))))))
 
     (define (cli-repl-submissions-from-records records)
-      "Return the external source text of each complete submission in RECORDS, in order.
-A `repl-submission' with `(complete #t)' contributes its `source'; an incomplete
-(EOF-truncated) submission, prompts, results, conditions, and the exit record
-contribute nothing, so the result is exactly the forms a replay can re-feed."
+      "Return the external source text of each complete submission in RECORDS,"
+      "in order.  A `repl-submission' with `(complete #t)' contributes its"
+      "`source'; an incomplete (EOF-truncated) submission, prompts, results,"
+      "conditions, and the exit record contribute nothing, so the result is"
+      "exactly the forms a replay can re-feed."
       (let loop ((records records) (sources '()))
         (cond
          ((null? records) (reverse sources))
@@ -794,15 +798,16 @@ contribute nothing, so the result is exactly the forms a replay can re-feed."
             (flush-output-port port)))))
 
     (define (repl--output-writer echo color? output-port record-port)
-      "Return a write-output procedure realizing the program-output policy.  The
-`comment' chrome OWNS program output: it renders each chunk commented (`;;   :: ')
-and aligned onto RECORD-PORT (the control channel) so the captured transcript
-replays it, and writes nothing to stdout.  Every other chrome leaves program
-output raw on OUTPUT-PORT (stdout) and untouched by the control channel.  ECHO --
-the chrome's output formatter -- yields the comment chrome's control-channel
-segments, or #f for a chrome that keeps output raw; that #f is the switch between
-the two streams.  The engine stays chrome-agnostic; this writer carries the
-policy."
+      "Return a write-output procedure realizing the program-output policy."
+      "The `comment' chrome OWNS program output: it renders each chunk"
+      "commented (`;;   :: ') and aligned onto RECORD-PORT (the control"
+      "channel) so the captured transcript replays it, and writes nothing to"
+      "stdout.  Every other chrome leaves program output raw on OUTPUT-PORT"
+      "(stdout) and untouched by the control channel.  ECHO -- the chrome's"
+      "output formatter -- yields the comment chrome's control-channel"
+      "segments, or #f for a chrome that keeps output raw; that #f is the"
+      "switch between the two streams.  The engine stays chrome-agnostic; this"
+      "writer carries the policy."
       (lambda (output)
         (let ((segments (echo output)))
           (if segments

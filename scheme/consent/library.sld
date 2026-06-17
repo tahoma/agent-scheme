@@ -525,10 +525,10 @@
          (list (string-append "scheme/" relative) relative))))
 
     (define (host-library-available? key context)
-      "Report whether KEY is loadable under an active host-libraries grant.
-Requires the grant, an internal library key, and either a compiled-in native
-bindings table or resolvable source, so that programs that merely define their
-own (consent ...) libraries are unaffected."
+      "Report whether KEY is loadable under an active host-libraries grant."
+      "Requires the grant, an internal library key, and either a compiled-in"
+      "native bindings table or resolvable source, so that programs that"
+      "merely define their own (consent ...) libraries are unaffected."
       (and (context-internal-libraries-allowed? context)
            (host-library-key? key)
            (or (consent-native-library-ref key)
@@ -543,13 +543,13 @@ own (consent ...) libraries are unaffected."
             (eval-error "host source library not found" key))))
 
     (define (native-callback-result value seen)
-      "Convert an interpreted callback's result for native consumption.
-Canonical number records become raw host numbers -- a custom resync
-strategy returns an offset the reader clamps with host arithmetic -- and
-the interpreter's end-of-file record becomes the host end-of-file object a
-native input driver tests with eof-object?. Pairs and vectors are walked
-copy-on-write so untouched structure keeps its identity, and SEEN returns
-cyclic data unchanged on revisit."
+      "Convert an interpreted callback's result for native consumption."
+      "Canonical number records become raw host numbers -- a custom resync"
+      "strategy returns an offset the reader clamps with host arithmetic --"
+      "and the interpreter's end-of-file record becomes the host end-of-file"
+      "object a native input driver tests with eof-object?. Pairs and vectors"
+      "are walked copy-on-write so untouched structure keeps its identity,"
+      "and SEEN returns cyclic data unchanged on revisit."
       (cond
        ((consent-number? value)
         (let ((host (consent-number-value value)))
@@ -584,12 +584,13 @@ cyclic data unchanged on revisit."
        (else value)))
 
     (define (native-callback-shim value context)
-      "Wrap interpreted callable VALUE as a host procedure applying it in CONTEXT.
-Arguments cross into the closure under the native result conversion (raw
-host numbers become canonical records, matching what interpreted code
-expects everywhere else) and the closure's result crosses back under the
-callback result conversion (canonical records become raw host numbers), so
-native higher-order code can consume what the closure returns."
+      "Wrap interpreted callable VALUE as a host procedure applying it in"
+      "CONTEXT. Arguments cross into the closure under the native result"
+      "conversion (raw host numbers become canonical records, matching what"
+      "interpreted code expects everywhere else) and the closure's result"
+      "crosses back under the callback result conversion (canonical records"
+      "become raw host numbers), so native higher-order code can consume what"
+      "the closure returns."
       (let ((applier (consent-native-applier-ref)))
         (lambda arguments
           (native-callback-result
@@ -607,29 +608,29 @@ native higher-order code can consume what the closure returns."
     (define native-call-context #f)
 
     (define (consent-apply-callable value arguments)
-      "Apply callable VALUE to ARGUMENTS across the native import boundary.
-Host procedures apply directly. An interpreted callable -- a closure a
-self-hosted program passes as a bare argument into a natively bound
-higher-order procedure such as the REPL engine's input driver -- runs
-through the native callback shim in the calling program's context, with
-the shim's argument and result conversions."
+      "Apply callable VALUE to ARGUMENTS across the native import boundary."
+      "Host procedures apply directly. An interpreted callable -- a closure"
+      "a self-hosted program passes as a bare argument into a natively bound"
+      "higher-order procedure such as the REPL engine's input driver -- runs"
+      "through the native callback shim in the calling program's context,"
+      "with the shim's argument and result conversions."
       (if (procedure? value)
           (apply value arguments)
           (apply (native-callback-shim value native-call-context)
                  arguments)))
 
     (define (native-nested-argument value context seen)
-      "Convert one value nested inside a container crossing into native code.
-Callables nested in data follow the callback convention -- a custom reader
-resync strategy or a policy-confirmation-function inside an options alist --
-so they become host callbacks native higher-order code can apply directly.
-Canonical number records cross unchanged: they are the datum-position
-number representation the native writer and audit layers expect, and the
-native consumers that compare them (capability scope matching, option
-counts) coerce payloads through consent-number-value at the comparison
-site. Pairs and vectors are walked copy-on-write so untouched structure
-keeps its identity. SEEN guards against cyclic data, which is returned
-unchanged on revisit."
+      "Convert one value nested inside a container crossing into native code."
+      "Callables nested in data follow the callback convention -- a custom"
+      "reader resync strategy or a policy-confirmation-function inside an"
+      "options alist -- so they become host callbacks native higher-order"
+      "code can apply directly. Canonical number records cross unchanged:"
+      "they are the datum-position number representation the native writer"
+      "and audit layers expect, and the native consumers that compare them"
+      "(capability scope matching, option counts) coerce payloads through"
+      "consent-number-value at the comparison site. Pairs and vectors are"
+      "walked copy-on-write so untouched structure keeps its identity. SEEN"
+      "guards against cyclic data, which is returned unchanged on revisit."
       (cond
        ((or (consent-procedure? value)
             (consent-primitive-procedure? value)
@@ -664,13 +665,14 @@ unchanged on revisit."
        (else value)))
 
     (define (native-argument-value value context)
-      "Convert one argument crossing into native code.
-A bare callable argument crosses unchanged: it is the runtime's own
-procedure record, which native predicates, accessors, and the shared apply
-machinery already handle (consent-procedure? on a consent-eval-source
-result must see the record, not a wrapper). Containers are walked so
-callables nested in data -- the options-alist callback convention -- become
-host callbacks native higher-order code can apply directly."
+      "Convert one argument crossing into native code."
+      "A bare callable argument crosses unchanged: it is the runtime's own"
+      "procedure record, which native predicates, accessors, and the shared"
+      "apply machinery already handle (consent-procedure? on a"
+      "consent-eval-source result must see the record, not a wrapper)."
+      "Containers are walked so callables nested in data -- the options-alist"
+      "callback convention -- become host callbacks native higher-order code"
+      "can apply directly."
       (if (or (pair? value) (vector? value))
           (native-nested-argument value context '())
           value))
@@ -688,15 +690,16 @@ host callbacks native higher-order code can apply directly."
        (else value)))
 
     (define (native-result-value value seen)
-      "Convert one native RESULT for interpreted use.
-Native unwrap accessors return raw host numbers (consent-number-value, read
-positions); interpreted callers expect canonical records, mirroring how
-char->integer wraps at the primitive boundary. A raw host procedure result
-(a REPL chrome lookup, for example) wraps as a native primitive through the
-shared binding cells so repeated lookups stay eqv? and the interpreted
-world can both recognize and apply it. Pairs and vectors are walked
-copy-on-write -- canonical structure passes through untouched and keeps its
-identity -- and SEEN returns cyclic data unchanged on revisit."
+      "Convert one native RESULT for interpreted use."
+      "Native unwrap accessors return raw host numbers (consent-number-value,"
+      "read positions); interpreted callers expect canonical records,"
+      "mirroring how char->integer wraps at the primitive boundary. A raw"
+      "host procedure result (a REPL chrome lookup, for example) wraps as a"
+      "native primitive through the shared binding cells so repeated lookups"
+      "stay eqv? and the interpreted world can both recognize and apply it."
+      "Pairs and vectors are walked copy-on-write -- canonical structure"
+      "passes through untouched and keeps its identity -- and SEEN returns"
+      "cyclic data unchanged on revisit."
       (cond
        ((number? value) (native-result-scalar value))
        ((procedure? value)
@@ -728,14 +731,15 @@ identity -- and SEEN returns cyclic data unchanged on revisit."
        (else value)))
 
     (define (native-binding-value name value)
-      "Wrap native VALUE for interpreted use.
-Host procedures become primitives whose arguments are converted under the
-two boundary conventions (bare callables cross as the runtime's own records,
-callables nested in data cross as host callbacks) and whose results are
-converted so raw host numbers come back canonical; every other value binds
-directly, because the compiled internal libraries share the runtime's value
-representations. The primitive name is prefixed so it can never collide with
-the interpreter's continuation-passing primitive dispatch names."
+      "Wrap native VALUE for interpreted use."
+      "Host procedures become primitives whose arguments are converted under"
+      "the two boundary conventions (bare callables cross as the runtime's"
+      "own records, callables nested in data cross as host callbacks) and"
+      "whose results are converted so raw host numbers come back canonical;"
+      "every other value binds directly, because the compiled internal"
+      "libraries share the runtime's value representations. The primitive"
+      "name is prefixed so it can never collide with the interpreter's"
+      "continuation-passing primitive dispatch names."
       (if (procedure? value)
           (make-primitive-procedure
            (string->symbol (string-append "native:" (symbol->string name)))
@@ -763,11 +767,12 @@ the interpreter's continuation-passing primitive dispatch names."
     (define native-binding-cells '())
 
     (define (native-binding-cell name value)
-      "Return the shared binding cell for native VALUE, creating it on first use.
-Internal libraries re-export one another's bindings ((consent eval) re-exports
-the (consent runtime) predicates, for example), and importing two such
-libraries into one program is only compatible when both export records carry
-the same cell, so the cache is keyed by the native value itself."
+      "Return the shared binding cell for native VALUE, creating it on first"
+      "use. Internal libraries re-export one another's bindings ((consent"
+      "eval) re-exports the (consent runtime) predicates, for example), and"
+      "importing two such libraries into one program is only compatible when"
+      "both export records carry the same cell, so the cache is keyed by the"
+      "native value itself."
       (let ((entry (assq value native-binding-cells)))
         (if entry
             (cdr entry)

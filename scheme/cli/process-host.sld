@@ -84,8 +84,8 @@
     (define cli-host--exit-marker "__CONSENT_CLI_EXIT__")
 
     (define (cli-host--drain port)
-      "Read every remaining character from PORT into a string.  Used by host
-branches whose process module yields an input port rather than a string."
+      "Read every remaining character from PORT into a string.  Used by host"
+      "branches whose process module yields an input port rather than a string."
       (let loop ((characters '()))
         (let ((character (read-char port)))
           (if (eof-object? character)
@@ -126,8 +126,9 @@ branches whose process module yields an input port rather than a string."
            (else (loop (+ start 1)))))))
 
     (define (cli-host--environment-prefix environment)
-      "Render an environment-grant alist of (NAME . VALUE) string pairs as the
-`NAME='VALUE' ...' shell prefix that scopes those variables to the child."
+      "Render an environment-grant alist of (NAME . VALUE) string pairs as the"
+      "`NAME='VALUE' ...' shell prefix that scopes those variables to the"
+      "child."
       (if (null? environment)
           ""
           (string-append
@@ -137,10 +138,11 @@ branches whose process module yields an input port rather than a string."
 
     (define (cli-host--shell-program command arguments stdin-file stderr-file
                                      cwd environment)
-      "Build the `/bin/sh -c' program: run COMMAND/ARGUMENTS as a group under the
-optional CWD and ENVIRONMENT grants with the optional stdin and stderr
-redirections, then print the exit marker and the shell `$?'.  Returning the
-status through stdout keeps exit-status capture host-neutral."
+      "Build the `/bin/sh -c' program: run COMMAND/ARGUMENTS as a group under"
+      "the optional CWD and ENVIRONMENT grants with the optional stdin and"
+      "stderr redirections, then print the exit marker and the shell `$?'."
+      "Returning the status through stdout keeps exit-status capture"
+      "host-neutral."
       (string-append
        "{ "
        (if cwd (string-append "cd " (cli-host--quote cwd) " && ") "")
@@ -154,9 +156,9 @@ status through stdout keeps exit-status capture host-neutral."
        " ; printf '" cli-host--exit-marker "%s' \"$?\""))
 
     (define (cli-host--read-file file)
-      "Read FILE's whole contents as a string, then delete it; return \"\" when
-FILE is absent.  The caller owns the path, so the captured stderr does not
-outlive the boundary call."
+      "Read FILE's whole contents as a string, then delete it; return \"\" when"
+      "FILE is absent.  The caller owns the path, so the captured stderr does"
+      "not outlive the boundary call."
       (if (and file (file-exists? file))
           (let ((contents (call-with-input-file file cli-host--drain)))
             (delete-file file)
@@ -165,12 +167,13 @@ outlive the boundary call."
 
     (define (cli-host-run command arguments stdin-file stderr-file cwd
                           environment)
-      "Spawn COMMAND with ARGUMENTS across a real process boundary and return
-a list (EXIT-STATUS STDOUT STDERR).  STDIN-FILE and STDERR-FILE, when non-#f,
-back the child's standard input and standard error.  CWD, when non-#f, is the
-child's granted working directory, and ENVIRONMENT is an alist of (NAME . VALUE)
-string pairs granted to the child.  Signals an error on a host without a process
-module, so a denied or unsupported request never reaches the shell."
+      "Spawn COMMAND with ARGUMENTS across a real process boundary and return"
+      "a list (EXIT-STATUS STDOUT STDERR).  STDIN-FILE and STDERR-FILE, when"
+      "non-#f, back the child's standard input and standard error.  CWD, when"
+      "non-#f, is the child's granted working directory, and ENVIRONMENT is an"
+      "alist of (NAME . VALUE) string pairs granted to the child.  Signals an"
+      "error on a host without a process module, so a denied or unsupported"
+      "request never reaches the shell."
       (unless (cli-host-available?)
         (error "cli-host-run: process spawning is unavailable on this host"))
       (let* ((program (cli-host--shell-program command arguments

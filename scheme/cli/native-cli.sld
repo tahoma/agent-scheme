@@ -70,8 +70,8 @@
     ;;;; Fixture navigation (standard reader only)
 
     (define (cli-native-cli--fields record)
-      "Return RECORD's field forms, treating a leading sub-list as a headless
-record whose fields start at the car."
+      "Return RECORD's field forms, treating a leading sub-list as a headless"
+      "record whose fields start at the car."
       (if (pair? (car record)) record (cdr record)))
 
     (define (cli-native-cli--field record name)
@@ -106,8 +106,8 @@ record whose fields start at the car."
     ;;;; Record builders (the Scheme-readable boundary contract)
 
     (define (cli-native-cli--request options spec resource-term)
-      "Build the capability-request datum for OPTIONS, operation SPEC, and
-RESOURCE-TERM."
+      "Build the capability-request datum for OPTIONS, operation SPEC, and"
+      "RESOURCE-TERM."
       `(capability-request
         (id ,(string->symbol
               (cli-native-cli--opt options 'request-id "req-native-cli")))
@@ -122,23 +122,23 @@ RESOURCE-TERM."
         ,resource-term))
 
     (define (cli-native-cli--decision id request-id status reason grant)
-      "Build the capability-decision datum with ID for REQUEST-ID's STATUS,
-REASON, and GRANT (`none' when GRANT is #f)."
+      "Build the capability-decision datum with ID for REQUEST-ID's STATUS,"
+      "REASON, and GRANT (`none' when GRANT is #f)."
       `(capability-decision
         (id ,id) (request ,request-id) (status ,status)
         (grant ,(if grant grant 'none)) (reason ,reason)))
 
     (define (cli-native-cli--event id session kind source payload)
-      "Build the adapter-event datum with ID for SESSION carrying KIND, SOURCE,
-and PAYLOAD at the fixed adapter timestamp."
+      "Build the adapter-event datum with ID for SESSION carrying KIND, SOURCE,"
+      "and PAYLOAD at the fixed adapter timestamp."
       `(adapter-event
         (id ,id) (adapter native-cli-daemon) (session ,session)
         (kind ,kind) (source ,source) (payload ,payload)
         (timestamp ,cli-native-cli--timestamp)))
 
     (define (cli-native-cli--result options id value events audit usage)
-      "Build the adapter-result datum with ID for OPTIONS carrying VALUE, the
-EVENTS and AUDIT id lists, and resource USAGE."
+      "Build the adapter-result datum with ID for OPTIONS carrying VALUE, the"
+      "EVENTS and AUDIT id lists, and resource USAGE."
       `(adapter-result
         (id ,id) (adapter native-cli-daemon)
         (mode ,(string->symbol (cli-native-cli--opt options 'mode "cli")))
@@ -150,8 +150,8 @@ EVENTS and AUDIT id lists, and resource USAGE."
         (resource-usage ,usage)))
 
     (define (cli-native-cli--audit id session request-id decision-id result)
-      "Build the adapter-audit datum with ID linking SESSION, REQUEST-ID, and
-DECISION-ID to RESULT at the fixed adapter timestamp."
+      "Build the adapter-audit datum with ID linking SESSION, REQUEST-ID, and"
+      "DECISION-ID to RESULT at the fixed adapter timestamp."
       `(adapter-audit
         (id ,id) (adapter native-cli-daemon) (session ,session)
         (request ,request-id) (decision ,decision-id) (result ,result)
@@ -160,9 +160,9 @@ DECISION-ID to RESULT at the fixed adapter timestamp."
 
     (define (cli-native-cli--error kind session request-id decision-id message
                                    irritants handle domain operation condition)
-      "Build an adapter-error datum.  HANDLE, DOMAIN, OPERATION, and CONDITION
-are appended only when non-#f so a liveness denial can carry the nested
-capability-error condition."
+      "Build an adapter-error datum.  HANDLE, DOMAIN, OPERATION, and CONDITION"
+      "are appended only when non-#f so a liveness denial can carry the nested"
+      "capability-error condition."
       (append
        `(adapter-error
          (kind ,kind) (adapter native-cli-daemon) (session ,session)
@@ -176,10 +176,10 @@ capability-error condition."
     ;;;; Capability decision resolver
 
     (define (cli-native-cli--resolve options spec)
-      "Resolve the decision for OPTIONS against operation SPEC and return an
-alist with `status' (`approved' or `denied'), `reason', and optionally
-`error-kind', `grant', and `prompt'.  The liveness gate runs first, so a
-non-live handle is denied before any prompt posture or host operation."
+      "Resolve the decision for OPTIONS against operation SPEC and return an"
+      "alist with `status' (`approved' or `denied'), `reason', and optionally"
+      "`error-kind', `grant', and `prompt'.  The liveness gate runs first, so a"
+      "non-live handle is denied before any prompt posture or host operation."
       (let* ((authority (list-ref spec 5))
              (policy (cli-native-cli--policy-for authority))
              (job-state (cli-native-cli--opt options 'job-state #f))
@@ -227,9 +227,9 @@ non-live handle is denied before any prompt posture or host operation."
       (list (string->symbol (car entry)) (cdr entry)))
 
     (define (cli-native-cli--resource-term options)
-      "Build the request resource term from OPTIONS: a command resource with
-its arguments, cwd, and environment grants, a process-job handle resource,
-or `(resource none)'."
+      "Build the request resource term from OPTIONS: a command resource with"
+      "its arguments, cwd, and environment grants, a process-job handle"
+      "resource, or `(resource none)'."
       (let ((command (cli-native-cli--opt options 'command #f))
             (arguments (cli-native-cli--opt options 'child-arguments '()))
             (cwd (cli-native-cli--opt options 'cwd #f))
@@ -249,8 +249,8 @@ or `(resource none)'."
          (else '(resource none)))))
 
     (define (cli-native-cli--irritants options)
-      "Return the error irritants for OPTIONS: the child arguments, a single
-command form, or the empty list."
+      "Return the error irritants for OPTIONS: the child arguments, a single"
+      "command form, or the empty list."
       (let ((arguments (cli-native-cli--opt options 'child-arguments '()))
             (command (cli-native-cli--opt options 'command #f)))
         (cond
@@ -261,8 +261,8 @@ command form, or the empty list."
     ;;;; Denial and approval outcomes
 
     (define (cli-native-cli--deny options spec request decision-id resolution)
-      "Return (EXIT RECORDS PROMPTS) for a denied RESOLUTION, proving no host
-operation ran by emitting no result and spawning no child."
+      "Return (EXIT RECORDS PROMPTS) for a denied RESOLUTION, proving no host"
+      "operation ran by emitting no result and spawning no child."
       (let* ((session (string->symbol
                        (cli-native-cli--opt options 'session "project-main")))
              (request-id (cli-native-cli--field-value request 'id))
@@ -299,8 +299,8 @@ operation ran by emitting no result and spawning no child."
        "/consent-native-cli-" (symbol->string request-id) ".stderr"))
 
     (define (cli-native-cli--run-events request-id session source prompt mode run)
-      "Build the streaming events for an approved process-run from the host run
-result RUN (EXIT STDOUT STDERR) plus any approval PROMPT."
+      "Build the streaming events for an approved process-run from the host run"
+      "result RUN (EXIT STDOUT STDERR) plus any approval PROMPT."
       (let ((exit (car run)) (stdout (cadr run)) (stderr (list-ref run 2)))
         (append
          (if prompt
@@ -325,8 +325,8 @@ result RUN (EXIT STDOUT STDERR) plus any approval PROMPT."
                 'process-exit source `(exit-status ,exit))))))
 
     (define (cli-native-cli--approve options spec request decision-id resolution)
-      "Return (EXIT RECORDS PROMPTS) for an approved request, performing the real
-host operation for SPEC's subcommand."
+      "Return (EXIT RECORDS PROMPTS) for an approved request, performing the"
+      "real host operation for SPEC's subcommand."
       (let* ((subcommand (cli-native-cli--opt options 'subcommand #f))
              (session (string->symbol
                        (cli-native-cli--opt options 'session "project-main")))
@@ -393,11 +393,12 @@ host operation for SPEC's subcommand."
     ;;;; Execution and entry point
 
     (define (cli-native-cli-execute options)
-      "Execute the request described by OPTIONS and return (EXIT RECORDS PROMPTS).
-RECORDS is the Scheme-readable boundary record stream; PROMPTS is the list of
-approval prompt summaries that belong on the diagnostic stream, never on the
-record stream or a host-backed stdin port.  Performs the real host operation
-through (cli process-host) only after the request is approved."
+      "Execute the request described by OPTIONS and return"
+      "(EXIT RECORDS PROMPTS).  RECORDS is the Scheme-readable boundary record"
+      "stream; PROMPTS is the list of approval prompt summaries that belong on"
+      "the diagnostic stream, never on the record stream or a host-backed stdin"
+      "port.  Performs the real host operation through (cli process-host) only"
+      "after the request is approved."
       (let ((subcommand (cli-native-cli--opt options 'subcommand #f)))
         (unless subcommand
           (error "Usage: consent-native-cli OPERATION [OPTIONS]"))
@@ -416,8 +417,8 @@ through (cli process-host) only after the request is approved."
                                       resolution))))))
 
     (define (cli-native-cli--environment-pair assignment)
-      "Split a NAME=VALUE assignment into the (NAME . VALUE) pair the host shim
-expects; a bare NAME maps to an empty value."
+      "Split a NAME=VALUE assignment into the (NAME . VALUE) pair the host shim"
+      "expects; a bare NAME maps to an empty value."
       (let loop ((index 0))
         (cond
          ((>= index (string-length assignment)) (cons assignment ""))
@@ -427,9 +428,9 @@ expects; a bare NAME maps to an empty value."
          (else (loop (+ index 1))))))
 
     (define (cli-native-cli-parse-arguments arguments)
-      "Parse ARGUMENTS (a list of strings) into the options alist consumed by
-`cli-native-cli-execute'.  Leading \"--\" separators are ignored so a host can
-pass a clean argument vector after its own option processing."
+      "Parse ARGUMENTS (a list of strings) into the options alist consumed by"
+      "`cli-native-cli-execute'.  Leading \"--\" separators are ignored so a"
+      "host can pass a clean argument vector after its own option processing."
       (let ((cleaned (let drop ((items arguments))
                        (if (and (pair? items) (string=? (car items) "--"))
                            (drop (cdr items))
@@ -490,10 +491,10 @@ pass a clean argument vector after its own option processing."
                  (else (error "Unknown native CLI flag" flag))))))))
 
     (define (cli-native-cli-main)
-      "Entry point for the native CLI process-boundary program.
-Parse the command line, execute the request, write the Scheme-readable record
-stream to stdout and any approval prompt to the diagnostic stream, then exit
-with the adapter's exit code."
+      "Entry point for the native CLI process-boundary program."
+      "Parse the command line, execute the request, write the Scheme-readable"
+      "record stream to stdout and any approval prompt to the diagnostic"
+      "stream, then exit with the adapter's exit code."
       (let* ((options (cli-native-cli-parse-arguments (cdr (command-line))))
              (outcome (cli-native-cli-execute options))
              (exit-code (car outcome))
