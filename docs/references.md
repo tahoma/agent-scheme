@@ -193,6 +193,9 @@ state, and consent/approval gating — stays defined in this repository's own
 design docs ([control-loop.md](control-loop.md) and the *Agent Layer* section of
 [architecture.md](architecture.md), plus [session-lifecycle.md](session-lifecycle.md)
 and the capability and approval material in [architecture.md](architecture.md)).
+For a non-normative synthesis of how these references inform the project — an
+idea bank of experiments, features, and design decisions for the M2 harness —
+see [Agentic-Harness and Language-Agent Prior-Art Synthesis](agentic-harness-ideas.md).
 
 ### Foundations and Surveys
 
