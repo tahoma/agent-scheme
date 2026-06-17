@@ -156,10 +156,11 @@
       (value consent-number-value-field))
 
     (define (consent-number-value datum)
-      "Return the host payload of canonical number DATUM.
-A plain host number is returned unchanged: values that cross the compiled
-host-runner boundary arrive unwrapped to host representation, so the public
-accessor accepts both forms with the same answer on every posture."
+      "Return the host payload of canonical number DATUM."
+      "A plain host number is returned unchanged: values that cross the"
+      "compiled host-runner boundary arrive unwrapped to host representation,"
+      "so the public accessor accepts both forms with the same answer on"
+      "every posture."
       (cond
        ((consent-number? datum) (consent-number-value-field datum))
        ((number? datum) datum)
@@ -262,10 +263,10 @@ accessor accepts both forms with the same answer on every posture."
         (if cell (cdr cell) default)))
 
     (define (option-count options key default)
-      "Return numeric option KEY as a host count.
-A canonical number record is unwrapped: an options alist that crossed the
-compiled host-runner boundary carries canonical numbers where a native call
-site would have written host literals."
+      "Return numeric option KEY as a host count."
+      "A canonical number record is unwrapped: an options alist that crossed"
+      "the compiled host-runner boundary carries canonical numbers where a"
+      "native call site would have written host literals."
       (let ((value (option-ref options key default)))
         (if (consent-number? value)
             (consent-number-value-field value)
@@ -746,18 +747,18 @@ site would have written host literals."
        (else #f)))
 
     (define (canonical-component value)
-      "Return numeric component VALUE as a host number.
-An already-canonical record is unwrapped: constructor arguments that crossed
-the compiled host-runner boundary arrive as canonical records where a native
-call site would have written host literals."
+      "Return numeric component VALUE as a host number."
+      "An already-canonical record is unwrapped: constructor arguments that"
+      "crossed the compiled host-runner boundary arrive as canonical records"
+      "where a native call site would have written host literals."
       (if (consent-number? value)
           (consent-number-value-field value)
           value))
 
     (define (consent-make-canonical-decimal value . maybe-lexeme)
-      "Public constructor for canonical inexact decimal number records.
-An already-canonical number is returned unchanged (see
-consent-make-canonical-integer)."
+      "Public constructor for canonical inexact decimal number records."
+      "An already-canonical number is returned unchanged (see"
+      "consent-make-canonical-integer)."
       (if (consent-number? value)
           value
           (let ((special-kind (host-inexact-special-kind value)))
@@ -774,8 +775,8 @@ consent-make-canonical-integer)."
 
     (define (consent-make-canonical-rational
              raw-numerator raw-denominator . rest)
-      "Public constructor for normalized rational number records.
-Canonical-record components are unwrapped to their host payloads."
+      "Public constructor for normalized rational number records."
+      "Canonical-record components are unwrapped to their host payloads."
       (let* ((numerator (canonical-component raw-numerator))
              (denominator (canonical-component raw-denominator))
              (pair (normalize-rational-pair numerator denominator))
