@@ -1413,11 +1413,12 @@
                  (loop (cdr grants))))))
 
     (define (authorize-process-environment-capability binding context)
-      "Authorize a policy-gated `(scheme process-context)' environment read.
-Host environment access is denied unless CONTEXT carries an active
-process-environment capability grant, so it stays opt-in and revocable while
-remaining available to a caller that deliberately grants it. Records the
-capability decision for the audit trail and raises on denial."
+      "Authorize a policy-gated `(scheme process-context)' environment read."
+      "Host environment access is denied unless CONTEXT carries an active"
+      "process-environment capability grant, so it stays opt-in and revocable"
+      "while remaining available to a caller that deliberately grants it."
+      "Records the capability decision for the audit trail and raises on"
+      "denial."
       (record-audit-event!
        context
        'capability-request
@@ -2028,10 +2029,10 @@ capability decision for the audit trail and raises on denial."
           (loop (cdr grants) kept)))))
 
     (define (capability-number-payload value)
-      "Return VALUE's host number payload for capability scope comparisons.
-Canonical number records arrive in grant and resource datum positions when
-requests cross the native import boundary; comparing payloads makes record
-and host forms match the same way on every posture."
+      "Return VALUE's host number payload for capability scope comparisons."
+      "Canonical number records arrive in grant and resource datum positions"
+      "when requests cross the native import boundary; comparing payloads"
+      "makes record and host forms match the same way on every posture."
       (if (consent-number? value) (consent-number-value value) value))
 
     (define (network-scope-denial grant resource)
@@ -2358,10 +2359,10 @@ and host forms match the same way on every posture."
            paths))
 
     (define (option-count options key default)
-      "Return numeric option KEY as a host count.
-A canonical number record is unwrapped: a caller whose options alist crossed
-the compiled host-runner boundary carries canonical numbers where a native
-call site would have written host literals."
+      "Return numeric option KEY as a host count."
+      "A canonical number record is unwrapped: a caller whose options alist"
+      "crossed the compiled host-runner boundary carries canonical numbers"
+      "where a native call site would have written host literals."
       (let ((value (option-ref options key default)))
         (if (consent-number? value)
             (consent-number-value value)
@@ -2476,12 +2477,12 @@ call site would have written host literals."
                         (primitive-procedure-name primitive))))
 
     (define (note-value-allocation! context count)
-      "Charge COUNT freshly allocated value nodes against the result budget.
-Constructors charge what they allocate as they allocate it, so the budget bounds
-cumulative result growth in O(1) per operation rather than re-walking the
-reachable structure of every primitive result.  Enforcement fails closed with
-the unchanged \"value node budget exceeded\" diagnostic so an interpreted `guard`
-cannot catch it."
+      "Charge COUNT freshly allocated value nodes against the result budget."
+      "Constructors charge what they allocate as they allocate it, so the"
+      "budget bounds cumulative result growth in O(1) per operation rather"
+      "than re-walking the reachable structure of every primitive result."
+      "Enforcement fails closed with the unchanged \"value node budget"
+      "exceeded\" diagnostic so an interpreted `guard` cannot catch it."
       (set-context-value-nodes!
        context
        (+ (context-value-nodes context) count))
@@ -2492,9 +2493,9 @@ cannot catch it."
                         (context-maximum-value-nodes context))))
 
     (define (charge-value-allocation! value count context)
-      "Charge COUNT allocated nodes against CONTEXT and return VALUE.
-A convenience wrapper so a constructor charges its allocation inline and still
-yields the constructed value in tail position."
+      "Charge COUNT allocated nodes against CONTEXT and return VALUE."
+      "A convenience wrapper so a constructor charges its allocation inline"
+      "and still yields the constructed value in tail position."
       (note-value-allocation! context count)
       value)
 
@@ -2514,17 +2515,19 @@ yields the constructed value in tail position."
       value)
 
     (define (charge-list-allocation! value context)
-      "Charge a freshly consed proper list VALUE's pairs (its length) and return it.
-The shared empty-list tail and the already-charged elements are not recounted."
+      "Charge a freshly consed proper list VALUE's pairs (its length) and"
+      "return it. The shared empty-list tail and the already-charged elements"
+      "are not recounted."
       (note-value-allocation! context (length value))
       value)
 
     (define (value-node-count value seen . maybe-tolerant)
-      "Count the reachable nodes in VALUE while tolerating cycles.
-An optional truthy MAYBE-TOLERANT argument counts unrecognized host values as
-opaque leaves instead of raising: under the internal-libraries grant, natively
-bound library procedures legitimately return their own host record types, so
-the canonical-value tripwire is relaxed only for that trusted posture."
+      "Count the reachable nodes in VALUE while tolerating cycles."
+      "An optional truthy MAYBE-TOLERANT argument counts unrecognized host"
+      "values as opaque leaves instead of raising: under the"
+      "internal-libraries grant, natively bound library procedures"
+      "legitimately return their own host record types, so the"
+      "canonical-value tripwire is relaxed only for that trusted posture."
       (let ((tolerant (and (pair? maybe-tolerant) (car maybe-tolerant))))
         (cond
          ((or (boolean? value)
@@ -2610,11 +2613,12 @@ the canonical-value tripwire is relaxed only for that trusted posture."
       value)
 
     (define (charge-literal! value context)
-      "Charge a quoted or self-evaluating literal's node count at evaluation.
-Literals are realized from source rather than constructed, so they are budgeted
-by a single bounded walk over the source datum -- off the hot primitive path --
-which keeps the literal result-size fixtures exact while the per-result walk is
-removed from constructor and accessor results."
+      "Charge a quoted or self-evaluating literal's node count at evaluation."
+      "Literals are realized from source rather than constructed, so they are"
+      "budgeted by a single bounded walk over the source datum -- off the hot"
+      "primitive path -- which keeps the literal result-size fixtures exact"
+      "while the per-result walk is removed from constructor and accessor"
+      "results."
       (note-value-allocation!
        context
        (value-node-count

@@ -670,9 +670,9 @@
     (define host-condition-tag (list 'host-condition))
 
     (define (host-condition-budget? condition)
-      "Report whether CONDITION carries a Consent budget diagnostic.
-Budget enforcement fails closed, so budget conditions stay host-level and
-uncatchable by interpreted exception handlers."
+      "Report whether CONDITION carries a Consent budget diagnostic."
+      "Budget enforcement fails closed, so budget conditions stay host-level"
+      "and uncatchable by interpreted exception handlers."
       (and (error-object? condition)
            (let ((message (error-object-message condition))
                  (prefix "consent budget error: "))
@@ -682,10 +682,10 @@ uncatchable by interpreted exception handlers."
                             prefix)))))
 
     (define (host-condition->consent-condition condition)
-      "Return CONDITION as a value interpreted exception handlers can inspect.
-Host error objects become interpreter error objects so guard clauses can
-use error-object? and the message and irritant accessors; any other raised
-host value crosses unchanged."
+      "Return CONDITION as a value interpreted exception handlers can inspect."
+      "Host error objects become interpreter error objects so guard clauses"
+      "can use error-object? and the message and irritant accessors; any"
+      "other raised host value crosses unchanged."
       (if (error-object? condition)
           (make-consent-error-object
            (error-object-message condition)
@@ -700,17 +700,18 @@ host value crosses unchanged."
 
     (define (apply-host-primitive/k
              function arguments context continuation native?)
-      "Invoke host primitive FUNCTION and deliver its budgeted result.
-A host condition escaping FUNCTION (a primitive argument error, a native
-module raise) becomes an interpreted raise that walks the context's
-exception handlers, so interpreted guard catches primitive errors the way
-it catches interpreted raises. Budget conditions from the interpreter's
-own primitives enforce this context's budgets and propagate unchanged so
-enforcement stays uncatchable; a budget condition surfacing from a NATIVE?
-call is a nested evaluation's error result (a consent-eval-source running
-its own budgeted context) and converts like any other condition. When the
-handler stack empties before the condition surfaces it also propagates
-unchanged, preserving top-level diagnostics."
+      "Invoke host primitive FUNCTION and deliver its budgeted result."
+      "A host condition escaping FUNCTION (a primitive argument error, a"
+      "native module raise) becomes an interpreted raise that walks the"
+      "context's exception handlers, so interpreted guard catches primitive"
+      "errors the way it catches interpreted raises. Budget conditions from"
+      "the interpreter's own primitives enforce this context's budgets and"
+      "propagate unchanged so enforcement stays uncatchable; a budget"
+      "condition surfacing from a NATIVE? call is a nested evaluation's"
+      "error result (a consent-eval-source running its own budgeted context)"
+      "and converts like any other condition. When the handler stack empties"
+      "before the condition surfaces it also propagates unchanged, preserving"
+      "top-level diagnostics."
       (let ((outcome
              (guard (condition
                      ((and (pair? (context-exception-handlers context))
@@ -1447,10 +1448,10 @@ unchanged, preserving top-level diagnostics."
         (step forms)))
 
     (define (capture-dynamic-state context)
-      "Return a checkpoint of CONTEXT's dynamic-extent state.
-The checkpoint covers the exception-handler stack, current-error, and the
-dynamic-wind stack -- the state CPS primitives mutate and unwind through
-their success continuations."
+      "Return a checkpoint of CONTEXT's dynamic-extent state."
+      "The checkpoint covers the exception-handler stack, current-error,"
+      "and the dynamic-wind stack -- the state CPS primitives mutate and"
+      "unwind through their success continuations."
       (list (context-exception-handlers context)
             (context-current-error context)
             (context-dynamic-winds context)))
@@ -1462,18 +1463,18 @@ their success continuations."
       (set-context-dynamic-winds! context (list-ref checkpoint 2)))
 
     (define (drain-state state context)
-      "Run bounce states until evaluation produces a final value.
-The CPS primitives restore the exception-handler stack, current-error,
-and the dynamic-wind stack from inside their success continuation, which
-never runs when an invoked handler or wind thunk escapes via a raised
-condition (an unhandled or non-continuable raise, a budget overflow).
-Checkpoint that state on entry and restore it should the trampoline
-unwind before producing a final value, so the CPS path is unwind-safe
-like the direct path.  Normal return and reified-continuation escapes
-leave the checkpoint untouched, so an aborting condition cannot leak
-handler or wind frames into a reused context.  Caught escapes still run
-dynamic-wind after thunks via switch-dynamic-winds!; an aborting
-condition does not."
+      "Run bounce states until evaluation produces a final value."
+      "The CPS primitives restore the exception-handler stack, current-error,"
+      "and the dynamic-wind stack from inside their success continuation,"
+      "which never runs when an invoked handler or wind thunk escapes via a"
+      "raised condition (an unhandled or non-continuable raise, a budget"
+      "overflow).  Checkpoint that state on entry and restore it should the"
+      "trampoline unwind before producing a final value, so the CPS path is"
+      "unwind-safe like the direct path.  Normal return and"
+      "reified-continuation escapes leave the checkpoint untouched, so an"
+      "aborting condition cannot leak handler or wind frames into a reused"
+      "context.  Caught escapes still run dynamic-wind after thunks via"
+      "switch-dynamic-winds!; an aborting condition does not."
       (let ((checkpoint (capture-dynamic-state context))
             (completed #f))
         (dynamic-wind
@@ -1502,9 +1503,9 @@ condition does not."
                (restore-dynamic-state context checkpoint))))))
 
     (define (trampoline expression environment context)
-      "Evaluate EXPRESSION in tail-call trampoline mode and return the result.
-The result needs no final budget walk: every node it reaches was charged at the
-allocation that produced it."
+      "Evaluate EXPRESSION in tail-call trampoline mode and return the result."
+      "The result needs no final budget walk: every node it reaches was"
+      "charged at the allocation that produced it."
       (drain-state
        (make-bounce expression
                     environment
@@ -3445,10 +3446,11 @@ allocation that produced it."
 
     (define (audit-port-capability-result!
              context port operation result error?)
-      "Record the result of a host-backed port capability operation.
-A byte/character count is wrapped as a canonical integer so the audit datum stays
-Scheme-readable -- the evaluation-result `events' field carries these, and a host
-integer there would not render through the consent writer."
+      "Record the result of a host-backed port capability operation."
+      "A byte/character count is wrapped as a canonical integer so the audit"
+      "datum stays Scheme-readable -- the evaluation-result `events' field"
+      "carries these, and a host integer there would not render through the"
+      "consent writer."
       (if (and context (consent-port-backing-domain port))
           (record-audit-event!
            context
@@ -8141,11 +8143,12 @@ integer there would not render through the consent writer."
       (make-primitive-procedure 'program-input-read #f 0 0))
 
     (define (consent-program-input-from-string content)
-      "Return a one-shot program-input reader that yields CONTENT once, then ends.
-This is the honest finite-input constructor -- a stream whose whole contents are
-available immediately and which then reaches end of stream.  Use it for fixtures,
-captured-transcript replay, and other genuinely in-memory input; it is never a
-way to model a live stdin, which has a time dimension a buffer cannot represent."
+      "Return a one-shot program-input reader that yields CONTENT once, then"
+      "ends.  This is the honest finite-input constructor -- a stream whose"
+      "whole contents are available immediately and which then reaches end of"
+      "stream.  Use it for fixtures, captured-transcript replay, and other"
+      "genuinely in-memory input; it is never a way to model a live stdin,"
+      "which has a time dimension a buffer cannot represent."
       (let ((pending content))
         (lambda ()
           (let ((chunk pending))
@@ -8159,10 +8162,11 @@ way to model a live stdin, which has a time dimension a buffer cannot represent.
     ;; a way to model a live stdin, which has a time dimension a buffer cannot
     ;; represent.
     (define (consent-program-input-from-bytevector content)
-      "Return a one-shot binary program-input reader yielding CONTENT once, then ends.
-CONTENT is a bytevector whose bytes are the whole finite input, available
-immediately and then at end of stream.  Use it for fixtures and captured byte
-streams; for a live byte pipe the host supplies its own incremental byte reader."
+      "Return a one-shot binary program-input reader yielding CONTENT once,"
+      "then ends.  CONTENT is a bytevector whose bytes are the whole finite"
+      "input, available immediately and then at end of stream.  Use it for"
+      "fixtures and captured byte streams; for a live byte pipe the host"
+      "supplies its own incremental byte reader."
       (let ((pending content))
         (lambda ()
           (let ((chunk pending))
@@ -8170,10 +8174,11 @@ streams; for a live byte pipe the host supplies its own incremental byte reader.
             chunk))))
 
     (define (program-input-reader-from-options options)
-      "Return the host input reader thunk from OPTIONS' `program-input-reader', or #f.
-Program input is always a reader (a stream); a caller with finite in-memory input
-wraps it with `consent-program-input-from-string' rather than passing a raw
-string, so the finite case states its no-time-dimension nature explicitly."
+      "Return the host input reader thunk from OPTIONS'"
+      "`program-input-reader', or #f.  Program input is always a reader (a"
+      "stream); a caller with finite in-memory input wraps it with"
+      "`consent-program-input-from-string' rather than passing a raw string,"
+      "so the finite case states its no-time-dimension nature explicitly."
       (let ((reader (option-ref options 'program-input-reader #f)))
         (and (procedure? reader) reader)))
 
@@ -8201,10 +8206,11 @@ string, so the finite case states its no-time-dimension nature explicitly."
        (cons (cons 'program-input-eof #t) (consent-port-counters port))))
 
     (define (program-input-refill! port context)
-      "Pull one more chunk from PORT's host reader onto its buffer.
-Return #t when characters were appended, #f at end of stream.  Each pull is
-charged against the host-callback budget and audited as a port read, so an
-unbounded stream stays budget-bounded and fail-closed like every host effect."
+      "Pull one more chunk from PORT's host reader onto its buffer."
+      "Return #t when characters were appended, #f at end of stream.  Each"
+      "pull is charged against the host-callback budget and audited as a"
+      "port read, so an unbounded stream stays budget-bounded and fail-closed"
+      "like every host effect."
       (if (program-input-eof? port)
           #f
           (begin
@@ -8240,9 +8246,9 @@ unbounded stream stays budget-bounded and fail-closed like every host effect."
            (else (loop (+ index 1)))))))
 
     (define (program-input-read-streaming port context)
-      "Read one datum from streaming PORT, refilling until a complete datum is
-buffered, then delegating to the validating raise-on-error reader so streaming
-`read' shares the single datum path."
+      "Read one datum from streaming PORT, refilling until a complete datum"
+      "is buffered, then delegating to the validating raise-on-error reader"
+      "so streaming `read' shares the single datum path."
       ;; Keep pulling while the buffered prefix is `incomplete' (a valid partial
       ;; datum) or `eof' (exhausted without a datum yet); stop once a whole
       ;; `datum' is buffered or the prefix is `invalid'.  `program-input-fill-until!'
@@ -8265,10 +8271,10 @@ buffered, then delegating to the validating raise-on-error reader so streaming
             (car result))))
 
     (define (make-program-input-port context grant reader)
-      "Return a capability-gated, refill-on-demand textual input port for GRANT.
-The port is backed by the `stdio' domain so every read revalidates GRANT and
-audits the operation, and pulls characters from READER on demand rather than
-holding a live host port."
+      "Return a capability-gated, refill-on-demand textual input port for"
+      "GRANT.  The port is backed by the `stdio' domain so every read"
+      "revalidates GRANT and audits the operation, and pulls characters from"
+      "READER on demand rather than holding a live host port."
       (let* ((grant-id (capability-grant-id grant))
              (limits (capability-grant-field-values grant 'limits))
              (port
@@ -8334,10 +8340,11 @@ holding a live host port."
        (cons (cons 'program-input-byte-eof #t) (consent-port-counters port))))
 
     (define (program-binary-input-refill! port context)
-      "Pull one more chunk from PORT's host byte reader onto its buffer.
-Return #t when bytes were appended, #f at end of stream.  Each pull is charged
-against the host-callback budget and audited as a port read, so an unbounded byte
-stream stays budget-bounded and fail-closed like every host effect."
+      "Pull one more chunk from PORT's host byte reader onto its buffer."
+      "Return #t when bytes were appended, #f at end of stream.  Each pull"
+      "is charged against the host-callback budget and audited as a port"
+      "read, so an unbounded byte stream stays budget-bounded and fail-closed"
+      "like every host effect."
       (if (program-binary-input-eof? port)
           #f
           (begin
@@ -8370,10 +8377,11 @@ stream stays budget-bounded and fail-closed like every host effect."
           amount))
 
     (define (make-program-binary-input-port context grant reader)
-      "Return a capability-gated, refill-on-demand binary input port for GRANT.
-The port is backed by the `stdio' domain so every read revalidates GRANT and
-audits the operation, and pulls bytes from READER on demand rather than holding a
-live host port.  It is the binary twin of `make-program-input-port'."
+      "Return a capability-gated, refill-on-demand binary input port for"
+      "GRANT.  The port is backed by the `stdio' domain so every read"
+      "revalidates GRANT and audits the operation, and pulls bytes from"
+      "READER on demand rather than holding a live host port.  It is the"
+      "binary twin of `make-program-input-port'."
       (let* ((grant-id (capability-grant-id grant))
              (limits (capability-grant-field-values grant 'limits))
              (port
@@ -8425,10 +8433,11 @@ live host port.  It is the binary twin of `make-program-input-port'."
         (and entry (cdr entry))))
 
     (define (make-program-output-port context grant writer purpose)
-      "Return a capability-gated, write-through textual output port for GRANT.
-PURPOSE is `program-output' or `program-error'.  The port is backed by the
-`stdio' domain so every write revalidates GRANT and audits the operation, and
-flushes through WRITER immediately rather than holding a live host port."
+      "Return a capability-gated, write-through textual output port for"
+      "GRANT.  PURPOSE is `program-output' or `program-error'.  The port is"
+      "backed by the `stdio' domain so every write revalidates GRANT and"
+      "audits the operation, and flushes through WRITER immediately rather"
+      "than holding a live host port."
       (let* ((grant-id (capability-grant-id grant))
              (limits (capability-grant-field-values grant 'limits))
              (port
@@ -8483,11 +8492,11 @@ flushes through WRITER immediately rather than holding a live host port."
         (and entry (cdr entry))))
 
     (define (make-program-binary-output-port context grant writer purpose)
-      "Return a capability-gated, write-through binary output port for GRANT.
-PURPOSE is `program-output' or `program-error'.  The port is backed by the
-`stdio' domain so every write revalidates GRANT and audits the operation, and
-flushes bytes through WRITER immediately.  Binary twin of
-`make-program-output-port'."
+      "Return a capability-gated, write-through binary output port for"
+      "GRANT.  PURPOSE is `program-output' or `program-error'.  The port is"
+      "backed by the `stdio' domain so every write revalidates GRANT and"
+      "audits the operation, and flushes bytes through WRITER immediately."
+      "Binary twin of `make-program-output-port'."
       (let* ((grant-id (capability-grant-id grant))
              (limits (capability-grant-field-values grant 'limits))
              (port
@@ -8518,11 +8527,12 @@ flushes bytes through WRITER immediately.  Binary twin of
         port))
 
     (define (connect-standard-stream! context device backing operation build install)
-      "Connect one standard stream when DEVICE and a matching grant are present.
-DEVICE is the host reader/writer (or #f); BACKING/OPERATION select the grant;
-BUILD makes the port from (context grant); INSTALL stores it on CONTEXT.  Without
-the grant the connection is denied and recorded; without the device it is a
-no-op, so the default posture stays fail-closed."
+      "Connect one standard stream when DEVICE and a matching grant are"
+      "present.  DEVICE is the host reader/writer (or #f); BACKING/OPERATION"
+      "select the grant; BUILD makes the port from (context grant); INSTALL"
+      "stores it on CONTEXT.  Without the grant the connection is denied and"
+      "recorded; without the device it is a no-op, so the default posture"
+      "stays fail-closed."
       (if device
           (let ((grant (find-standard-stream-grant context backing operation))
                 (request
@@ -8561,18 +8571,20 @@ no-op, so the default posture stays fail-closed."
                              "standard stream requires a matching port grant")))))))
 
     (define (connect-standard-streams! context options)
-      "Connect CONTEXT's current input/output/error ports to the granted standard
-streams.  Each stream is wired only when OPTIONS supply its host device (a
-textual `program-input-reader' thunk / `program-output-writer' /
-`program-error-writer', or the binary `program-input-byte-reader' /
-`program-output-byte-writer' / `program-error-byte-writer' peers) AND CONTEXT
-holds a matching active `port' grant; absent the grant the stream fails closed,
-absent the device it is left untouched.  A stream is textual or binary, not both
-within a run: the binary device connects only when the textual device for the
-same stream is absent, so the established textual path takes precedence and the
-binary peer is purely additive (a byte filter offers byte devices instead).  The
-standard streams are consented by invocation -- the host attaching them is the
-authorization -- while ambient effects keep gating separately."
+      "Connect CONTEXT's current input/output/error ports to the granted"
+      "standard streams.  Each stream is wired only when OPTIONS supply its"
+      "host device (a textual `program-input-reader' thunk /"
+      "`program-output-writer' / `program-error-writer', or the binary"
+      "`program-input-byte-reader' / `program-output-byte-writer' /"
+      "`program-error-byte-writer' peers) AND CONTEXT holds a matching active"
+      "`port' grant; absent the grant the stream fails closed, absent the"
+      "device it is left untouched.  A stream is textual or binary, not both"
+      "within a run: the binary device connects only when the textual device"
+      "for the same stream is absent, so the established textual path takes"
+      "precedence and the binary peer is purely additive (a byte filter"
+      "offers byte devices instead).  The standard streams are consented by"
+      "invocation -- the host attaching them is the authorization -- while"
+      "ambient effects keep gating separately."
       (let ((reader (program-input-reader-from-options options))
             (out-writer (option-ref options 'program-output-writer #f))
             (err-writer (option-ref options 'program-error-writer #f))
@@ -8748,11 +8760,11 @@ authorization -- while ambient effects keep gating separately."
       (interaction-context-program-input-port interaction))
 
     (define (consent-interaction-seed-program-input! interaction text)
-      "Seed the shared program-input cursor with TEXT (the post-form remainder) at
-position 0, so an evaluated read consumes the input that follows the just-read
-submission.  A no-op when program input is not connected.  The end-of-stream flag
-is left untouched: once the host stream truly ends, both form and program reads
-are at end."
+      "Seed the shared program-input cursor with TEXT (the post-form"
+      "remainder) at position 0, so an evaluated read consumes the input"
+      "that follows the just-read submission.  A no-op when program input is"
+      "not connected.  The end-of-stream flag is left untouched: once the"
+      "host stream truly ends, both form and program reads are at end."
       (let ((port (interaction-context-program-input-port interaction)))
         (if port
             (begin
@@ -8760,10 +8772,10 @@ are at end."
               (set-consent-port-position! port 0)))))
 
     (define (consent-interaction-program-input-remainder interaction)
-      "Return the shared program-input cursor's unconsumed remainder (the input the
-evaluated form did not read), or #f when program input is not connected.  The
-REPL engine threads this back as the next form-reading buffer, so neither reader
-steals the other's characters."
+      "Return the shared program-input cursor's unconsumed remainder (the"
+      "input the evaluated form did not read), or #f when program input is"
+      "not connected.  The REPL engine threads this back as the next"
+      "form-reading buffer, so neither reader steals the other's characters."
       (let ((port (interaction-context-program-input-port interaction)))
         (and port
              (substring (consent-port-source port)
