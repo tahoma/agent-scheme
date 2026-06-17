@@ -1260,7 +1260,8 @@
         (expand-expression/fully expression environment context)))
 
     (define (consent-expand-source source . rest)
-      "Read and expand a source body, preserving top-level definition structure for tests and future compiler/backend passes."
+      "Read and expand a source body, preserving top-level definition structure"
+      "for tests and future compiler/backend passes."
       (let ((context (new-eval-context (macro-rest-options rest)))
             (environment (macro-rest-environment rest))
             (forms (consent-read-all source (macro-rest-options rest))))

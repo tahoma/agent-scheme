@@ -33,7 +33,8 @@
 
 (define (length list)
   (define (loop cursor count)
-    "R7RS requires a proper list; reaching a non-pair tail forces an error through a primitive operation instead of silently accepting dotted input."
+    "R7RS requires a proper list; reaching a non-pair tail forces an error"
+    "through a primitive operation instead of silently accepting dotted input."
     (if (null? cursor)
         count
         (if (pair? cursor)
@@ -44,7 +45,8 @@
 
 (define (append . lists)
   (define (append-two left right)
-    "The final argument is reused as the tail, matching Scheme's variadic `append' behavior for both proper and improper final lists."
+    "The final argument is reused as the tail, matching Scheme's variadic"
+    "`append' behavior for both proper and improper final lists."
     (if (null? left)
         right
         (cons (car left)
@@ -85,7 +87,8 @@
 
 (define (make-list k . fill)
   (define (loop remaining value)
-    "`(if #f #f)' produces the implementation's unspecified value when no fill argument is supplied."
+    "`(if #f #f)' produces the implementation's unspecified value when no fill"
+    "argument is supplied."
     (if (= remaining 0)
         '()
         (cons value (loop (- remaining 1) value))))

@@ -37,13 +37,17 @@
   (begin
 
     (define (script--whitespace-after-bang? char)
-      "Return #t when CHAR (`/' or intertoken whitespace) may follow `#!' to introduce a shebang; `#!fold-case' and other letter-led `#!'-tokens are excluded."
+      "Return #t when CHAR (`/' or intertoken whitespace) may follow `#!'"
+      "to introduce a shebang; `#!fold-case' and other letter-led"
+      "`#!'-tokens are excluded."
       (or (char=? char #\/)
           (char=? char #\space)
           (char=? char #\tab)))
 
     (define (cli-script-shebang-line? source)
-      "Return #t when SOURCE begins with an executable-script shebang: `#!' as the first two characters followed by `/' or whitespace, narrow enough to leave `#!fold-case' and other `#!'-tokens alone."
+      "Return #t when SOURCE begins with an executable-script shebang:"
+      "`#!' as the first two characters followed by `/' or whitespace,"
+      "narrow enough to leave `#!fold-case' and other `#!'-tokens alone."
       (and (>= (string-length source) 3)
            (char=? (string-ref source 0) #\#)
            (char=? (string-ref source 1) #\!)
@@ -59,7 +63,10 @@
            (else (loop (+ index 1)))))))
 
     (define (cli-script-strip-shebang source)
-      "Return SOURCE with a leading shebang line removed up to (not including) its newline, so the remaining source keeps a blank first line and later datums keep their line numbers; SOURCE without a shebang is returned unchanged for the reader."
+      "Return SOURCE with a leading shebang line removed up to (not"
+      "including) its newline, so the remaining source keeps a blank first"
+      "line and later datums keep their line numbers; SOURCE without a"
+      "shebang is returned unchanged for the reader."
       (if (cli-script-shebang-line? source)
           (substring source
                      (script--line-terminator-index source)
@@ -77,25 +84,31 @@
                   (loop (cons char chars))))))))
 
     (define (cli-script-source-from-file path)
-      "Return PATH's contents with any leading executable-script shebang removed, ready for the reader."
+      "Return PATH's contents with any leading executable-script shebang"
+      "removed, ready for the reader."
       (cli-script-strip-shebang (script--read-file-string path)))
 
     (define (cli-script-run-file path . rest)
-      "Run executable Consent Scheme script PATH through the Consent interpreter and return its last value.
-A leading shebang line is consumed before reading, so a file made executable with
-`#!/usr/bin/env consent' (or the `/bin/sh' polyglot) reads correctly. Evaluation
-goes through `consent-eval-source' with the optional REST (environment, options).
-Ambient host capabilities -- opening a named file, a process, network -- fail
-closed without an explicit grant, policy file, or preloaded approval, and a denial
-or error raises so a CLI caller exits non-zero. The standard streams are
-consented by invocation: when REST's options supply the host stream devices
-(`program-input-reader', `program-output-writer', `program-error-writer') with
-one matching `port' grant per stream, the script reads stdin and writes
-stdout/stderr (docs/repl-interaction-contract.md, \"Program Stream Model\"); the
-product main attaches these by default so a `(read-line)'/`(display ...)' filter
-works in a pipe, streaming incrementally. Finite in-memory input uses a reader
-built with `consent-program-input-from-string'. This is the host-neutral peer of
-the Emacs `consent-script-run-file'."
+      "Run executable Consent Scheme script PATH through the Consent"
+      "interpreter and return its last value."
+      "A leading shebang line is consumed before reading, so a file made"
+      "executable with `#!/usr/bin/env consent' (or the `/bin/sh'"
+      "polyglot) reads correctly. Evaluation goes through"
+      "`consent-eval-source' with the optional REST (environment,"
+      "options). Ambient host capabilities -- opening a named file, a"
+      "process, network -- fail closed without an explicit grant, policy"
+      "file, or preloaded approval, and a denial or error raises so a CLI"
+      "caller exits non-zero. The standard streams are consented by"
+      "invocation: when REST's options supply the host stream devices"
+      "(`program-input-reader', `program-output-writer',"
+      "`program-error-writer') with one matching `port' grant per stream,"
+      "the script reads stdin and writes stdout/stderr"
+      "(docs/repl-interaction-contract.md, \"Program Stream Model\"); the"
+      "product main attaches these by default so a"
+      "`(read-line)'/`(display ...)' filter works in a pipe, streaming"
+      "incrementally. Finite in-memory input uses a reader built with"
+      "`consent-program-input-from-string'. This is the host-neutral peer"
+      "of the Emacs `consent-script-run-file'."
       (apply consent-eval-source (cli-script-source-from-file path) rest))
 
     ;; Host-runner posture: the deliberate capability bundle that lets the

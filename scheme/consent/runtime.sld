@@ -340,7 +340,8 @@
     (define consent-library-search-directories '())
 
     (define (consent-set-library-search-directories! directories)
-      "Replace the host-injected library search-directory prefixes, highest precedence first."
+      "Replace the host-injected library search-directory prefixes, highest"
+      "precedence first."
       (set! consent-library-search-directories directories)
       consent-unspecified)
 
@@ -354,7 +355,8 @@
     (define consent-embedded-source-entries '())
 
     (define (consent-register-embedded-source! relative-path text)
-      "Register embedded source TEXT for logical RELATIVE-PATH (the zero-dependency floor)."
+      "Register embedded source TEXT for logical RELATIVE-PATH (the"
+      "zero-dependency floor)."
       (set! consent-embedded-source-entries
             (cons (cons relative-path text) consent-embedded-source-entries))
       consent-unspecified)
@@ -390,7 +392,8 @@
     (define consent-native-applier-procedure #f)
 
     (define (consent-install-native-applier! applier)
-      "Install APPLIER, called as (APPLIER procedure arguments context), for native callbacks."
+      "Install APPLIER, called as (APPLIER procedure arguments context), for"
+      "native callbacks."
       (set! consent-native-applier-procedure applier)
       consent-unspecified)
 
@@ -804,7 +807,8 @@
         (string-append directory "/" path))))
 
     (define (path-split path)
-      "Split PATH on slash characters, preserving empty components for absolute path detection while letting normalization discard redundant separators."
+      "Split PATH on slash characters, preserving empty components for absolute"
+      "path detection while letting normalization discard redundant separators."
       (let ((length (string-length path)))
         (let loop ((index 0) (start 0) (parts '()))
           (cond
@@ -1536,7 +1540,8 @@ capability decision for the audit trail and raises on denial."
        (else (process-member-equal? value (cdr values)))))
 
     (define (process-resource-fields resource)
-      "Return RESOURCE's field alist, accepting either a plain field list or a `(resource ...)` datum."
+      "Return RESOURCE's field alist, accepting either a plain field list or a"
+      "`(resource ...)` datum."
       (if (and (pair? resource) (eq? (car resource) 'resource))
           (cdr resource)
           resource))
@@ -1792,7 +1797,9 @@ capability decision for the audit trail and raises on denial."
 
     (define (authorize-process-capability
              library binding context operation resource command-allow-list)
-      "Authorize a host adapter process request against the shared process capability vocabulary.  This does not start or observe a real process; adapters call it before touching host process APIs."
+      "Authorize a host adapter process request against the shared process"
+      "capability vocabulary.  This does not start or observe a real process;"
+      "adapters call it before touching host process APIs."
       (let* ((request
               (process-capability-request
                library
@@ -1924,7 +1931,8 @@ capability decision for the audit trail and raises on denial."
                        (list 'ok (redact result 'local-only)))))))
 
     (define (network-resource-fields resource)
-      "Return RESOURCE's field alist, accepting either a plain field list or a `(resource ...)` datum."
+      "Return RESOURCE's field alist, accepting either a plain field list or a"
+      "`(resource ...)` datum."
       (if (and (pair? resource) (eq? (car resource) 'resource))
           (cdr resource)
           resource))
@@ -1945,7 +1953,8 @@ capability decision for the audit trail and raises on denial."
        (network-resource-field-values resource field)))
 
     (define (network-public-datum datum)
-      "Convert host-owned network metadata to Consent Scheme datums before publishing it through result or audit records."
+      "Convert host-owned network metadata to Consent Scheme datums before"
+      "publishing it through result or audit records."
       (cond
        ((consent-number? datum) datum)
        ((and (number? datum) (integer? datum))
@@ -2209,7 +2218,8 @@ and host forms match the same way on every posture."
 
     (define (authorize-network-capability
              library binding context operation resource)
-      "Authorize a host adapter network request against the shared network capability vocabulary. This does not perform transport."
+      "Authorize a host adapter network request against the shared network"
+      "capability vocabulary. This does not perform transport."
       (let* ((request
               (network-capability-request
                library

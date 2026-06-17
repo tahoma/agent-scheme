@@ -353,7 +353,8 @@
                        (format . "Export format symbol: scheme-datum, text-summary, or fixture-cases.")))
         (returns . "Raw events, summary strings, or generated fixture cases for EVENTS.")
         (effects . (pure))
-        (see-also . (transcript-raw-view transcript-summary-view transcript-event->fixture-case)))
+        (see-also . (transcript-raw-view transcript-summary-view
+                     transcript-event->fixture-case)))
       (cond
        ((eq? format 'scheme-datum)
         (transcript-raw-view events))

@@ -233,15 +233,20 @@
             (eval-error "standard source library is not available" key))))
 
     (define (source-library-relative-path paths)
-      "Return the canonical datadir/embedded-relative path for a source library: the last (most-relative) configured candidate."
+      "Return the canonical datadir/embedded-relative path for a source"
+      "library: the last (most-relative) configured candidate."
       (if (null? (cdr paths))
           (car paths)
           (source-library-relative-path (cdr paths))))
 
     (define (consent-runtime-source-files)
-      "Return the canonical relative paths of every runtime-provided source file the interpreter loads as data: the base prelude and syntax prelude, then the standard, agent, and consent source-libraries.
-This is the single source of truth the host-compiled staging extracts its embed
-and install manifest from, so the build never hand-maintains a parallel list."
+      "Return the canonical relative paths of every runtime-provided"
+      "source file the interpreter loads as data: the base prelude and"
+      "syntax prelude, then the standard, agent, and consent"
+      "source-libraries."
+      "This is the single source of truth the host-compiled staging"
+      "extracts its embed and install manifest from, so the build never"
+      "hand-maintains a parallel list."
       (append
        (list (source-library-relative-path consent-base-prelude-load-paths)
              (source-library-relative-path consent-base-syntax-load-paths))
@@ -253,7 +258,8 @@ and install manifest from, so the build never hand-maintains a parallel list."
             consent-source-library-load-paths)))
 
     (define (load-standard-source-library-source key)
-      "Read KEY's source through the host/core resolution contract (search dirs, source tree, embedded)."
+      "Read KEY's source through the host/core resolution contract (search"
+      "dirs, source tree, embedded)."
       (let* ((paths (standard-source-library-paths key))
              (relative (source-library-relative-path paths))
              (entry (resolve-source-entry relative paths)))
@@ -285,7 +291,8 @@ and install manifest from, so the build never hand-maintains a parallel list."
             (eval-error "source library is not available" key))))
 
     (define (load-agent-source-library-source key)
-      "Read Agent library KEY's source through the host/core resolution contract (search dirs, source tree, embedded)."
+      "Read Agent library KEY's source through the host/core resolution"
+      "contract (search dirs, source tree, embedded)."
       (let* ((paths (agent-source-library-paths key))
              (relative (source-library-relative-path paths))
              (entry (resolve-source-entry relative paths)))
@@ -491,7 +498,8 @@ and install manifest from, so the build never hand-maintains a parallel list."
     ;; ordinary grant-independent resolution paths; only internal agent
     ;; libraries (for example (agent task)) resolve through this gate.
     (define (host-library-key? key)
-      "Report whether KEY names a runtime-internal source library exposable under the host posture."
+      "Report whether KEY names a runtime-internal source library exposable"
+      "under the host posture."
       (and (pair? key)
            (or (memq (car key) '(consent cli))
                (and (eq? (car key) 'agent)
@@ -501,7 +509,8 @@ and install manifest from, so the build never hand-maintains a parallel list."
            (not (equal? key scheme-base-library-key))))
 
     (define (host-library-relative-path key)
-      "Return the datadir/source-relative path for host library KEY: (consent reader) -> consent/reader.sld."
+      "Return the datadir/source-relative path for host library KEY: (consent"
+      "reader) -> consent/reader.sld."
       (let loop ((parts key) (acc ""))
         (if (null? (cdr parts))
             (string-append acc (symbol->string (car parts)) ".sld")
@@ -889,7 +898,8 @@ the same cell, so the cache is keyed by the native value itself."
         cdaaar cdaadr cdadar cdaddr cddaar cddadr cdddar cddddr))
 
     (define (primitive-cxr-function name)
-      "Implement the `cxr-function` primitive with argument validation and Consent Scheme values."
+      "Implement the `cxr-function` primitive with argument validation and"
+      "Consent Scheme values."
       (let ((text (symbol->string name)))
         (lambda (arguments context)
           (let loop ((index (- (string-length text) 2))
@@ -900,9 +910,11 @@ the same cell, so the cache is keyed by the native value itself."
                   (loop (- index 1)
                         (cond
                          ((char=? step #\a)
-                          ((library-primitive-implementation 'primitive-car) (list value) context))
+                          ((library-primitive-implementation 'primitive-car)
+                           (list value) context))
                          ((char=? step #\d)
-                          ((library-primitive-implementation 'primitive-cdr) (list value) context))
+                          ((library-primitive-implementation 'primitive-cdr)
+                           (list value) context))
                          (else
                           (eval-error "invalid cxr name" name))))))))))
 

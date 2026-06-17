@@ -131,7 +131,8 @@
          (continue continuation consent-unspecified))))
 
     (define (switch-dynamic-winds! target context)
-      "Continuation jumps call each after thunk being exited and each before thunk being entered, updating the active stack as those callbacks run."
+      "Continuation jumps call each after thunk being exited and each before"
+      "thunk being entered, updating the active stack as those callbacks run."
       (let* ((current (context-dynamic-winds context))
              (common (dynamic-wind-common-frame current target))
              (exiting (if common
@@ -728,7 +729,9 @@ unchanged, preserving top-level diagnostics."
             (continue continuation (cdr outcome)))))
 
     (define (apply-procedure procedure arguments context tail? . maybe-continuation)
-      "All callable values pass through this boundary so primitive callbacks, parameter procedures, compound procedures, and continuations share arity, budget, tail-position, and trampoline behavior."
+      "All callable values pass through this boundary so primitive callbacks,"
+      "parameter procedures, compound procedures, and continuations share"
+      "arity, budget, tail-position, and trampoline behavior."
       (let ((direct-call? (null? maybe-continuation))
             (continuation
              (if (null? maybe-continuation)
@@ -2091,7 +2094,8 @@ allocation that produced it."
              (* (car right-pair) (cdr left-pair))))))))
 
     (define (primitive-compare arguments predicate description)
-      "Implement the `compare` primitive with argument validation and Consent Scheme values."
+      "Implement the `compare` primitive with argument validation and Consent"
+      "Scheme values."
       (let loop ((numbers (numeric-arguments arguments description)))
         (cond
          ((or (null? numbers) (null? (cdr numbers))) #t)
@@ -2154,23 +2158,27 @@ allocation that produced it."
                     (cdr rest))))))
 
     (define (primitive-square arguments context)
-      "Implement the `square` primitive with argument validation and Consent Scheme values."
+      "Implement the `square` primitive with argument validation and Consent"
+      "Scheme values."
       (let ((number (expect-number (car arguments) "square")))
         (binary-number number number '* "square")))
 
     (define (primitive-zero? arguments context)
-      "Implement the `zero?` primitive with argument validation and Consent Scheme values."
+      "Implement the `zero?` primitive with argument validation and Consent"
+      "Scheme values."
       (consent-number-zero? (expect-number (car arguments) "zero?")))
 
     (define (primitive-positive? arguments context)
-      "Implement the `positive?` primitive with argument validation and Consent Scheme values."
+      "Implement the `positive?` primitive with argument validation and Consent"
+      "Scheme values."
       (primitive-compare
        (list (car arguments) (consent-make-canonical-integer 0))
        >
        "positive?"))
 
     (define (primitive-negative? arguments context)
-      "Implement the `negative?` primitive with argument validation and Consent Scheme values."
+      "Implement the `negative?` primitive with argument validation and Consent"
+      "Scheme values."
       (primitive-compare
        (list (car arguments) (consent-make-canonical-integer 0))
        <
@@ -2181,7 +2189,8 @@ allocation that produced it."
       (odd? (exact-integer->host (car arguments) "odd?")))
 
     (define (primitive-even? arguments context)
-      "Implement the `even?` primitive with argument validation and Consent Scheme values."
+      "Implement the `even?` primitive with argument validation and Consent"
+      "Scheme values."
       (even? (exact-integer->host (car arguments) "even?")))
 
     (define (truncate-quotient-value left right)
@@ -2206,19 +2215,23 @@ allocation that produced it."
          (quotient-function left right))))
 
     (define (primitive-quotient arguments context)
-      "Implement the `quotient` primitive with argument validation and Consent Scheme values."
+      "Implement the `quotient` primitive with argument validation and Consent"
+      "Scheme values."
       (integer-quotient arguments truncate-quotient-value "quotient"))
 
     (define (primitive-floor-quotient arguments context)
-      "Implement the `floor-quotient` primitive with argument validation and Consent Scheme values."
+      "Implement the `floor-quotient` primitive with argument validation and"
+      "Consent Scheme values."
       (integer-quotient arguments floor-quotient "floor-quotient"))
 
     (define (primitive-truncate-quotient arguments context)
-      "Implement the `truncate-quotient` primitive with argument validation and Consent Scheme values."
+      "Implement the `truncate-quotient` primitive with argument validation and"
+      "Consent Scheme values."
       (integer-quotient arguments truncate-quotient-value "truncate-quotient"))
 
     (define (primitive-remainder arguments context)
-      "Implement the `remainder` primitive with argument validation and Consent Scheme values."
+      "Implement the `remainder` primitive with argument validation and Consent"
+      "Scheme values."
       (let ((left (exact-integer->host (car arguments) "remainder"))
             (right (exact-integer->host (second arguments) "remainder")))
         (if (zero? right)
@@ -2227,7 +2240,8 @@ allocation that produced it."
          (truncate-remainder-value left right))))
 
     (define (primitive-modulo arguments context)
-      "Implement the `modulo` primitive with argument validation and Consent Scheme values."
+      "Implement the `modulo` primitive with argument validation and Consent"
+      "Scheme values."
       (let ((left (exact-integer->host (car arguments) "modulo"))
             (right (exact-integer->host (second arguments) "modulo")))
         (if (zero? right)
@@ -2236,11 +2250,13 @@ allocation that produced it."
          (floor-remainder left right))))
 
     (define (primitive-floor-remainder arguments context)
-      "Implement the `floor-remainder` primitive with argument validation and Consent Scheme values."
+      "Implement the `floor-remainder` primitive with argument validation and"
+      "Consent Scheme values."
       (primitive-modulo arguments context))
 
     (define (primitive-truncate-remainder arguments context)
-      "Implement the `truncate-remainder` primitive with argument validation and Consent Scheme values."
+      "Implement the `truncate-remainder` primitive with argument validation"
+      "and Consent Scheme values."
       (primitive-remainder arguments context))
 
     (define (floor-rational-pair pair)
@@ -2276,7 +2292,8 @@ allocation that produced it."
         (* sign rounded)))
 
     (define (primitive-rounding arguments function description)
-      "Implement the `rounding` primitive with argument validation and Consent Scheme values."
+      "Implement the `rounding` primitive with argument validation and Consent"
+      "Scheme values."
       (let ((number
              (number-real-part-for-ordering (car arguments) description)))
         (cond
@@ -2292,19 +2309,23 @@ allocation that produced it."
           number))))
 
     (define (primitive-floor arguments context)
-      "Implement the `floor` primitive with argument validation and Consent Scheme values."
+      "Implement the `floor` primitive with argument validation and Consent"
+      "Scheme values."
       (primitive-rounding arguments floor-rational-pair "floor"))
 
     (define (primitive-ceiling arguments context)
-      "Implement the `ceiling` primitive with argument validation and Consent Scheme values."
+      "Implement the `ceiling` primitive with argument validation and Consent"
+      "Scheme values."
       (primitive-rounding arguments ceiling-rational-pair "ceiling"))
 
     (define (primitive-truncate arguments context)
-      "Implement the `truncate` primitive with argument validation and Consent Scheme values."
+      "Implement the `truncate` primitive with argument validation and Consent"
+      "Scheme values."
       (primitive-rounding arguments truncate-rational-pair "truncate"))
 
     (define (primitive-round arguments context)
-      "Implement the `round` primitive with argument validation and Consent Scheme values."
+      "Implement the `round` primitive with argument validation and Consent"
+      "Scheme values."
       (primitive-rounding arguments round-rational-pair "round"))
 
     (define (integer-argument datum description)
@@ -2364,7 +2385,8 @@ allocation that produced it."
                     (or inexact? (number-inexact? (car rest))))))))
 
     (define (primitive-numerator arguments context)
-      "Implement the `numerator` primitive with argument validation and Consent Scheme values."
+      "Implement the `numerator` primitive with argument validation and Consent"
+      "Scheme values."
       (let* ((number (expect-number (car arguments) "numerator"))
              (pair (if (number-inexact? number)
                        (decimal->exact-rational-pair number)
@@ -2373,7 +2395,8 @@ allocation that produced it."
         (if (number-inexact? number) (number-inexact value) value)))
 
     (define (primitive-denominator arguments context)
-      "Implement the `denominator` primitive with argument validation and Consent Scheme values."
+      "Implement the `denominator` primitive with argument validation and"
+      "Consent Scheme values."
       (let* ((number (expect-number (car arguments) "denominator"))
              (pair (if (number-inexact? number)
                        (decimal->exact-rational-pair number)
@@ -2382,11 +2405,13 @@ allocation that produced it."
         (if (number-inexact? number) (number-inexact value) value)))
 
     (define (primitive-exact arguments context)
-      "Implement the `exact` primitive with argument validation and Consent Scheme values."
+      "Implement the `exact` primitive with argument validation and Consent"
+      "Scheme values."
       (number-exact (car arguments)))
 
     (define (primitive-inexact arguments context)
-      "Implement the `inexact` primitive with argument validation and Consent Scheme values."
+      "Implement the `inexact` primitive with argument validation and Consent"
+      "Scheme values."
       (number-inexact (car arguments)))
 
     (define (primitive-expt arguments context)
@@ -2414,7 +2439,8 @@ allocation that produced it."
                    (number->host-float power "expt"))))))
 
     (define (primitive-inexact-unary arguments function description)
-      "Implement the `inexact-unary` primitive with argument validation and Consent Scheme values."
+      "Implement the `inexact-unary` primitive with argument validation and"
+      "Consent Scheme values."
       (consent-make-canonical-decimal
        (function (number->host-float (car arguments) description))))
 
@@ -2485,7 +2511,8 @@ allocation that produced it."
                   (loop mid high))))))
 
     (define (primitive-exact-integer-sqrt arguments context)
-      "Implement the `exact-integer-sqrt` primitive with argument validation and Consent Scheme values."
+      "Implement the `exact-integer-sqrt` primitive with argument validation"
+      "and Consent Scheme values."
       (let ((value (exact-integer->host
                     (car arguments)
                     "exact-integer-sqrt")))
@@ -2499,7 +2526,8 @@ allocation that produced it."
                   (- value (* root root))))))))
 
     (define (primitive-floor/ arguments context)
-      "Implement the `floor/` primitive with argument validation and Consent Scheme values."
+      "Implement the `floor/` primitive with argument validation and Consent"
+      "Scheme values."
       (let ((left (exact-integer->host (car arguments) "floor/"))
             (right (exact-integer->host (second arguments) "floor/")))
         (if (zero? right)
@@ -2511,7 +2539,8 @@ allocation that produced it."
                  (consent-make-canonical-integer remainder))))))
 
     (define (primitive-truncate/ arguments context)
-      "Implement the `truncate/` primitive with argument validation and Consent Scheme values."
+      "Implement the `truncate/` primitive with argument validation and Consent"
+      "Scheme values."
       (let ((left (exact-integer->host (car arguments) "truncate/"))
             (right (exact-integer->host (second arguments) "truncate/")))
         (if (zero? right)
@@ -2609,7 +2638,8 @@ allocation that produced it."
        (rational-pair+ x y)))
 
     (define (primitive-rationalize arguments context)
-      "Implement the `rationalize` primitive with argument validation and Consent Scheme values."
+      "Implement the `rationalize` primitive with argument validation and"
+      "Consent Scheme values."
       (let* ((x (expect-number (car arguments) "rationalize"))
              (y (expect-number (second arguments) "rationalize"))
              (inexact?
@@ -2628,11 +2658,13 @@ allocation that produced it."
             (number-from-rational-pair result))))
 
     (define (primitive-finite? arguments context)
-      "Implement the `finite?` primitive with argument validation and Consent Scheme values."
+      "Implement the `finite?` primitive with argument validation and Consent"
+      "Scheme values."
       (number-finite? (expect-number (car arguments) "finite?")))
 
     (define (primitive-infinite? arguments context)
-      "Implement the `infinite?` primitive with argument validation and Consent Scheme values."
+      "Implement the `infinite?` primitive with argument validation and Consent"
+      "Scheme values."
       (number-infinite? (expect-number (car arguments) "infinite?")))
 
     (define (primitive-nan? arguments context)
@@ -2640,13 +2672,15 @@ allocation that produced it."
       (number-nan? (expect-number (car arguments) "nan?")))
 
     (define (primitive-make-rectangular arguments context)
-      "Implement the `make-rectangular` primitive with argument validation and Consent Scheme values."
+      "Implement the `make-rectangular` primitive with argument validation and"
+      "Consent Scheme values."
       (consent-make-canonical-complex
        (expect-number (car arguments) "make-rectangular")
        (expect-number (second arguments) "make-rectangular")))
 
     (define (primitive-make-polar arguments context)
-      "Implement the `make-polar` primitive with argument validation and Consent Scheme values."
+      "Implement the `make-polar` primitive with argument validation and"
+      "Consent Scheme values."
       (let ((magnitude (number->host-float
                         (car arguments)
                         "make-polar"))
@@ -2660,21 +2694,24 @@ allocation that produced it."
           (* magnitude (sin angle))))))
 
     (define (primitive-real-part arguments context)
-      "Implement the `real-part` primitive with argument validation and Consent Scheme values."
+      "Implement the `real-part` primitive with argument validation and Consent"
+      "Scheme values."
       (let ((number (expect-number (car arguments) "real-part")))
         (if (number-complex-representation? number)
             (car (consent-number-value number))
             number)))
 
     (define (primitive-imag-part arguments context)
-      "Implement the `imag-part` primitive with argument validation and Consent Scheme values."
+      "Implement the `imag-part` primitive with argument validation and Consent"
+      "Scheme values."
       (let ((number (expect-number (car arguments) "imag-part")))
         (if (number-complex-representation? number)
             (cdr (consent-number-value number))
             (consent-make-canonical-integer 0))))
 
     (define (primitive-magnitude arguments context)
-      "Implement the `magnitude` primitive with argument validation and Consent Scheme values."
+      "Implement the `magnitude` primitive with argument validation and Consent"
+      "Scheme values."
       (let ((number (expect-number (car arguments) "magnitude")))
         (if (number-complex-representation? number)
             (let* ((parts (consent-number-value number))
@@ -2687,7 +2724,8 @@ allocation that produced it."
             (consent-number-abs number))))
 
     (define (primitive-angle arguments context)
-      "Implement the `angle` primitive with argument validation and Consent Scheme values."
+      "Implement the `angle` primitive with argument validation and Consent"
+      "Scheme values."
       (let ((number (expect-number (car arguments) "angle")))
         (if (number-complex-representation? number)
             (let* ((parts (consent-number-value number))
@@ -2738,23 +2776,28 @@ allocation that produced it."
          (else (loop (cdr cursor) (cons cursor seen))))))
 
     (define (primitive-list? arguments context)
-      "Implement the `list?` primitive with argument validation and Consent Scheme values."
+      "Implement the `list?` primitive with argument validation and Consent"
+      "Scheme values."
       (proper-list? (car arguments)))
 
     (define (primitive-length arguments context)
-      "Implement the `length` primitive with argument validation and Consent Scheme values."
+      "Implement the `length` primitive with argument validation and Consent"
+      "Scheme values."
       (length (proper-list-elements (car arguments) "length")))
 
     (define (primitive-append arguments context)
-      "Implement the `append` primitive with argument validation and Consent Scheme values."
+      "Implement the `append` primitive with argument validation and Consent"
+      "Scheme values."
       (apply append arguments))
 
     (define (primitive-reverse arguments context)
-      "Implement the `reverse` primitive with argument validation and Consent Scheme values."
+      "Implement the `reverse` primitive with argument validation and Consent"
+      "Scheme values."
       (reverse (proper-list-elements (car arguments) "reverse")))
 
     (define (primitive-list-tail arguments context)
-      "Implement the `list-tail` primitive with argument validation and Consent Scheme values."
+      "Implement the `list-tail` primitive with argument validation and Consent"
+      "Scheme values."
       (let ((index (exact-integer->host (second arguments) "list-tail")))
         (if (< index 0)
             (eval-error "list-tail index must be non-negative"))
@@ -2765,14 +2808,16 @@ allocation that produced it."
            (else (eval-error "list-tail index exceeds list length"))))))
 
     (define (primitive-list-ref arguments context)
-      "Implement the `list-ref` primitive with argument validation and Consent Scheme values."
+      "Implement the `list-ref` primitive with argument validation and Consent"
+      "Scheme values."
       (let ((tail (primitive-list-tail arguments context)))
         (if (pair? tail)
             (car tail)
             (eval-error "list-ref index exceeds list length"))))
 
     (define (primitive-list-set! arguments context)
-      "Implement the `list-set!` primitive with argument validation and Consent Scheme values."
+      "Implement the `list-set!` primitive with argument validation and Consent"
+      "Scheme values."
       (let ((tail (primitive-list-tail arguments context)))
         (if (not (pair? tail))
             (eval-error "list-set! index exceeds list length"))
@@ -2780,7 +2825,8 @@ allocation that produced it."
         consent-unspecified))
 
     (define (primitive-set-car! arguments context)
-      "Implement the `set-car!` primitive with argument validation and Consent Scheme values."
+      "Implement the `set-car!` primitive with argument validation and Consent"
+      "Scheme values."
       (let ((pair (car arguments)))
         (if (not (pair? pair))
             (eval-error "set-car! expected pair" pair))
@@ -2788,7 +2834,8 @@ allocation that produced it."
         consent-unspecified))
 
     (define (primitive-set-cdr! arguments context)
-      "Implement the `set-cdr!` primitive with argument validation and Consent Scheme values."
+      "Implement the `set-cdr!` primitive with argument validation and Consent"
+      "Scheme values."
       (let ((pair (car arguments)))
         (if (not (pair? pair))
             (eval-error "set-cdr! expected pair" pair))
@@ -2796,7 +2843,8 @@ allocation that produced it."
         consent-unspecified))
 
     (define (primitive-make-list arguments context)
-      "Implement the `make-list` primitive with argument validation and Consent Scheme values."
+      "Implement the `make-list` primitive with argument validation and Consent"
+      "Scheme values."
       (let ((length (exact-integer->host (car arguments) "make-list"))
             (fill (if (null? (cdr arguments))
                       consent-unspecified
@@ -2813,7 +2861,8 @@ allocation that produced it."
        (else value)))
 
     (define (primitive-list-copy arguments context)
-      "Implement the `list-copy` primitive with argument validation and Consent Scheme values."
+      "Implement the `list-copy` primitive with argument validation and Consent"
+      "Scheme values."
       (copy-list (car arguments)))
 
     (define (primitive-caar arguments context)
@@ -2833,11 +2882,13 @@ allocation that produced it."
       (primitive-cdr (list (primitive-cdr arguments context)) context))
 
     (define (primitive-null? arguments context)
-      "Implement the `null?` primitive with argument validation and Consent Scheme values."
+      "Implement the `null?` primitive with argument validation and Consent"
+      "Scheme values."
       (null? (car arguments)))
 
     (define (primitive-pair? arguments context)
-      "Implement the `pair?` primitive with argument validation and Consent Scheme values."
+      "Implement the `pair?` primitive with argument validation and Consent"
+      "Scheme values."
       (pair? (car arguments)))
 
     (define (primitive-not arguments context)
@@ -2845,11 +2896,13 @@ allocation that produced it."
       (if (eq? (car arguments) #f) #t #f))
 
     (define (primitive-boolean? arguments context)
-      "Implement the `boolean?` primitive with argument validation and Consent Scheme values."
+      "Implement the `boolean?` primitive with argument validation and Consent"
+      "Scheme values."
       (boolean? (car arguments)))
 
     (define (primitive-boolean=? arguments context)
-      "Implement the `boolean=?` primitive with argument validation and Consent Scheme values."
+      "Implement the `boolean=?` primitive with argument validation and Consent"
+      "Scheme values."
       (let ((first (car arguments)))
         (if (not (boolean? first))
             (eval-error "boolean=? expected booleans"))
@@ -2862,36 +2915,44 @@ allocation that produced it."
            (else #f)))))
 
     (define (primitive-number? arguments context)
-      "Implement the `number?` primitive with argument validation and Consent Scheme values."
+      "Implement the `number?` primitive with argument validation and Consent"
+      "Scheme values."
       (consent-number? (car arguments)))
 
     (define (primitive-complex? arguments context)
-      "Implement the `complex?` primitive with argument validation and Consent Scheme values."
+      "Implement the `complex?` primitive with argument validation and Consent"
+      "Scheme values."
       (consent-number? (car arguments)))
 
     (define (primitive-real? arguments context)
-      "Implement the `real?` primitive with argument validation and Consent Scheme values."
+      "Implement the `real?` primitive with argument validation and Consent"
+      "Scheme values."
       (number-real? (car arguments)))
 
     (define (primitive-rational? arguments context)
-      "Implement the `rational?` primitive with argument validation and Consent Scheme values."
+      "Implement the `rational?` primitive with argument validation and Consent"
+      "Scheme values."
       (number-rational? (car arguments)))
 
     (define (primitive-integer? arguments context)
-      "Implement the `integer?` primitive with argument validation and Consent Scheme values."
+      "Implement the `integer?` primitive with argument validation and Consent"
+      "Scheme values."
       (number-integer? (car arguments)))
 
     (define (primitive-exact-integer? arguments context)
-      "Implement the `exact-integer?` primitive with argument validation and Consent Scheme values."
+      "Implement the `exact-integer?` primitive with argument validation and"
+      "Consent Scheme values."
       (and (number-integer? (car arguments))
            (number-exact? (car arguments))))
 
     (define (primitive-exact? arguments context)
-      "Implement the `exact?` primitive with argument validation and Consent Scheme values."
+      "Implement the `exact?` primitive with argument validation and Consent"
+      "Scheme values."
       (number-exact? (car arguments)))
 
     (define (primitive-inexact? arguments context)
-      "Implement the `inexact?` primitive with argument validation and Consent Scheme values."
+      "Implement the `inexact?` primitive with argument validation and Consent"
+      "Scheme values."
       (number-inexact? (car arguments)))
 
     (define (number->string/radix number radix)
@@ -2920,7 +2981,8 @@ allocation that produced it."
         (consent-number->external number))))
 
     (define (primitive-number->string arguments context)
-      "Implement the `number->string` primitive with argument validation and Consent Scheme values."
+      "Implement the `number->string` primitive with argument validation and"
+      "Consent Scheme values."
       (let ((number (expect-number (car arguments) "number->string"))
             (radix (if (null? (cdr arguments))
                        10
@@ -2944,7 +3006,8 @@ allocation that produced it."
                  (char=? marker #\i)))))
 
     (define (primitive-string->number arguments context)
-      "Implement the `string->number` primitive with argument validation and Consent Scheme values."
+      "Implement the `string->number` primitive with argument validation and"
+      "Consent Scheme values."
       (let* ((source-text (expect-string (car arguments) "string->number"))
              (radix (if (null? (cdr arguments))
                         10
@@ -2973,7 +3036,8 @@ allocation that produced it."
                 #f)))))
 
     (define (primitive-string->utf8 arguments context)
-      "Implement the `string->utf8` primitive with argument validation and Consent Scheme values."
+      "Implement the `string->utf8` primitive with argument validation and"
+      "Consent Scheme values."
       (let* ((string (expect-string (car arguments) "string->utf8"))
              (range (optional-range
                      arguments
@@ -2985,7 +3049,8 @@ allocation that produced it."
          context)))
 
     (define (primitive-utf8->string arguments context)
-      "Implement the `utf8->string` primitive with argument validation and Consent Scheme values."
+      "Implement the `utf8->string` primitive with argument validation and"
+      "Consent Scheme values."
       (let* ((bytes (expect-bytevector (car arguments) "utf8->string"))
              (range (optional-range
                      arguments
@@ -2997,21 +3062,25 @@ allocation that produced it."
          context)))
 
     (define (primitive-symbol? arguments context)
-      "Implement the `symbol?` primitive with argument validation and Consent Scheme values."
+      "Implement the `symbol?` primitive with argument validation and Consent"
+      "Scheme values."
       (symbol? (car arguments)))
 
     (define (primitive-symbol->string arguments context)
-      "Implement the `symbol->string` primitive with argument validation and Consent Scheme values."
+      "Implement the `symbol->string` primitive with argument validation and"
+      "Consent Scheme values."
       (if (not (symbol? (car arguments)))
           (eval-error "symbol->string expected a symbol"))
       (charge-string-allocation! (symbol->string (car arguments)) context))
 
     (define (primitive-string->symbol arguments context)
-      "Implement the `string->symbol` primitive with argument validation and Consent Scheme values."
+      "Implement the `string->symbol` primitive with argument validation and"
+      "Consent Scheme values."
       (string->symbol (expect-string (car arguments) "string->symbol")))
 
     (define (primitive-symbol=? arguments context)
-      "Implement the `symbol=?` primitive with argument validation and Consent Scheme values."
+      "Implement the `symbol=?` primitive with argument validation and Consent"
+      "Scheme values."
       (let ((first (car arguments)))
         (if (not (symbol? first))
             (eval-error "symbol=? expected symbols"))
@@ -3024,22 +3093,26 @@ allocation that produced it."
            (else #f)))))
 
     (define (primitive-char? arguments context)
-      "Implement the `char?` primitive with argument validation and Consent Scheme values."
+      "Implement the `char?` primitive with argument validation and Consent"
+      "Scheme values."
       (char? (car arguments)))
 
     (define (primitive-char->integer arguments context)
-      "Implement the `char->integer` primitive with argument validation and Consent Scheme values."
+      "Implement the `char->integer` primitive with argument validation and"
+      "Consent Scheme values."
       (consent-make-canonical-integer
        (char->integer
         (expect-character (car arguments) "char->integer"))))
 
     (define (primitive-integer->char arguments context)
-      "Implement the `integer->char` primitive with argument validation and Consent Scheme values."
+      "Implement the `integer->char` primitive with argument validation and"
+      "Consent Scheme values."
       (integer->char
        (exact-integer->host (car arguments) "integer->char")))
 
     (define (primitive-char-compare arguments predicate description)
-      "Implement the `char-compare` primitive with argument validation and Consent Scheme values."
+      "Implement the `char-compare` primitive with argument validation and"
+      "Consent Scheme values."
       (let loop ((rest arguments))
         (cond
          ((or (null? rest) (null? (cdr rest))) #t)
@@ -3049,67 +3122,81 @@ allocation that produced it."
             (and (predicate left right) (loop (cdr rest))))))))
 
     (define (primitive-char=? arguments context)
-      "Implement the `char=?` primitive with argument validation and Consent Scheme values."
+      "Implement the `char=?` primitive with argument validation and Consent"
+      "Scheme values."
       (primitive-char-compare arguments char=? "char=?"))
 
     (define (primitive-char<? arguments context)
-      "Implement the `char<?` primitive with argument validation and Consent Scheme values."
+      "Implement the `char<?` primitive with argument validation and Consent"
+      "Scheme values."
       (primitive-char-compare arguments char<? "char<?"))
 
     (define (primitive-char>? arguments context)
-      "Implement the `char>?` primitive with argument validation and Consent Scheme values."
+      "Implement the `char>?` primitive with argument validation and Consent"
+      "Scheme values."
       (primitive-char-compare arguments char>? "char>?"))
 
     (define (primitive-char<=? arguments context)
-      "Implement the `char<=?` primitive with argument validation and Consent Scheme values."
+      "Implement the `char<=?` primitive with argument validation and Consent"
+      "Scheme values."
       (primitive-char-compare arguments char<=? "char<=?"))
 
     (define (primitive-char>=? arguments context)
-      "Implement the `char>=?` primitive with argument validation and Consent Scheme values."
+      "Implement the `char>=?` primitive with argument validation and Consent"
+      "Scheme values."
       (primitive-char-compare arguments char>=? "char>=?"))
 
     (define (primitive-char-upcase arguments context)
-      "Implement the `char-upcase` primitive with argument validation and Consent Scheme values."
+      "Implement the `char-upcase` primitive with argument validation and"
+      "Consent Scheme values."
       (char-upcase (expect-character (car arguments) "char-upcase")))
 
     (define (primitive-char-downcase arguments context)
-      "Implement the `char-downcase` primitive with argument validation and Consent Scheme values."
+      "Implement the `char-downcase` primitive with argument validation and"
+      "Consent Scheme values."
       (char-downcase (expect-character (car arguments) "char-downcase")))
 
     (define (primitive-char-foldcase arguments context)
-      "Implement the `char-foldcase` primitive with argument validation and Consent Scheme values."
+      "Implement the `char-foldcase` primitive with argument validation and"
+      "Consent Scheme values."
       (char-foldcase (expect-character (car arguments) "char-foldcase")))
 
     (define (primitive-char-alphabetic? arguments context)
-      "Implement the `char-alphabetic?` primitive with argument validation and Consent Scheme values."
+      "Implement the `char-alphabetic?` primitive with argument validation and"
+      "Consent Scheme values."
       (char-alphabetic? (expect-character
                          (car arguments)
                          "char-alphabetic?")))
 
     (define (primitive-char-numeric? arguments context)
-      "Implement the `char-numeric?` primitive with argument validation and Consent Scheme values."
+      "Implement the `char-numeric?` primitive with argument validation and"
+      "Consent Scheme values."
       (char-numeric? (expect-character (car arguments) "char-numeric?")))
 
     (define (primitive-char-whitespace? arguments context)
-      "Implement the `char-whitespace?` primitive with argument validation and Consent Scheme values."
+      "Implement the `char-whitespace?` primitive with argument validation and"
+      "Consent Scheme values."
       (char-whitespace? (expect-character
                          (car arguments)
                          "char-whitespace?")))
 
     (define (primitive-char-upper-case? arguments context)
-      "Implement the `char-upper-case?` primitive with argument validation and Consent Scheme values."
+      "Implement the `char-upper-case?` primitive with argument validation and"
+      "Consent Scheme values."
       (char-upper-case? (expect-character
                          (car arguments)
                          "char-upper-case?")))
 
     (define (primitive-char-lower-case? arguments context)
-      "Implement the `char-lower-case?` primitive with argument validation and Consent Scheme values."
+      "Implement the `char-lower-case?` primitive with argument validation and"
+      "Consent Scheme values."
       (char-lower-case? (expect-character
                          (car arguments)
                          "char-lower-case?")))
 
     (define (primitive-digit-value arguments context)
-      "Implement the `digit-value` primitive with argument validation and Consent Scheme values."
+      "Implement the `digit-value` primitive with argument validation and"
+      "Consent Scheme values."
       (let ((value (digit-value
                     (expect-character (car arguments) "digit-value"))))
         (if value
@@ -3117,7 +3204,8 @@ allocation that produced it."
             #f)))
 
     (define (primitive-char-ci-compare arguments predicate description)
-      "Implement the `char-ci-compare` primitive with argument validation and Consent Scheme values."
+      "Implement the `char-ci-compare` primitive with argument validation and"
+      "Consent Scheme values."
       (primitive-char-compare
        arguments
        (lambda (left right)
@@ -3125,39 +3213,48 @@ allocation that produced it."
        description))
 
     (define (primitive-char-ci=? arguments context)
-      "Implement the `char-ci=?` primitive with argument validation and Consent Scheme values."
+      "Implement the `char-ci=?` primitive with argument validation and Consent"
+      "Scheme values."
       (primitive-char-ci-compare arguments char=? "char-ci=?"))
 
     (define (primitive-char-ci<? arguments context)
-      "Implement the `char-ci<?` primitive with argument validation and Consent Scheme values."
+      "Implement the `char-ci<?` primitive with argument validation and Consent"
+      "Scheme values."
       (primitive-char-ci-compare arguments char<? "char-ci<?"))
 
     (define (primitive-char-ci>? arguments context)
-      "Implement the `char-ci>?` primitive with argument validation and Consent Scheme values."
+      "Implement the `char-ci>?` primitive with argument validation and Consent"
+      "Scheme values."
       (primitive-char-ci-compare arguments char>? "char-ci>?"))
 
     (define (primitive-char-ci<=? arguments context)
-      "Implement the `char-ci<=?` primitive with argument validation and Consent Scheme values."
+      "Implement the `char-ci<=?` primitive with argument validation and"
+      "Consent Scheme values."
       (primitive-char-ci-compare arguments char<=? "char-ci<=?"))
 
     (define (primitive-char-ci>=? arguments context)
-      "Implement the `char-ci>=?` primitive with argument validation and Consent Scheme values."
+      "Implement the `char-ci>=?` primitive with argument validation and"
+      "Consent Scheme values."
       (primitive-char-ci-compare arguments char>=? "char-ci>=?"))
 
     (define (primitive-string-upcase arguments context)
-      "Implement the `string-upcase` primitive with argument validation and Consent Scheme values."
+      "Implement the `string-upcase` primitive with argument validation and"
+      "Consent Scheme values."
       (string-upcase (expect-string (car arguments) "string-upcase")))
 
     (define (primitive-string-downcase arguments context)
-      "Implement the `string-downcase` primitive with argument validation and Consent Scheme values."
+      "Implement the `string-downcase` primitive with argument validation and"
+      "Consent Scheme values."
       (string-downcase (expect-string (car arguments) "string-downcase")))
 
     (define (primitive-string-foldcase arguments context)
-      "Implement the `string-foldcase` primitive with argument validation and Consent Scheme values."
+      "Implement the `string-foldcase` primitive with argument validation and"
+      "Consent Scheme values."
       (string-foldcase (expect-string (car arguments) "string-foldcase")))
 
     (define (primitive-string-ci-compare arguments predicate description)
-      "Implement the `string-ci-compare` primitive with argument validation and Consent Scheme values."
+      "Implement the `string-ci-compare` primitive with argument validation and"
+      "Consent Scheme values."
       (primitive-string-compare
        arguments
        (lambda (left right)
@@ -3165,23 +3262,28 @@ allocation that produced it."
        description))
 
     (define (primitive-string-ci=? arguments context)
-      "Implement the `string-ci=?` primitive with argument validation and Consent Scheme values."
+      "Implement the `string-ci=?` primitive with argument validation and"
+      "Consent Scheme values."
       (primitive-string-ci-compare arguments string=? "string-ci=?"))
 
     (define (primitive-string-ci<? arguments context)
-      "Implement the `string-ci<?` primitive with argument validation and Consent Scheme values."
+      "Implement the `string-ci<?` primitive with argument validation and"
+      "Consent Scheme values."
       (primitive-string-ci-compare arguments string<? "string-ci<?"))
 
     (define (primitive-string-ci>? arguments context)
-      "Implement the `string-ci>?` primitive with argument validation and Consent Scheme values."
+      "Implement the `string-ci>?` primitive with argument validation and"
+      "Consent Scheme values."
       (primitive-string-ci-compare arguments string>? "string-ci>?"))
 
     (define (primitive-string-ci<=? arguments context)
-      "Implement the `string-ci<=?` primitive with argument validation and Consent Scheme values."
+      "Implement the `string-ci<=?` primitive with argument validation and"
+      "Consent Scheme values."
       (primitive-string-ci-compare arguments string<=? "string-ci<=?"))
 
     (define (primitive-string-ci>=? arguments context)
-      "Implement the `string-ci>=?` primitive with argument validation and Consent Scheme values."
+      "Implement the `string-ci>=?` primitive with argument validation and"
+      "Consent Scheme values."
       (primitive-string-ci-compare arguments string>=? "string-ci>=?"))
 
     (define (display-string value)
@@ -3523,45 +3625,54 @@ integer there would not render through the consent writer."
        (if (null? maybe-context) #f (car maybe-context))))
 
     (define (primitive-eof-object? arguments context)
-      "Implement the `eof-object?` primitive with argument validation and Consent Scheme values."
+      "Implement the `eof-object?` primitive with argument validation and"
+      "Consent Scheme values."
       (consent-eof-object? (car arguments)))
 
     (define (primitive-eof-object arguments context)
-      "Implement the `eof-object` primitive with argument validation and Consent Scheme values."
+      "Implement the `eof-object` primitive with argument validation and"
+      "Consent Scheme values."
       consent-eof-object)
 
     (define (primitive-port? arguments context)
-      "Implement the `port?` primitive with argument validation and Consent Scheme values."
+      "Implement the `port?` primitive with argument validation and Consent"
+      "Scheme values."
       (consent-port? (car arguments)))
 
     (define (primitive-input-port? arguments context)
-      "Implement the `input-port?` primitive with argument validation and Consent Scheme values."
+      "Implement the `input-port?` primitive with argument validation and"
+      "Consent Scheme values."
       (and (consent-port? (car arguments))
            (consent-port-input? (car arguments))))
 
     (define (primitive-output-port? arguments context)
-      "Implement the `output-port?` primitive with argument validation and Consent Scheme values."
+      "Implement the `output-port?` primitive with argument validation and"
+      "Consent Scheme values."
       (and (consent-port? (car arguments))
            (consent-port-output? (car arguments))))
 
     (define (primitive-textual-port? arguments context)
-      "Implement the `textual-port?` primitive with argument validation and Consent Scheme values."
+      "Implement the `textual-port?` primitive with argument validation and"
+      "Consent Scheme values."
       (and (consent-port? (car arguments))
            (consent-port-textual? (car arguments))))
 
     (define (primitive-binary-port? arguments context)
-      "Implement the `binary-port?` primitive with argument validation and Consent Scheme values."
+      "Implement the `binary-port?` primitive with argument validation and"
+      "Consent Scheme values."
       (and (consent-port? (car arguments))
            (consent-port-binary? (car arguments))))
 
     (define (primitive-input-port-open? arguments context)
-      "Implement the `input-port-open?` primitive with argument validation and Consent Scheme values."
+      "Implement the `input-port-open?` primitive with argument validation and"
+      "Consent Scheme values."
       (let ((port (expect-port (car arguments) "input-port-open?")))
         (and (consent-port-input? port)
              (consent-port-open? port))))
 
     (define (primitive-output-port-open? arguments context)
-      "Implement the `output-port-open?` primitive with argument validation and Consent Scheme values."
+      "Implement the `output-port-open?` primitive with argument validation and"
+      "Consent Scheme values."
       (let ((port (expect-port (car arguments) "output-port-open?")))
         (and (consent-port-output? port)
              (consent-port-open? port))))
@@ -3624,29 +3735,34 @@ integer there would not render through the consent writer."
       consent-unspecified)
 
     (define (primitive-close-port arguments context)
-      "Implement the `close-port` primitive with argument validation and Consent Scheme values."
+      "Implement the `close-port` primitive with argument validation and"
+      "Consent Scheme values."
       (close-port-value (expect-port (car arguments) "close-port") context))
 
     (define (primitive-close-input-port arguments context)
-      "Implement the `close-input-port` primitive with argument validation and Consent Scheme values."
+      "Implement the `close-input-port` primitive with argument validation and"
+      "Consent Scheme values."
       (close-port-value
        (expect-input-port (car arguments) "close-input-port")
        context))
 
     (define (primitive-close-output-port arguments context)
-      "Implement the `close-output-port` primitive with argument validation and Consent Scheme values."
+      "Implement the `close-output-port` primitive with argument validation and"
+      "Consent Scheme values."
       (close-port-value
        (expect-output-port (car arguments) "close-output-port")
        context))
 
     (define (primitive-open-output-string arguments context)
-      "Implement the `open-output-string` primitive with argument validation and Consent Scheme values."
+      "Implement the `open-output-string` primitive with argument validation"
+      "and Consent Scheme values."
       (make-consent-port
        'string #f #t #t #f #t #f 0 ""
        #f '() #f '() #f #f #f '()))
 
     (define (primitive-open-input-string arguments context)
-      "Implement the `open-input-string` primitive with argument validation and Consent Scheme values."
+      "Implement the `open-input-string` primitive with argument validation and"
+      "Consent Scheme values."
       (make-consent-port
        'string #t #f #t #f #t
        (expect-string (car arguments) "open-input-string")
@@ -3654,7 +3770,8 @@ integer there would not render through the consent writer."
        #f '() #f '() #f #f #f '()))
 
     (define (primitive-get-output-string arguments context)
-      "Implement the `get-output-string` primitive with argument validation and Consent Scheme values."
+      "Implement the `get-output-string` primitive with argument validation and"
+      "Consent Scheme values."
       (charge-string-allocation!
        (consent-port-contents
         (expect-string-output-port
@@ -3663,7 +3780,8 @@ integer there would not render through the consent writer."
        context))
 
     (define (primitive-open-output-bytevector arguments context)
-      "Implement the `open-output-bytevector` primitive with argument validation and Consent Scheme values."
+      "Implement the `open-output-bytevector` primitive with argument"
+      "validation and Consent Scheme values."
       (make-consent-port
        'bytevector #f #t #f #t #t #f 0 '()
        #f '() #f '() #f #f #f '()))
@@ -3680,7 +3798,8 @@ integer there would not render through the consent writer."
         copy))
 
     (define (primitive-open-input-bytevector arguments context)
-      "Implement the `open-input-bytevector` primitive with argument validation and Consent Scheme values."
+      "Implement the `open-input-bytevector` primitive with argument validation"
+      "and Consent Scheme values."
       (make-consent-port
        'bytevector #t #f #f #t #t
        (copy-bytevector
@@ -3699,7 +3818,8 @@ integer there would not render through the consent writer."
                 (loop (+ index 1) (cdr rest)))))))
 
     (define (primitive-get-output-bytevector arguments context)
-      "Implement the `get-output-bytevector` primitive with argument validation and Consent Scheme values."
+      "Implement the `get-output-bytevector` primitive with argument validation"
+      "and Consent Scheme values."
       (charge-bytevector-allocation!
        (list->bytevector
         (consent-port-contents
@@ -3773,7 +3893,8 @@ integer there would not render through the consent writer."
                 char)))))
 
     (define (primitive-read-char arguments context)
-      "Implement the `read-char` primitive with argument validation and Consent Scheme values."
+      "Implement the `read-char` primitive with argument validation and Consent"
+      "Scheme values."
       (if (null? arguments)
           (text-port-next-char
            (current-input-port-or-deny context "read-char")
@@ -3783,7 +3904,8 @@ integer there would not render through the consent writer."
           (text-port-next-char (car arguments) #t "read-char" context)))
 
     (define (primitive-peek-char arguments context)
-      "Implement the `peek-char` primitive with argument validation and Consent Scheme values."
+      "Implement the `peek-char` primitive with argument validation and Consent"
+      "Scheme values."
       (if (null? arguments)
           (text-port-next-char
            (current-input-port-or-deny context "peek-char")
@@ -3793,13 +3915,15 @@ integer there would not render through the consent writer."
           (text-port-next-char (car arguments) #f "peek-char" context)))
 
     (define (primitive-char-ready? arguments context)
-      "Implement the `char-ready?` primitive with argument validation and Consent Scheme values."
+      "Implement the `char-ready?` primitive with argument validation and"
+      "Consent Scheme values."
       (if (not (null? arguments))
           (expect-textual-input-port (car arguments) "char-ready?"))
       #t)
 
     (define (primitive-read-string arguments context)
-      "Implement the `read-string` primitive with argument validation and Consent Scheme values."
+      "Implement the `read-string` primitive with argument validation and"
+      "Consent Scheme values."
       (let ((count (exact-integer->host (car arguments) "read-string"))
             (port (if (null? (cdr arguments))
                       (current-input-port-or-deny context "read-string")
@@ -3837,7 +3961,8 @@ integer there would not render through the consent writer."
                context))))))))
 
     (define (primitive-read-line arguments context)
-      "Implement the `read-line` primitive with argument validation and Consent Scheme values."
+      "Implement the `read-line` primitive with argument validation and Consent"
+      "Scheme values."
       (let ((port (expect-textual-input-port
                    (if (null? arguments)
                        (current-input-port-or-deny context "read-line")
@@ -3917,7 +4042,8 @@ integer there would not render through the consent writer."
        (if (null? maybe-context) #f (car maybe-context))))
 
     (define (primitive-read-u8 arguments context)
-      "Implement the `read-u8` primitive with argument validation and Consent Scheme values."
+      "Implement the `read-u8` primitive with argument validation and Consent"
+      "Scheme values."
       (if (null? arguments)
           consent-eof-object
           (let ((port (expect-binary-input-port (car arguments) "read-u8")))
@@ -3945,7 +4071,8 @@ integer there would not render through the consent writer."
                      (bytevector-u8-ref source position))))))))
 
     (define (primitive-peek-u8 arguments context)
-      "Implement the `peek-u8` primitive with argument validation and Consent Scheme values."
+      "Implement the `peek-u8` primitive with argument validation and Consent"
+      "Scheme values."
       (if (null? arguments)
           consent-eof-object
           (let ((port (expect-binary-input-port (car arguments) "peek-u8")))
@@ -3970,7 +4097,8 @@ integer there would not render through the consent writer."
                      (bytevector-u8-ref source position))))))))
 
     (define (primitive-u8-ready? arguments context)
-      "Implement the `u8-ready?` primitive with argument validation and Consent Scheme values."
+      "Implement the `u8-ready?` primitive with argument validation and Consent"
+      "Scheme values."
       (if (not (null? arguments))
           (expect-binary-input-port (car arguments) "u8-ready?"))
       #t)
@@ -3989,7 +4117,8 @@ integer there would not render through the consent writer."
         result))
 
     (define (primitive-read-bytevector arguments context)
-      "Implement the `read-bytevector` primitive with argument validation and Consent Scheme values."
+      "Implement the `read-bytevector` primitive with argument validation and"
+      "Consent Scheme values."
       (let ((count (exact-integer->host
                     (car arguments)
                     "read-bytevector"))
@@ -4028,7 +4157,8 @@ integer there would not render through the consent writer."
                context))))))))
 
     (define (primitive-read-bytevector! arguments context)
-      "Implement the `read-bytevector!` primitive with argument validation and Consent Scheme values."
+      "Implement the `read-bytevector!` primitive with argument validation and"
+      "Consent Scheme values."
       (let* ((arity (length arguments))
              (target (expect-bytevector
                       (car arguments)
@@ -4090,7 +4220,8 @@ integer there would not render through the consent writer."
                       (host-number->agent-number amount))))))))
 
     (define (primitive-write-u8 arguments context)
-      "Implement the `write-u8` primitive with argument validation and Consent Scheme values."
+      "Implement the `write-u8` primitive with argument validation and Consent"
+      "Scheme values."
       (if (not (null? (cdr arguments)))
           (write-byte-to-port
            (expect-byte (car arguments) "write-u8")
@@ -4100,7 +4231,8 @@ integer there would not render through the consent writer."
       consent-unspecified)
 
     (define (primitive-write-bytevector arguments context)
-      "Implement the `write-bytevector` primitive with argument validation and Consent Scheme values."
+      "Implement the `write-bytevector` primitive with argument validation and"
+      "Consent Scheme values."
       (if (not (null? (cdr arguments)))
           (let* ((bytes (expect-bytevector
                          (car arguments)
@@ -4121,7 +4253,8 @@ integer there would not render through the consent writer."
       consent-unspecified)
 
     (define (primitive-write-char arguments context)
-      "Implement the `write-char` primitive with argument validation and Consent Scheme values."
+      "Implement the `write-char` primitive with argument validation and"
+      "Consent Scheme values."
       (write-text-to-port
        (string (expect-character (car arguments) "write-char"))
        (if (null? (cdr arguments))
@@ -4132,7 +4265,8 @@ integer there would not render through the consent writer."
       consent-unspecified)
 
     (define (primitive-write-string arguments context)
-      "Implement the `write-string` primitive with argument validation and Consent Scheme values."
+      "Implement the `write-string` primitive with argument validation and"
+      "Consent Scheme values."
       (let* ((string (expect-string (car arguments) "write-string"))
              (port (if (null? (cdr arguments))
                        (current-output-port-or-deny context "write-string")
@@ -4149,7 +4283,8 @@ integer there would not render through the consent writer."
       consent-unspecified)
 
     (define (primitive-newline arguments context)
-      "Implement the `newline` primitive with argument validation and Consent Scheme values."
+      "Implement the `newline` primitive with argument validation and Consent"
+      "Scheme values."
       (write-text-to-port
        "\n"
        (if (null? arguments)
@@ -4160,7 +4295,8 @@ integer there would not render through the consent writer."
       consent-unspecified)
 
     (define (primitive-display arguments context)
-      "Implement the `display` primitive with argument validation and Consent Scheme values."
+      "Implement the `display` primitive with argument validation and Consent"
+      "Scheme values."
       (write-to-output-port
        (car arguments)
        (if (null? (cdr arguments))
@@ -4171,7 +4307,8 @@ integer there would not render through the consent writer."
        context))
 
     (define (primitive-write arguments context)
-      "Implement the `write` primitive with argument validation and Consent Scheme values."
+      "Implement the `write` primitive with argument validation and Consent"
+      "Scheme values."
       (write-to-output-port
        (car arguments)
        (if (null? (cdr arguments))
@@ -4182,7 +4319,8 @@ integer there would not render through the consent writer."
        context))
 
     (define (primitive-write-shared arguments context)
-      "Implement the `write-shared` primitive with argument validation and Consent Scheme values."
+      "Implement the `write-shared` primitive with argument validation and"
+      "Consent Scheme values."
       (write-to-output-port
        (car arguments)
        (if (null? (cdr arguments))
@@ -4193,7 +4331,8 @@ integer there would not render through the consent writer."
        context))
 
     (define (primitive-write-simple arguments context)
-      "Implement the `write-simple` primitive with argument validation and Consent Scheme values."
+      "Implement the `write-simple` primitive with argument validation and"
+      "Consent Scheme values."
       (write-to-output-port
        (car arguments)
        (if (null? (cdr arguments))
@@ -4204,7 +4343,8 @@ integer there would not render through the consent writer."
        context))
 
     (define (primitive-flush-output-port arguments context)
-      "Implement the `flush-output-port` primitive with argument validation and Consent Scheme values."
+      "Implement the `flush-output-port` primitive with argument validation and"
+      "Consent Scheme values."
       (if (not (null? arguments))
           (flush-file-output-port
            (expect-output-port (car arguments) "flush-output-port")
@@ -4213,15 +4353,18 @@ integer there would not render through the consent writer."
       consent-unspecified)
 
     (define (primitive-read-error? arguments context)
-      "Implement the `read-error?` primitive with argument validation and Consent Scheme values."
+      "Implement the `read-error?` primitive with argument validation and"
+      "Consent Scheme values."
       #f)
 
     (define (primitive-file-error? arguments context)
-      "Implement the `file-error?` primitive with argument validation and Consent Scheme values."
+      "Implement the `file-error?` primitive with argument validation and"
+      "Consent Scheme values."
       #f)
 
     (define (primitive-features arguments context)
-      "Implement the `features` primitive with argument validation and Consent Scheme values."
+      "Implement the `features` primitive with argument validation and Consent"
+      "Scheme values."
       '(r7rs ratios exact-complex ieee-float consent))
 
     (define (primitive-agent-yield arguments context)
@@ -6258,7 +6401,8 @@ integer there would not render through the consent writer."
         (make-binary-file-output-port context authorization)))
 
     (define (primitive-file-exists? arguments context)
-      "Implement the `file-exists?` primitive with argument validation and Consent Scheme values."
+      "Implement the `file-exists?` primitive with argument validation and"
+      "Consent Scheme values."
       (let* ((authorization
              (resolve-file-policy-path
               (expect-string (car arguments) "file-exists?")
@@ -6269,7 +6413,8 @@ integer there would not render through the consent writer."
         exists?))
 
     (define (primitive-delete-file arguments context)
-      "Implement the `delete-file` primitive with argument validation and Consent Scheme values."
+      "Implement the `delete-file` primitive with argument validation and"
+      "Consent Scheme values."
       (let* ((authorization
               (resolve-file-policy-path
                (expect-string (car arguments) "delete-file")
@@ -6293,14 +6438,16 @@ integer there would not render through the consent writer."
         consent-unspecified))
 
     (define (primitive-call-with-port arguments context)
-      "Implement the `call-with-port` primitive with argument validation and Consent Scheme values."
+      "Implement the `call-with-port` primitive with argument validation and"
+      "Consent Scheme values."
       (drain-state
        (primitive-call-with-port/k
         arguments context identity-continuation)
        context))
 
     (define (primitive-call-with-port/k arguments context continuation)
-      "Continuation-aware implementation of the `call-with-port` primitive for trampoline evaluation."
+      "Continuation-aware implementation of the `call-with-port` primitive for"
+      "trampoline evaluation."
       (let ((port (expect-port (car arguments) "call-with-port port"))
             (procedure
              (expect-procedure (second arguments) "call-with-port procedure")))
@@ -6412,7 +6559,8 @@ integer there would not render through the consent writer."
            (continue continuation value)))))
 
     (define (primitive-environment arguments context)
-      "Implement the `environment` primitive with argument validation and Consent Scheme values."
+      "Implement the `environment` primitive with argument validation and"
+      "Consent Scheme values."
       (let ((environment (consent-make-empty-environment))
             (syntax-environment (make-syntax-environment '() #f '())))
         (with-syntax-environment
@@ -6445,7 +6593,8 @@ integer there would not render through the consent writer."
        context))
 
     (define (primitive-eval/k arguments context continuation)
-      "Continuation-aware implementation of the `eval` primitive for trampoline evaluation."
+      "Continuation-aware implementation of the `eval` primitive for trampoline"
+      "evaluation."
       (let* ((expression (car arguments))
              (specifier
               (expect-environment-specifier (second arguments) "eval"))
@@ -6466,7 +6615,8 @@ integer there would not render through the consent writer."
                 expression environment context #t continuation))))))
 
     (define (read-policy-file-forms filename context description)
-      "Read policy-approved source file forms and return forms, directory, and authorization data."
+      "Read policy-approved source file forms and return forms, directory, and"
+      "authorization data."
       (let* ((authorization
               (resolve-file-policy-path filename context description))
              (path (file-authorization-path authorization)))
@@ -6506,7 +6656,8 @@ integer there would not render through the consent writer."
        context))
 
     (define (primitive-load/k arguments context continuation)
-      "Continuation-aware implementation of the `load` primitive for trampoline evaluation."
+      "Continuation-aware implementation of the `load` primitive for trampoline"
+      "evaluation."
       (let* ((filename (expect-string (car arguments) "load"))
              (read-result
               (read-policy-file-forms filename context "load"))
@@ -6536,11 +6687,13 @@ integer there would not render through the consent writer."
                  (continue continuation consent-unspecified)))))))))
 
     (define (primitive-string? arguments context)
-      "Implement the `string?` primitive with argument validation and Consent Scheme values."
+      "Implement the `string?` primitive with argument validation and Consent"
+      "Scheme values."
       (string? (car arguments)))
 
     (define (primitive-make-string arguments context)
-      "Implement the `make-string` primitive with argument validation and Consent Scheme values."
+      "Implement the `make-string` primitive with argument validation and"
+      "Consent Scheme values."
       (let ((length (exact-integer->host (car arguments) "make-string"))
             (fill (if (null? (cdr arguments))
                       #\null
@@ -6552,7 +6705,8 @@ integer there would not render through the consent writer."
         (charge-string-allocation! (make-string length fill) context)))
 
     (define (primitive-string arguments context)
-      "Implement the `string` primitive with argument validation and Consent Scheme values."
+      "Implement the `string` primitive with argument validation and Consent"
+      "Scheme values."
       (charge-string-allocation!
        (list->string
         (map (lambda (argument)
@@ -6561,12 +6715,14 @@ integer there would not render through the consent writer."
        context))
 
     (define (primitive-string-length arguments context)
-      "Implement the `string-length` primitive with argument validation and Consent Scheme values."
+      "Implement the `string-length` primitive with argument validation and"
+      "Consent Scheme values."
       (consent-make-canonical-integer
        (string-length (expect-string (car arguments) "string-length"))))
 
     (define (primitive-string-ref arguments context)
-      "Implement the `string-ref` primitive with argument validation and Consent Scheme values."
+      "Implement the `string-ref` primitive with argument validation and"
+      "Consent Scheme values."
       (let* ((string (expect-string (car arguments) "string-ref"))
              (index (expect-nonnegative-index
                      (second arguments)
@@ -6576,7 +6732,8 @@ integer there would not render through the consent writer."
         (string-ref string index)))
 
     (define (primitive-string-set! arguments context)
-      "Implement the `string-set!` primitive with argument validation and Consent Scheme values."
+      "Implement the `string-set!` primitive with argument validation and"
+      "Consent Scheme values."
       (let* ((string (expect-string (car arguments) "string-set!"))
              (index (expect-nonnegative-index
                      (second arguments)
@@ -6588,7 +6745,8 @@ integer there would not render through the consent writer."
         consent-unspecified))
 
     (define (primitive-substring arguments context)
-      "Implement the `substring` primitive with argument validation and Consent Scheme values."
+      "Implement the `substring` primitive with argument validation and Consent"
+      "Scheme values."
       (let* ((string (expect-string (car arguments) "substring"))
              (start (expect-nonnegative-index
                      (second arguments)
@@ -6605,7 +6763,8 @@ integer there would not render through the consent writer."
         (charge-string-allocation! (substring string start end) context)))
 
     (define (primitive-string-append arguments context)
-      "Implement the `string-append` primitive with argument validation and Consent Scheme values."
+      "Implement the `string-append` primitive with argument validation and"
+      "Consent Scheme values."
       (charge-string-allocation!
        (apply string-append
               (map (lambda (argument)
@@ -6614,7 +6773,8 @@ integer there would not render through the consent writer."
        context))
 
     (define (primitive-string->list arguments context)
-      "Implement the `string->list` primitive with argument validation and Consent Scheme values."
+      "Implement the `string->list` primitive with argument validation and"
+      "Consent Scheme values."
       (let* ((string (expect-string (car arguments) "string->list"))
              (range (optional-range
                      arguments
@@ -6628,7 +6788,8 @@ integer there would not render through the consent writer."
                     (cons (string-ref string index) result))))))
 
     (define (primitive-list->string arguments context)
-      "Implement the `list->string` primitive with argument validation and Consent Scheme values."
+      "Implement the `list->string` primitive with argument validation and"
+      "Consent Scheme values."
       (charge-string-allocation!
        (list->string
         (map (lambda (argument)
@@ -6637,13 +6798,15 @@ integer there would not render through the consent writer."
        context))
 
     (define (primitive-string->vector arguments context)
-      "Implement the `string->vector` primitive with argument validation and Consent Scheme values."
+      "Implement the `string->vector` primitive with argument validation and"
+      "Consent Scheme values."
       (charge-vector-allocation!
        (list->vector (primitive-string->list arguments context))
        context))
 
     (define (primitive-vector->string arguments context)
-      "Implement the `vector->string` primitive with argument validation and Consent Scheme values."
+      "Implement the `vector->string` primitive with argument validation and"
+      "Consent Scheme values."
       (let* ((vector (expect-vector (car arguments) "vector->string"))
              (range (optional-range
                      arguments
@@ -6660,7 +6823,8 @@ integer there would not render through the consent writer."
                           result))))))
 
     (define (primitive-string-copy arguments context)
-      "Implement the `string-copy` primitive with argument validation and Consent Scheme values."
+      "Implement the `string-copy` primitive with argument validation and"
+      "Consent Scheme values."
       (let* ((string (expect-string (car arguments) "string-copy"))
              (range (optional-range
                      arguments
@@ -6672,7 +6836,8 @@ integer there would not render through the consent writer."
          context)))
 
     (define (primitive-string-copy! arguments context)
-      "Implement the `string-copy!` primitive with argument validation and Consent Scheme values."
+      "Implement the `string-copy!` primitive with argument validation and"
+      "Consent Scheme values."
       (let* ((to (expect-string (car arguments) "string-copy! target"))
              (at (expect-nonnegative-index
                   (second arguments)
@@ -6695,7 +6860,8 @@ integer there would not render through the consent writer."
         consent-unspecified))
 
     (define (primitive-string-fill! arguments context)
-      "Implement the `string-fill!` primitive with argument validation and Consent Scheme values."
+      "Implement the `string-fill!` primitive with argument validation and"
+      "Consent Scheme values."
       (let* ((string (expect-string (car arguments) "string-fill!"))
              (fill (expect-character (second arguments) "string-fill! value"))
              (range (optional-range
@@ -6711,7 +6877,8 @@ integer there would not render through the consent writer."
         consent-unspecified))
 
     (define (primitive-string-compare arguments predicate description)
-      "Implement the `string-compare` primitive with argument validation and Consent Scheme values."
+      "Implement the `string-compare` primitive with argument validation and"
+      "Consent Scheme values."
       (let loop ((rest arguments))
         (cond
          ((or (null? rest) (null? (cdr rest))) #t)
@@ -6721,23 +6888,28 @@ integer there would not render through the consent writer."
             (and (predicate left right) (loop (cdr rest))))))))
 
     (define (primitive-string=? arguments context)
-      "Implement the `string=?` primitive with argument validation and Consent Scheme values."
+      "Implement the `string=?` primitive with argument validation and Consent"
+      "Scheme values."
       (primitive-string-compare arguments string=? "string=?"))
 
     (define (primitive-string<? arguments context)
-      "Implement the `string<?` primitive with argument validation and Consent Scheme values."
+      "Implement the `string<?` primitive with argument validation and Consent"
+      "Scheme values."
       (primitive-string-compare arguments string<? "string<?"))
 
     (define (primitive-string>? arguments context)
-      "Implement the `string>?` primitive with argument validation and Consent Scheme values."
+      "Implement the `string>?` primitive with argument validation and Consent"
+      "Scheme values."
       (primitive-string-compare arguments string>? "string>?"))
 
     (define (primitive-string<=? arguments context)
-      "Implement the `string<=?` primitive with argument validation and Consent Scheme values."
+      "Implement the `string<=?` primitive with argument validation and Consent"
+      "Scheme values."
       (primitive-string-compare arguments string<=? "string<=?"))
 
     (define (primitive-string>=? arguments context)
-      "Implement the `string>=?` primitive with argument validation and Consent Scheme values."
+      "Implement the `string>=?` primitive with argument validation and Consent"
+      "Scheme values."
       (primitive-string-compare arguments string>=? "string>=?"))
 
     (define (map-over-lists procedure lists context keep-results?)
@@ -6765,7 +6937,8 @@ integer there would not render through the consent writer."
                       results)))))))
 
     (define (primitive-apply arguments context)
-      "Implement the `apply` primitive with argument validation and Consent Scheme values."
+      "Implement the `apply` primitive with argument validation and Consent"
+      "Scheme values."
       (let ((procedure (expect-procedure (car arguments) "apply procedure"))
             (fixed-arguments (reverse (cdr (reverse (cdr arguments)))))
             (tail-arguments
@@ -6802,14 +6975,16 @@ integer there would not render through the consent writer."
         (continue continuation consent-unspecified))))
 
     (define (primitive-make-parameter arguments context)
-      "Implement the `make-parameter` primitive with argument validation and Consent Scheme values."
+      "Implement the `make-parameter` primitive with argument validation and"
+      "Consent Scheme values."
       (drain-state
        (primitive-make-parameter/k
         arguments context identity-continuation)
        context))
 
     (define (primitive-make-parameter/k arguments context continuation)
-      "Continuation-aware implementation of the `make-parameter` primitive for trampoline evaluation."
+      "Continuation-aware implementation of the `make-parameter` primitive for"
+      "trampoline evaluation."
       (let ((initial (car arguments))
             (converter (if (null? (cdr arguments))
                            #f
@@ -6831,7 +7006,8 @@ integer there would not render through the consent writer."
             (continue continuation (make-consent-parameter initial #f)))))
 
     (define (primitive-apply/k arguments context continuation)
-      "Continuation-aware implementation of the `apply` primitive for trampoline evaluation."
+      "Continuation-aware implementation of the `apply` primitive for"
+      "trampoline evaluation."
       (let ((procedure (expect-procedure (car arguments) "apply procedure"))
             (fixed-arguments (reverse (cdr (reverse (cdr arguments)))))
             (tail-arguments
@@ -6845,13 +7021,15 @@ integer there would not render through the consent writer."
                          continuation)))
 
     (define (primitive-values arguments context)
-      "Implement the `values` primitive with argument validation and Consent Scheme values."
+      "Implement the `values` primitive with argument validation and Consent"
+      "Scheme values."
       ;; One fresh multiple-values wrapper; the values it carries were charged
       ;; where they were allocated.
       (charge-value-allocation! (make-multiple-values arguments) 1 context))
 
     (define (primitive-call-with-values arguments context)
-      "Implement the `call-with-values` primitive with argument validation and Consent Scheme values."
+      "Implement the `call-with-values` primitive with argument validation and"
+      "Consent Scheme values."
       (let* ((producer (expect-procedure
                         (car arguments)
                         "call-with-values producer"))
@@ -6863,7 +7041,8 @@ integer there would not render through the consent writer."
 
     (define (primitive-call-with-values/k
              arguments context continuation)
-      "Continuation-aware implementation of the `call-with-values` primitive for trampoline evaluation."
+      "Continuation-aware implementation of the `call-with-values` primitive"
+      "for trampoline evaluation."
       (let ((producer (expect-procedure
                        (car arguments)
                        "call-with-values producer"))
@@ -6884,14 +7063,16 @@ integer there would not render through the consent writer."
             continuation)))))
 
     (define (primitive-call/cc arguments context)
-      "Implement the `call/cc` primitive with argument validation and Consent Scheme values."
+      "Implement the `call/cc` primitive with argument validation and Consent"
+      "Scheme values."
       (drain-state
        (primitive-call/cc/k
         arguments context identity-continuation)
        context))
 
     (define (primitive-call/cc/k arguments context continuation)
-      "Continuation-aware implementation of the `call/cc` primitive for trampoline evaluation."
+      "Continuation-aware implementation of the `call/cc` primitive for"
+      "trampoline evaluation."
       (let* ((procedure
               (expect-procedure
                (car arguments)
@@ -6925,14 +7106,16 @@ integer there would not render through the consent writer."
        (continuation-value arguments)))
 
     (define (primitive-dynamic-wind arguments context)
-      "Implement the `dynamic-wind` primitive with argument validation and Consent Scheme values."
+      "Implement the `dynamic-wind` primitive with argument validation and"
+      "Consent Scheme values."
       (drain-state
        (primitive-dynamic-wind/k
         arguments context identity-continuation)
        context))
 
     (define (primitive-dynamic-wind/k arguments context continuation)
-      "Continuation-aware implementation of the `dynamic-wind` primitive for trampoline evaluation."
+      "Continuation-aware implementation of the `dynamic-wind` primitive for"
+      "trampoline evaluation."
       (let ((before (expect-procedure (car arguments) "dynamic-wind before"))
             (thunk (expect-procedure (second arguments) "dynamic-wind thunk"))
             (after (expect-procedure (third arguments) "dynamic-wind after")))
@@ -6994,7 +7177,8 @@ integer there would not render through the consent writer."
            (continue continuation value)))))
 
     (define (primitive-with-exception-handler arguments context)
-      "Implement the `with-exception-handler` primitive with argument validation and Consent Scheme values."
+      "Implement the `with-exception-handler` primitive with argument"
+      "validation and Consent Scheme values."
       (drain-state
        (primitive-with-exception-handler/k
         arguments context identity-continuation)
@@ -7002,7 +7186,8 @@ integer there would not render through the consent writer."
 
     (define (primitive-with-exception-handler/k
              arguments context continuation)
-      "Continuation-aware implementation of the `with-exception-handler` primitive for trampoline evaluation."
+      "Continuation-aware implementation of the `with-exception-handler`"
+      "primitive for trampoline evaluation."
       (let ((handler (expect-procedure
                       (car arguments)
                       "with-exception-handler handler"))
@@ -7025,22 +7210,26 @@ integer there would not render through the consent writer."
            (continue continuation value)))))
 
     (define (primitive-raise-continuable arguments context)
-      "Implement the `raise-continuable` primitive with argument validation and Consent Scheme values."
+      "Implement the `raise-continuable` primitive with argument validation and"
+      "Consent Scheme values."
       (invoke-exception-handler (car arguments) context))
 
     (define (primitive-raise-continuable/k
              arguments context continuation)
-      "Continuation-aware implementation of the `raise-continuable` primitive for trampoline evaluation."
+      "Continuation-aware implementation of the `raise-continuable` primitive"
+      "for trampoline evaluation."
       (invoke-exception-handler/k
        (car arguments) context continuation))
 
     (define (primitive-raise arguments context)
-      "Implement the `raise` primitive with argument validation and Consent Scheme values."
+      "Implement the `raise` primitive with argument validation and Consent"
+      "Scheme values."
       (invoke-exception-handler (car arguments) context)
       (eval-error "non-continuable exception handler returned"))
 
     (define (primitive-raise/k arguments context continuation)
-      "Continuation-aware implementation of the `raise` primitive for trampoline evaluation."
+      "Continuation-aware implementation of the `raise` primitive for"
+      "trampoline evaluation."
       (invoke-exception-handler/k
        (car arguments)
        context
@@ -7049,7 +7238,8 @@ integer there would not render through the consent writer."
           "non-continuable exception handler returned"))))
 
     (define (primitive-error arguments context)
-      "Implement the `error` primitive with argument validation and Consent Scheme values."
+      "Implement the `error` primitive with argument validation and Consent"
+      "Scheme values."
       (let ((message (expect-string (car arguments) "error message"))
             (irritants (cdr arguments)))
         (primitive-raise
@@ -7057,7 +7247,8 @@ integer there would not render through the consent writer."
          context)))
 
     (define (primitive-error/k arguments context continuation)
-      "Continuation-aware implementation of the `error` primitive for trampoline evaluation."
+      "Continuation-aware implementation of the `error` primitive for"
+      "trampoline evaluation."
       (let ((message (expect-string (car arguments) "error message"))
             (irritants (cdr arguments)))
         (primitive-raise/k
@@ -7066,7 +7257,8 @@ integer there would not render through the consent writer."
          continuation)))
 
     (define (primitive-error-object? arguments context)
-      "Implement the `error-object?` primitive with argument validation and Consent Scheme values."
+      "Implement the `error-object?` primitive with argument validation and"
+      "Consent Scheme values."
       (consent-error-object? (car arguments)))
 
     (define (expect-error-object value description)
@@ -7078,12 +7270,14 @@ integer there would not render through the consent writer."
            value)))
 
     (define (primitive-error-object-message arguments context)
-      "Implement the `error-object-message` primitive with argument validation and Consent Scheme values."
+      "Implement the `error-object-message` primitive with argument validation"
+      "and Consent Scheme values."
       (consent-error-object-message
        (expect-error-object (car arguments) "error-object-message")))
 
     (define (primitive-error-object-irritants arguments context)
-      "Implement the `error-object-irritants` primitive with argument validation and Consent Scheme values."
+      "Implement the `error-object-irritants` primitive with argument"
+      "validation and Consent Scheme values."
       (consent-error-object-irritants
        (expect-error-object (car arguments) "error-object-irritants")))
 
@@ -7096,7 +7290,8 @@ integer there would not render through the consent writer."
        #t))
 
     (define (primitive-for-each arguments context)
-      "Implement the `for-each` primitive with argument validation and Consent Scheme values."
+      "Implement the `for-each` primitive with argument validation and Consent"
+      "Scheme values."
       (map-over-lists
        (expect-procedure (car arguments) "for-each procedure")
        (cdr arguments)
@@ -7104,11 +7299,13 @@ integer there would not render through the consent writer."
        #f))
 
     (define (primitive-vector? arguments context)
-      "Implement the `vector?` primitive with argument validation and Consent Scheme values."
+      "Implement the `vector?` primitive with argument validation and Consent"
+      "Scheme values."
       (vector? (car arguments)))
 
     (define (primitive-make-vector arguments context)
-      "Implement the `make-vector` primitive with argument validation and Consent Scheme values."
+      "Implement the `make-vector` primitive with argument validation and"
+      "Consent Scheme values."
       (let ((length (exact-integer->host (car arguments) "make-vector"))
             (fill (if (null? (cdr arguments))
                       consent-unspecified
@@ -7118,16 +7315,19 @@ integer there would not render through the consent writer."
         (charge-vector-allocation! (make-vector length fill) context)))
 
     (define (primitive-vector arguments context)
-      "Implement the `vector` primitive with argument validation and Consent Scheme values."
+      "Implement the `vector` primitive with argument validation and Consent"
+      "Scheme values."
       (charge-vector-allocation! (list->vector arguments) context))
 
     (define (primitive-vector-length arguments context)
-      "Implement the `vector-length` primitive with argument validation and Consent Scheme values."
+      "Implement the `vector-length` primitive with argument validation and"
+      "Consent Scheme values."
       (consent-make-canonical-integer
        (vector-length (expect-vector (car arguments) "vector-length"))))
 
     (define (primitive-vector-ref arguments context)
-      "Implement the `vector-ref` primitive with argument validation and Consent Scheme values."
+      "Implement the `vector-ref` primitive with argument validation and"
+      "Consent Scheme values."
       (let* ((vector (expect-vector (car arguments) "vector-ref"))
              (index (expect-nonnegative-index
                      (second arguments)
@@ -7137,7 +7337,8 @@ integer there would not render through the consent writer."
         (vector-ref vector index)))
 
     (define (primitive-vector-set! arguments context)
-      "Implement the `vector-set!` primitive with argument validation and Consent Scheme values."
+      "Implement the `vector-set!` primitive with argument validation and"
+      "Consent Scheme values."
       (let* ((vector (expect-vector (car arguments) "vector-set!"))
              (index (expect-nonnegative-index
                      (second arguments)
@@ -7148,7 +7349,8 @@ integer there would not render through the consent writer."
         consent-unspecified))
 
     (define (primitive-vector->list arguments context)
-      "Implement the `vector->list` primitive with argument validation and Consent Scheme values."
+      "Implement the `vector->list` primitive with argument validation and"
+      "Consent Scheme values."
       (let* ((vector (expect-vector (car arguments) "vector->list"))
              (range (optional-range
                      arguments
@@ -7162,20 +7364,23 @@ integer there would not render through the consent writer."
                     (cons (vector-ref vector index) result))))))
 
     (define (primitive-list->vector arguments context)
-      "Implement the `list->vector` primitive with argument validation and Consent Scheme values."
+      "Implement the `list->vector` primitive with argument validation and"
+      "Consent Scheme values."
       (charge-vector-allocation!
        (list->vector
         (proper-list-elements (car arguments) "list->vector"))
        context))
 
     (define (primitive-vector-copy arguments context)
-      "Implement the `vector-copy` primitive with argument validation and Consent Scheme values."
+      "Implement the `vector-copy` primitive with argument validation and"
+      "Consent Scheme values."
       (charge-vector-allocation!
        (list->vector (primitive-vector->list arguments context))
        context))
 
     (define (primitive-vector-copy! arguments context)
-      "Implement the `vector-copy!` primitive with argument validation and Consent Scheme values."
+      "Implement the `vector-copy!` primitive with argument validation and"
+      "Consent Scheme values."
       (let* ((to (expect-vector (car arguments) "vector-copy! target"))
              (at (expect-nonnegative-index
                   (second arguments)
@@ -7199,7 +7404,8 @@ integer there would not render through the consent writer."
         consent-unspecified))
 
     (define (primitive-vector-append arguments context)
-      "Implement the `vector-append` primitive with argument validation and Consent Scheme values."
+      "Implement the `vector-append` primitive with argument validation and"
+      "Consent Scheme values."
       (charge-vector-allocation!
        (list->vector
         (apply append
@@ -7210,7 +7416,8 @@ integer there would not render through the consent writer."
        context))
 
     (define (primitive-vector-fill! arguments context)
-      "Implement the `vector-fill!` primitive with argument validation and Consent Scheme values."
+      "Implement the `vector-fill!` primitive with argument validation and"
+      "Consent Scheme values."
       (let* ((vector (expect-vector (car arguments) "vector-fill!"))
              (fill (second arguments))
              (range (optional-range
@@ -7226,11 +7433,13 @@ integer there would not render through the consent writer."
         consent-unspecified))
 
     (define (primitive-bytevector? arguments context)
-      "Implement the `bytevector?` primitive with argument validation and Consent Scheme values."
+      "Implement the `bytevector?` primitive with argument validation and"
+      "Consent Scheme values."
       (bytevector? (car arguments)))
 
     (define (primitive-make-bytevector arguments context)
-      "Implement the `make-bytevector` primitive with argument validation and Consent Scheme values."
+      "Implement the `make-bytevector` primitive with argument validation and"
+      "Consent Scheme values."
       (let ((length (exact-integer->host (car arguments) "make-bytevector"))
             (fill (if (null? (cdr arguments))
                       0
@@ -7242,7 +7451,8 @@ integer there would not render through the consent writer."
         (charge-bytevector-allocation! (make-bytevector length fill) context)))
 
     (define (primitive-bytevector arguments context)
-      "Implement the `bytevector` primitive with argument validation and Consent Scheme values."
+      "Implement the `bytevector` primitive with argument validation and"
+      "Consent Scheme values."
       (charge-bytevector-allocation!
        (apply bytevector
               (map (lambda (argument)
@@ -7251,13 +7461,15 @@ integer there would not render through the consent writer."
        context))
 
     (define (primitive-bytevector-length arguments context)
-      "Implement the `bytevector-length` primitive with argument validation and Consent Scheme values."
+      "Implement the `bytevector-length` primitive with argument validation and"
+      "Consent Scheme values."
       (consent-make-canonical-integer
        (bytevector-length
         (expect-bytevector (car arguments) "bytevector-length"))))
 
     (define (primitive-bytevector-u8-ref arguments context)
-      "Implement the `bytevector-u8-ref` primitive with argument validation and Consent Scheme values."
+      "Implement the `bytevector-u8-ref` primitive with argument validation and"
+      "Consent Scheme values."
       (let* ((bytevector
               (expect-bytevector
                (car arguments)
@@ -7271,7 +7483,8 @@ integer there would not render through the consent writer."
          (bytevector-u8-ref bytevector index))))
 
     (define (primitive-bytevector-u8-set! arguments context)
-      "Implement the `bytevector-u8-set!` primitive with argument validation and Consent Scheme values."
+      "Implement the `bytevector-u8-set!` primitive with argument validation"
+      "and Consent Scheme values."
       (let* ((bytevector
               (expect-bytevector
                (car arguments)
@@ -7288,7 +7501,8 @@ integer there would not render through the consent writer."
         consent-unspecified))
 
     (define (primitive-bytevector-copy arguments context)
-      "Implement the `bytevector-copy` primitive with argument validation and Consent Scheme values."
+      "Implement the `bytevector-copy` primitive with argument validation and"
+      "Consent Scheme values."
       (let* ((bytevector
               (expect-bytevector (car arguments) "bytevector-copy"))
              (range (optional-range
@@ -7301,7 +7515,8 @@ integer there would not render through the consent writer."
          context)))
 
     (define (primitive-bytevector-copy! arguments context)
-      "Implement the `bytevector-copy!` primitive with argument validation and Consent Scheme values."
+      "Implement the `bytevector-copy!` primitive with argument validation and"
+      "Consent Scheme values."
       (let* ((to (expect-bytevector
                   (car arguments)
                   "bytevector-copy! target"))
@@ -7324,7 +7539,8 @@ integer there would not render through the consent writer."
         consent-unspecified))
 
     (define (primitive-bytevector-append arguments context)
-      "Implement the `bytevector-append` primitive with argument validation and Consent Scheme values."
+      "Implement the `bytevector-append` primitive with argument validation and"
+      "Consent Scheme values."
       (charge-bytevector-allocation!
        (apply bytevector-append
               (map (lambda (argument)
@@ -7333,7 +7549,8 @@ integer there would not render through the consent writer."
        context))
 
     (define (primitive-procedure? arguments context)
-      "Implement the `procedure?` primitive with argument validation and Consent Scheme values."
+      "Implement the `procedure?` primitive with argument validation and"
+      "Consent Scheme values."
       (or (consent-procedure? (car arguments))
           (consent-primitive-procedure? (car arguments))
           (consent-parameter? (car arguments))
@@ -7419,7 +7636,8 @@ integer there would not render through the consent writer."
       (eqv-value? (car arguments) (second arguments)))
 
     (define (primitive-equal? arguments context)
-      "Implement the `equal?` primitive with argument validation and Consent Scheme values."
+      "Implement the `equal?` primitive with argument validation and Consent"
+      "Scheme values."
       (equal-value? (car arguments) (second arguments) '()))
 
     (define (primitive-memq arguments context)
@@ -7437,7 +7655,8 @@ integer there would not render through the consent writer."
          (else (loop (cdr cursor))))))
 
     (define (primitive-member arguments context)
-      "Implement the `member` primitive with argument validation and Consent Scheme values."
+      "Implement the `member` primitive with argument validation and Consent"
+      "Scheme values."
       (let loop ((cursor (second arguments)))
         (cond
          ((null? cursor) #f)
@@ -7462,7 +7681,8 @@ integer there would not render through the consent writer."
          (else (loop (cdr cursor))))))
 
     (define (primitive-assoc arguments context)
-      "Implement the `assoc` primitive with argument validation and Consent Scheme values."
+      "Implement the `assoc` primitive with argument validation and Consent"
+      "Scheme values."
       (let loop ((cursor (second arguments)))
         (cond
          ((null? cursor) #f)
@@ -8397,7 +8617,8 @@ authorization -- while ambient effects keep gating separately."
          (lambda (port) (set-context-current-error-port! context port)))))
 
     (define (consent-eval expression . rest)
-      "Evaluate one already-read expression in the supplied environment, or a fresh base environment when no environment is provided."
+      "Evaluate one already-read expression in the supplied environment, or a"
+      "fresh base environment when no environment is provided."
       (let ((context (new-eval-context (rest-options rest)))
             (environment (rest-environment rest)))
         (set-context-interaction-environment! context environment)
@@ -8406,7 +8627,8 @@ authorization -- while ambient effects keep gating separately."
         (trampoline expression environment context)))
 
     (define (consent-eval-source source . rest)
-      "Read and evaluate a source body as a sequence that may contain definitions, imports, libraries, and expressions."
+      "Read and evaluate a source body as a sequence that may contain"
+      "definitions, imports, libraries, and expressions."
       (let ((context (new-eval-context (rest-options rest)))
             (environment (rest-environment rest))
             (forms (consent-read-all source (rest-options rest))))
@@ -8428,7 +8650,9 @@ authorization -- while ambient effects keep gating separately."
           thunk))))
 
     (define (consent-eval-result expression . rest)
-      "Result-producing evaluation catches conditions and returns an inspectable Scheme-readable evaluation-result datum instead of raising to the host."
+      "Result-producing evaluation catches conditions and returns an"
+      "inspectable Scheme-readable evaluation-result datum instead of raising"
+      "to the host."
       (let ((context (new-eval-context (rest-options rest)))
             (environment (rest-environment rest)))
         (set-context-interaction-environment! context environment)
@@ -8442,7 +8666,8 @@ authorization -- while ambient effects keep gating separately."
             context)))))
 
     (define (consent-eval-source-result source . rest)
-      "Source result evaluation combines reader, evaluator, condition capture, and budget reporting for REPL and protocol-boundary callers."
+      "Source result evaluation combines reader, evaluator, condition"
+      "capture, and budget reporting for REPL and protocol-boundary callers."
       (let ((context (new-eval-context (rest-options rest)))
             (environment (rest-environment rest)))
         (set-context-interaction-environment! context environment)
@@ -8487,17 +8712,22 @@ authorization -- while ambient effects keep gating separately."
         (and entry (cdr entry))))
 
     (define (make-interaction-program-output-port)
-      "Return a fresh textual string output port (like `open-output-string') for the program output stream."
+      "Return a fresh textual string output port (like `open-output-string')"
+      "for the program output stream."
       (make-consent-port
        'string #f #t #t #f #t #f 0 ""
        #f '() #f '() #f #f #f '()))
 
     (define (consent-make-interaction-context . rest)
-      "Create a durable interaction context from optional REST options (session-id, policy-actions, capability-grants) whose definitions, imports, macros, and program output persist across `consent-interaction-eval-form' submissions.
-When OPTIONS supply a `program-input-reader' and a matching active `port'/`read'
-grant backed by `stdin', a program-input port is created and shared as the
-session's single stdin cursor (the REPL form reader and evaluated reads draw from
-it); otherwise program input stays disconnected and reads fail closed."
+      "Create a durable interaction context from optional REST options"
+      "(session-id, policy-actions, capability-grants) whose definitions,"
+      "imports, macros, and program output persist across"
+      "`consent-interaction-eval-form' submissions."
+      "When OPTIONS supply a `program-input-reader' and a matching active"
+      "`port'/`read' grant backed by `stdin', a program-input port is"
+      "created and shared as the session's single stdin cursor (the REPL"
+      "form reader and evaluated reads draw from it); otherwise program"
+      "input stays disconnected and reads fail closed."
       (let* ((options (if (null? rest) '() (car rest)))
              (context (new-eval-context options))
              (environment (consent-make-base-environment))
@@ -8546,12 +8776,17 @@ steals the other's characters."
        (interaction-context-options interaction)))
 
     (define (consent-interaction-program-output interaction)
-      "Return the program output the most recent `consent-interaction-eval-form' submission wrote, cleared before each evaluation."
+      "Return the program output the most recent"
+      "`consent-interaction-eval-form' submission wrote, cleared before each"
+      "evaluation."
       (consent-port-contents
        (interaction-context-program-output-port interaction)))
 
     (define (consent-interaction-eval-form interaction form)
-      "Evaluate one already-read top-level FORM in durable INTERACTION, reusing its value/syntax environments and program-output port, and return an `evaluation-result' datum (ok/values or captured error) like `consent-eval-source-result'."
+      "Evaluate one already-read top-level FORM in durable INTERACTION, reusing"
+      "its value/syntax environments and program-output port, and return an"
+      "`evaluation-result' datum (ok/values or captured error) like"
+      "`consent-eval-source-result'."
       (let* ((options (interaction-context-options interaction))
              (environment (interaction-context-environment interaction))
              (syntax-environment
