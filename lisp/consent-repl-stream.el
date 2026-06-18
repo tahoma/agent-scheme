@@ -54,6 +54,7 @@
 (require 'consent-reader)
 (require 'consent-repl-chrome)
 (require 'consent-result)
+(require 'consent-session)
 
 (defconst consent-repl-stream-default-session "repl-main"
   "Default session id used by the incremental Consent Scheme REPL entry.")
@@ -387,13 +388,32 @@ EMIT-OUTPUT on separate streams, under SESSION and evaluator OPTIONS."
                             (consent-symbol-name session))
                            ((symbolp session) (symbol-name session))
                            (t (format "%s" session))))
+         (interaction-options
+          (consent-repl-stream--interaction-options
+           session-id read-chunk options))
+         ;; The initial session keeps its own transient context (unchanged
+         ;; behavior); once a `switch-session'/`create-session' verb sets
+         ;; `consent-session-current-id' to a durable registry session, the loop
+         ;; resolves that session's live environment per form, sharing this one
+         ;; stdin cursor so neither session steals the other's input.
          (interaction
-          (consent-make-interaction-context
-           (consent-repl-stream--interaction-options
-            session-id read-chunk options)))
+          (consent-make-interaction-context interaction-options))
+         (shared-input-port
+          (consent-interaction-program-input-port interaction))
          (exit-code 0))
+    (setq consent-session-current-id session-id)
     (cl-labels
-        ((emit (record)
+        ((current-interaction ()
+           (let ((id consent-session-current-id))
+             (if (and id
+                      (not (equal id session-id))
+                      (consent-session--maybe id))
+                 (consent-session-interaction-context
+                  id
+                  (append (list :program-input-port shared-input-port)
+                          interaction-options))
+               interaction)))
+         (emit (record)
            (when (and (consp record)
                       (consent-symbol-p (car record))
                       (equal (consent-symbol-name (car record)) "repl-exit"))
@@ -404,8 +424,8 @@ EMIT-OUTPUT on separate streams, under SESSION and evaluator OPTIONS."
                                      "closed-error"))
                          1 0))))
            (funcall emit-record record))
-         (drain-output! ()
-           (let ((output (consent-interaction-program-output interaction)))
+         (drain-output! (turn-interaction)
+           (let ((output (consent-interaction-program-output turn-interaction)))
              (when (> (length output) 0)
                (funcall emit-output output))))
          (next-chunk () (funcall read-chunk))
@@ -493,34 +513,39 @@ EMIT-OUTPUT on separate streams, under SESSION and evaluator OPTIONS."
                   (t
                    (emit (consent-repl-stream--submission-record
                           session ordinal source t nil))
-                   ;; Seed the shared cursor so an evaluated read consumes the
-                   ;; input after this form; whatever it leaves unread threads back
-                   ;; as the next form-reading buffer, so neither reader steals the
-                   ;; other's characters.
-                   (consent-interaction-seed-program-input! interaction
-                                                            program-input)
-                   (let ((result (consent-interaction-eval-form
-                                  interaction datum)))
-                     ;; Drain this turn's program output before the result
-                     ;; record, binding the ordinal so the `comment' chrome's
-                     ;; output formatter aligns its `;;   :: ' gutter to this
-                     ;; turn's result marker.
-                     (let ((consent-repl-chrome-output-ordinal ordinal))
-                       (drain-output!))
-                     (if (consent-repl-stream--error-result-p result)
-                         (emit (consent-repl-stream--condition-record
-                                session ordinal "eval" t
-                                (consent-repl-stream--error-condition result)
-                                (consent-repl-stream--error-message result)))
-                       (emit (consent-repl-stream--result-record
-                              session ordinal result
-                              (consent-repl-stream--result-display result))))
-                     (setq buffer
-                           (or (consent-interaction-program-input-remainder
-                                interaction)
-                               program-input))
-                     (setq ordinal (1+ ordinal))
-                     (setq count (1+ count)))))))))))
+                   ;; Resolve the session this form runs in *now*: a prior form's
+                   ;; `switch-session'/`create-session' verb may have changed the
+                   ;; default, redirecting this turn to another sandbox
+                   ;; environment.  All sessions share one stdin cursor.
+                   (let ((turn-interaction (current-interaction)))
+                     ;; Seed the shared cursor so an evaluated read consumes the
+                     ;; input after this form; whatever it leaves unread threads
+                     ;; back as the next form-reading buffer, so neither reader
+                     ;; steals the other's characters.
+                     (consent-interaction-seed-program-input! turn-interaction
+                                                              program-input)
+                     (let ((result (consent-interaction-eval-form
+                                    turn-interaction datum)))
+                       ;; Drain this turn's program output before the result
+                       ;; record, binding the ordinal so the `comment' chrome's
+                       ;; output formatter aligns its `;;   :: ' gutter to this
+                       ;; turn's result marker.
+                       (let ((consent-repl-chrome-output-ordinal ordinal))
+                         (drain-output! turn-interaction))
+                       (if (consent-repl-stream--error-result-p result)
+                           (emit (consent-repl-stream--condition-record
+                                  session ordinal "eval" t
+                                  (consent-repl-stream--error-condition result)
+                                  (consent-repl-stream--error-message result)))
+                         (emit (consent-repl-stream--result-record
+                                session ordinal result
+                                (consent-repl-stream--result-display result))))
+                       (setq buffer
+                             (or (consent-interaction-program-input-remainder
+                                  turn-interaction)
+                                 program-input))
+                       (setq ordinal (1+ ordinal))
+                       (setq count (1+ count))))))))))))
       exit-code)))
 
 ;;;; Public driver surface
