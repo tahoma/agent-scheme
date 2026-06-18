@@ -151,6 +151,52 @@ storage so public repositories do not accidentally capture personal memory.
 Any tracked or indexed form remains a rebuildable view over canonical
 Scheme-readable memory records.
 
+### Agent-Layer Determinism and Cross-Host Parity
+
+The First-Class Portable Scheme parity invariant above is a property of the
+language core. **D7** extends it to the agent layer: the deterministic control
+loop, its receipts, scoped memory, transcripts, skills, and any future search
+records must be as reproducible and cross-host-identical as the reader and
+evaluator already are. This decision is ratified by the agent-layer stance RFC
+(#561); its rationale is the agentic prior-art synthesis
+([§4](agentic-harness-ideas.md#4-design-tensions-to-decide-deliberately)), and
+it constrains the Scheme-readable record design that the
+[Task Lifecycle and Control Loop](control-loop.md) and #286 implement. The
+remaining cross-cutting decisions, **D5** (tree search and backtracking) and
+**D6** (autonomy locus), are recorded in that control-loop document.
+
+*Field default:* agent results are means over noisy runs on one implementation;
+learning lives in opaque weights; retrieval lives in an opaque vector database;
+records are stamped with wall-clock time. Nondeterminism is pervasive and is
+reported as a statistic.
+
+*Consent choice:* nondeterminism is quarantined and bounded so the agent layer
+is replayable and parity-checkable:
+
+- **Model output is the only nondeterministic channel,** and it is recorded as
+  fixed input on resync. A replay re-runs the deterministic loop over the
+  recorded model output; it does not re-sample the model.
+- **Agent records use logical clocks, not wall-clock time.** Ordering and
+  recency are appended events on the loop's monotonic counter, so a record
+  stream is identical regardless of when or how fast it ran.
+- **Embeddings and other host acceleration structures are untrusted advisory
+  caches** over the canonical content-addressed store, never the source of
+  truth, consistent with [Inspectable Memory](#inspectable-memory). If
+  embeddings are ever used, any ranking they inform is rebuildable from the
+  canonical datums, and a parity run cannot depend on them.
+- **Live browsing and other external observation lower to snapshotted evidence
+  datums,** with the network capability an explicit grant, so a replayed run
+  sees the recorded snapshot rather than a fresh fetch.
+- **Learning lives in append-only memory and content-addressed skills, never in
+  weights.** A learned skill must hash and behave byte-identically on both
+  cores.
+- **Anything that hashes or behaves differently across the two cores is a
+  parity defect to fix at root,** not a variance to average away. The
+  `test-parity` gate (#374) is the mechanism; the agent-layer corpora extend it.
+  This is also the mechanical counterpart to the field's manual agreement
+  checks, such as GAIA's two-annotator agreement and tau-bench's task-uniqueness
+  check.
+
 ## Runtime Shape
 
 The runtime has three layers.
