@@ -684,6 +684,120 @@ Retry policy must be bounded by budget and by repeated-failure receipts. A
 model may suggest retrying, but the runtime decides whether retry remains
 allowed.
 
+## Cross-Cutting Stance Decisions
+
+The agentic prior-art synthesis enumerates seven tensions between the agentic
+field's defaults and Consent's stance
+([Agentic-harness prior-art synthesis §4](agentic-harness-ideas.md#4-design-tensions-to-decide-deliberately)).
+Four are decided where they are implemented: **D1** (JSON vs Lisp-first tool
+schemas) in #531, **D2** (free-form code vs capability-gated effects) and **D3**
+(who authorizes completion) in #286, and **D4** (memory mutation vs append-only)
+in the memory slice. The remaining three are cross-cutting — they bind more
+than one implementation slice — and are ratified here as an RFC (#561) before
+the work they gate proceeds. Each is framed as the field default versus the
+consent-aligned choice. D5 and D6 govern the control loop and are recorded in
+this document; **D7** (agent-layer determinism and cross-host parity) is
+recorded in [Architecture and threat model](architecture.md) as an extension of
+the First-Class Portable Scheme parity invariant, because it is an
+architecture-wide rule, and it constrains the Scheme-readable record design this
+document defines and #286 implements.
+
+These decisions are binding stance now even where the runtime that exercises
+them is far-future. Recording the record vocabulary early prevents drift when
+the driver that needs it lands.
+
+### D5 — Tree search and backtracking
+
+*Field default:* search *is* the control flow; the loop expands, scores, and
+prunes a tree of model thoughts every step; backtracking silently discards the
+pruned subtrees; voting assumes cheap repeated model calls. [ToT,
+Building-Effective-Agents, Wang-survey, AutoGen]
+
+*Consent choice:* the deterministic single-track loop in
+[Control Loop](#control-loop) remains the control flow. Tree search is an
+**opt-in, explicitly budgeted planning sub-mode** entered from `planning`, never
+the default driver and never a new lifecycle state. Within it:
+
+- The search tree is **append-only**, like every other agent record. Expansion
+  adds nodes; nothing is overwritten or deleted.
+- Backtracking is a typed receipt, not a silent discard:
+
+  ```scheme
+  (backtrack
+    (from node-7)
+    (to node-3)
+    (reason impossible)
+    (discarded-subtree (node-7 node-8 node-9))
+    (grants-accounted ((grant region-edit (status released)))))
+  ```
+
+  The receipt keeps the discarded subtree as data and accounts for every grant
+  the pruned branch acquired, so abandoning a branch can never strand authority.
+- **True backtracking is sound only over pure-Scheme subtrees.** A subtree that
+  performed a host effect cannot be re-entered as if it had not happened; the
+  loop treats such a node as a recorded observation, not a re-runnable state,
+  and re-acquires any authority through the normal gate.
+- **Voting is a deterministic Scheme function over recorded response datums,**
+  not model self-selection: the aggregator reads the candidate response datums
+  and reduces them by an explicit, printable rule, so two cores replaying the
+  same candidates reach the same verdict.
+- The search cost `b·k·T` (branching × samples × depth) **folds into the
+  allocation budget**; exhaustion produces a search-exhaustion receipt — a
+  `budget-exhausted` stop receipt whose payload names the best partial node
+  found — rather than an unbounded spend.
+
+The search driver itself is far-future (synthesis tag *later*, planning
+hardening); only the stance and the record vocabulary above are decided now.
+
+### D6 — Autonomy locus: who drives the loop
+
+*Field default:* the model, an MCP server, or a multi-agent manager owns control
+flow; autonomy knobs are untracked keyword arguments; self-chaining is capped by
+an implicit constant buried in the framework. [MCP, MemGPT, AutoGen, tau-bench,
+Toolformer, Building-Effective-Agents]
+
+*Consent choice:* the **deterministic outer loop owns invocation, routing,
+eviction, and termination.** Every external initiation is re-cast as a
+*proposal* the loop and the policy gate own and adjudicate — it can suggest the
+next step but cannot drive it:
+
+- MCP server-initiated sampling (`createMessage`) is a proposed provider request
+  the loop must route and the gate must approve, not a call an external party
+  pushes into `acting`.
+- MemGPT-style heartbeat self-chaining (`request_heartbeat` / continue) is a
+  budget-charged, receipted step: the loop honors `continue` only while the step
+  and heartbeat budgets allow, else forces a yield.
+- AutoGen-style speaker selection is a loop- and policy-resolved routing
+  decision with a receipt; the model may propose the next speaker but cannot
+  select the route.
+- The **non-interactive script drive** is the same shape: a script that drives
+  the loop proposes work under the loop's authority; it does not bypass it.
+
+Autonomy knobs become **policy-governed approval/budget data with receipts,**
+not free kwargs: `human_input_mode` (NEVER / TERMINATE / ALWAYS) becomes an
+approval policy, and `max_consecutive_auto_reply`-style limits become an
+explicit budget whose exhaustion emits a receipt (for example
+`auto-reply-budget-exhausted` or `heartbeat-budget-exhausted`), folded into the
+[Failure and Stop Conditions](#failure-and-stop-conditions) contract.
+
+This is the decision **#400 applies for the non-interactive (batch/shebang)
+script-drive case**, extending the batch fail-closed posture to provider and
+agent grants: the script proposes; the loop and gate retain authority.
+
+### D7 — Agent-layer determinism and cross-host parity
+
+D7 is recorded in [Architecture and threat model](architecture.md#agent-layer-determinism-and-cross-host-parity),
+because it extends the architecture-wide First-Class Portable Scheme parity
+invariant rather than the control loop alone. In summary: all nondeterminism is
+quarantined to the model channel and recorded as fixed input on resync; agent
+records use logical clocks, not wall-clock time; embeddings and other host
+acceleration structures are untrusted advisory caches over a content-addressed
+store, never the source of truth; learning lives in append-only memory and
+content-addressed skills, never in weights; and anything that hashes or behaves
+differently across the two cores is a parity defect to fix at root. This
+constrains the Scheme-readable record design throughout this document and the
+runner #286 builds from it.
+
 ## Follow-Up Issues
 
 This design is the umbrella contract for issue #281. Executable work should be
