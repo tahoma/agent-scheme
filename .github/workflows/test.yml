@@ -40,6 +40,7 @@ jobs:
   license-reuse:
     name: REUSE / SPDX license compliance
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
@@ -58,14 +59,15 @@ jobs:
   lint-elisp:
     name: Emacs byte-compile lint (warnings-as-errors)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
 
       - name: Install Emacs
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y emacs-nox
+        uses: ./.github/actions/apt-install
+        with:
+          packages: emacs-nox
 
       - name: Byte-compile lisp/ with warnings-as-errors
         run: make lint-elisp
@@ -73,6 +75,7 @@ jobs:
   lint-portable:
     name: Portable-host compiler lint (warnings-as-errors)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     # Portable twin of lint-elisp (#421): compile the host-loadable portable
     # libraries under Guile with static warnings promoted to errors. Guile is the
     # gate host because it is the only in-CI portable host with a usable `-W`
@@ -82,10 +85,12 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Install Guile
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y guile-3.0
-          guile --version
+        uses: ./.github/actions/apt-install
+        with:
+          packages: guile-3.0
+
+      - name: Verify Guile
+        run: guile --version
 
       - name: Compile portable libraries with warnings-as-errors
         run: make lint-portable
@@ -93,6 +98,7 @@ jobs:
   test-portable-gambit:
     name: portable R7RS / Gambit full suite / syntax ${{ matrix.combo.source_metadata }} / docstrings ${{ matrix.combo.docstring_retention }}
     runs-on: ubuntu-latest
+    timeout-minutes: 35
     # Gambit is the canonical portable host: on the per-push lane its full-suite
     # shard runs the canonical on/full combo plus a single fully-stripped off/none
     # de-feature smoke leg, and its recompile-bound native shard runs on/full only
@@ -129,11 +135,13 @@ jobs:
           path: ${{ runner.tool_cache }}/gambit/${{ env.CONSENT_GAMBIT_VERSION }}
           key: ${{ runner.os }}-gambit-${{ env.CONSENT_GAMBIT_VERSION }}
 
+      - name: Install Gambit build dependencies
+        uses: ./.github/actions/apt-install
+        with:
+          packages: emacs-nox build-essential ca-certificates curl libssl-dev
+
       - name: Install Gambit
         run: |
-          sudo apt-get update
-          sudo apt-get install -y emacs-nox build-essential ca-certificates curl libssl-dev
-
           gambit_prefix="${RUNNER_TOOL_CACHE}/gambit/${CONSENT_GAMBIT_VERSION}"
           if [ ! -x "${gambit_prefix}/bin/gsi" ]; then
             curl -fsSL \
@@ -240,6 +248,7 @@ jobs:
   test-portable-extra-hosts:
     name: portable R7RS / ${{ matrix.host.host_name }} full suite / syntax ${{ matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention }}
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     # Pull the base image from the rate-limit-free AWS ECR Public Ubuntu mirror
     # instead of Docker Hub (registry-1.docker.io), whose anonymous per-IP limit
     # intermittently times this container job out at provisioning. Same Ubuntu
@@ -290,8 +299,18 @@ jobs:
       - name: Install checkout tools
         shell: bash
         run: |
-          apt-get update
-          apt-get install -y ca-certificates git tar zstd
+          run() { timeout 180 "$@"; }
+          ok=0
+          for attempt in 1 2 3 4; do
+            if run apt-get update -o Acquire::Retries=3 \
+               && run apt-get install -y --no-install-recommends -o Acquire::Retries=3 ca-certificates git tar zstd; then
+              ok=1
+              break
+            fi
+            echo "::warning::apt attempt ${attempt} failed; retrying" >&2
+            sleep $((attempt * 10))
+          done
+          [ "${ok}" -eq 1 ] || { echo "::error::apt failed after retries" >&2; exit 1; }
 
       - name: Check out repository
         uses: actions/checkout@v6
@@ -320,10 +339,13 @@ jobs:
             ${{ runner.os }}-racket-build-v1-
 
       - name: Install portable R7RS host
+        uses: ./.github/actions/apt-install
+        with:
+          packages: make emacs-nox ${{ matrix.host.apt_package }}
+
+      - name: Verify portable R7RS host
         shell: bash
         run: |
-          apt-get install -y make emacs-nox "${{ matrix.host.apt_package }}"
-
           case "${{ matrix.host.host }}" in
             racket|compiled)
               raco pkg install --batch --auto --skip-installed --no-docs r7rs
@@ -373,6 +395,7 @@ jobs:
   test-emacs-hosted:
     name: Emacs-hosted ERT (${{ matrix.shard.label }}; syntax ${{ matrix.source_metadata }}; docstrings ${{ matrix.docstring_retention }})
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     env:
       CONSENT_TEST_SOURCE_METADATA: ${{ matrix.source_metadata }}
       CONSENT_TEST_DOCSTRING_RETENTION: ${{ matrix.docstring_retention }}
@@ -434,9 +457,9 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Install Emacs
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y emacs-nox
+        uses: ./.github/actions/apt-install
+        with:
+          packages: emacs-nox
 
       - name: Run Emacs-hosted ERT shard
         shell: bash
@@ -474,6 +497,7 @@ jobs:
   test-emacs-core:
     name: Emacs-hosted ERT (${{ matrix.shard.label }}; syntax ${{ matrix.combo.source_metadata }}; docstrings ${{ matrix.combo.docstring_retention }})
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     # Canonical Emacs shard: on the per-push lane the core language/runtime shard
     # runs the canonical on/full combo plus a single fully-stripped off/none
     # de-feature smoke leg, so the Emacs reader/writer/docstring axis keeps a fast
@@ -502,9 +526,9 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Install Emacs
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y emacs-nox
+        uses: ./.github/actions/apt-install
+        with:
+          packages: emacs-nox
 
       - name: Run Emacs-hosted ERT shard
         shell: bash
@@ -542,6 +566,7 @@ jobs:
   test-parity:
     name: Emacs/portable parity gate (syntax ${{ matrix.source_metadata }}; docstrings ${{ matrix.docstring_retention }})
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     # Required cross-implementation gate (#374): run the shared fixture corpus
     # through both in-repo cores -- the Emacs-hosted implementation and the
     # portable R7RS implementation, exercised here under Guile -- and fail on
@@ -567,9 +592,12 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Install Emacs and Guile
+        uses: ./.github/actions/apt-install
+        with:
+          packages: emacs-nox guile-3.0
+
+      - name: Verify Guile
         run: |
-          sudo apt-get update
-          sudo apt-get install -y emacs-nox guile-3.0
           guile --no-auto-compile --r7rs -L scheme \
             -c '(import (scheme base) (scheme write)) (write (+ 1 2)) (newline)'
 
@@ -609,6 +637,7 @@ jobs:
   test-summary:
     name: test shard timing summary
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs:
       - test-portable-gambit
       - test-portable-extra-hosts
@@ -622,9 +651,9 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Install Emacs
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y emacs-nox
+        uses: ./.github/actions/apt-install
+        with:
+          packages: emacs-nox
 
       - name: Download shard logs
         continue-on-error: true
@@ -763,6 +792,7 @@ jobs:
   live-local-model:
     name: live local model smoke
     runs-on: ubuntu-latest
+    timeout-minutes: 25
 
     env:
       CONSENT_LIVE_MODEL_ENDPOINT: http://127.0.0.1:11434/v1
@@ -774,9 +804,9 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Install runtime dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ca-certificates curl emacs-nox zstd
+        uses: ./.github/actions/apt-install
+        with:
+          packages: ca-certificates curl emacs-nox zstd
 
       - name: Cache Ollama models
         uses: actions/cache@v5
