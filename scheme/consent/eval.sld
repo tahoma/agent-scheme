@@ -22,6 +22,9 @@
           consent-interaction-program-input-port
           consent-interaction-seed-program-input!
           consent-interaction-program-input-remainder
+          consent-repl-session-manager
+          consent-repl-seed-initial-session!
+          consent-session-manager-current-context
           consent-program-input-from-string
           consent-program-input-from-bytevector
           consent-make-empty-environment

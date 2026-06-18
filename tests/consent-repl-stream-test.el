@@ -743,6 +743,42 @@ silently reproducing the recorded value."
                        "kind"))
                      "condition")))))
 
+;;;; Scheme-callable session switching redirects forms across sandboxes
+
+(ert-deftest consent-repl-stream-session-switch-redirects-and-isolates ()
+  "A `switch-session' verb redirects subsequent forms to per-session sandboxes."
+  (consent-session-clear!)
+  (setq consent-session-current-id nil)
+  (let* ((records
+          (consent-repl-stream-test--drive
+           (concat
+            "(import (agent session))\n"
+            "(create-session 'named '((id sess-a)))\n"
+            "(create-session 'named '((id sess-b)))\n"
+            "(switch-session 'sess-a)\n"
+            "(import (agent session))\n"
+            "(define v 'a)\n"
+            "v\n"
+            "(switch-session 'sess-b)\n"
+            "(import (agent session))\n"
+            "(define v 'b)\n"
+            "v\n"
+            "(switch-session 'sess-a)\n"
+            "v\n")
+           '(:policy-actions ((window-session . allow)))))
+         (results (consent-repl-stream-test--of records "repl-result")))
+    ;; Thirteen forms produce thirteen results; `v' reads the value defined in
+    ;; whichever session is current, and switching back to `sess-a' still sees
+    ;; its own `v' (isolation), not the value defined in `sess-b'.
+    (should (= (length results) 13))
+    (should (equal (consent-repl-stream-test--field (nth 6 results) "display")
+                   "a"))
+    (should (equal (consent-repl-stream-test--field (nth 10 results) "display")
+                   "b"))
+    (should (equal (consent-repl-stream-test--field (nth 12 results) "display")
+                   "a"))
+    (should (= (consent-repl-stream-test--count records "repl-condition") 0))))
+
 (provide 'consent-repl-stream-test)
 
 ;;; consent-repl-stream-test.el ends here

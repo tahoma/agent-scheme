@@ -379,8 +379,12 @@ session the rest of Emacs evaluates against, rather than an island."
            (grant (and reader
                        (consent--find-standard-stream-grant
                         eval-context 'stdin 'read)))
-           (input-port (and reader grant
-                            (consent--make-program-input-port grant reader))))
+           ;; A pre-built `:program-input-port' lets the multi-session REPL share
+           ;; one stdin cursor across every session it switches between, instead
+           ;; of forking a fresh cursor per session.
+           (input-port (or (plist-get merged-options :program-input-port)
+                           (and reader grant
+                                (consent--make-program-input-port grant reader)))))
       (consent--make-interaction-context-record
        merged-options environment syntax-environment
        (consent--primitive-open-output-string nil nil)

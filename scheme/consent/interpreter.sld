@@ -22,6 +22,9 @@
           consent-interaction-program-input-port
           consent-interaction-seed-program-input!
           consent-interaction-program-input-remainder
+          consent-repl-session-manager
+          consent-repl-seed-initial-session!
+          consent-session-manager-current-context
           consent-program-input-from-string
           consent-program-input-from-bytevector
           consent-make-empty-environment
@@ -63,6 +66,7 @@
           (prefix (consent memory) memory-model:)
           (prefix (consent plan) plan-model:)
           (prefix (consent redaction) redaction-model:)
+          (prefix (consent session) session-model:)
           (consent macro))
   (begin
     ;; Process-local portable approvals used by `(agent approval)' primitives.
@@ -84,6 +88,30 @@
     ;; Process-local portable plans used by `(agent plan)' primitives.
     (define interpreter-plan-store
       (plan-model:consent-make-plan-store))
+
+    ;; Process-local live session manager backing the `(agent session)' verbs
+    ;; and the multi-environment REPL loop.  Its interaction-context factory is
+    ;; injected at module load (see the install below) so this store can build
+    ;; per-session sandbox environments without a `session -> interpreter'
+    ;; import cycle.
+    (define interpreter-session-manager
+      (session-model:consent-make-session-manager))
+
+    (define (default-session-context-factory id scope options)
+      "Build a fresh sandbox interaction context for session ID.
+The default factory gives each session its own base environment with no
+shared stdin; the multi-session REPL replaces it (see
+`consent-repl-seed-initial-session!') with one that shares a single stdin
+cursor across sessions."
+      (consent-make-interaction-context (cons (cons 'session-id id) options)))
+
+    (define (active-session-manager)
+      "Return the live session manager, ensuring a context factory is installed."
+      (if (not (session-model:session-manager-context-factory
+                interpreter-session-manager))
+          (session-model:session-manager-set-context-factory!
+           interpreter-session-manager default-session-context-factory))
+      interpreter-session-manager)
 
     ;; Process-local portable model provider profiles.
     (define interpreter-model-providers '())
@@ -4835,8 +4863,11 @@
 
     (define (reflect-current-session-info context)
       "Return public session and event identity for CONTEXT."
+      ;; Report the session id this evaluation runs under (matching the Emacs
+      ;; twin); in the REPL each session's interaction context carries its own
+      ;; id, so this agrees with `current-session'.
       (list 'session-info
-            (result-field 'id #f)
+            (result-field 'id (context-session-id context))
             (result-field 'job #f)
             (result-field 'events-used
                           (consent-make-canonical-integer
@@ -4924,6 +4955,89 @@
     (define (primitive-recent-policy-decisions arguments context)
       "Return recent policy decision records."
       (reflect-recent-policy-decisions context))
+
+    (define (authorize-session-verb context operation)
+      "Gate a mutating `(agent session)' verb on the window-session policy."
+      "Records the capability request and decision, then raises fail-closed"
+      "when window-session is not granted.  The portable host has no"
+      "interactive confirmer, so only an explicit `allow' passes; the default"
+      "`confirm' denies."
+      (record-audit-event!
+       context
+       'capability-request
+       (list (result-field 'domain 'session)
+             (result-field 'operation operation)))
+      (if (eq? (reflect-policy-action context 'window-session) 'allow)
+          (record-policy-decision! context 'window-session operation 'allowed
+                                   (list (result-field 'domain 'session)))
+          (begin
+            (record-policy-decision! context 'window-session operation 'denied
+                                     (list (result-field 'domain 'session)))
+            (eval-error
+             (string-append operation
+                            " requires policy-gated session access")))))
+
+    (define (record-session-lifecycle! context operation id)
+      "Record a `session-lifecycle' audit entry for OPERATION on session ID."
+      (record-audit-event!
+       context
+       'session-lifecycle
+       (list (result-field 'operation operation)
+             (result-field 'session id))))
+
+    (define (primitive-create-session arguments context)
+      "Create a session with its own sandbox environment and return its datum."
+      "Optional ARGUMENTS are a scope symbol (default `named') and an options"
+      "alist overriding id and construction fields.  Does not change the"
+      "default session."
+      (authorize-session-verb context "create-session")
+      (let* ((scope (if (null? arguments) 'named (car arguments)))
+             (options (if (or (null? arguments) (null? (cdr arguments)))
+                          '()
+                          (cadr arguments)))
+             (datum (session-model:session-manager-create!
+                     (active-session-manager) scope options)))
+        (record-session-lifecycle! context 'create
+                                   (session-model:session-datum-id datum))
+        (redaction-model:redact datum 'runtime-reflection)))
+
+    (define (primitive-switch-session arguments context)
+      "Switch the default session to the existing session named in ARGUMENTS."
+      "Bound as both `switch-session' and `set-default-session!'; raises when"
+      "the named session is unknown."
+      (authorize-session-verb context "switch-session")
+      (let ((datum (session-model:session-manager-switch!
+                    (active-session-manager) (car arguments))))
+        (if datum
+            (begin
+              (record-session-lifecycle! context 'switch (car arguments))
+              (redaction-model:redact datum 'runtime-reflection))
+            (eval-error "unknown session" (car arguments)))))
+
+    (define (primitive-current-session arguments context)
+      "Return the default session datum, or session info when none is selected."
+      (let ((datum (session-model:session-manager-current
+                    interpreter-session-manager)))
+        (redaction-model:redact
+         (or datum (reflect-current-session-info context))
+         'runtime-reflection)))
+
+    (define (primitive-list-sessions arguments context)
+      "Return the manager's session datums, optionally filtered by scope."
+      (redaction-model:redact
+       (if (null? arguments)
+           (session-model:session-manager-list interpreter-session-manager)
+           (session-model:session-manager-list interpreter-session-manager
+                                                (car arguments)))
+       'runtime-reflection))
+
+    (define (primitive-close-session arguments context)
+      "Retire the session named in ARGUMENTS and drop its live context."
+      (authorize-session-verb context "close-session")
+      (let ((datum (session-model:session-manager-close!
+                    (active-session-manager) (car arguments))))
+        (record-session-lifecycle! context 'close (car arguments))
+        (redaction-model:redact datum 'runtime-reflection)))
 
     (define (primitive-capability-info arguments context)
       "Return metadata for one named capability."
@@ -7780,6 +7894,11 @@
        (cons 'primitive-current-budget primitive-current-budget)
        (cons 'primitive-current-imports primitive-current-imports)
        (cons 'primitive-current-session-info primitive-current-session-info)
+       (cons 'primitive-create-session primitive-create-session)
+       (cons 'primitive-switch-session primitive-switch-session)
+       (cons 'primitive-current-session primitive-current-session)
+       (cons 'primitive-list-sessions primitive-list-sessions)
+       (cons 'primitive-close-session primitive-close-session)
        (cons 'primitive-recent-yields primitive-recent-yields)
        (cons 'primitive-recent-errors primitive-recent-errors)
        (cons 'primitive-recent-policy-decisions
@@ -8730,30 +8849,74 @@
        'string #f #t #t #f #t #f 0 ""
        #f '() #f '() #f #f #f '()))
 
+    (define (program-input-port-from-options options)
+      "Return a pre-built program-input port supplied in OPTIONS, or #f."
+      "The multi-session REPL injects one shared stdin port into every"
+      "session's interaction context so switching sessions never forks the"
+      "single stdin cursor."
+      (let ((entry (assq 'program-input-port options)))
+        (and entry (cdr entry))))
+
     (define (consent-make-interaction-context . rest)
       "Create a durable interaction context from optional REST options"
       "(session-id, policy-actions, capability-grants) whose definitions,"
       "imports, macros, and program output persist across"
       "`consent-interaction-eval-form' submissions."
-      "When OPTIONS supply a `program-input-reader' and a matching active"
-      "`port'/`read' grant backed by `stdin', a program-input port is"
-      "created and shared as the session's single stdin cursor (the REPL"
-      "form reader and evaluated reads draw from it); otherwise program"
-      "input stays disconnected and reads fail closed."
+      "When OPTIONS supply a pre-built `program-input-port' it is reused (the"
+      "multi-session shared stdin cursor); otherwise, when OPTIONS supply a"
+      "`program-input-reader' and a matching active `port'/`read' grant backed"
+      "by `stdin', a program-input port is created and shared as the session's"
+      "single stdin cursor (the REPL form reader and evaluated reads draw from"
+      "it); otherwise program input stays disconnected and reads fail closed."
       (let* ((options (if (null? rest) '() (car rest)))
              (context (new-eval-context options))
              (environment (consent-make-base-environment))
              (reader (program-input-reader-from-options options))
              (grant (and reader
                          (find-standard-stream-grant context 'stdin 'read)))
-             (input-port (and reader grant
-                              (make-program-input-port context grant reader))))
+             (input-port (or (program-input-port-from-options options)
+                             (and reader grant
+                                  (make-program-input-port
+                                   context grant reader)))))
         (set-context-interaction-environment! context environment)
         (ensure-base-syntax! context environment)
         (make-consent-interaction-context
          options environment (context-syntax-environment context)
          (make-interaction-program-output-port)
          input-port)))
+
+    (define (consent-repl-session-manager)
+      "Return the process-local live session manager backing the REPL verbs."
+      (active-session-manager))
+
+    (define (consent-session-manager-current-context manager)
+      "Return MANAGER's default session interaction context, or #f when none."
+      (let ((id (session-model:session-manager-current-id manager)))
+        (and id (session-model:session-manager-context-ref manager id))))
+
+    (define (consent-repl-seed-initial-session! manager session-id options)
+      "Reset MANAGER and seed an initial named session for SESSION-ID."
+      "Each REPL run starts from a clean manager (the process-local store is"
+      "shared across evaluations), then installs a context factory that shares"
+      "one program-input port across all sessions so the multi-session REPL"
+      "keeps a single stdin cursor, and registers the initial session as the"
+      "default."
+      (session-model:session-manager-reset! manager)
+      (let* ((id (if (symbol? session-id)
+                     session-id
+                     (string->symbol session-id)))
+             (initial (consent-make-interaction-context options))
+             (shared-port
+              (consent-interaction-program-input-port initial)))
+        (session-model:session-manager-set-context-factory!
+         manager
+         (lambda (sid scope create-options)
+           (consent-make-interaction-context
+            (cons (cons 'session-id sid)
+                  (cons (cons 'program-input-port shared-port)
+                        options)))))
+        (session-model:session-manager-seed! manager id 'named initial))
+      manager)
 
     (define (consent-interaction-program-input-port interaction)
       "Return INTERACTION's shared program-input port, or #f when disconnected."
