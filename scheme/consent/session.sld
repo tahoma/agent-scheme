@@ -24,7 +24,21 @@
           session-fork!
           session-retire!
           session-handles
-          session-datum-id)
+          session-datum-id
+          consent-make-session-manager
+          consent-session-manager?
+          session-manager-store
+          session-manager-set-context-factory!
+          session-manager-context-factory
+          session-manager-reset!
+          session-manager-context-ref
+          session-manager-current-id
+          session-manager-create!
+          session-manager-seed!
+          session-manager-switch!
+          session-manager-current
+          session-manager-list
+          session-manager-close!)
   (import (scheme base))
   (begin
     ;; Session scopes distinguish one-off evaluation from named REPL and
@@ -82,6 +96,20 @@
       (snapshots session-snapshots set-session-snapshots!)
       (parent-id session-parent-id)
       (forked-from session-forked-from))
+
+    ;; Live session manager: the multi-environment-native layer over the pure
+    ;; lifecycle store.  It owns a store of session records, a map of session id
+    ;; to live host interaction context (each its own sandbox environment), a
+    ;; default session id the REPL evaluates subsequent forms in, and an
+    ;; injected context factory so this host-neutral library never imports the
+    ;; interpreter that builds interaction contexts.
+    (define-record-type <consent-session-manager>
+      (make-session-manager store contexts default-id context-factory)
+      consent-session-manager?
+      (store manager-store set-manager-store!)
+      (contexts manager-contexts set-manager-contexts!)
+      (default-id manager-default-id set-manager-default-id!)
+      (context-factory manager-context-factory set-manager-context-factory!))
 
     (define (consent-make-session-store)
       "Construct an empty portable session store."
@@ -354,4 +382,165 @@
         (effects . (state-write error)))
       (let ((session (require-session store id)))
         (set-session-record-handles! session '())
-        (transition! session 'retired)))))
+        (transition! session 'retired)))
+
+    (define (consent-make-session-manager)
+      "Construct an empty live session manager."
+      #((parameters . ())
+        (returns . "A session manager with an empty store, no live contexts, no default session, and no context factory.")
+        (effects . (allocation)))
+      (make-session-manager (consent-make-session-store) '() #f #f))
+
+    (define (session-manager-set-context-factory! manager factory)
+      "Install FACTORY as MANAGER's interaction-context factory."
+      #((parameters . ((manager . "Session manager to configure.")
+                       (factory . "Procedure of (id scope options) returning a live interaction context for a session.")))
+        (returns . "Unspecified.")
+        (effects . (state-write)))
+      (set-manager-context-factory! manager factory))
+
+    (define (session-manager-context-factory manager)
+      "Return MANAGER's installed interaction-context factory, or #f."
+      #((parameters . ((manager . "Session manager to inspect.")))
+        (returns . "The installed context factory procedure, or #f when none is set.")
+        (effects . (state-read)))
+      (manager-context-factory manager))
+
+    (define (session-manager-reset! manager)
+      "Clear MANAGER's sessions, live contexts, and default session."
+      #((parameters . ((manager . "Session manager to reset.")))
+        (returns . "Unspecified.  The installed context factory is preserved.")
+        (effects . (state-write)))
+      ;; A process-local manager is shared across evaluations; resetting it at
+      ;; the start of a REPL run keeps multiple runs in one process (tests,
+      ;; embeddings) from leaking sessions or already-imported environments.
+      (set-manager-store! manager (consent-make-session-store))
+      (set-manager-contexts! manager '())
+      (set-manager-default-id! manager #f))
+
+    (define (session-manager-store manager)
+      "Return MANAGER's underlying lifecycle store."
+      #((parameters . ((manager . "Session manager to inspect.")))
+        (returns . "The manager's session store.")
+        (effects . (state-read)))
+      (manager-store manager))
+
+    (define (session-manager-current-id manager)
+      "Return MANAGER's default session id, or #f when none is selected."
+      #((parameters . ((manager . "Session manager to inspect.")))
+        (returns . "The default session id symbol, or #f.")
+        (effects . (state-read)))
+      (manager-default-id manager))
+
+    (define (manager-context-cell manager id)
+      "Return the (id . context) cell for ID in MANAGER, or #f."
+      (let loop ((cells (manager-contexts manager)))
+        (cond
+         ((null? cells) #f)
+         ((eq? (caar cells) id) (car cells))
+         (else (loop (cdr cells))))))
+
+    (define (session-manager-context-ref manager id)
+      "Return MANAGER's live interaction context for ID, or #f when absent."
+      #((parameters . ((manager . "Session manager to inspect.")
+                       (id . "Session id symbol.")))
+        (returns . "The live interaction context for ID, or #f.")
+        (effects . (state-read)))
+      (let ((cell (manager-context-cell manager id)))
+        (if cell (cdr cell) #f)))
+
+    (define (manager-build-context manager id scope options)
+      "Build a live interaction context for ID through MANAGER's factory."
+      (let ((factory (manager-context-factory manager)))
+        (if (not factory)
+            (error "session manager has no interaction-context factory" id))
+        (factory id scope options)))
+
+    (define (manager-register-context! manager id context)
+      "Store CONTEXT under ID in MANAGER, replacing any prior cell."
+      (set-manager-contexts!
+       manager
+       (cons (cons id context)
+             (let loop ((cells (manager-contexts manager)) (kept '()))
+               (cond
+                ((null? cells) (reverse kept))
+                ((eq? (caar cells) id) (loop (cdr cells) kept))
+                (else (loop (cdr cells) (cons (car cells) kept))))))))
+
+    (define (session-manager-create! manager scope options)
+      "Create a SCOPE session in MANAGER with a fresh sandbox context."
+      #((parameters . ((manager . "Session manager to mutate.")
+                       (scope . "Session scope symbol.")
+                       (options . "Association list overriding id and construction fields.")))
+        (returns . "The created public session datum.  Does not change the default session.")
+        (effects . (state-write error)))
+      (let* ((datum (session-create! (manager-store manager) scope options))
+             (id (session-datum-id datum)))
+        (manager-register-context!
+         manager id (manager-build-context manager id scope options))
+        datum))
+
+    (define (session-manager-seed! manager id scope context)
+      "Register a pre-built CONTEXT as session ID (SCOPE) and make it default."
+      #((parameters . ((manager . "Session manager to mutate.")
+                       (id . "Session id symbol for the seeded session.")
+                       (scope . "Session scope symbol.")
+                       (context . "Pre-built live interaction context to adopt.")))
+        (returns . "The seeded public session datum, now the default session.")
+        (effects . (state-write error)))
+      (let ((datum (session-create! (manager-store manager)
+                                    scope
+                                    (list (list 'id id)))))
+        (manager-register-context! manager id context)
+        (set-manager-default-id! manager id)
+        datum))
+
+    (define (session-manager-switch! manager id)
+      "Make ID MANAGER's default session, building a context if needed."
+      #((parameters . ((manager . "Session manager to mutate.")
+                       (id . "Existing session id symbol to switch to.")))
+        (returns . "ID's public session datum, or #f when ID is unknown.")
+        (effects . (state-write)))
+      (let ((datum (session-ref (manager-store manager) id)))
+        (if datum
+            (begin
+              (if (not (session-manager-context-ref manager id))
+                  (manager-register-context!
+                   manager id (manager-build-context manager id #f '())))
+              (set-manager-default-id! manager id)
+              datum)
+            #f)))
+
+    (define (session-manager-current manager)
+      "Return MANAGER's default session datum, or #f when none is selected."
+      #((parameters . ((manager . "Session manager to inspect.")))
+        (returns . "The default session's public datum, or #f.")
+        (effects . (state-read)))
+      (let ((id (manager-default-id manager)))
+        (if id (session-ref (manager-store manager) id) #f)))
+
+    (define (session-manager-list manager . maybe-scope)
+      "Return MANAGER's session datums, optionally filtered by SCOPE."
+      #((parameters . ((manager . "Session manager to inspect.")
+                       (maybe-scope . "Optional session scope symbol.")))
+        (returns . "List of public session datums in creation order.")
+        (effects . (state-read error)))
+      (apply session-list (manager-store manager) maybe-scope))
+
+    (define (session-manager-close! manager id)
+      "Retire session ID in MANAGER and drop its live context."
+      #((parameters . ((manager . "Session manager to mutate.")
+                       (id . "Session id symbol to retire.")))
+        (returns . "The retired public session datum.")
+        (effects . (state-write error)))
+      (let ((datum (session-retire! (manager-store manager) id)))
+        (set-manager-contexts!
+         manager
+         (let loop ((cells (manager-contexts manager)) (kept '()))
+           (cond
+            ((null? cells) (reverse kept))
+            ((eq? (caar cells) id) (loop (cdr cells) kept))
+            (else (loop (cdr cells) (cons (car cells) kept))))))
+        (if (eq? (manager-default-id manager) id)
+            (set-manager-default-id! manager #f))
+        datum))))

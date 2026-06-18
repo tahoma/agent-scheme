@@ -135,6 +135,7 @@
         (agent context)
         (agent reflect)
         (agent redaction)
+        (agent session)
         (agent transcript)))
 
     ;; Consent core library keys recognized by the portable registry.  The
@@ -1513,6 +1514,35 @@
                                   'primitive-safe-for-provider?
                                   2
                                   2))
+         context))
+       ((equal? key '(agent session))
+        (register-primitive-library!
+         key
+         (list
+          (library-primitive-spec 'create-session
+                                  'primitive-create-session
+                                  0
+                                  2)
+          (library-primitive-spec 'switch-session
+                                  'primitive-switch-session
+                                  1
+                                  1)
+          (library-primitive-spec 'set-default-session!
+                                  'primitive-switch-session
+                                  1
+                                  1)
+          (library-primitive-spec 'current-session
+                                  'primitive-current-session
+                                  0
+                                  0)
+          (library-primitive-spec 'list-sessions
+                                  'primitive-list-sessions
+                                  0
+                                  1)
+          (library-primitive-spec 'close-session
+                                  'primitive-close-session
+                                  1
+                                  1))
          context))
        ((equal? key '(agent transcript))
         (if (not (library-registry-ref context key))

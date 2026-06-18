@@ -431,16 +431,21 @@
              (session-id (if (symbol? session)
                              (symbol->string session)
                              session))
-             (interaction
-              (consent-make-interaction-context
-               (repl--interaction-options session-id read-chunk options)))
+             ;; The live session manager owns one interaction context per
+             ;; session.  Seeding installs the initial default session and a
+             ;; factory that shares a single stdin cursor across sessions, so a
+             ;; `switch-session'/`create-session' verb run in one form redirects
+             ;; the next form to the now-current session's sandbox environment.
+             (manager (consent-repl-session-manager))
              (exit-code 0))
+        (define (current-interaction)
+          (consent-session-manager-current-context manager))
         (define (emit record)
           (when (and (pair? record) (eq? (car record) 'repl-exit))
             (set! exit-code
                   (if (eq? (repl--field record 'status) 'closed-error) 1 0)))
           (emit-record record))
-        (define (drain-output!)
+        (define (drain-output! interaction)
           (let ((output (consent-interaction-program-output interaction)))
             (when (> (string-length output) 0)
               (emit-output output))))
@@ -486,6 +491,13 @@
                ((char=? (string-ref buffer index) #\newline)
                 (substring buffer (+ index 1) length))
                (else (loop (+ index 1)))))))
+        ;; Install the initial default session before the first prompt, so the
+        ;; first form already evaluates in a managed session and verbs can
+        ;; switch the default for subsequent forms.
+        (consent-repl-seed-initial-session!
+         manager
+         session-id
+         (repl--interaction-options session-id read-chunk options))
         (let loop ((buffer "") (ordinal 1) (count 0))
           (emit (repl--prompt-record session ordinal 'ready #f))
           (call-with-values
@@ -529,32 +541,38 @@
                                               (cdr disposition)))))
                   (else
                    (emit (repl--submission-record session ordinal source #t #f))
-                   ;; Seed the shared cursor so an evaluated read consumes the
-                   ;; input after this form; whatever it leaves unread is threaded
-                   ;; back as the next form-reading buffer, so neither reader steals
-                   ;; the other's characters.
-                   (consent-interaction-seed-program-input! interaction
-                                                            program-input)
-                   (let ((result (consent-interaction-eval-form
-                                  interaction datum)))
-                     ;; Drain this turn's program output before the result
-                     ;; record, binding the ordinal so the `comment' chrome's
-                     ;; output formatter aligns its `;;   :: ' gutter to this
-                     ;; turn's result marker.
-                     (parameterize ((cli-repl-chrome-output-ordinal ordinal))
-                       (drain-output!))
-                     (if (repl--error-result? result)
-                         (emit (repl--condition-record
-                                session ordinal 'eval #t
-                                (repl--error-condition result)
-                                (repl--error-message result)))
-                         (emit (repl--result-record
-                                session ordinal result
-                                (repl--result-display result))))
-                     (loop (or (consent-interaction-program-input-remainder
-                                interaction)
-                               program-input)
-                           (+ ordinal 1) (+ count 1)))))))))))
+                   ;; Resolve the session this form runs in *now*: a prior form's
+                   ;; `switch-session'/`create-session' may have changed the
+                   ;; manager's default, redirecting this turn to a different
+                   ;; sandbox environment.  All sessions share one stdin cursor.
+                   (let ((interaction (current-interaction)))
+                     ;; Seed the shared cursor so an evaluated read consumes the
+                     ;; input after this form; whatever it leaves unread is threaded
+                     ;; back as the next form-reading buffer, so neither reader steals
+                     ;; the other's characters.
+                     (consent-interaction-seed-program-input! interaction
+                                                              program-input)
+                     (let ((result (consent-interaction-eval-form
+                                    interaction datum)))
+                       ;; Drain this turn's program output before the result
+                       ;; record, binding the ordinal so the `comment' chrome's
+                       ;; output formatter aligns its `;;   :: ' gutter to this
+                       ;; turn's result marker.  Drain the just-evaluated
+                       ;; interaction even if the form switched the default.
+                       (parameterize ((cli-repl-chrome-output-ordinal ordinal))
+                         (drain-output! interaction))
+                       (if (repl--error-result? result)
+                           (emit (repl--condition-record
+                                  session ordinal 'eval #t
+                                  (repl--error-condition result)
+                                  (repl--error-message result)))
+                           (emit (repl--result-record
+                                  session ordinal result
+                                  (repl--result-display result))))
+                       (loop (or (consent-interaction-program-input-remainder
+                                  interaction)
+                                 program-input)
+                             (+ ordinal 1) (+ count 1))))))))))))
         exit-code))
 
     (define (cli-repl-run read-chunk write-record write-output session

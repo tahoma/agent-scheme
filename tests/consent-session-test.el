@@ -14,6 +14,7 @@
 (require 'consent-audit)
 (require 'consent-capability)
 (require 'consent-eval)
+(require 'consent-repl)
 (require 'consent-result)
 (require 'consent-session)
 
@@ -166,6 +167,85 @@
            (consent-capability-handle-known-p live-handle)))
       (when (buffer-live-p buffer)
         (kill-buffer buffer)))))
+
+(ert-deftest consent-session-test-scheme-verbs-policy-shared-pointer-and-audit ()
+  "Gate the `(agent session)' REPL verbs, share the default pointer, and audit."
+  (consent-session-test--reset)
+  (setq consent-session-current-id nil)
+  ;; Without a window-session grant the mutating verbs fail closed.
+  (should
+   (eq 'consent-policy-error
+       (condition-case condition
+           (progn
+             (consent-eval-source
+              "(import (agent session))
+               (create-session 'named '((id denied-a)))")
+             'no-error)
+         (consent-policy-error 'consent-policy-error))))
+  (should-not (consent-session-ref "denied-a"))
+  ;; With the grant, create-session returns a session datum without changing the
+  ;; default session, and emits Scheme-readable audit entries.
+  (let ((created
+         (consent-session-test--value-external
+          (consent-eval-source
+           "(import (agent session))
+            (create-session 'named '((id verb-a)))"
+           nil
+           '(:policy-actions ((window-session . allow)))))))
+    (should
+     (string-match-p
+      (regexp-quote "(session (id verb-a) (scope named) (status new)")
+      created))
+    (should-not consent-session-current-id))
+  (should
+   (consent-session-test--audit-entry-matching
+    "(event policy-decision)"
+    "(category window-session)"
+    "(operation \"create-session\")"
+    "(decision allowed)"))
+  ;; switch-session sets the canonical default pointer that the native REPL
+  ;; commands also read through the `consent-current-session-id' alias.
+  (let ((switched
+         (consent-session-test--value-external
+          (consent-eval-source
+           "(import (agent session))
+            (switch-session 'verb-a)"
+           nil
+           '(:policy-actions ((window-session . allow)))))))
+    (should (string-match-p (regexp-quote "(id verb-a)") switched)))
+  (should (equal consent-session-current-id "verb-a"))
+  (should (equal consent-current-session-id "verb-a"))
+  (should
+   (consent-session-test--audit-entry-matching
+    "(event session-lifecycle)"
+    "(operation \"switch-session\")"
+    "(session verb-a)"))
+  ;; current-session reports the default; list-sessions enumerates records.
+  (should
+   (string-match-p
+    (regexp-quote "(id verb-a)")
+    (consent-session-test--value-external
+     (consent-eval-source
+      "(import (agent session)) (current-session)"
+      nil
+      '(:policy-actions ((window-session . allow)))))))
+  (should
+   (string-match-p
+    (regexp-quote "(session (id verb-a)")
+    (consent-session-test--value-external
+     (consent-eval-source
+      "(import (agent session)) (list-sessions)"
+      nil
+      '(:policy-actions ((window-session . allow)))))))
+  ;; close-session retires the session and clears the default when it was current.
+  (let ((closed
+         (consent-session-test--value-external
+          (consent-eval-source
+           "(import (agent session)) (close-session 'verb-a)"
+           nil
+           '(:policy-actions ((window-session . allow)))))))
+    (should (string-match-p (regexp-quote "(status retired)") closed)))
+  (should-not consent-session-current-id))
 
 (ert-deftest consent-session-test-session-handles-primitive ()
   "Expose session-owned handle references through `(agent session)'."

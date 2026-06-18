@@ -34,7 +34,12 @@
   :type 'string
   :group 'consent-repl)
 
-(defvar consent-current-session-id nil
+;; The native REPL commands and the Scheme `(agent session)' verbs share one
+;; default-session pointer: `consent-session-current-id' (defined in the lower
+;; `consent-session' layer).  Aliasing keeps the historical command-facing name
+;; while a `switch-session'/`set-default-session!' verb run in the REPL changes
+;; which session subsequent interactive forms evaluate in.
+(defvaralias 'consent-current-session-id 'consent-session-current-id
   "Current Consent Scheme session id for native REPL commands.")
 
 (defvar consent-mode-line-string ""
