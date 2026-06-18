@@ -20,6 +20,7 @@
     "tests/scheme/consent-transcript-test.scm"
     "tests/scheme/consent-repl-test.scm"
     "tests/scheme/consent-repl-parity-test.scm"
+    "tests/scheme/consent-session-test.scm"
     "tests/scheme/consent-script-test.scm"
     "tests/scheme/consent-eval-test.scm")
   "Portable Scheme test files exercised by full-suite host shards.")

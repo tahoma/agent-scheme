@@ -108,6 +108,53 @@ The Emacs bootstrap also exposes matching `consent-session-*` functions
 and `consent-session-eval-source` for evaluating source inside a durable
 session.
 
+## REPL Session Verbs
+
+`(agent session)` also exposes higher-level, policy-gated verbs a user or an
+agent can call directly from the REPL to manage the sessions the loop evaluates
+in:
+
+```scheme
+(create-session)              ; optional scope symbol and options alist
+(create-session 'named '((id work-a)))
+(switch-session 'work-a)      ; alias: (set-default-session! 'work-a)
+(current-session)
+(list-sessions)               ; optional scope filter
+(close-session 'work-a)
+```
+
+- `create-session` makes a new session — its own sandbox value/syntax
+  environment — and returns its session record. It defaults to the `named`
+  scope and does **not** change the default session.
+- `switch-session` / `set-default-session!` make an existing session the
+  **default**: the session that subsequent REPL forms evaluate in. Switching to
+  an unknown session fails closed with an error record.
+- `current-session` returns the default session's record (aligned with the id
+  `current-session-info` reports); `list-sessions` returns the session records.
+- `close-session` retires a session with the documented stale-handle semantics
+  and clears the default when it was current.
+
+Switching the default session changes which session subsequent forms run in, and
+definitions, imports, and macros persist per session. Because each session is
+its own sandbox, a freshly created session does not inherit the creating
+session's imports: import `(agent session)` (and any other libraries) inside a
+session before using its verbs there. One session cannot read or mutate another
+session's environment.
+
+These verbs are gated by the `window-session` policy category. Their mutating
+operations (`create-session`, `switch-session`/`set-default-session!`,
+`close-session`) fail closed unless `window-session` is granted — in the
+portable terminal, which has no interactive confirmer, only an explicit `allow`
+passes, so a caller grants it through the REPL option
+`(policy-actions (window-session . allow))`. Each verb records Scheme-readable
+`capability-request`, `policy-decision`, and `session-lifecycle` audit entries.
+
+On the Emacs host the verbs share one default-session pointer with the native
+REPL commands (`consent-start-repl`, `consent-switch-session`): the Scheme
+`switch-session` verb and the interactive commands both move
+`consent-current-session-id`, so a verb run in the REPL changes which session
+subsequent interactive forms evaluate in.
+
 ## Handle Lifetime
 
 Opaque handles are live references to adapter-owned host resources. The handle

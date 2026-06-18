@@ -17,6 +17,7 @@
 (require 'consent-audit)
 (require 'consent-base)
 (require 'consent-capability)
+(require 'consent-policy)
 (require 'consent-reader)
 (require 'consent-redaction)
 (require 'consent-result)
@@ -90,6 +91,13 @@ exposing this host structure."
 
 (defvar consent--session-current-job-id nil
   "Dynamically bound job id allowed to evaluate a locked session.")
+
+(defvar consent-session-current-id nil
+  "Canonical default Consent Scheme session id.
+Shared by the `(agent session)' verbs (`switch-session', `current-session',
+`close-session') and the native REPL session commands; `consent-repl.el'
+aliases `consent-current-session-id' to this variable so a verb run in the
+REPL changes which session subsequent interactive forms evaluate in.")
 
 (defun consent-session--symbol (name)
   "Return NAME as an Consent Scheme symbol datum."
@@ -1174,6 +1182,66 @@ Return the stale handles that were removed."
   "Primitive session-retire! over ARGUMENTS."
   (consent-session-retire! (car arguments)))
 
+(defun consent-session--primitive-create-session (arguments context)
+  "Primitive create-session over ARGUMENTS, gated by window-session policy.
+Optional ARGUMENTS are a scope symbol (default `named') and an options alist.
+Does not change the default session."
+  (consent-policy-authorize
+   'window-session "create-session" '((domain . session)) context)
+  (consent-session-create!
+   (if (and arguments (car arguments)) (car arguments) 'named)
+   (and (cdr arguments)
+        (consent-session--primitive-options (cadr arguments)))))
+
+(defun consent-session--primitive-switch-session (arguments context)
+  "Primitive switch-session/set-default-session! over ARGUMENTS.
+Sets the canonical default session, gated by window-session policy, and
+signals when the named session is unknown."
+  (consent-policy-authorize
+   'window-session "switch-session" '((domain . session)) context)
+  (let ((session (consent-session--maybe (car arguments))))
+    (unless session
+      (signal 'consent-session-error
+              (list (format "unknown session: %s"
+                            (consent-session--name (car arguments)
+                                                   "session id")))))
+    (setq consent-session-current-id (consent-session-id session))
+    (consent-audit-record
+     'session-lifecycle
+     `((category . agent-session)
+       (operation . "switch-session")
+       (session . ,(consent-session--symbol consent-session-current-id))
+       (decision . completed)))
+    (consent-session-datum session)))
+
+(defun consent-session--primitive-current-session (_arguments context)
+  "Primitive current-session over CONTEXT.
+Returns the default session datum, or current session info when no default
+session is selected."
+  (or (and consent-session-current-id
+           (consent-session-ref consent-session-current-id))
+      (and (fboundp 'consent-reflect-current-session-info)
+           (consent-reflect-current-session-info context))
+      consent-false))
+
+(defun consent-session--primitive-list-sessions (arguments _context)
+  "Primitive list-sessions over ARGUMENTS, optionally filtered by scope."
+  (if arguments
+      (consent-session-list (car arguments))
+    (consent-session-list)))
+
+(defun consent-session--primitive-close-session (arguments context)
+  "Primitive close-session over ARGUMENTS, gated by window-session policy.
+Retires the named session and clears the default session when it was current."
+  (consent-policy-authorize
+   'window-session "close-session" '((domain . session)) context)
+  (let* ((session (consent-session--require (car arguments)))
+         (id (consent-session-id session))
+         (datum (consent-session-retire! (car arguments))))
+    (when (equal consent-session-current-id id)
+      (setq consent-session-current-id nil))
+    datum))
+
 ;;;###autoload
 (defun consent-session-primitive-specs ()
   "Return primitive specs for the `(agent session)' library."
@@ -1185,7 +1253,13 @@ Return the stale handles that were removed."
     ("session-resume!" ,#'consent-session--primitive-resume 1 1)
     ("session-snapshot!" ,#'consent-session--primitive-snapshot 1 2)
     ("session-fork!" ,#'consent-session--primitive-fork 1 2)
-    ("session-retire!" ,#'consent-session--primitive-retire 1 1)))
+    ("session-retire!" ,#'consent-session--primitive-retire 1 1)
+    ("create-session" ,#'consent-session--primitive-create-session 0 2)
+    ("switch-session" ,#'consent-session--primitive-switch-session 1 1)
+    ("set-default-session!" ,#'consent-session--primitive-switch-session 1 1)
+    ("current-session" ,#'consent-session--primitive-current-session 0 0)
+    ("list-sessions" ,#'consent-session--primitive-list-sessions 0 1)
+    ("close-session" ,#'consent-session--primitive-close-session 1 1)))
 
 (provide 'consent-session)
 
