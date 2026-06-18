@@ -33,6 +33,7 @@ jobs:
   release-gambit:
     name: Build and publish the standalone Gambit binary
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     env:
       # Pin the Gambit toolchain to the same version/digest the test workflow
       # builds, so released binaries come from a known-good compiler.
@@ -63,11 +64,13 @@ jobs:
           path: ${{ runner.tool_cache }}/gambit/${{ env.CONSENT_GAMBIT_VERSION }}
           key: ${{ runner.os }}-gambit-${{ env.CONSENT_GAMBIT_VERSION }}
 
+      - name: Install Gambit build dependencies
+        uses: ./.github/actions/apt-install
+        with:
+          packages: emacs-nox build-essential ca-certificates curl libssl-dev
+
       - name: Install Gambit
         run: |
-          sudo apt-get update
-          sudo apt-get install -y emacs-nox build-essential ca-certificates curl libssl-dev
-
           gambit_prefix="${RUNNER_TOOL_CACHE}/gambit/${CONSENT_GAMBIT_VERSION}"
           if [ ! -x "${gambit_prefix}/bin/gsi" ]; then
             curl -fsSL \

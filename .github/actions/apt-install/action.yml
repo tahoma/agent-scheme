@@ -1,0 +1,41 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Tahoma Toelkes
+name: Reliable apt install
+description: >
+  Install apt packages with a per-attempt timeout, bounded retries, and apt's own
+  download retries, so a stalled or flaky mirror fails fast and recovers instead
+  of hanging the job for hours. Auto-detects whether sudo is needed (runner vs
+  root container). Requires the repository to be checked out first; for a
+  pre-checkout bootstrap install, inline the same pattern.
+inputs:
+  packages:
+    description: Space-separated apt package names to install.
+    required: true
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        DEBIAN_FRONTEND: noninteractive
+      run: |
+        set -uo pipefail
+        sudo=""
+        if [ "$(id -u)" -ne 0 ]; then sudo="sudo"; fi
+        # Bound every apt call so a stalled mirror is killed in minutes, not the
+        # 6-hour job default; retry the whole update+install a few times with
+        # backoff; let apt retry individual package downloads too.
+        run() { $sudo timeout 180 "$@"; }
+        ok=0
+        for attempt in 1 2 3 4; do
+          if run apt-get update -o Acquire::Retries=3 \
+             && run apt-get install -y --no-install-recommends -o Acquire::Retries=3 ${{ inputs.packages }}; then
+            ok=1
+            break
+          fi
+          echo "::warning::apt install attempt ${attempt} failed (packages: ${{ inputs.packages }}); retrying" >&2
+          sleep $((attempt * 10))
+        done
+        if [ "${ok}" -ne 1 ]; then
+          echo "::error::apt install failed after retries (packages: ${{ inputs.packages }})" >&2
+          exit 1
+        fi
