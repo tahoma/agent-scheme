@@ -102,12 +102,21 @@
       "portable")
 
     (define (budget-datum options)
-      "Return a budget datum derived from OPTIONS."
+      "Return the declared budget datum derived from OPTIONS."
+      "The job reports its declared ceilings here; a completed job reports the"
+      "consumed counts in its result's `budget' field, so a consumer reads"
+      "remaining headroom as declared minus used per dimension."
       (list 'budget
             (list 'max-steps (option-ref options 'max-steps 100000))
             (list 'max-host-callbacks
                   (option-ref options 'max-host-callbacks 10000))
-            (list 'max-events (option-ref options 'max-events 1000))))
+            (list 'max-events (option-ref options 'max-events 1000))
+            (list 'max-value-nodes
+                  (option-ref options 'max-value-nodes 10000000))
+            (list 'max-output-bytes
+                  (option-ref options 'max-output-bytes 10485760))
+            (list 'max-wall-time-ms
+                  (option-ref options 'max-wall-time-ms #f))))
 
     (define (session-id-value session)
       "Return the session id from SESSION."

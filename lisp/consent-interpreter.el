@@ -1168,6 +1168,10 @@ each initializer."
 	             (consent--special-operator-active-p operator environment))
 	        (consent--eval-sequence
                  (cdr parts) environment context tailp nil continuation))
+	       ((and (consent--symbol-named-p operator "with-budget")
+	             (consent--special-operator-active-p operator environment))
+	        (consent--eval-with-budget
+                 parts environment context continuation))
 	       (t
 	        (consent--eval-expression
                  operator
@@ -1186,6 +1190,35 @@ each initializer."
                       (lambda (arguments)
                         (consent--apply-procedure
                          procedure arguments context tailp continuation)))))))))))
+
+(defun consent--eval-with-budget (parts environment context continuation)
+  "Evaluate (with-budget SPEC BODY ...) under a tightened budget.
+SPEC evaluates to a (budget ...) datum; for its dynamic extent the active
+counter ceilings admit at most the SPEC amount more.  The inherited ceilings
+are restored when the body completes.  A non-local exit out of the body leaves
+the tightened ceilings in place, which is a conservative, fail-closed outcome
+rather than a relaxation.  The body is an implicit `begin'; wrap it in
+\(let () ...) for internal definitions."
+  (when (< (length parts) 3)
+    (consent--eval-error "with-budget requires a budget spec and a body"))
+  (consent--eval-expression
+   (cadr parts)
+   environment
+   context
+   nil
+   (lambda (spec-result)
+     (let ((spec (consent--single-value spec-result "with-budget spec"))
+           (saved (consent--budget-ceiling-snapshot context)))
+       (consent--budget-tighten context spec)
+       (consent--eval-sequence
+        (cddr parts)
+        environment
+        context
+        nil
+        nil
+        (lambda (body-result)
+          (consent--budget-restore context saved)
+          (consent--continue continuation body-result)))))))
 
 (defun consent--eval-expression
     (expression environment context tailp &optional continuation)
@@ -3942,6 +3975,11 @@ The standard streams are consented by invocation; ambient effects keep gating."
       (consent--eval-error
        "%s host textual output ports are not available" description))
     (consent--port-capability-check output context 'write)
+    ;; Charge the emitted characters against the output budget before the write
+    ;; lands so an unbounded printing loop fails closed without first emitting
+    ;; the over-budget bytes.
+    (when context
+      (consent--note-output context (length text)))
     ;; A streaming stdio output port flushes each write through its host writer
     ;; immediately (so a single-form filter loop streams instead of buffering to
     ;; end of program), charged against the host-callback budget; an ordinary

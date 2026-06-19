@@ -1447,6 +1447,18 @@
                                   'primitive-current-budget
                                   0
                                   0)
+          (library-primitive-spec 'budget-remaining
+                                  'primitive-budget-remaining
+                                  0
+                                  0)
+          (library-primitive-spec 'budget-exhausted?
+                                  'primitive-budget-exhausted?
+                                  1
+                                  1)
+          (library-primitive-spec 'budget-yield
+                                  'primitive-budget-yield
+                                  0
+                                  0)
           (library-primitive-spec 'current-imports
                                   'primitive-current-imports
                                   0

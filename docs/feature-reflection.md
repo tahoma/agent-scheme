@@ -152,8 +152,19 @@ Current procedures:
   `(signature)`.
 - `(current-policy)` returns the active policy category actions and per-run
   overrides.
-- `(current-budget)` returns evaluator step, host-call, event, event-node, and
-  value-node counters and limits.
+- `(current-budget)` returns the evaluation budget ledger: the used count and
+  ceiling for every enforced and reserved dimension (steps, host calls, events,
+  event nodes, value nodes, output bytes, wall time) plus a `reason` field
+  naming the dimension that stopped the run, or `#f` while the run is still
+  admissible. See [budgets.md](budgets.md) for the full ledger shape.
+- `(budget-remaining)` returns the same ledger expressed as remaining headroom
+  (`limit - used`) per enforced dimension; an unbounded dimension reports `#f`.
+- `(budget-exhausted? condition)` reports whether a condition datum or an
+  evaluation-result error datum is a budget-exhaustion stop receipt.
+- `(budget-yield)` emits the current budget ledger as a yield event (so an agent
+  loop can observe remaining budget mid-run) and returns it.
+- `(with-budget spec body ...)` evaluates `body` under a budget tightened by the
+  `(budget ...)` `spec` for that dynamic extent. See [budgets.md](budgets.md).
 - `(current-imports)` returns the libraries registered in the current
   evaluation context.
 - `(current-session-info)` returns public session/job identity and event count

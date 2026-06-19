@@ -721,6 +721,9 @@ Mitigations:
 - validate datums for maximum depth, length, scalar type, string size, and total
   node count before evaluation
 - preserve proper tail recursion while still enforcing evaluation budgets
+  (steps, host callbacks, events, allocation, output, and opt-in wall time),
+  reported through a single inspectable ledger with an explicit exhaustion
+  reason — see [budgets.md](budgets.md)
 - make all host authority explicit through capability libraries
 - use opaque handles for host objects
 - gate effectful capabilities through policy and approvals

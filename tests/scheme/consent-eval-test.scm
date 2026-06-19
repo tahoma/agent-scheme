@@ -1465,6 +1465,120 @@
                          "(type budget-exhausted)"
                          "(phase macro-expansion)"))
 
+;;;; Comprehensive evaluation budgets (#51)
+;;
+;; The single inspectable budget ledger and its explicit exhaustion reason
+;; ("stop receipt"), the new output-byte and wall-time dimensions, and the
+;; current-budget / budget-remaining / budget-exhausted? / budget-yield /
+;; with-budget procedures.  Folded into this file so the cases share its one
+;; runtime load rather than paying a separate per-file host-process load.
+
+;; The ledger reports every enforced and reserved dimension plus the reason.
+(check-result-contains 'budget-ledger-shape
+                       "(import (scheme base) (agent reflect)) (current-budget)"
+                       '("(steps-used " "(max-steps 100000)"
+                         "(host-calls " "(max-host-calls 10000)"
+                         "(events-used " "(max-events 1000)"
+                         "(max-event-nodes 100000)"
+                         "(value-nodes-used " "(max-value-nodes 10000000)"
+                         "(output-bytes-used " "(max-output-bytes 10485760)"
+                         "(max-wall-time-ms #f)" "(reason #f)"))
+
+;; Step exhaustion halts with a budget-exhausted reason of `steps'.
+(check-result-contains 'budget-step-exhaustion-reason
+                       "(import (scheme base))
+                        (let loop ((i 0)) (loop (+ i 1)))"
+                       '("(type budget-exhausted)" "(reason steps)")
+                       '((max-steps . 200)))
+
+;; A tail-recursive loop consumes the step budget without growing host stack;
+;; reaching a stop receipt at all proves the trampoline stayed iterative.
+(check-result-contains 'budget-tail-loop-bounded-by-steps
+                       "(import (scheme base)) (let loop () (loop))"
+                       '("(type budget-exhausted)")
+                       '((max-steps . 1000)))
+
+;; Host-callback exhaustion names the `host-callbacks' dimension.
+(check-result-contains 'budget-host-callback-exhaustion-reason
+                       "(import (scheme base))
+                        (let loop ((i 0)) (loop (+ i 1)))"
+                       '("(reason host-callbacks)")
+                       '((max-host-callbacks . 10)))
+
+;; Printed-output exhaustion names the `output-bytes' dimension.
+(check-result-contains 'budget-output-exhaustion-reason
+                       "(import (scheme base) (scheme write))
+                        (let ((port (open-output-string)))
+                          (let loop ((i 0))
+                            (write-string \"xxxxx\" port) (loop (+ i 1))))"
+                       '("(reason output-bytes)")
+                       '((max-output-bytes . 32)))
+
+;; Yielded-event exhaustion names the `events' dimension.
+(check-result-contains 'budget-yield-exhaustion-reason
+                       "(import (scheme base) (agent io))
+                        (let loop ((i 0)) (agent-yield i) (loop (+ i 1)))"
+                       '("(reason events)")
+                       '((max-events . 4)))
+
+;; Wall-time exhaustion uses an injected deterministic clock that advances
+;; 100 milliseconds per reading and names the `wall-time' dimension.
+(define budget-wall-clock-tick 0)
+(define (budget-stub-wall-clock)
+  (set! budget-wall-clock-tick (+ budget-wall-clock-tick 100))
+  budget-wall-clock-tick)
+(check-result-contains 'budget-wall-time-exhaustion-reason
+                       "(import (scheme base))
+                        (let loop ((i 0)) (loop (+ i 1)))"
+                       '("(reason wall-time)")
+                       (list (cons 'max-wall-time-ms 250)
+                             (cons 'wall-clock budget-stub-wall-clock)))
+
+;; with-budget tightens for its dynamic extent, halting on the step budget.
+(check-result-contains 'budget-with-budget-tightens-steps
+                       "(import (scheme base) (agent reflect))
+                        (with-budget '(budget (steps 50))
+                          (let loop ((i 0)) (loop (+ i 1))))"
+                       '("(reason steps)"))
+
+;; After a normally completing with-budget the outer ceiling is restored.
+(check-result-contains 'budget-with-budget-restores-ceiling
+                       "(import (scheme base) (agent reflect))
+                        (with-budget '(budget (steps 50)) (+ 1 2))
+                        (current-budget)"
+                       '("(max-steps 100000)"))
+
+;; budget-remaining reports headroom per enforced dimension and no reason.
+(check-result-contains 'budget-remaining-headroom
+                       "(import (scheme base) (agent reflect))
+                        (budget-remaining)"
+                       '("(budget-remaining " "(steps " "(output-bytes "
+                         "(reason #f)")
+                       '((max-steps . 1000)))
+
+;; budget-exhausted? classifies condition and evaluation-result error datums.
+(check-external 'budget-exhausted-true
+                "(import (scheme base) (agent reflect))
+                 (budget-exhausted? '(condition (type budget-exhausted)))"
+                "#t")
+(check-external 'budget-exhausted-false
+                "(import (scheme base) (agent reflect))
+                 (budget-exhausted? '(condition (type evaluation-error)))"
+                "#f")
+(check-external 'budget-exhausted-result-datum
+                "(import (scheme base) (agent reflect))
+                 (budget-exhausted?
+                   '(evaluation-result (status error)
+                      (error (condition (condition (type budget-exhausted))))))"
+                "#t")
+
+;; budget-yield emits the current ledger as an observable yield event.
+(check-result-contains 'budget-yield-emits-ledger
+                       "(import (scheme base) (agent reflect))
+                        (budget-yield)
+                        (recent-yields)"
+                       '("(yield (budget "))
+
 (check-external 'macroexpand-expands-local-syntax-scope
                 "(import (scheme base) (agent reflect))
                  (let ((expansion
