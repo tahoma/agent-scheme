@@ -1,0 +1,31 @@
+<!--
+SPDX-License-Identifier: Apache-2.0
+SPDX-FileCopyrightText: 2026 Tahoma Toelkes
+-->
+<svg width="680" height="460" viewBox="0 0 680 460" role="img" xmlns="http://www.w3.org/2000/svg">
+<title>Yin-yang symbol with a brush lambda and a heavier single-stroke ensō speech bubble with a gap</title>
+<desc>A yin-yang where a single-stroke ensō speech bubble sits in the top dark dot: the brush starts heavy at bottom center, sweeps clockwise around with a thicker band, lifts before closing to leave a gap, then the tail runs down and out to the left to form the spur. A balanced angular brush lambda sits in the bottom light dot.</desc>
+
+<defs>
+<clipPath id="topdot6"><circle cx="0" cy="-90" r="46"/></clipPath>
+</defs>
+
+<g transform="translate(340,230)">
+<circle cx="0" cy="0" r="180" fill="#1a1a1a" stroke="#1a1a1a" stroke-width="2"/>
+<path d="M0,-180 A180,180 0 0,1 0,180 A90,90 0 0,1 0,0 A90,90 0 0,0 0,-180 Z" fill="#f5f5f5"/>
+
+<circle cx="0" cy="-90" r="46" fill="#1a1a1a"/>
+<circle cx="0" cy="90" r="46" fill="#f5f5f5"/>
+
+<g fill="#1a1a1a">
+<path d="M-16,66&#10;         C-15,63 -9,62 -6,63&#10;         L-1,64&#10;         C3,71 9,84 14,96&#10;         C17,104 21,110 26,112&#10;         C22,114 18,114 14,112&#10;         C11,108 6,99 2,90&#10;         C-1,84 -4,77 -6,72&#10;         L-11,70&#10;         C-14,69 -16,68 -16,66 Z"/>
+<path d="M-2,76&#10;         C-1,78 -1,81 -2,84&#10;         C-4,91 -7,98 -10,104&#10;         C-12,108 -14,111 -17,112&#10;         C-13,114 -10,114 -7,112&#10;         C-5,106 -2,96 0,88&#10;         C1,84 1,80 1,77&#10;         C1,75 -1,74 -2,76 Z"/>
+</g>
+
+
+<g fill="#f5f5f5" clip-path="url(#topdot6)">
+<path d="M3,-66&#10;         C-9,-65 -21,-72 -25,-84&#10;         C-30,-96 -25,-110 -14,-117&#10;         C-2,-124 15,-122 24,-112&#10;         C32,-103 32,-87 23,-78&#10;         C17,-72 9,-68 0,-67&#10;         C8,-70 16,-74 20,-82&#10;         C26,-91 24,-103 16,-110&#10;         C7,-117 -7,-117 -16,-110&#10;         C-24,-103 -26,-91 -21,-82&#10;         C-18,-76 -12,-72 -5,-71&#10;         C-2,-71 1,-70 3,-69&#10;         C0,-68.5 -3,-68 -6,-68&#10;         C-3,-67 0,-66.5 3,-66 Z&#10;         M3,-66&#10;         C-3,-64 -10,-61 -16,-56&#10;         C-21,-52 -25,-48 -28,-45&#10;         C-24,-48 -19,-53 -14,-58&#10;         C-8,-64 -1,-68 4,-69&#10;         C6,-69 6,-67 3,-66 Z"/>
+</g>
+</g>
+<circle cx="340" cy="230" r="181" fill="none" stroke="#8a8a8a" stroke-width="3"/>
+</svg>
