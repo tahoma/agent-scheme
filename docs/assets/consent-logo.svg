@@ -3,8 +3,8 @@ SPDX-License-Identifier: Apache-2.0
 SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 -->
 <svg width="680" height="460" viewBox="0 0 680 460" role="img" xmlns="http://www.w3.org/2000/svg">
-<title>Yin-yang symbol with a brush lambda and a heavier single-stroke ensō speech bubble with a gap</title>
-<desc>A yin-yang where a single-stroke ensō speech bubble sits in the top dark dot: the brush starts heavy at bottom center, sweeps clockwise around with a thicker band, lifts before closing to leave a gap, then the tail runs down and out to the left to form the spur. A balanced angular brush lambda sits in the bottom light dot.</desc>
+<title>Yin-yang symbol with a brush lambda and a heavier single-stroke ensō dialog bubble with a gap</title>
+<desc>A yin-yang where a single-stroke ensō dialog bubble sits in the top dark dot: the brush starts heavy at bottom center, sweeps clockwise around with a thicker band, lifts before closing to leave a gap, then the tail runs down and out to the left to form the spur. A balanced angular brush lambda sits in the bottom light dot.</desc>
 
 <defs>
 <clipPath id="topdot6"><circle cx="0" cy="-90" r="46"/></clipPath>

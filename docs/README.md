@@ -59,6 +59,7 @@ project pitch and examples, see the top-level [README](../README.md).
 
 ## Reference
 
+- [The Logo](logo.md) — the design and layered meaning of the Consent Scheme mark (a yin-yang of a brush λ and an ensō dialog bubble).
 - [Scheme References](references.md) — external Scheme references useful while building Consent Scheme.
 - [Agentic-Harness and Language-Agent Prior-Art Synthesis](agentic-harness-ideas.md) — non-normative idea bank derived from the curated agentic references: experiments, features, and design decisions for the M2 REPL agent harness.
 - [Release Notes](release-notes.md) — the historical record of completed roadmap chunks.
