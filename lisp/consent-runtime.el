@@ -43,6 +43,20 @@ bulk allocation."
   :type 'integer
   :group 'consent)
 
+(defcustom consent-eval-maximum-output-bytes 10485760
+  "Maximum printed-output bytes a single evaluation run may emit.
+Output is charged at each port write, so this bounds the cumulative characters a
+run may display or write while a runaway printing loop still trips it."
+  :type 'integer
+  :group 'consent)
+
+(defcustom consent-eval-maximum-wall-time-ms nil
+  "Wall-time budget in milliseconds, or nil to leave wall time unbounded.
+A nil limit means no host clock is read, so ordinary and parity runs stay
+deterministic; a caller opts in by supplying `:max-wall-time-ms'."
+  :type '(choice (const :tag "Unbounded" nil) integer)
+  :group 'consent)
+
 (defconst consent--version-source-file
   (expand-file-name
    "../scheme/consent/version.sld"
@@ -366,7 +380,18 @@ base syntax prelude has already been installed."
   base-syntax-installed
   exception-handlers
   dynamic-winds
-  docstring-retention)
+  docstring-retention
+  ;; Cumulative printed-output bytes and the run's output ceiling.
+  (output-bytes 0)
+  maximum-output-bytes
+  ;; Wall-time ceiling in milliseconds (nil leaves it unbounded), the injected
+  ;; host clock thunk (a function of no arguments returning integer
+  ;; milliseconds, or nil), and the clock baseline captured at the first check.
+  maximum-wall-time-ms
+  wall-clock
+  wall-start
+  ;; The dimension symbol that exhausted this run's budget, or nil.
+  exhaustion-reason)
 
 (defconst consent--missing-cell (make-symbol "consent-missing-cell")
   "Sentinel used when looking up environment cells.")
@@ -386,6 +411,16 @@ MESSAGE and ARGS are passed to `format'."
   "Signal an Consent Scheme budget error.
 MESSAGE and ARGS are passed to `format'."
   (signal 'consent-budget-error (list (apply #'format message args))))
+
+(defun consent--budget-stop (context reason message &rest args)
+  "Record REASON on CONTEXT as the budget dimension that stopped the run.
+Then signal a budget error built from MESSAGE and ARGS.  Centralizing the
+stop-receipt reason lets the comprehensive ledger and the error condition name
+the dimension that was no longer admissible while the host diagnostic stays
+unchanged and uncatchable."
+  (when context
+    (setf (consent--eval-context-exhaustion-reason context) reason))
+  (apply #'consent--budget-error message args))
 
 (defun consent--normalize-include-paths (paths directory)
   "Return policy PATHS expanded relative to DIRECTORY."
@@ -501,7 +536,18 @@ MESSAGE and ARGS are passed to `format'."
      :interrupt-reason nil
      :base-syntax-installed nil
      :exception-handlers nil
-     :dynamic-winds nil)))
+     :dynamic-winds nil
+     :output-bytes 0
+     :maximum-output-bytes
+     (consent--eval-option options :max-output-bytes
+                                consent-eval-maximum-output-bytes)
+     :maximum-wall-time-ms
+     (consent--eval-option options :max-wall-time-ms
+                                consent-eval-maximum-wall-time-ms)
+     :wall-clock
+     (consent--eval-option options :wall-clock nil)
+     :wall-start nil
+     :exhaustion-reason nil)))
 
 (defun consent--apply-current-context-options! (context options)
   "Apply current-context OPTIONS to CONTEXT and return CONTEXT."
@@ -1168,7 +1214,9 @@ environment for free-template-identifier hygiene."
       (puthash name t seen))))
 
 (defun consent--note-step (context)
-  "Record one evaluator step in CONTEXT."
+  "Record one evaluator step in CONTEXT.
+Each step also re-checks the wall-time budget so an opted-in wall-clock limit
+interrupts even a tight loop that allocates nothing."
   (consent--check-control-request context)
   (cl-incf (consent--eval-context-steps context))
   (when (and (fboundp 'thread-yield)
@@ -1176,18 +1224,50 @@ environment for free-template-identifier hygiene."
     (thread-yield))
   (when (> (consent--eval-context-steps context)
            (consent--eval-context-maximum-steps context))
-    (consent--budget-error
+    (consent--budget-stop
+     context 'steps
      "evaluation step budget exceeded: %d"
-     (consent--eval-context-maximum-steps context))))
+     (consent--eval-context-maximum-steps context)))
+  (consent--check-wall-time context))
+
+(defun consent--check-wall-time (context)
+  "Enforce the wall-time budget when a limit and a host clock are set.
+A run opts in by configuring `:max-wall-time-ms' and a `:wall-clock' thunk;
+otherwise no clock is read and evaluation stays deterministic."
+  (let ((limit (consent--eval-context-maximum-wall-time-ms context))
+        (clock (consent--eval-context-wall-clock context)))
+    (when (and limit clock)
+      (let ((now (funcall clock)))
+        (unless (consent--eval-context-wall-start context)
+          (setf (consent--eval-context-wall-start context) now))
+        (let ((elapsed (- now (consent--eval-context-wall-start context))))
+          (when (> elapsed limit)
+            (consent--budget-stop
+             context 'wall-time
+             "wall-time budget exceeded: %d" limit)))))))
 
 (defun consent--note-host-callback (context primitive)
   "Record one host callback for PRIMITIVE in CONTEXT."
   (cl-incf (consent--eval-context-host-callbacks context))
   (when (> (consent--eval-context-host-callbacks context)
            (consent--eval-context-maximum-host-callbacks context))
-    (consent--budget-error
+    (consent--budget-stop
+     context 'host-callbacks
      "host callback budget exceeded while calling %s"
      (consent-primitive-procedure-name primitive))))
+
+(defun consent--note-output (context byte-count)
+  "Charge BYTE-COUNT printed-output characters against CONTEXT's output budget.
+Port writes charge what they emit as they emit it, so an unbounded printing
+loop fails closed with the dimension named, like the step budget."
+  (cl-incf (consent--eval-context-output-bytes context) byte-count)
+  (when (> (consent--eval-context-output-bytes context)
+           (consent--eval-context-maximum-output-bytes context))
+    (consent--budget-stop
+     context 'output-bytes
+     "output byte budget exceeded: %d > %d"
+     (consent--eval-context-output-bytes context)
+     (consent--eval-context-maximum-output-bytes context))))
 
 (defun consent--value-node-count (value seen)
   "Return an approximate node count for VALUE.
@@ -1256,7 +1336,8 @@ SEEN prevents infinite recursion over cyclic host structures."
   (let ((count (consent--value-node-count
                 value (make-hash-table :test #'eq))))
     (when (> count (consent--eval-context-maximum-value-nodes context))
-      (consent--budget-error
+      (consent--budget-stop
+       context 'value-nodes
        "value node budget exceeded: %d > %d"
        count
        (consent--eval-context-maximum-value-nodes context))))
@@ -1272,7 +1353,8 @@ cannot catch it."
   (cl-incf (consent--eval-context-value-nodes context) count)
   (when (> (consent--eval-context-value-nodes context)
            (consent--eval-context-maximum-value-nodes context))
-    (consent--budget-error
+    (consent--budget-stop
+     context 'value-nodes
      "value node budget exceeded: %d > %d"
      (consent--eval-context-value-nodes context)
      (consent--eval-context-maximum-value-nodes context))))
@@ -1303,6 +1385,89 @@ cannot catch it."
 The shared empty-list tail and the already-charged elements are not recounted."
   (consent--note-value-allocation context (length value))
   value)
+
+(defun consent--budget-spec-number (value)
+  "Return VALUE as a host integer when it is a budget amount, else nil.
+A budget field value is a raw integer or an exact-integer Scheme number."
+  (cond
+   ((integerp value) value)
+   ((and (consent-number-p value)
+         (eq (consent-number-kind value) 'integer)
+         (eq (consent-number-exactness value) 'exact))
+    (consent-number-value value))
+   (t nil)))
+
+(defun consent--budget-spec-ref (spec keys)
+  "Return SPEC's first numeric value among KEYS as a host integer, or nil.
+SPEC is a (budget (key value) ...) datum or a bare field list; KEYS lists the
+acceptable field-name symbols (so an alias such as `allocation-bytes' can stand
+in for `allocation-nodes')."
+  (let ((fields (if (and (consp spec)
+                         (consent--symbol-named-p (car spec) "budget"))
+                    (cdr spec)
+                  spec)))
+    (catch 'consent--budget-found
+      (dolist (key keys)
+        (dolist (field fields)
+          (when (and (consp field)
+                     (consent--symbol-named-p (car field) (symbol-name key))
+                     (consp (cdr field)))
+            (let ((number (consent--budget-spec-number (cadr field))))
+              (when number
+                (throw 'consent--budget-found number))))))
+      nil)))
+
+(defun consent--budget-spec-dimensions ()
+  "Return the counter dimensions a budget specification may tighten.
+Each entry is (KEYS getter setter used-getter); KEYS are the specification
+field-name symbols that target the dimension."
+  (list
+   (list '(steps)
+         #'consent--eval-context-maximum-steps
+         (lambda (c v) (setf (consent--eval-context-maximum-steps c) v))
+         #'consent--eval-context-steps)
+   (list '(host-callbacks)
+         #'consent--eval-context-maximum-host-callbacks
+         (lambda (c v) (setf (consent--eval-context-maximum-host-callbacks c) v))
+         #'consent--eval-context-host-callbacks)
+   (list '(yields events)
+         #'consent--eval-context-maximum-events
+         (lambda (c v) (setf (consent--eval-context-maximum-events c) v))
+         #'consent--eval-context-event-count)
+   (list '(allocation-nodes allocation-bytes)
+         #'consent--eval-context-maximum-value-nodes
+         (lambda (c v) (setf (consent--eval-context-maximum-value-nodes c) v))
+         #'consent--eval-context-value-nodes)
+   (list '(output-bytes)
+         #'consent--eval-context-maximum-output-bytes
+         (lambda (c v) (setf (consent--eval-context-maximum-output-bytes c) v))
+         #'consent--eval-context-output-bytes)))
+
+(defun consent--budget-ceiling-snapshot (context)
+  "Capture CONTEXT's current tightenable ceilings for later restoration."
+  (mapcar (lambda (dimension) (funcall (nth 1 dimension) context))
+          (consent--budget-spec-dimensions)))
+
+(defun consent--budget-tighten (context spec)
+  "Lower CONTEXT's counter ceilings to admit at most the SPEC amount more.
+A dimension absent from SPEC is left untouched, and the tightened ceiling never
+rises above the inherited outer ceiling, so nested `with-budget' forms compose
+monotonically."
+  (dolist (dimension (consent--budget-spec-dimensions))
+    (let ((requested (consent--budget-spec-ref spec (nth 0 dimension))))
+      (when requested
+        (let* ((current (funcall (nth 1 dimension) context))
+               (used (funcall (nth 3 dimension) context))
+               (tightened (+ used requested)))
+          (funcall (nth 2 dimension) context
+                   (if (< tightened current) tightened current)))))))
+
+(defun consent--budget-restore (context saved)
+  "Restore CONTEXT's tightenable ceilings from a SAVED snapshot."
+  (cl-mapc (lambda (dimension value)
+             (funcall (nth 2 dimension) context value))
+           (consent--budget-spec-dimensions)
+           saved))
 
 (defun consent--charge-literal (value context)
   "Charge a quoted or self-evaluating literal's node count at evaluation.
@@ -1354,14 +1519,16 @@ removed from constructor and accessor results."
           (consent--eval-context-maximum-events context)))
     (when (and (integerp maximum-nodes)
                (> node-count maximum-nodes))
-      (consent--budget-error
+      (consent--budget-stop
+       context 'event-nodes
        "event node budget exceeded: %d > %d"
        node-count
        maximum-nodes))
     (when (and (integerp maximum-events)
                (>= (consent--eval-context-event-count context)
                    maximum-events))
-      (consent--budget-error
+      (consent--budget-stop
+       context 'events
        "event count budget exceeded: %d > %d"
        (1+ (consent--eval-context-event-count context))
        maximum-events))

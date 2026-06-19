@@ -14,9 +14,18 @@ the public record stays printable and inspectable:
   (started-at "2026-05-24T16:00:00-0700")
   (budget (max-steps 100000)
           (max-host-callbacks 10000)
-          (max-events 1000))
+          (max-events 1000)
+          (max-value-nodes 10000000)
+          (max-output-bytes 10485760)
+          (max-wall-time-ms #f))
   (yields ((yield (phase ready)))))
 ```
+
+The `budget` field is the job's declared ceilings across every comprehensive
+budget dimension (see [budgets.md](budgets.md)); `max-wall-time-ms` is `#f` when
+wall time is unbounded.  A completed job reports the consumed counters in its
+result's own `budget` field, so a consumer reads remaining headroom as the
+declared ceiling minus the used count per dimension.
 
 ## Foreground Evaluation
 

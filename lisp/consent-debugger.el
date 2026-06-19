@@ -363,6 +363,14 @@ inspection.  PHASE defaults to `evaluation'."
        "phase" (consent-debugger--symbol phase-name)))
      (when-let ((symbol (consent-debugger--condition-symbol message)))
        (list (consent-debugger--field "symbol" symbol)))
+     ;; A budget exhaustion names the dimension that stopped the run so the
+     ;; stop receipt answers "which budget was no longer admissible?".
+     (when-let ((reason (and (eq type 'budget-exhausted)
+                             context
+                             (consent--eval-context-exhaustion-reason
+                              context))))
+       (list (consent-debugger--field
+              "reason" (consent-debugger--symbol reason))))
      (when-let ((session (and context
                               (consent--eval-context-session-id context))))
        (list
