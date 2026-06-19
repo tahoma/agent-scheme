@@ -2,7 +2,8 @@
 
 `consent-logo.svg` is the source of truth for the Consent Scheme logo: a
 yin-yang whose two dots are a brush **λ** (computation) and a single-stroke
-**ensō speech bubble** (dialogue / consent). A thin neutral outer ring keeps the
+**ensō dialog bubble** (dialogue / consent; see [the logo's
+about page](../logo.md)). A thin neutral outer ring keeps the
 disc legible on both light and dark backgrounds — for example GitHub's two
 README themes, where the near-white and near-black halves would otherwise blend
 into the page.
