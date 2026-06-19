@@ -1271,6 +1271,9 @@ cursor across sessions."
                  (special-operator-active? operator environment))
             (eval-sequence
              (cdr parts) environment context tail? #f continuation))
+           ((and (identifier-named? operator 'with-budget)
+                 (special-operator-active? operator environment))
+            (eval-with-budget parts environment context tail? continuation))
            (else
             (eval-expression
              operator
@@ -1292,6 +1295,35 @@ cursor across sessions."
                      context
                      tail?
                      continuation)))))))))))
+
+    (define (eval-with-budget parts environment context tail? continuation)
+      "Evaluate (with-budget SPEC BODY ...) under a tightened budget."
+      "SPEC evaluates to a `(budget ...)' datum; for its dynamic extent the"
+      "active counter ceilings admit at most the SPEC amount more. The"
+      "inherited ceilings are restored when the body completes. A non-local"
+      "exit out of the body leaves the tightened ceilings in place, which is a"
+      "conservative, fail-closed outcome rather than a relaxation. The body is"
+      "an implicit `begin'; wrap it in `(let () ...)' for internal definitions."
+      (if (< (length parts) 3)
+          (eval-error "with-budget requires a budget spec and a body" parts))
+      (eval-expression
+       (second parts)
+       environment
+       context
+       #f
+       (lambda (spec-result)
+         (let ((spec (single-value spec-result "with-budget spec"))
+               (saved (budget-ceiling-snapshot context)))
+           (budget-tighten! context spec)
+           (eval-sequence
+            (cddr parts)
+            environment
+            context
+            #f
+            #f
+            (lambda (body-result)
+              (budget-restore! context saved)
+              (continue continuation body-result)))))))
 
     (define (eval-expression
              expression environment context tail? . maybe-continuation)
@@ -3628,6 +3660,11 @@ cursor across sessions."
                             " host textual output ports are not available")
              port))
         (revalidate-port-operation! output context 'write)
+        ;; Charge the emitted characters against the output budget before the
+        ;; write lands so an unbounded printing loop fails closed without first
+        ;; emitting the over-budget bytes.
+        (if context
+            (note-output! context (string-length text)))
         ;; A streaming stdio output port flushes each write through its host
         ;; writer immediately (so a single-form filter loop streams instead of
         ;; buffering to end of program), charged against the host-callback budget;
@@ -4806,7 +4843,10 @@ cursor across sessions."
               #f)))))
 
     (define (reflect-current-budget context)
-      "Return the active budget counters and limits for CONTEXT."
+      "Return the active budget ledger -- counters, limits, and stop reason."
+      "The ledger is the single inspectable budget object: every enforced and"
+      "reserved dimension reports its used count and ceiling, and `reason'"
+      "names the dimension that stopped the run (or #f while admissible)."
       (list 'budget
             (result-field 'steps-used
                           (consent-make-canonical-integer
@@ -4829,9 +4869,58 @@ cursor across sessions."
             (result-field 'max-event-nodes
                           (reflect-datumize
                            (context-maximum-event-nodes context)))
+            (result-field 'value-nodes-used
+                          (consent-make-canonical-integer
+                           (context-value-nodes context)))
             (result-field 'max-value-nodes
                           (reflect-datumize
-                           (context-maximum-value-nodes context)))))
+                           (context-maximum-value-nodes context)))
+            (result-field 'output-bytes-used
+                          (consent-make-canonical-integer
+                           (context-output-bytes context)))
+            (result-field 'max-output-bytes
+                          (reflect-datumize
+                           (context-maximum-output-bytes context)))
+            (result-field 'max-wall-time-ms
+                          (reflect-datumize
+                           (context-maximum-wall-time-ms context)))
+            (result-field 'reason
+                          (context-exhaustion-reason context))))
+
+    (define (reflect-budget-remaining context)
+      "Return the budget ledger as remaining headroom per enforced dimension."
+      "Each dimension reports `limit - used'; an unbounded dimension (a #f"
+      "wall-time limit) reports #f so callers can distinguish unbounded from"
+      "exhausted."
+      (list 'budget-remaining
+            (result-field 'steps
+                          (reflect-budget-headroom
+                           (context-maximum-steps context)
+                           (context-steps context)))
+            (result-field 'host-calls
+                          (reflect-budget-headroom
+                           (context-maximum-host-callbacks context)
+                           (context-host-callbacks context)))
+            (result-field 'events
+                          (reflect-budget-headroom
+                           (context-maximum-events context)
+                           (context-event-count context)))
+            (result-field 'value-nodes
+                          (reflect-budget-headroom
+                           (context-maximum-value-nodes context)
+                           (context-value-nodes context)))
+            (result-field 'output-bytes
+                          (reflect-budget-headroom
+                           (context-maximum-output-bytes context)
+                           (context-output-bytes context)))
+            (result-field 'reason
+                          (context-exhaustion-reason context))))
+
+    (define (reflect-budget-headroom limit used)
+      "Return LIMIT minus USED as a canonical integer, or #f when unbounded."
+      (if (integer? limit)
+          (consent-make-canonical-integer (- limit used))
+          #f))
 
     (define (reflect-policy-action context category)
       "Return CATEGORY's effective policy action in CONTEXT."
@@ -4933,6 +5022,23 @@ cursor across sessions."
       "Return the current evaluation budget snapshot."
       (redaction-model:redact (reflect-current-budget context)
                               'runtime-reflection))
+
+    (define (primitive-budget-remaining arguments context)
+      "Return remaining budget headroom per enforced dimension."
+      (redaction-model:redact (reflect-budget-remaining context)
+                              'runtime-reflection))
+
+    (define (primitive-budget-exhausted? arguments context)
+      "Report whether ARGUMENT is a budget-exhaustion stop receipt."
+      "Accepts a condition datum or an evaluation-result error datum so a"
+      "caller can classify a recent error or a nested evaluation's outcome."
+      (budget-exhausted-condition? (car arguments)))
+
+    (define (primitive-budget-yield arguments context)
+      "Emit the current budget ledger as a yield event and return it."
+      (let ((ledger (reflect-current-budget context)))
+        (record-agent-event! context (list 'yield ledger))
+        (redaction-model:redact ledger 'runtime-reflection)))
 
     (define (primitive-current-imports arguments context)
       "Return the current import snapshot."
@@ -5748,7 +5854,9 @@ cursor across sessions."
         max-value-nodes
         max-host-callbacks
         max-events
-        max-event-nodes))
+        max-event-nodes
+        max-output-bytes
+        max-wall-time-ms))
 
     (define (agent-test-budget-option? key)
       "Return #t when KEY names an allowed self-test budget option."
@@ -7892,6 +8000,9 @@ cursor across sessions."
        (cons 'primitive-current-capabilities primitive-current-capabilities)
        (cons 'primitive-current-policy primitive-current-policy)
        (cons 'primitive-current-budget primitive-current-budget)
+       (cons 'primitive-budget-remaining primitive-budget-remaining)
+       (cons 'primitive-budget-exhausted? primitive-budget-exhausted?)
+       (cons 'primitive-budget-yield primitive-budget-yield)
        (cons 'primitive-current-imports primitive-current-imports)
        (cons 'primitive-current-session-info primitive-current-session-info)
        (cons 'primitive-create-session primitive-create-session)

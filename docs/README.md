@@ -38,6 +38,7 @@ project pitch and examples, see the top-level [README](../README.md).
 - [Session Lifecycle and Snapshots](session-lifecycle.md) — explicit runtime records for evaluation state and their snapshots.
 - [Task Lifecycle and Control Loop](control-loop.md) — the runtime layer that turns Scheme-readable tasks into managed work.
 - [Jobs, Cancellation, and Streaming Yields](jobs.md) — representing long-running or concurrent work as Scheme-readable jobs.
+- [Evaluation Budgets](budgets.md) — the single inspectable budget ledger, its exhaustion reason, and how to inspect and tighten resource ceilings.
 - [First-Class Plans](plans.md) — Scheme-readable plan records shared through the `(agent plan)` library.
 - [Replayable Transcripts](transcripts.md) — recording session and runtime activity as replayable Scheme data.
 - [Debugger](debugger.md) — turning evaluator failures and raised exceptions into an inspectable surface.

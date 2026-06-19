@@ -21,7 +21,9 @@
     (max-value-nodes . :max-value-nodes)
     (max-host-callbacks . :max-host-callbacks)
     (max-events . :max-events)
-    (max-event-nodes . :max-event-nodes))
+    (max-event-nodes . :max-event-nodes)
+    (max-output-bytes . :max-output-bytes)
+    (max-wall-time-ms . :max-wall-time-ms))
   "Budget options accepted by `(agent test)' source-string execution.")
 
 (defun consent-test--symbol-name (value)
@@ -58,7 +60,9 @@
          :max-value-nodes
          :max-host-callbacks
          :max-events
-         :max-event-nodes)
+         :max-event-nodes
+         :max-output-bytes
+         :max-wall-time-ms)
      (consent-test--host-integer value (symbol-name key)))
     (_ value)))
 
