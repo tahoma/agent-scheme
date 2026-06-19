@@ -20,3 +20,12 @@ path = [
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2026 Tahoma Toelkes"
 SPDX-License-Identifier = "Apache-2.0"
+
+# The logo PNG is a derived binary (regenerated from consent-logo.svg via
+# rsvg-convert; see docs/assets/README.md), so it cannot carry an inline SPDX
+# header. The SVG source carries its own inline header.
+[[annotations]]
+path = ["docs/assets/consent-logo.png"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 Tahoma Toelkes"
+SPDX-License-Identifier = "Apache-2.0"
