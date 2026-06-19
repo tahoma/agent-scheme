@@ -429,6 +429,80 @@ Provider routing decisions are audit input. They are not authority decisions
 for remote disclosure, tool use, host mutation, approval resolution, or memory
 writes.
 
+## Agent Abstraction, Registry, and Selection
+
+Roles and models route individual calls; an *agent* is the composed,
+inspectable entity a user selects, sets as default, or lets the harness choose
+automatically. The portable `(agent registry)` library owns this abstraction
+once for both hosts: the Emacs interpreter and the portable hosts load the same
+Scheme source, so the agent datum, the registry, and selection behave
+identically without a separate Emacs reimplementation.
+
+An agent is a Scheme-readable datum bundling an id and name, a role, a model (a
+model id, the symbol `auto` for role routing, or a model-selection policy
+datum), and optional rules, skills, and a budget:
+
+```scheme
+(agent
+  (id coder-1)
+  (name "Coder One")
+  (role coder)
+  (model portable-coder)
+  (rules ())
+  (skills ())
+  (budget default)
+  (description "Writes code."))
+```
+
+The registry registers, lists, references, and defaults agents. A fresh
+registry is seeded with a general-purpose `default` agent (role `planner`,
+model `auto`) and sets it as the default, so automatic selection always
+resolves with no further configuration:
+
+| Verb | Effect |
+| --- | --- |
+| `(make-agent-registry)` | A registry seeded with the `default` agent. |
+| `(register-agent registry agent)` | Register an agent, replacing one with the same id. |
+| `(agents registry)` | List agents in registration order. |
+| `(agent-ref registry id)` | The agent named `id`, or `#f`. |
+| `(default-agent registry)` / `(default-agent-id registry)` | The default agent datum / its id. |
+| `(set-default-agent! registry id)` | Make an already-registered agent the default. |
+
+Automatic selection is deterministic and policy-visible. `select-agent` takes a
+goal/session context and returns an `agent-selection` decision record naming the
+chosen agent and the basis and reason for the choice, plus the requested role,
+model, goal, session, and the candidate ids considered:
+
+```scheme
+(agent-selection
+  (status selected)
+  (agent (agent (id default) ...))
+  (agent-id default)
+  (basis default-agent)
+  (reason "no goal-specific configuration; resolved to the default agent")
+  (requested-role #f)
+  (requested-model #f)
+  (goal none)
+  (session none)
+  (considered (default coder-1)))
+```
+
+Selection priority is: an explicitly named agent (`explicit-agent`), then the
+first agent matching a requested role (`role-match`), then the default agent
+(`default-agent`). The `first-agent` and `no-agent` bases are defensive
+fallbacks for a registry constructed without a default; the seeded default
+means a registry built through `make-agent-registry` resolves at
+`default-agent` or above.
+
+Selection consults only the registry contents and the context — never the
+wall clock, host randomness, or a model provider — so a decision record is
+reproducible and cross-host identical, matching the D7 agent-layer determinism
+stance. The agent's model field records the *intent*; routing that intent to a
+concrete provider happens later, when the prompting verbs drive the runner. The
+registry itself does not gate authority: it is designed to be session-scoped and
+policy-gated by the prompting layer, which enforces session authority and
+budgets and fails closed when authority is missing.
+
 ## Provider Request Contract
 
 Provider calls use one shared vocabulary for local and remote routes. The same
