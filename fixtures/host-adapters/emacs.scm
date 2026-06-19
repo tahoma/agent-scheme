@@ -59,6 +59,7 @@
      (library (agent reflect))
      (library (agent redaction))
      (library (agent session))
+     (library (agent registry))
      (library (agent transcript))))
    (mediates
     ((library (scheme file))
