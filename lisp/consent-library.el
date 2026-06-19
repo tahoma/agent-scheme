@@ -96,6 +96,7 @@
     "(agent reflect)"
     "(agent redaction)"
     "(agent session)"
+    "(agent registry)"
     "(agent transcript)")
   "Agent interaction library keys with focused bootstrap support.")
 
@@ -118,6 +119,8 @@ core rather than the agent domain it governs.")
      . "../scheme/agent/vcs.sld")
     ("(agent network)"
      . "../scheme/agent/network.sld")
+    ("(agent registry)"
+     . "../scheme/agent/registry.sld")
     ("(agent task)"
      . "../scheme/agent/task.sld")
     ("(agent test)"
@@ -407,6 +410,10 @@ core rather than the agent domain it governs.")
        (consent--register-source-library
         (consent--agent-source-library-source key) context environment)))
     ("(agent network)"
+     (unless (gethash key (consent--eval-context-libraries context))
+       (consent--register-source-library
+        (consent--agent-source-library-source key) context environment)))
+    ("(agent registry)"
      (unless (gethash key (consent--eval-context-libraries context))
        (consent--register-source-library
         (consent--agent-source-library-source key) context environment)))

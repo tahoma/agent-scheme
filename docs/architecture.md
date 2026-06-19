@@ -238,6 +238,8 @@ The agent layer provides self-scripting facilities as Scheme-readable data:
 
 - `(agent io)` event channel
 - `(agent task)` task lifecycle records and state transitions
+- `(agent registry)` agent abstraction, registry, and automatic selection,
+  described in [Task Lifecycle and Control Loop](control-loop.md)
 - `(agent memory)` scoped memory
 - `(agent plan)` plans
 - `(agent helper)` helper libraries and artifacts
