@@ -159,6 +159,22 @@
           set-context-event-count!
           context-maximum-events
           context-maximum-event-nodes
+          set-context-maximum-steps!
+          set-context-maximum-value-nodes!
+          set-context-maximum-host-callbacks!
+          set-context-maximum-events!
+          context-output-bytes
+          set-context-output-bytes!
+          context-maximum-output-bytes
+          set-context-maximum-output-bytes!
+          context-maximum-wall-time-ms
+          set-context-maximum-wall-time-ms!
+          context-wall-clock
+          set-context-wall-clock!
+          context-wall-start
+          set-context-wall-start!
+          context-exhaustion-reason
+          set-context-exhaustion-reason!
           context-syntax-environment
           set-context-syntax-environment!
           context-libraries
@@ -278,6 +294,13 @@
           charge-list-allocation!
           charge-literal!
           check-value-budget
+          note-output!
+          check-wall-time!
+          budget-spec-ref
+          budget-spec-dimensions
+          budget-ceiling-snapshot
+          budget-tighten!
+          budget-restore!
           values-list
           single-value
           identity-continuation
@@ -326,6 +349,16 @@
     (define consent-default-maximum-events 1000)
     ;; Default maximum reachable value graph size for one event record.
     (define consent-default-maximum-event-nodes 100000)
+    ;; Default maximum printed-output bytes a single evaluation run may emit.
+    ;; Output is charged at each port write, so this bounds the cumulative
+    ;; characters a run may display/write across all in-memory and streaming
+    ;; ports. It is generous enough for the self-hosted suite's output while a
+    ;; runaway unbounded printing loop still trips it.
+    (define consent-default-maximum-output-bytes 10485760)
+    ;; Default wall-time budget in milliseconds. #f leaves wall time unbounded
+    ;; so ordinary and parity runs never read a host clock and stay
+    ;; deterministic; a caller opts in by supplying `max-wall-time-ms'.
+    (define consent-default-maximum-wall-time-ms #f)
 
     ;; Host-injected library/source resolution context (host/core boundary).
     ;; The portable core reads its prelude, syntax prelude, and source-backed
@@ -647,16 +680,21 @@
                          interaction-environment
                          base-syntax-installed next-syntax-id
                          exception-handlers dynamic-winds
-                         internal-libraries-allowed)
+                         internal-libraries-allowed
+                         output-bytes maximum-output-bytes
+                         maximum-wall-time-ms wall-clock wall-start
+                         exhaustion-reason)
       eval-context?
       (steps context-steps set-context-steps!)
-      (maximum-steps context-maximum-steps)
-      (maximum-value-nodes context-maximum-value-nodes)
+      (maximum-steps context-maximum-steps set-context-maximum-steps!)
+      (maximum-value-nodes context-maximum-value-nodes
+                           set-context-maximum-value-nodes!)
       (value-nodes context-value-nodes set-context-value-nodes!)
       (host-callbacks context-host-callbacks set-context-host-callbacks!)
-      (maximum-host-callbacks context-maximum-host-callbacks)
+      (maximum-host-callbacks context-maximum-host-callbacks
+                              set-context-maximum-host-callbacks!)
       (event-count context-event-count set-context-event-count!)
-      (maximum-events context-maximum-events)
+      (maximum-events context-maximum-events set-context-maximum-events!)
       (maximum-event-nodes context-maximum-event-nodes)
       (syntax-environment context-syntax-environment
                           set-context-syntax-environment!)
@@ -699,7 +737,22 @@
       ;; When true, imported programs may load the runtime's own internal
       ;; libraries ((consent ...)/(cli ...)) from source -- the host capability
       ;; grant that lets the compiled runtime act as a full Scheme host runner.
-      (internal-libraries-allowed context-internal-libraries-allowed?))
+      (internal-libraries-allowed context-internal-libraries-allowed?)
+      ;; Cumulative printed-output bytes and the run's output ceiling.
+      (output-bytes context-output-bytes set-context-output-bytes!)
+      (maximum-output-bytes context-maximum-output-bytes
+                            set-context-maximum-output-bytes!)
+      ;; Wall-time ceiling in milliseconds (#f leaves it unbounded), the
+      ;; injected host clock thunk (() -> integer milliseconds, or #f), and the
+      ;; clock baseline captured at the first wall-time check.
+      (maximum-wall-time-ms context-maximum-wall-time-ms
+                            set-context-maximum-wall-time-ms!)
+      (wall-clock context-wall-clock set-context-wall-clock!)
+      (wall-start context-wall-start set-context-wall-start!)
+      ;; The dimension symbol that exhausted this run's budget, or #f. Set just
+      ;; before a budget error raises so the stop receipt names the dimension.
+      (exhaustion-reason context-exhaustion-reason
+                         set-context-exhaustion-reason!))
 
     ;; Syntax transformers remember their definition environments; expansion
     ;; relies on this for syntax-rules hygiene instead of host macro state.
@@ -768,6 +821,15 @@
       (apply error
              (string-append "consent budget error: " message)
              irritants))
+
+    (define (budget-stop! context reason message . irritants)
+      "Record REASON as the budget dimension that stopped CONTEXT, then raise."
+      "Centralizing the stop-receipt reason lets the comprehensive ledger and"
+      "the error condition name which dimension was no longer admissible while"
+      "the host diagnostic itself stays unchanged and uncatchable."
+      (if context
+          (set-context-exhaustion-reason! context reason))
+      (apply budget-error message irritants))
 
     (define (normalize-docstring-retention value)
       "Return the normalized docstring retention mode for VALUE."
@@ -2428,7 +2490,17 @@
        0
        '()
        '()
-       (option-ref options 'internal-libraries-allowed #f))))
+       (option-ref options 'internal-libraries-allowed #f)
+       0
+       (option-count options
+                     'max-output-bytes
+                     consent-default-maximum-output-bytes)
+       (option-count options
+                     'max-wall-time-ms
+                     consent-default-maximum-wall-time-ms)
+       (option-ref options 'wall-clock #f)
+       #f
+       #f)))
 
     (define (record-audit-event! context event fields)
       "Record a Scheme-readable audit EVENT with FIELDS in CONTEXT."
@@ -2443,12 +2515,14 @@
       "Record an ordered event-channel EVENT after enforcing event budgets."
       (let ((node-count (value-node-count event '())))
         (if (> node-count (context-maximum-event-nodes context))
-            (budget-error "event node budget exceeded"
+            (budget-stop! context 'event-nodes
+                          "event node budget exceeded"
                           node-count
                           (context-maximum-event-nodes context))))
       (if (>= (context-event-count context)
               (context-maximum-events context))
-          (budget-error "event count budget exceeded"
+          (budget-stop! context 'events
+                        "event count budget exceeded"
                         (+ (context-event-count context) 1)
                         (context-maximum-events context)))
       (set-context-event-count!
@@ -2461,10 +2535,31 @@
 
     (define (note-step! context)
       "Charge one evaluator step against the active step budget."
+      "Each evaluation step also re-checks the wall-time budget so an opted-in"
+      "wall-clock limit interrupts even a tight loop that allocates nothing."
       (set-context-steps! context (+ (context-steps context) 1))
       (if (> (context-steps context) (context-maximum-steps context))
-          (budget-error "evaluation step budget exceeded"
-                        (context-maximum-steps context))))
+          (budget-stop! context 'steps
+                        "evaluation step budget exceeded"
+                        (context-maximum-steps context)))
+      (check-wall-time! context))
+
+    (define (check-wall-time! context)
+      "Enforce the wall-time budget when a limit and a host clock are set."
+      "A run opts in by configuring `max-wall-time-ms' and a `wall-clock'"
+      "thunk; otherwise no clock is read and evaluation stays deterministic."
+      (let ((limit (context-maximum-wall-time-ms context))
+            (clock (context-wall-clock context)))
+        (if (and limit clock)
+            (let ((now (clock)))
+              (if (not (context-wall-start context))
+                  (set-context-wall-start! context now))
+              (let ((elapsed (- now (context-wall-start context))))
+                (if (> elapsed limit)
+                    (budget-stop! context 'wall-time
+                                  "wall-time budget exceeded"
+                                  elapsed
+                                  limit)))))))
 
     (define (note-host-callback! context primitive)
       "Charge one primitive callback against the host-callback budget."
@@ -2473,8 +2568,24 @@
        (+ (context-host-callbacks context) 1))
       (if (> (context-host-callbacks context)
              (context-maximum-host-callbacks context))
-          (budget-error "host callback budget exceeded"
+          (budget-stop! context 'host-callbacks
+                        "host callback budget exceeded"
                         (primitive-procedure-name primitive))))
+
+    (define (note-output! context byte-count)
+      "Charge BYTE-COUNT printed-output characters against the output budget."
+      "Port writes charge what they emit as they emit it, so an unbounded"
+      "printing loop fails closed with the dimension named, exactly like the"
+      "step and host-callback budgets."
+      (set-context-output-bytes!
+       context
+       (+ (context-output-bytes context) byte-count))
+      (if (> (context-output-bytes context)
+             (context-maximum-output-bytes context))
+          (budget-stop! context 'output-bytes
+                        "output byte budget exceeded"
+                        (context-output-bytes context)
+                        (context-maximum-output-bytes context))))
 
     (define (note-value-allocation! context count)
       "Charge COUNT freshly allocated value nodes against the result budget."
@@ -2488,7 +2599,8 @@
        (+ (context-value-nodes context) count))
       (if (> (context-value-nodes context)
              (context-maximum-value-nodes context))
-          (budget-error "value node budget exceeded"
+          (budget-stop! context 'value-nodes
+                        "value node budget exceeded"
                         (context-value-nodes context)
                         (context-maximum-value-nodes context))))
 
@@ -2607,7 +2719,8 @@
                     (and context
                          (context-internal-libraries-allowed? context)))))
         (if (> count (context-maximum-value-nodes context))
-            (budget-error "value node budget exceeded"
+            (budget-stop! context 'value-nodes
+                          "value node budget exceeded"
                           count
                           (context-maximum-value-nodes context))))
       value)
@@ -2626,6 +2739,76 @@
         '()
         (and context (context-internal-libraries-allowed? context))))
       value)
+
+    (define (budget-spec-ref spec keys)
+      "Return SPEC's first numeric value among KEYS as a host number, or #f."
+      "SPEC is a `(budget (key value) ...)' datum or a bare field alist; KEYS"
+      "lists the acceptable field names (so an alias such as `allocation-bytes'"
+      "can stand in for `allocation-nodes')."
+      (let ((fields (if (and (pair? spec) (eq? (car spec) 'budget))
+                        (cdr spec)
+                        spec)))
+        (let loop ((remaining keys))
+          (if (null? remaining)
+              #f
+              (let ((entry (and (list? fields) (assq (car remaining) fields))))
+                (if (and (pair? entry) (pair? (cdr entry)))
+                    (let ((value (cadr entry)))
+                      (cond
+                       ((consent-number? value) (consent-number-value value))
+                       ((number? value) value)
+                       (else (loop (cdr remaining)))))
+                    (loop (cdr remaining))))))))
+
+    (define (budget-spec-dimensions)
+      "Return the counter dimensions a budget specification may tighten."
+      "Each entry is (KEYS max-getter max-setter used-getter); KEYS are the"
+      "specification field names that target the dimension."
+      (list
+       (list '(steps)
+             context-maximum-steps set-context-maximum-steps!
+             context-steps)
+       (list '(host-callbacks)
+             context-maximum-host-callbacks set-context-maximum-host-callbacks!
+             context-host-callbacks)
+       (list '(yields events)
+             context-maximum-events set-context-maximum-events!
+             context-event-count)
+       (list '(allocation-nodes allocation-bytes)
+             context-maximum-value-nodes set-context-maximum-value-nodes!
+             context-value-nodes)
+       (list '(output-bytes)
+             context-maximum-output-bytes set-context-maximum-output-bytes!
+             context-output-bytes)))
+
+    (define (budget-ceiling-snapshot context)
+      "Capture CONTEXT's current tightenable ceilings for later restoration."
+      (map (lambda (dimension) ((second dimension) context))
+           (budget-spec-dimensions)))
+
+    (define (budget-tighten! context spec)
+      "Lower CONTEXT's counter ceilings to admit at most the SPEC amount more."
+      "A dimension absent from SPEC is left untouched, and the tightened ceiling"
+      "never rises above the inherited outer ceiling, so nested `with-budget'"
+      "forms compose monotonically."
+      (for-each
+       (lambda (dimension)
+         (let ((requested (budget-spec-ref spec (car dimension))))
+           (if requested
+               (let ((current ((second dimension) context))
+                     (setter (third dimension))
+                     (used ((fourth dimension) context)))
+                 (let ((tightened (+ used requested)))
+                   (setter context
+                           (if (< tightened current) tightened current)))))))
+       (budget-spec-dimensions)))
+
+    (define (budget-restore! context saved)
+      "Restore CONTEXT's tightenable ceilings from a SAVED snapshot."
+      (for-each
+       (lambda (dimension value) ((third dimension) context value))
+       (budget-spec-dimensions)
+       saved))
 
     (define (values-list value)
       "Unpack a single or multiple-value result into a list."

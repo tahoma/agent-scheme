@@ -19,6 +19,7 @@
           debugger-restart-id-name
           debugger-default-restarts
           condition-result-datum
+          budget-exhausted-condition?
           consent-result->external
           consent-value->external)
   (import (scheme base)
@@ -427,6 +428,12 @@
                (result-field 'message message)
                (result-field 'phase phase))
          (if symbol (list (result-field 'symbol symbol)) '())
+         ;; A budget exhaustion names the dimension that stopped the run so the
+         ;; stop receipt answers "which budget was no longer admissible?".
+         (if (and (eq? type 'budget-exhausted)
+                  (context-exhaustion-reason context))
+             (list (result-field 'reason (context-exhaustion-reason context)))
+             '())
          (list
           (result-field
            'stack
@@ -487,6 +494,24 @@
                (result-field 'message (condition-message condition)))
               (result-field 'events (context-events context))
               (budget-result-field context))))
+
+    (define (budget-exhausted-condition? value)
+      "Report whether VALUE is a budget-exhaustion condition or stop receipt."
+      #((parameters . ((value . "Condition datum or evaluation-result error datum.")))
+        (returns . "#t when VALUE names a budget exhaustion, else #f.")
+        (effects . (pure)))
+      (and (pair? value)
+           (cond
+            ((eq? (car value) 'condition)
+             (eq? (debugger-field-value value 'type) 'budget-exhausted))
+            ((eq? (car value) 'evaluation-result)
+             (let ((error-entry (assq 'error (cdr value))))
+               (and (pair? error-entry)
+                    (let ((condition
+                           (debugger-field-value error-entry 'condition)))
+                      (and (pair? condition)
+                           (budget-exhausted-condition? condition))))))
+            (else #f))))
 
     (define (consent-result->external result)
       "Render an evaluation-result datum using the reader/writer external form."

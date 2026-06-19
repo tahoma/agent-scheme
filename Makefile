@@ -61,7 +61,7 @@ CONSENT_PORTABLE_GUILE_TEST_SELECTOR ?= "^consent-scheme-guile-host-test-r7rs-su
 CONSENT_PORTABLE_GAUCHE_TEST_SELECTOR ?= "^consent-scheme-gauche-host-test-r7rs-suite$$"
 CONSENT_PORTABLE_CHIBI_TEST_SELECTOR ?= "^consent-scheme-chibi-host-test-r7rs-suite$$"
 CONSENT_EMACS_HOSTED_TEST_SELECTOR ?= (not "consent-scheme-.*")
-CONSENT_EMACS_CORE_TEST_SELECTOR ?= (or "consent-base.*" "consent-eval.*" "consent-interpreter-module.*" "consent-macro.*" "consent-reader.*" "consent-result.*" "consent-runtime.*")
+CONSENT_EMACS_CORE_TEST_SELECTOR ?= (or "consent-base.*" "consent-budget.*" "consent-eval.*" "consent-interpreter-module.*" "consent-macro.*" "consent-reader.*" "consent-result.*" "consent-runtime.*")
 CONSENT_EMACS_LIBRARY_TEST_SELECTOR ?= (or "consent-conformance.*" "consent-fixture.*" "consent-host-adapter-fixture.*" "consent-library.*" "consent-oracle.*")
 CONSENT_EMACS_CAPABILITY_TEST_SELECTOR ?= (or "consent-agent-io.*" "consent-agent-registry.*" "consent-approval.*" "consent-capability.*" "consent-context.*" "consent-helper.*" "consent-memory.*" "consent-models.*" "consent-network.*" "consent-plan.*" "consent-policy.*" "consent-redaction.*" "consent-session.*" "consent-task.*" "consent-test.*" "consent-transcript.*")
 # The tools shard keeps the lighter Emacs-hosted tools/docs surface (CI, compile,

@@ -326,7 +326,10 @@ SUBJECT may be a binding symbol/name or a procedure value."
         consent-false)))))
 
 (defun consent-reflect-current-budget (context)
-  "Return the active budget counters and limits for CONTEXT."
+  "Return the active budget ledger -- counters, limits, and stop reason.
+The ledger is the single inspectable budget object: every enforced and reserved
+dimension reports its used count and ceiling, and `reason' names the dimension
+that stopped the run (or #f while admissible)."
   (list
    (consent-reflect--symbol "budget")
    (consent-reflect--field
@@ -358,9 +361,79 @@ SUBJECT may be a binding symbol/name or a procedure value."
     (consent-reflect--datumize
      (consent--eval-context-maximum-event-nodes context)))
    (consent-reflect--field
+    "value-nodes-used"
+    (consent-reflect--integer
+     (consent--eval-context-value-nodes context)))
+   (consent-reflect--field
     "max-value-nodes"
     (consent-reflect--datumize
-     (consent--eval-context-maximum-value-nodes context)))))
+     (consent--eval-context-maximum-value-nodes context)))
+   (consent-reflect--field
+    "output-bytes-used"
+    (consent-reflect--integer
+     (consent--eval-context-output-bytes context)))
+   (consent-reflect--field
+    "max-output-bytes"
+    (consent-reflect--datumize
+     (consent--eval-context-maximum-output-bytes context)))
+   (consent-reflect--field
+    "max-wall-time-ms"
+    (consent-reflect--budget-limit-datum
+     (consent--eval-context-maximum-wall-time-ms context)))
+   (consent-reflect--field
+    "reason"
+    (consent-reflect--budget-reason-datum
+     (consent--eval-context-exhaustion-reason context)))))
+
+(defun consent-reflect--budget-limit-datum (limit)
+  "Return LIMIT as a Scheme-readable budget ceiling, or #f when unbounded."
+  (if limit (consent-reflect--datumize limit) consent-false))
+
+(defun consent-reflect--budget-reason-datum (reason)
+  "Return REASON as a Scheme symbol, or #f when no budget was exhausted."
+  (if reason (consent-reflect--symbol reason) consent-false))
+
+(defun consent-reflect--budget-headroom (limit used)
+  "Return LIMIT minus USED as an exact integer, or #f when unbounded."
+  (if (integerp limit)
+      (consent-reflect--integer (- limit used))
+    consent-false))
+
+(defun consent-reflect-budget-remaining (context)
+  "Return the budget ledger as remaining headroom per enforced dimension.
+Each dimension reports LIMIT minus USED; an unbounded dimension reports #f so
+callers can distinguish unbounded from exhausted."
+  (list
+   (consent-reflect--symbol "budget-remaining")
+   (consent-reflect--field
+    "steps"
+    (consent-reflect--budget-headroom
+     (consent--eval-context-maximum-steps context)
+     (consent--eval-context-steps context)))
+   (consent-reflect--field
+    "host-calls"
+    (consent-reflect--budget-headroom
+     (consent--eval-context-maximum-host-callbacks context)
+     (consent--eval-context-host-callbacks context)))
+   (consent-reflect--field
+    "events"
+    (consent-reflect--budget-headroom
+     (consent--eval-context-maximum-events context)
+     (consent--eval-context-event-count context)))
+   (consent-reflect--field
+    "value-nodes"
+    (consent-reflect--budget-headroom
+     (consent--eval-context-maximum-value-nodes context)
+     (consent--eval-context-value-nodes context)))
+   (consent-reflect--field
+    "output-bytes"
+    (consent-reflect--budget-headroom
+     (consent--eval-context-maximum-output-bytes context)
+     (consent--eval-context-output-bytes context)))
+   (consent-reflect--field
+    "reason"
+    (consent-reflect--budget-reason-datum
+     (consent--eval-context-exhaustion-reason context)))))
 
 (defun consent-reflect--policy-action-datum (category context)
   "Return CATEGORY's effective policy action in CONTEXT."
@@ -441,6 +514,34 @@ SUBJECT may be a binding symbol/name or a procedure value."
           (cdr-safe datum))))
     (and field (cadr field))))
 
+(defun consent-reflect--field-entry (datum name)
+  "Return field NAME's entry (head and values) from DATUM, or nil."
+  (seq-find
+   (lambda (candidate)
+     (and (consp candidate)
+          (equal (consent-reflect--record-head-name candidate) name)))
+   (cdr-safe datum)))
+
+(defun consent--budget-exhausted-condition-p (value)
+  "Report whether VALUE is a budget-exhaustion condition or stop receipt.
+VALUE may be a condition datum or an evaluation-result error datum, so a caller
+can classify a recent error or a nested evaluation's outcome."
+  (and (consp value)
+       (let ((head (consent-reflect--record-head-name value)))
+         (cond
+          ((equal head "condition")
+           (let ((type (consent-reflect--field-value value "type")))
+             (and (consent-symbol-p type)
+                  (equal (consent-symbol-name type) "budget-exhausted"))))
+          ((equal head "evaluation-result")
+           (let ((error-field (consent-reflect--field-entry value "error")))
+             (and error-field
+                  (let ((condition (consent-reflect--field-value
+                                    error-field "condition")))
+                    (and (consp condition)
+                         (consent--budget-exhausted-condition-p condition))))))
+          (t nil)))))
+
 (defun consent-reflect--event-named-p (entry name)
   "Return non-nil when audit ENTRY has event NAME."
   (let ((event (consent-reflect--field-value entry "event")))
@@ -505,6 +606,23 @@ SUBJECT may be a binding symbol/name or a procedure value."
   "Primitive `current-budget'."
   (consent-reflect--redact
    (consent-reflect-current-budget context)))
+
+(defun consent-reflect--primitive-budget-remaining (_arguments context)
+  "Primitive `budget-remaining'."
+  (consent-reflect--redact
+   (consent-reflect-budget-remaining context)))
+
+(defun consent-reflect--primitive-budget-exhausted-p (arguments _context)
+  "Primitive `budget-exhausted?'."
+  (consent-reflect--boolean
+   (consent--budget-exhausted-condition-p (car arguments))))
+
+(defun consent-reflect--primitive-budget-yield (_arguments context)
+  "Primitive `budget-yield': emit the current ledger as a yield event."
+  (let ((ledger (consent-reflect-current-budget context)))
+    (consent--record-event! context (list (consent--syntax-symbol "yield")
+                                          ledger))
+    (consent-reflect--redact ledger)))
 
 (defun consent-reflect--primitive-current-imports (_arguments context)
   "Primitive `current-imports'."
@@ -603,6 +721,12 @@ SUBJECT may be a binding symbol/name or a procedure value."
      ,#'consent-reflect--primitive-current-policy 0 0)
     ("current-budget"
      ,#'consent-reflect--primitive-current-budget 0 0)
+    ("budget-remaining"
+     ,#'consent-reflect--primitive-budget-remaining 0 0)
+    ("budget-exhausted?"
+     ,#'consent-reflect--primitive-budget-exhausted-p 1 1)
+    ("budget-yield"
+     ,#'consent-reflect--primitive-budget-yield 0 0)
     ("current-imports"
      ,#'consent-reflect--primitive-current-imports 0 0)
     ("current-session-info"

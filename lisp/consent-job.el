@@ -210,13 +210,36 @@ Scheme code."
      (consent-job--budget-value
       options
       :max-events
-      (consent--eval-context-maximum-events context))))))
+      (consent--eval-context-maximum-events context))))
+   (consent-job--field
+    "max-value-nodes"
+    (consent-job--integer
+     (consent-job--budget-value
+      options
+      :max-value-nodes
+      (consent--eval-context-maximum-value-nodes context))))
+   (consent-job--field
+    "max-output-bytes"
+    (consent-job--integer
+     (consent-job--budget-value
+      options
+      :max-output-bytes
+      (consent--eval-context-maximum-output-bytes context))))
+   (consent-job--field
+    "max-wall-time-ms"
+    (let ((limit (if (plist-member options :max-wall-time-ms)
+                     (plist-get options :max-wall-time-ms)
+                   (consent--eval-context-maximum-wall-time-ms context))))
+      (if (integerp limit)
+          (consent-job--integer limit)
+        consent-false)))))
 
 (defun consent-job--normalize-eval-options (options)
   "Return OPTIONS with Scheme numeric budget values converted for the host."
   (let ((normalized (copy-sequence options)))
     (dolist (key '(:max-steps :max-non-tail-steps :max-value-nodes
-                   :max-host-callbacks :max-events :max-event-nodes)
+                   :max-host-callbacks :max-events :max-event-nodes
+                   :max-output-bytes :max-wall-time-ms)
                  normalized)
       (when (plist-member normalized key)
         (setq normalized
