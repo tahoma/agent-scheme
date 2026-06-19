@@ -1,3 +1,9 @@
+<p align="center">
+  <img src="docs/assets/consent-logo.png"
+       alt="Consent Scheme logo: a yin-yang of a brush lambda and a single-stroke ensō speech bubble"
+       width="240">
+</p>
+
 # Consent Scheme
 
 Consent Scheme is an R7RS-small guest language and agentic REPL design whose first host is Emacs.
