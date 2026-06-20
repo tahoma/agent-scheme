@@ -16,6 +16,7 @@ the public record stays printable and inspectable:
           (max-host-callbacks 10000)
           (max-events 1000)
           (max-value-nodes 10000000)
+          (max-interned-symbols 1000000)
           (max-output-bytes 10485760)
           (max-wall-time-ms #f))
   (yields ((yield (phase ready)))))

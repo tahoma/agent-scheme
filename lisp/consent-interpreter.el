@@ -3238,10 +3238,11 @@ DESCRIPTION names the primitive for errors."
   (consent--charge-string-allocation
    (copy-sequence (consent-symbol-name (car arguments))) context))
 
-(defun consent--primitive-string->symbol (arguments _context)
-  "Primitive string->symbol over ARGUMENTS."
-  (consent--intern-symbol
-   (consent--expect-string (car arguments) "string->symbol")))
+(defun consent--primitive-string->symbol (arguments context)
+  "Primitive string->symbol over ARGUMENTS, charging CONTEXT's symbol budget."
+  (consent--intern-symbol-budgeted
+   (consent--expect-string (car arguments) "string->symbol")
+   context))
 
 (defun consent--primitive-symbol=? (arguments _context)
   "Primitive symbol=? over ARGUMENTS."
@@ -6182,9 +6183,12 @@ objects so result records can be rendered by `consent-datum->external'."
           (consent--budget-result-field context))))
 
 (defun consent--condition-result-datum (condition context)
-  "Return a stable Scheme-readable error result for CONDITION."
-  (let ((condition-name (symbol-name (car condition)))
-        (debugger-condition
+  "Return a stable Scheme-readable error result for CONDITION.
+The `host-condition' field is the host-neutral `error' tag both twins emit: a
+host condition object is not portable across Scheme implementations, so the
+structured `type' and `reason' inside the condition -- not the host condition
+symbol -- carry the classification."
+  (let ((debugger-condition
          (consent-debugger-condition-datum condition context)))
     (setf (consent--eval-context-current-error context)
           debugger-condition)
@@ -6198,7 +6202,7 @@ objects so result records can be rendered by `consent-datum->external'."
             debugger-condition)
            (consent--result-field
             "host-condition"
-            (consent--syntax-symbol condition-name))
+            (consent--syntax-symbol "error"))
            (consent--result-field
             "message"
             (consent--condition-message condition)))
