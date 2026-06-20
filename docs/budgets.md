@@ -29,6 +29,7 @@ a ceiling, and a final `reason` field names the dimension that stopped the run
   (events-used 0)       (max-events 1000)
   (max-event-nodes 100000)
   (value-nodes-used 0)  (max-value-nodes 10000000)
+  (interned-symbols-used 0) (max-interned-symbols 1000000)
   (output-bytes-used 0) (max-output-bytes 10485760)
   (max-wall-time-ms #f)
   (reason #f))
@@ -42,8 +43,8 @@ exhausted.
 ```scheme
 (budget-remaining)
 ;; => (budget-remaining (steps 99997) (host-calls 9999) (events 1000)
-;;                       (value-nodes 10000000) (output-bytes 10485760)
-;;                       (reason #f))
+;;                       (value-nodes 10000000) (interned-symbols 1000000)
+;;                       (output-bytes 10485760) (reason #f))
 ```
 
 ## Dimensions and defaults
@@ -55,6 +56,7 @@ exhausted.
 | Yielded events | `yields` | `max-events` | `1000` | yes |
 | Per-event node size | — | `max-event-nodes` | `100000` | yes |
 | Allocation (value nodes) | `allocation-nodes` | `max-value-nodes` | `10000000` | yes |
+| Interned symbols | `interned-symbols` | `max-interned-symbols` | `1000000` | yes |
 | Printed output bytes | `output-bytes` | `max-output-bytes` | `10485760` | yes |
 | Wall time (ms) | `wall-time-ms` | `max-wall-time-ms` | `#f` (unbounded) | opt-in |
 | File bytes | `file-bytes` | — | — | reserved |
@@ -66,9 +68,15 @@ expansion, which runs through the same step counter).  **Host callbacks** count
 primitive invocations.  **Events** bound the yield/audit channel.  **Allocation**
 is charged at construction time and is measured in value-graph *nodes*, a
 host-independent unit, rather than host bytes; the spec accepts `allocation-bytes`
-as an alias for the same node budget.  **Output bytes** are charged at each
-textual port write, before the bytes land, so an unbounded printing loop fails
-closed.
+as an alias for the same node budget.  **Interned symbols** are charged once per
+guest `string->symbol` call, before the name is interned; because each call
+interns at most one new symbol, the ceiling bounds how many symbols a run can add
+to the process-global intern table, closing a resource-exhaustion vector where
+untrusted code such as `(string->symbol (number->string i))` in a loop would
+otherwise grow interned-symbol memory without limit.  Reader-created identifiers
+are bounded by the reader's own node budgets rather than this dimension.
+**Output bytes** are charged at each textual port write, before the bytes land,
+so an unbounded printing loop fails closed.
 
 The **reserved** dimensions are part of the ledger schema so the budget record
 is comprehensive and forward-compatible, but their enforcement arrives with the
@@ -121,8 +129,8 @@ relaxation.  The body is an implicit `begin`; wrap it in `(let () ...)` for
 internal definitions.
 
 `with-budget` tightens the counter dimensions (`steps`, `host-callbacks`,
-`yields`, `allocation-nodes`, `output-bytes`); wall time is configured at the
-run boundary rather than tightened relative to elapsed time.
+`yields`, `allocation-nodes`, `interned-symbols`, `output-bytes`); wall time is
+configured at the run boundary rather than tightened relative to elapsed time.
 
 ## The stop receipt
 
