@@ -124,7 +124,8 @@
         (max-host-callbacks . 1000000000)
         (max-events . 1000000000)
         (max-event-nodes . 1000000000)
-        (max-value-nodes . 1000000000)))
+        (max-value-nodes . 1000000000)
+        (max-interned-symbols . 1000000000)))
 
     (define (cli-script-host-run-options root)
       "Return the host-run capability options rooted at absolute directory"

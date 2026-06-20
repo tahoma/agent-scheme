@@ -152,6 +152,10 @@
           context-maximum-value-nodes
           context-value-nodes
           set-context-value-nodes!
+          context-interned-symbols
+          set-context-interned-symbols!
+          context-maximum-interned-symbols
+          set-context-maximum-interned-symbols!
           context-host-callbacks
           set-context-host-callbacks!
           context-maximum-host-callbacks
@@ -285,6 +289,7 @@
           record-agent-event!
           note-step!
           note-host-callback!
+          note-interned-symbol!
           note-value-allocation!
           value-node-count
           charge-value-allocation!
@@ -343,6 +348,15 @@
     ;; well above the comprehensive self-hosted suite's per-run peak (~0.78M
     ;; nodes) while still tripping a runaway bulk allocation.
     (define consent-default-maximum-value-nodes 10000000)
+    ;; Default maximum guest `string->symbol' interning operations for one
+    ;; evaluation run. Each call charges one unit, and because a call interns at
+    ;; most one new symbol this bounds the symbols a run can add to the global
+    ;; intern table -- a resource-exhaustion vector that untrusted guest code
+    ;; such as a `(string->symbol (number->string i))' loop would otherwise grow
+    ;; without limit. Sized well above legitimate per-run symbol generation while
+    ;; still tripping a runaway flood; reader-created identifiers are bounded by
+    ;; the reader's node budgets rather than this dimension.
+    (define consent-default-maximum-interned-symbols 1000000)
     ;; Default maximum primitive callback count allowed during evaluation.
     (define consent-default-maximum-host-callbacks 10000)
     ;; Default maximum event-channel records allowed during evaluation.
@@ -683,13 +697,20 @@
                          internal-libraries-allowed
                          output-bytes maximum-output-bytes
                          maximum-wall-time-ms wall-clock wall-start
-                         exhaustion-reason)
+                         exhaustion-reason
+                         interned-symbols maximum-interned-symbols)
       eval-context?
       (steps context-steps set-context-steps!)
       (maximum-steps context-maximum-steps set-context-maximum-steps!)
       (maximum-value-nodes context-maximum-value-nodes
                            set-context-maximum-value-nodes!)
       (value-nodes context-value-nodes set-context-value-nodes!)
+      ;; Cumulative guest `string->symbol' interning operations and the run's
+      ;; ceiling. Each call charges one unit, bounding how many symbols a run
+      ;; can add to the global intern table.
+      (interned-symbols context-interned-symbols set-context-interned-symbols!)
+      (maximum-interned-symbols context-maximum-interned-symbols
+                                set-context-maximum-interned-symbols!)
       (host-callbacks context-host-callbacks set-context-host-callbacks!)
       (maximum-host-callbacks context-maximum-host-callbacks
                               set-context-maximum-host-callbacks!)
@@ -2500,7 +2521,11 @@
                      consent-default-maximum-wall-time-ms)
        (option-ref options 'wall-clock #f)
        #f
-       #f)))
+       #f
+       0
+       (option-count options
+                     'max-interned-symbols
+                     consent-default-maximum-interned-symbols))))
 
     (define (record-audit-event! context event fields)
       "Record a Scheme-readable audit EVENT with FIELDS in CONTEXT."
@@ -2571,6 +2596,23 @@
           (budget-stop! context 'host-callbacks
                         "host callback budget exceeded"
                         (primitive-procedure-name primitive))))
+
+    (define (note-interned-symbol! context)
+      "Charge one guest symbol-interning operation against the symbol budget."
+      "Called once per guest `string->symbol' before the name is interned, so a"
+      "flood of distinct names fails closed naming the `interned-symbols'"
+      "dimension rather than relying on the step budget as a proxy. Each call"
+      "interns at most one new symbol, so the per-call charge is a conservative"
+      "upper bound on the symbols the run adds to the global intern table."
+      (set-context-interned-symbols!
+       context
+       (+ (context-interned-symbols context) 1))
+      (if (> (context-interned-symbols context)
+             (context-maximum-interned-symbols context))
+          (budget-stop! context 'interned-symbols
+                        "interned-symbol budget exceeded"
+                        (context-interned-symbols context)
+                        (context-maximum-interned-symbols context))))
 
     (define (note-output! context byte-count)
       "Charge BYTE-COUNT printed-output characters against the output budget."
@@ -2777,6 +2819,10 @@
        (list '(allocation-nodes allocation-bytes)
              context-maximum-value-nodes set-context-maximum-value-nodes!
              context-value-nodes)
+       (list '(interned-symbols)
+             context-maximum-interned-symbols
+             set-context-maximum-interned-symbols!
+             context-interned-symbols)
        (list '(output-bytes)
              context-maximum-output-bytes set-context-maximum-output-bytes!
              context-output-bytes)))

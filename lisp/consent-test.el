@@ -19,6 +19,7 @@
   '((max-steps . :max-steps)
     (max-non-tail-steps . :max-non-tail-steps)
     (max-value-nodes . :max-value-nodes)
+    (max-interned-symbols . :max-interned-symbols)
     (max-host-callbacks . :max-host-callbacks)
     (max-events . :max-events)
     (max-event-nodes . :max-event-nodes)
@@ -58,6 +59,7 @@
     ((or :max-steps
          :max-non-tail-steps
          :max-value-nodes
+         :max-interned-symbols
          :max-host-callbacks
          :max-events
          :max-event-nodes

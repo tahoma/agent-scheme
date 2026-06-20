@@ -35,6 +35,8 @@
                       "(events-used " "(max-events 1000)"
                       "(max-event-nodes 100000)"
                       "(value-nodes-used " "(max-value-nodes 10000000)"
+                      "(interned-symbols-used "
+                      "(max-interned-symbols 1000000)"
                       "(output-bytes-used " "(max-output-bytes 10485760)"
                       "(max-wall-time-ms #f)" "(reason #f)"))
       (should (string-match-p (regexp-quote needle) text)))))
@@ -54,6 +56,20 @@ Reaching a stop receipt at all proves the trampoline stayed iterative."
                "(import (scheme base)) (let loop () (loop))"
                '(:max-steps 5000))))
     (should (string-match-p (regexp-quote "(type budget-exhausted)") text))))
+
+(ert-deftest consent-budget-test-interned-symbol-flood-names-dimension ()
+  "A `string->symbol' flood halts on the `interned-symbols' dimension.
+The flood interns unbounded distinct symbols; with a generous step budget the
+interned-symbol budget -- not the step budget -- is the binding constraint, so
+the stop receipt names `interned-symbols'."
+  (let ((text (consent-budget-test--result
+               (concat "(import (scheme base))"
+                       " (let loop ((i 0))"
+                       "   (string->symbol (number->string i))"
+                       "   (loop (+ i 1)))")
+               '(:max-interned-symbols 100 :max-steps 1000000))))
+    (should (string-match-p (regexp-quote "(type budget-exhausted)") text))
+    (should (string-match-p (regexp-quote "(reason interned-symbols)") text))))
 
 (ert-deftest consent-budget-test-host-callback-exhaustion-names-dimension ()
   "Host-callback exhaustion names the `host-callbacks' dimension."
@@ -116,6 +132,7 @@ The stub advances 100 milliseconds per reading."
                '(:max-steps 1000))))
     (should (string-match-p (regexp-quote "(budget-remaining ") text))
     (should (string-match-p (regexp-quote "(steps ") text))
+    (should (string-match-p (regexp-quote "(interned-symbols ") text))
     (should (string-match-p (regexp-quote "(output-bytes ") text))
     (should (string-match-p (regexp-quote "(reason #f)") text))))
 

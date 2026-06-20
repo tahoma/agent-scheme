@@ -1481,8 +1481,23 @@
                          "(events-used " "(max-events 1000)"
                          "(max-event-nodes 100000)"
                          "(value-nodes-used " "(max-value-nodes 10000000)"
+                         "(interned-symbols-used "
+                         "(max-interned-symbols 1000000)"
                          "(output-bytes-used " "(max-output-bytes 10485760)"
                          "(max-wall-time-ms #f)" "(reason #f)"))
+
+;; A string->symbol flood halts on the interned-symbols dimension rather than
+;; growing the intern table without limit; with a generous step budget the
+;; interned-symbol budget is the binding constraint and is named in the receipt.
+(check-result-contains 'budget-interned-symbol-flood-reason
+                       "(import (scheme base))
+                        (let loop ((i 0))
+                          (string->symbol (number->string i))
+                          (loop (+ i 1)))"
+                       '("(type budget-exhausted)"
+                         "(reason interned-symbols)")
+                       '((max-interned-symbols . 100)
+                         (max-steps . 1000000)))
 
 ;; Step exhaustion halts with a budget-exhausted reason of `steps'.
 (check-result-contains 'budget-step-exhaustion-reason
@@ -1552,7 +1567,8 @@
 (check-result-contains 'budget-remaining-headroom
                        "(import (scheme base) (agent reflect))
                         (budget-remaining)"
-                       '("(budget-remaining " "(steps " "(output-bytes "
+                       '("(budget-remaining " "(steps "
+                         "(interned-symbols " "(output-bytes "
                          "(reason #f)")
                        '((max-steps . 1000)))
 

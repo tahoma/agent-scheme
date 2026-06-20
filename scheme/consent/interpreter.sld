@@ -3136,8 +3136,12 @@ cursor across sessions."
 
     (define (primitive-string->symbol arguments context)
       "Implement the `string->symbol` primitive with argument validation and"
-      "Consent Scheme values."
-      (string->symbol (expect-string (car arguments) "string->symbol")))
+      "Consent Scheme values. The interned-symbol budget is charged before the"
+      "name is interned so a flood of distinct names fails closed on its own"
+      "dimension rather than relying on the step budget as a proxy."
+      (let ((name (expect-string (car arguments) "string->symbol")))
+        (note-interned-symbol! context)
+        (string->symbol name)))
 
     (define (primitive-symbol=? arguments context)
       "Implement the `symbol=?` primitive with argument validation and Consent"
@@ -4875,6 +4879,12 @@ cursor across sessions."
             (result-field 'max-value-nodes
                           (reflect-datumize
                            (context-maximum-value-nodes context)))
+            (result-field 'interned-symbols-used
+                          (consent-make-canonical-integer
+                           (context-interned-symbols context)))
+            (result-field 'max-interned-symbols
+                          (reflect-datumize
+                           (context-maximum-interned-symbols context)))
             (result-field 'output-bytes-used
                           (consent-make-canonical-integer
                            (context-output-bytes context)))
@@ -4909,6 +4919,10 @@ cursor across sessions."
                           (reflect-budget-headroom
                            (context-maximum-value-nodes context)
                            (context-value-nodes context)))
+            (result-field 'interned-symbols
+                          (reflect-budget-headroom
+                           (context-maximum-interned-symbols context)
+                           (context-interned-symbols context)))
             (result-field 'output-bytes
                           (reflect-budget-headroom
                            (context-maximum-output-bytes context)
@@ -5852,6 +5866,7 @@ cursor across sessions."
       '(max-steps
         max-non-tail-steps
         max-value-nodes
+        max-interned-symbols
         max-host-callbacks
         max-events
         max-event-nodes

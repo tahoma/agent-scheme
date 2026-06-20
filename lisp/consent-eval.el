@@ -65,8 +65,8 @@
   "Evaluate one Consent Scheme EXPRESSION datum.
 ENVIRONMENT defaults to a fresh base environment.  OPTIONS is a
 plist supporting `:max-steps', `:max-non-tail-steps',
-`:max-value-nodes', `:max-host-callbacks', `:max-events',
-and `:max-event-nodes'."
+`:max-value-nodes', `:max-interned-symbols', `:max-host-callbacks',
+`:max-events', and `:max-event-nodes'."
   (let ((context (consent--new-eval-context options))
         (eval-environment (or environment
                               (consent-make-base-environment)))
@@ -176,6 +176,9 @@ agent events, and handle references across calls."
       (when (plist-member options :max-value-nodes)
         (setf (consent--eval-context-maximum-value-nodes context)
               (plist-get options :max-value-nodes)))
+      (when (plist-member options :max-interned-symbols)
+        (setf (consent--eval-context-maximum-interned-symbols context)
+              (plist-get options :max-interned-symbols)))
       (when (plist-member options :max-host-callbacks)
         (setf (consent--eval-context-maximum-host-callbacks context)
               (plist-get options :max-host-callbacks)))
