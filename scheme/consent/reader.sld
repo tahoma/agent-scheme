@@ -33,6 +33,7 @@
           consent-copy-datum-source!
           consent-validate-datum
           consent-datum->external
+          consent-datum->external-bounded
           consent-number?
           consent-number-lexeme
           consent-number-exactness
@@ -2537,4 +2538,143 @@
         (scan datum '())
         (if (and (eq? mode 'simple) (not (null? cyclic)))
             (error "consent reader error: write-simple cannot render circular datum"))
-        (render datum)))))
+        (render datum)))
+
+    (define (consent--render-limit-ref limits key)
+      "Return the integer ceiling for KEY in the LIMITS alist, or #f for none."
+      (let ((entry (and (pair? limits) (assq key limits))))
+        (and entry (cdr entry))))
+
+    (define (consent-datum->external-bounded datum limits . maybe-mode+display)
+      "Render DATUM as external text bounded by LIMITS so a deep, long, or"
+      "cyclic value renders in bounded time and space instead of wedging an"
+      "interactive loop or flooding its output (#508)."
+      ;; LIMITS is an alist `((depth . D) (length . L) (size . S))'; each value
+      ;; is a nonnegative integer ceiling or #f / absent for no ceiling.  DEPTH
+      ;; bounds nesting (a compound at the ceiling renders as the marker), LENGTH
+      ;; bounds the elements rendered per list/vector/bytevector (the overflow
+      ;; renders as a trailing marker), and SIZE bounds the total characters
+      ;; emitted (a hard backstop that stops the walk once reached, so rendering
+      ;; is bounded in time as well as space).  The canonical truncation marker
+      ;; is the parseable token `...' at every elision point.  Cyclic structure
+      ;; is detected against the ancestor path and broken with the marker, so the
+      ;; walk always terminates regardless of LIMITS.  Atoms delegate to the
+      ;; unbounded `consent-datum->external' so numbers, strings, symbols,
+      ;; characters, and records render identically to the canonical writer; the
+      ;; optional MAYBE-MODE+DISPLAY arguments are its mode and display flag.
+      ;; This is the interactive display path: the canonical writer stays
+      ;; unbounded for the capture/round-trip surface.
+      (let ((mode (if (pair? maybe-mode+display) (car maybe-mode+display) 'write))
+            (displayp (if (and (pair? maybe-mode+display)
+                               (pair? (cdr maybe-mode+display)))
+                          (cadr maybe-mode+display)
+                          #f))
+            (depth-limit (consent--render-limit-ref limits 'depth))
+            (length-limit (consent--render-limit-ref limits 'length))
+            (size-limit (consent--render-limit-ref limits 'size))
+            (marker "...")
+            (parts '())
+            (used 0)
+            (overflow #f)
+            (ancestors '()))
+
+        (define (raw-emit! text)
+          (set! parts (cons text parts))
+          (set! used (+ used (string-length text))))
+
+        (define (emit! text)
+          (cond
+           (overflow #t)
+           ((and size-limit (> (+ used (string-length text)) size-limit))
+            (set! overflow #t)
+            (raw-emit! marker))
+           (else (raw-emit! text))))
+
+        (define (atom-text value)
+          ;; Pre-cap a long string by source prefix so a huge atom does not force
+          ;; the unbounded writer to build a huge intermediate before the size
+          ;; backstop in `emit!' can apply.
+          (let ((value
+                 (if (and size-limit
+                          (string? value)
+                          (> (string-length value) (- size-limit used)))
+                     (substring value 0 (max 0 (- size-limit used)))
+                     value)))
+            (consent-datum->external value mode displayp)))
+
+        (define (render value depth)
+          (cond
+           (overflow #t)
+           ((pair? value) (render-pair value depth))
+           ((vector? value) (render-vector value depth))
+           ((bytevector? value) (render-bytevector value depth))
+           (else (emit! (atom-text value)))))
+
+        (define (render-pair value depth)
+          (cond
+           ((memq value ancestors) (emit! marker))
+           ((and depth-limit (>= depth depth-limit)) (emit! marker))
+           (else
+            (let ((saved ancestors))
+              (emit! "(")
+              (let loop ((cursor value) (count 0) (first #t))
+                (cond
+                 (overflow #t)
+                 ((not (pair? cursor))
+                  (if (not (null? cursor))
+                      (begin (emit! " . ") (render cursor (+ depth 1))))
+                  (emit! ")"))
+                 ((memq cursor ancestors)
+                  (emit! " . ") (emit! marker) (emit! ")"))
+                 ((and length-limit (>= count length-limit))
+                  (emit! " ") (emit! marker) (emit! ")"))
+                 (else
+                  (if (not first) (emit! " "))
+                  (set! ancestors (cons cursor ancestors))
+                  (render (car cursor) (+ depth 1))
+                  (loop (cdr cursor) (+ count 1) #f))))
+              (set! ancestors saved)))))
+
+        (define (render-vector value depth)
+          (cond
+           ((memq value ancestors) (emit! marker))
+           ((and depth-limit (>= depth depth-limit)) (emit! marker))
+           (else
+            (let ((saved ancestors)
+                  (size (vector-length value)))
+              (set! ancestors (cons value ancestors))
+              (emit! "#(")
+              (let loop ((index 0) (first #t))
+                (cond
+                 (overflow #t)
+                 ((>= index size) #t)
+                 ((and length-limit (>= index length-limit))
+                  (if (not first) (emit! " ")) (emit! marker))
+                 (else
+                  (if (not first) (emit! " "))
+                  (render (vector-ref value index) (+ depth 1))
+                  (loop (+ index 1) #f))))
+              (emit! ")")
+              (set! ancestors saved)))))
+
+        (define (render-bytevector value depth)
+          (cond
+           ((and depth-limit (>= depth depth-limit)) (emit! marker))
+           (else
+            (let ((size (bytevector-length value)))
+              (emit! "#u8(")
+              (let loop ((index 0) (first #t))
+                (cond
+                 (overflow #t)
+                 ((>= index size) #t)
+                 ((and length-limit (>= index length-limit))
+                  (if (not first) (emit! " ")) (emit! marker))
+                 (else
+                  (if (not first) (emit! " "))
+                  (emit! (consent-integer->radix-string
+                          (bytevector-u8-ref value index) 10))
+                  (loop (+ index 1) #f))))
+              (emit! ")")))))
+
+        (render datum 0)
+        (apply string-append (reverse parts))))))
