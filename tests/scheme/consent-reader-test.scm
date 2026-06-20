@@ -367,6 +367,47 @@
        (raises? (lambda () (consent-read-all "(good) (bad ]")))
        #t)
 
+;;;; Bounded rendering (#508): depth/length/size ceilings and cycle breaking
+;;;; with the canonical `...' truncation marker, used by the interactive REPL
+;;;; display path.  These mirror the Emacs reader tests so both cores agree.
+
+;; Render SOURCE read through the reader, bounded by LIMITS, for comparison.
+(define (check-bounded name source limits expected)
+  (check name
+         (consent-datum->external-bounded (consent-read source) limits)
+         expected))
+
+;; A length ceiling shows the first L elements then the marker.
+(check-bounded 'bounded-length "(1 2 3 4 5 6 7 8)" '((length . 4)) "(1 2 3 4 ...)")
+;; A depth ceiling elides the over-deep nesting with the marker.
+(check-bounded 'bounded-depth "(1 (2 (3 (4 5))))" '((depth . 2)) "(1 (2 ...))")
+;; Vectors honor the length ceiling too.
+(check-bounded 'bounded-vector "#(10 20 30 40)" '((length . 2)) "#(10 20 ...)")
+;; Bytevectors honor the length ceiling.
+(check-bounded 'bounded-bytevector "#u8(1 2 3 4 5)" '((length . 3)) "#u8(1 2 3 ...)")
+;; A real datum-label cycle terminates: the back-edge renders as the marker.
+(check-bounded 'bounded-cycle-tail "#0=(1 2 3 . #0#)" '((depth . 8)) "(1 2 3 . ...)")
+;; A cycle cut by the length ceiling before the back-edge also terminates.
+(check-bounded 'bounded-cycle-length "#0=(1 2 3 . #0#)" '((length . 2)) "(1 2 ...)")
+;; A self-referential vector terminates via the ancestor check.
+(check-bounded 'bounded-cycle-vector "#0=#(1 #0#)" '((depth . 8)) "#(1 ...)")
+;; The total-size ceiling is a hard backstop that stops the walk mid-structure.
+(check-bounded 'bounded-size "(100 200 300 400 500)" '((size . 14)) "(100 200 300 ...")
+;; A long string atom is pre-capped so a huge atom cannot escape the size bound.
+(check 'bounded-size-string
+       (consent-datum->external-bounded "abcdefghijklmnop" '((size . 6)))
+       "...")
+;; Shared (non-cyclic) structure is rendered in full when within the ceilings.
+(check-bounded 'bounded-shared "(#0=(a b) #0#)" '() "((a b) (a b))")
+;; With no ceilings, bounded output equals the canonical writer for acyclic data.
+(check 'bounded-no-limit-matches
+       (consent-datum->external-bounded (consent-read "(1 (2 3) #(4 5) \"s\")") '())
+       (consent-datum->external (consent-read "(1 (2 3) #(4 5) \"s\")")))
+;; The ancestor check guarantees termination even with no ceilings at all.
+(check 'bounded-cycle-no-limit
+       (consent-datum->external-bounded (consent-read "#0=(1 . #0#)") '())
+       "(1 . ...)")
+
 (if (= failures 0)
     (begin
       (display "Scheme reader tests passed")

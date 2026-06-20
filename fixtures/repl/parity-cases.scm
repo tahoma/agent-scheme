@@ -331,4 +331,54 @@
         (repl-result (id res-3) (submission sub-3)
                      (evaluation-result (evaluation-result (status ok))))
         (repl-prompt (ordinal 4) (state ready) (pending #f))
-        (repl-exit (reason eof) (status closed-ok) (count 3) (detail #f)))))))
+        (repl-exit (reason eof) (status closed-ok) (count 3) (detail #f)))))
+
+    ;; Bounded result rendering (#508): a session sets a `render-limits' option
+    ;; `((depth D) (length L) (size S))' and the result `display' field renders
+    ;; within those ceilings, eliding at each limit with the canonical, parseable
+    ;; `...' truncation marker.  Both hosts must produce byte-identical bounded
+    ;; text, so these cases pin the marker and each bound across the two cores.
+    ((id repl-render-bound-length)
+     (description "A length-limited render shows the first L elements then the `...' marker.")
+     (replay reproduced)
+     (session "project-main")
+     (options ((render-limits ((depth 8) (length 3) (size 4096)))))
+     (input "(list 1 2 3 4 5 6 7 8)\n")
+     (expect
+       ((repl-prompt (ordinal 1) (state ready) (pending #f))
+        (repl-submission (id sub-1) (ordinal 1) (source "(list 1 2 3 4 5 6 7 8)") (complete #t) (eof #f))
+        (repl-result (id res-1) (submission sub-1) (ordinal 1)
+                     (evaluation-result (evaluation-result (status ok)))
+                     (display "(1 2 3 ...)"))
+        (repl-prompt (ordinal 2) (state ready) (pending #f))
+        (repl-exit (reason eof) (status closed-ok) (count 1) (detail #f)))))
+
+    ((id repl-render-bound-depth-default)
+     (description "With no override, the documented default depth ceiling (8) elides the deepest nesting with `...'.  This pins the default bound, not just an override.")
+     (replay reproduced)
+     (session "project-main")
+     (options ())
+     (input "(quote (1 (2 (3 (4 (5 (6 (7 (8 (9))))))))))\n")
+     (expect
+       ((repl-prompt (ordinal 1) (state ready) (pending #f))
+        (repl-submission (id sub-1) (ordinal 1) (source "(quote (1 (2 (3 (4 (5 (6 (7 (8 (9))))))))))") (complete #t) (eof #f))
+        (repl-result (id res-1) (submission sub-1) (ordinal 1)
+                     (evaluation-result (evaluation-result (status ok)))
+                     (display "(1 (2 (3 (4 (5 (6 (7 (8 ...))))))))"))
+        (repl-prompt (ordinal 2) (state ready) (pending #f))
+        (repl-exit (reason eof) (status closed-ok) (count 1) (detail #f)))))
+
+    ((id repl-render-bound-size)
+     (description "A total-size ceiling is the hard backstop: the walk stops once S characters are emitted and ends with the `...' marker.")
+     (replay reproduced)
+     (session "project-main")
+     (options ((render-limits ((depth 8) (length 64) (size 14)))))
+     (input "(list 100 200 300 400 500)\n")
+     (expect
+       ((repl-prompt (ordinal 1) (state ready) (pending #f))
+        (repl-submission (id sub-1) (ordinal 1) (source "(list 100 200 300 400 500)") (complete #t) (eof #f))
+        (repl-result (id res-1) (submission sub-1) (ordinal 1)
+                     (evaluation-result (evaluation-result (status ok)))
+                     (display "(100 200 300 ..."))
+        (repl-prompt (ordinal 2) (state ready) (pending #f))
+        (repl-exit (reason eof) (status closed-ok) (count 1) (detail #f)))))))
