@@ -28,6 +28,20 @@ bulk allocation."
   :type 'integer
   :group 'consent)
 
+(defcustom consent-eval-maximum-interned-symbols 1000000
+  "Maximum guest `string->symbol' interning operations in one evaluation run.
+Each `string->symbol' call is charged one unit, and because a call interns at
+most one new symbol this ceiling bounds the symbols a run can add to the
+process-global intern table -- a resource-exhaustion vector, since untrusted
+guest code such as a `(string->symbol (number->string i))' loop would otherwise
+grow interned-symbol memory without an explicit limit.  It is sized well above
+any legitimate per-run symbol generation while still tripping a runaway flood;
+reader-created identifiers go through a separate path bounded by the reader's
+node budgets rather than this one.  Cross-run intern-table ownership is a
+separate concern tracked alongside the portable symbol-identity work."
+  :type 'integer
+  :group 'consent)
+
 (defcustom consent-eval-maximum-host-callbacks 10000
   "Maximum registered primitive callbacks allowed during evaluation."
   :type 'integer
@@ -148,14 +162,18 @@ deterministic; a caller opts in by supplying `:max-wall-time-ms'."
   'consent-eval-error)
 
 (defun consent--condition-message (condition)
-  "Render CONDITION as the canonical, host-neutral Consent Scheme diagnostic string.
-A Consent evaluator or budget error renders with the same `consent eval error: '
-/ `consent budget error: ' prefix the portable twin's `eval-error'/`budget-error'
-build (CONDITION's message string follows the prefix unquoted), so the error
-`message' both hosts surface is identical for an error whose inner wording
-already agrees.  A non-Consent host condition falls back to
-`error-message-string'.  This is the cross-host convergence of the prefix-and-
-quoting layer; per-message inner-wording parity is tracked separately."
+  "Render CONDITION as the canonical, host-neutral diagnostic string.
+A Consent evaluator or budget error renders with the same `consent eval
+error: ' / `consent budget error: ' prefix the portable twin's `eval-error' /
+`budget-error' build, with CONDITION's message string following the prefix
+unquoted.  A non-Consent host condition falls back to `error-message-string'.
+
+Budget stop receipts are byte-identical across both hosts: every budget message
+is the bare dimension wording (no host-formatted counts), so this prefixed form
+matches the portable twin exactly for both the inner condition `message' and the
+result `message'.  The remaining cross-host gap is the inner detail wording of
+non-budget evaluation errors (for example the offending identifier or arity),
+which is not yet unified."
   (let ((type (car condition))
         (data (cdr condition)))
     (cond
@@ -345,6 +363,11 @@ base syntax prelude has already been installed."
   maximum-steps
   maximum-value-nodes
   (value-nodes 0)
+  ;; Cumulative guest `string->symbol' interning operations and the run's
+  ;; ceiling.  Each call charges one unit, bounding how many symbols a run can
+  ;; add to the global intern table.
+  (interned-symbols 0)
+  maximum-interned-symbols
   host-callbacks
   maximum-host-callbacks
   events
@@ -477,6 +500,10 @@ unchanged and uncatchable."
      :maximum-value-nodes
      (consent--eval-option options :max-value-nodes
                                 consent-eval-maximum-value-nodes)
+     :interned-symbols 0
+     :maximum-interned-symbols
+     (consent--eval-option options :max-interned-symbols
+                                consent-eval-maximum-interned-symbols)
      :host-callbacks 0
      :maximum-host-callbacks
      (consent--eval-option options :max-host-callbacks
@@ -1226,8 +1253,7 @@ interrupts even a tight loop that allocates nothing."
            (consent--eval-context-maximum-steps context))
     (consent--budget-stop
      context 'steps
-     "evaluation step budget exceeded: %d"
-     (consent--eval-context-maximum-steps context)))
+     "evaluation step budget exceeded"))
   (consent--check-wall-time context))
 
 (defun consent--check-wall-time (context)
@@ -1244,17 +1270,42 @@ otherwise no clock is read and evaluation stays deterministic."
           (when (> elapsed limit)
             (consent--budget-stop
              context 'wall-time
-             "wall-time budget exceeded: %d" limit)))))))
+             "wall-time budget exceeded")))))))
 
-(defun consent--note-host-callback (context primitive)
-  "Record one host callback for PRIMITIVE in CONTEXT."
+(defun consent--note-interned-symbol (context)
+  "Charge one guest symbol-interning operation against CONTEXT's symbol budget.
+Called once per guest `string->symbol' before the name is interned, so a flood
+of distinct names fails closed on its own dimension -- naming `interned-symbols'
+in the stop receipt -- rather than relying on the step budget as a proxy.  Each
+call interns at most one new symbol, so the per-call charge is a conservative
+upper bound on the symbols the run adds to the global intern table."
+  (when context
+    (cl-incf (consent--eval-context-interned-symbols context))
+    (when (> (consent--eval-context-interned-symbols context)
+             (consent--eval-context-maximum-interned-symbols context))
+      (consent--budget-stop
+       context 'interned-symbols
+       "interned-symbol budget exceeded"))))
+
+(defun consent--intern-symbol-budgeted (name context)
+  "Intern NAME, charging CONTEXT's interned-symbol budget first.
+The budget is charged before the symbol is recorded so a run that would exceed
+its symbol ceiling fails closed before the new datum lands, like the output and
+value-node budgets."
+  (consent--note-interned-symbol context)
+  (consent--intern-symbol name))
+
+(defun consent--note-host-callback (context _primitive)
+  "Record one host callback in CONTEXT.
+The host-callback budget stop names the `host-callbacks' dimension and renders
+the same base diagnostic the portable twin emits, so the offending primitive is
+not woven into the message; the stop receipt's `reason' carries the dimension."
   (cl-incf (consent--eval-context-host-callbacks context))
   (when (> (consent--eval-context-host-callbacks context)
            (consent--eval-context-maximum-host-callbacks context))
     (consent--budget-stop
      context 'host-callbacks
-     "host callback budget exceeded while calling %s"
-     (consent-primitive-procedure-name primitive))))
+     "host callback budget exceeded")))
 
 (defun consent--note-output (context byte-count)
   "Charge BYTE-COUNT printed-output characters against CONTEXT's output budget.
@@ -1265,9 +1316,7 @@ loop fails closed with the dimension named, like the step budget."
            (consent--eval-context-maximum-output-bytes context))
     (consent--budget-stop
      context 'output-bytes
-     "output byte budget exceeded: %d > %d"
-     (consent--eval-context-output-bytes context)
-     (consent--eval-context-maximum-output-bytes context))))
+     "output byte budget exceeded")))
 
 (defun consent--value-node-count (value seen)
   "Return an approximate node count for VALUE.
@@ -1338,9 +1387,7 @@ SEEN prevents infinite recursion over cyclic host structures."
     (when (> count (consent--eval-context-maximum-value-nodes context))
       (consent--budget-stop
        context 'value-nodes
-       "value node budget exceeded: %d > %d"
-       count
-       (consent--eval-context-maximum-value-nodes context))))
+       "value node budget exceeded")))
   value)
 
 (defun consent--note-value-allocation (context count)
@@ -1355,9 +1402,7 @@ cannot catch it."
            (consent--eval-context-maximum-value-nodes context))
     (consent--budget-stop
      context 'value-nodes
-     "value node budget exceeded: %d > %d"
-     (consent--eval-context-value-nodes context)
-     (consent--eval-context-maximum-value-nodes context))))
+     "value node budget exceeded")))
 
 (defun consent--charge-value-allocation (value count context)
   "Charge COUNT allocated nodes against CONTEXT and return VALUE."
@@ -1438,6 +1483,11 @@ field-name symbols that target the dimension."
          #'consent--eval-context-maximum-value-nodes
          (lambda (c v) (setf (consent--eval-context-maximum-value-nodes c) v))
          #'consent--eval-context-value-nodes)
+   (list '(interned-symbols)
+         #'consent--eval-context-maximum-interned-symbols
+         (lambda (c v)
+           (setf (consent--eval-context-maximum-interned-symbols c) v))
+         #'consent--eval-context-interned-symbols)
    (list '(output-bytes)
          #'consent--eval-context-maximum-output-bytes
          (lambda (c v) (setf (consent--eval-context-maximum-output-bytes c) v))
@@ -1521,17 +1571,13 @@ removed from constructor and accessor results."
                (> node-count maximum-nodes))
       (consent--budget-stop
        context 'event-nodes
-       "event node budget exceeded: %d > %d"
-       node-count
-       maximum-nodes))
+       "event node budget exceeded"))
     (when (and (integerp maximum-events)
                (>= (consent--eval-context-event-count context)
                    maximum-events))
       (consent--budget-stop
        context 'events
-       "event count budget exceeded: %d > %d"
-       (1+ (consent--eval-context-event-count context))
-       maximum-events))
+       "event count budget exceeded"))
     (cl-incf (consent--eval-context-event-count context))
     (push event (consent--eval-context-events context))
     (when-let ((hook (consent--eval-context-event-hook context)))

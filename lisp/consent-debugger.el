@@ -97,8 +97,14 @@ evaluation context.")
     datum)))
 
 (defun consent-debugger--host-condition-message (condition)
-  "Return CONDITION's raw message when possible."
+  "Return CONDITION's message for the debugger condition datum.
+A budget condition renders through `consent--condition-message' so its inner
+message carries the same `consent budget error: ' prefix and base wording the
+portable twin emits, keeping the budget stop receipt byte-identical across
+hosts.  Other conditions keep their raw host message."
   (cond
+   ((and (consp condition) (eq (car condition) 'consent-budget-error))
+    (consent--condition-message condition))
    ((and (consp condition) (stringp (cadr condition)))
     (cadr condition))
    ((consp condition)
