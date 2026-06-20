@@ -185,6 +185,53 @@
     (should (equal (consent-datum->external shared)
                    "((a b) (a b))"))))
 
+(defun consent-reader-test--bounded (source limits)
+  "Read SOURCE and return its external representation bounded by LIMITS."
+  (consent-datum->external-bounded (consent-read source) limits))
+
+(ert-deftest consent-reader-test-bounded-rendering ()
+  "Bound rendering by depth/length/size with the `...' truncation marker (#508).
+These mirror the portable reader tests so both cores render identically."
+  ;; A length ceiling shows the first L elements then the marker.
+  (should (equal (consent-reader-test--bounded "(1 2 3 4 5 6 7 8)" '((length . 4)))
+                 "(1 2 3 4 ...)"))
+  ;; A depth ceiling elides over-deep nesting with the marker.
+  (should (equal (consent-reader-test--bounded "(1 (2 (3 (4 5))))" '((depth . 2)))
+                 "(1 (2 ...))"))
+  ;; Vectors and bytevectors honor the length ceiling.
+  (should (equal (consent-reader-test--bounded "#(10 20 30 40)" '((length . 2)))
+                 "#(10 20 ...)"))
+  (should (equal (consent-reader-test--bounded "#u8(1 2 3 4 5)" '((length . 3)))
+                 "#u8(1 2 3 ...)"))
+  ;; The total-size ceiling is a hard backstop that stops mid-structure.
+  (should (equal (consent-reader-test--bounded "(100 200 300 400 500)" '((size . 14)))
+                 "(100 200 300 ..."))
+  ;; A long string atom is pre-capped so a huge atom cannot escape the bound.
+  (should (equal (consent-datum->external-bounded "abcdefghijklmnop" '((size . 6)))
+                 "...")))
+
+(ert-deftest consent-reader-test-bounded-rendering-breaks-cycles ()
+  "Always terminate on shared and circular structure, regardless of LIMITS (#508)."
+  ;; A real datum-label cycle terminates: the back-edge renders as the marker.
+  (should (equal (consent-reader-test--bounded "#0=(1 2 3 . #0#)" '((depth . 8)))
+                 "(1 2 3 . ...)"))
+  ;; A cycle cut by the length ceiling before the back-edge also terminates.
+  (should (equal (consent-reader-test--bounded "#0=(1 2 3 . #0#)" '((length . 2)))
+                 "(1 2 ...)"))
+  ;; A self-referential vector terminates via the ancestor check.
+  (should (equal (consent-reader-test--bounded "#0=#(1 #0#)" '((depth . 8)))
+                 "#(1 ...)"))
+  ;; The ancestor check guarantees termination even with no ceilings at all.
+  (should (equal (consent-reader-test--bounded "#0=(1 . #0#)" '())
+                 "(1 . ...)"))
+  ;; Shared (non-cyclic) structure renders in full when within the ceilings.
+  (should (equal (consent-reader-test--bounded "(#0=(a b) #0#)" '())
+                 "((a b) (a b))"))
+  ;; With no ceilings, bounded output equals the canonical writer for acyclic data.
+  (should (equal (consent-datum->external-bounded
+                  (consent-read "(1 (2 3) #(4 5) \"s\")") '())
+                 (consent-datum->external (consent-read "(1 (2 3) #(4 5) \"s\")")))))
+
 (ert-deftest consent-reader-test-comments-and-read-all ()
   "Skip line, block, datum comments, and read multiple datums."
   (should

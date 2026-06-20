@@ -256,7 +256,12 @@ Advances the ordinal/count as it goes."
                          (consent-repl-stream--result-record
                           consent-repl-comint--session-id
                           consent-repl-comint--ordinal result
-                          (consent-repl-stream--result-display result))))))
+                          ;; Bound the result `display' the same way the stream
+                          ;; engine does (#508); the live buffer applies the
+                          ;; documented default ceiling.
+                          (consent-repl-stream--result-display
+                           result
+                           consent-repl-stream-default-render-limits))))))
                (setq consent-repl-comint--ordinal
                      (1+ consent-repl-comint--ordinal))
                (setq consent-repl-comint--count

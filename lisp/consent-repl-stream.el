@@ -59,6 +59,17 @@
 (defconst consent-repl-stream-default-session "repl-main"
   "Default session id used by the incremental Consent Scheme REPL entry.")
 
+(defvar consent-repl-stream-default-render-limits
+  '((depth . 8) (length . 64) (size . 4096))
+  "Default depth/length/size ceiling applied to each result `display' (#508).
+A deep, long, or cyclic value -- such as one an agent loop's untrusted code
+produces -- renders within these bounds with the `...' truncation marker
+instead of wedging the loop or flooding the stream.  These bound the human
+`display' only; the canonical `evaluation-result' datum the record also carries
+keeps full fidelity.  A session overrides them with a `:render-limits'
+evaluator option `((depth . D) (length . L) (size . S))'; the portable twin
+mirrors these defaults in `cli-repl-default-render-limits'.")
+
 (defconst consent-repl-stream--eof (make-symbol "consent-repl-stream-eof")
   "Sentinel a chunk source returns when the interaction input is exhausted.")
 
@@ -201,16 +212,20 @@ condition marker to the prompt-gutter width."
     (and (consent-symbol-p status)
          (equal (consent-symbol-name status) "error"))))
 
-(defun consent-repl-stream--result-display (evaluation-result)
-  "Return a human-readable display string for a non-error EVALUATION-RESULT."
+(defun consent-repl-stream--result-display (evaluation-result limits)
+  "Return a human-readable display string for a non-error EVALUATION-RESULT.
+Bounded by LIMITS so a deep, long, or cyclic value renders in bounded time and
+space with the `...' truncation marker (#508)."
   (let ((status (consent-repl-stream--field evaluation-result "status")))
     (if (and (consent-symbol-p status)
              (equal (consent-symbol-name status) "values"))
-        (consent-result->external
+        (consent-datum->external-bounded
          (cons (consent-repl-stream--sym "values")
-               (consent-repl-stream--field evaluation-result "values")))
-      (consent-result->external
-       (consent-repl-stream--field evaluation-result "value")))))
+               (consent-repl-stream--field evaluation-result "values"))
+         limits)
+      (consent-datum->external-bounded
+       (consent-repl-stream--field evaluation-result "value")
+       limits))))
 
 (defun consent-repl-stream--error-subfields (evaluation-result)
   "Return the error field's sub-field list from EVALUATION-RESULT, or nil.
@@ -400,6 +415,10 @@ EMIT-OUTPUT on separate streams, under SESSION and evaluator OPTIONS."
           (consent-make-interaction-context interaction-options))
          (shared-input-port
           (consent-interaction-program-input-port interaction))
+         ;; The depth/length/size ceiling applied to each result `display'
+         ;; (#508); a `:render-limits' option overrides the documented default.
+         (render-limits (or (plist-get options :render-limits)
+                            consent-repl-stream-default-render-limits))
          (exit-code 0))
     (setq consent-session-current-id session-id)
     (cl-labels
@@ -539,7 +558,8 @@ EMIT-OUTPUT on separate streams, under SESSION and evaluator OPTIONS."
                                   (consent-repl-stream--error-message result)))
                          (emit (consent-repl-stream--result-record
                                 session ordinal result
-                                (consent-repl-stream--result-display result))))
+                                (consent-repl-stream--result-display
+                                 result render-limits))))
                        (setq buffer
                              (or (consent-interaction-program-input-remainder
                                   turn-interaction)
