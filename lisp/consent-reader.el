@@ -2142,6 +2142,152 @@ strings, symbols, and characters use display rendering."
                                   value)))))))
       (render datum))))
 
+(defun consent--render-limit-ref (limits key)
+  "Return the integer ceiling for KEY in the LIMITS alist, or nil for none."
+  (let ((entry (and (consp limits) (assq key limits))))
+    (and entry (cdr entry))))
+
+(defun consent-datum->external-bounded (datum limits &optional mode displayp)
+  "Return external text for DATUM bounded by LIMITS.
+LIMITS is an alist `((depth . D) (length . L) (size . S))'; each value is a
+nonnegative integer ceiling or nil/absent for no ceiling.  DEPTH bounds
+nesting (a compound at the ceiling renders as the marker), LENGTH bounds the
+elements rendered per list/vector/bytevector (the overflow renders as a
+trailing marker), and SIZE bounds the total characters emitted (a hard
+backstop that stops the walk once reached, so rendering is bounded in time as
+well as space).  The canonical truncation marker is the parseable token `...'
+at every elision point.  Cyclic structure is detected against the ancestor
+path and broken with the marker, so the walk always terminates regardless of
+LIMITS.  Atoms delegate to the unbounded `consent-datum->external' so numbers,
+strings, symbols, characters, and records render identically to the canonical
+writer; MODE and DISPLAYP are its arguments.  This is the interactive display
+path (#508); the canonical writer stays unbounded for the capture/round-trip
+surface.  Mirrors the portable `consent-datum->external-bounded'."
+  (let ((writer-mode (or mode 'write))
+        (depth-limit (consent--render-limit-ref limits 'depth))
+        (length-limit (consent--render-limit-ref limits 'length))
+        (size-limit (consent--render-limit-ref limits 'size))
+        (marker "...")
+        (parts nil)
+        (used 0)
+        (overflow nil)
+        (ancestors nil))
+    (cl-labels
+        ((raw-emit
+          (text)
+          (push text parts)
+          (setq used (+ used (length text))))
+         (emit
+          (text)
+          (cond
+           (overflow t)
+           ((and size-limit (> (+ used (length text)) size-limit))
+            (setq overflow t)
+            (raw-emit marker))
+           (t (raw-emit text))))
+         (atom-text
+          (value)
+          ;; Pre-cap a long string by source prefix so a huge atom does not
+          ;; force the unbounded writer to build a huge intermediate before the
+          ;; size backstop in `emit' can apply.
+          (let ((value (if (and size-limit
+                                 (stringp value)
+                                 (> (length value) (- size-limit used)))
+                           (substring value 0 (max 0 (- size-limit used)))
+                         value)))
+            (consent-datum->external value writer-mode displayp)))
+         (render
+          (value depth)
+          (cond
+           (overflow t)
+           ((consp value) (render-pair value depth))
+           ((vectorp value) (render-vector value depth))
+           ((consent-bytevector-p value) (render-bytevector value depth))
+           (t (emit (atom-text value)))))
+         (render-pair
+          (value depth)
+          (cond
+           ((memq value ancestors) (emit marker))
+           ((and depth-limit (>= depth depth-limit)) (emit marker))
+           (t
+            (let ((saved ancestors)
+                  (cursor value)
+                  (count 0)
+                  (first t)
+                  (done nil))
+              (emit "(")
+              (while (not done)
+                (cond
+                 (overflow (setq done t))
+                 ((not (consp cursor))
+                  (unless (null cursor)
+                    (emit " . ")
+                    (render cursor (1+ depth)))
+                  (emit ")")
+                  (setq done t))
+                 ((memq cursor ancestors)
+                  (emit " . ") (emit marker) (emit ")")
+                  (setq done t))
+                 ((and length-limit (>= count length-limit))
+                  (emit " ") (emit marker) (emit ")")
+                  (setq done t))
+                 (t
+                  (unless first (emit " "))
+                  (push cursor ancestors)
+                  (render (car cursor) (1+ depth))
+                  (setq cursor (cdr cursor) count (1+ count) first nil))))
+              (setq ancestors saved)))))
+         (render-vector
+          (value depth)
+          (cond
+           ((memq value ancestors) (emit marker))
+           ((and depth-limit (>= depth depth-limit)) (emit marker))
+           (t
+            (let ((saved ancestors)
+                  (size (length value))
+                  (index 0)
+                  (first t)
+                  (done nil))
+              (push value ancestors)
+              (emit "#(")
+              (while (not done)
+                (cond
+                 (overflow (setq done t))
+                 ((>= index size) (setq done t))
+                 ((and length-limit (>= index length-limit))
+                  (unless first (emit " ")) (emit marker)
+                  (setq done t))
+                 (t
+                  (unless first (emit " "))
+                  (render (aref value index) (1+ depth))
+                  (setq index (1+ index) first nil))))
+              (emit ")")
+              (setq ancestors saved)))))
+         (render-bytevector
+          (value depth)
+          (cond
+           ((and depth-limit (>= depth depth-limit)) (emit marker))
+           (t
+            (let ((bytes (consent-bytevector-bytes value))
+                  (index 0)
+                  (first t)
+                  (done nil))
+              (emit "#u8(")
+              (while (not done)
+                (cond
+                 (overflow (setq done t))
+                 ((>= index (length bytes)) (setq done t))
+                 ((and length-limit (>= index length-limit))
+                  (unless first (emit " ")) (emit marker)
+                  (setq done t))
+                 (t
+                  (unless first (emit " "))
+                  (emit (number-to-string (aref bytes index)))
+                  (setq index (1+ index) first nil))))
+              (emit ")"))))))
+      (render datum 0)
+      (apply #'concat (nreverse parts)))))
+
 (provide 'consent-reader)
 
 ;;; consent-reader.el ends here

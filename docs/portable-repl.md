@@ -253,7 +253,16 @@ from. For `(+ 1 2)` followed by end of input:
 ```
 
 - Results wrap the existing `(consent result)` `evaluation-result` datum
-  unchanged and add an optional human-readable `display` string.
+  unchanged and add an optional human-readable `display` string. The `display`
+  is **bounded** — a deep, long, or cyclic value renders within a depth, length,
+  and total character-size ceiling, eliding at each limit with the parseable
+  truncation marker `...`, and shared/circular structure is broken with the same
+  marker — so an untrusted value cannot wedge the loop or flood the stream
+  (#508). The default ceiling is depth 8, length 64, size 4096; override it per
+  session with a `render-limits` evaluator option `((depth . D) (length . L)
+  (size . S))` (any component `#f` disables that ceiling). The bound shapes the
+  human `display` only; the embedded `evaluation-result` keeps full fidelity, so
+  capture and replay are unaffected.
 - A recoverable reader or evaluator condition is reported as a `repl-condition`
   and the session keeps running; an unbalanced form at the end of input closes
   with `(status closed-error)`.

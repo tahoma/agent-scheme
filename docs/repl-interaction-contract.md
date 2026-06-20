@@ -400,6 +400,21 @@ reshaping, the existing `evaluation-result` datum.
 - `display` is an optional convenience string for terminal/buffer presentation,
   derived from `consent-value->external`. It is never the canonical result; the
   embedded `evaluation-result` datum is.
+- `display` is **bounded** so a deep, long, or cyclic value — such as one an
+  agent loop's untrusted code produces — renders in bounded time and space
+  instead of wedging the loop or flooding the stream (#508). Each interactive
+  session renders the value within a depth, length (element count), and total
+  character-size ceiling, eliding at every limit with the canonical, parseable
+  truncation marker `...`; shared or circular structure is detected and broken
+  with the same marker, so rendering always terminates. The bound applies to the
+  human `display` only — the embedded `evaluation-result` keeps full fidelity, so
+  capture and replay round-trip unchanged. The default ceiling is depth 8, length
+  64, and size 4096 characters, identical on both hosts (`cli-repl-default-render-limits`
+  in `(cli repl-shell)` and `consent-repl-stream-default-render-limits` in
+  `consent-repl-stream.el`); a session overrides it with a `render-limits`
+  evaluator option, `((depth . D) (length . L) (size . S))`, where any component
+  may be `#f` for no ceiling. The shared corpus pins the marker and each bound on
+  both hosts.
 - A `repl-result` is written to the `repl-result` stream. Anything the form
   itself printed went to `program-output` during evaluation and is not duplicated
   here.

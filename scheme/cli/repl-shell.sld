@@ -285,6 +285,25 @@
             (list 'count (consent-make-canonical-integer count))
             (list 'detail detail)))
 
+    ;;;; Bounded result rendering (#508)
+
+    ;; The default depth/length/size ceiling an interactive session applies to
+    ;; the `repl-result' `display' field, so a deep, long, or cyclic value (such
+    ;; as one an agent loop's untrusted code produces) renders in bounded time
+    ;; and space with the `...' truncation marker instead of wedging the loop or
+    ;; flooding the stream.  These bound the human `display' only; the canonical
+    ;; `evaluation-result' datum the record also carries keeps full fidelity.  A
+    ;; session overrides them with a `render-limits' evaluator option
+    ;; `((depth . D) (length . L) (size . S))'; the Emacs twin mirrors these
+    ;; defaults in `consent-repl-stream-default-render-limits'.
+    (define cli-repl-default-render-limits
+      '((depth . 8) (length . 64) (size . 4096)))
+
+    (define (repl--render-limits options)
+      "Return the render-limits alist from OPTIONS, or the documented default."
+      (let ((entry (assq 'render-limits options)))
+        (if entry (cdr entry) cli-repl-default-render-limits)))
+
     ;;;; Evaluation-result inspection
 
     (define (repl--field datum name)
@@ -296,16 +315,18 @@
       "Return #t when EVALUATION-RESULT carries an error status."
       (eq? (repl--field evaluation-result 'status) 'error))
 
-    (define (repl--result-display evaluation-result)
-      "Return a human-readable display string for a non-error EVALUATION-RESULT."
+    (define (repl--result-display evaluation-result limits)
+      "Return a human-readable display string for a non-error EVALUATION-RESULT,"
+      "bounded by LIMITS so a deep, long, or cyclic value renders in bounded"
+      "time and space with the `...' truncation marker (#508)."
       (let ((status (repl--field evaluation-result 'status)))
         (cond
          ((eq? status 'values)
           (let ((entry (assq 'values (cdr evaluation-result))))
-            (consent-result->external (cons 'values (cadr entry)))))
+            (consent-datum->external-bounded (cons 'values (cadr entry)) limits)))
          (else
           (let ((value (repl--field evaluation-result 'value)))
-            (consent-result->external value))))))
+            (consent-datum->external-bounded value limits))))))
 
     (define (repl--error-condition evaluation-result)
       "Return the debugger-condition datum from an error EVALUATION-RESULT"
@@ -437,6 +458,9 @@
              ;; `switch-session'/`create-session' verb run in one form redirects
              ;; the next form to the now-current session's sandbox environment.
              (manager (consent-repl-session-manager))
+             ;; The depth/length/size ceiling applied to each result `display'
+             ;; (#508); a `render-limits' option overrides the documented default.
+             (render-limits (repl--render-limits options))
              (exit-code 0))
         (define (current-interaction)
           (consent-session-manager-current-context manager))
@@ -568,7 +592,7 @@
                                   (repl--error-message result)))
                            (emit (repl--result-record
                                   session ordinal result
-                                  (repl--result-display result))))
+                                  (repl--result-display result render-limits))))
                        (loop (or (consent-interaction-program-input-remainder
                                   interaction)
                                  program-input)
