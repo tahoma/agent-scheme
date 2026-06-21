@@ -2557,23 +2557,18 @@
 
     (define (consent-datum->external-bounded datum limits . maybe-mode+display)
       "Render DATUM as external text bounded by LIMITS so a deep, long, or"
-      "cyclic value renders in bounded time and space instead of wedging an"
-      "interactive loop or flooding its output (#508)."
-      ;; LIMITS is an alist `((depth . D) (length . L) (size . S))'; each value
-      ;; is a nonnegative integer ceiling or #f / absent for no ceiling.  DEPTH
-      ;; bounds nesting (a compound at the ceiling renders as the marker), LENGTH
-      ;; bounds the elements rendered per list/vector/bytevector (the overflow
-      ;; renders as a trailing marker), and SIZE bounds the total characters
-      ;; emitted (a hard backstop that stops the walk once reached, so rendering
-      ;; is bounded in time as well as space).  The canonical truncation marker
-      ;; is the parseable token `...' at every elision point.  Cyclic structure
-      ;; is detected against the ancestor path and broken with the marker, so the
-      ;; walk always terminates regardless of LIMITS.  Atoms delegate to the
-      ;; unbounded `consent-datum->external' so numbers, strings, symbols,
-      ;; characters, and records render identically to the canonical writer; the
-      ;; optional MAYBE-MODE+DISPLAY arguments are its mode and display flag.
-      ;; This is the interactive display path: the canonical writer stays
-      ;; unbounded for the capture/round-trip surface.
+      "cyclic value renders in bounded time and space with the `...' truncation"
+      "marker instead of wedging an interactive loop or flooding output (#508)."
+      #((parameters
+         . ((datum . "Datum to render for an interactive display surface.")
+            (limits
+             . "Alist `((depth . D) (length . L) (size . S))' of nonnegative integer ceilings, each #f or absent for no ceiling: DEPTH bounds nesting (a compound at the ceiling renders as the marker), LENGTH bounds the elements rendered per list/vector/bytevector (the overflow renders as a trailing marker), and SIZE bounds the total characters emitted (a hard backstop that stops the walk once reached, so rendering is bounded in time as well as space).")
+            (maybe-mode+display
+             . "Optional `consent-datum->external' mode and display flag.")))
+        (returns . "Bounded external text: each elided depth/length/size point and each shared or circular back-edge renders as the parseable `...' marker, so rendering always terminates regardless of LIMITS.  Atoms delegate to the unbounded `consent-datum->external', so numbers, strings, symbols, characters, and records render identically to the canonical writer.")
+        (effects . (pure)))
+      ;; The canonical writer stays unbounded for the capture/round-trip surface;
+      ;; this bound is the interactive display path only.
       (let ((mode (if (pair? maybe-mode+display) (car maybe-mode+display) 'write))
             (displayp (if (and (pair? maybe-mode+display)
                                (pair? (cdr maybe-mode+display)))
