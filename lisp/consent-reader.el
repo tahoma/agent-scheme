@@ -2143,9 +2143,17 @@ strings, symbols, and characters use display rendering."
       (render datum))))
 
 (defun consent--render-limit-ref (limits key)
-  "Return the integer ceiling for KEY in the LIMITS alist, or nil for none."
+  "Return the integer ceiling for KEY in the LIMITS alist, or nil for none.
+A ceiling may arrive as a host integer (the usual interactive default) or as a
+Consent number record (when LIMITS came from evaluated Consent data); the
+internal depth/length/size counters are host integers, so normalize the ceiling
+to a host integer rather than risk comparing an integer against a record."
   (let ((entry (and (consp limits) (assq key limits))))
-    (and entry (cdr entry))))
+    (and entry
+         (let ((value (cdr entry)))
+           (if (consent-number-p value)
+               (consent-number-value value)
+             value)))))
 
 (defun consent-datum->external-bounded (datum limits &optional mode displayp)
   "Return external text for DATUM bounded by LIMITS.
