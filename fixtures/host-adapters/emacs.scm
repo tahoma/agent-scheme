@@ -60,6 +60,7 @@
      (library (agent redaction))
      (library (agent session))
      (library (agent registry))
+     (library (agent proposal))
      (library (agent transcript))))
    (mediates
     ((library (scheme file))

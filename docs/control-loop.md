@@ -758,14 +758,73 @@ Retry policy must be bounded by budget and by repeated-failure receipts. A
 model may suggest retrying, but the runtime decides whether retry remains
 allowed.
 
+## Proposal-Datum Boundary (D2)
+
+A model's emitted Scheme form is a **proposal**, not authority. The runtime
+treats it as data at every step: the runner reads it with the existing reader
+(recovering malformed input as data, never as a partial program), then walks it
+with the `(agent proposal)` library before any effect runs. The form is never
+`eval`'d as raw authority — model output proposes, the policy gate disposes.
+This is design tension **D2** (free-form code execution vs. capability-gated
+effects), implemented in #286.
+
+A proposal is carried inside a `code-action` agent-action:
+
+```scheme
+(agent-action
+  (kind code-action)
+  (form (begin (read-file "notes.txt")
+               (file-write "summary.txt" result))))
+```
+
+`analyze-code-action` walks the `form` as data and returns a
+`code-action-analysis` that classifies every sub-form without running it:
+
+- **Pure sub-forms** are accounted against a bounded `pure-cost` budget; a walk
+  that exceeds the budget stops with a `budget-exhausted` status rather than an
+  unbounded traversal.
+- **Host calls** become `capability-request` datums that the loop routes through
+  policy, so the model reaches a host effect only through the gate.
+- **Control-plane sub-forms** — minting or attenuating a grant, revoking or
+  releasing a handle, resolving an approval, or stamping a verifier as passed —
+  are **quarantined** to a denied `capability-decision` and perform no effect:
+
+```scheme
+(capability-decision
+  (request (grant-capability! token authority))
+  (status denied)
+  (operation grant-capability!)
+  (reason proposal-quarantined-control-plane))
+```
+
+The analysis status is `quarantined` whenever any control-plane sub-form is
+present, even alongside otherwise-routable host calls, so a single escalation
+attempt fails the whole proposed action closed.
+
+> **Design decision (resolves tension D2).** Model-proposed code is a proposal
+> the loop reads and runs under policy, gated at capability-request granularity.
+> We reject the field default — execute model code directly and sandbox after
+> the fact (CodeAct, AutoGen, Voyager). The accepted trade is that the gated
+> loop is slower and interruptible than a frictionless interpreter. The harder
+> sub-problem — pausing and resuming a single sub-expression mid-form across a
+> gated call — is deferred to its own future issue; this slice classifies and
+> routes whole sub-forms.
+
+The `(agent proposal)` library is host-neutral and single-sourced: the Emacs
+interpreter and the portable hosts load the same Scheme source, so a proposal
+analysis is byte-identical and replayable across cores, satisfying the D7
+agent-layer determinism stance.
+
 ## Cross-Cutting Stance Decisions
 
 The agentic prior-art synthesis enumerates seven tensions between the agentic
 field's defaults and Consent's stance
 ([Agentic-harness prior-art synthesis §4](agentic-harness-ideas.md#4-design-tensions-to-decide-deliberately)).
 Four are decided where they are implemented: **D1** (JSON vs Lisp-first tool
-schemas) in #531, **D2** (free-form code vs capability-gated effects) and **D3**
-(who authorizes completion) in #286, and **D4** (memory mutation vs append-only)
+schemas) in #531, **D2** (free-form code vs capability-gated effects, recorded
+in the [Proposal-Datum Boundary](#proposal-datum-boundary-d2) section above) and
+**D3** (who authorizes completion) in #286, and **D4** (memory mutation vs
+append-only)
 in the memory slice. The remaining three are cross-cutting — they bind more
 than one implementation slice — and are ratified here as an RFC (#561) before
 the work they gate proceeds. Each is framed as the field default versus the

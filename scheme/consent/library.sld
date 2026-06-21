@@ -145,6 +145,7 @@
         (agent redaction)
         (agent session)
         (agent registry)
+        (agent proposal)
         (agent transcript)))
 
     ;; Consent core library keys recognized by the portable registry.  The
@@ -170,6 +171,9 @@
         ((agent registry)
          "scheme/agent/registry.sld"
          "agent/registry.sld")
+        ((agent proposal)
+         "scheme/agent/proposal.sld"
+         "agent/proposal.sld")
         ((agent test)
          "scheme/agent/test.sld"
          "agent/test.sld")
@@ -1343,6 +1347,12 @@
              context
              environment)))
        ((equal? key '(agent registry))
+        (if (not (library-registry-ref context key))
+            (register-source-library!
+             (agent-source-library-source key)
+             context
+             environment)))
+       ((equal? key '(agent proposal))
         (if (not (library-registry-ref context key))
             (register-source-library!
              (agent-source-library-source key)
