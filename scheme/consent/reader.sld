@@ -2541,13 +2541,14 @@
         (render datum)))
 
     (define (consent--render-limit-ref limits key)
-      "Return the integer ceiling for KEY in the LIMITS alist, or #f for none."
-      ;; A ceiling may arrive as a host integer (the usual interactive default)
-      ;; or as a Consent number record (when LIMITS came from evaluated Consent
-      ;; data, e.g. a `render-limits' option read on a self-hosted host).  The
-      ;; internal depth/length/size counters are host integers, so normalize the
-      ;; ceiling to a host integer; otherwise a host `>=' would compare a host
-      ;; integer against a number record and raise.
+      "Return the host-integer ceiling for KEY in the LIMITS alist, or #f when"
+      "KEY is absent.  A ceiling may arrive as a host integer (the usual"
+      "interactive default) or as a Consent number record (when LIMITS came from"
+      "evaluated Consent data, such as a `render-limits' option read on a"
+      "self-hosted host); since the bounded renderer's depth/length/size counters"
+      "are host integers, a number record is normalized through"
+      "`consent-number-value' so the host comparisons do not compare an integer"
+      "against a record and raise."
       (let ((entry (and (pair? limits) (assq key limits))))
         (and entry
              (let ((value (cdr entry)))
@@ -2584,10 +2585,15 @@
             (ancestors '()))
 
         (define (raw-emit! text)
+          "Append TEXT to the output accumulator and charge its length against"
+          "the running size counter, without consulting the size ceiling."
           (set! parts (cons text parts))
           (set! used (+ used (string-length text))))
 
         (define (emit! text)
+          "Append TEXT under the size ceiling: drop it once overflow is set,"
+          "or emit the marker and set overflow when TEXT would cross SIZE-LIMIT,"
+          "otherwise append it via `raw-emit!'."
           (cond
            (overflow #t)
            ((and size-limit (> (+ used (string-length text)) size-limit))
@@ -2596,9 +2602,10 @@
            (else (raw-emit! text))))
 
         (define (atom-text value)
-          ;; Pre-cap a long string by source prefix so a huge atom does not force
-          ;; the unbounded writer to build a huge intermediate before the size
-          ;; backstop in `emit!' can apply.
+          "Render atomic VALUE through the unbounded writer for identical atom"
+          "text, pre-capping a long string by source prefix so a huge atom does"
+          "not force the writer to build a huge intermediate before the size"
+          "backstop in `emit!' can apply."
           (let ((value
                  (if (and size-limit
                           (string? value)
@@ -2608,6 +2615,9 @@
             (consent-datum->external value mode displayp)))
 
         (define (render value depth)
+          "Render VALUE at nesting DEPTH, dispatching compounds to their"
+          "bounded renderers and atoms to `atom-text'; a no-op once overflow"
+          "is set so the walk unwinds in bounded time."
           (cond
            (overflow #t)
            ((pair? value) (render-pair value depth))
@@ -2616,6 +2626,9 @@
            (else (emit! (atom-text value)))))
 
         (define (render-pair value depth)
+          "Render pair VALUE at nesting DEPTH, breaking a cycle back to an"
+          "ancestor or an over-deep nesting with the marker, and eliding the"
+          "spine past LENGTH-LIMIT with a trailing marker."
           (cond
            ((memq value ancestors) (emit! marker))
            ((and depth-limit (>= depth depth-limit)) (emit! marker))
@@ -2641,6 +2654,9 @@
               (set! ancestors saved)))))
 
         (define (render-vector value depth)
+          "Render vector VALUE at nesting DEPTH, breaking a self-reference or"
+          "an over-deep nesting with the marker, and eliding elements past"
+          "LENGTH-LIMIT with a trailing marker."
           (cond
            ((memq value ancestors) (emit! marker))
            ((and depth-limit (>= depth depth-limit)) (emit! marker))
@@ -2663,6 +2679,9 @@
               (set! ancestors saved)))))
 
         (define (render-bytevector value depth)
+          "Render bytevector VALUE at nesting DEPTH (over-deep nesting renders"
+          "as the marker), eliding bytes past LENGTH-LIMIT with a trailing"
+          "marker; bytevectors hold no compounds, so no cycle check is needed."
           (cond
            ((and depth-limit (>= depth depth-limit)) (emit! marker))
            (else

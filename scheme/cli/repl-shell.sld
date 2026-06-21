@@ -287,15 +287,11 @@
 
     ;;;; Bounded result rendering (#508)
 
-    ;; The default depth/length/size ceiling an interactive session applies to
-    ;; the `repl-result' `display' field, so a deep, long, or cyclic value (such
-    ;; as one an agent loop's untrusted code produces) renders in bounded time
-    ;; and space with the `...' truncation marker instead of wedging the loop or
-    ;; flooding the stream.  These bound the human `display' only; the canonical
-    ;; `evaluation-result' datum the record also carries keeps full fidelity.  A
-    ;; session overrides them with a `render-limits' evaluator option
-    ;; `((depth . D) (length . L) (size . S))'; the Emacs twin mirrors these
-    ;; defaults in `consent-repl-stream-default-render-limits'.
+    ;; Default depth/length/size ceiling `repl--result-display' applies to the
+    ;; `repl-result' `display' field; a `render-limits' evaluator option overrides
+    ;; it.  `consent-datum->external-bounded' documents the bounding semantics,
+    ;; and the Emacs twin mirrors these defaults in
+    ;; `consent-repl-stream-default-render-limits'.
     (define cli-repl-default-render-limits
       '((depth . 8) (length . 64) (size . 4096)))
 

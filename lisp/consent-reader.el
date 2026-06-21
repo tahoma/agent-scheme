@@ -2183,10 +2183,15 @@ surface.  Mirrors the portable `consent-datum->external-bounded'."
     (cl-labels
         ((raw-emit
           (text)
+          ;; Append TEXT to the accumulator and charge its length against the
+          ;; running size counter, without consulting the size ceiling.
           (push text parts)
           (setq used (+ used (length text))))
          (emit
           (text)
+          ;; Append TEXT under the size ceiling: drop it once overflow is set,
+          ;; emit the marker and set overflow when it would cross SIZE-LIMIT,
+          ;; otherwise append it.
           (cond
            (overflow t)
            ((and size-limit (> (+ used (length text)) size-limit))
@@ -2206,6 +2211,9 @@ surface.  Mirrors the portable `consent-datum->external-bounded'."
             (consent-datum->external value writer-mode displayp)))
          (render
           (value depth)
+          ;; Render VALUE at nesting DEPTH, dispatching compounds to their
+          ;; bounded renderers and atoms to `atom-text'; a no-op once overflow
+          ;; is set so the walk unwinds in bounded time.
           (cond
            (overflow t)
            ((consp value) (render-pair value depth))
@@ -2214,6 +2222,9 @@ surface.  Mirrors the portable `consent-datum->external-bounded'."
            (t (emit (atom-text value)))))
          (render-pair
           (value depth)
+          ;; Render pair VALUE at DEPTH, breaking a cycle back to an ancestor or
+          ;; an over-deep nesting with the marker, and eliding the spine past
+          ;; LENGTH-LIMIT with a trailing marker.
           (cond
            ((memq value ancestors) (emit marker))
            ((and depth-limit (>= depth depth-limit)) (emit marker))
@@ -2247,6 +2258,9 @@ surface.  Mirrors the portable `consent-datum->external-bounded'."
               (setq ancestors saved)))))
          (render-vector
           (value depth)
+          ;; Render vector VALUE at DEPTH, breaking a self-reference or an
+          ;; over-deep nesting with the marker, and eliding elements past
+          ;; LENGTH-LIMIT with a trailing marker.
           (cond
            ((memq value ancestors) (emit marker))
            ((and depth-limit (>= depth depth-limit)) (emit marker))
@@ -2273,6 +2287,9 @@ surface.  Mirrors the portable `consent-datum->external-bounded'."
               (setq ancestors saved)))))
          (render-bytevector
           (value depth)
+          ;; Render bytevector VALUE at DEPTH (over-deep nesting renders as the
+          ;; marker), eliding bytes past LENGTH-LIMIT with a trailing marker; no
+          ;; cycle check is needed since a bytevector holds no compounds.
           (cond
            ((and depth-limit (>= depth depth-limit)) (emit marker))
            (t
