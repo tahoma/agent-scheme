@@ -490,6 +490,8 @@ reason above.
 
 ## Verification
 
+> Cloud-environment test note: this verification surface was last exercised in the cloud development environment on 2026-06-21.
+
 The default local verification command is:
 
 ```sh
