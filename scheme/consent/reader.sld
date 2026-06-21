@@ -162,6 +162,9 @@
       "compiled host-runner boundary arrive unwrapped to host representation,"
       "so the public accessor accepts both forms with the same answer on"
       "every posture."
+      #((parameters . ((datum . "Canonical number record or plain host number to unwrap.")))
+        (returns . "The host payload of a canonical number record, or DATUM itself when it is already a plain host number.")
+        (effects . (error)))
       (cond
        ((consent-number? datum) (consent-number-value-field datum))
        ((number? datum) datum)
@@ -244,6 +247,10 @@
       "Exported writer helper used by the reader, evaluator, and tests whenever"
       "Consent Scheme needs canonical integer text independent of host"
       "formatting."
+      #((parameters . ((integer . "Host integer to render as canonical digit text.")
+                       (radix . "Numeric base from 2 through 16 for the digit conversion.")))
+        (returns . "A string of RADIX digits for INTEGER, with a leading minus sign for negative values and \"0\" for zero.")
+        (effects . (allocation)))
       (let ((digits "0123456789abcdef")
             (negative? (< integer 0))
             (value (abs integer)))
@@ -388,6 +395,10 @@
 
     (define (consent-datum-source-set! datum source)
       "Attach SOURCE metadata to DATUM when DATUM has stable identity."
+      #((parameters . ((datum . "Datum to associate source metadata with; ignored unless it has stable identity.")
+                       (source . "Source metadata to attach, or #f to attach nothing.")))
+        (returns . "DATUM, after attaching SOURCE when DATUM is identity-attachable, evicting the metadata table when it overflows its limit.")
+        (effects . (state-write)))
       (if (and source (source-attachable? datum))
           (begin
             (if (> consent-source-metadata-count
@@ -404,6 +415,9 @@
 
     (define (consent-datum-source datum)
       "Return source metadata attached to DATUM, or #f when absent."
+      #((parameters . ((datum . "Datum to look up source metadata for.")))
+        (returns . "A source-metadata record built from DATUM's attached metadata, or #f when none is attached.")
+        (effects . (state-read)))
       (let ((cell (assq datum consent-source-metadata)))
         (if cell (source-metadata->record (cdr cell)) #f)))
 
@@ -415,6 +429,12 @@
     (define (consent-copy-datum-source! target source . maybe-overwrite)
       "Copy source metadata from SOURCE to TARGET, preserving existing metadata"
       "by default."
+      #((parameters . ((target . "Datum to receive copied source metadata.")
+                       (source . "Datum whose attached source metadata is copied.")
+                       (maybe-overwrite
+                        . "Optional flag; when truthy, overwrite TARGET's existing metadata.")))
+        (returns . "TARGET, with SOURCE's metadata attached when SOURCE has metadata and overwrite is requested or TARGET had none.")
+        (effects . (state-write)))
       (let ((metadata (datum-source-metadata source))
             (overwrite? (and (not (null? maybe-overwrite))
                              (car maybe-overwrite))))
@@ -726,6 +746,10 @@
       "whose argument crossed the compiled host-runner boundary as a"
       "canonical record gets the same answer it would on a reference host"
       "with a host literal."
+      #((parameters . ((value . "Host integer, or an already-canonical number returned unchanged.")
+                       (rest . "Optional exactness symbol (default `exact') followed by an optional radix integer (default 10).")))
+        (returns . "A canonical integer number record wrapping VALUE with the requested exactness and radix.")
+        (effects . (allocation)))
       (if (consent-number? value)
           value
           (let ((exactness (if (null? rest) 'exact (car rest)))
@@ -760,6 +784,11 @@
       "Public constructor for canonical inexact decimal number records."
       "An already-canonical number is returned unchanged (see"
       "consent-make-canonical-integer)."
+      #((parameters . ((value . "Host inexact number, or an already-canonical number returned unchanged.")
+                       (maybe-lexeme
+                        . "Optional source lexeme string overriding the host-formatted spelling.")))
+        (returns . "A canonical inexact decimal number record, delegating to the infnan constructor when VALUE is a host infinity or NaN.")
+        (effects . (allocation)))
       (if (consent-number? value)
           value
           (let ((special-kind (host-inexact-special-kind value)))
@@ -778,6 +807,11 @@
              raw-numerator raw-denominator . rest)
       "Public constructor for normalized rational number records."
       "Canonical-record components are unwrapped to their host payloads."
+      #((parameters . ((raw-numerator . "Numerator as a host integer or canonical number record.")
+                       (raw-denominator . "Denominator as a host integer or canonical number record.")
+                       (rest . "Optional exactness symbol followed by an optional radix integer.")))
+        (returns . "A normalized canonical rational record, collapsing to a canonical integer when the reduced denominator is one.")
+        (effects . (allocation)))
       (let* ((numerator (canonical-component raw-numerator))
              (denominator (canonical-component raw-denominator))
              (pair (normalize-rational-pair numerator denominator))
@@ -804,6 +838,9 @@
 
     (define (consent-make-canonical-infnan kind)
       "Public constructor for canonical infinity and NaN number records."
+      #((parameters . ((kind . "Special-value spelling, one of \"+inf.0\", \"-inf.0\", or \"+nan.0\".")))
+        (returns . "A canonical inexact infnan number record for KIND.")
+        (effects . (error)))
       (make-consent-number
        (cond
         ((string=? kind "+inf.0") "+inf.0")
@@ -817,6 +854,10 @@
 
     (define (consent-make-canonical-complex real imaginary)
       "Public constructor for canonical rectangular complex number records."
+      #((parameters . ((real . "Canonical number record for the real component.")
+                       (imaginary . "Canonical number record for the imaginary component.")))
+        (returns . "A canonical complex number record pairing REAL and IMAGINARY, exact only when both components are exact.")
+        (effects . (allocation)))
       (let ((exactness
              (if (and (eq? (consent-number-exactness real) 'exact)
                       (eq? (consent-number-exactness imaginary)
@@ -833,6 +874,9 @@
     (define (consent-number-zero? number)
       "Numeric predicates and helpers inspect the agent-owned representation"
       "instead of asking the host whether wrapped numbers are ordinary numbers."
+      #((parameters . ((number . "Value to test; only a canonical number record can be zero.")))
+        (returns . "#t when NUMBER is a canonical integer, rational, decimal, or complex record equal to zero; #f otherwise.")
+        (effects . (pure)))
       (and (consent-number? number)
            (cond
             ((eq? (consent-number-kind number) 'integer)
@@ -850,6 +894,9 @@
 
     (define (consent-number-negative? number)
       "Public predicate for negative real Consent Scheme number records."
+      #((parameters . ((number . "Canonical Consent Scheme number record to test for sign.")))
+        (returns . "#t when NUMBER is a negative integer, rational, decimal, or negative infinity; #f otherwise.")
+        (effects . (pure)))
       (cond
        ((eq? (consent-number-kind number) 'integer)
         (< (consent-number-value number) 0))
@@ -863,6 +910,9 @@
 
     (define (consent-number-abs number)
       "Public helper that returns the absolute value of an Consent Scheme number record."
+      #((parameters . ((number . "Canonical Consent Scheme number record to take the magnitude of.")))
+        (returns . "A canonical number record holding the absolute value of NUMBER, preserving its exactness and radix.")
+        (effects . (allocation)))
       (cond
        ((eq? (consent-number-kind number) 'integer)
         (consent-make-canonical-integer
@@ -910,6 +960,9 @@
 
     (define (consent-number->external number)
       "Public renderer for Consent Scheme number records."
+      #((parameters . ((number . "Canonical Consent Scheme number record to render.")))
+        (returns . "A string with the number's canonical external spelling for integer, rational, decimal, infnan, and complex kinds.")
+        (effects . (error)))
       (cond
        ((eq? (consent-number-kind number) 'integer)
         (consent-integer->radix-string
@@ -1846,6 +1899,11 @@
     (define (consent-read source . maybe-options)
       "Read one datum from SOURCE, enforce complete input consumption, and"
       "validate the resulting host data against Consent Scheme resource limits."
+      #((parameters . ((source . "Source string or port body to read a single datum from.")
+                       (maybe-options
+                        . "Optional reader options alist supplying budget overrides.")))
+        (returns . "The single datum read from SOURCE after confirming no trailing input remains.")
+        (effects . (error)))
       (let* ((options (options-from-rest maybe-options))
              (reader (reader-from-source source options)))
         (set-reader-datum-labels! reader '())
@@ -1860,6 +1918,11 @@
     (define (consent-read-all source . maybe-options)
       "Read a source body into datums for program/library evaluation.  Datum"
       "labels are scoped per datum, matching R7RS external representations."
+      #((parameters . ((source . "Source string or port body to read fully into datums.")
+                       (maybe-options
+                        . "Optional reader options alist supplying budget overrides.")))
+        (returns . "A list of every datum read from SOURCE, in source order, each validated against the resource budgets.")
+        (effects . (error)))
       (let* ((options (options-from-rest maybe-options))
              (reader (reader-from-source source options)))
         (let loop ((datums '()))
@@ -1882,6 +1945,12 @@
     (define (consent-read-from-string-at source position . maybe-options)
       "Incremental read entry point for ports and REPL-like callers; the cdr of"
       "the result is the next source offset no matter which datum was returned."
+      #((parameters . ((source . "Source string to read one datum from.")
+                       (position . "Nonnegative offset within SOURCE at which to begin reading.")
+                       (maybe-options
+                        . "Optional reader options alist supplying budget overrides.")))
+        (returns . "A pair whose car is the read datum (or the end-of-file object) and whose cdr is the next source offset.")
+        (effects . (error)))
       (set! position (canonical-component position))
       (if (not (string? source))
           (error "consent reader source must be a string" source))
@@ -1918,6 +1987,10 @@
       "default recovery resync strategy; callers may supply their own (for"
       "example a lexer-level or editor-grade strategy) through the `resync`"
       "option."
+      #((parameters . ((source . "Source string being scanned for the next top-level form.")
+                       (position . "Offset after which to search for the next top-level form.")))
+        (returns . "The offset of the next line-anchored top-level form strictly after POSITION, or the length of SOURCE when none remains.")
+        (effects . (pure)))
       (set! position (canonical-component position))
       (let ((length (string-length source)))
         (let loop ((index position))
@@ -2093,6 +2166,11 @@
       "trailing region is a valid prefix awaiting more input, otherwise"
       "`complete`.  The resync point is caller-selectable through the `resync`"
       "option (defaulting to `consent-resync-to-next-form`)."
+      #((parameters . ((source . "Source string to read fully in recovery mode.")
+                       (maybe-options
+                        . "Optional reader options alist supplying `resync', `source-id', and budget overrides.")))
+        (returns . "A `<consent-recovery-result>' bundling the readable datums, the ordered diagnostics, the recovery spans, and a STATUS of `complete' or `incomplete'.")
+        (effects . (error)))
       (if (not (string? source))
           (error "consent reader source must be a string" source))
       (let* ((options (options-from-rest maybe-options))
@@ -2133,6 +2211,12 @@
       "where the caller should resume.  Incomplete input is surfaced as its own"
       "status so auto-indent and continuation prompts never confuse a valid"
       "prefix with a syntax error."
+      #((parameters . ((source . "Source string to read one recovery step from.")
+                       (position . "Nonnegative offset within SOURCE at which to begin reading.")
+                       (maybe-options
+                        . "Optional reader options alist supplying `resync', `source-id', and budget overrides.")))
+        (returns . "A `<consent-recovery-step>' describing the next form: STATUS is `datum', `invalid', `incomplete', or `eof', and NEXT is the offset to resume from.")
+        (effects . (error)))
       (set! position (canonical-component position))
       (if (not (string? source))
           (error "consent reader source must be a string" source))
@@ -2258,6 +2342,11 @@
     (define (consent-validate-datum datum . maybe-options)
       "Public validation returns DATUM unchanged so callers can place it inline"
       "in read/evaluate pipelines while still enforcing depth and size budgets."
+      #((parameters . ((datum . "Datum to validate against the resource budgets.")
+                       (maybe-options
+                        . "Optional reader options alist supplying `max-depth', `max-total-nodes', `max-string-size', and `max-bytevector-length' overrides.")))
+        (returns . "DATUM unchanged when it stays within every budget.")
+        (effects . (error)))
       (let* ((options (options-from-rest maybe-options))
              (validation
               (make-validation
@@ -2350,6 +2439,11 @@
     (define (consent-datum->external datum . maybe-options)
       "Render Consent Scheme datums with stable external syntax, including"
       "shared and circular structure labels for write/shared mode."
+      #((parameters . ((datum . "Consent Scheme datum to render as external text.")
+                       (maybe-options
+                        . "Optional `mode' symbol (`write', `shared', or `display') followed by an optional display flag controlling string and character quoting.")))
+        (returns . "A string holding the datum's external representation, emitting `#N=`/`#N#` datum labels for shared and circular structure in write/shared mode.")
+        (effects . (allocation)))
       (let ((mode (if (null? maybe-options) 'write (car maybe-options)))
             (display? (if (or (null? maybe-options)
                               (null? (cdr maybe-options)))
@@ -2560,12 +2654,11 @@
       "Render DATUM as external text bounded by LIMITS so a deep, long, or"
       "cyclic value renders in bounded time and space with the `...' truncation"
       "marker instead of wedging an interactive loop or flooding output (#508)."
-      #((parameters
-         . ((datum . "Datum to render for an interactive display surface.")
-            (limits
-             . "Alist `((depth . D) (length . L) (size . S))' of nonnegative integer ceilings, each #f or absent for no ceiling: DEPTH bounds nesting (a compound at the ceiling renders as the marker), LENGTH bounds the elements rendered per list/vector/bytevector (the overflow renders as a trailing marker), and SIZE bounds the total characters emitted (a hard backstop that stops the walk once reached, so rendering is bounded in time as well as space).")
-            (maybe-mode+display
-             . "Optional `consent-datum->external' mode and display flag.")))
+      #((parameters . ((datum . "Datum to render for an interactive display surface.")
+                       (limits
+                        . "Alist `((depth . D) (length . L) (size . S))' of nonnegative integer ceilings, each #f or absent for no ceiling: DEPTH bounds nesting (a compound at the ceiling renders as the marker), LENGTH bounds the elements rendered per list/vector/bytevector (the overflow renders as a trailing marker), and SIZE bounds the total characters emitted (a hard backstop that stops the walk once reached, so rendering is bounded in time as well as space).")
+                       (maybe-mode+display
+                        . "Optional `consent-datum->external' mode and display flag.")))
         (returns . "Bounded external text: each elided depth/length/size point and each shared or circular back-edge renders as the parseable `...' marker, so rendering always terminates regardless of LIMITS.  Atoms delegate to the unbounded `consent-datum->external', so numbers, strings, symbols, characters, and records render identically to the canonical writer.")
         (effects . (pure)))
       ;; The canonical writer stays unbounded for the capture/round-trip surface;

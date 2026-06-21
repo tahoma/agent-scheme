@@ -365,3 +365,8 @@ representation work is left to a later reflection/metadata slice.
 - #338 supplies syntax datum source metadata that can improve doc metadata
   source locations.
 - #325 adds evaluator docstring retention modes for CI performance work.
+- #598 enforces the rich property record on every exported runtime procedure,
+  inverting the documentation gate
+  (`consent-scheme-documentation-test-public-rich-docstrings`) from an opt-in
+  allowlist to fail-closed coverage over all runtime `scheme/` source with an
+  empty exclusion list.
