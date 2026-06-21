@@ -98,6 +98,7 @@
     "(agent session)"
     "(agent registry)"
     "(agent proposal)"
+    "(agent runner)"
     "(agent transcript)")
   "Agent interaction library keys with focused bootstrap support.")
 
@@ -124,6 +125,8 @@ core rather than the agent domain it governs.")
      . "../scheme/agent/registry.sld")
     ("(agent proposal)"
      . "../scheme/agent/proposal.sld")
+    ("(agent runner)"
+     . "../scheme/agent/runner.sld")
     ("(agent task)"
      . "../scheme/agent/task.sld")
     ("(agent test)"
@@ -421,6 +424,10 @@ core rather than the agent domain it governs.")
        (consent--register-source-library
         (consent--agent-source-library-source key) context environment)))
     ("(agent proposal)"
+     (unless (gethash key (consent--eval-context-libraries context))
+       (consent--register-source-library
+        (consent--agent-source-library-source key) context environment)))
+    ("(agent runner)"
      (unless (gethash key (consent--eval-context-libraries context))
        (consent--register-source-library
         (consent--agent-source-library-source key) context environment)))

@@ -815,6 +815,50 @@ interpreter and the portable hosts load the same Scheme source, so a proposal
 analysis is byte-identical and replayable across cores, satisfying the D7
 agent-layer determinism stance.
 
+## Completion Authority (D3)
+
+`finish` is proposable; `complete` is not. The model proposes
+`(action finish ...)`, which the runner records as an `agent-action`, but the
+`acting -> complete` transition is reached only when a deterministic,
+policy-side **verifier** stamps `verifier-result (status passed)`. A proposal
+that self-asserts a pass is ignored: the verifier is non-proposable, so a
+critic's verdict, a self-written test, or a literal "FINAL ANSWER" is read data,
+never authorization. This is design tension **D3** (who authorizes completion),
+implemented in #286.
+
+In the minimal runner the verifier verdict is an injected deterministic value;
+in production it runs held-out checks. The outcomes are distinct receipts:
+
+| Proposal | Verifier | Outcome | Receipt |
+| --- | --- | --- | --- |
+| `finish` | `passed` | `complete` | `task-stop` (`completed-goal`) with an `agent-completion` |
+| `finish` | not passed | `blocked` | `task-pause` (`insufficient-evidence`) |
+
+A blocked-for-evidence task is resumable: more observation or action can satisfy
+the verifier on a later step. Completion never is — it is authorized once, by
+the verifier, and recorded in an `agent-completion`.
+
+> **Design decision (resolves tension D3).** Model output PROPOSES; only a
+> deterministic, policy-side verifier authorizes. `finish` is not `complete`. We
+> reject the field default — the model, or a model-as-judge, marks its own
+> success (ReAct, Voyager, GAIA). SWE-bench's held-out test patch is the
+> canonical justification: the agent does not get to grade its own diff. This is
+> the most consent-distinctive rule in the loop.
+
+## Runner Scope and Follow-Ups
+
+The minimal runner in #286 is one observation, one plan, a bounded acting loop,
+fake-but-shape-correct providers, and an injected verifier. It is single-sourced
+as `(agent runner)`, loaded by both cores. It deliberately defers, to the
+follow-up issues in [Follow-Up Issues](#follow-up-issues): production scheduling
+and parallel workers; provider hardening and the provider matrix (#289, and the
+provider capability domain #223); task persistence and resume (#288); the shared
+control-loop fixture corpus (#287); the shared budget ledger and stop receipts
+(#291); and the human-collaboration UX for runner states (#52). Pausing and
+resuming a single proposed sub-expression mid-form across a gated call (noted
+under [Proposal-Datum Boundary](#proposal-datum-boundary-d2)) is likewise a
+future issue.
+
 ## Cross-Cutting Stance Decisions
 
 The agentic prior-art synthesis enumerates seven tensions between the agentic
@@ -823,8 +867,9 @@ field's defaults and Consent's stance
 Four are decided where they are implemented: **D1** (JSON vs Lisp-first tool
 schemas) in #531, **D2** (free-form code vs capability-gated effects, recorded
 in the [Proposal-Datum Boundary](#proposal-datum-boundary-d2) section above) and
-**D3** (who authorizes completion) in #286, and **D4** (memory mutation vs
-append-only)
+**D3** (who authorizes completion, recorded in the
+[Completion Authority](#completion-authority-d3) section above) in #286, and
+**D4** (memory mutation vs append-only)
 in the memory slice. The remaining three are cross-cutting — they bind more
 than one implementation slice — and are ratified here as an RFC (#561) before
 the work they gate proceeds. Each is framed as the field default versus the
