@@ -399,6 +399,9 @@
       "the diagnostic stream, never on the record stream or a host-backed stdin"
       "port.  Performs the real host operation through (cli process-host) only"
       "after the request is approved."
+      #((parameters . ((options . "Parsed options alist naming the subcommand, mode, session, resource, and gate inputs for the request.")))
+        (returns . "A `(EXIT RECORDS PROMPTS)' list whose RECORDS are Scheme-readable boundary records and PROMPTS are diagnostic-stream approval summaries.")
+        (effects . (state-read host-eval allocation error)))
       (let ((subcommand (cli-native-cli--opt options 'subcommand #f)))
         (unless subcommand
           (error "Usage: consent-native-cli OPERATION [OPTIONS]"))
@@ -431,6 +434,9 @@
       "Parse ARGUMENTS (a list of strings) into the options alist consumed by"
       "`cli-native-cli-execute'.  Leading \"--\" separators are ignored so a"
       "host can pass a clean argument vector after its own option processing."
+      #((parameters . ((arguments . "List of command-line argument strings: a leading subcommand followed by recognized flags and their values.")))
+        (returns . "An options alist consumed by `cli-native-cli-execute', defaults seeded and flag overrides consed to the front.")
+        (effects . (allocation error)))
       (let ((cleaned (let drop ((items arguments))
                        (if (and (pair? items) (string=? (car items) "--"))
                            (drop (cdr items))
@@ -495,6 +501,9 @@
       "Parse the command line, execute the request, write the Scheme-readable"
       "record stream to stdout and any approval prompt to the diagnostic"
       "stream, then exit with the adapter's exit code."
+      #((parameters . ())
+        (returns . "Does not return normally; terminates the process with the adapter's exit code via `exit'.")
+        (effects . (state-read state-write host-eval allocation error)))
       (let* ((options (cli-native-cli-parse-arguments (cdr (command-line))))
              (outcome (cli-native-cli-execute options))
              (exit-code (car outcome))
