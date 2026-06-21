@@ -275,25 +275,15 @@ AND has no docstring, i.e. the comment is standing in for the docstring."
      "Build a successful evaluation-result datum for VALUE."))
   "Representative public Scheme bindings that should carry docstrings.")
 
-(defconst consent--scheme-documentation-rich-docstring-files
-  '("scheme/standard-library/lazy.sld"
-    "scheme/agent/diagnostics.sld"
-    "scheme/agent/diff.sld"
-    "scheme/agent/network.sld"
-    "scheme/agent/task.sld"
-    "scheme/agent/test.sld"
-    "scheme/agent/transcript.sld"
-    "scheme/agent/vcs.sld"
-    "scheme/consent/approval.sld"
-    "scheme/consent/context.sld"
-    "scheme/consent/helper.sld"
-    "scheme/consent/job.sld"
-    "scheme/consent/memory.sld"
-    "scheme/consent/plan.sld"
-    "scheme/consent/redaction.sld"
-    "scheme/consent/result.sld"
-    "scheme/consent/session.sld")
-  "Public Scheme files whose exported procedures must carry rich metadata.")
+(defconst consent--scheme-documentation-rich-docstring-exclusions
+  '()
+  "Runtime Scheme files exempt from the rich-metadata gate.
+The gate in `consent-scheme-documentation-test-public-rich-docstrings' runs
+fail-closed over every runtime `scheme/' source file by default, so a new
+file is covered automatically.  This list is intentionally empty: a file
+with no exported procedures already produces no errors, so the only reason
+to add a path here would be a deliberate, recorded exemption.  See
+docs/docstring-metadata.md.")
 
 (defun consent--scheme-documentation-docstring-present-p
     (relative-file name docstring)
@@ -427,12 +417,17 @@ AND has no docstring, i.e. the comment is standing in for the docstring."
       (ert-fail (mapconcat #'identity (nreverse missing) "\n")))))
 
 (ert-deftest consent-scheme-documentation-test-public-rich-docstrings ()
-  "Ensure exported Scheme procedures carry rich parameter and return metadata."
+  "Ensure every exported Scheme procedure carries rich parameter and return metadata.
+Runs fail-closed over every runtime `scheme/' source file; a file may be
+exempted only by listing it in
+`consent--scheme-documentation-rich-docstring-exclusions'."
   (let ((errors
-         (cl-loop for relative-file
-                  in consent--scheme-documentation-rich-docstring-files
-                  for file = (expand-file-name relative-file
-                                               consent--test-root)
+         (cl-loop for file in (consent--scheme-documentation-source-files)
+                  for relative-file = (file-relative-name file
+                                                           consent--test-root)
+                  unless (member
+                          relative-file
+                          consent--scheme-documentation-rich-docstring-exclusions)
                   append
                   (consent--scheme-documentation-public-rich-errors file))))
     (when errors

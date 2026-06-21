@@ -174,6 +174,14 @@
       "alist of (NAME . VALUE) string pairs granted to the child.  Signals an"
       "error on a host without a process module, so a denied or unsupported"
       "request never reaches the shell."
+      #((parameters . ((command . "Executable name or path to spawn as the child.")
+                       (arguments . "List of string arguments passed to COMMAND as one group.")
+                       (stdin-file . "Path backing the child's standard input, or #f for none.")
+                       (stderr-file . "Path capturing the child's standard error, or #f for none.")
+                       (cwd . "Granted working directory for the child, or #f to inherit.")
+                       (environment . "Alist of (NAME . VALUE) string pairs granted to the child.")))
+        (returns . "A list (EXIT-STATUS STDOUT STDERR): the child's exit status and its captured standard output and standard error.")
+        (effects . (host-eval error)))
       (unless (cli-host-available?)
         (error "cli-host-run: process spawning is unavailable on this host"))
       (let* ((program (cli-host--shell-program command arguments

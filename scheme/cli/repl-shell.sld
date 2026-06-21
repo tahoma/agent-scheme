@@ -600,12 +600,24 @@
       "Run a REPL session, streaming records to WRITE-RECORD and program"
       "output to WRITE-OUTPUT on separate streams, returning the"
       "close-status exit code."
+      #((parameters . ((read-chunk . "Chunk source thunk yielding the next newline-kept interaction-input string or EOF.")
+                       (write-record . "Procedure receiving each emitted contract record datum.")
+                       (write-output . "Procedure receiving each drained program-output string.")
+                       (session . "Session identifier symbol or string for the record stream.")
+                       (maybe-options . "Optional single-element list holding the REPL option alist.")))
+        (returns . "The close-status exit code: 0 on clean close, 1 on error close.")
+        (effects . (host-eval state-write error allocation)))
       (repl--engine read-chunk write-record write-output session
                     (if (null? maybe-options) '() (car maybe-options))))
 
     (define (cli-repl-drive read-chunk session . maybe-options)
       "Drive a REPL session over READ-CHUNK and return the ordered contract"
       "records, discarding program output."
+      #((parameters . ((read-chunk . "Chunk source thunk yielding the next interaction-input string or EOF.")
+                       (session . "Session identifier symbol or string for the record stream.")
+                       (maybe-options . "Optional single-element list holding the REPL option alist.")))
+        (returns . "The ordered list of emitted contract record datums.")
+        (effects . (host-eval allocation error)))
       (let ((records '()))
         (repl--engine read-chunk
                       (lambda (record) (set! records (cons record records)))
@@ -617,6 +629,11 @@
     (define (cli-repl-records-from-string input session . maybe-options)
       "Drive a REPL session over INPUT split into newline chunks and return"
       "the ordered contract records."
+      #((parameters . ((input . "Interaction-input text to split into newline-kept chunks and drive.")
+                       (session . "Session identifier symbol or string for the record stream.")
+                       (maybe-options . "Optional single-element list holding the REPL option alist.")))
+        (returns . "The ordered list of emitted contract record datums.")
+        (effects . (host-eval allocation error)))
       (apply cli-repl-drive
              (repl--list-chunk-source (repl--split-lines input))
              session
@@ -633,6 +650,9 @@
       "Reload a captured `datum'-chrome record stream TEXT into the list of"
       "contract records, reading with the standard reader the capture format"
       "is written for."
+      #((parameters . ((text . "Captured `datum'-chrome stream text, one record datum per line.")))
+        (returns . "The ordered list of contract record datums reloaded from the stream.")
+        (effects . (allocation)))
       (let ((port (open-input-string text)))
         (let loop ((records '()))
           (let ((datum (read port)))
@@ -646,6 +666,9 @@
       "`source'; an incomplete (EOF-truncated) submission, prompts, results,"
       "conditions, and the exit record contribute nothing, so the result is"
       "exactly the forms a replay can re-feed."
+      #((parameters . ((records . "List of contract record datums to scan for complete submissions.")))
+        (returns . "The ordered list of source strings for each complete submission.")
+        (effects . (allocation)))
       (let loop ((records records) (sources '()))
         (cond
          ((null? records) (reverse sources))
@@ -660,6 +683,9 @@
       "Reconstruct the interaction-input string that replays RECORDS: each"
       "complete submission's source followed by a newline, so a fresh loop"
       "reads the same forms."
+      #((parameters . ((records . "List of contract record datums whose complete submissions are replayed.")))
+        (returns . "The interaction-input string: each submission source plus a trailing newline.")
+        (effects . (allocation)))
       (let loop ((sources (cli-repl-submissions-from-records records)) (parts '()))
         (if (null? sources)
             (apply string-append (reverse parts))
@@ -673,6 +699,11 @@
       "posture does not grant fails closed as a `repl-condition' rather"
       "than reproducing the recorded value (compare with"
       "`cli-repl-replay-report')."
+      #((parameters . ((records . "Captured contract record datums whose complete submissions are re-fed.")
+                       (session . "Session identifier symbol or string for the fresh replay session.")
+                       (maybe-options . "Optional single-element list holding the REPL option alist.")))
+        (returns . "The new contract record stream produced by replaying the submissions.")
+        (effects . (host-eval allocation error)))
       (apply cli-repl-records-from-string
              (cli-repl-replay-input records)
              session
@@ -769,6 +800,10 @@
       "mismatched or unpaired submission.  A captured `result' that replays"
       "as a `condition' is the documented fail-closed signal for a live"
       "host effect the replay posture does not grant."
+      #((parameters . ((captured . "Captured contract record stream providing the reference outcomes.")
+                       (replayed . "Replayed contract record stream compared against the captured outcomes.")))
+        (returns . "A `repl-replay-report' datum: reproduced, or diverged with per-submission divergences.")
+        (effects . (allocation)))
       (let* ((captured-outcomes (repl--submission-outcomes captured))
              (replayed-outcomes (repl--submission-outcomes replayed))
              (divergences (repl--outcome-divergences
@@ -797,6 +832,9 @@
       "for the ordinary stdin session); later flags win, unrecognized"
       "arguments are ignored, and the caller validates chrome and color"
       "against the registry and the known modes."
+      #((parameters . ((arguments . "List of command-line argument strings to parse for REPL flags.")))
+        (returns . "The option alist with session, chrome, color, and replay entries.")
+        (effects . (allocation)))
       (let loop ((arguments arguments)
                  (session #f) (chrome #f) (color #f) (replay #f))
         (cond
@@ -869,6 +907,13 @@
       "only.  COLOR? paints the control channel; the optional INPUT-ECHOED?"
       "flag (default #f) models a host that already echoes interaction"
       "input."
+      #((parameters . ((input . "Interaction-input text driven through the REPL.")
+                       (session . "Session identifier symbol or string for the record stream.")
+                       (chrome-name . "Chrome name symbol selecting the control-channel rendering.")
+                       (color? . "True to paint the control channel with ANSI color.")
+                       (maybe-input-echoed? . "Optional flag list; #t models a host already echoing input.")))
+        (returns . "A pair (CONTROL . PROGRAM-OUTPUT) of painted control text and raw stdout text.")
+        (effects . (host-eval allocation error)))
       (let ((chrome (cli-repl-chrome-lookup chrome-name))
             (echo (cli-repl-chrome-output-formatter chrome-name session))
             (control-port (open-output-string))
@@ -897,6 +942,13 @@
       "models a host that already echoes interaction input -- an"
       "interactive TTY -- so the comment chrome suppresses its own"
       "submission echo just as the live terminal entry does."
+      #((parameters . ((input . "Interaction-input text driven through the REPL.")
+                       (session . "Session identifier symbol or string for the record stream.")
+                       (chrome-name . "Chrome name symbol selecting the control-channel rendering.")
+                       (color? . "True to paint the control channel with ANSI color.")
+                       (maybe-input-echoed? . "Optional flag list; #t models a host already echoing input.")))
+        (returns . "The CHROME-NAME chrome's control-channel text, painted when COLOR? is true.")
+        (effects . (host-eval allocation error)))
       (car (apply cli-repl-capture-from-string
                   input session chrome-name color? maybe-input-echoed?)))
 
@@ -921,6 +973,13 @@
       "authority the capture had is denied and surfaced as a"
       "`repl-condition' -- a divergence the report records rather than"
       "silently reproducing the recorded value."
+      #((parameters . ((path . "Filesystem path of the captured `datum'-chrome transcript to reload.")
+                       (session . "Session identifier symbol or string for the fresh replay session.")
+                       (chrome . "Chrome procedure painting each replayed record for RECORD-PORT.")
+                       (color? . "True to paint the replayed record stream with ANSI color.")
+                       (record-port . "Output port receiving the painted replay stream and report datum.")))
+        (returns . "0 when the replay reproduced the captured outcomes, 1 when it diverged.")
+        (effects . (host-eval state-read state-write allocation error)))
       (let* ((captured (cli-repl-records-from-datum-stream (repl--read-file path)))
              (replayed (cli-repl-replay-records captured session))
              (write-record (repl--rendering-writer chrome color? record-port))
@@ -949,6 +1008,9 @@
       "With `--replay FILE', reload that captured transcript instead of"
       "reading stdin, replay its submissions to a fresh session, and exit"
       "0 (reproduced) or 1 (diverged) per the replay report."
+      #((parameters . ())
+        (returns . "Does not return normally: exits the process with the close-status or replay code.")
+        (effects . (host-eval state-read state-write error allocation)))
       (let* ((options (cli-repl-parse-options (cdr (command-line))))
              (session (repl--option options 'session))
              (chrome-name (repl--option options 'chrome))
