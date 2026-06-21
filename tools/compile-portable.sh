@@ -1566,13 +1566,24 @@ compile_gambit() {
     if [ "$cgu_ref" != "main" ]; then
       cgu_moduleflag="-module-ref $cgu_ref"
     fi
+    # Record each pass's real exit status (128+signal when the kernel kills a
+    # compiler, e.g. 137 for an out-of-memory SIGKILL) into the per-unit log, so
+    # a failure that emits no compiler diagnostics is still diagnosable instead
+    # of leaving an empty log behind.
+    cgu_rc=0
     # shellcheck disable=SC2086
-    if ! "$gsc" -:r7rs,"$cgu_search" -c $cgu_moduleflag -o "$cgu_cout" "$cgu_src" >>"$cgu_log" 2>&1; then
+    "$gsc" -:r7rs,"$cgu_search" -c $cgu_moduleflag -o "$cgu_cout" "$cgu_src" \
+      >>"$cgu_log" 2>&1 || cgu_rc=$?
+    if [ "$cgu_rc" -ne 0 ]; then
+      printf 'consent compile: gsc -c exited %s for %s\n' "$cgu_rc" "$cgu_ref" >>"$cgu_log"
       rm -f "$cgu_cout" "$cgu_oout"
       printf '%s\n' "$cgu_ref" > "$stamp_dir/$cgu_safe.fail"
       return 0
     fi
-    if ! "$gsc" -obj -o "$cgu_oout" "$cgu_cout" >>"$cgu_log" 2>&1; then
+    cgu_rc=0
+    "$gsc" -obj -o "$cgu_oout" "$cgu_cout" >>"$cgu_log" 2>&1 || cgu_rc=$?
+    if [ "$cgu_rc" -ne 0 ]; then
+      printf 'consent compile: gsc -obj exited %s for %s\n' "$cgu_rc" "$cgu_ref" >>"$cgu_log"
       rm -f "$cgu_cout" "$cgu_oout"
       printf '%s\n' "$cgu_ref" > "$stamp_dir/$cgu_safe.fail"
       return 0
@@ -1586,16 +1597,50 @@ compile_gambit() {
   search_default="search=$scheme_dir"
   search_main="search=$scheme_dir,search=$src_dir"
 
+  # Emit the `ref|src|search|c-out|o-out` compile-unit tuple for one module ref,
+  # shared by the parallel dispatch and the serial retry below so both build the
+  # exact same task.
+  gambit_module_task() {
+    if [ "$1" = "main" ]; then
+      printf '%s|%s|%s|%s|%s\n' \
+        main "$main_file" "$search_main" "$main_c" "$src_dir/consent-main.o"
+    else
+      printf '%s|%s|%s|%s|%s\n' \
+        "$1" "$(gambit_module_source "$1")" "$search_default" \
+        "$src_dir/$1.c" "$src_dir/$1.o"
+    fi
+  }
+
   compile_started=$(date +%s)
   {
     for ref in $gambit_module_order; do
-      printf '%s|%s|%s|%s|%s\n' \
-        "$ref" "$(gambit_module_source "$ref")" "$search_default" \
-        "$src_dir/$ref.c" "$src_dir/$ref.o"
+      gambit_module_task "$ref"
     done
-    printf '%s|%s|%s|%s|%s\n' \
-      main "$main_file" "$search_main" "$main_c" "$src_dir/consent-main.o"
+    gambit_module_task main
   } | run_compile_pool compile_gambit_unit "$compile_jobs"
+
+  # A module can fail under the parallel pool from transient resource contention
+  # rather than a real translation error: the largest single-host C units (the
+  # runtime and interpreter objects) each peak at several GB of compiler memory,
+  # so a wide pool can drive a transient kill on exactly those units while every
+  # other module succeeds. Retry any failed modules once, serially, before
+  # giving up. A genuine error fails again in the aggregation below with its
+  # captured diagnostics; a contention casualty compiles cleanly on its own. The
+  # retry is announced so flakiness stays visible instead of silently absorbed,
+  # and it is skipped entirely (no extra cost) on a clean parallel pass.
+  if [ -n "$(ls -A "$stamp_dir" 2>/dev/null)" ]; then
+    retry_refs=
+    for stamp in "$stamp_dir"/*.fail; do
+      [ -f "$stamp" ] || continue
+      retry_refs="$retry_refs $(cat "$stamp")"
+    done
+    rm -f "$stamp_dir"/*.fail
+    printf 'consent compile: parallel pass failed for%s; retrying serially\n' \
+      "$retry_refs" >&2
+    for ref in $retry_refs; do
+      compile_gambit_unit "$(gambit_module_task "$ref")"
+    done
+  fi
 
   if [ -n "$(ls -A "$stamp_dir" 2>/dev/null)" ]; then
     for stamp in "$stamp_dir"/*.fail; do
