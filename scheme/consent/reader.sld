@@ -2542,8 +2542,18 @@
 
     (define (consent--render-limit-ref limits key)
       "Return the integer ceiling for KEY in the LIMITS alist, or #f for none."
+      ;; A ceiling may arrive as a host integer (the usual interactive default)
+      ;; or as a Consent number record (when LIMITS came from evaluated Consent
+      ;; data, e.g. a `render-limits' option read on a self-hosted host).  The
+      ;; internal depth/length/size counters are host integers, so normalize the
+      ;; ceiling to a host integer; otherwise a host `>=' would compare a host
+      ;; integer against a number record and raise.
       (let ((entry (and (pair? limits) (assq key limits))))
-        (and entry (cdr entry))))
+        (and entry
+             (let ((value (cdr entry)))
+               (if (consent-number? value)
+                   (consent-number-value value)
+                   value)))))
 
     (define (consent-datum->external-bounded datum limits . maybe-mode+display)
       "Render DATUM as external text bounded by LIMITS so a deep, long, or"
