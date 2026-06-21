@@ -8394,6 +8394,9 @@ cursor across sessions."
       "stream.  Use it for fixtures, captured-transcript replay, and other"
       "genuinely in-memory input; it is never a way to model a live stdin,"
       "which has a time dimension a buffer cannot represent."
+      #((parameters . ((content . "String holding the whole finite program input, yielded once.")))
+        (returns . "A reader thunk returning CONTENT on its first call and #f thereafter.")
+        (effects . (allocation)))
       (let ((pending content))
         (lambda ()
           (let ((chunk pending))
@@ -8412,6 +8415,9 @@ cursor across sessions."
       "input, available immediately and then at end of stream.  Use it for"
       "fixtures and captured byte streams; for a live byte pipe the host"
       "supplies its own incremental byte reader."
+      #((parameters . ((content . "Bytevector holding the whole finite binary input, yielded once.")))
+        (returns . "A reader thunk returning CONTENT on its first call and #f thereafter.")
+        (effects . (allocation)))
       (let ((pending content))
         (lambda ()
           (let ((chunk pending))
@@ -8876,6 +8882,10 @@ cursor across sessions."
     (define (consent-eval expression . rest)
       "Evaluate one already-read expression in the supplied environment, or a"
       "fresh base environment when no environment is provided."
+      #((parameters . ((expression . "Already-read datum to evaluate.")
+                       (rest . "Optional environment then options alist; both default when absent.")))
+        (returns . "The value produced by evaluating EXPRESSION.")
+        (effects . (host-eval state-read state-write error)))
       (let ((context (new-eval-context (rest-options rest)))
             (environment (rest-environment rest)))
         (set-context-interaction-environment! context environment)
@@ -8886,6 +8896,10 @@ cursor across sessions."
     (define (consent-eval-source source . rest)
       "Read and evaluate a source body as a sequence that may contain"
       "definitions, imports, libraries, and expressions."
+      #((parameters . ((source . "Program source text or port read into a form sequence.")
+                       (rest . "Optional environment then options alist; both default when absent.")))
+        (returns . "The value of the last form in the evaluated sequence.")
+        (effects . (host-eval state-read state-write error)))
       (let ((context (new-eval-context (rest-options rest)))
             (environment (rest-environment rest))
             (forms (consent-read-all source (rest-options rest))))
@@ -8910,6 +8924,10 @@ cursor across sessions."
       "Result-producing evaluation catches conditions and returns an"
       "inspectable Scheme-readable evaluation-result datum instead of raising"
       "to the host."
+      #((parameters . ((expression . "Already-read datum to evaluate.")
+                       (rest . "Optional environment then options alist; both default when absent.")))
+        (returns . "An `evaluation-result' datum capturing the value or the raised condition.")
+        (effects . (host-eval state-read state-write)))
       (let ((context (new-eval-context (rest-options rest)))
             (environment (rest-environment rest)))
         (set-context-interaction-environment! context environment)
@@ -8925,6 +8943,10 @@ cursor across sessions."
     (define (consent-eval-source-result source . rest)
       "Source result evaluation combines reader, evaluator, condition"
       "capture, and budget reporting for REPL and protocol-boundary callers."
+      #((parameters . ((source . "Program source text or port read into a form sequence.")
+                       (rest . "Optional environment then options alist; both default when absent.")))
+        (returns . "An `evaluation-result' datum capturing the value or the raised condition.")
+        (effects . (host-eval state-read state-write)))
       (let ((context (new-eval-context (rest-options rest)))
             (environment (rest-environment rest)))
         (set-context-interaction-environment! context environment)
@@ -8994,6 +9016,9 @@ cursor across sessions."
       "by `stdin', a program-input port is created and shared as the session's"
       "single stdin cursor (the REPL form reader and evaluated reads draw from"
       "it); otherwise program input stays disconnected and reads fail closed."
+      #((parameters . ((rest . "Optional single options alist (session-id, policy-actions, capability-grants, program-input port/reader).")))
+        (returns . "A durable `<consent-interaction-context>' record reused across submissions.")
+        (effects . (state-read allocation)))
       (let* ((options (if (null? rest) '() (car rest)))
              (context (new-eval-context options))
              (environment (consent-make-base-environment))
@@ -9013,10 +9038,16 @@ cursor across sessions."
 
     (define (consent-repl-session-manager)
       "Return the process-local live session manager backing the REPL verbs."
+      #((parameters . ())
+        (returns . "The process-local active session manager.")
+        (effects . (state-read)))
       (active-session-manager))
 
     (define (consent-session-manager-current-context manager)
       "Return MANAGER's default session interaction context, or #f when none."
+      #((parameters . ((manager . "Session manager whose current session is looked up.")))
+        (returns . "The current session's interaction context, or #f when no session is current.")
+        (effects . (state-read)))
       (let ((id (session-model:session-manager-current-id manager)))
         (and id (session-model:session-manager-context-ref manager id))))
 
@@ -9027,6 +9058,11 @@ cursor across sessions."
       "one program-input port across all sessions so the multi-session REPL"
       "keeps a single stdin cursor, and registers the initial session as the"
       "default."
+      #((parameters . ((manager . "Session manager to reset and seed.")
+                       (session-id . "Symbol or string naming the initial default session.")
+                       (options . "Options alist seeded into every session's interaction context.")))
+        (returns . "The seeded MANAGER.")
+        (effects . (state-write allocation)))
       (session-model:session-manager-reset! manager)
       (let* ((id (if (symbol? session-id)
                      session-id
@@ -9046,6 +9082,9 @@ cursor across sessions."
 
     (define (consent-interaction-program-input-port interaction)
       "Return INTERACTION's shared program-input port, or #f when disconnected."
+      #((parameters . ((interaction . "Interaction context whose shared stdin port is read.")))
+        (returns . "The shared program-input port, or #f when program input is not connected.")
+        (effects . (state-read)))
       (interaction-context-program-input-port interaction))
 
     (define (consent-interaction-seed-program-input! interaction text)
@@ -9054,6 +9093,10 @@ cursor across sessions."
       "that follows the just-read submission.  A no-op when program input is"
       "not connected.  The end-of-stream flag is left untouched: once the"
       "host stream truly ends, both form and program reads are at end."
+      #((parameters . ((interaction . "Interaction context holding the shared stdin cursor.")
+                       (text . "Post-form remainder string to seed at position 0.")))
+        (returns . "An unspecified value; called for its effect on the shared cursor.")
+        (effects . (state-read state-write)))
       (let ((port (interaction-context-program-input-port interaction)))
         (if port
             (begin
@@ -9065,6 +9108,9 @@ cursor across sessions."
       "input the evaluated form did not read), or #f when program input is"
       "not connected.  The REPL engine threads this back as the next"
       "form-reading buffer, so neither reader steals the other's characters."
+      #((parameters . ((interaction . "Interaction context holding the shared stdin cursor.")))
+        (returns . "The unconsumed remainder string after the port position, or #f when disconnected.")
+        (effects . (state-read allocation)))
       (let ((port (interaction-context-program-input-port interaction)))
         (and port
              (substring (consent-port-source port)
@@ -9073,6 +9119,9 @@ cursor across sessions."
 
     (define (consent-interaction-context-session-id interaction)
       "Return the session id INTERACTION evaluates under, or #f when unsessioned."
+      #((parameters . ((interaction . "Interaction context whose options carry the session id.")))
+        (returns . "The configured session id, or #f when the context is unsessioned.")
+        (effects . (state-read)))
       (interaction-context-session-id-from-options
        (interaction-context-options interaction)))
 
@@ -9080,6 +9129,9 @@ cursor across sessions."
       "Return the program output the most recent"
       "`consent-interaction-eval-form' submission wrote, cleared before each"
       "evaluation."
+      #((parameters . ((interaction . "Interaction context whose program-output port is read.")))
+        (returns . "The string written to program output by the most recent submission.")
+        (effects . (state-read)))
       (consent-port-contents
        (interaction-context-program-output-port interaction)))
 
@@ -9088,6 +9140,10 @@ cursor across sessions."
       "its value/syntax environments and program-output port, and return an"
       "`evaluation-result' datum (ok/values or captured error) like"
       "`consent-eval-source-result'."
+      #((parameters . ((interaction . "Durable interaction context supplying persistent environments and ports.")
+                       (form . "Already-read top-level datum to evaluate.")))
+        (returns . "An `evaluation-result' datum capturing the value or the raised condition.")
+        (effects . (host-eval state-read state-write)))
       (let* ((options (interaction-context-options interaction))
              (environment (interaction-context-environment interaction))
              (syntax-environment

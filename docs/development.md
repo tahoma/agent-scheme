@@ -144,6 +144,19 @@ implementation procedure docstrings only as fallback for internal or generated
 hooks; fallback reflection marks the origin as `(implementation-procedure
 string)`.
 
+Every exported procedure in the runtime `scheme/` tree must carry the rich
+property record described in
+[Docstring Metadata Convention](docstring-metadata.md): a
+`#((parameters . ...) (returns . ...) (effects . ...))` vector following the
+simple string docstring. The
+`consent-scheme-documentation-test-public-rich-docstrings` gate enforces this
+fail-closed -- it runs over every runtime `scheme/` source file by default
+rather than an opt-in allowlist, so a newly added file is covered automatically
+and any exported procedure missing the record fails the test. The exemption
+list (`consent--scheme-documentation-rich-docstring-exclusions`) is
+intentionally empty: a file with no exported procedures already passes, so add a
+path there only with a deliberate, recorded justification.
+
 ## Test Layout
 
 Project tests live under `tests/` and run through the repository `Makefile`.
