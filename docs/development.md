@@ -129,6 +129,15 @@ ordinary R7RS reading.
 - Keep Scheme comments public-repo safe: avoid project history, personal
   machine paths, secrets, transcripts, and non-project branding.
 
+These comment rules are enforced by
+`consent-scheme-documentation-test-source-comments` (in the `test-emacs-tools`
+shard), which fails any top-level `(define ...)` in `scheme/`, `tests/scheme/`,
+or `fixtures/r7rs/` `.scm`/`.sld` files that lacks a leading `;;` comment or a
+procedure docstring -- including plain value bindings such as `(define
+program-input-stream-pulls 0)`, not only procedures. Only the Emacs ERT
+doc-lint enforces this; running the file directly under a host Scheme (Chibi,
+Guile) passes it, so a missing comment surfaces only in the Emacs-tools shard.
+
 Runtime-visible documentation for public procedures belongs in a simple string
 docstring in the procedure body, using the convention in
 [Docstring Metadata Convention](docstring-metadata.md). Add docstrings to new
@@ -803,6 +812,97 @@ project-history or private-machine references relevant to the change. The
 pattern uses a character class so this guide does not carry the deprecated
 spelling as plain text. If a match is intentional, explain why in the pull
 request.
+
+### Test authoring and shard pitfalls
+
+These are silent or CI-only traps when adding tests; nothing else in the build
+warns about them.
+
+- **A new Emacs test file needs a matching shard selector.** The ERT runner
+  (`tests/consent-test-runner.el`) auto-discovers every `tests/consent-*-test.el`
+  by glob, but `make test` does not run the whole glob -- it runs the four
+  Emacs shard targets, each filtered by an ERT name-selector regexp in the
+  `Makefile`
+  (`CONSENT_EMACS_CORE`/`LIBRARY`/`CAPABILITY`/`TOOLS_TEST_SELECTOR`). A new file
+  whose `ert-deftest` names match none of those selectors loads but never runs
+  under `make test` (only under the unfiltered `make test-emacs-hosted` or an
+  explicit `CONSENT_TEST_SELECTOR`). When adding a `consent-*-test.el`, add or
+  broaden the matching shard selector. Host-spawning Scheme bridge tests
+  (`consent-scheme-*` that start an external host) belong in the portable
+  selectors; host-independent pure-elisp `consent-scheme-*` tests belong in an
+  Emacs shard (for example `CONSENT_EMACS_TOOLS_TEST_SELECTOR`). Use a prefix
+  clause only when the whole family is host-free; otherwise anchor exact names so
+  host-spawning siblings stay on host shards. The `selector:` strings in
+  `.github/workflows/test.yml` are cosmetic -- printed into the run summary only;
+  CI selects tests by invoking `make <shard-target>`, which reads the `Makefile`
+  selector, so the `Makefile` edit is what changes CI coverage. Update the YAML
+  literal only to keep the summary honest.
+
+- **Host-level `#u8(...)` literals break CI's Racket.** A `#u8(...)` bytevector
+  literal read at the host level in a `tests/scheme/*.scm` file -- a real datum
+  the host Scheme reads, not text inside a `"..."` Consent source string -- fails
+  on CI's Racket with `read-syntax: bad syntax #u` and fails the
+  `test-portable-racket` shard. The other hosts accept it, and a newer local
+  Racket also accepts it, so `make test-portable-racket` can pass locally while
+  CI breaks; do not trust a local Racket pass for `#u8` portability. Build host
+  bytevector test data with `(bytevector b ...)`, a plain `(scheme base)` call
+  with no reader syntax that every host reader accepts. `#u8(...)` is only safe
+  inside a Consent source string or an expected-value string, where the Consent
+  reader (which supports `#u8`) reads it rather than the host reader.
+
+- **Self-hosted shards yield Consent number records, not host integers.** Under
+  `consent --host-run` (the `test-portable-compiled` and
+  `test-portable-gambit-native` shards) the test file is evaluated by the Consent
+  interpreter, so a literal like `'((length . 4))` yields an alist whose `4` is a
+  Consent number record, not a host integer. A `.sld` procedure that compares or
+  combines such a value with its own host-integer counters (`>=`, `-`,
+  arithmetic, `substring`) works on every directly-run host but fails only on the
+  self-hosted shards, surfacing as a generic `(status error) (message "error")
+  (host-condition error)`. Normalize at the boundary --
+  `(if (consent-number? v) (consent-number-value v) v)` (Emacs:
+  `consent-number-p`) -- leaving host integers and `#f` untouched. Reproduce with
+  a freshly built binary run directly, for example
+  `build/compile/gambit/bin/consent --host-run FILE`.
+
+- **Keep multi-element cyclic-render assertions off the portable test files.** A
+  `tests/scheme/*.scm` file runs both directly on each interpreted host and
+  self-hosted via `consent --host-run`. Under self-host, a multi-element
+  datum-label cycle read by the Consent reader (`#0=(1 2 3 . #0#)`,
+  `#0=#(1 #0#)`) does not come back with the back-reference `eq?`-identical to the
+  labeled head, so identity-based cycle detection (`memq`/`eq?` against an
+  ancestor path) never terminates (hangs on Chibi, errors on Racket-compiled).
+  Immediate self-cycles (`#1=(a . #1#)`) and shared non-cyclic labels
+  (`(#1=(a b) #1#)`) do work self-hosted. Keep real multi-element cyclic-render
+  assertions on the Emacs host (`tests/*.el`), where the reader builds genuinely
+  `eq?`-shared cyclic structure, and keep the portable Scheme cases
+  datum-label-free.
+
+- **Compiled-host `standard-source-library-*-file` failures are usually a stale
+  install.** If the compiled-host shards (`test-portable-gambit-native`,
+  `test-portable-compiled`) fail only on
+  `standard-source-library-case-lambda-file` /
+  `standard-source-library-lazy-file` -- expecting a relative
+  `scheme/standard-library/*.sld` but getting an absolute
+  `/usr/local/share/consent/<version>/standard-library/*.sld` -- it is almost
+  always a stale local install, not a regression. The compiled binary is built
+  with `CONSENT_INSTALL_DATADIR=/usr/local/share/consent/<version>` and searches
+  that datadir before the cwd-relative source tree. Tell-tale signs: the failing
+  version's directory exists under `/usr/local/share/consent/` but `main`'s does
+  not, and the interpreted hosts (run with `-L <source>`) all pass. Clear it with
+  `sudo rm -rf /usr/local/share/consent/<that-version>` (or `sudo make
+  uninstall`) and re-run. Do not weaken the test -- CI has no install and always
+  resolves source-relative.
+
+- **Compare cross-host record streams by serializing, not `equal?`.** To assert
+  two Consent contract-record streams are equal in a test that runs on every
+  host, compare their serialized forms (`consent-datum->external` in portable,
+  `consent-result->external` in Emacs), not raw `equal?`. Records embed
+  canonical-number records, and on Gauche R7RS `equal?` on those is
+  identity-based, so two value-equal streams built separately are not `equal?`
+  there (Chibi/Guile/Racket happen to pass). Records reloaded from a captured
+  `datum` stream via the standard reader are plain Scheme data, which
+  `consent-datum->external` refuses to write -- only live or replayed Consent
+  records can be serialized.
 
 ## Expected Repository Shape
 
