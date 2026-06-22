@@ -62,6 +62,7 @@
      (library (agent registry))
      (library (agent proposal))
      (library (agent runner))
+     (library (agent prompt))
      (library (agent transcript))))
    (mediates
     ((library (scheme file))
