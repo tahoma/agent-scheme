@@ -9,10 +9,10 @@ interactive-surface work; and in
 prior art on agentic harnesses and language agents for the Chunk 0.17
 Milestone M2 *REPL Agent Harness — Minimal Loop* work; and in
 [Scheme and Lisp Type Annotation References](#scheme-and-lisp-type-annotation-references)
-prior art for typed documentation metadata and library-edge contract hints. Keep
-project-specific decisions in this repository's own design docs; use these
-references for language context, historical grounding, and implementation
-techniques.
+prior art for typed documentation metadata, library-edge contract hints, and
+type-related context for coding agents. Keep project-specific decisions in this
+repository's own design docs; use these references for language context,
+historical grounding, and implementation techniques.
 
 ## Canonical External Scheme References
 
@@ -126,9 +126,9 @@ checks, and tool schemas without changing the source metadata shape.
 - [Bigloo Manual: Explicit typing](https://www-sop.inria.fr/indes/fp/Bigloo/doc/bigloo-27.html)
   documents result, formal-parameter, and local-variable annotations in a Scheme
   compiler. Missing annotations default to the generic `obj` type and the
-  interpreter ignores annotations, which is useful contrast for Consent Scheme's
-  planned lint rule: public metadata should distinguish omission from an explicit
-  top type.
+  interpreter ignores annotations, which is useful contrast for Consent Scheme:
+  the metadata reader can default omission to `any`, while the project-specific
+  linter can still require explicit public type metadata.
 - [Common Lisp HyperSpec: Type Specifiers](https://www.lispworks.com/documentation/HyperSpec/Body/04_bc.htm)
   and [DECLARE](https://www.lispworks.com/documentation/HyperSpec/Body/s_declar.htm)
   standardize symbol and list type specifiers, local declaration placement,
@@ -150,6 +150,67 @@ a reader will infer it from another Lisp. It also supports keeping the first
 metadata vocabulary small: ordinary predicates and analyzers can consume
 symbols, unions, list/vector forms, procedure forms, and an explicit top type
 before the project commits to dependent, refinement, or flow-sensitive typing.
+
+### Type Context and Structured Metadata for Coding Agents
+
+These references support the agent-facing motivation for #604 with a narrow
+claim: precise, machine-readable type context, dependency context, and
+static-analysis feedback can help LLM-based coding systems generate, repair, or
+validate code. They do not prove that stronger type annotations are always
+better, nor that every annotation should become a prompt token. The useful
+lesson for Consent Scheme is to keep typed metadata structured and lowerable, so
+tools can choose the right projection for a given task.
+
+- [Statically Contextualizing Large Language Models with Typed Holes](https://arxiv.org/abs/2409.00921)
+  integrates LLM code generation with a language server that exposes type and
+  binding context. The Hazel and TypeScript experiments are useful prior art for
+  treating language-server-readable type metadata as compact, semantically local
+  context for code completion.
+- [CATCODER: Repository-Level Code Generation with Relevant Code and Type
+  Context](https://arxiv.org/abs/2406.03283) combines retrieved code with type
+  dependencies from static analyzers for Java and Rust repository-level
+  generation. Its reported improvement over RepoCoder is direct evidence that
+  type context can matter at repository boundaries.
+- [STALL+: Boosting LLM-based Repository-level Code Completion with Static
+  Analysis](https://arxiv.org/abs/2406.10018) studies where static-analysis
+  information helps in repository completion pipelines. Its distinction between
+  prompting, decoding, and post-processing is a useful caution for #604: typed
+  metadata should remain reusable data, not one hardcoded prompt format.
+- [Less Is More: Measuring How LLM Involvement affects Chatbot Accuracy in
+  Static Analysis](https://arxiv.org/abs/2604.21746) compares direct query
+  generation, a schema-constrained intermediate representation, and a more
+  agentic tool-use loop for static-analysis tasks. The structured intermediate
+  result is the relevant prior art for Scheme-readable metadata lowering: keep
+  the formal representation deterministic and let the model operate at the edge.
+- [CodePlan: Repository-level Coding using LLMs and
+  Planning](https://arxiv.org/abs/2309.12499) frames repository-wide changes as
+  planning over dependency and may-impact analyses. It explicitly names adding
+  type annotations, adding specifications, and fixing static-analysis reports as
+  repository-level coding tasks, making it useful background for agent workflows
+  that need stable metadata instead of local-only snippets.
+- [Generative Type Inference for Python](https://arxiv.org/abs/2307.09163)
+  uses static domain knowledge and type-dependency graphs to guide LLM type
+  inference. This is not evidence that agents perform better when given stronger
+  annotations, but it does show that type structure is recoverable and useful
+  enough to be modeled explicitly.
+- [Helping LLMs Improve Code Generation Using Feedback from Testing and Static
+  Analysis](https://arxiv.org/abs/2412.14841) and [Static Analysis as a Feedback
+  Loop: Enhancing LLM-Generated Code Beyond Correctness](https://arxiv.org/abs/2508.14419)
+  show that analyzer and test feedback can improve generated code or repairs.
+  They motivate keeping #604 metadata consumable by static-analysis tools, while
+  stopping short of making metadata itself an enforcement mechanism.
+- [Compiler generated feedback for Large Language
+  Models](https://arxiv.org/abs/2403.14714) is useful negative evidence: compiler
+  feedback produced only modest gains in its LLVM optimization setting, and
+  sampling outperformed feedback at larger sample counts. It is a reminder to
+  measure each metadata consumer rather than assuming more formal feedback is
+  always helpful.
+- [Unmasking the Genuine Type Inference Capabilities of LLMs for Java Code
+  Snippets](https://arxiv.org/abs/2503.04076) reports benchmark-leakage and
+  robustness concerns for LLM type inference. It is a good caution for future
+  evaluation of type-aware agents: use leakage-resistant fixtures and
+  semantics-preserving transformations before treating type-related scores as
+  evidence of real understanding.
 
 ### Chez Scheme and Indiana Compiler Lineage
 
