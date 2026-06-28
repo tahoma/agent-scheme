@@ -8499,10 +8499,11 @@ cursor across sessions."
     (define (program-input-read-streaming port context)
       "Read one datum from streaming PORT, refilling until a complete datum"
       "is buffered, then delegating to the validating raise-on-error reader"
-      "so streaming `read' shares the single datum path.  Refilling continues"
-      "only while the buffered input is an incomplete partial datum, and stops"
-      "once a whole datum is buffered, the input is malformed, or the host"
-      "stream ends."
+      "so streaming `read' shares the single datum path.  Refilling keeps"
+      "pulling while the buffered prefix is `incomplete' (a valid partial"
+      "datum) or `eof' (exhausted without a datum yet), and stops once a whole"
+      "`datum' is buffered or the prefix is `invalid'; `program-input-fill-until!'"
+      "also stops when the host stream itself ends."
       (program-input-fill-until!
        port context
        (lambda ()
