@@ -72,6 +72,10 @@
           agent-selection-basis
           agent-selection-reason
           agent-selection-considered
+          make-prompt-authority
+          prompt-authority?
+          prompt-authority-field-value
+          prompt-authority-authorized?
           make-prompt-harness
           prompt-harness?
           prompt-harness-registry
@@ -141,13 +145,100 @@
       "Return the leading options alist from a variadic TAIL, or the empty list."
       (if (pair? tail) (car tail) '()))
 
+    (define (non-empty-list? value)
+      "Return #t when VALUE is a non-empty proper or dotted list."
+      (and (pair? value) #t))
+
+    (define (authorized-source? source)
+      "Return #t when SOURCE names an explicit prompt authority source."
+      (or (eq? source 'grant)
+          (eq? source 'preloaded-approval)
+          (eq? source 'policy-file)
+          (eq? source 'session)))
+
+    (define (prompt-authority-authorized-from-options options source)
+      "Resolve the authorized flag from OPTIONS and SOURCE."
+      (let ((explicit (option-ref options 'authorized 'auto)))
+        (cond
+         ((eq? explicit #t) #t)
+         ((eq? explicit #f) #f)
+         ((not (eq? explicit 'auto)) (and explicit #t))
+         ((non-empty-list? (option-ref options 'grants '())) #t)
+         ((non-empty-list? (option-ref options 'approvals '())) #t)
+         ((non-empty-list? (option-ref options 'policy '())) #t)
+         ((authorized-source? source) #t)
+         (else #f))))
+
+    (define (prompt-authority-source-from-options options)
+      "Resolve the authority source from OPTIONS."
+      (option-ref
+       options
+       'source
+       (cond
+        ((non-empty-list? (option-ref options 'grants '())) 'grant)
+        ((non-empty-list? (option-ref options 'approvals '()))
+         'preloaded-approval)
+        ((non-empty-list? (option-ref options 'policy '())) 'policy-file)
+        (else 'none))))
+
+    (define (make-prompt-authority options)
+      "Return a Scheme-readable prompt authority bundle."
+      #((parameters . ((options . "Association list with optional `origin', `source', `grants', `approvals', `policy', and `authorized' fields. Non-empty grants, approvals, or policy authorize the bundle unless `authorized' is explicitly #f.")))
+        (returns . "A `prompt-authority' datum that a prompt harness can inspect.")
+        (effects . (allocation)))
+      (let* ((origin (option-ref options 'origin 'interactive))
+             (source (prompt-authority-source-from-options options))
+             (grants (option-ref options 'grants '()))
+             (approvals (option-ref options 'approvals '()))
+             (policy (option-ref options 'policy '()))
+             (authorized
+              (prompt-authority-authorized-from-options options source)))
+        (list 'prompt-authority
+              (list 'origin origin)
+              (list 'source source)
+              (list 'grants grants)
+              (list 'approvals approvals)
+              (list 'policy policy)
+              (list 'authorized authorized))))
+
+    (define (prompt-authority? datum)
+      "Return #t when DATUM is a prompt-authority bundle."
+      #((parameters . ((datum . "Value to inspect.")))
+        (returns . "#t when DATUM is tagged as a `prompt-authority'; otherwise #f.")
+        (effects . (pure)))
+      (tagged? datum 'prompt-authority))
+
+    (define (prompt-authority-field-value authority field . maybe-default)
+      "Return AUTHORITY's FIELD value, or DEFAULT (or #f) when absent."
+      #((parameters . ((authority . "A `prompt-authority' datum.")
+                       (field . "Symbol naming the authority field to read.")
+                       (maybe-default . "Optional fallback value; defaults to #f.")))
+        (returns . "The field value, or the fallback when FIELD is absent.")
+        (effects . (pure)))
+      (record-field-value authority field
+                          (if (null? maybe-default) #f (car maybe-default))))
+
+    (define (prompt-authority-authorized? authority)
+      "Return #t when AUTHORITY carries explicit prompt authority."
+      #((parameters . ((authority . "A `prompt-authority' datum.")))
+        (returns . "#t when the bundle authorizes prompt dispatch; otherwise #f.")
+        (effects . (pure)))
+      (and (prompt-authority? authority)
+           (prompt-authority-field-value authority 'authorized #f)
+           #t))
+
+    (define (normalize-authority authority)
+      "Return AUTHORITY in the harness representation."
+      (if (prompt-authority? authority)
+          authority
+          (and authority #t)))
+
     ;; Harness container: a registry to select from, the current default session
-    ;; id the verbs dispatch into, a boolean recording whether that session
-    ;; carries granted authority, and a defaults alist of runner options
-    ;; (provider, policy, verifier, budgets, ...) merged under per-call options.
-    ;; This is mutable host/session state, so it is a record rather than a
-    ;; serializable datum; the agents, selections, and results it produces remain
-    ;; tagged lists.
+    ;; id the verbs dispatch into, authority for that session, and a defaults
+    ;; alist of runner options (provider, policy, verifier, budgets, ...) merged
+    ;; under per-call options. This is mutable host/session state, so it is a
+    ;; record rather than a serializable datum; the agents, selections, and
+    ;; results it produces remain tagged lists.
     (define-record-type <prompt-harness>
       (make-harness-record registry session authority defaults)
       prompt-harness?
@@ -166,9 +257,9 @@
         (make-harness-record
          (option-ref options 'registry (make-agent-registry))
          (option-ref options 'session 'project-main)
-         ;; Absent authority defaults to granted; an explicit `(authority #f)'
-         ;; arms the fail-closed path.
-         (and (option-ref options 'authority #t) #t)
+         ;; Absent authority defaults to the interactive session posture; an
+         ;; explicit `(authority #f)' or unauthorized bundle arms fail-closed.
+         (normalize-authority (option-ref options 'authority #t))
          options)))
 
     (define (prompt-harness-registry harness)
@@ -190,7 +281,10 @@
       #((parameters . ((harness . "A `prompt-harness'.")))
         (returns . "#t when the harness session is authorized to dispatch; otherwise #f.")
         (effects . (state-read)))
-      (and (harness-authority harness) #t))
+      (let ((authority (harness-authority harness)))
+        (if (prompt-authority? authority)
+            (prompt-authority-authorized? authority)
+            (and authority #t))))
 
     (define (prompt-harness-defaults harness)
       "Return HARNESS's runner defaults alist."
@@ -208,7 +302,8 @@
         (effects . (state-write)))
       (set-harness-session! harness session)
       (if (pair? maybe-authority)
-          (set-harness-authority! harness (and (car maybe-authority) #t)))
+          (set-harness-authority! harness
+                                  (normalize-authority (car maybe-authority))))
       session)
 
     (define (prompt-harness-set-authority! harness authority)
@@ -217,9 +312,9 @@
                        (authority . "Authority boolean for the current session.")))
         (returns . "The stored authority boolean.")
         (effects . (state-write)))
-      (let ((flag (and authority #t)))
-        (set-harness-authority! harness flag)
-        flag))
+      (let ((value (normalize-authority authority)))
+        (set-harness-authority! harness value)
+        (prompt-harness-authority? harness)))
 
     ;; Process-local ambient harness so a bare `(prompt "...")' resolves to a
     ;; current default without threading a harness argument.  It is created
@@ -279,6 +374,51 @@
       "Return a Scheme-readable `prompt-audit' record of KIND carrying FIELDS."
       (cons 'prompt-audit (cons (list 'kind kind) fields)))
 
+    (define (authority-audit-fields authority)
+      "Return origin/source audit fields for AUTHORITY when available."
+      (if (prompt-authority? authority)
+          (list
+           (list 'origin
+                 (prompt-authority-field-value authority 'origin 'interactive))
+           (list 'source
+                 (prompt-authority-field-value authority 'source 'none)))
+          '()))
+
+    (define (authority-origin authority)
+      "Return AUTHORITY's origin, defaulting to interactive."
+      (if (prompt-authority? authority)
+          (prompt-authority-field-value authority 'origin 'interactive)
+          'interactive))
+
+    (define (authority-source authority)
+      "Return AUTHORITY's source, defaulting to none."
+      (if (prompt-authority? authority)
+          (prompt-authority-field-value authority 'source 'none)
+          'none))
+
+    (define (authority-denial-reason authority)
+      "Return the denial reason for missing AUTHORITY."
+      (if (eq? (authority-origin authority) 'noninteractive)
+          'noninteractive-authority-unavailable
+          'authority-missing))
+
+    (define (authority-denial-message authority)
+      "Return the denial message for missing AUTHORITY."
+      (if (eq? (authority-origin authority) 'noninteractive)
+          "noninteractive prompt requires preloaded authority; refusing to dispatch"
+          "no granted session authority; refusing to dispatch"))
+
+    (define (authority-granted-audit authority session)
+      "Return an authority-granted audit entry for noninteractive AUTHORITY."
+      (if (and (prompt-authority? authority)
+               (eq? (authority-origin authority) 'noninteractive))
+          (list
+           (make-audit 'authority-granted
+                       (append (list (list 'session session)
+                                     (list 'operation 'prompt))
+                               (authority-audit-fields authority))))
+          '()))
+
     (define (selection-context goal session extra options)
       "Build the selection context alist from GOAL, SESSION, EXTRA, and OPTIONS."
       "EXTRA (the role/model forced by `prompt-role'/`prompt-model') is placed"
@@ -334,17 +474,23 @@
               (list 'budget budget)
               (list 'audit audit))))
 
-    (define (fail-closed status agent selection session reason message)
+    (define (fail-closed status agent selection session reason message
+                         . maybe-authority)
       "Build a fail-closed `prompt-result' with a `prompt-error' receipt."
-      (let ((error-receipt (list 'prompt-error
+      (let* ((authority (if (null? maybe-authority)
+                            #f
+                            (car maybe-authority)))
+             (error-receipt (list 'prompt-error
                                  (list 'reason reason)
                                  (list 'session session)
                                  (list 'message message)))
-            (audit (list (make-audit 'authority-denied
-                                     (list (list 'session session)
-                                           (list 'operation 'prompt)
-                                           (list 'reason reason)
-                                           (list 'message message))))))
+             (audit (list (make-audit 'authority-denied
+                                      (append
+                                       (list (list 'session session)
+                                             (list 'operation 'prompt)
+                                             (list 'reason reason)
+                                             (list 'message message))
+                                       (authority-audit-fields authority))))))
         (make-prompt-result status agent selection session 'none error-receipt
                             'failed-closed 'none '() '() 'none audit)))
 
@@ -358,8 +504,9 @@
          ((not (prompt-harness-authority? harness))
           (fail-closed 'authority-missing
                        (agent-of selection) selection session
-                       'authority-missing
-                       "no granted session authority; refusing to dispatch"))
+                       (authority-denial-reason (harness-authority harness))
+                       (authority-denial-message (harness-authority harness))
+                       (harness-authority harness)))
          ((not session)
           (fail-closed 'no-session
                        (agent-of selection) selection session
@@ -381,19 +528,27 @@
       "Run AGENT (from SELECTION) on GOAL and assemble the prompt-result."
       (let* ((agent (agent-of selection))
              (run (run-task goal (runner-options harness agent session options)))
-             (audit (list (make-audit 'agent-selected
-                                      (list (list 'session session)
-                                            (list 'agent-id (agent-id agent))
-                                            (list 'role (agent-role agent))
-                                            (list 'model (agent-model agent))
-                                            (list 'basis
-                                                  (agent-selection-basis
-                                                   selection))))
-                          (make-audit 'model-route
-                                      (list (list 'session session)
-                                            (list 'role (agent-role agent))
-                                            (list 'model (agent-model agent))
-                                            (list 'provider 'fake-local))))))
+             (authority (harness-authority harness))
+             (audit (append
+                     (authority-granted-audit authority session)
+                     (list
+                      (make-audit 'agent-selected
+                                  (append
+                                   (list (list 'session session)
+                                         (list 'agent-id (agent-id agent))
+                                         (list 'role (agent-role agent))
+                                         (list 'model (agent-model agent))
+                                         (list 'basis
+                                               (agent-selection-basis
+                                                selection)))
+                                   (authority-audit-fields authority)))
+                      (make-audit 'model-route
+                                  (append
+                                   (list (list 'session session)
+                                         (list 'role (agent-role agent))
+                                         (list 'model (agent-model agent))
+                                         (list 'provider 'fake-local))
+                                   (authority-audit-fields authority)))))))
         (make-prompt-result 'selected agent selection session run
                             (task-run-receipt run)
                             (task-run-state run)

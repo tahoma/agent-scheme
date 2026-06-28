@@ -51,6 +51,7 @@
                   (current-jiffy host-current-jiffy)
                   (jiffies-per-second host-jiffies-per-second))
           (rename (scheme process-context)
+                  (command-line host-command-line)
                   (get-environment-variable host-get-environment-variable)
                   (get-environment-variables host-get-environment-variables))
           (scheme write)
@@ -6410,6 +6411,16 @@ cursor across sessions."
           (host-current-second)
           "current-second"))))
 
+    (define (primitive-command-line arguments context)
+      "Implement `command-line` from script invocation metadata or a grant."
+      (let ((script-command-line
+             (and context (context-command-line context))))
+        (if script-command-line
+            script-command-line
+            (begin
+              (authorize-process-environment-capability "command-line" context)
+              (host-command-line)))))
+
     (define (primitive-get-environment-variable arguments context)
       "Implement `get-environment-variable` through a policy-gated host read."
       (authorize-process-environment-capability
@@ -7997,6 +8008,7 @@ cursor across sessions."
        (cons 'primitive-current-second primitive-current-second)
        (cons 'primitive-current-jiffy primitive-current-jiffy)
        (cons 'primitive-jiffies-per-second primitive-jiffies-per-second)
+       (cons 'primitive-command-line primitive-command-line)
        (cons 'primitive-get-environment-variable
              primitive-get-environment-variable)
        (cons 'primitive-get-environment-variables

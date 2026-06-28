@@ -112,22 +112,23 @@ any other object closes with an error status.
 
 Arguments after the script reach the process in both forms — the kernel appends
 them after the script path for a direct shebang, and the polyglot's `"$@"`
-forwards them through `exec`. Today a script reads them through the host's R7RS
-`(command-line)` from `(scheme process-context)`, which on the host-compiled
-binary returns the raw process arguments: the interpreter as element 0 (on some
-hosts as a non-string path object), then — for the `--script` form — the literal
-`"--script"`, then the script path, then the user arguments. The layout is the
-host's and differs between the bare-path and `--script` forms, so treat it as
-host-defined for now.
+forwards them through `exec`. Consent Scheme owns the script-facing
+`(command-line)` value instead of exposing the host process vector, so the
+contract is identical across hosts and invocation forms:
 
-A normalized, host-identical contract — `(command-line)` returning
-`(script-path arg …)` with the interpreter name and any `--script` token removed
-— is deferred to the consent-runtime script model (issue #400), where the runtime
-owns `command-line` directly and can present the same clean vector on every host.
-The script is evaluated through the Consent interpreter, but `command-line` is
-still the host's raw vector (element 0 is host-pinned, for example Racket's run
-file), so a clean, normalized contract is not deliverable until that
-runtime-owned `command-line` lands.
+```scheme
+;; consent --script tools/example.scm alpha beta
+;; consent tools/example.scm alpha beta
+(import (scheme base) (scheme process-context))
+(command-line)
+;; => ("tools/example.scm" "alpha" "beta")
+```
+
+The interpreter name and any `--script` token are removed. The first element is
+the script path exactly as supplied to the script runner, followed by user
+arguments. This value is invocation metadata, like stdio: it does not grant broad
+process-environment access. Outside the script runner, `(command-line)` remains
+policy-gated and fails closed without an explicit process-environment grant.
 
 ## Policy posture: noninteractive and fail-closed
 
@@ -167,8 +168,9 @@ the process — so the CLI attaches them by default; everything else fails close
   exits non-zero. A script can shuttle data between its caller-provided stdin and
   stdout, but it cannot reach any ambient resource without an explicit grant.
 - **Emacs batch runner (`consent-script-run-file`).** The same contract through
-  the same `consent-eval-source`; a caller that attaches stdio devices and grants
-  gets the identical behavior.
+  the same `consent-eval-source`; a caller passes script arguments separately
+  from evaluator options, and a caller that attaches stdio devices and grants gets
+  the identical behavior.
 
 White-box tests that `import` the runtime's internal libraries (for example
 `(consent interpreter)`) are **not** scripts and do not run through this path:
@@ -176,12 +178,64 @@ they exercise the compiled libraries on a separate, non-shipped host-execution
 test runner, never through `consent --script`. Host execution is not on the
 product command surface.
 
-Promptable scripts that call `(prompt …)`, a grant/policy mechanism for admitting
-*ambient* capabilities to a trusted script, and a normalized host-identical
-`command-line` contract remain the scope of the non-interactive script authority
-work (#400). Requesting a stdio grant at runtime (rather than by invocation) is
-part of that work; connecting the standard streams by invocation is in place
-here.
+## Promptable scripts
+
+Batch scripts do not receive ambient model/provider authority. A script that
+drives `(prompt …)` must pass a harness with an explicit `prompt-authority`
+bundle. The bundle records the origin (`noninteractive`) and how authority was
+preloaded (`grant`, `preloaded-approval`, or `policy-file`) so the prompt audit
+distinguishes script-driven work from an interactive session.
+
+```scheme
+(import (scheme base) (agent prompt))
+
+(define authority
+  (make-prompt-authority
+   '((origin noninteractive)
+     (source grant)
+     (grants ((capability-grant
+               (id script-prompt)
+               (domain provider)
+               (operations complete)
+               (expires never)))))))
+
+(define harness
+  (make-prompt-harness
+   (list (list 'authority authority)
+         (list 'max-steps 4))))
+
+(prompt harness 'summarize
+        '((provider ((finish done)))
+          (verifier passed)))
+```
+
+A noninteractive bundle with no preloaded authority fails closed; it does not ask
+the user at runtime:
+
+```scheme
+(import (scheme base) (agent prompt))
+
+(define harness
+  (make-prompt-harness
+   (list (list 'authority
+               (make-prompt-authority
+                '((origin noninteractive)))))))
+
+(define result (prompt harness 'summarize))
+
+(prompt-result-status result)
+;; => authority-missing
+
+(cadr (assq 'reason (cdr (prompt-result-receipt result))))
+;; => noninteractive-authority-unavailable
+```
+
+The denial audit is an `authority-denied` prompt audit carrying
+`(origin noninteractive)` and `(source none)`. Budgets supplied on the harness or
+per prompt call continue to flow to the task runner, so a trusted script still
+runs under explicit resource limits. Requesting a stdio grant at runtime (rather
+than by invocation) remains separate future work; connecting the standard streams
+by invocation is in place here.
 
 ## Verification
 

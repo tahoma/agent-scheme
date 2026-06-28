@@ -111,6 +111,65 @@
          'authority-missing)
   (check 'closed-audit-kinds (audit-kinds result) '(authority-denied)))
 
+;;;; Non-interactive prompt authority is explicit data, not ambient approval
+
+(let* ((authority
+        (make-prompt-authority
+         '((origin noninteractive)
+           (source grant)
+           (grants ((capability-grant
+                     (id script-prompt)
+                     (domain provider)
+                     (operations complete)
+                     (expires never)))))))
+       (harness (make-prompt-harness (list (list 'authority authority))))
+       (result (prompt harness 'script-goal
+                       (list (list 'provider '((finish done)))
+                             (list 'verifier 'passed))))
+       (audit (prompt-result-audit result))
+       (authority-audit (car audit)))
+  (check-true 'noninteractive-authority-record
+              (prompt-authority? authority))
+  (check 'noninteractive-authority-status
+         (prompt-result-status result)
+         'selected)
+  (check 'noninteractive-authority-state
+         (prompt-result-state result)
+         'complete)
+  (check 'noninteractive-authority-audit-kinds
+         (audit-kinds result)
+         '(authority-granted agent-selected model-route))
+  (check 'noninteractive-authority-audit-origin
+         (cadr (assq 'origin (cdr authority-audit)))
+         'noninteractive)
+  (check 'noninteractive-authority-audit-source
+         (cadr (assq 'source (cdr authority-audit)))
+         'grant))
+
+(let* ((authority
+        (make-prompt-authority '((origin noninteractive))))
+       (harness (make-prompt-harness (list (list 'authority authority))))
+       (result (prompt harness 'script-goal
+                       (list (list 'provider '((finish done)))
+                             (list 'verifier 'passed))))
+       (audit (prompt-result-audit result))
+       (authority-audit (car audit)))
+  (check 'noninteractive-authority-denied-status
+         (prompt-result-status result)
+         'authority-missing)
+  (check 'noninteractive-authority-denied-reason
+         (cadr (assq 'reason (cdr (prompt-result-receipt result))))
+         'noninteractive-authority-unavailable)
+  (check 'noninteractive-authority-denied-audit-kinds
+         (audit-kinds result)
+         '(authority-denied))
+  (check 'noninteractive-authority-denied-origin
+         (cadr (assq 'origin (cdr authority-audit)))
+         'noninteractive)
+  (check 'noninteractive-authority-denied-source
+         (cadr (assq 'source (cdr authority-audit)))
+         'none))
+
 ;;;; Fail closed without a current session
 
 (let* ((harness (make-prompt-harness (list (list 'session #f))))

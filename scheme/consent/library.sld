@@ -1155,12 +1155,16 @@
          context))
        ((equal? key '(scheme process-context))
         (register-primitive-library!
-         key
-         (append
-          (map policy-denied-spec
-               '(command-line
-                 emergency-exit
-                 exit))
+	         key
+	         (append
+	          (list
+	           (library-primitive-spec 'command-line
+	                                   'primitive-command-line
+	                                   0
+	                                   0))
+	          (map policy-denied-spec
+	               '(emergency-exit
+	                 exit))
           ;; Environment reads are real, policy-gated primitives: denied unless
           ;; the context carries an active process-environment capability grant.
           (list

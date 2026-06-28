@@ -414,7 +414,9 @@ base syntax prelude has already been installed."
   wall-clock
   wall-start
   ;; The dimension symbol that exhausted this run's budget, or nil.
-  exhaustion-reason)
+  exhaustion-reason
+  ;; Script invocation metadata supplied by a batch runner for `(command-line)'.
+  command-line)
 
 (defconst consent--missing-cell (make-symbol "consent-missing-cell")
   "Sentinel used when looking up environment cells.")
@@ -574,7 +576,9 @@ unchanged and uncatchable."
      :wall-clock
      (consent--eval-option options :wall-clock nil)
      :wall-start nil
-     :exhaustion-reason nil)))
+     :exhaustion-reason nil
+     :command-line
+     (copy-sequence (consent--eval-option options :command-line nil)))))
 
 (defun consent--apply-current-context-options! (context options)
   "Apply current-context OPTIONS to CONTEXT and return CONTEXT."

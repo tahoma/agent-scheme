@@ -678,7 +678,7 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
     (("(scheme load)" . "load")
      . "Read and evaluate Scheme source from PATH, subject to the file-system capability policy.")
     (("(scheme process-context)" . "command-line")
-     . "Return the process command line when process-environment access is allowed.")
+     . "Return script invocation arguments, or the process command line when process-environment access is allowed.")
     (("(scheme process-context)" . "emergency-exit")
      . "Request immediate process termination, denied by default by the process policy.")
     (("(scheme process-context)" . "exit")
@@ -762,8 +762,8 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
      :policy deny :test-categories (load file policy))
     (:name "command-line" :library "(scheme process-context)" :minimum-arity 0
      :maximum-arity nil :source host-capability :effect host-process
-     :required-capability process-environment :emacs-hook consent--policy-denied-primitive
-     :portable-hook policy-denied-primitive :emitter-hook capability-process
+     :required-capability process-environment :emacs-hook consent--primitive-command-line
+     :portable-hook primitive-command-line :emitter-hook capability-process
      :policy deny :test-categories (process policy))
     (:name "emergency-exit" :library "(scheme process-context)" :minimum-arity 0
      :maximum-arity nil :source host-capability :effect host-process

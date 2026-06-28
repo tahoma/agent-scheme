@@ -9,7 +9,9 @@
 ;;; such as `#!fold-case' keep their reader meaning.
 
 (import (scheme base)
+        (scheme file)
         (scheme write)
+        (only (consent interpreter) consent-value->external)
         (consent reader)
         (cli script))
 
@@ -38,6 +40,19 @@
   (guard (condition (else #t))
     (thunk)
     #f))
+
+;; Delete PATH when present, ignoring the absent-file condition.
+(define (delete-if-present path)
+  (guard (condition (else #f))
+    (delete-file path)
+    #t))
+
+;; Write SOURCE to PATH, replacing any previous scratch file.
+(define (write-scratch-file path source)
+  (delete-if-present path)
+  (call-with-output-file path
+    (lambda (port)
+      (display source port))))
 
 ;; The `/bin/sh' polyglot recommended in docs/executable-scripts.md.
 (define sh-polyglot
@@ -115,6 +130,30 @@
 (check 'raw-shebang-would-error
        (raises? (lambda () (consent-read-all sh-polyglot)))
        #t)
+
+;;;; End-to-end script command-line behavior
+
+(define command-line-script-path
+  "tests/scheme/scratch/consent-script-command-line-test.scm")
+
+(write-scratch-file
+ command-line-script-path
+ (string-append
+  "#!/usr/bin/env consent-scheme\n"
+  "(import (scheme base) (scheme process-context))\n"
+  "(command-line)\n"))
+
+(check 'script-command-line-normalized
+       (consent-value->external
+        (cli-script-run-file command-line-script-path
+                             #f
+                             (list (list 'script-arguments
+                                         "alpha"
+                                         "beta"))))
+       (consent-value->external
+        (list command-line-script-path "alpha" "beta")))
+
+(delete-if-present command-line-script-path)
 
 (if (= failures 0)
     (begin
