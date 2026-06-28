@@ -3724,9 +3724,9 @@
 
     (define (environment-cell-for-identifier environment identifier)
       "Resolve a raw or hygienic identifier to its lexical cell."
-      ;; Hygienic identifiers first try their generated lexical key at the use
-      ;; site, then fall back to the macro definition environment for free
-      ;; template identifiers.
+      "Hygienic identifiers first try their generated lexical key at the use"
+      "site, then fall back to the macro definition environment for free"
+      "template identifiers."
       #((parameters . ((environment . "Use-site environment to resolve the identifier in.")
                        (identifier . "Symbol or hygienic identifier to resolve.")))
         (returns . "The resolved binding cell, or #f when the identifier is unbound.")
