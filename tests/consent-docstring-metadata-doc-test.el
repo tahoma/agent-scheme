@@ -55,11 +55,14 @@
                  "return comments as datums"
                  "Internal definitions come first"
                  "At least one non-metadata body expression must remain"
-                 "A string or rich property record in final position"
-                 "Adjacent simple strings in metadata position"
-                 "\"Return the arithmetic sum of XS.\\nXS must be a list of numbers.\""
-                 "#((documentation ."
-                 "The simple string form and rich property form may appear together"
+	                 "A string or rich property record in final position"
+	                 "Adjacent simple strings in metadata position"
+	                 "\"Return the arithmetic sum of XS. XS must be a list of numbers.\""
+	                 "#((documentation ."
+	                 "Parameter and return descriptors"
+	                 "`(type any)` is the top type"
+	                 "`returns` may appear at most once"
+	                 "The simple string form and rich property form may appear together"
                  "Procedures with no body-literal documentation still expose their signature"
                  "procedure shorthand `define`"
                  "`lambda` expressions"
@@ -85,10 +88,11 @@
                  "Guile's procedure-property"
                  "influence, but the fields"
                  "#301 implements simple string docstrings"
-                 "#303 implements rich documentation property records"
-                 "#344 adds manifest-backed primitive documentation"
-                 "#304 preserves documentation metadata"
-                 "#325 adds evaluator docstring retention modes"))
+	                 "#303 implements rich documentation property records"
+	                 "#344 adds manifest-backed primitive documentation"
+	                 "#304 preserves documentation metadata"
+	                 "#325 adds evaluator docstring retention modes"
+	                 "#604 adds typed parameter and return descriptors"))
         (should (string-match-p (regexp-quote needle) doc))))))
 
 ;;; consent-docstring-metadata-doc-test.el ends here

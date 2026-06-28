@@ -66,21 +66,44 @@
 
     (define (diff-line kind text)
       "Return one line record for a hunk."
-      #((parameters . ((kind . "Line role symbol, usually context, remove, or add.")
-                       (text . "Line text without its trailing newline.")))
-        (returns . "A `(line KIND TEXT)` record suitable for a diff hunk.")
-        (effects . (pure)))
+      #((parameters
+         (kind
+          (type any)
+          (description "Line role symbol, usually context, remove, or add."))
+         (text
+          (type any)
+          (description "Line text without its trailing newline.")))
+        (returns
+         (type any)
+         (description
+          ("A `(line KIND TEXT)` record suitable for a diff hunk.")))
+        (effects pure))
       (list 'line kind text))
 
     (define (make-diff-hunk old-start old-count new-start new-count lines)
       "Return one hunk record with explicit old and new ranges."
-      #((parameters . ((old-start . "One-based starting line in the old text.")
-                       (old-count . "Number of old-text lines covered.")
-                       (new-start . "One-based starting line in the new text.")
-                       (new-count . "Number of new-text lines covered.")
-                       (lines . "List of line records returned by `diff-line`.")))
-        (returns . "A `(hunk ...)` record that can be rendered by `diff-render-unified`.")
-        (effects . (pure)))
+      #((parameters
+         (old-start
+          (type any)
+          (description "One-based starting line in the old text."))
+         (old-count
+          (type any)
+          (description "Number of old-text lines covered."))
+         (new-start
+          (type any)
+          (description "One-based starting line in the new text."))
+         (new-count
+          (type any)
+          (description "Number of new-text lines covered."))
+         (lines
+          (type any)
+          (description "List of line records returned by `diff-line`.")))
+        (returns
+         (type any)
+         (description
+          ("A `(hunk ...)` record that can be rendered by"
+           "`diff-render-unified`.")))
+        (effects pure))
       (list 'hunk
             (diff-field 'old-start old-start)
             (diff-field 'old-count old-count)
@@ -90,12 +113,26 @@
 
     (define (make-diff source old-label new-label hunks)
       "Return a canonical diff datum from SOURCE labels and HUNKS."
-      #((parameters . ((source . "Symbol, path, handle, or other datum naming what changed.")
-                       (old-label . "Display label for the original side.")
-                       (new-label . "Display label for the proposed or current side.")
-                       (hunks . "List of hunk records; empty means no change.")))
-        (returns . "A canonical `(diff ...)` datum with status `changed` or `no-change`.")
-        (effects . (pure)))
+      #((parameters
+         (source
+          (type any)
+          (description
+           ("Symbol, path, handle, or other datum naming what changed.")))
+         (old-label
+          (type any)
+          (description "Display label for the original side."))
+         (new-label
+          (type any)
+          (description "Display label for the proposed or current side."))
+         (hunks
+          (type any)
+          (description "List of hunk records; empty means no change.")))
+        (returns
+         (type any)
+         (description
+          ("A canonical `(diff ...)` datum with status `changed` or"
+           "`no-change`.")))
+        (effects pure))
       (list 'diff
             (diff-field 'source source)
             (diff-field 'old-label old-label)
@@ -105,38 +142,67 @@
 
     (define (no-change-diff source label)
       "Return an explicit no-change diff for SOURCE and LABEL."
-      #((parameters . ((source . "Datum naming the unchanged resource.")
-                       (label . "Display label used for both old and new sides.")))
-        (returns . "A canonical diff datum whose status is `no-change`.")
-        (effects . (pure)))
+      #((parameters
+         (source
+          (type any)
+          (description "Datum naming the unchanged resource."))
+         (label
+          (type any)
+          (description "Display label used for both old and new sides.")))
+        (returns
+         (type any)
+         (description "A canonical diff datum whose status is `no-change`."))
+        (effects pure))
       (make-diff source label label '()))
 
     (define (diff? datum)
       "Return #t when DATUM is a portable diff record."
-      #((parameters . ((datum . "Value to inspect.")))
-        (returns . "#t when DATUM is tagged as a canonical diff record; otherwise #f.")
-        (effects . (pure)))
+      #((parameters
+         (datum
+          (type any)
+          (description "Value to inspect.")))
+        (returns
+         (type any)
+         (description
+          ("#t when DATUM is tagged as a canonical diff record;"
+           "otherwise #f.")))
+        (effects pure))
       (and (pair? datum) (eq? (car datum) 'diff)))
 
     (define (diff-changed? diff)
       "Return #t when DIFF contains at least one changed hunk."
-      #((parameters . ((diff . "Canonical diff datum.")))
-        (returns . "#t when DIFF has changed status; otherwise #f.")
-        (effects . (pure)))
+      #((parameters
+         (diff
+          (type any)
+          (description "Canonical diff datum.")))
+        (returns
+         (type any)
+         (description "#t when DIFF has changed status; otherwise #f."))
+        (effects pure))
       (eq? (diff-field-value diff 'status 'no-change) 'changed))
 
     (define (diff-source diff)
       "Return DIFF's source field."
-      #((parameters . ((diff . "Canonical diff datum.")))
-        (returns . "The source datum stored in DIFF, or #f when absent.")
-        (effects . (pure)))
+      #((parameters
+         (diff
+          (type any)
+          (description "Canonical diff datum.")))
+        (returns
+         (type any)
+         (description "The source datum stored in DIFF, or #f when absent."))
+        (effects pure))
       (diff-field-value diff 'source #f))
 
     (define (diff-hunks diff)
       "Return DIFF's hunk list."
-      #((parameters . ((diff . "Canonical diff datum.")))
-        (returns . "The list of hunk records in DIFF, or the empty list.")
-        (effects . (pure)))
+      #((parameters
+         (diff
+          (type any)
+          (description "Canonical diff datum.")))
+        (returns
+         (type any)
+         (description "The list of hunk records in DIFF, or the empty list."))
+        (effects pure))
       (diff-field-value diff 'hunks '()))
 
     (define (diff-removal-lines text)
@@ -151,9 +217,16 @@
 
     (define (proposed-edit-diff edit)
       "Return a one-hunk diff for a proposed edit datum."
-      #((parameters . ((edit . "Association-list or record-like edit datum with source, labels, start, before, and after fields.")))
-        (returns . "A canonical diff datum describing the proposed edit.")
-        (effects . (pure)))
+      #((parameters
+         (edit
+          (type any)
+          (description
+           ("Association-list or record-like edit datum with source,"
+            "labels, start, before, and after fields."))))
+        (returns
+         (type any)
+         (description "A canonical diff datum describing the proposed edit."))
+        (effects pure))
       (let ((source (diff-field-value edit 'source 'proposed-edit))
             (old-label (diff-field-value edit 'old-label "before"))
             (new-label (diff-field-value edit 'new-label "after"))
@@ -220,11 +293,19 @@
 
     (define (diff-render-unified diff)
       "Render DIFF to deterministic unified-diff text for humans."
-      #((parameters . ((diff . "Canonical diff datum.")))
-        (returns . "Unified-diff text, or the empty string when DIFF has no changes.")
-        (effects . (pure))
-        (examples . (((source . "(diff-render-unified (no-change-diff 'buffer \"same\"))")
-                      (result . "")))))
+      #((parameters
+         (diff
+          (type any)
+          (description "Canonical diff datum.")))
+        (returns
+         (type any)
+	        (description
+	         ("Unified-diff text, or the empty string when DIFF has no"
+	          "changes.")))
+	        (effects pure)
+	        (examples
+	         ((source . "(diff-render-unified (no-change-diff 'buffer \"same\"))")
+	          (result . ""))))
       (if (diff-changed? diff)
           (string-append
            "--- "
@@ -237,8 +318,13 @@
 
     (define (diff-yield diff)
       "Yield DIFF through the portable Consent Scheme event channel."
-      #((parameters . ((diff . "Canonical diff datum to publish as an agent event.")))
-        (returns . "The host-specific result of `agent-yield`.")
-        (effects . (agent-yield))
-        (see-also . (diff-render-unified)))
+      #((parameters
+         (diff
+          (type any)
+          (description "Canonical diff datum to publish as an agent event.")))
+        (returns
+         (type any)
+         (description "The host-specific result of `agent-yield`."))
+        (effects agent-yield)
+        (see-also diff-render-unified))
       (agent-yield diff))))

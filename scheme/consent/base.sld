@@ -50,11 +50,26 @@
     (define (consent-install-base-backend!
              primitive-resolver trampoline define-syntax)
       "Install the evaluator backend hooks used for base bootstrapping."
-      #((parameters . ((primitive-resolver . "Procedure mapping a registry implementation name to its primitive function.")
-                       (trampoline . "Procedure that evaluates a derived base prelude sequence in an environment and context.")
-                       (define-syntax . "Procedure that installs a derived base syntax form into a syntax environment.")))
-        (returns . "The unspecified value.")
-        (effects . (state-write)))
+      #((parameters
+         (primitive-resolver
+          (type any)
+          (description
+           ("Procedure mapping a registry implementation name to its"
+            "primitive function.")))
+         (trampoline
+          (type any)
+          (description
+           ("Procedure that evaluates a derived base prelude sequence"
+            "in an environment and context.")))
+         (define-syntax
+          (type any)
+          (description
+           ("Procedure that installs a derived base syntax form into a"
+            "syntax environment."))))
+        (returns
+         (type any)
+         (description "The unspecified value."))
+        (effects state-write))
       (set! base-primitive-resolver primitive-resolver)
       (set! base-trampoline trampoline)
       (set! base-define-syntax define-syntax)
@@ -250,20 +265,25 @@
         (= . "Return #t when all numeric arguments are numerically equal.")
         (> . "Return #t when the numeric arguments are strictly decreasing.")
         (>= . "Return #t when the numeric arguments are monotonically nonincreasing.")
-        (apply . "Call a procedure with leading arguments followed by the elements of the final list argument.")
+        (apply .
+         "Call a procedure with leading arguments plus elements of the final list argument.")
         (binary-port? . "Return #t when an object is a binary input or output port.")
         (boolean=? . "Return #t when all boolean arguments have the same truth value.")
         (boolean? . "Return #t when an object is either #t or #f.")
         (bytevector . "Return a newly allocated bytevector containing the given byte values.")
-        (bytevector-append . "Return a newly allocated bytevector containing the bytes from each argument in order.")
+        (bytevector-append .
+         "Return a newly allocated bytevector containing the bytes from each argument in order.")
         (bytevector-copy . "Return a newly allocated copy of a bytevector slice.")
-        (bytevector-copy! . "Copy bytes from one bytevector slice into another bytevector in place.")
+        (bytevector-copy! .
+                          "Copy bytes from one bytevector slice into another bytevector in place.")
         (bytevector-length . "Return the number of bytes in a bytevector.")
         (bytevector-u8-ref . "Return the byte at a zero-based bytevector index.")
         (bytevector-u8-set! . "Store an unsigned byte at a zero-based bytevector index.")
         (bytevector? . "Return #t when an object is a bytevector.")
-        (call-with-current-continuation . "Call a procedure with the current continuation as an escape procedure.")
-        (call-with-port . "Call a procedure with a port and close the port after the procedure returns or raises.")
+        (call-with-current-continuation .
+         "Call a procedure with the current continuation as an escape procedure.")
+        (call-with-port .
+         "Call a procedure with a port and close the port after the procedure returns or raises.")
         (call-with-values . "Call a producer and pass all produced values to a consumer.")
         (call/cc . "Alias for `call-with-current-continuation`.")
         (car . "Return the first field of a pair.")
@@ -275,7 +295,8 @@
         (char=? . "Return #t when all characters have the same scalar value.")
         (char>=? . "Return #t when the characters are monotonically nonincreasing by scalar value.")
         (char>? . "Return #t when the characters are strictly decreasing by scalar value.")
-        (char-ready? . "Return #t when a character can be read from a textual input port without blocking.")
+        (char-ready? .
+         "Return #t when a character can be read from a textual input port without blocking.")
         (char? . "Return #t when an object is a character.")
         (close-input-port . "Close an input port.")
         (close-output-port . "Close an output port.")
@@ -285,7 +306,8 @@
         (current-error-port . "Return the current textual error output port.")
         (current-input-port . "Return the current textual input port.")
         (current-output-port . "Return the current textual output port.")
-        (dynamic-wind . "Run before, thunk, and after procedures while preserving dynamic-wind entry and exit behavior.")
+        (dynamic-wind .
+         "Run before, thunk, and after while preserving dynamic entry and exit behavior.")
         (eq? . "Return #t when two objects are the same object under `eq?` identity.")
         (equal? . "Return #t when two objects have recursively equivalent contents.")
         (eqv? . "Return #t when two objects are equivalent under R7RS `eqv?` rules.")
@@ -297,7 +319,8 @@
         (error-object? . "Return #t when an object is an error object.")
         (denominator . "Return the denominator of a rational number in lowest terms.")
         (exact . "Return an exact representation of a number when one is available.")
-        (exact-integer-sqrt . "Return the exact integer square root and remainder for a nonnegative exact integer.")
+        (exact-integer-sqrt .
+         "Return the exact integer square root and remainder for a nonnegative exact integer.")
         (exact-integer? . "Return #t when an object is both exact and an integer.")
         (exact? . "Return #t when a number is represented exactly.")
         (expt . "Return a number raised to a numeric power.")
@@ -308,7 +331,8 @@
         (floor-quotient . "Return the floor quotient for two integers.")
         (floor-remainder . "Return the floor remainder for two integers.")
         (flush-output-port . "Flush buffered output on an output port.")
-        (gcd . "Return the greatest common divisor of all integer arguments, or 0 with no arguments.")
+        (gcd .
+             "Return the greatest common divisor of all integer arguments, or 0 with no arguments.")
         (get-output-bytevector . "Return the accumulated bytes from an output bytevector port.")
         (get-output-string . "Return the accumulated text from an output string port.")
         (inexact . "Return an inexact representation of a number.")
@@ -321,14 +345,18 @@
         (list->string . "Return a newly allocated string containing the characters from a list.")
         (list->vector . "Return a newly allocated vector containing the elements from a list.")
         (list? . "Return #t when an object is a proper list.")
-        (make-bytevector . "Return a newly allocated bytevector of a given length and optional fill byte.")
-        (make-parameter . "Return a parameter procedure with an initial value and optional converter.")
-        (make-string . "Return a newly allocated string of a given length and optional fill character.")
+        (make-bytevector .
+         "Return a newly allocated bytevector of a given length and optional fill byte.")
+        (make-parameter .
+         "Return a parameter procedure with an initial value and optional converter.")
+        (make-string .
+         "Return a newly allocated string of a given length and optional fill character.")
         (make-vector . "Return a newly allocated vector of a given length and optional fill value.")
         (modulo . "Return the modulo remainder for two integers.")
         (newline . "Write a newline character to an output port.")
         (null? . "Return #t when an object is the empty list.")
-        (number->string . "Return the textual representation of a number, optionally using a radix.")
+        (number->string .
+                        "Return the textual representation of a number, optionally using a radix.")
         (number? . "Return #t when an object is a number.")
         (numerator . "Return the numerator of a rational number in lowest terms.")
         (open-input-bytevector . "Return a binary input port that reads from a bytevector.")
@@ -356,7 +384,8 @@
         (read-u8 . "Read and consume one byte from a binary input port.")
         (real? . "Return #t when an object is a real number.")
         (remainder . "Return the truncated integer remainder for two integers.")
-        (round . "Return the nearest integer to a real number, using the implementation's tie behavior.")
+        (round .
+         "Return the nearest integer to a real number, using the implementation's tie behavior.")
         (set-car! . "Replace the first field of a mutable pair.")
         (set-cdr! . "Replace the second field of a mutable pair.")
         (string . "Return a newly allocated string containing the given characters.")
@@ -365,7 +394,8 @@
         (string->symbol . "Return the symbol whose name is a string.")
         (string->utf8 . "Encode a string slice as a UTF-8 bytevector.")
         (string->vector . "Return a vector containing the characters from a string slice.")
-        (string-append . "Return a newly allocated string containing each argument's characters in order.")
+        (string-append .
+         "Return a newly allocated string containing each argument's characters in order.")
         (string-copy . "Return a newly allocated copy of a string slice.")
         (string-copy! . "Copy characters from one string slice into another string in place.")
         (string-fill! . "Fill a string slice with a character in place.")
@@ -392,7 +422,8 @@
         (vector . "Return a newly allocated vector containing the given values.")
         (vector->list . "Return a list containing the elements from a vector slice.")
         (vector->string . "Return a string containing the characters from a vector slice.")
-        (vector-append . "Return a newly allocated vector containing each argument's elements in order.")
+        (vector-append .
+         "Return a newly allocated vector containing each argument's elements in order.")
         (vector-copy . "Return a newly allocated copy of a vector slice.")
         (vector-copy! . "Copy elements from one vector slice into another vector in place.")
         (vector-fill! . "Fill a vector slice with a value in place.")
@@ -401,7 +432,8 @@
         (vector-set! . "Store a value at a zero-based vector index.")
         (vector? . "Return #t when an object is a vector.")
         (values . "Return all arguments as multiple values.")
-        (with-exception-handler . "Call a thunk with an exception handler installed for its dynamic extent.")
+        (with-exception-handler .
+         "Call a thunk with an exception handler installed for its dynamic extent.")
         (write-bytevector . "Write bytes from a bytevector slice to a binary output port.")
         (write-char . "Write one character to a textual output port.")
         (write-string . "Write characters from a string slice to a textual output port.")
@@ -533,16 +565,25 @@
       "Primitive metadata is exported for tests and future conformance reports;"
       "it describes the kernel surface without exposing implementation"
       "closures."
-      #((parameters . ())
-        (returns . "A list of the symbol names of every registered kernel primitive.")
-        (effects . (state-read allocation)))
+      #((parameters)
+        (returns
+         (type any)
+         (description
+          ("A list of the symbol names of every registered kernel"
+           "primitive.")))
+        (effects state-read allocation))
       (map car base-primitive-registry))
 
     (define (consent-base-primitive-specs)
       "Public metadata accessor for kernel primitive arity and source specs."
-      #((parameters . ())
-        (returns . "A list of association lists, one per kernel primitive, carrying its name, minimum and maximum arity, source, and effect fields.")
-        (effects . (state-read allocation)))
+      #((parameters)
+        (returns
+         (type any)
+         (description
+          ("A list of association lists, one per kernel primitive,"
+           "carrying its name, minimum and maximum arity, source, and"
+           "effect fields.")))
+        (effects state-read allocation))
       (map (lambda (spec)
              (list (assq 'name spec)
                    (assq 'minimum-arity spec)
@@ -573,9 +614,15 @@
 
     (define (read-port-string port)
       "Read all characters from PORT into a string."
-      #((parameters . ((port . "Open textual input port to drain to end of file.")))
-        (returns . "A string containing every character read from the port.")
-        (effects . (state-read allocation)))
+      #((parameters
+         (port
+          (type any)
+          (description "Open textual input port to drain to end of file.")))
+        (returns
+         (type any)
+         (description
+          ("A string containing every character read from the port.")))
+        (effects state-read allocation))
       (let loop ((chars '()))
         (let ((char (read-char port)))
           (if (eof-object? char)
@@ -584,9 +631,17 @@
 
     (define (read-all-datums port)
       "Read and parse all datums from PORT."
-      #((parameters . ((port . "Open textual input port whose contents are read and parsed.")))
-        (returns . "A list of every datum parsed from the port's contents.")
-        (effects . (state-read allocation)))
+      #((parameters
+         (port
+          (type any)
+          (description
+           ("Open textual input port whose contents are read and"
+            "parsed."))))
+        (returns
+         (type any)
+         (description
+          ("A list of every datum parsed from the port's contents.")))
+        (effects state-read allocation))
       (consent-read-all (read-port-string port)))
 
     (define (try-read-file-text path)
@@ -603,10 +658,21 @@
       "DEFAULT-PATHS (source tree), then embedded source (the"
       "zero-dependency floor). RESOLVED-PATH is the on-disk path read, or"
       "RELATIVE-PATH for embedded source."
-      #((parameters . ((relative-path . "Logical path of the source resource to resolve.")
-                       (default-paths . "List of built-in cwd-relative fallback paths searched before embedded source.")))
-        (returns . "A pair (RESOLVED-PATH . TEXT) from the first source that works, or #f when none resolve.")
-        (effects . (state-read allocation)))
+      #((parameters
+         (relative-path
+          (type any)
+          (description "Logical path of the source resource to resolve."))
+         (default-paths
+          (type any)
+          (description
+           ("List of built-in cwd-relative fallback paths searched"
+            "before embedded source."))))
+        (returns
+         (type any)
+         (description
+          ("A pair (RESOLVED-PATH . TEXT) from the first source that"
+           "works, or #f when none resolve.")))
+        (effects state-read allocation))
       (let loop-dirs ((dirs (consent-library-search-directory-list)))
         (if (pair? dirs)
             (let* ((path (string-append (car dirs) "/" relative-path))
@@ -625,19 +691,34 @@
 
     (define (resolve-source-text relative-path default-paths)
       "Return runtime source TEXT for logical RELATIVE-PATH, or #f when none is found."
-      #((parameters . ((relative-path . "Logical path of the source resource to resolve.")
-                       (default-paths . "List of built-in cwd-relative fallback paths searched before embedded source.")))
-        (returns . "The source text string for the resolved resource, or #f when none is found.")
-        (effects . (state-read allocation)))
+      #((parameters
+         (relative-path
+          (type any)
+          (description "Logical path of the source resource to resolve."))
+         (default-paths
+          (type any)
+          (description
+           ("List of built-in cwd-relative fallback paths searched"
+            "before embedded source."))))
+        (returns
+         (type any)
+         (description
+          ("The source text string for the resolved resource, or #f"
+           "when none is found.")))
+        (effects state-read allocation))
       (let ((entry (resolve-source-entry relative-path default-paths)))
         (and entry (cdr entry))))
 
     (define (base-prelude-forms)
       "Prelude forms are cached after reader validation; metadata extraction"
       "depends on each top-level form remaining one define."
-      #((parameters . ())
-        (returns . "The list of parsed top-level base prelude forms, cached after first read.")
-        (effects . (state-read state-write allocation error)))
+      #((parameters)
+        (returns
+         (type any)
+         (description
+          ("The list of parsed top-level base prelude forms, cached"
+           "after first read.")))
+        (effects state-read state-write allocation error))
       (or base-prelude-forms-cache
           (let ((text (resolve-source-text "consent/base-prelude.scm"
                                            consent-base-prelude-load-paths)))
@@ -650,9 +731,13 @@
     (define (base-syntax-forms)
       "Syntax prelude forms are cached separately because they install into the"
       "current syntax environment, not the value environment."
-      #((parameters . ())
-        (returns . "The list of parsed top-level base syntax prelude forms, cached after first read.")
-        (effects . (state-read state-write allocation error)))
+      #((parameters)
+        (returns
+         (type any)
+         (description
+          ("The list of parsed top-level base syntax prelude forms,"
+           "cached after first read.")))
+        (effects state-read state-write allocation error))
       (or base-syntax-forms-cache
           (let ((text (resolve-source-text "consent/base-syntax.scm"
                                            consent-base-syntax-load-paths)))
@@ -747,25 +832,37 @@
     (define (consent-base-prelude-binding-specs)
       "Prelude binding specs identify derived procedures separately from kernel"
       "primitives so tests can catch accidental boundary movement."
-      #((parameters . ())
-        (returns . "A list of association lists describing each derived prelude binding's name, arity, source, and documentation.")
-        (effects . (state-read state-write allocation error)))
+      #((parameters)
+        (returns
+         (type any)
+         (description
+          ("A list of association lists describing each derived"
+           "prelude binding's name, arity, source, and documentation.")))
+        (effects state-read state-write allocation error))
       (map prelude-definition-spec (base-prelude-forms)))
 
     (define (consent-base-prelude-binding-names)
       "Public metadata accessor for derived base prelude names."
-      #((parameters . ())
-        (returns . "A list of the symbol names of every derived base prelude binding.")
-        (effects . (state-read state-write allocation error)))
+      #((parameters)
+        (returns
+         (type any)
+         (description
+          ("A list of the symbol names of every derived base prelude"
+           "binding.")))
+        (effects state-read state-write allocation error))
       (map (lambda (spec)
              (second (assq 'name spec)))
            (consent-base-prelude-binding-specs)))
 
     (define (consent-base-binding-specs)
       "Public metadata accessor for all base binding specs."
-      #((parameters . ())
-        (returns . "A list of binding specs covering both kernel primitives and derived prelude bindings.")
-        (effects . (state-read state-write allocation error)))
+      #((parameters)
+        (returns
+         (type any)
+         (description
+          ("A list of binding specs covering both kernel primitives"
+           "and derived prelude bindings.")))
+        (effects state-read state-write allocation error))
       (append (consent-base-primitive-specs)
               (consent-base-prelude-binding-specs)))
 
@@ -775,7 +872,9 @@
        (list '(scheme file) 'delete-file
              "Delete the file at PATH, subject to the file-system capability policy.")
        (list '(scheme file) 'file-exists?
-             "Return #t when PATH names an existing file, subject to the file-system capability policy.")
+             (string-append
+              "Return #t when PATH names an existing file, subject to the "
+              "file-system capability policy."))
        (list '(scheme file) 'call-with-input-file
              "Open PATH for textual input, call PROC with the port, and close the port afterward.")
        (list '(scheme file) 'call-with-output-file
@@ -789,13 +888,21 @@
        (list '(scheme file) 'open-output-file
              "Open PATH as a textual output port, subject to the file-system capability policy.")
        (list '(scheme file) 'with-input-from-file
-             "Evaluate THUNK with the current input port temporarily bound to PATH's textual input port.")
+             (string-append
+              "Evaluate THUNK with the current input port temporarily bound "
+              "to PATH's textual input port."))
        (list '(scheme file) 'with-output-to-file
-             "Evaluate THUNK with the current output port temporarily bound to PATH's textual output port.")
+             (string-append
+              "Evaluate THUNK with the current output port temporarily bound "
+              "to PATH's textual output port."))
        (list '(scheme load) 'load
-             "Read and evaluate Scheme source from PATH, subject to the file-system capability policy.")
+             (string-append
+              "Read and evaluate Scheme source from PATH, subject to the "
+              "file-system capability policy."))
        (list '(scheme process-context) 'command-line
-             "Return script invocation arguments, or the process command line when process-environment access is allowed.")
+             (string-append
+              "Return script invocation arguments, or the process command "
+              "line when process-environment access is allowed."))
        (list '(scheme process-context) 'emergency-exit
              "Request immediate process termination, denied by default by the process policy.")
        (list '(scheme process-context) 'exit
@@ -807,9 +914,13 @@
        (list '(scheme repl) 'interaction-environment
              "Return the current session interaction environment when REPL access is allowed.")
        (list '(scheme time) 'current-jiffy
-             "Return the current clock reading as an integer jiffy count, subject to the clock capability policy.")
+             (string-append
+              "Return the current clock reading as an integer jiffy count, "
+              "subject to the clock capability policy."))
        (list '(scheme time) 'current-second
-             "Return the current time as a real number of seconds since the Unix epoch, subject to the clock capability policy.")
+             (string-append
+              "Return the current time as a real number of seconds since the "
+              "Unix epoch, subject to the clock capability policy."))
        (list '(scheme time) 'jiffies-per-second
              "Return the number of jiffies per second used by `current-jiffy`.")))
 
@@ -1106,9 +1217,14 @@
 
     (define (consent-primitive-manifest-binding-specs)
       "Public manifest accessor shared by portable tests and future tools."
-      #((parameters . ())
-        (returns . "A list of manifest specs covering kernel primitives, derived prelude bindings, and host-effecting standard primitives.")
-        (effects . (state-read state-write allocation error)))
+      #((parameters)
+        (returns
+         (type any)
+         (description
+          ("A list of manifest specs covering kernel primitives,"
+           "derived prelude bindings, and host-effecting standard"
+           "primitives.")))
+        (effects state-read state-write allocation error))
       (append (map base-primitive-manifest-spec base-primitive-registry)
               (map prelude-manifest-spec
                    (consent-base-prelude-binding-specs))
@@ -1120,13 +1236,27 @@
                                minimum-arity
                                maximum-arity)
       "Install a primitive procedure binding into ENVIRONMENT."
-      #((parameters . ((environment . "Target environment to receive the primitive binding.")
-                       (name . "Symbol under which the primitive is bound.")
-                       (function . "Host procedure implementing the primitive.")
-                       (minimum-arity . "Minimum number of arguments the primitive accepts.")
-                       (maximum-arity . "Maximum number of arguments, or #f for unbounded.")))
-        (returns . "The unspecified result of installing the binding.")
-        (effects . (state-write allocation)))
+      #((parameters
+         (environment
+          (type any)
+          (description
+           ("Target environment to receive the primitive binding.")))
+         (name
+          (type any)
+          (description "Symbol under which the primitive is bound."))
+         (function
+          (type any)
+          (description "Host procedure implementing the primitive."))
+         (minimum-arity
+          (type any)
+          (description "Minimum number of arguments the primitive accepts."))
+         (maximum-arity
+          (type any)
+          (description "Maximum number of arguments, or #f for unbounded.")))
+        (returns
+         (type any)
+         (description "The unspecified result of installing the binding."))
+        (effects state-write allocation))
       (environment-define!
        environment
        name
@@ -1136,9 +1266,13 @@
     (define (consent-make-base-environment)
       "The base environment installs primitive kernel bindings first, then"
       "evaluates derived Scheme definitions in the same environment."
-      #((parameters . ())
-        (returns . "A fresh environment populated with kernel primitives and derived base definitions.")
-        (effects . (state-read state-write allocation host-eval error)))
+      #((parameters)
+        (returns
+         (type any)
+         (description
+          ("A fresh environment populated with kernel primitives and"
+           "derived base definitions.")))
+        (effects state-read state-write allocation host-eval error))
       (let ((environment (consent-make-empty-environment)))
         (let loop ((rest base-primitive-registry))
           (if (null? rest)
@@ -1160,10 +1294,23 @@
 
     (define (ensure-base-syntax! context environment)
       "Install derived base syntax into CONTEXT once."
-      #((parameters . ((context . "Evaluation context tracking whether base syntax is already installed.")
-                       (environment . "Environment into which the derived syntax forms are installed.")))
-        (returns . "The unspecified value once base syntax is installed in the context.")
-        (effects . (state-read state-write allocation host-eval error)))
+      #((parameters
+         (context
+          (type any)
+          (description
+           ("Evaluation context tracking whether base syntax is already"
+            "installed.")))
+         (environment
+          (type any)
+          (description
+           ("Environment into which the derived syntax forms are"
+            "installed."))))
+        (returns
+         (type any)
+         (description
+          ("The unspecified value once base syntax is installed in the"
+           "context.")))
+        (effects state-read state-write allocation host-eval error))
       (if (not (context-base-syntax-installed context))
           (begin
             (for-each

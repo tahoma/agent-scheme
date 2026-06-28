@@ -76,20 +76,36 @@
 
     (define (transcript-field-value datum name . maybe-default)
       "Return field NAME from DATUM, or DEFAULT when absent."
-      #((parameters . ((datum . "Transcript record or field list to inspect.")
-                       (name . "Symbol naming the field to read.")
-                       (maybe-default . "Optional fallback value; defaults to #f.")))
-        (returns . "The field value, or DEFAULT when NAME is absent.")
-        (effects . (pure)))
+      #((parameters
+         (datum
+          (type any)
+          (description "Transcript record or field list to inspect."))
+         (name
+          (type any)
+          (description "Symbol naming the field to read."))
+         (maybe-default
+          (type any)
+          (description "Optional fallback value; defaults to #f.")))
+        (returns
+         (type any)
+         (description "The field value, or DEFAULT when NAME is absent."))
+        (effects pure))
       (fields-value (if (pair? datum) (cdr datum) '())
                     name
                     (default-value maybe-default)))
 
     (define (transcript-event? datum)
       "Return #t when DATUM is a transcript event record."
-      #((parameters . ((datum . "Value to inspect.")))
-        (returns . "#t when DATUM is tagged as a transcript event; otherwise #f.")
-        (effects . (pure)))
+      #((parameters
+         (datum
+          (type any)
+          (description "Value to inspect.")))
+        (returns
+         (type any)
+         (description
+          ("#t when DATUM is tagged as a transcript event; otherwise"
+           "#f.")))
+        (effects pure))
       (and (pair? datum) (eq? (car datum) 'transcript-event)))
 
     (define (host-effect-kind? kind)
@@ -168,11 +184,22 @@
 
     (define (make-transcript-event kind fields)
       "Create a transcript event with deterministic defaults for missing fields."
-      #((parameters . ((kind . "Transcript event kind symbol.")
-                       (fields . "Field list supplied by the caller; reserved construction fields are normalized.")))
-        (returns . "A `transcript-event` datum with id, kind, time, and replay metadata.")
-        (effects . (pure))
-        (see-also . (transcript-event-replay-mode transcript-event-summary)))
+      #((parameters
+         (kind
+          (type any)
+          (description "Transcript event kind symbol."))
+         (fields
+          (type any)
+          (description
+           ("Field list supplied by the caller; reserved construction"
+            "fields are normalized."))))
+        (returns
+         (type any)
+         (description
+          ("A `transcript-event` datum with id, kind, time, and replay"
+           "metadata.")))
+        (effects pure)
+        (see-also transcript-event-replay-mode transcript-event-summary))
       (let ((id (fields-value fields 'id 'e-0))
             (session (fields-value fields 'session #f))
             (time (fields-value fields 'time "portable")))
@@ -188,24 +215,45 @@
 
     (define (transcript-event-replay-mode event)
       "Return EVENT's replay mode."
-      #((parameters . ((event . "Transcript event datum.")))
-        (returns . "Replay mode symbol such as deterministic-pure, fixture-generation, recorded-observation, or audit-only.")
-        (effects . (pure)))
+      #((parameters
+         (event
+          (type any)
+          (description "Transcript event datum.")))
+        (returns
+         (type any)
+         (description
+          ("Replay mode symbol such as deterministic-pure,"
+           "fixture-generation, recorded-observation, or audit-only.")))
+        (effects pure))
       (classify-transcript-event event))
 
     (define (transcript-replayable? event)
       "Return #t when EVENT can drive deterministic replay or fixtures."
-      #((parameters . ((event . "Transcript event datum.")))
-        (returns . "#t when EVENT can be replayed or converted into a fixture; otherwise #f.")
-        (effects . (pure)))
+      #((parameters
+         (event
+          (type any)
+          (description "Transcript event datum.")))
+        (returns
+         (type any)
+         (description
+          ("#t when EVENT can be replayed or converted into a fixture;"
+           "otherwise #f.")))
+        (effects pure))
       (memq (transcript-event-replay-mode event)
             '(deterministic-pure fixture-generation)))
 
     (define (transcript-recorded-observation? event)
       "Return #t when EVENT represents a recorded host observation."
-      #((parameters . ((event . "Transcript event datum.")))
-        (returns . "#t when EVENT is host observation data rather than replayable computation; otherwise #f.")
-        (effects . (pure)))
+      #((parameters
+         (event
+          (type any)
+          (description "Transcript event datum.")))
+        (returns
+         (type any)
+         (description
+          ("#t when EVENT is host observation data rather than"
+           "replayable computation; otherwise #f.")))
+        (effects pure))
       (eq? (transcript-event-replay-mode event) 'recorded-observation))
 
     (define (summary-value value)
@@ -231,10 +279,17 @@
 
     (define (transcript-event->fixture-case event)
       "Generate a shared fixture case from EVENT when replay permits it."
-      #((parameters . ((event . "Transcript event datum.")))
-        (returns . "A shared fixture case datum when EVENT can seed one; otherwise #f.")
-        (effects . (pure))
-        (see-also . (transcript-replayable? transcript-export)))
+      #((parameters
+         (event
+          (type any)
+          (description "Transcript event datum.")))
+        (returns
+         (type any)
+         (description
+          ("A shared fixture case datum when EVENT can seed one;"
+           "otherwise #f.")))
+        (effects pure)
+        (see-also transcript-replayable? transcript-export))
       (let ((mode (transcript-event-replay-mode event))
             (id (transcript-field-value event 'id))
             (form (transcript-field-value event 'form))
@@ -280,9 +335,16 @@
 
     (define (transcript-event-summary event)
       "Return a human-readable one-line summary for EVENT."
-      #((parameters . ((event . "Transcript event datum.")))
-        (returns . "A compact text summary suitable for logs or transcript lists.")
-        (effects . (pure)))
+      #((parameters
+         (event
+          (type any)
+          (description "Transcript event datum.")))
+        (returns
+         (type any)
+         (description
+          ("A compact text summary suitable for logs or transcript"
+           "lists.")))
+        (effects pure))
       (let ((id (summary-value (transcript-field-value event 'id)))
             (kind (summary-value (transcript-field-value event 'kind)))
             (session (summary-value
@@ -308,16 +370,26 @@
 
     (define (transcript-raw-view events)
       "Return EVENTS as raw Scheme-readable datums."
-      #((parameters . ((events . "Chronological list of transcript event datums.")))
-        (returns . "EVENTS unchanged.")
-        (effects . (pure)))
+      #((parameters
+         (events
+          (type any)
+          (description "Chronological list of transcript event datums.")))
+        (returns
+         (type any)
+         (description "EVENTS unchanged."))
+        (effects pure))
       events)
 
     (define (transcript-summary-view events)
       "Return human-readable summaries for EVENTS."
-      #((parameters . ((events . "Chronological list of transcript event datums.")))
-        (returns . "List of one-line summary strings.")
-        (effects . (pure)))
+      #((parameters
+         (events
+          (type any)
+          (description "Chronological list of transcript event datums.")))
+        (returns
+         (type any)
+         (description "List of one-line summary strings."))
+        (effects pure))
       (map transcript-event-summary events))
 
     (define (drop items count)
@@ -328,10 +400,17 @@
 
     (define (transcript-rotate events keep)
       "Return the newest KEEP events from chronological EVENTS."
-      #((parameters . ((events . "Chronological list of transcript event datums.")
-                       (keep . "Maximum number of newest events to retain.")))
-        (returns . "A suffix of EVENTS containing at most KEEP records.")
-        (effects . (pure)))
+      #((parameters
+         (events
+          (type any)
+          (description "Chronological list of transcript event datums."))
+         (keep
+          (type any)
+          (description "Maximum number of newest events to retain.")))
+        (returns
+         (type any)
+         (description "A suffix of EVENTS containing at most KEEP records."))
+        (effects pure))
       (let ((count (length events)))
         (if (or (<= count keep) (<= keep 0))
             events
@@ -349,12 +428,22 @@
 
     (define (transcript-export events format)
       "Return a transcript view for EVENTS in FORMAT."
-      #((parameters . ((events . "Chronological list of transcript event datums.")
-                       (format . "Export format symbol: scheme-datum, text-summary, or fixture-cases.")))
-        (returns . "Raw events, summary strings, or generated fixture cases for EVENTS.")
-        (effects . (pure))
-        (see-also . (transcript-raw-view transcript-summary-view
-                     transcript-event->fixture-case)))
+      #((parameters
+         (events
+          (type any)
+          (description "Chronological list of transcript event datums."))
+         (format
+          (type any)
+          (description
+           ("Export format symbol: scheme-datum, text-summary, or"
+            "fixture-cases."))))
+        (returns
+         (type any)
+         (description
+          ("Raw events, summary strings, or generated fixture cases"
+           "for EVENTS.")))
+        (effects pure)
+        (see-also transcript-raw-view transcript-summary-view transcript-event->fixture-case))
       (cond
        ((eq? format 'scheme-datum)
         (transcript-raw-view events))

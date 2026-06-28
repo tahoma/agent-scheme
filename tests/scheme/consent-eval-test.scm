@@ -418,7 +418,7 @@
                        (arguments (documentation 'no-doc))
                        (doc-string (documentation 'missing)))"
                 '((docstring-retention . full))
-                "(\"First line.\\nSecond line.\" (x) 5 \"Use the local definition.\" (x) \"result\" #f () #f (x) #f)")
+                "(\"First line. Second line.\" (x) 5 \"Use the local definition.\" (x) \"result\" #f () #f (x) #f)")
 
 (check-external/options 'rich-documentation-metadata
                 "(import (scheme base) (agent reflect))
@@ -513,7 +513,69 @@
                        (final-rich)
                        (metadata-fields 'final-rich))"
                 '((docstring-retention . full))
-                "((session cfg) \"Create an Consent Scheme session from CONFIG.\\nThe session is represented as a datum.\" (config) \"Open an Consent Scheme session.\" ((config . \"Session configuration datum.\")) \"A session record.\" (pure) (((source . \"(rich cfg)\") (result session cfg))) (current-context session-snapshot) (consent-version 0 15 4) #f experimental \"local only\" \"Line one.\\nLine two.\\nLine three.\" (x) (((source . \"first\")) ((source . \"second\"))) (alpha beta) ((tag . kept)) \"Valid documentation.\" \"First result.\" #f ((arguments (x))) ((arguments (x))) ((arguments (x))) ((head . \"Required argument.\") (tail . \"Rest arguments.\")) #((returns . \"ordinary result\")) ((arguments ())))")
+                "((session cfg) \"Create an Consent Scheme session from CONFIG. The session is represented as a datum.\" (config) \"Open an Consent Scheme session.\" ((config (type any) (description \"Session configuration datum.\"))) ((type any) (description \"A session record.\")) (pure) (((source . \"(rich cfg)\") (result session cfg))) (current-context session-snapshot) (consent-version 0 15 4) #f experimental \"local only\" \"Line one. Line two. Line three.\" (x) (((source . \"first\")) ((source . \"second\"))) (alpha beta) ((tag . kept)) \"Valid documentation.\" ((type any) (description \"First result.\")) #f ((arguments (x))) ((arguments (x))) ((arguments (x))) ((head (type any) (description \"Required argument.\")) (tail (type any) (description \"Rest arguments.\"))) #((returns . \"ordinary result\")) ((arguments ())))")
+
+(check-external/options 'typed-rich-documentation-metadata
+                "(import (scheme base) (agent reflect))
+                 (define (field datum name)
+                   (cadr (assq name (cdr datum))))
+                 (define (metadata-field name field-name)
+                   (let ((datum (documentation name)))
+                     (if datum
+                         (let ((entry (assq field-name (field datum 'fields))))
+                           (if entry (cadr entry) #f))
+                       #f)))
+                 (define (typed config)
+                   \"Create a session from CONFIG.\"
+                   #((parameters
+                      . ((config
+                          (type session-config)
+                          (description (\"Session configuration\"
+                                        \"datum.\")))))
+                     (returns
+                      . ((type session-record)
+                         (description \"A session record.\")))
+                     (effects . (pure)))
+                   (list 'session config))
+                 (define (legacy-shorthand x)
+                   #((parameters . ((x . \"Input value.\")))
+                     (returns . \"Output value.\"))
+                   x)
+                 (define (fragment-shorthand y)
+                   #((parameters . ((y . (\"Fragment\"
+                                          \"input.\"))))
+                     (returns . (\"Fragment\"
+                                 \"output.\")))
+                   y)
+                 (define (missing-type x)
+                   #((parameters
+                      . ((x (description (\"Wrapped\"
+                                          \"input.\")))))
+                     (returns
+                      . ((description (\"Wrapped\"
+                                       \"output.\")))))
+                   x)
+                 (define (multi-values)
+                   #((parameters . ())
+                     (returns
+                      . ((type (values string any))
+                         (description (\"String result\"
+                                       \"and opaque payload.\")))))
+                   (values \"ok\" 1))
+                 (list (metadata-field 'typed 'documentation)
+                       (metadata-field 'typed 'parameters)
+                       (metadata-field 'typed 'returns)
+                       (metadata-field 'typed 'effects)
+                       (metadata-field 'legacy-shorthand 'parameters)
+                       (metadata-field 'legacy-shorthand 'returns)
+                       (metadata-field 'fragment-shorthand 'parameters)
+                       (metadata-field 'fragment-shorthand 'returns)
+                       (metadata-field 'missing-type 'parameters)
+                       (metadata-field 'missing-type 'returns)
+                       (metadata-field 'multi-values 'parameters)
+                       (metadata-field 'multi-values 'returns))"
+                '((docstring-retention . full))
+                "(\"Create a session from CONFIG.\" ((config (type session-config) (description \"Session configuration datum.\"))) ((type session-record) (description \"A session record.\")) (pure) ((x (type any) (description \"Input value.\"))) ((type any) (description \"Output value.\")) ((y (type any) (description \"Fragment input.\"))) ((type any) (description \"Fragment output.\")) ((x (type any) (description \"Wrapped input.\"))) ((type any) (description \"Wrapped output.\")) () ((type (values string any)) (description \"String result and opaque payload.\")))")
 
 (check-external/options 'docstring-retention-simple
                 "(import (scheme base) (agent reflect))
@@ -619,7 +681,7 @@
                        (metadata-field 'make-network-request 'parameters)
                        (metadata-field 'make-network-request 'returns))"
                 '((docstring-retention . full))
-                "(\"Return the number of pairs in LIST.\" \"Return PROMISE's value, evaluating and memoizing delayed thunks once.\" \"Render DIFF to deterministic unified-diff text for humans.\" \"Return a host-adapter request datum for one network operation.\" \"Return a fail-closed authorization decision for REQUEST.\" \"Generate a shared fixture case from EVENT when replay permits it.\" ((promise . \"Promise record or ordinary value to force.\")) \"PROMISE's memoized value, or PROMISE unchanged when it is not a promise.\" ((diff . \"Canonical diff datum.\")) \"Unified-diff text, or the empty string when DIFF has no changes.\" ((id . \"Stable request id assigned by the caller or host adapter.\") (operation . \"Network operation symbol such as request or stream.\") (resource . \"Association list describing scheme, host, port, method, headers, payload, response, redirect, timeout, and stream limits.\")) \"A `network-capability-request` datum ready for policy evaluation.\")")
+                "(\"Return the number of pairs in LIST.\" \"Return PROMISE's value, evaluating and memoizing delayed thunks once.\" \"Render DIFF to deterministic unified-diff text for humans.\" \"Return a host-adapter request datum for one network operation.\" \"Return a fail-closed authorization decision for REQUEST.\" \"Generate a shared fixture case from EVENT when replay permits it.\" ((promise (type any) (description \"Promise record or ordinary value to force.\"))) ((type any) (description \"PROMISE's memoized value, or PROMISE unchanged when it is not a promise.\")) ((diff (type any) (description \"Canonical diff datum.\"))) ((type any) (description \"Unified-diff text, or the empty string when DIFF has no changes.\")) ((id (type any) (description \"Stable request id assigned by the caller or host adapter.\")) (operation (type any) (description \"Network operation symbol such as request or stream.\")) (resource (type any) (description \"Association list describing scheme, host, port, method, headers, payload, response, redirect, timeout, and stream limits.\"))) ((type any) (description \"A `network-capability-request` datum ready for policy evaluation.\")))")
 
 ;; Report whether TEXT starts with PREFIX.
 (define (string-prefix? prefix text)
