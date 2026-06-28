@@ -284,14 +284,14 @@
 
     (define (syntax-binding-for-operator operator environment context)
       "Resolve OPERATOR to its active syntax transformer, respecting hygiene."
+      "Macro-introduced operators consult their definition-time syntax"
+      "environment; plain symbols use the active syntax environment unless a"
+      "value binding shadows the syntactic keyword."
       #((parameters . ((operator . "Operator identifier datum to resolve.")
                        (environment . "Value environment that may shadow the keyword.")
                        (context . "Evaluation context supplying the active syntax environment.")))
         (returns . "OPERATOR's active syntax transformer, or #f when none applies.")
         (effects . (state-read)))
-      ;; Macro-introduced operators consult their definition-time syntax
-      ;; environment.  Plain symbols use the active syntax environment unless a
-      ;; value binding shadows the syntactic keyword.
       (let ((name (identifier-datum-name operator)))
         (if (and name (not (operator-shadowed? operator environment)))
             (or
@@ -899,8 +899,8 @@
 
     (define (expand-template template bindings syntax-context ellipsis . rest)
       "Expand a syntax-rules template using captured pattern bindings."
-      ;; Identifiers not captured by BINDINGS are wrapped with SYNTAX-CONTEXT
-      ;; so free template identifiers keep their definition-time bindings.
+      "Identifiers not captured by BINDINGS are wrapped with SYNTAX-CONTEXT so"
+      "free template identifiers keep their definition-time bindings."
       (let ((path (if (null? rest) '() (car rest)))
             (ellipsis-literal? (if (or (null? rest) (null? (cdr rest)))
                                    #f
@@ -986,8 +986,8 @@
 
     (define (next-syntax-context! context value-environment syntax-environment)
       "Allocate a fresh syntax context for identifiers introduced by a macro."
-      ;; Each expansion gets a fresh context id so introduced bindings cannot
-      ;; collide accidentally with names from the macro use site.
+      "Each expansion gets a fresh context id so introduced bindings cannot"
+      "collide accidentally with names from the macro use site."
       (let ((id (context-next-syntax-id context)))
         (set-context-next-syntax-id! context (+ id 1))
         (make-syntax-context id value-environment syntax-environment)))
