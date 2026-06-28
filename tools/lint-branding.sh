@@ -145,11 +145,40 @@ if [ -n "$branch" ] && [ "$branch" != "HEAD" ]; then
 fi
 
 # --- Pull request title and body (TIER A + TIER B) ------------------------
-if [ -n "${CONSENT_PR_TITLE:-}" ]; then
-  scan_text "PR title" "$CONSENT_PR_TITLE" "$attribution_re|$slug_re"
+# The PR title/body live only in GitHub metadata, never in git. Prefer values
+# injected by a workflow (CONSENT_PR_TITLE/BODY). Failing that, when running in
+# GitHub Actions on a pull_request, derive the PR number from GITHUB_REF and read
+# the title/body from the public REST API UNAUTHENTICATED -- no token, no
+# workflow change. This is best-effort: it succeeds for a public repository when
+# the runner can reach the API and is not rate-limited, and it degrades to a loud
+# notice (not a failure) otherwise, so it never makes the piggybacked lint job
+# flaky. A dedicated workflow that injects CONSENT_PR_* is the deterministic
+# upgrade; see docs/development.md.
+pr_title=${CONSENT_PR_TITLE:-}
+pr_body=${CONSENT_PR_BODY:-}
+if [ -z "$pr_title$pr_body" ] && [ -n "${GITHUB_ACTIONS:-}" ]; then
+  pr_number=$(printf '%s' "${GITHUB_REF:-}" \
+    | sed -n 's#^refs/pull/\([0-9][0-9]*\)/.*#\1#p')
+  repo=${GITHUB_REPOSITORY:-}
+  if [ -n "$pr_number" ] && [ -n "$repo" ] && \
+     command -v curl >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
+    api="${GITHUB_API_URL:-https://api.github.com}/repos/$repo/pulls/$pr_number"
+    response=$(curl -fsSL -H "Accept: application/vnd.github+json" "$api" \
+      2>/dev/null || true)
+    if [ -n "$response" ]; then
+      pr_title=$(printf '%s' "$response" | jq -r '.title // ""' 2>/dev/null || true)
+      pr_body=$(printf '%s' "$response" | jq -r '.body // ""' 2>/dev/null || true)
+    else
+      printf 'notice: lint-branding could not read PR #%s metadata unauthenticated (private repo, rate limit, or no egress); PR title/body branding scan skipped this run\n' \
+        "$pr_number" >&2
+    fi
+  fi
 fi
-if [ -n "${CONSENT_PR_BODY:-}" ]; then
-  scan_text "PR body" "$CONSENT_PR_BODY" "$attribution_re|$slug_re"
+if [ -n "$pr_title" ]; then
+  scan_text "PR title" "$pr_title" "$attribution_re|$slug_re"
+fi
+if [ -n "$pr_body" ]; then
+  scan_text "PR body" "$pr_body" "$attribution_re|$slug_re"
 fi
 
 if [ -s "$violations" ]; then
