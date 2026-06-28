@@ -1,6 +1,6 @@
 name: Branding
 
-# Deterministic branding gate.
+# Branding gate, required on pull requests.
 #
 # The lint-branding check also rides along on the lint-elisp job, but that job
 # checks out shallow (the default fetch-depth), so it has no base ref and the
@@ -9,11 +9,21 @@ name: Branding
 # test`). This dedicated job checks out full history and injects the pull
 # request title and body from the event payload, so every branding dimension --
 # tracked files, branch name, commit messages, commit author/committer identity,
-# and the PR title/body -- is enforced on every pull request rather than
-# best-effort. See docs/development.md "branding gate".
+# and the PR title/body -- is scanned.
+#
+# It runs on `opened`/`synchronize`/`reopened` AND `edited`, because a branding
+# trailer is most often appended to the PR title or body *after* creation, and
+# without `edited` that change would never be re-scanned. This job's check name
+# ("Assistant/tool/vendor branding gate") is a required status check on `main`
+# (the "Protect main" ruleset), so a failure blocks merge rather than only
+# reporting red. The required check assumes the PR branch carries this workflow
+# file; branches cut before it landed must rebase onto `main`. Direct pushes to
+# `main` are not gated here, but the ruleset makes `main` pull-request-only.
+# See docs/development.md "branding gate".
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, edited]
 
 permissions:
   contents: read
