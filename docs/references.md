@@ -6,10 +6,13 @@ Consent Scheme: Scheme-language references for the runtime core; in
 prior art on REPLs and interactive programming environments for the Chunk 0.16
 interactive-surface work; and in
 [Agentic Harness and Language-Agent References](#agentic-harness-and-language-agent-references)
-prior art on agentic harnesses and language agents for the Chunk 0.17 Milestone M2
-*REPL Agent Harness — Minimal Loop* work. Keep project-specific decisions in this
-repository's own design docs; use these references for language context, historical
-grounding, and implementation techniques.
+prior art on agentic harnesses and language agents for the Chunk 0.17
+Milestone M2 *REPL Agent Harness — Minimal Loop* work; and in
+[Scheme and Lisp Type Annotation References](#scheme-and-lisp-type-annotation-references)
+prior art for typed documentation metadata and library-edge contract hints. Keep
+project-specific decisions in this repository's own design docs; use these
+references for language context, historical grounding, and implementation
+techniques.
 
 ## Canonical External Scheme References
 
@@ -75,6 +78,104 @@ grounding, and implementation techniques.
   [Docstring Metadata Convention](docstring-metadata.md) is influenced by that
   shape but defines its own R7RS-compatible public behavior and
   Scheme-readable metadata records.
+
+## Scheme and Lisp Type Annotation References
+
+These collect prior art for typed docstring metadata, especially the Chunk 0.17
+typed parameter and return metadata work (#604). They are grounding for
+vocabulary and tradeoffs, not authority over Consent Scheme's source syntax. The
+near-term design goal is an advisory, Scheme-readable metadata vocabulary for
+public library edges that can later lower into contracts, capability admission
+checks, and tool schemas without changing the source metadata shape.
+
+- [Typed Racket Guide: Specifying Types](https://docs.racket-lang.org/ts-guide/more.html)
+  and [Types in Typed Racket](https://docs.racket-lang.org/ts-guide/types.html)
+  show top-level and local annotation forms, function types, unions, recursive
+  types, structure types, polymorphism, and type aliases. Typed Racket uses
+  `Any` as a top type in examples, which is useful prior art for an explicit
+  "intentionally unconstrained" metadata type.
+- [Typed Racket Guide: Occurrence Typing](https://docs.racket-lang.org/ts-guide/occurrence-typing.html)
+  and [The Design and Implementation of Typed Scheme](https://www2.ccs.neu.edu/racket/pubs/popl08-thf.pdf)
+  document predicate-sensitive narrowing, true union types, recursive types,
+  subtyping, polymorphism, and local inference for a Scheme-family language.
+  This is the closest research lineage for typed metadata that should support
+  ordinary Scheme idioms rather than force algebraic-datatype-only style.
+- [Typed Racket Guide: Typed-Untyped Interaction](https://docs.racket-lang.org/ts-guide/typed-untyped-interaction.html)
+  separates typed/untyped boundary annotation from runtime enforcement choices:
+  deep contracts, shallow shape checks, and optional no-runtime-check modes. This
+  is the key caution for #604: defining metadata should not silently decide an
+  enforcement model.
+- [Racket Guide: Contracts](https://docs.racket-lang.org/guide/contracts.html)
+  is useful when later work considers lowering documentation metadata into
+  runtime boundary checks. Keep it separate from the metadata vocabulary itself:
+  a type descriptor can be advisory even when a related contract language exists.
+- [Contracts for Higher-Order Functions](https://www2.ccs.neu.edu/racket/pubs/icfp2002-ff.pdf)
+  (Findler and Felleisen) is the classic higher-order contract reference behind
+  the Racket lineage. It is especially relevant for procedure-valued parameters,
+  delayed checking, boundary identity, and blame assignment.
+- [Soft Contract Verification for Higher-Order Stateful Programs](https://arxiv.org/abs/1711.03620)
+  shows that contract information can feed static verification as well as
+  runtime monitors. It is useful prior art for metadata that serves static
+  analysis, contract lowering, and agent-facing explanations from one source.
+- [CHICKEN 5 Manual: Types](https://wiki.call-cc.org/man/5/Types)
+  documents Scheme-readable optional type declarations such as `(: name type)`,
+  `(the TYPE expr)`, `(or ...)`, procedure types, `(list-of ...)`, `(forall ...)`,
+  and `*` for any value. It is close to Consent Scheme's likely data shape and
+  also shows a useful split: compiled analysis may use declarations while the
+  interpreter can ignore them.
+- [Bigloo Manual: Explicit typing](https://www-sop.inria.fr/indes/fp/Bigloo/doc/bigloo-27.html)
+  documents result, formal-parameter, and local-variable annotations in a Scheme
+  compiler. Missing annotations default to the generic `obj` type and the
+  interpreter ignores annotations, which is useful contrast for Consent Scheme's
+  planned lint rule: public metadata should distinguish omission from an explicit
+  top type.
+- [Common Lisp HyperSpec: Type Specifiers](https://www.lispworks.com/documentation/HyperSpec/Body/04_bc.htm)
+  and [DECLARE](https://www.lispworks.com/documentation/HyperSpec/Body/s_declar.htm)
+  standardize symbol and list type specifiers, local declaration placement,
+  `type`, `ftype`, `the`, `deftype`, and compound forms such as `or`, `and`,
+  `not`, `member`, `satisfies`, `values`, `function`, `cons`, and `vector`.
+  Common Lisp's universal type is
+  [`t`](https://www.lispworks.com/documentation/HyperSpec/Body/t_t.htm).
+- [Practical Optional Types for Clojure](https://arxiv.org/abs/1812.03571)
+  describes Typed Clojure as a Lisp-family optional type system that adapts
+  occurrence typing to Clojure idioms, Java interop, multimethods, nullability,
+  and heterogeneous dictionaries. It is less directly Scheme-like, but useful
+  prior art for agent-facing metadata that may need to describe host interop and
+  dictionary-shaped data later.
+
+Across these systems, the top type is spelled differently: Typed Racket uses
+`Any`, CHICKEN uses `*`, Bigloo uses `obj`, and Common Lisp uses `t`. That spread
+argues for documenting Consent Scheme's spelling explicitly rather than assuming
+a reader will infer it from another Lisp. It also supports keeping the first
+metadata vocabulary small: ordinary predicates and analyzers can consume
+symbols, unions, list/vector forms, procedure forms, and an explicit top type
+before the project commits to dependent, refinement, or flow-sensitive typing.
+
+### Chez Scheme and Indiana Compiler Lineage
+
+The [publications related to Chez Scheme](https://www.scheme.com/pubs/) index
+collects work from the Indiana University period of Chez development. These
+references do not form a typed annotation system, but they are relevant to
+library-edge metadata that may later feed static analysis, contract lowering,
+and compiler passes.
+
+- [Automatic cross-library optimization](https://www.scheme.com/pubs/auto-xlib-opt.pdf)
+  describes Chez Scheme's expander and source optimizer collaborating across
+  library boundaries. It is useful background for treating public metadata as
+  boundary information rather than only as documentation.
+- [Enabling cross-library optimization and compile-time error checking in the
+  presence of procedural macros](https://www.scheme.com/pubs/library-groups.pdf)
+  introduces library groups and compile-time checking across library/program
+  boundaries. It is relevant to #604's goal of making exported signatures
+  analyzable before native tool/function calling consumes them.
+- [A nanopass framework for commercial compiler development](https://www.scheme.com/pubs/commercial-nanopass.pdf)
+  describes the pass-oriented infrastructure used by Chez Scheme's compiler.
+  Future static checks or contract-lowering passes should preserve the same
+  spirit: small, explicit transforms over Scheme-readable intermediate data.
+- [Ftypes: Structured foreign types](https://www.scheme.com/pubs/ftypes.pdf)
+  documents Chez Scheme's structured foreign-object mechanism. It is useful
+  background for future host interop and capability metadata, where a type
+  descriptor may need to name structured data that is not purely R7RS.
 
 ### Related Systems and Prior Art
 
