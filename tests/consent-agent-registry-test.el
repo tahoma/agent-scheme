@@ -158,6 +158,22 @@
              (select-agent registry '((agent ghost) (role coder)))))")
     "(role-match default-agent explicit-agent cod role-match)")))
 
+(ert-deftest consent-agent-registry-test-selection-model-match ()
+  "A requested model selects the first matching agent, then falls back."
+  (should
+   (equal
+    (consent-agent-registry-test--external
+     "(import (scheme base) (agent registry))
+      (define registry (make-agent-registry))
+      (register-agent registry (make-agent 'cod '((role coder) (model m1))))
+      (list (agent-selection-basis
+             (select-agent registry '((model m1))))
+            (agent-selection-agent-id
+             (select-agent registry '((model m1))))
+            (agent-selection-basis
+             (select-agent registry '((model nomatch)))))")
+    "(model-match cod default-agent)")))
+
 (ert-deftest consent-agent-registry-test-selection-records-context ()
   "Selection records the requested role, model, goal, and session."
   (should

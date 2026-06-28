@@ -206,5 +206,15 @@
            (agent-selection-agent-id selection)
            'coder-1)))
 
+;; A requested model selects the first matching agent, then falls back.
+(let ((registry (make-agent-registry)))
+  (register-agent registry
+                  (make-agent 'cod (list (list 'role 'coder) (list 'model 'm1))))
+  (let ((hit (select-agent registry (list (list 'model 'm1))))
+        (miss (select-agent registry (list (list 'model 'nomatch)))))
+    (check 'model-match-basis (agent-selection-basis hit) 'model-match)
+    (check 'model-match-agent (agent-selection-agent-id hit) 'cod)
+    (check 'model-miss-basis (agent-selection-basis miss) 'default-agent)))
+
 (if (> failures 0)
     (error "portable agent registry tests failed" failures))

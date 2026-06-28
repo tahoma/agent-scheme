@@ -131,11 +131,16 @@
          'role-match)
   (check 'role-state (prompt-result-state result) 'complete))
 
-;;;; prompt-model records the requested model for the downstream router
+;;;; prompt-model forces an agent of a named model
 
 (let* ((harness (make-staffed-harness))
        (result (prompt-model harness 'portable-coder 'build-it)))
   (check 'model-status (prompt-result-status result) 'selected)
+  (check 'model-agent-id (prompt-result-agent-id result) 'coder-1)
+  (check 'model-model (prompt-result-model result) 'portable-coder)
+  (check 'model-basis
+         (agent-selection-basis (prompt-result-selection result))
+         'model-match)
   (check 'model-requested
          (agent-selection-field-value (prompt-result-selection result)
                                       'requested-model)
