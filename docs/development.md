@@ -664,14 +664,23 @@ two reachability classes:
   branding committed into files and branded branch names without any
   workflow-scoped change, because it rides on normal build code the job already
   executes.
-- **Needs a dedicated workflow.** The PR title and body live only in GitHub
-  metadata, not in git, so they can only be scanned by a job that injects
-  `github.event.pull_request.title` / `.body` (and, for a guaranteed commit-range
-  scan, checks out with `fetch-depth: 0`). The script reads these from
-  `CONSENT_PR_TITLE`, `CONSENT_PR_BODY`, `CONSENT_BRANDING_BRANCH`,
-  `CONSENT_BRANDING_BASE`, and `CONSENT_BRANDING_HEAD`. A small standalone
-  `Branding` workflow that sets those from the `pull_request` event closes the
-  PR-body/title dimension; adding it requires a workflow-scoped commit.
+- **PR title/body — best-effort now, deterministic with a workflow.** The PR
+  title and body live only in GitHub metadata, not in git. When run in GitHub
+  Actions without injected values, the gate derives the PR number from
+  `GITHUB_REF` and reads the title/body from the public REST API
+  *unauthenticated* — no token, no workflow change. That succeeds for a public
+  repository when the runner can reach the API and is not rate-limited, and
+  otherwise degrades to a loud notice (not a failure) so it never makes the
+  piggybacked job flaky. Because shared-runner unauthenticated reads are
+  rate-limited, this is best-effort, not guaranteed. The deterministic upgrade is
+  a small standalone `Branding` workflow that injects
+  `github.event.pull_request.title` / `.body` (the script reads them from
+  `CONSENT_PR_TITLE` / `CONSENT_PR_BODY`, alongside `CONSENT_BRANDING_BRANCH` /
+  `CONSENT_BRANDING_BASE` / `CONSENT_BRANDING_HEAD`) and checks out with
+  `fetch-depth: 0` for a guaranteed commit-range scan; adding it requires a
+  workflow-scoped commit. Note that the PR-creation tooling can append a branding
+  trailer to a PR body after a clean body is supplied, so this dimension is worth
+  closing deterministically.
 
 Run the exhaustive set — every portable host shard plus every Emacs shard —
 with the opt-in escape hatch:
