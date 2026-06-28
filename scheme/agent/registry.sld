@@ -277,6 +277,16 @@
          ((eq? (agent-role (car rest)) role) (car rest))
          (else (loop (cdr rest))))))
 
+    (define (first-agent-with-model registry model)
+      "Return REGISTRY's first agent whose model is MODEL, or #f."
+      ;; A model specification may be a bare id symbol, the symbol `auto', or a
+      ;; richer model-selection policy, so match with `equal?' rather than `eq?'.
+      (let loop ((rest (agents registry)))
+        (cond
+         ((null? rest) #f)
+         ((equal? (agent-model (car rest)) model) (car rest))
+         (else (loop (cdr rest))))))
+
     (define (first-registered-agent registry)
       "Return REGISTRY's first registered agent, or #f when it has none."
       (let ((all (agents registry)))
@@ -316,6 +326,9 @@
               (role-match (and requested-role
                                (first-agent-with-role registry
                                                        requested-role)))
+              (model-match (and requested-model
+                                (first-agent-with-model registry
+                                                        requested-model)))
               (fallback (default-agent registry)))
           (cond
            (explicit
@@ -326,6 +339,11 @@
            (role-match
             (make-agent-selection 'selected role-match 'role-match
                                   "selected the first registered agent matching the requested role"
+                                  requested-role requested-model
+                                  goal session considered))
+           (model-match
+            (make-agent-selection 'selected model-match 'model-match
+                                  "selected the first registered agent matching the requested model"
                                   requested-role requested-model
                                   goal session considered))
            (fallback
