@@ -67,11 +67,23 @@
 
     (define (proposal-field-value record name . maybe-default)
       "Return RECORD field NAME, or DEFAULT when the field is absent."
-      #((parameters . ((record . "Proposal record represented as a tagged list, such as a `code-action-analysis', `capability-request', or `capability-decision'.")
-                       (name . "Symbol naming the field to read.")
-                       (maybe-default . "Optional fallback value; defaults to #f.")))
-        (returns . "The field value, or DEFAULT when NAME is absent.")
-        (effects . (pure)))
+      #((parameters
+         (record
+          (type any)
+          (description
+           ("Proposal record represented as a tagged list, such as a"
+            "`code-action-analysis', `capability-request', or"
+            "`capability-decision'.")))
+         (name
+          (type any)
+          (description "Symbol naming the field to read."))
+         (maybe-default
+          (type any)
+          (description "Optional fallback value; defaults to #f.")))
+        (returns
+         (type any)
+         (description "The field value, or DEFAULT when NAME is absent."))
+        (effects pure))
       (let ((default (if (null? maybe-default) #f (car maybe-default))))
         (let loop ((fields (cdr record)))
           (cond
@@ -85,66 +97,127 @@
 
     (define (proposal-control-plane-operation? operation)
       "Return #t when OPERATION is a default control-plane operation symbol."
-      #((parameters . ((operation . "Symbol naming a proposed call operator to classify.")))
-        (returns . "#t when OPERATION is part of the default control-plane vocabulary; otherwise #f.")
-        (effects . (pure)))
+      #((parameters
+         (operation
+          (type any)
+          (description
+           ("Symbol naming a proposed call operator to classify."))))
+        (returns
+         (type any)
+         (description
+          ("#t when OPERATION is part of the default control-plane"
+           "vocabulary; otherwise #f.")))
+        (effects pure))
       (and (symbol? operation)
            (member-eq? operation proposal-control-plane-operations)))
 
     (define (code-action-analysis? datum)
       "Return #t when DATUM is a code-action analysis record."
-      #((parameters . ((datum . "Value to inspect.")))
-        (returns . "#t when DATUM is tagged as a `code-action-analysis'; otherwise #f.")
-        (effects . (pure)))
+      #((parameters
+         (datum
+          (type any)
+          (description "Value to inspect.")))
+        (returns
+         (type any)
+         (description
+          ("#t when DATUM is tagged as a `code-action-analysis';"
+           "otherwise #f.")))
+        (effects pure))
       (proposal-record? datum 'code-action-analysis))
 
     (define (capability-request? datum)
       "Return #t when DATUM is a capability-request record."
-      #((parameters . ((datum . "Value to inspect.")))
-        (returns . "#t when DATUM is tagged as a `capability-request'; otherwise #f.")
-        (effects . (pure)))
+      #((parameters
+         (datum
+          (type any)
+          (description "Value to inspect.")))
+        (returns
+         (type any)
+         (description
+          ("#t when DATUM is tagged as a `capability-request';"
+           "otherwise #f.")))
+        (effects pure))
       (proposal-record? datum 'capability-request))
 
     (define (capability-decision? datum)
       "Return #t when DATUM is a capability-decision record."
-      #((parameters . ((datum . "Value to inspect.")))
-        (returns . "#t when DATUM is tagged as a `capability-decision'; otherwise #f.")
-        (effects . (pure)))
+      #((parameters
+         (datum
+          (type any)
+          (description "Value to inspect.")))
+        (returns
+         (type any)
+         (description
+          ("#t when DATUM is tagged as a `capability-decision';"
+           "otherwise #f.")))
+        (effects pure))
       (proposal-record? datum 'capability-decision))
 
     (define (capability-decision-status decision)
       "Return the status symbol of a capability-decision record."
-      #((parameters . ((decision . "A `capability-decision' record.")))
-        (returns . "The decision status symbol, such as `denied'.")
-        (effects . (pure)))
+      #((parameters
+         (decision
+          (type any)
+          (description "A `capability-decision' record.")))
+        (returns
+         (type any)
+         (description "The decision status symbol, such as `denied'."))
+        (effects pure))
       (proposal-field-value decision 'status))
 
     (define (analysis-status analysis)
       "Return the overall status of a code-action analysis."
-      #((parameters . ((analysis . "A `code-action-analysis' record.")))
-        (returns . "One of `allowed', `gated', `quarantined', or `budget-exhausted'.")
-        (effects . (pure)))
+      #((parameters
+         (analysis
+          (type any)
+          (description "A `code-action-analysis' record.")))
+        (returns
+         (type any)
+         (description
+          ("One of `allowed', `gated', `quarantined', or"
+           "`budget-exhausted'.")))
+        (effects pure))
       (proposal-field-value analysis 'status))
 
     (define (analysis-pure-cost analysis)
       "Return the bounded pure-form cost charged by walking the proposal."
-      #((parameters . ((analysis . "A `code-action-analysis' record.")))
-        (returns . "The non-negative integer count of proposal nodes the walk visited.")
-        (effects . (pure)))
+      #((parameters
+         (analysis
+          (type any)
+          (description "A `code-action-analysis' record.")))
+        (returns
+         (type any)
+         (description
+          ("The non-negative integer count of proposal nodes the walk"
+           "visited.")))
+        (effects pure))
       (proposal-field-value analysis 'pure-cost 0))
 
     (define (analysis-capability-requests analysis)
       "Return the capability-request datums the proposal would route to policy."
-      #((parameters . ((analysis . "A `code-action-analysis' record.")))
-        (returns . "A list of `capability-request' datums in document order.")
-        (effects . (pure)))
+      #((parameters
+         (analysis
+          (type any)
+          (description "A `code-action-analysis' record.")))
+        (returns
+         (type any)
+         (description
+          ("A list of `capability-request' datums in document order.")))
+        (effects pure))
       (proposal-field-value analysis 'capability-requests '()))
 
     (define (analysis-quarantine-decisions analysis)
       "Return the denied capability-decision datums for quarantined sub-forms."
-      #((parameters . ((analysis . "A `code-action-analysis' record.")))
-        (returns . "A list of denied `capability-decision' datums in document order.")
-        (effects . (pure)))
+      #((parameters
+         (analysis
+          (type any)
+          (description "A `code-action-analysis' record.")))
+        (returns
+         (type any)
+         (description
+          ("A list of denied `capability-decision' datums in document"
+           "order.")))
+        (effects pure))
       (proposal-field-value analysis 'quarantine-decisions '()))
 
     (define (quote-form? node)
@@ -158,10 +231,32 @@
 
     (define (analyze-code-action form options)
       "Analyze a model-proposed FORM as data and return a code-action analysis."
-      #((parameters . ((form . "The model-proposed Scheme datum to read and walk; it is never evaluated as authority.")
-                       (options . "Association list configuring the walk: `operations' (alist of `(operator effect authority)' host-operation entries), `quarantine' (extra control-plane operator symbols), `max-pure-cost' (integer node budget), and `id-prefix' (symbol or string seeding deterministic request/decision ids).")))
-        (returns . "A `code-action-analysis' datum carrying the original form, an overall status (`allowed'/`gated'/`quarantined'/`budget-exhausted'), the bounded pure-form cost, the ordered capability-request datums for host calls, and the ordered denied capability-decision datums for quarantined control-plane sub-forms.")
-        (effects . (allocation)))
+      #((parameters
+         (form
+          (type any)
+          (description
+           ("The model-proposed Scheme datum to read and walk; it is"
+            "never evaluated as authority.")))
+         (options
+          (type any)
+          (description
+           ("Association list configuring the walk: `operations' (alist"
+            "of `(operator effect authority)' host-operation entries),"
+            "`quarantine' (extra control-plane operator symbols),"
+            "`max-pure-cost' (integer node budget), and `id-prefix'"
+            "(symbol or string seeding deterministic request/decision"
+            "ids)."))))
+        (returns
+         (type any)
+         (description
+          ("A `code-action-analysis' datum carrying the original form,"
+           "an overall status"
+           "(`allowed'/`gated'/`quarantined'/`budget-exhausted'), the"
+           "bounded pure-form cost, the ordered capability-request"
+           "datums for host calls, and the ordered denied"
+           "capability-decision datums for quarantined control-plane"
+           "sub-forms.")))
+        (effects allocation))
       (let ((operations (option-ref options 'operations '()))
             (extra-quarantine (option-ref options 'quarantine '()))
             (max-pure-cost (option-ref options 'max-pure-cost 100000))

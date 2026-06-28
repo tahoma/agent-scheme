@@ -11,6 +11,7 @@
 
 (require 'cl-lib)
 (require 'ert)
+(require 'consent-reader)
 
 (defun consent--scheme-documentation-files ()
   "Return portable Scheme source and fixture files that carry source comments.
@@ -364,11 +365,90 @@ docs/docstring-metadata.md.")
            line)
       (match-string 1 line))))
 
+(defun consent--scheme-documentation-proper-list-p (value)
+  "Return non-nil when VALUE is a proper list."
+  (let ((cursor value))
+    (while (consp cursor)
+      (setq cursor (cdr cursor)))
+    (null cursor)))
+
+(defun consent--scheme-documentation-symbol-named-p (value name)
+  "Return non-nil when VALUE is the Consent Scheme symbol NAME."
+  (and (consent-symbol-p value)
+       (string= (consent-symbol-name value) name)))
+
+(defun consent--scheme-documentation-rich-vectors (definition-text)
+  "Return rich metadata vectors parsed from DEFINITION-TEXT."
+  (let (vectors)
+    (with-temp-buffer
+      (insert definition-text)
+      (goto-char (point-min))
+      (while (search-forward "#(" nil t)
+        (let ((start (match-beginning 0)))
+          (goto-char start)
+          (condition-case nil
+              (let* ((end (scan-sexps start 1))
+                     (datum
+                      (consent-read
+                       (buffer-substring-no-properties start end))))
+                (when (vectorp datum)
+                  (push datum vectors))
+                (goto-char end))
+            (error
+             (goto-char (1+ start)))))))
+    (nreverse vectors)))
+
+(defun consent--scheme-documentation-vector-field (vector name)
+  "Return `(present . value)' for VECTOR field NAME, or nil when absent."
+  (catch 'found
+    (dotimes (index (length vector))
+      (let ((entry (aref vector index)))
+	(when (and (consp entry)
+	           (consent--scheme-documentation-symbol-named-p
+	            (car entry)
+	            name))
+	  (throw 'found (cons t (cdr entry))))))
+    nil))
+
+(defun consent--scheme-documentation-descriptor-has-type-p (descriptor)
+  "Return non-nil when DESCRIPTOR explicitly includes a type entry."
+  (and (consent--scheme-documentation-proper-list-p descriptor)
+       (cl-some
+        (lambda (entry)
+          (and (consp entry)
+               (consent--scheme-documentation-symbol-named-p
+                (car entry)
+                "type")
+               (consp (cdr entry))
+               (null (cddr entry))))
+        descriptor)))
+
+(defun consent--scheme-documentation-typed-parameters-p (parameters)
+  "Return non-nil when PARAMETERS carries explicit descriptor types."
+  (and (consent--scheme-documentation-proper-list-p parameters)
+       (cl-every
+        (lambda (entry)
+          (and (consp entry)
+               (consent-symbol-p (car entry))
+               (consent--scheme-documentation-descriptor-has-type-p
+                (cdr entry))))
+        parameters)))
+
 (defun consent--scheme-documentation-rich-vector-p (definition-text)
-  "Return non-nil when DEFINITION-TEXT has rich procedure metadata."
-  (and (string-match-p (regexp-quote "#((") definition-text)
-       (string-match-p (regexp-quote "(parameters .") definition-text)
-       (string-match-p (regexp-quote "(returns .") definition-text)))
+  "Return non-nil when DEFINITION-TEXT has typed rich procedure metadata."
+  (cl-some
+   (lambda (vector)
+     (let ((parameters
+            (consent--scheme-documentation-vector-field vector "parameters"))
+           (returns
+            (consent--scheme-documentation-vector-field vector "returns")))
+       (and parameters
+            returns
+            (consent--scheme-documentation-typed-parameters-p
+             (cdr parameters))
+            (consent--scheme-documentation-descriptor-has-type-p
+             (cdr returns)))))
+   (consent--scheme-documentation-rich-vectors definition-text)))
 
 (defun consent--scheme-documentation-public-rich-errors (file)
   "Return rich-docstring errors for exported procedures in FILE."
@@ -396,7 +476,7 @@ docs/docstring-metadata.md.")
                                  "\n")))
                (unless (consent--scheme-documentation-rich-vector-p
                         definition-text)
-                 (push (format "%s:%d exported procedure %s missing rich metadata vector with parameters and returns"
+                 (push (format "%s:%d exported procedure %s missing rich metadata vector with typed parameters and returns"
                                relative-file
                                (1+ index)
                                name)

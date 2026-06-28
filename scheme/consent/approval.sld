@@ -30,9 +30,13 @@
 
     (define (consent-make-approval-store)
       "Construct an empty approval store."
-      #((parameters . ())
-        (returns . "A mutable approval store with no records and the next generated id set to zero.")
-        (effects . (allocation)))
+      #((parameters)
+        (returns
+         (type any)
+         (description
+          ("A mutable approval store with no records and the next"
+           "generated id set to zero.")))
+        (effects allocation))
       (make-approval-store '() 0))
 
     (define (member-eq? value list)
@@ -116,10 +120,19 @@
 
     (define (approval-ref store id)
       "Return approval record ID from STORE, or #f."
-      #((parameters . ((store . "Approval store to search.")
-                       (id . "Approval request id symbol.")))
-        (returns . "The matching approval request datum, or #f when ID is unknown.")
-        (effects . (state-read)))
+      #((parameters
+         (store
+          (type any)
+          (description "Approval store to search."))
+         (id
+          (type any)
+          (description "Approval request id symbol.")))
+        (returns
+         (type any)
+         (description
+          ("The matching approval request datum, or #f when ID is"
+           "unknown.")))
+        (effects state-read))
       (let loop ((records (store-records store)))
         (cond
          ((null? records) #f)
@@ -128,20 +141,37 @@
 
     (define (approval-request! store datum)
       "Create an approval request from DATUM in STORE and return its id."
-      #((parameters . ((store . "Approval store to mutate.")
-                       (datum . "Requested effect or approval payload as Scheme-readable data.")))
-        (returns . "The generated approval id symbol.")
-        (effects . (state-write)))
+      #((parameters
+         (store
+          (type any)
+          (description "Approval store to mutate."))
+         (datum
+          (type any)
+          (description
+           ("Requested effect or approval payload as Scheme-readable"
+            "data."))))
+        (returns
+         (type any)
+         (description "The generated approval id symbol."))
+        (effects state-write))
       (let ((record (make-approval-record store datum)))
         (store-record! store record)
         (record-id record)))
 
     (define (approval-status store id)
       "Return approval ID status from STORE, or #f."
-      #((parameters . ((store . "Approval store to search.")
-                       (id . "Approval request id symbol.")))
-        (returns . "The approval status symbol, or #f when ID is unknown.")
-        (effects . (state-read)))
+      #((parameters
+         (store
+          (type any)
+          (description "Approval store to search."))
+         (id
+          (type any)
+          (description "Approval request id symbol.")))
+        (returns
+         (type any)
+         (description
+          ("The approval status symbol, or #f when ID is unknown.")))
+        (effects state-read))
       (let ((record (approval-ref store id)))
         (if record (record-status record) #f)))
 
@@ -160,11 +190,20 @@
 
     (define (approval-resolve! store id decision)
       "Resolve approval ID in STORE with DECISION and return the record."
-      #((parameters . ((store . "Approval store to mutate.")
-                       (id . "Approval request id symbol.")
-                       (decision . "Resolution status, either approved or denied.")))
-        (returns . "The resolved approval request datum.")
-        (effects . (state-write error)))
+      #((parameters
+         (store
+          (type any)
+          (description "Approval store to mutate."))
+         (id
+          (type any)
+          (description "Approval request id symbol."))
+         (decision
+          (type any)
+          (description "Resolution status, either approved or denied.")))
+        (returns
+         (type any)
+         (description "The resolved approval request datum."))
+        (effects state-write error))
       (let ((status (normalize-status decision))
             (record (approval-ref store id)))
         (if (not (or (eq? status 'approved) (eq? status 'denied)))
@@ -175,10 +214,17 @@
 
     (define (approval-cancel! store id)
       "Cancel approval ID in STORE and return the record."
-      #((parameters . ((store . "Approval store to mutate.")
-                       (id . "Approval request id symbol.")))
-        (returns . "The canceled approval request datum.")
-        (effects . (state-write error)))
+      #((parameters
+         (store
+          (type any)
+          (description "Approval store to mutate."))
+         (id
+          (type any)
+          (description "Approval request id symbol.")))
+        (returns
+         (type any)
+         (description "The canceled approval request datum."))
+        (effects state-write error))
       (let ((record (approval-ref store id)))
         (if (not record)
             (error "unknown approval id" id))
@@ -188,9 +234,15 @@
 
     (define (approval-pending store)
       "Return pending approval records in creation order."
-      #((parameters . ((store . "Approval store to inspect.")))
-        (returns . "List of approval request datums whose status is pending.")
-        (effects . (state-read)))
+      #((parameters
+         (store
+          (type any)
+          (description "Approval store to inspect.")))
+        (returns
+         (type any)
+         (description
+          ("List of approval request datums whose status is pending.")))
+        (effects state-read))
       (let loop ((records (store-records store)) (result '()))
         (cond
          ((null? records) (reverse result))

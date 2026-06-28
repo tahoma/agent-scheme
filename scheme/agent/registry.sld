@@ -80,11 +80,24 @@
 
     (define (make-agent id options)
       "Return a Scheme-readable agent datum bundling role, model, and metadata."
-      #((parameters . ((id . "Stable agent id symbol.")
-                       (options . "Association list overriding name, role, model (a model id symbol, the symbol auto for role routing, or a model-selection policy datum), rules, skills, budget, and description.")))
-        (returns . "A canonical `agent` datum suitable for a registry and for automatic selection.")
-        (effects . (pure))
-        (see-also . (register-agent select-agent)))
+      #((parameters
+         (id
+          (type any)
+          (description "Stable agent id symbol."))
+         (options
+          (type any)
+          (description
+           ("Association list overriding name, role, model (a model id"
+            "symbol, the symbol auto for role routing, or a"
+            "model-selection policy datum), rules, skills, budget, and"
+            "description."))))
+        (returns
+         (type any)
+         (description
+          ("A canonical `agent` datum suitable for a registry and for"
+           "automatic selection.")))
+        (effects pure)
+        (see-also register-agent select-agent))
       (list 'agent
             (agent-field 'id id)
             (agent-field 'name
@@ -98,76 +111,135 @@
 
     (define (agent? datum)
       "Return #t when DATUM is an agent datum."
-      #((parameters . ((datum . "Value to inspect.")))
-        (returns . "#t when DATUM is tagged as an agent; otherwise #f.")
-        (effects . (pure)))
+      #((parameters
+         (datum
+          (type any)
+          (description "Value to inspect.")))
+        (returns
+         (type any)
+         (description "#t when DATUM is tagged as an agent; otherwise #f."))
+        (effects pure))
       (tagged? datum 'agent))
 
     (define (agent-field-value agent field . maybe-default)
       "Return AGENT's FIELD value, or DEFAULT (or #f) when absent."
-      #((parameters . ((agent . "Agent datum to read.")
-                       (field . "Symbol naming the field.")
-                       (maybe-default . "Optional fallback value; defaults to #f.")))
-        (returns . "The field value, or the fallback when FIELD is absent.")
-        (effects . (pure)))
+      #((parameters
+         (agent
+          (type any)
+          (description "Agent datum to read."))
+         (field
+          (type any)
+          (description "Symbol naming the field."))
+         (maybe-default
+          (type any)
+          (description "Optional fallback value; defaults to #f.")))
+        (returns
+         (type any)
+         (description
+          ("The field value, or the fallback when FIELD is absent.")))
+        (effects pure))
       (record-field-value agent
                           field
                           (if (null? maybe-default) #f (car maybe-default))))
 
     (define (agent-id agent)
       "Return AGENT's stable id symbol."
-      #((parameters . ((agent . "Agent datum to read.")))
-        (returns . "The agent id, or #f when absent.")
-        (effects . (pure)))
+      #((parameters
+         (agent
+          (type any)
+          (description "Agent datum to read.")))
+        (returns
+         (type any)
+         (description "The agent id, or #f when absent."))
+        (effects pure))
       (record-field-value agent 'id #f))
 
     (define (agent-name agent)
       "Return AGENT's printable name."
-      #((parameters . ((agent . "Agent datum to read.")))
-        (returns . "The agent name string, or #f when absent.")
-        (effects . (pure)))
+      #((parameters
+         (agent
+          (type any)
+          (description "Agent datum to read.")))
+        (returns
+         (type any)
+         (description "The agent name string, or #f when absent."))
+        (effects pure))
       (record-field-value agent 'name #f))
 
     (define (agent-role agent)
       "Return AGENT's role symbol."
-      #((parameters . ((agent . "Agent datum to read.")))
-        (returns . "The agent role symbol, or #f when absent.")
-        (effects . (pure)))
+      #((parameters
+         (agent
+          (type any)
+          (description "Agent datum to read.")))
+        (returns
+         (type any)
+         (description "The agent role symbol, or #f when absent."))
+        (effects pure))
       (record-field-value agent 'role #f))
 
     (define (agent-model agent)
       "Return AGENT's model id, the symbol auto, or a model-selection policy."
-      #((parameters . ((agent . "Agent datum to read.")))
-        (returns . "The agent model specification, or #f when absent.")
-        (effects . (pure)))
+      #((parameters
+         (agent
+          (type any)
+          (description "Agent datum to read.")))
+        (returns
+         (type any)
+         (description "The agent model specification, or #f when absent."))
+        (effects pure))
       (record-field-value agent 'model #f))
 
     (define (agent-rules agent)
       "Return AGENT's rules list."
-      #((parameters . ((agent . "Agent datum to read.")))
-        (returns . "The agent rules list, or the empty list when absent.")
-        (effects . (pure)))
+      #((parameters
+         (agent
+          (type any)
+          (description "Agent datum to read.")))
+        (returns
+         (type any)
+         (description "The agent rules list, or the empty list when absent."))
+        (effects pure))
       (record-field-value agent 'rules '()))
 
     (define (agent-skills agent)
       "Return AGENT's skills list."
-      #((parameters . ((agent . "Agent datum to read.")))
-        (returns . "The agent skills list, or the empty list when absent.")
-        (effects . (pure)))
+      #((parameters
+         (agent
+          (type any)
+          (description "Agent datum to read.")))
+        (returns
+         (type any)
+         (description
+          ("The agent skills list, or the empty list when absent.")))
+        (effects pure))
       (record-field-value agent 'skills '()))
 
     (define (agent-budget agent)
       "Return AGENT's budget datum."
-      #((parameters . ((agent . "Agent datum to read.")))
-        (returns . "The agent budget datum, or the symbol default when absent.")
-        (effects . (pure)))
+      #((parameters
+         (agent
+          (type any)
+          (description "Agent datum to read.")))
+        (returns
+         (type any)
+         (description
+          ("The agent budget datum, or the symbol default when absent.")))
+        (effects pure))
       (record-field-value agent 'budget 'default))
 
     (define (agent-description agent)
       "Return AGENT's human-readable description."
-      #((parameters . ((agent . "Agent datum to read.")))
-        (returns . "The agent description string, or the empty string when absent.")
-        (effects . (pure)))
+      #((parameters
+         (agent
+          (type any)
+          (description "Agent datum to read.")))
+        (returns
+         (type any)
+         (description
+          ("The agent description string, or the empty string when"
+           "absent.")))
+        (effects pure))
       (record-field-value agent 'description ""))
 
     ;; Mutable registry container: a roster of agents in registration order plus
@@ -191,10 +263,14 @@
 
     (define (make-agent-registry)
       "Return a fresh agent registry seeded with a default general-purpose agent."
-      #((parameters . ())
-        (returns . "A mutable agent registry whose only agent is the seeded default, set as the default agent.")
-        (effects . (allocation))
-        (see-also . (register-agent set-default-agent! select-agent)))
+      #((parameters)
+        (returns
+         (type any)
+         (description
+          ("A mutable agent registry whose only agent is the seeded"
+           "default, set as the default agent.")))
+        (effects allocation)
+        (see-also register-agent set-default-agent! select-agent))
       (let ((registry (make-registry-record '() #f)))
         (register-agent registry (built-in-default-agent))
         (set-registry-default-id! registry 'default)
@@ -210,11 +286,18 @@
 
     (define (register-agent registry agent)
       "Register AGENT in REGISTRY, replacing any agent with the same id."
-      #((parameters . ((registry . "Agent registry to mutate.")
-                       (agent . "Agent datum to register.")))
-        (returns . "The registered AGENT datum.")
-        (effects . (state-write error))
-        (see-also . (agents agent-ref make-agent)))
+      #((parameters
+         (registry
+          (type any)
+          (description "Agent registry to mutate."))
+         (agent
+          (type any)
+          (description "Agent datum to register.")))
+        (returns
+         (type any)
+         (description "The registered AGENT datum."))
+        (effects state-write error)
+        (see-also agents agent-ref make-agent))
       (if (not (agent? agent))
           (error "register-agent requires an agent datum" agent))
       (let ((id (agent-id agent)))
@@ -226,43 +309,76 @@
 
     (define (agents registry)
       "Return REGISTRY's agent datums in registration order."
-      #((parameters . ((registry . "Agent registry to inspect.")))
-        (returns . "A list of agent datums, oldest registration first.")
-        (effects . (state-read)))
+      #((parameters
+         (registry
+          (type any)
+          (description "Agent registry to inspect.")))
+        (returns
+         (type any)
+         (description "A list of agent datums, oldest registration first."))
+        (effects state-read))
       (map cdr (reverse (registry-agents registry))))
 
     (define (agent-ref registry id)
       "Return REGISTRY's agent datum named ID, or #f when unknown."
-      #((parameters . ((registry . "Agent registry to inspect.")
-                       (id . "Agent id symbol.")))
-        (returns . "The agent datum for ID, or #f when no such agent is registered.")
-        (effects . (state-read)))
+      #((parameters
+         (registry
+          (type any)
+          (description "Agent registry to inspect."))
+         (id
+          (type any)
+          (description "Agent id symbol.")))
+        (returns
+         (type any)
+         (description
+          ("The agent datum for ID, or #f when no such agent is"
+           "registered.")))
+        (effects state-read))
       (let ((cell (assq id (registry-agents registry))))
         (if cell (cdr cell) #f)))
 
     (define (default-agent-id registry)
       "Return REGISTRY's default agent id, or #f when none is set."
-      #((parameters . ((registry . "Agent registry to inspect.")))
-        (returns . "The default agent id symbol, or #f.")
-        (effects . (state-read)))
+      #((parameters
+         (registry
+          (type any)
+          (description "Agent registry to inspect.")))
+        (returns
+         (type any)
+         (description "The default agent id symbol, or #f."))
+        (effects state-read))
       (registry-default-id registry))
 
     (define (default-agent registry)
       "Return REGISTRY's default agent datum, or #f when none is set."
-      #((parameters . ((registry . "Agent registry to inspect.")))
-        (returns . "The default agent datum, or #f when no default is set or it is missing.")
-        (effects . (state-read))
-        (see-also . (set-default-agent!)))
+      #((parameters
+         (registry
+          (type any)
+          (description "Agent registry to inspect.")))
+        (returns
+         (type any)
+         (description
+          ("The default agent datum, or #f when no default is set or"
+           "it is missing.")))
+        (effects state-read)
+        (see-also set-default-agent!))
       (let ((id (registry-default-id registry)))
         (if id (agent-ref registry id) #f)))
 
     (define (set-default-agent! registry id)
       "Make the agent named ID REGISTRY's default agent and return it."
-      #((parameters . ((registry . "Agent registry to mutate.")
-                       (id . "Id of an already-registered agent to make default.")))
-        (returns . "The agent datum now serving as the default agent.")
-        (effects . (state-write error))
-        (see-also . (default-agent register-agent)))
+      #((parameters
+         (registry
+          (type any)
+          (description "Agent registry to mutate."))
+         (id
+          (type any)
+          (description "Id of an already-registered agent to make default.")))
+        (returns
+         (type any)
+         (description "The agent datum now serving as the default agent."))
+        (effects state-write error)
+        (see-also default-agent register-agent))
       (let ((agent (agent-ref registry id)))
         (if (not agent)
             (error "set-default-agent! given unknown agent id" id))
@@ -310,11 +426,23 @@
 
     (define (select-agent registry context)
       "Choose an agent for CONTEXT deterministically and explain the choice."
-      #((parameters . ((registry . "Agent registry to select from.")
-                       (context . "Association list goal/session context that may name an explicit agent, a requested role, or a requested model.")))
-        (returns . "An `agent-selection` decision record naming the chosen agent (or none) and the policy-visible basis and reason for the choice.")
-        (effects . (state-read))
-        (see-also . (default-agent set-default-agent! make-agent)))
+      #((parameters
+         (registry
+          (type any)
+          (description "Agent registry to select from."))
+         (context
+          (type any)
+          (description
+           ("Association list goal/session context that may name an"
+            "explicit agent, a requested role, or a requested model."))))
+        (returns
+         (type any)
+         (description
+          ("An `agent-selection` decision record naming the chosen"
+           "agent (or none) and the policy-visible basis and reason"
+           "for the choice.")))
+        (effects state-read)
+        (see-also default-agent set-default-agent! make-agent))
       (let ((requested-agent (plist-ref context 'agent #f))
             (requested-role (plist-ref context 'role #f))
             (requested-model (plist-ref context 'model #f))
@@ -370,60 +498,115 @@
 
     (define (agent-selection? datum)
       "Return #t when DATUM is an automatic-selection decision record."
-      #((parameters . ((datum . "Value to inspect.")))
-        (returns . "#t when DATUM is tagged as an agent-selection record; otherwise #f.")
-        (effects . (pure)))
+      #((parameters
+         (datum
+          (type any)
+          (description "Value to inspect.")))
+        (returns
+         (type any)
+         (description
+          ("#t when DATUM is tagged as an agent-selection record;"
+           "otherwise #f.")))
+        (effects pure))
       (tagged? datum 'agent-selection))
 
     (define (agent-selection-field-value selection field . maybe-default)
       "Return SELECTION's FIELD value, or DEFAULT (or #f) when absent."
-      #((parameters . ((selection . "Agent-selection decision record.")
-                       (field . "Symbol naming the field.")
-                       (maybe-default . "Optional fallback value; defaults to #f.")))
-        (returns . "The field value, or the fallback when FIELD is absent.")
-        (effects . (pure)))
+      #((parameters
+         (selection
+          (type any)
+          (description "Agent-selection decision record."))
+         (field
+          (type any)
+          (description "Symbol naming the field."))
+         (maybe-default
+          (type any)
+          (description "Optional fallback value; defaults to #f.")))
+        (returns
+         (type any)
+         (description
+          ("The field value, or the fallback when FIELD is absent.")))
+        (effects pure))
       (record-field-value selection
                           field
                           (if (null? maybe-default) #f (car maybe-default))))
 
     (define (agent-selection-status selection)
       "Return SELECTION's status symbol (selected or no-agent)."
-      #((parameters . ((selection . "Agent-selection decision record.")))
-        (returns . "The selection status symbol, or #f when absent.")
-        (effects . (pure)))
+      #((parameters
+         (selection
+          (type any)
+          (description "Agent-selection decision record.")))
+        (returns
+         (type any)
+         (description "The selection status symbol, or #f when absent."))
+        (effects pure))
       (record-field-value selection 'status #f))
 
     (define (agent-selection-agent selection)
       "Return SELECTION's chosen agent datum, or the symbol none."
-      #((parameters . ((selection . "Agent-selection decision record.")))
-        (returns . "The chosen agent datum, or the symbol none when nothing was selected.")
-        (effects . (pure)))
+      #((parameters
+         (selection
+          (type any)
+          (description "Agent-selection decision record.")))
+        (returns
+         (type any)
+         (description
+          ("The chosen agent datum, or the symbol none when nothing"
+           "was selected.")))
+        (effects pure))
       (record-field-value selection 'agent 'none))
 
     (define (agent-selection-agent-id selection)
       "Return SELECTION's chosen agent id, or the symbol none."
-      #((parameters . ((selection . "Agent-selection decision record.")))
-        (returns . "The chosen agent id symbol, or the symbol none when nothing was selected.")
-        (effects . (pure)))
+      #((parameters
+         (selection
+          (type any)
+          (description "Agent-selection decision record.")))
+        (returns
+         (type any)
+         (description
+          ("The chosen agent id symbol, or the symbol none when"
+           "nothing was selected.")))
+        (effects pure))
       (record-field-value selection 'agent-id 'none))
 
     (define (agent-selection-basis selection)
       "Return the policy-visible basis SELECTION used to choose the agent."
-      #((parameters . ((selection . "Agent-selection decision record.")))
-        (returns . "The basis symbol, such as explicit-agent, role-match, default-agent, sole-agent, or none.")
-        (effects . (pure)))
+      #((parameters
+         (selection
+          (type any)
+          (description "Agent-selection decision record.")))
+        (returns
+         (type any)
+         (description
+          ("The basis symbol, such as explicit-agent, role-match,"
+           "default-agent, sole-agent, or none.")))
+        (effects pure))
       (record-field-value selection 'basis #f))
 
     (define (agent-selection-reason selection)
       "Return SELECTION's human-readable reason for the choice."
-      #((parameters . ((selection . "Agent-selection decision record.")))
-        (returns . "The reason string, or #f when absent.")
-        (effects . (pure)))
+      #((parameters
+         (selection
+          (type any)
+          (description "Agent-selection decision record.")))
+        (returns
+         (type any)
+         (description "The reason string, or #f when absent."))
+        (effects pure))
       (record-field-value selection 'reason #f))
 
     (define (agent-selection-considered selection)
       "Return the candidate agent ids SELECTION considered."
-      #((parameters . ((selection . "Agent-selection decision record.")))
-        (returns . "The list of candidate agent ids, or the empty list when absent.")
-        (effects . (pure)))
+      #((parameters
+         (selection
+          (type any)
+          (description "Agent-selection decision record.")))
+        (returns
+         (type any)
+         (description
+          ("The list of candidate agent ids, or the empty list when"
+           "absent.")))
+        (effects pure))
       (record-field-value selection 'considered '()))))

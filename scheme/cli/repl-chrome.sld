@@ -275,10 +275,24 @@
       "stays clean.  Every other chrome returns #f, so the host wiring leaves"
       "program output raw on stdout.  The #f is the switch between the two"
       "streams."
-      #((parameters . ((name . "Chrome name as a symbol or string, looked up against the registry.")
-                       (session . "Session id as a symbol or string, used to align the output gutter.")))
-        (returns . "A one-argument procedure mapping a program-output chunk to control-channel painter input for the `comment' chrome, or to #f for every other chrome.")
-        (effects . (allocation)))
+      #((parameters
+         (name
+          (type any)
+          (description
+           ("Chrome name as a symbol or string, looked up against the"
+            "registry.")))
+         (session
+          (type any)
+          (description
+           ("Session id as a symbol or string, used to align the output"
+            "gutter."))))
+        (returns
+         (type any)
+         (description
+          ("A one-argument procedure mapping a program-output chunk to"
+           "control-channel painter input for the `comment' chrome, or"
+           "to #f for every other chrome.")))
+        (effects allocation))
       (let ((symbol (if (string? name) (string->symbol name) name))
             (session-symbol (if (string? session)
                                 (string->symbol session)
@@ -387,25 +401,41 @@
 
     (define (cli-repl-chrome-lookup name)
       "Return the chrome procedure registered under NAME (a symbol or string), or #f."
-      #((parameters . ((name . "Chrome name as a symbol or string to resolve against the registry.")))
-        (returns . "The render procedure registered under NAME, or #f when no chrome matches.")
-        (effects . (state-read)))
+      #((parameters
+         (name
+          (type any)
+          (description
+           ("Chrome name as a symbol or string to resolve against the"
+            "registry."))))
+        (returns
+         (type any)
+         (description
+          ("The render procedure registered under NAME, or #f when no"
+           "chrome matches.")))
+        (effects state-read))
       (let* ((symbol (if (string? name) (string->symbol name) name))
              (entry (assq symbol chrome--registry)))
         (and entry (cdr entry))))
 
     (define (cli-repl-chrome-names)
       "Return the list of registered chrome name symbols, in declaration order."
-      #((parameters . ())
-        (returns . "A freshly allocated list of the registered chrome name symbols, in declaration order.")
-        (effects . (state-read allocation)))
+      #((parameters)
+        (returns
+         (type any)
+         (description
+          ("A freshly allocated list of the registered chrome name"
+           "symbols, in declaration order.")))
+        (effects state-read allocation))
       (map car chrome--registry))
 
     (define (cli-repl-chrome-default-name)
       "Return the default chrome name."
-      #((parameters . ())
-        (returns . "The symbol `comment', the name of the default chrome.")
-        (effects . (pure)))
+      #((parameters)
+        (returns
+         (type any)
+         (description
+          ("The symbol `comment', the name of the default chrome.")))
+        (effects pure))
       'comment)
 
     ;;;; Terminal substrate: roles to ANSI SGR
@@ -446,10 +476,24 @@
       "Render a chrome RESULT (#f, a string, or `(role . text)' segments)"
       "to a string or #f, applying ANSI SGR per role when COLOR? is true; a"
       "plain string is returned verbatim and never colored."
-      #((parameters . ((result . "A chrome result: #f, a verbatim string, or a list of `(role . text)' segments.")
-                       (color? . "When #t, wrap colorable segments in ANSI SGR escapes by their role.")))
-        (returns . "#f when RESULT is #f, the string unchanged when RESULT is a string, otherwise the concatenated segment text with per-role SGR applied when COLOR? is true.")
-        (effects . (allocation)))
+      #((parameters
+         (result
+          (type any)
+          (description
+           ("A chrome result: #f, a verbatim string, or a list of"
+            "`(role . text)' segments.")))
+         (color?
+          (type any)
+          (description
+           ("When #t, wrap colorable segments in ANSI SGR escapes by"
+            "their role."))))
+        (returns
+         (type any)
+         (description
+          ("#f when RESULT is #f, the string unchanged when RESULT is"
+           "a string, otherwise the concatenated segment text with"
+           "per-role SGR applied when COLOR? is true.")))
+        (effects allocation))
       (cond
        ((not result) #f)
        ((string? result) result)
@@ -470,11 +514,24 @@
       "`auto' colorizes only on a TTY with NO_COLOR unset, so output is plain"
       "when piped or redirected: NO-COLOR? is #t when the NO_COLOR environment"
       "variable is set, and TTY? is #t when the control channel is a terminal."
-      #((parameters . ((mode . "Color mode symbol: `auto', `always', or `never'.")
-                       (no-color? . "#t when the NO_COLOR environment variable is set, forcing plain output under `auto'.")
-                       (tty? . "#t when the control channel is a terminal, enabling color under `auto'.")))
-        (returns . "#t to colorize output, #f to leave it plain.")
-        (effects . (pure)))
+      #((parameters
+         (mode
+          (type any)
+          (description "Color mode symbol: `auto', `always', or `never'."))
+         (no-color?
+          (type any)
+          (description
+           ("#t when the NO_COLOR environment variable is set, forcing"
+            "plain output under `auto'.")))
+         (tty?
+          (type any)
+          (description
+           ("#t when the control channel is a terminal, enabling color"
+            "under `auto'."))))
+        (returns
+         (type any)
+         (description "#t to colorize output, #f to leave it plain."))
+        (effects pure))
       (cond
        ((eq? mode 'never) #f)
        ((eq? mode 'always) #t)

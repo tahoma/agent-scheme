@@ -48,9 +48,17 @@
       "Return #t when SOURCE begins with an executable-script shebang:"
       "`#!' as the first two characters followed by `/' or whitespace,"
       "narrow enough to leave `#!fold-case' and other `#!'-tokens alone."
-      #((parameters . ((source . "Script source text to inspect for a leading shebang.")))
-        (returns . "#t when SOURCE opens with a `#!' followed by `/' or whitespace, else #f.")
-        (effects . (pure)))
+      #((parameters
+         (source
+          (type any)
+          (description
+           ("Script source text to inspect for a leading shebang."))))
+        (returns
+         (type any)
+         (description
+          ("#t when SOURCE opens with a `#!' followed by `/' or"
+           "whitespace, else #f.")))
+        (effects pure))
       (and (>= (string-length source) 3)
            (char=? (string-ref source 0) #\#)
            (char=? (string-ref source 1) #\!)
@@ -70,9 +78,18 @@
       "including) its newline, so the remaining source keeps a blank first"
       "line and later datums keep their line numbers; SOURCE without a"
       "shebang is returned unchanged for the reader."
-      #((parameters . ((source . "Script source text whose leading shebang line, if any, is removed.")))
-        (returns . "SOURCE with the shebang stripped up to its newline, or SOURCE unchanged when none is present.")
-        (effects . (allocation)))
+      #((parameters
+         (source
+          (type any)
+          (description
+           ("Script source text whose leading shebang line, if any, is"
+            "removed."))))
+        (returns
+         (type any)
+         (description
+          ("SOURCE with the shebang stripped up to its newline, or"
+           "SOURCE unchanged when none is present.")))
+        (effects allocation))
       (if (cli-script-shebang-line? source)
           (substring source
                      (script--line-terminator-index source)
@@ -92,9 +109,16 @@
     (define (cli-script-source-from-file path)
       "Return PATH's contents with any leading executable-script shebang"
       "removed, ready for the reader."
-      #((parameters . ((path . "Filesystem path of the script file to read.")))
-        (returns . "The file's contents as a string with any leading shebang line stripped.")
-        (effects . (state-read allocation error)))
+      #((parameters
+         (path
+          (type any)
+          (description "Filesystem path of the script file to read.")))
+        (returns
+         (type any)
+         (description
+          ("The file's contents as a string with any leading shebang"
+           "line stripped.")))
+        (effects state-read allocation error))
       (cli-script-strip-shebang (script--read-file-string path)))
 
     (define (script--rest-environment rest)
@@ -150,10 +174,22 @@
       "reader built with"
       "`consent-program-input-from-string'. This is the host-neutral peer"
       "of the Emacs `consent-script-run-file'."
-      #((parameters . ((path . "Filesystem path of the executable Consent Scheme script to run.")
-                       (rest . "Optional evaluation arguments forwarded to `consent-eval-source' (environment, options).")))
-        (returns . "The last value produced by evaluating the script's source.")
-        (effects . (state-read host-eval error)))
+      #((parameters
+         (path
+          (type any)
+          (description
+           ("Filesystem path of the executable Consent Scheme script to"
+            "run.")))
+         (rest
+          (type any)
+          (description
+           ("Optional evaluation arguments forwarded to"
+            "`consent-eval-source' (environment, options)."))))
+        (returns
+         (type any)
+         (description
+          ("The last value produced by evaluating the script's source.")))
+        (effects state-read host-eval error))
       (consent-eval-source
        (cli-script-source-from-file path)
        (script--rest-environment rest)
@@ -189,9 +225,18 @@
       "process-environment grant is included so a host-runner test can read"
       "its CI configuration from the host environment; that capability remains"
       "denied to ordinary scripts."
-      #((parameters . ((root . "Absolute directory the host run is scoped to; becomes the include directory and sole file-access root.")))
-        (returns . "An options alist of include-directory, capability grants, and raised per-run budgets for the host runner.")
-        (effects . (allocation)))
+      #((parameters
+         (root
+          (type any)
+          (description
+           ("Absolute directory the host run is scoped to; becomes the"
+            "include directory and sole file-access root."))))
+        (returns
+         (type any)
+         (description
+          ("An options alist of include-directory, capability grants,"
+           "and raised per-run budgets for the host runner.")))
+        (effects allocation))
       (cons (cons 'include-directory root)
             (cons (list 'capability-grants
                         (list 'capability-grant
@@ -236,11 +281,28 @@
       "real stdout. Returns #t when every form completes, or the failing"
       "`evaluation-result' datum at the first error -- so a CLI caller exits"
       "non-zero exactly when a captured test assertion raised."
-      #((parameters . ((path . "Filesystem path of the host-runner test file to evaluate form by form.")
-                       (root . "Absolute working directory the run is scoped to for file access and include resolution.")
-                       (emit . "Procedure called with each form's captured program output so the host can stream it to real stdout.")))
-        (returns . "#t when every form completes, or the failing `evaluation-result' datum at the first error.")
-        (effects . (state-read host-eval state-write error)))
+      #((parameters
+         (path
+          (type any)
+          (description
+           ("Filesystem path of the host-runner test file to evaluate"
+            "form by form.")))
+         (root
+          (type any)
+          (description
+           ("Absolute working directory the run is scoped to for file"
+            "access and include resolution.")))
+         (emit
+          (type any)
+          (description
+           ("Procedure called with each form's captured program output"
+            "so the host can stream it to real stdout."))))
+        (returns
+         (type any)
+         (description
+          ("#t when every form completes, or the failing"
+           "`evaluation-result' datum at the first error.")))
+        (effects state-read host-eval state-write error))
       (let ((source (cli-script-source-from-file path))
             (interaction
              (consent-make-interaction-context

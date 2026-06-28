@@ -831,6 +831,124 @@ proper list."
   (and metadata
        (consent--documentation-metadata-fields metadata)))
 
+(defun consent--documentation-join-string-fragments (strings)
+  "Return STRINGS joined as one prose fragment."
+  (mapconcat #'identity strings " "))
+
+(defun consent--documentation-normalize-description (value)
+  "Return VALUE as a normalized description string, or `:malformed'."
+  (catch 'malformed
+    (cond
+     ((stringp value) value)
+     ((consent--proper-list-p value)
+      (let (strings)
+        (dolist (element (consent--proper-list-elements value "description"))
+          (unless (stringp element)
+            (throw 'malformed :malformed))
+          (push element strings))
+        (consent--documentation-join-string-fragments (nreverse strings))))
+     (t
+      (throw 'malformed :malformed)))))
+
+(defun consent--documentation-string-list-p (value)
+  "Return non-nil when VALUE is a non-empty proper list of strings."
+  (and (consp value)
+       (consent--proper-list-p value)
+       (cl-every #'stringp (consent--proper-list-elements value
+                                                           "description"))))
+
+(defun consent--documentation-descriptor-entry-name (entry)
+  "Return ENTRY's descriptor field name, or nil when malformed."
+  (and (consp entry)
+       (consent--symbol-name (car entry))))
+
+(defun consent--documentation-descriptor-entry-value (entry)
+  "Return ENTRY's single value, or `:malformed'."
+  (if (and (consp entry)
+           (consp (cdr entry))
+           (null (cddr entry)))
+      (cadr entry)
+    :malformed))
+
+(defun consent--documentation-normalize-descriptor (value)
+  "Return VALUE as a metadata descriptor, or `:malformed'."
+  (catch 'malformed
+    (cond
+     ((stringp value)
+      (list (list (consent--intern-symbol "type")
+                  (consent--intern-symbol "any"))
+            (list (consent--intern-symbol "description") value)))
+     ((consent--documentation-string-list-p value)
+      (list
+       (list (consent--intern-symbol "type")
+             (consent--intern-symbol "any"))
+       (list (consent--intern-symbol "description")
+             (consent--documentation-join-string-fragments value))))
+     ((not (consent--proper-list-p value))
+      (throw 'malformed :malformed))
+     (t
+      (let (fields
+            names
+            type-present)
+        (dolist (entry (consent--proper-list-elements value "descriptor"))
+          (let ((name (consent--documentation-descriptor-entry-name entry)))
+            (unless name
+              (throw 'malformed :malformed))
+            (when (member name names)
+              (throw 'malformed :malformed))
+            (push name names)
+            (cond
+             ((equal name "type")
+              (let ((entry-value
+                     (consent--documentation-descriptor-entry-value entry)))
+                (when (eq entry-value :malformed)
+                  (throw 'malformed :malformed))
+                (push (list (car entry) entry-value) fields)
+                (setq type-present t)))
+             ((equal name "description")
+              (let ((entry-value
+                     (consent--documentation-descriptor-entry-value entry)))
+                (when (eq entry-value :malformed)
+                  (throw 'malformed :malformed))
+                (let ((description
+                       (consent--documentation-normalize-description
+                        entry-value)))
+                  (when (eq description :malformed)
+                    (throw 'malformed :malformed))
+                  (push (list (car entry) description) fields))))
+             (t
+              (push entry fields)))))
+        (let ((normalized (nreverse fields)))
+          (if type-present
+              normalized
+            (cons (list (consent--intern-symbol "type")
+                        (consent--intern-symbol "any"))
+                  normalized))))))))
+
+(defun consent--documentation-normalize-parameters (parameters)
+  "Return descriptor-shaped PARAMETERS, or `:malformed'."
+  (catch 'malformed
+    (unless (consent--proper-list-p parameters)
+      (throw 'malformed :malformed))
+    (let (normalized
+          names)
+      (dolist (entry (consent--proper-list-elements parameters "parameters"))
+        (unless (consp entry)
+          (throw 'malformed :malformed))
+        (let ((name (consent--symbol-name (car entry))))
+          (unless name
+            (throw 'malformed :malformed))
+          (when (member name names)
+            (throw 'malformed :malformed))
+          (let ((descriptor
+                 (consent--documentation-normalize-descriptor
+                  (cdr entry))))
+            (when (eq descriptor :malformed)
+              (throw 'malformed :malformed))
+            (push name names)
+            (push (cons (car entry) descriptor) normalized))))
+      (nreverse normalized))))
+
 (defun consent--documentation-parameter-names (parameters)
   "Return parameter names in PARAMETERS, or `:malformed' when malformed.
 PARAMETERS is valid when it is a proper association list whose keys
@@ -887,9 +1005,13 @@ are Scheme identifiers and whose keys do not repeat."
 
 (defun consent--documentation-merge-parameters (fields value)
   "Return FIELDS merged with parameter metadata VALUE, or nil if malformed."
-  (let ((new-names (consent--documentation-parameter-names value))
+  (let* ((normalized
+          (consent--documentation-normalize-parameters value))
+         (new-names (unless (eq normalized :malformed)
+                      (consent--documentation-parameter-names normalized)))
         (existing (consent--documentation-field fields "parameters")))
-    (when (eq new-names :malformed)
+    (when (or (eq normalized :malformed)
+              (eq new-names :malformed))
       (setq fields nil))
     (when (and fields
                (not (consent--documentation-parameters-match-arguments-p
@@ -910,9 +1032,18 @@ are Scheme identifiers and whose keys do not repeat."
           (when fields
             (if existing
                 (consent--documentation-set-field
-                 fields "parameters" (append existing-value value))
+                 fields "parameters" (append existing-value normalized))
               (consent--documentation-add-field
-               fields "parameters" value))))))))
+               fields "parameters" normalized))))))))
+
+(defun consent--documentation-merge-returns (fields value)
+  "Return FIELDS merged with return metadata VALUE, or nil if malformed."
+  (let ((normalized (consent--documentation-normalize-descriptor value)))
+    (if (eq normalized :malformed)
+        nil
+      (if (consent--documentation-field fields "returns")
+          nil
+        (consent--documentation-add-field fields "returns" normalized)))))
 
 (defun consent--documentation-merge-field (fields name value)
   "Return FIELDS merged with NAME/VALUE, or nil if malformed."
@@ -924,11 +1055,13 @@ are Scheme identifiers and whose keys do not repeat."
         (if existing
             (if (stringp (cdr existing))
                 (consent--documentation-set-field
-                 fields name (concat (cdr existing) "\n" value))
+                 fields name (concat (cdr existing) " " value))
               nil)
           (consent--documentation-add-field fields name value))))
      ((equal name "parameters")
       (consent--documentation-merge-parameters fields value))
+     ((equal name "returns")
+      (consent--documentation-merge-returns fields value))
      ((member name consent--documentation-list-field-names)
       (if (not (consent--proper-list-p value))
           nil
@@ -972,7 +1105,8 @@ are Scheme identifiers and whose keys do not repeat."
   "Return METADATA merged with adjacent documentation STRINGS."
   (let* ((fields (plist-get metadata :fields))
          (origins (plist-get metadata :origins))
-         (documentation (mapconcat #'identity strings "\n"))
+         (documentation
+          (consent--documentation-join-string-fragments strings))
          (merged-fields
           (consent--documentation-merge-field
            fields "documentation" documentation)))
