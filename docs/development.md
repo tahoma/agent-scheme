@@ -651,10 +651,27 @@ publishers, and "cursor" is this project's own word for the shared stdin cursor.
 The slug set is therefore deliberately narrow and excludes words with a
 legitimate technical use here (notably "openai", as in the shipped
 OpenAI-compatible transport). Locally the script scans the tree, the current
-branch, and the `origin/main..HEAD` range. When invoked from CI it additionally
-receives the PR title/body, branch name, and `base..head` commit range through
-the environment (`CONSENT_PR_TITLE`, `CONSENT_PR_BODY`, `CONSENT_BRANDING_BRANCH`,
-`CONSENT_BRANDING_BASE`, `CONSENT_BRANDING_HEAD`); see the `Branding` workflow.
+branch, and the `origin/main..HEAD` range.
+
+How much runs in CI depends on the context the job can see, and that splits into
+two reachability classes:
+
+- **Already enforced, no workflow change.** `lint-branding` is a prerequisite of
+  `lint-elisp`, so the always-run `lint-elisp` CI job runs the gate on every
+  pull request. There it scans tracked file contents (the checked-out tree) and
+  the branch name — read from the GitHub-Actions-provided `GITHUB_HEAD_REF` — and
+  scans the commit range when the base ref happens to be present. This covers
+  branding committed into files and branded branch names without any
+  workflow-scoped change, because it rides on normal build code the job already
+  executes.
+- **Needs a dedicated workflow.** The PR title and body live only in GitHub
+  metadata, not in git, so they can only be scanned by a job that injects
+  `github.event.pull_request.title` / `.body` (and, for a guaranteed commit-range
+  scan, checks out with `fetch-depth: 0`). The script reads these from
+  `CONSENT_PR_TITLE`, `CONSENT_PR_BODY`, `CONSENT_BRANDING_BRANCH`,
+  `CONSENT_BRANDING_BASE`, and `CONSENT_BRANDING_HEAD`. A small standalone
+  `Branding` workflow that sets those from the `pull_request` event closes the
+  PR-body/title dimension; adding it requires a workflow-scoped commit.
 
 Run the exhaustive set — every portable host shard plus every Emacs shard —
 with the opt-in escape hatch:
