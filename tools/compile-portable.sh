@@ -357,7 +357,8 @@ write_racket_main_common() {
   (display "  --help          Show this help.\n")
   (display "  --version       Print the Consent Scheme runtime version.\n")
   (display "  --eval SOURCE   Evaluate a Consent Scheme expression.\n")
-  (display "  --script FILE   Run a Consent Scheme script file (capability-gated).\n")
+  (display "  --script FILE [ARG ...]\n")
+  (display "                  Run a Consent Scheme script file (capability-gated).\n")
   (display "  --repl          Start the portable terminal REPL shell.\n")
   (display "  FILE            Run FILE as a script (same as --script FILE),\n")
   (display "                  so a #!/usr/bin/env consent shebang runs directly.\n")
@@ -421,7 +422,7 @@ write_racket_main_common() {
       (consent-eval-source source #f (consent-main-stdio-options options))))
     (newline)))
 
-(define (consent-main-script path options)
+(define (consent-main-script path script-args options)
   (guard (condition
           (else
            (display "consent: script failed" (current-error-port))
@@ -434,7 +435,10 @@ write_racket_main_common() {
     ;; no raw host objects exposed) -- the same gated path as --eval and the Emacs
     ;; `consent-script-run-file' twin.
     (consent-main:cli-script:cli-script-run-file
-     path #f (consent-main-stdio-options options))))
+     path
+     #f
+     (consent-main-stdio-options
+      (cons (cons 'script-arguments script-args) options)))))
 
 (define (consent-main-host-run path)
   ;; Run a Consent-Scheme host-runner test file on THIS runtime: every form is
@@ -490,7 +494,7 @@ write_racket_main_common() {
      ((string=? (car args) "--script")
       (if (null? (cdr args))
           (consent-main-error "--script requires FILE")
-          (consent-main-script (cadr args) options)))
+          (consent-main-script (cadr args) (cddr args) options)))
      ((string=? (car args) "--host-run")
       ;; Run FILE as a host-runner test on this runtime (internal libraries,
       ;; captured program output, raised budgets, exit code from assertions).
@@ -507,7 +511,7 @@ write_racket_main_common() {
       ;; A bare path is a script file: consent FILE == consent --script FILE.
       ;; This lets a #!/usr/bin/env consent shebang run a file with no flag,
       ;; avoiding the kernel single-argument rule that breaks a flagged shebang.
-      (consent-main-script (car args) options)))))
+      (consent-main-script (car args) (cdr args) options)))))
 
 (define (consent-main--split-search-path value)
   ;; Split a colon-separated path string into directory components.
@@ -642,7 +646,8 @@ write_gambit_main_common() {
   (display "  --help          Show this help.\n")
   (display "  --version       Print the Consent Scheme runtime version.\n")
   (display "  --eval SOURCE   Evaluate a Consent Scheme expression.\n")
-  (display "  --script FILE   Run a Consent Scheme script file (capability-gated).\n")
+  (display "  --script FILE [ARG ...]\n")
+  (display "                  Run a Consent Scheme script file (capability-gated).\n")
   (display "  --repl          Start the portable terminal REPL shell.\n")
   (display "  FILE            Run FILE as a script (same as --script FILE),\n")
   (display "                  so a #!/usr/bin/env consent shebang runs directly.\n")
@@ -706,7 +711,7 @@ write_gambit_main_common() {
       (consent-eval-source source #f (consent-main-stdio-options options))))
     (newline)))
 
-(define (consent-main-script path options)
+(define (consent-main-script path script-args options)
   (guard (condition
           (else
            (display "consent: script failed" (current-error-port))
@@ -719,7 +724,10 @@ write_gambit_main_common() {
     ;; no raw host objects exposed) -- the same gated path as --eval and the Emacs
     ;; `consent-script-run-file' twin.
     (consent-main:cli-script:cli-script-run-file
-     path #f (consent-main-stdio-options options))))
+     path
+     #f
+     (consent-main-stdio-options
+      (cons (cons 'script-arguments script-args) options)))))
 
 (define (consent-main-host-run path)
   ;; Run a Consent-Scheme host-runner test file on THIS runtime: every form is
@@ -775,7 +783,7 @@ write_gambit_main_common() {
      ((string=? (car args) "--script")
       (if (null? (cdr args))
           (consent-main-error "--script requires FILE")
-          (consent-main-script (cadr args) options)))
+          (consent-main-script (cadr args) (cddr args) options)))
      ((string=? (car args) "--host-run")
       ;; Run FILE as a host-runner test on this runtime (internal libraries,
       ;; captured program output, raised budgets, exit code from assertions).
@@ -792,7 +800,7 @@ write_gambit_main_common() {
       ;; A bare path is a script file: consent FILE == consent --script FILE.
       ;; This lets a #!/usr/bin/env consent shebang run a file with no flag,
       ;; avoiding the kernel single-argument rule that breaks a flagged shebang.
-      (consent-main-script (car args) options)))))
+      (consent-main-script (car args) (cdr args) options)))))
 
 (define (consent-main--split-search-path value)
   ;; Split a colon-separated path string into directory components.

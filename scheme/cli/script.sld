@@ -97,6 +97,35 @@
         (effects . (state-read allocation error)))
       (cli-script-strip-shebang (script--read-file-string path)))
 
+    (define (script--rest-environment rest)
+      "Return the optional evaluation environment from REST."
+      (if (null? rest) #f (car rest)))
+
+    (define (script--rest-options rest)
+      "Return the optional evaluation options from REST."
+      (if (or (null? rest) (null? (cdr rest)))
+          '()
+          (cadr rest)))
+
+    (define (script--option-ref options key default)
+      "Return KEY from OPTIONS, or DEFAULT when KEY is absent."
+      (let ((cell (assq key options)))
+        (if cell
+            (let ((value (cdr cell)))
+              (if (and (pair? value) (null? (cdr value)))
+                  (car value)
+                  value))
+            default)))
+
+    (define (script--options-with-command-line path options)
+      "Return OPTIONS with PATH and script arguments as command-line."
+      (cons (cons 'command-line
+                  (cons path
+                        (script--option-ref options
+                                            'script-arguments
+                                            '())))
+            options))
+
     (define (cli-script-run-file path . rest)
       "Run executable Consent Scheme script PATH through the Consent"
       "interpreter and return its last value."
@@ -115,14 +144,21 @@
       "(docs/repl-interaction-contract.md, \"Program Stream Model\"); the"
       "product main attaches these by default so a"
       "`(read-line)'/`(display ...)' filter works in a pipe, streaming"
-      "incrementally. Finite in-memory input uses a reader built with"
+      "incrementally. The standard `(command-line)' value is PATH followed by"
+      "any `script-arguments' option supplied by the host entrypoint, without"
+      "granting ambient host process access. Finite in-memory input uses a"
+      "reader built with"
       "`consent-program-input-from-string'. This is the host-neutral peer"
       "of the Emacs `consent-script-run-file'."
       #((parameters . ((path . "Filesystem path of the executable Consent Scheme script to run.")
                        (rest . "Optional evaluation arguments forwarded to `consent-eval-source' (environment, options).")))
         (returns . "The last value produced by evaluating the script's source.")
         (effects . (state-read host-eval error)))
-      (apply consent-eval-source (cli-script-source-from-file path) rest))
+      (consent-eval-source
+       (cli-script-source-from-file path)
+       (script--rest-environment rest)
+       (script--options-with-command-line path
+                                         (script--rest-options rest))))
 
     ;; Host-runner posture: the deliberate capability bundle that lets the
     ;; compiled runtime act as a Consent-Scheme host runner for portable test

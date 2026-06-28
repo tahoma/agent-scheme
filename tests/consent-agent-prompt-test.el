@@ -91,6 +91,60 @@
                  (prompt-result-audit result)))")
     "(authority-missing #f failed-closed none prompt-error authority-missing (authority-denied))")))
 
+(ert-deftest consent-agent-prompt-test-noninteractive-authority-bundle ()
+  "A noninteractive prompt dispatch requires explicit preloaded authority."
+  (should
+   (equal
+    (consent-agent-prompt-test--external
+     "(import (scheme base) (agent prompt))
+      (define authority
+        (make-prompt-authority
+         '((origin noninteractive)
+           (source grant)
+           (grants ((capability-grant
+                     (id script-prompt)
+                     (domain provider)
+                     (operations complete)
+                     (expires never)))))))
+      (define harness
+        (make-prompt-harness (list (list 'authority authority))))
+      (define result
+        (prompt harness 'script-goal
+                '((provider ((finish done))) (verifier passed))))
+      (define audit (prompt-result-audit result))
+      (define authority-audit (car audit))
+      (list (prompt-authority? authority)
+            (prompt-result-status result)
+            (prompt-result-state result)
+            (map (lambda (entry) (cadr (assq 'kind (cdr entry))))
+                 audit)
+            (cadr (assq 'origin (cdr authority-audit)))
+            (cadr (assq 'source (cdr authority-audit))))")
+    "(#t selected complete (authority-granted agent-selected model-route) noninteractive grant)")))
+
+(ert-deftest consent-agent-prompt-test-noninteractive-authority-denies-ambient ()
+  "A noninteractive prompt without preloaded authority fails closed."
+  (should
+   (equal
+    (consent-agent-prompt-test--external
+     "(import (scheme base) (agent prompt))
+      (define authority
+        (make-prompt-authority '((origin noninteractive))))
+      (define harness
+        (make-prompt-harness (list (list 'authority authority))))
+      (define result
+        (prompt harness 'script-goal
+                '((provider ((finish done))) (verifier passed))))
+      (define audit (prompt-result-audit result))
+      (define authority-audit (car audit))
+      (list (prompt-result-status result)
+            (cadr (assq 'reason (cdr (prompt-result-receipt result))))
+            (map (lambda (entry) (cadr (assq 'kind (cdr entry))))
+                 audit)
+            (cadr (assq 'origin (cdr authority-audit)))
+            (cadr (assq 'source (cdr authority-audit))))")
+    "(authority-missing noninteractive-authority-unavailable (authority-denied) noninteractive none)")))
+
 (ert-deftest consent-agent-prompt-test-fails-closed-without-session ()
   "Without a current session the harness fails closed before dispatch."
   (should

@@ -795,7 +795,7 @@
        (list '(scheme load) 'load
              "Read and evaluate Scheme source from PATH, subject to the file-system capability policy.")
        (list '(scheme process-context) 'command-line
-             "Return the process command line when process-environment access is allowed.")
+             "Return script invocation arguments, or the process command line when process-environment access is allowed.")
        (list '(scheme process-context) 'emergency-exit
              "Request immediate process termination, denied by default by the process policy.")
        (list '(scheme process-context) 'exit
@@ -967,8 +967,8 @@
              (list 'source 'host-capability)
              (list 'effect 'host-process)
              (list 'required-capability 'process-environment)
-             (list 'emacs-hook 'consent--policy-denied-primitive)
-             (list 'portable-hook 'policy-denied-primitive)
+             (list 'emacs-hook 'consent--primitive-command-line)
+             (list 'portable-hook 'primitive-command-line)
              (list 'emitter-hook 'capability-process)
              (list 'policy 'deny)
              (list 'test-categories '(process policy)))

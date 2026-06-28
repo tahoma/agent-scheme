@@ -751,12 +751,12 @@ Each spec has (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY)."
       context))
     ("(scheme process-context)"
      (consent--register-primitive-library
-      key
-      (append
-       (mapcar #'consent--policy-denied-spec
-               '("command-line"
-                 "emergency-exit"
-                 "exit"))
+	      key
+	      (append
+	       `(("command-line" ,#'consent--primitive-command-line 0 0))
+	       (mapcar #'consent--policy-denied-spec
+	               '("emergency-exit"
+	                 "exit"))
        ;; Environment reads are real, policy-gated primitives: denied unless the
        ;; context carries an active process-environment capability grant.
        `(("get-environment-variable"
