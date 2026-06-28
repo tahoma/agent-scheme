@@ -488,7 +488,8 @@ model, goal, session, and the candidate ids considered:
 ```
 
 Selection priority is: an explicitly named agent (`explicit-agent`), then the
-first agent matching a requested role (`role-match`), then the default agent
+first agent matching a requested role (`role-match`), then the first agent
+matching a requested model (`model-match`), then the default agent
 (`default-agent`). The `first-agent` and `no-agent` bases are defensive
 fallbacks for a registry constructed without a default; the seeded default
 means a registry built through `make-agent-registry` resolves at

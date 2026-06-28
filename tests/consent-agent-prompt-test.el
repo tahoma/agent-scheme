@@ -121,8 +121,8 @@
             (prompt-result-state result))")
     "(reviewer-1 reviewer role-match complete)")))
 
-(ert-deftest consent-agent-prompt-test-prompt-model-records-model ()
-  "`prompt-model' records the requested model for the downstream router."
+(ert-deftest consent-agent-prompt-test-prompt-model-forces-model ()
+  "`prompt-model' selects the first agent matching the requested model."
   (should
    (equal
     (consent-agent-prompt-test--external
@@ -132,9 +132,12 @@
       (define harness (make-prompt-harness (list (list 'registry registry))))
       (define result (prompt-model harness 'portable-coder 'build-it))
       (list (prompt-result-status result)
+            (prompt-result-agent-id result)
+            (prompt-result-model result)
+            (agent-selection-basis (prompt-result-selection result))
             (agent-selection-field-value (prompt-result-selection result)
                                          'requested-model))")
-    "(selected portable-coder)")))
+    "(selected coder-1 portable-coder model-match portable-coder)")))
 
 (ert-deftest consent-agent-prompt-test-policy-gating-pauses ()
   "Policy gating flows through the harness to a runner approval pause."
