@@ -650,9 +650,11 @@ checked-in tool-config file, `docs/references.md` cites external papers by their
 publishers, and "cursor" is this project's own word for the shared stdin cursor.
 The slug set is therefore deliberately narrow and excludes words with a
 legitimate technical use here (notably "openai", as in the shipped
-OpenAI-compatible transport). CI passes the PR title/body, branch name, and the
-`base..head` commit range to the script through the environment; locally the
-script scans the tree, the current branch, and the `origin/main..HEAD` range.
+OpenAI-compatible transport). Locally the script scans the tree, the current
+branch, and the `origin/main..HEAD` range. When invoked from CI it additionally
+receives the PR title/body, branch name, and `base..head` commit range through
+the environment (`CONSENT_PR_TITLE`, `CONSENT_PR_BODY`, `CONSENT_BRANDING_BRANCH`,
+`CONSENT_BRANDING_BASE`, `CONSENT_BRANDING_HEAD`); see the `Branding` workflow.
 
 Run the exhaustive set — every portable host shard plus every Emacs shard —
 with the opt-in escape hatch:
