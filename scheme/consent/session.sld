@@ -408,12 +408,12 @@
 
     (define (session-manager-reset! manager)
       "Clear MANAGER's sessions, live contexts, and default session."
+      "The manager is process-local and shared across evaluations, so a REPL"
+      "run resets it at the start to keep multiple runs in one process (tests,"
+      "embeddings) from leaking sessions or already-imported environments."
       #((parameters . ((manager . "Session manager to reset.")))
         (returns . "Unspecified.  The installed context factory is preserved.")
         (effects . (state-write)))
-      ;; A process-local manager is shared across evaluations; resetting it at
-      ;; the start of a REPL run keeps multiple runs in one process (tests,
-      ;; embeddings) from leaking sessions or already-imported environments.
       (set-manager-store! manager (consent-make-session-store))
       (set-manager-contexts! manager '())
       (set-manager-default-id! manager #f))

@@ -3614,11 +3614,10 @@ unbounded stream stays budget-bounded and fail-closed like every host effect."
 (defun consent--program-input-read-streaming (port context)
   "Read one datum from streaming PORT, refilling until a complete datum is
 buffered, then delegating to the validating raise-on-error reader so streaming
-`read' shares the single datum path."
-  ;; Keep pulling while the buffered prefix is `incomplete' (a valid partial
-  ;; datum) or `eof' (exhausted without a datum yet); stop once a whole `datum'
-  ;; is buffered or the prefix is `invalid'.  `consent--program-input-fill-until!'
-  ;; also stops when the host stream itself ends.
+`read' shares the single datum path.
+Refilling continues only while the buffered input is an incomplete partial
+datum, and stops once a whole datum is buffered, the input is malformed, or
+the host stream ends."
   (consent--program-input-fill-until!
    port context
    (lambda ()
