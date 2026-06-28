@@ -14,6 +14,9 @@
 .env.*
 !.env.example
 
+# Local agent-client runtime state and worktrees.
+.claude/
+
 var/
 dist/
 build/

@@ -1,5 +1,15 @@
 # Repository Agent Instructions
 
+## Agent Entry Points
+
+`AGENTS.md` is the canonical, repository-owned instruction source for
+tool-assisted work in this repository. Tool-specific bootstrap files checked
+into the repository must only delegate here; they must not carry independent,
+weaker, or conflicting policy. If an agent client does not automatically load
+this file or expand a checked-in include, read `AGENTS.md` manually before
+touching files, running verification, committing, pushing, or opening a pull
+request.
+
 Before starting issue work in this repository, read and follow:
 
 - `docs/contributing.md` for issue lifecycle, branch names, pull requests, and
