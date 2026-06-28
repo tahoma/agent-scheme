@@ -146,6 +146,7 @@ native_library_table() {
 (agent registry)|agent/registry.sld|consent-main:agent-registry:
 (agent proposal)|agent/proposal.sld|consent-main:agent-proposal:
 (agent runner)|agent/runner.sld|consent-main:agent-runner:
+(agent prompt)|agent/prompt.sld|consent-main:agent-prompt:
 (consent approval)|consent/approval.sld|consent-main:approval:
 (consent base)|consent/base.sld|consent-main:base:
 (consent context)|consent/context.sld|consent-main:context:
@@ -307,6 +308,7 @@ write_racket_main_common() {
         (prefix (agent registry) consent-main:agent-registry:)
         (prefix (agent proposal) consent-main:agent-proposal:)
         (prefix (agent runner) consent-main:agent-runner:)
+        (prefix (agent prompt) consent-main:agent-prompt:)
         (prefix (consent approval) consent-main:approval:)
         (prefix (consent base) consent-main:base:)
         (prefix (consent context) consent-main:context:)
@@ -591,6 +593,7 @@ write_gambit_main_common() {
         (prefix (agent registry) consent-main:agent-registry:)
         (prefix (agent proposal) consent-main:agent-proposal:)
         (prefix (agent runner) consent-main:agent-runner:)
+        (prefix (agent prompt) consent-main:agent-prompt:)
         (prefix (consent approval) consent-main:approval:)
         (prefix (consent base) consent-main:base:)
         (prefix (consent context) consent-main:context:)
@@ -1436,6 +1439,9 @@ compile_gambit() {
     "$scheme_dir/agent/runner.sld" \
     "$src_dir/agent/runner.sld"
   copy_gambit_source \
+    "$scheme_dir/agent/prompt.sld" \
+    "$src_dir/agent/prompt.sld"
+  copy_gambit_source \
     "$scheme_dir/cli/process-host.sld" \
     "$src_dir/cli/process-host.sld"
   copy_gambit_source \
@@ -1473,7 +1479,7 @@ compile_gambit() {
   # the per-module compiled artifacts are $src_dir/<ref>.c and $src_dir/<ref>.o.
   # (consent embedded-source) is generated into $src_dir; every other module's
   # source lives under $scheme_dir.
-  gambit_module_order='consent/version consent/reader consent/runtime consent/base consent/library consent/result consent/macro consent/approval consent/context consent/helper consent/job consent/memory consent/plan consent/redaction consent/session agent/task agent/transcript agent/registry agent/proposal agent/runner consent/interpreter consent/eval cli/process-host cli/native-cli cli/repl-chrome cli/repl-shell cli/script consent/embedded-source'
+  gambit_module_order='consent/version consent/reader consent/runtime consent/base consent/library consent/result consent/macro consent/approval consent/context consent/helper consent/job consent/memory consent/plan consent/redaction consent/session agent/task agent/transcript agent/registry agent/proposal agent/runner agent/prompt consent/interpreter consent/eval cli/process-host cli/native-cli cli/repl-chrome cli/repl-shell cli/script consent/embedded-source'
 
   gambit_module_source() {
     case "$1" in

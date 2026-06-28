@@ -147,6 +147,7 @@
         (agent registry)
         (agent proposal)
         (agent runner)
+        (agent prompt)
         (agent transcript)))
 
     ;; Consent core library keys recognized by the portable registry.  The
@@ -178,6 +179,9 @@
         ((agent runner)
          "scheme/agent/runner.sld"
          "agent/runner.sld")
+        ((agent prompt)
+         "scheme/agent/prompt.sld"
+         "agent/prompt.sld")
         ((agent test)
          "scheme/agent/test.sld"
          "agent/test.sld")
@@ -1363,6 +1367,12 @@
              context
              environment)))
        ((equal? key '(agent runner))
+        (if (not (library-registry-ref context key))
+            (register-source-library!
+             (agent-source-library-source key)
+             context
+             environment)))
+       ((equal? key '(agent prompt))
         (if (not (library-registry-ref context key))
             (register-source-library!
              (agent-source-library-source key)
