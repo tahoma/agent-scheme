@@ -281,9 +281,9 @@
 
     (define (selection-context goal session extra options)
       "Build the selection context alist from GOAL, SESSION, EXTRA, and OPTIONS."
-      ;; EXTRA (the role/model forced by `prompt-role'/`prompt-model') is placed
-      ;; first so it wins over any same-named cell carried in OPTIONS, since
-      ;; `select-agent' reads the first matching cell.
+      "EXTRA (the role/model forced by `prompt-role'/`prompt-model') is placed"
+      "first so it wins over any same-named OPTIONS cell, because `select-agent'"
+      "reads the first matching cell."
       (append extra
               (let ((agent (option-ref options 'agent 'unset)))
                 (if (eq? agent 'unset) '() (list (list 'agent agent))))
