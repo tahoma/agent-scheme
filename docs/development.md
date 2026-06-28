@@ -658,34 +658,28 @@ machine-authored on the PR even when the branch name, every commit message, and
 the PR body are clean. Locally the script scans the tree, the current branch,
 the `origin/main..HEAD` range, and that range's commit identities.
 
-How much runs in CI depends on the context the job can see, and that splits into
-two reachability classes:
+CI enforces the gate two ways — a deterministic primary and a fallback:
 
-- **Already enforced, no workflow change.** `lint-branding` is a prerequisite of
-  `lint-elisp`, so the always-run `lint-elisp` CI job runs the gate on every
-  pull request. There it scans tracked file contents (the checked-out tree) and
-  the branch name — read from the GitHub-Actions-provided `GITHUB_HEAD_REF` — and
-  scans the commit range when the base ref happens to be present. This covers
-  branding committed into files and branded branch names without any
-  workflow-scoped change, because it rides on normal build code the job already
-  executes.
-- **PR title/body — best-effort now, deterministic with a workflow.** The PR
-  title and body live only in GitHub metadata, not in git. When run in GitHub
-  Actions without injected values, the gate derives the PR number from
-  `GITHUB_REF` and reads the title/body from the public REST API
-  *unauthenticated* — no token, no workflow change. That succeeds for a public
-  repository when the runner can reach the API and is not rate-limited, and
-  otherwise degrades to a loud notice (not a failure) so it never makes the
-  piggybacked job flaky. Because shared-runner unauthenticated reads are
-  rate-limited, this is best-effort, not guaranteed. The deterministic upgrade is
-  a small standalone `Branding` workflow that injects
-  `github.event.pull_request.title` / `.body` (the script reads them from
-  `CONSENT_PR_TITLE` / `CONSENT_PR_BODY`, alongside `CONSENT_BRANDING_BRANCH` /
-  `CONSENT_BRANDING_BASE` / `CONSENT_BRANDING_HEAD`) and checks out with
-  `fetch-depth: 0` for a guaranteed commit-range scan; adding it requires a
-  workflow-scoped commit. Note that the PR-creation tooling can append a branding
-  trailer to a PR body after a clean body is supplied, so this dimension is worth
-  closing deterministically.
+- **Dedicated `Branding` workflow (deterministic, primary).**
+  `.github/workflows/branding.yml` runs on every pull request, checks out full
+  history (`fetch-depth: 0`), and injects the PR title and body from the event
+  payload (`CONSENT_PR_TITLE` / `CONSENT_PR_BODY`) alongside the base and head
+  SHAs and the branch (`CONSENT_BRANDING_BASE` / `CONSENT_BRANDING_HEAD` /
+  `CONSENT_BRANDING_BRANCH`). With full history and injected metadata, every
+  dimension runs deterministically: tracked files, branch name, commit messages,
+  commit author/committer identity, and the PR title/body. Because it edits a
+  file under `.github/workflows/`, adding or changing it needs a workflow-scoped
+  push.
+- **Piggybacked on `lint-elisp` (fallback, no workflow change).**
+  `lint-branding` is also a prerequisite of `lint-elisp`, so the always-run
+  `lint-elisp` job runs the gate even outside a pull request — for example on a
+  push to `main`. That job checks out shallow, so there it reliably scans tracked
+  file contents (the checked-out tree) and the branch name (`GITHUB_HEAD_REF`);
+  the commit-range scans (messages and identity) run only when a base ref is
+  present, and the PR title/body are read best-effort from the public REST API
+  *unauthenticated*, degrading to a loud notice rather than a failure when that
+  read is rate-limited or blocked. This path rides on normal build code the job
+  already executes, so it predates and backstops the dedicated workflow.
 
 Run the exhaustive set — every portable host shard plus every Emacs shard —
 with the opt-in escape hatch:

@@ -1,0 +1,49 @@
+name: Branding
+
+# Deterministic branding gate.
+#
+# The lint-branding check also rides along on the lint-elisp job, but that job
+# checks out shallow (the default fetch-depth), so it has no base ref and the
+# gate's commit-message and commit author/committer-identity scans silently
+# no-op there -- they only run where full history is present (a local `make
+# test`). This dedicated job checks out full history and injects the pull
+# request title and body from the event payload, so every branding dimension --
+# tracked files, branch name, commit messages, commit author/committer identity,
+# and the PR title/body -- is enforced on every pull request rather than
+# best-effort. See docs/development.md "branding gate".
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+# Coalesce superseded runs for a pull request onto one group, matching the Test
+# workflow: a new push to the PR cancels the in-flight branding run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  branding:
+    name: Assistant/tool/vendor branding gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository (full history)
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Run the branding gate over the pull request
+        run: make lint-branding
+        env:
+          # Explicit base/head SHAs from the event payload make the commit-range
+          # scan independent of whether an origin/main ref exists in the
+          # checkout. Both are ancestors of the checked-out merge commit, so
+          # full history guarantees they resolve.
+          CONSENT_BRANDING_BASE: ${{ github.event.pull_request.base.sha }}
+          CONSENT_BRANDING_HEAD: ${{ github.event.pull_request.head.sha }}
+          CONSENT_BRANDING_BRANCH: ${{ github.head_ref }}
+          CONSENT_PR_TITLE: ${{ github.event.pull_request.title }}
+          CONSENT_PR_BODY: ${{ github.event.pull_request.body }}

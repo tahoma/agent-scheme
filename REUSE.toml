@@ -16,6 +16,7 @@ path = [
   ".github/pull_request_template.md",
   ".github/workflows/test.yml",
   ".github/workflows/release.yml",
+  ".github/workflows/branding.yml",
 ]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2026 Tahoma Toelkes"
