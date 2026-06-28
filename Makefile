@@ -331,8 +331,8 @@ compile-elisp:
 # invokes `make lint-elisp') also runs the branding gate, wiring it into CI
 # through normal build code rather than a workflow-scoped change. In a CI run
 # the gate reads GITHUB_HEAD_REF for the branch name and scans tracked files;
-# the PR title/body dimension still requires a dedicated workflow that injects
-# those fields (see docs/development.md).
+# the dedicated Branding workflow injects the PR title/body and full commit
+# range, while this prerequisite remains a fallback for ordinary test runs.
 lint-elisp: lint-branding
 	@rm -rf '$(CONSENT_LINT_BUILD_DIR)'
 	@mkdir -p '$(CONSENT_LINT_BUILD_DIR)'
