@@ -278,9 +278,9 @@
          (else (loop (cdr rest))))))
 
     (define (first-agent-with-model registry model)
-      "Return REGISTRY's first agent whose model is MODEL, or #f."
-      ;; A model specification may be a bare id symbol, the symbol `auto', or a
-      ;; richer model-selection policy, so match with `equal?' rather than `eq?'.
+      "Return REGISTRY's first agent whose model is MODEL, or #f.  A model"
+      "specification can be a bare id symbol, the symbol `auto', or a richer"
+      "model-selection policy, so MODEL is compared with `equal?', not `eq?'."
       (let loop ((rest (agents registry)))
         (cond
          ((null? rest) #f)
