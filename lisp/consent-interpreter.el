@@ -4761,6 +4761,16 @@ Advance when ADVANCEP is non-nil.  Signal errors using DESCRIPTION."
       (funcall consent-time-current-second-function)
       "current-second"))))
 
+(defun consent--primitive-command-line (_arguments context)
+  "Primitive command-line over _ARGUMENTS."
+  (let ((script-command-line
+         (and context (consent--eval-context-command-line context))))
+    (if script-command-line
+        (copy-sequence script-command-line)
+      (consent-capability-authorize-process-environment
+       "command-line" context)
+      (copy-sequence command-line-args))))
+
 (defun consent--primitive-get-environment-variable (arguments context)
   "Primitive get-environment-variable over ARGUMENTS."
   (consent-capability-authorize-process-environment

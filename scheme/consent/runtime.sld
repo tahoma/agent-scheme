@@ -213,6 +213,7 @@
           context-buffer-context
           context-project-context
           context-conversation-summary
+          context-command-line
           context-interaction-environment
           set-context-interaction-environment!
           context-base-syntax-installed
@@ -723,6 +724,7 @@
                          session-id request-id request focus
                          region-context buffer-context project-context
                          conversation-summary
+                         command-line
                          interaction-environment
                          base-syntax-installed next-syntax-id
                          exception-handlers dynamic-winds
@@ -779,6 +781,7 @@
       (buffer-context context-buffer-context)
       (project-context context-project-context)
       (conversation-summary context-conversation-summary)
+      (command-line context-command-line)
       (interaction-environment context-interaction-environment
                                set-context-interaction-environment!)
       (base-syntax-installed context-base-syntax-installed
@@ -2691,6 +2694,7 @@
        (option-ref options 'buffer-context #f)
        (option-ref options 'project-context #f)
        (option-ref options 'conversation-summary #f)
+       (option-ref options 'command-line #f)
        #f
        #f
        0

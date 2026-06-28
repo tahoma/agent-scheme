@@ -853,6 +853,8 @@ Return the stale handles that were removed."
           (consent--eval-context-project-context context)
           :conversation-summary
           (consent--eval-context-conversation-summary context)
+          :command-line
+          (copy-sequence (consent--eval-context-command-line context))
           :job-id nil
           :cancel-requested nil
           :interrupt-reason nil

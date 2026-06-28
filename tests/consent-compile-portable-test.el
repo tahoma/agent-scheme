@@ -179,6 +179,7 @@ regressed to host execution (the host would create the file). Together these are
 a positive/negative control: the interpreter selectively gates rather than
 failing closed on everything."
   (let ((ok-script (make-temp-file "consent-script-ok-" nil ".scm"))
+        (args-script (make-temp-file "consent-script-args-" nil ".scm"))
         (deny-script (make-temp-file "consent-script-deny-" nil ".scm"))
         (deny-marker (make-temp-file "consent-script-marker-" nil ".txt")))
     (delete-file deny-marker)
@@ -195,6 +196,25 @@ failing closed on everything."
              (consent-compile-portable-test--run-executable
               runner "--script" ok-script))
             0))
+          (with-temp-file args-script
+            (insert "(import (scheme base) (scheme process-context))\n"
+                    "(define expected\n"
+                    (format "  (list %S \"alpha\" \"beta\"))\n" args-script)
+                    "(if (not (equal? (command-line) expected))\n"
+                    "    (error \"script command-line was not normalized\"\n"
+                    "           (command-line)))\n"))
+          (should
+           (equal
+            (consent-compile-portable-test--status
+             (consent-compile-portable-test--run-executable
+              runner "--script" args-script "alpha" "beta"))
+            0))
+          (should
+           (equal
+            (consent-compile-portable-test--status
+             (consent-compile-portable-test--run-executable
+              runner args-script "alpha" "beta"))
+            0))
           (with-temp-file deny-script
             (insert "(import (scheme base) (scheme file))\n"
                     (format "(call-with-output-file %S\n" deny-marker)
@@ -206,6 +226,7 @@ failing closed on everything."
              (equal (consent-compile-portable-test--status deny-result) 0))
             (should-not (file-exists-p deny-marker))))
       (ignore-errors (delete-file ok-script))
+      (ignore-errors (delete-file args-script))
       (ignore-errors (delete-file deny-script))
       (ignore-errors (delete-file deny-marker)))))
 

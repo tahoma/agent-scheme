@@ -959,9 +959,10 @@ explicit budget whose exhaustion emits a receipt (for example
 `auto-reply-budget-exhausted` or `heartbeat-budget-exhausted`), folded into the
 [Failure and Stop Conditions](#failure-and-stop-conditions) contract.
 
-This is the decision **#400 applies for the non-interactive (batch/shebang)
+This is the decision **#400 codifies for the non-interactive (batch/shebang)
 script-drive case**, extending the batch fail-closed posture to provider and
-agent grants: the script proposes; the loop and gate retain authority.
+agent grants: the script proposes with preloaded authority; the loop and gate
+retain authority.
 
 ### D7 — Agent-layer determinism and cross-host parity
 

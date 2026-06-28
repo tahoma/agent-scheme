@@ -68,13 +68,21 @@ empty string.  SOURCE without a shebang is returned unchanged, leaving
      (insert-file-contents path)
      (buffer-string))))
 
-(defun consent-script-run-file (path &optional environment options)
+(defun consent-script--options-with-command-line (path options arguments)
+  "Return OPTIONS with PATH and ARGUMENTS exposed as script command-line."
+  (append (list :command-line (cons path (copy-sequence (or arguments nil))))
+          options))
+
+(defun consent-script-run-file (path &optional environment options arguments)
   "Run executable Consent Scheme script PATH and return its last value.
 A leading shebang line is consumed before reading, so a file made executable
 with `#!/usr/bin/env consent' (or the `/bin/sh' polyglot) reads correctly.
 Evaluation goes through `consent-eval-source' with ENVIRONMENT and OPTIONS in the
 consent runtime.  Ambient host capabilities -- opening a named file, a process,
 network -- fail closed without a grant, policy file, or preloaded approval.  The
+standard `(command-line)' value is PATH followed by ARGUMENTS, matching the
+compiled `--script' and bare-file entrypoints without exposing the host process
+command line.
 standard streams are consented by invocation: when OPTIONS supply the host stream
 devices (`:program-input-reader', `:program-output-writer',
 `:program-error-writer') with one matching `port' grant per stream, the script
@@ -83,7 +91,9 @@ Stream Model\"); input is pulled from the reader on demand so a `(read-line)'
 filter streams incrementally.  Finite in-memory input uses a reader built with
 `consent-program-input-from-string'."
   (consent-eval-source
-   (consent-script-source-from-file path) environment options))
+   (consent-script-source-from-file path)
+   environment
+   (consent-script--options-with-command-line path options arguments)))
 
 (provide 'consent-script)
 

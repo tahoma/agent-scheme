@@ -72,7 +72,21 @@
     (unwind-protect
         (should (equal (consent-value->external
                         (consent-script-run-file path))
-                       "\"hi world\""))
+	                       "\"hi world\""))
+      (delete-file path))))
+
+(ert-deftest consent-script-test-run-file-normalizes-command-line ()
+  "Expose script command-line as the script path followed by user arguments."
+  (let ((path (consent-script-test--write
+               (concat "#!/usr/bin/env consent-scheme\n"
+                       "(import (scheme base) (scheme process-context))\n"
+                       "(command-line)\n"))))
+    (unwind-protect
+        (should
+         (equal
+          (consent-value->external
+           (consent-script-run-file path nil nil '("alpha" "beta")))
+          (consent-value->external (list path "alpha" "beta"))))
       (delete-file path))))
 
 (ert-deftest consent-script-test-run-file-reports-line-numbers ()
