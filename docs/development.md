@@ -658,18 +658,26 @@ machine-authored on the PR even when the branch name, every commit message, and
 the PR body are clean. Locally the script scans the tree, the current branch,
 the `origin/main..HEAD` range, and that range's commit identities.
 
-CI enforces the gate two ways — a deterministic primary and a fallback:
+CI enforces the gate two ways — a required primary and a fallback:
 
-- **Dedicated `Branding` workflow (deterministic, primary).**
-  `.github/workflows/branding.yml` runs on every pull request, checks out full
-  history (`fetch-depth: 0`), and injects the PR title and body from the event
-  payload (`CONSENT_PR_TITLE` / `CONSENT_PR_BODY`) alongside the base and head
-  SHAs and the branch (`CONSENT_BRANDING_BASE` / `CONSENT_BRANDING_HEAD` /
-  `CONSENT_BRANDING_BRANCH`). With full history and injected metadata, every
-  dimension runs deterministically: tracked files, branch name, commit messages,
-  commit author/committer identity, and the PR title/body. Because it edits a
-  file under `.github/workflows/`, adding or changing it needs a workflow-scoped
-  push.
+- **Dedicated `Branding` workflow (required, primary).**
+  `.github/workflows/branding.yml` runs on pull-request `opened`,
+  `synchronize`, `reopened`, and `edited` events — the `edited` type matters
+  because a branding trailer is usually appended to the PR title or body *after*
+  creation, and without it that change would never be re-scanned. The job checks
+  out full history (`fetch-depth: 0`) and injects the PR title and body from the
+  event payload (`CONSENT_PR_TITLE` / `CONSENT_PR_BODY`) alongside the base and
+  head SHAs and the branch (`CONSENT_BRANDING_BASE` / `CONSENT_BRANDING_HEAD` /
+  `CONSENT_BRANDING_BRANCH`), so every dimension is scanned deterministically:
+  tracked files, branch name, commit messages, commit author/committer identity,
+  and the PR title/body. The job's check (`Assistant/tool/vendor branding gate`)
+  is a **required status check** in the "Protect main" ruleset, so a failure
+  blocks merge rather than only reporting red. Two caveats it does not cover: the
+  required check assumes the PR branch carries this workflow file (a branch cut
+  before it landed must rebase onto `main` for the check to report), and direct
+  pushes to `main` are not gated by it — though the ruleset makes `main`
+  pull-request-only, closing that path in practice. Because it edits a file under
+  `.github/workflows/`, adding or changing it needs a workflow-scoped push.
 - **Piggybacked on `lint-elisp` (fallback, no workflow change).**
   `lint-branding` is also a prerequisite of `lint-elisp`, so the always-run
   `lint-elisp` job runs the gate even outside a pull request — for example on a
