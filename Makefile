@@ -349,6 +349,16 @@ lint-portable:
 	CONSENT_PORTABLE_LINT_BUILD_DIR='$(CONSENT_PORTABLE_LINT_BUILD_DIR)' \
 	tools/lint-portable.sh
 
+# Assistant/tool/vendor branding gate. Enforces the AGENTS.md rule that no
+# assistant, tool, vendor, or workflow branding appears in branch names, PR
+# titles/bodies, commit messages, docs, or generated artifacts, so the
+# checked-in rule is machine-enforced rather than left to contributor diligence.
+# CI passes the PR title/body, branch name, and commit range through the
+# environment (see tools/lint-branding.sh); locally it scans the tree, the
+# current branch, and the origin/main..HEAD commit range.
+lint-branding:
+	tools/lint-branding.sh
+
 # Start the portable terminal REPL shell outside Emacs (docs/portable-repl.md).
 # Reads Consent Scheme forms from stdin, writes interaction-contract records to
 # stderr, and keeps program output on stdout. Pass arguments through ARGS, e.g.

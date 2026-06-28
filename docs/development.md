@@ -627,6 +627,33 @@ than being skipped silently. Like the portable host shards, the gate *skips*
 (rather than fails) when Guile is unavailable, so it is a no-op on a Guile-free
 machine; CI installs Guile so it always runs there.
 
+The default set also runs `lint-branding`, the assistant/tool/vendor branding
+gate. It enforces the AGENTS.md rule that no assistant, tool, vendor, or
+workflow branding appears in branch names, pull request titles or bodies, commit
+messages, documentation, or generated artifacts — machine-checking a rule that
+is otherwise left to contributor diligence, the same stance the two compiler
+lint gates take. Run it on its own with:
+
+```sh
+make lint-branding
+```
+
+The gate (`tools/lint-branding.sh`) uses two pattern tiers to keep false
+positives near zero on this project's own domain language. Self-attribution
+markers — a co-author trailer naming a model or tool, a "generated with/by
+<tool>" line, a session link, the robot emoji — are scanned everywhere: tracked
+file contents, commit messages, the PR title/body, and the branch name. Bare
+vendor or tool slugs are scanned only in those metadata contexts (commit
+messages, PR title/body, branch name), never in file contents, because the
+repository legitimately writes some of those words in prose — `CLAUDE.md` is a
+checked-in tool-config file, `docs/references.md` cites external papers by their
+publishers, and "cursor" is this project's own word for the shared stdin cursor.
+The slug set is therefore deliberately narrow and excludes words with a
+legitimate technical use here (notably "openai", as in the shipped
+OpenAI-compatible transport). CI passes the PR title/body, branch name, and the
+`base..head` commit range to the script through the environment; locally the
+script scans the tree, the current branch, and the `origin/main..HEAD` range.
+
 Run the exhaustive set — every portable host shard plus every Emacs shard —
 with the opt-in escape hatch:
 
