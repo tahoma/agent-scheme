@@ -31,6 +31,16 @@
 #     legitimate technical use here (notably "openai", as in the shipped
 #     OpenAI-compatible transport, "anthropic", "cursor", and bare model words).
 #
+#   * Commit author/committer identity (TIER C) is scanned ONLY against the
+#     `%an <%ae>` / `%cn <%ce>` fields of each commit in the range, never file
+#     contents. A commit's author EMAIL is what GitHub attributes it to, so a
+#     vendor "noreply" identity badges the commit as machine-authored on the PR
+#     even when the branch name, every commit message, and the PR body are
+#     clean -- the gap that let branded authorship reach a merged PR while the
+#     other dimensions stayed green. The identity scan adds the vendor-bot email
+#     domains (which are never a legitimate author here, unlike the same vendor
+#     word in prose) on top of the TIER A and TIER B patterns.
+#
 # This script's own source is excluded from the file-content scan because it
 # necessarily spells the patterns out. Inputs from the CI event are passed in
 # through the environment:
@@ -52,6 +62,12 @@ attribution_re='co-authored-by:.*(claude|anthropic|codex|copilot|chatgpt|openai|
 
 # TIER B -- bare vendor/tool slugs (ASCII), scanned in metadata contexts only.
 slug_re='\b(claude|codex|copilot|chatgpt|devin)\b|claude[ ._-]?(code|opus|sonnet|haiku)'
+
+# TIER C -- vendor-bot identity, scanned ONLY against commit author/committer
+# identity (never file contents or prose). These email domains are what GitHub
+# attributes a commit to; a real contributor here never authors from them, so
+# unlike the bare vendor word they are safe to match in this one context.
+identity_re='@(anthropic|openai)\.com'
 
 # The robot emoji is checked as a fixed string so the scan never depends on the
 # grep locale handling multibyte regex classes.
@@ -123,6 +139,12 @@ if [ -n "$range" ]; then
   for sha in $(git rev-list "$range" 2>/dev/null || true); do
     message=$(git log -1 --format='%B' "$sha")
     scan_text "commit $sha" "$message" "$attribution_re|$slug_re"
+    # The author/committer identity is metadata too, but its own scan (TIER C)
+    # because GitHub attributes the commit by the author email -- a clean
+    # message on a vendor-authored commit still shows the vendor as author.
+    identity=$(git log -1 --format='%an <%ae>%n%cn <%ce>' "$sha")
+    scan_text "commit $sha identity" "$identity" \
+      "$attribution_re|$slug_re|$identity_re"
   done
 fi
 

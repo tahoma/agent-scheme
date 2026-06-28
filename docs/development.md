@@ -650,8 +650,13 @@ checked-in tool-config file, `docs/references.md` cites external papers by their
 publishers, and "cursor" is this project's own word for the shared stdin cursor.
 The slug set is therefore deliberately narrow and excludes words with a
 legitimate technical use here (notably "openai", as in the shipped
-OpenAI-compatible transport). Locally the script scans the tree, the current
-branch, and the `origin/main..HEAD` range.
+OpenAI-compatible transport). A third tier scans each commit's author and
+committer identity (`name <email>`) — and only that — for the vendor-bot email
+domains a real contributor never authors from. The author email is what GitHub
+attributes a commit to, so a vendor "noreply" identity badges the commit as
+machine-authored on the PR even when the branch name, every commit message, and
+the PR body are clean. Locally the script scans the tree, the current branch,
+the `origin/main..HEAD` range, and that range's commit identities.
 
 How much runs in CI depends on the context the job can see, and that splits into
 two reachability classes:
