@@ -390,17 +390,27 @@
     (define (consent-set-library-search-directories! directories)
       "Replace the host-injected library search-directory prefixes, highest"
       "precedence first."
-      #((parameters . ((directories . "List of directory path strings, highest precedence first.")))
-        (returns . "The unspecified value.")
-        (effects . (state-write)))
+      #((parameters
+         (directories
+          (type any)
+          (description
+           ("List of directory path strings, highest precedence first."))))
+        (returns
+         (type any)
+         (description "The unspecified value."))
+        (effects state-write))
       (set! consent-library-search-directories directories)
       consent-unspecified)
 
     (define (consent-library-search-directory-list)
       "Return the host-injected library search-directory prefixes."
-      #((parameters . ())
-        (returns . "The current list of host-injected library search-directory prefixes.")
-        (effects . (state-read)))
+      #((parameters)
+        (returns
+         (type any)
+         (description
+          ("The current list of host-injected library search-directory"
+           "prefixes.")))
+        (effects state-read))
       consent-library-search-directories)
 
     ;; Embedded runtime source registered by a compiled host's linked-in
@@ -411,19 +421,36 @@
     (define (consent-register-embedded-source! relative-path text)
       "Register embedded source TEXT for logical RELATIVE-PATH (the"
       "zero-dependency floor)."
-      #((parameters . ((relative-path . "Logical relative path naming the embedded source entry.")
-                       (text . "Source text to register for that path.")))
-        (returns . "The unspecified value.")
-        (effects . (state-write)))
+      #((parameters
+         (relative-path
+          (type any)
+          (description
+           ("Logical relative path naming the embedded source entry.")))
+         (text
+          (type any)
+          (description "Source text to register for that path.")))
+        (returns
+         (type any)
+         (description "The unspecified value."))
+        (effects state-write))
       (set! consent-embedded-source-entries
             (cons (cons relative-path text) consent-embedded-source-entries))
       consent-unspecified)
 
     (define (consent-embedded-source-ref relative-path)
       "Return registered embedded source text for RELATIVE-PATH, or #f when absent."
-      #((parameters . ((relative-path . "Logical relative path to look up in the embedded-source registry.")))
-        (returns . "The registered source text string, or #f when no entry exists.")
-        (effects . (state-read)))
+      #((parameters
+         (relative-path
+          (type any)
+          (description
+           ("Logical relative path to look up in the embedded-source"
+            "registry."))))
+        (returns
+         (type any)
+         (description
+          ("The registered source text string, or #f when no entry"
+           "exists.")))
+        (effects state-read))
       (let ((entry (assoc relative-path consent-embedded-source-entries)))
         (and entry (cdr entry))))
 
@@ -438,19 +465,38 @@
 
     (define (consent-register-native-library! key bindings)
       "Register native BINDINGS, an alist of (name . value), for internal library KEY."
-      #((parameters . ((key . "Library key identifying the internal library being registered.")
-                       (bindings . "Alist of (name . value) entries exported by the native library.")))
-        (returns . "The unspecified value.")
-        (effects . (state-write)))
+      #((parameters
+         (key
+          (type any)
+          (description
+           ("Library key identifying the internal library being"
+            "registered.")))
+         (bindings
+          (type any)
+          (description
+           ("Alist of (name . value) entries exported by the native"
+            "library."))))
+        (returns
+         (type any)
+         (description "The unspecified value."))
+        (effects state-write))
       (set! consent-native-library-entries
             (cons (cons key bindings) consent-native-library-entries))
       consent-unspecified)
 
     (define (consent-native-library-ref key)
       "Return the native bindings registered for library KEY, or #f when absent."
-      #((parameters . ((key . "Library key to look up in the native-library registry.")))
-        (returns . "The registered (name . value) bindings alist, or #f when absent.")
-        (effects . (state-read)))
+      #((parameters
+         (key
+          (type any)
+          (description
+           ("Library key to look up in the native-library registry."))))
+        (returns
+         (type any)
+         (description
+          ("The registered (name . value) bindings alist, or #f when"
+           "absent.")))
+        (effects state-read))
       (let ((entry (assoc key consent-native-library-entries)))
         (and entry (cdr entry))))
 
@@ -462,31 +508,50 @@
     (define (consent-install-native-applier! applier)
       "Install APPLIER, called as (APPLIER procedure arguments context), for"
       "native callbacks."
-      #((parameters . ((applier . "Procedure applying interpreted closures, called as (applier procedure arguments context).")))
-        (returns . "The unspecified value.")
-        (effects . (state-write)))
+      #((parameters
+         (applier
+          (type any)
+          (description
+           ("Procedure applying interpreted closures, called as"
+            "(applier procedure arguments context)."))))
+        (returns
+         (type any)
+         (description "The unspecified value."))
+        (effects state-write))
       (set! consent-native-applier-procedure applier)
       consent-unspecified)
 
     (define (consent-native-applier-ref)
       "Return the installed native callback applier, or #f when absent."
-      #((parameters . ())
-        (returns . "The installed native callback applier procedure, or #f when none is installed.")
-        (effects . (state-read)))
+      #((parameters)
+        (returns
+         (type any)
+         (description
+          ("The installed native callback applier procedure, or #f"
+           "when none is installed.")))
+        (effects state-read))
       consent-native-applier-procedure)
 
     (define (consent-version-components)
       "Return the Consent Scheme version as exact non-negative host integers."
-      #((parameters . ())
-        (returns . "A list of exact non-negative host integers naming the version components.")
-        (effects . (pure)))
+      #((parameters)
+        (returns
+         (type any)
+         (description
+          ("A list of exact non-negative host integers naming the"
+           "version components.")))
+        (effects pure))
       (cdr consent-version-datum))
 
     (define (consent-version)
       "Return the canonical Scheme-readable Consent Scheme version datum."
-      #((parameters . ())
-        (returns . "The version datum: a tag followed by canonical-integer version components.")
-        (effects . (pure)))
+      #((parameters)
+        (returns
+         (type any)
+         (description
+          ("The version datum: a tag followed by canonical-integer"
+           "version components.")))
+        (effects pure))
       (cons (car consent-version-datum)
             (map consent-make-canonical-integer
                  (consent-version-components))))
@@ -863,30 +928,58 @@
 
     (define (option-ref options key default)
       "Return the option value for KEY or DEFAULT when KEY is absent."
-      #((parameters . ((options . "Association list of option key/value pairs.")
-                       (key . "Option key to look up via eq? comparison.")
-                       (default . "Value to return when KEY is absent from OPTIONS.")))
-        (returns . "The value associated with KEY, or DEFAULT when KEY is absent.")
-        (effects . (pure)))
+      #((parameters
+         (options
+          (type any)
+          (description "Association list of option key/value pairs."))
+         (key
+          (type any)
+          (description "Option key to look up via eq? comparison."))
+         (default
+          (type any)
+          (description "Value to return when KEY is absent from OPTIONS.")))
+        (returns
+         (type any)
+         (description
+          ("The value associated with KEY, or DEFAULT when KEY is"
+           "absent.")))
+        (effects pure))
       (let ((cell (assq key options)))
         (if cell (cdr cell) default)))
 
     (define (eval-error message . irritants)
       "Raise an evaluator error with the Consent Scheme diagnostic prefix."
-      #((parameters . ((message . "Diagnostic message describing the evaluator error.")
-                       (irritants . "Zero or more irritant values attached to the error.")))
-        (returns . "Does not return; always raises an error condition.")
-        (effects . (error)))
+      #((parameters
+         (message
+          (type any)
+          (description "Diagnostic message describing the evaluator error."))
+         (irritants
+          (type any)
+          (description
+           ("Zero or more irritant values attached to the error."))))
+        (returns
+         (type any)
+         (description "Does not return; always raises an error condition."))
+        (effects error))
       (apply error
              (string-append "consent eval error: " message)
              irritants))
 
     (define (budget-error message . irritants)
       "Raise an evaluator budget error with the Consent Scheme diagnostic prefix."
-      #((parameters . ((message . "Diagnostic message describing the budget error.")
-                       (irritants . "Zero or more irritant values attached to the error.")))
-        (returns . "Does not return; always raises a budget error condition.")
-        (effects . (error)))
+      #((parameters
+         (message
+          (type any)
+          (description "Diagnostic message describing the budget error."))
+         (irritants
+          (type any)
+          (description
+           ("Zero or more irritant values attached to the error."))))
+        (returns
+         (type any)
+         (description
+          ("Does not return; always raises a budget error condition.")))
+        (effects error))
       (apply error
              (string-append "consent budget error: " message)
              irritants))
@@ -913,9 +1006,16 @@
 
     (define (normalize-include-directory directory)
       "Normalize include-directory options to a stable prefix form."
-      #((parameters . ((directory . "Include-directory path string to normalize.")))
-        (returns . "The directory as an empty string or a slash-terminated prefix.")
-        (effects . (pure)))
+      #((parameters
+         (directory
+          (type any)
+          (description "Include-directory path string to normalize.")))
+        (returns
+         (type any)
+         (description
+          ("The directory as an empty string or a slash-terminated"
+           "prefix.")))
+        (effects pure))
       (cond
        ((or (string=? directory "")
             (string=? directory "."))
@@ -927,18 +1027,33 @@
 
     (define (path-absolute? path)
       "Report whether PATH is absolute for include/load path resolution."
-      #((parameters . ((path . "Path string to test for absoluteness.")))
-        (returns . "#t when PATH begins with a slash, #f otherwise.")
-        (effects . (pure)))
+      #((parameters
+         (path
+          (type any)
+          (description "Path string to test for absoluteness.")))
+        (returns
+         (type any)
+         (description "#t when PATH begins with a slash, #f otherwise."))
+        (effects pure))
       (and (> (string-length path) 0)
            (char=? (string-ref path 0) #\/)))
 
     (define (path-join directory path)
       "Join DIRECTORY and PATH unless PATH is already absolute."
-      #((parameters . ((directory . "Directory prefix to prepend to PATH.")
-                       (path . "Path to join onto DIRECTORY, or returned unchanged when absolute.")))
-        (returns . "The joined path string with a single slash separator.")
-        (effects . (pure)))
+      #((parameters
+         (directory
+          (type any)
+          (description "Directory prefix to prepend to PATH."))
+         (path
+          (type any)
+          (description
+           ("Path to join onto DIRECTORY, or returned unchanged when"
+            "absolute."))))
+        (returns
+         (type any)
+         (description
+          ("The joined path string with a single slash separator.")))
+        (effects pure))
       (cond
        ((or (string=? directory "") (path-absolute? path))
         path)
@@ -972,9 +1087,18 @@
 
     (define (path-normalize path)
       "Resolve . and .. path components without consulting the host filesystem."
-      #((parameters . ((path . "Path string whose . and .. components are resolved syntactically.")))
-        (returns . "The normalized path string, preserving leading-slash absoluteness.")
-        (effects . (pure)))
+      #((parameters
+         (path
+          (type any)
+          (description
+           ("Path string whose . and .. components are resolved"
+            "syntactically."))))
+        (returns
+         (type any)
+         (description
+          ("The normalized path string, preserving leading-slash"
+           "absoluteness.")))
+        (effects pure))
       (let ((absolute? (path-absolute? path)))
         (let loop ((parts (path-split path)) (stack '()))
           (cond
@@ -1232,13 +1356,37 @@
     (define (authorize-file-capability
              filename context operation binding legacy-paths)
       "Authorize FILENAME for file OPERATION and return authorization data."
-      #((parameters . ((filename . "File path requested by the program, relative to the include directory.")
-                       (context . "Evaluation context holding capability grants and audit events.")
-                       (operation . "File operation symbol being authorized, such as read or write.")
-                       (binding . "Name of the host binding requesting the file capability.")
-                       (legacy-paths . "Legacy permitted paths folded into the available file grants.")))
-        (returns . "An authorization alist with path, request, decision, operation, grant, and handle entries.")
-        (effects . (state-write error)))
+      #((parameters
+         (filename
+          (type any)
+          (description
+           ("File path requested by the program, relative to the"
+            "include directory.")))
+         (context
+          (type any)
+          (description
+           ("Evaluation context holding capability grants and audit"
+            "events.")))
+         (operation
+          (type any)
+          (description
+           ("File operation symbol being authorized, such as read or"
+            "write.")))
+         (binding
+          (type any)
+          (description
+           ("Name of the host binding requesting the file capability.")))
+         (legacy-paths
+          (type any)
+          (description
+           ("Legacy permitted paths folded into the available file"
+            "grants."))))
+        (returns
+         (type any)
+         (description
+          ("An authorization alist with path, request, decision,"
+           "operation, grant, and handle entries.")))
+        (effects state-write error))
       (let* ((path (path-normalize
                     (path-join (context-include-directory context)
                                filename)))
@@ -1338,20 +1486,42 @@
 
     (define (file-authorization-path authorization)
       "Return the authorized normalized host path from AUTHORIZATION."
-      #((parameters . ((authorization . "Authorization alist produced by authorize-file-capability.")))
-        (returns . "The normalized host path string recorded in AUTHORIZATION.")
-        (effects . (pure)))
+      #((parameters
+         (authorization
+          (type any)
+          (description
+           ("Authorization alist produced by authorize-file-capability."))))
+        (returns
+         (type any)
+         (description
+          ("The normalized host path string recorded in AUTHORIZATION.")))
+        (effects pure))
       (cadr (assq 'path authorization)))
 
     (define (audit-file-capability-result!
              context authorization result error?)
       "Record the result of an authorized file capability operation."
-      #((parameters . ((context . "Evaluation context whose audit log receives the event.")
-                       (authorization . "Authorization alist identifying the request and decision.")
-                       (result . "Result value or error object produced by the operation.")
-                       (error? . "True when RESULT represents an error rather than success.")))
-        (returns . "The unspecified value.")
-        (effects . (state-write)))
+      #((parameters
+         (context
+          (type any)
+          (description
+           ("Evaluation context whose audit log receives the event.")))
+         (authorization
+          (type any)
+          (description
+           ("Authorization alist identifying the request and decision.")))
+         (result
+          (type any)
+          (description
+           ("Result value or error object produced by the operation.")))
+         (error?
+          (type any)
+          (description
+           ("True when RESULT represents an error rather than success."))))
+        (returns
+         (type any)
+         (description "The unspecified value."))
+        (effects state-write))
       (record-audit-event!
        context
        'capability-audit
@@ -1380,11 +1550,27 @@
 
     (define (authorize-code-loading authorization context binding)
       "Authorize evaluation of source forms read by a file capability request."
-      #((parameters . ((authorization . "File authorization alist whose path is being loaded as code.")
-                       (context . "Evaluation context whose audit log receives the events.")
-                       (binding . "Name of the host binding requesting the code-loading capability.")))
-        (returns . "A code-loading authorization alist with path, request, decision, and operation entries.")
-        (effects . (state-write)))
+      #((parameters
+         (authorization
+          (type any)
+          (description
+           ("File authorization alist whose path is being loaded as"
+            "code.")))
+         (context
+          (type any)
+          (description
+           ("Evaluation context whose audit log receives the events.")))
+         (binding
+          (type any)
+          (description
+           ("Name of the host binding requesting the code-loading"
+            "capability."))))
+        (returns
+         (type any)
+         (description
+          ("A code-loading authorization alist with path, request,"
+           "decision, and operation entries.")))
+        (effects state-write))
       (let* ((path (file-authorization-path authorization))
              (request (code-loading-request authorization binding))
              (decision
@@ -1427,12 +1613,27 @@
     (define (audit-code-loading-result!
              context authorization result error?)
       "Record the result of a code-loading capability operation."
-      #((parameters . ((context . "Evaluation context whose audit log receives the event.")
-                       (authorization . "Code-loading authorization alist identifying the request and decision.")
-                       (result . "Result value or error object produced by the load.")
-                       (error? . "True when RESULT represents an error rather than success.")))
-        (returns . "The unspecified value.")
-        (effects . (state-write)))
+      #((parameters
+         (context
+          (type any)
+          (description
+           ("Evaluation context whose audit log receives the event.")))
+         (authorization
+          (type any)
+          (description
+           ("Code-loading authorization alist identifying the request"
+            "and decision.")))
+         (result
+          (type any)
+          (description "Result value or error object produced by the load."))
+         (error?
+          (type any)
+          (description
+           ("True when RESULT represents an error rather than success."))))
+        (returns
+         (type any)
+         (description "The unspecified value."))
+        (effects state-write))
       (record-audit-event!
        context
        'capability-audit
@@ -1590,10 +1791,23 @@
       "while remaining available to a caller that deliberately grants it."
       "Records the capability decision for the audit trail and raises on"
       "denial."
-      #((parameters . ((binding . "Name of the host binding requesting process-environment access.")
-                       (context . "Evaluation context whose grants and audit log are consulted.")))
-        (returns . "#t when an active grant authorizes the read; otherwise raises.")
-        (effects . (state-write error)))
+      #((parameters
+         (binding
+          (type any)
+          (description
+           ("Name of the host binding requesting process-environment"
+            "access.")))
+         (context
+          (type any)
+          (description
+           ("Evaluation context whose grants and audit log are"
+            "consulted."))))
+        (returns
+         (type any)
+         (description
+          ("#t when an active grant authorizes the read; otherwise"
+           "raises.")))
+        (effects state-write error))
       (record-audit-event!
        context
        'capability-request
@@ -1622,10 +1836,21 @@
 
     (define (authorize-clock-capability binding context)
       "Authorize a policy-gated `(scheme time)` clock read."
-      #((parameters . ((binding . "Name of the host binding requesting the clock read.")
-                       (context . "Evaluation context whose clock grants and audit log are consulted.")))
-        (returns . "An authorization alist with request, decision, operation, and grant entries.")
-        (effects . (state-write error)))
+      #((parameters
+         (binding
+          (type any)
+          (description "Name of the host binding requesting the clock read."))
+         (context
+          (type any)
+          (description
+           ("Evaluation context whose clock grants and audit log are"
+            "consulted."))))
+        (returns
+         (type any)
+         (description
+          ("An authorization alist with request, decision, operation,"
+           "and grant entries.")))
+        (effects state-write error))
       (let* ((operation binding)
              (request (clock-capability-request binding operation))
              (grants (clock-capability-grants context)))
@@ -1693,12 +1918,28 @@
     (define (audit-clock-capability-result!
              context authorization result error?)
       "Record the result of an authorized clock capability operation."
-      #((parameters . ((context . "Evaluation context whose audit log receives the event.")
-                       (authorization . "Clock authorization alist identifying the request and decision.")
-                       (result . "Result value or error object produced by the clock read.")
-                       (error? . "True when RESULT represents an error rather than success.")))
-        (returns . "The unspecified value.")
-        (effects . (state-write)))
+      #((parameters
+         (context
+          (type any)
+          (description
+           ("Evaluation context whose audit log receives the event.")))
+         (authorization
+          (type any)
+          (description
+           ("Clock authorization alist identifying the request and"
+            "decision.")))
+         (result
+          (type any)
+          (description
+           ("Result value or error object produced by the clock read.")))
+         (error?
+          (type any)
+          (description
+           ("True when RESULT represents an error rather than success."))))
+        (returns
+         (type any)
+         (description "The unspecified value."))
+        (effects state-write))
       (record-audit-event!
        context
        'capability-audit
@@ -1749,18 +1990,36 @@
 
     (define (process-capability-effect operation)
       "Return the effect class for a process capability operation."
-      #((parameters . ((operation . "Process operation symbol to classify, such as spawn or status.")))
-        (returns . "The symbol process-control for mutating operations, else read-only-observation.")
-        (effects . (pure)))
+      #((parameters
+         (operation
+          (type any)
+          (description
+           ("Process operation symbol to classify, such as spawn or"
+            "status."))))
+        (returns
+         (type any)
+         (description
+          ("The symbol process-control for mutating operations, else"
+           "read-only-observation.")))
+        (effects pure))
       (if (memq operation '(spawn input interrupt terminate))
           'process-control
           'read-only-observation))
 
     (define (process-capability-policy-category operation)
       "Return the policy category for a process capability operation."
-      #((parameters . ((operation . "Process operation symbol whose policy category is requested.")))
-        (returns . "The symbol command-process for process-control effects, else emacs-read-only.")
-        (effects . (pure)))
+      #((parameters
+         (operation
+          (type any)
+          (description
+           ("Process operation symbol whose policy category is"
+            "requested."))))
+        (returns
+         (type any)
+         (description
+          ("The symbol command-process for process-control effects,"
+           "else emacs-read-only.")))
+        (effects pure))
       (if (eq? (process-capability-effect operation) 'process-control)
           'command-process
           'emacs-read-only))
@@ -1897,12 +2156,28 @@
 
     (define (process-capability-request library binding operation resource)
       "Return a host-neutral process capability request datum."
-      #((parameters . ((library . "Library specifier naming the requesting host library.")
-                       (binding . "Name of the host binding making the request.")
-                       (operation . "Process operation symbol being requested.")
-                       (resource . "Process resource descriptor whose fields are redacted into the request.")))
-        (returns . "A capability-request datum describing the process operation.")
-        (effects . (pure)))
+      #((parameters
+         (library
+          (type any)
+          (description
+           ("Library specifier naming the requesting host library.")))
+         (binding
+          (type any)
+          (description "Name of the host binding making the request."))
+         (operation
+          (type any)
+          (description "Process operation symbol being requested."))
+         (resource
+          (type any)
+          (description
+           ("Process resource descriptor whose fields are redacted into"
+            "the request."))))
+        (returns
+         (type any)
+         (description
+          ("A capability-request datum describing the process"
+           "operation.")))
+        (effects pure))
       (list 'capability-request
             (list 'library library)
             (list 'binding binding)
@@ -1998,14 +2273,36 @@
       "Authorize a host adapter process request against the shared process"
       "capability vocabulary.  This does not start or observe a real process;"
       "adapters call it before touching host process APIs."
-      #((parameters . ((library . "Library specifier naming the requesting host library.")
-                       (binding . "Name of the host binding making the request.")
-                       (context . "Evaluation context whose process grants and audit log are consulted.")
-                       (operation . "Process operation symbol being authorized.")
-                       (resource . "Process resource descriptor naming command, arguments, and environment.")
-                       (command-allow-list . "List of commands permitted for spawn operations.")))
-        (returns . "An authorization alist with request, decision, operation, and grant entries.")
-        (effects . (state-write error)))
+      #((parameters
+         (library
+          (type any)
+          (description
+           ("Library specifier naming the requesting host library.")))
+         (binding
+          (type any)
+          (description "Name of the host binding making the request."))
+         (context
+          (type any)
+          (description
+           ("Evaluation context whose process grants and audit log are"
+            "consulted.")))
+         (operation
+          (type any)
+          (description "Process operation symbol being authorized."))
+         (resource
+          (type any)
+          (description
+           ("Process resource descriptor naming command, arguments, and"
+            "environment.")))
+         (command-allow-list
+          (type any)
+          (description "List of commands permitted for spawn operations.")))
+        (returns
+         (type any)
+         (description
+          ("An authorization alist with request, decision, operation,"
+           "and grant entries.")))
+        (effects state-write error))
       (let* ((request
               (process-capability-request
                library
@@ -2094,12 +2391,26 @@
 
     (define (process-capability-handle id resource grant status)
       "Return a Scheme-readable process job handle datum."
-      #((parameters . ((id . "Identifier assigned to the process job handle.")
-                       (resource . "Process resource descriptor whose command and arguments are redacted in.")
-                       (grant . "Grant identifier backing the handle.")
-                       (status . "Status symbol describing the handle's lifecycle state.")))
-        (returns . "A handle datum describing the process job.")
-        (effects . (pure)))
+      #((parameters
+         (id
+          (type any)
+          (description "Identifier assigned to the process job handle."))
+         (resource
+          (type any)
+          (description
+           ("Process resource descriptor whose command and arguments"
+            "are redacted in.")))
+         (grant
+          (type any)
+          (description "Grant identifier backing the handle."))
+         (status
+          (type any)
+          (description
+           ("Status symbol describing the handle's lifecycle state."))))
+        (returns
+         (type any)
+         (description "A handle datum describing the process job."))
+        (effects pure))
       (list 'handle
             (list 'id id)
             (list 'kind 'process-job)
@@ -2117,15 +2428,36 @@
     (define (process-port-capability-handle
              id kind process-handle operations grant limits status)
       "Return a Scheme-readable process-backed port capability datum."
-      #((parameters . ((id . "Identifier assigned to the port capability.")
-                       (kind . "Port kind symbol, such as input or output.")
-                       (process-handle . "Handle of the backing process the port is attached to.")
-                       (operations . "List of operations the port permits.")
-                       (grant . "Grant identifier backing the port capability.")
-                       (limits . "List of limit entries constraining the port.")
-                       (status . "Status symbol describing the port's lifecycle state.")))
-        (returns . "A port-capability datum describing the process-backed port.")
-        (effects . (pure)))
+      #((parameters
+         (id
+          (type any)
+          (description "Identifier assigned to the port capability."))
+         (kind
+          (type any)
+          (description "Port kind symbol, such as input or output."))
+         (process-handle
+          (type any)
+          (description
+           ("Handle of the backing process the port is attached to.")))
+         (operations
+          (type any)
+          (description "List of operations the port permits."))
+         (grant
+          (type any)
+          (description "Grant identifier backing the port capability."))
+         (limits
+          (type any)
+          (description "List of limit entries constraining the port."))
+         (status
+          (type any)
+          (description
+           ("Status symbol describing the port's lifecycle state."))))
+        (returns
+         (type any)
+         (description
+          ("A port-capability datum describing the process-backed"
+           "port.")))
+        (effects pure))
       (list 'port-capability
             (list 'id id)
             (list 'kind kind)
@@ -2139,12 +2471,29 @@
     (define (audit-process-capability-result!
              context authorization result error?)
       "Record the result of an authorized process capability operation."
-      #((parameters . ((context . "Evaluation context whose audit log receives the event.")
-                       (authorization . "Process authorization alist identifying the request and decision.")
-                       (result . "Result value or error object produced by the operation, redacted on record.")
-                       (error? . "True when RESULT represents an error rather than success.")))
-        (returns . "The unspecified value.")
-        (effects . (state-write)))
+      #((parameters
+         (context
+          (type any)
+          (description
+           ("Evaluation context whose audit log receives the event.")))
+         (authorization
+          (type any)
+          (description
+           ("Process authorization alist identifying the request and"
+            "decision.")))
+         (result
+          (type any)
+          (description
+           ("Result value or error object produced by the operation,"
+            "redacted on record.")))
+         (error?
+          (type any)
+          (description
+           ("True when RESULT represents an error rather than success."))))
+        (returns
+         (type any)
+         (description "The unspecified value."))
+        (effects state-write))
       (record-audit-event!
        context
        'capability-audit
@@ -2224,9 +2573,18 @@
 
     (define (network-capability-effect operation)
       "Return the effect class for a network capability operation."
-      #((parameters . ((operation . "Network operation symbol to classify, such as stream or request.")))
-        (returns . "The symbol network-stream for stream operations, else network-egress.")
-        (effects . (pure)))
+      #((parameters
+         (operation
+          (type any)
+          (description
+           ("Network operation symbol to classify, such as stream or"
+            "request."))))
+        (returns
+         (type any)
+         (description
+          ("The symbol network-stream for stream operations, else"
+           "network-egress.")))
+        (effects pure))
       (if (eq? operation 'stream)
           'network-stream
           'network-egress))
@@ -2359,12 +2717,28 @@
 
     (define (network-capability-request library binding operation resource)
       "Return a host-neutral network capability request datum."
-      #((parameters . ((library . "Library specifier naming the requesting host library.")
-                       (binding . "Name of the host binding making the request.")
-                       (operation . "Network operation symbol being requested.")
-                       (resource . "Network resource descriptor whose fields are redacted into the request.")))
-        (returns . "A capability-request datum describing the network operation.")
-        (effects . (pure)))
+      #((parameters
+         (library
+          (type any)
+          (description
+           ("Library specifier naming the requesting host library.")))
+         (binding
+          (type any)
+          (description "Name of the host binding making the request."))
+         (operation
+          (type any)
+          (description "Network operation symbol being requested."))
+         (resource
+          (type any)
+          (description
+           ("Network resource descriptor whose fields are redacted into"
+            "the request."))))
+        (returns
+         (type any)
+         (description
+          ("A capability-request datum describing the network"
+           "operation.")))
+        (effects pure))
       (list 'capability-request
             (list 'library library)
             (list 'binding binding)
@@ -2456,13 +2830,33 @@
              library binding context operation resource)
       "Authorize a host adapter network request against the shared network"
       "capability vocabulary. This does not perform transport."
-      #((parameters . ((library . "Library specifier naming the requesting host library.")
-                       (binding . "Name of the host binding making the request.")
-                       (context . "Evaluation context whose network grants and audit log are consulted.")
-                       (operation . "Network operation symbol being authorized.")
-                       (resource . "Network resource descriptor naming scheme, host, port, and method.")))
-        (returns . "An authorization alist with request, decision, operation, and grant entries.")
-        (effects . (state-write error)))
+      #((parameters
+         (library
+          (type any)
+          (description
+           ("Library specifier naming the requesting host library.")))
+         (binding
+          (type any)
+          (description "Name of the host binding making the request."))
+         (context
+          (type any)
+          (description
+           ("Evaluation context whose network grants and audit log are"
+            "consulted.")))
+         (operation
+          (type any)
+          (description "Network operation symbol being authorized."))
+         (resource
+          (type any)
+          (description
+           ("Network resource descriptor naming scheme, host, port, and"
+            "method."))))
+        (returns
+         (type any)
+         (description
+          ("An authorization alist with request, decision, operation,"
+           "and grant entries.")))
+        (effects state-write error))
       (let* ((request
               (network-capability-request
                library
@@ -2555,13 +2949,28 @@
 
     (define (network-capability-handle id request url grant status)
       "Return a Scheme-readable network stream handle datum."
-      #((parameters . ((id . "Identifier assigned to the network stream handle.")
-                       (request . "Capability request datum the handle was authorized for.")
-                       (url . "URL the network stream is connected to.")
-                       (grant . "Grant identifier backing the handle.")
-                       (status . "Status symbol describing the handle's lifecycle state.")))
-        (returns . "A handle datum describing the network stream.")
-        (effects . (pure)))
+      #((parameters
+         (id
+          (type any)
+          (description "Identifier assigned to the network stream handle."))
+         (request
+          (type any)
+          (description
+           ("Capability request datum the handle was authorized for.")))
+         (url
+          (type any)
+          (description "URL the network stream is connected to."))
+         (grant
+          (type any)
+          (description "Grant identifier backing the handle."))
+         (status
+          (type any)
+          (description
+           ("Status symbol describing the handle's lifecycle state."))))
+        (returns
+         (type any)
+         (description "A handle datum describing the network stream."))
+        (effects pure))
       (list 'handle
             (list 'id id)
             (list 'kind 'network-stream)
@@ -2574,15 +2983,37 @@
     (define (network-port-capability-handle
              id kind stream-handle operations grant limits status)
       "Return a Scheme-readable network-backed port capability datum."
-      #((parameters . ((id . "Identifier assigned to the port capability.")
-                       (kind . "Port kind symbol, such as input or output.")
-                       (stream-handle . "Handle of the backing network stream the port is attached to.")
-                       (operations . "List of operations the port permits.")
-                       (grant . "Grant identifier backing the port capability.")
-                       (limits . "List of limit entries constraining the port.")
-                       (status . "Status symbol describing the port's lifecycle state.")))
-        (returns . "A port-capability datum describing the network-backed port.")
-        (effects . (pure)))
+      #((parameters
+         (id
+          (type any)
+          (description "Identifier assigned to the port capability."))
+         (kind
+          (type any)
+          (description "Port kind symbol, such as input or output."))
+         (stream-handle
+          (type any)
+          (description
+           ("Handle of the backing network stream the port is attached"
+            "to.")))
+         (operations
+          (type any)
+          (description "List of operations the port permits."))
+         (grant
+          (type any)
+          (description "Grant identifier backing the port capability."))
+         (limits
+          (type any)
+          (description "List of limit entries constraining the port."))
+         (status
+          (type any)
+          (description
+           ("Status symbol describing the port's lifecycle state."))))
+        (returns
+         (type any)
+         (description
+          ("A port-capability datum describing the network-backed"
+           "port.")))
+        (effects pure))
       (list 'port-capability
             (list 'id id)
             (list 'kind kind)
@@ -2596,12 +3027,29 @@
     (define (audit-network-capability-result!
              context authorization result error?)
       "Record the result of an authorized network capability operation."
-      #((parameters . ((context . "Evaluation context whose audit log receives the event.")
-                       (authorization . "Network authorization alist identifying the request and decision.")
-                       (result . "Result value or error object produced by the operation, redacted on record.")
-                       (error? . "True when RESULT represents an error rather than success.")))
-        (returns . "The unspecified value.")
-        (effects . (state-write)))
+      #((parameters
+         (context
+          (type any)
+          (description
+           ("Evaluation context whose audit log receives the event.")))
+         (authorization
+          (type any)
+          (description
+           ("Network authorization alist identifying the request and"
+            "decision.")))
+         (result
+          (type any)
+          (description
+           ("Result value or error object produced by the operation,"
+            "redacted on record.")))
+         (error?
+          (type any)
+          (description
+           ("True when RESULT represents an error rather than success."))))
+        (returns
+         (type any)
+         (description "The unspecified value."))
+        (effects state-write))
       (record-audit-event!
        context
        'capability-audit
@@ -2618,10 +3066,18 @@
 
     (define (normalize-include-paths paths directory)
       "Resolve relative include paths against the active include directory."
-      #((parameters . ((paths . "List of include path strings to resolve.")
-                       (directory . "Include directory prefix to join relative paths against.")))
-        (returns . "A list of normalized path strings.")
-        (effects . (pure)))
+      #((parameters
+         (paths
+          (type any)
+          (description "List of include path strings to resolve."))
+         (directory
+          (type any)
+          (description
+           ("Include directory prefix to join relative paths against."))))
+        (returns
+         (type any)
+         (description "A list of normalized path strings."))
+        (effects pure))
       (map (lambda (path)
              (path-normalize (path-join directory path)))
            paths))
@@ -2638,9 +3094,18 @@
 
     (define (new-eval-context options)
       "Create a fresh evaluation context from user option overrides."
-      #((parameters . ((options . "Association list of user option overrides controlling budgets, paths, capabilities, and context fields.")))
-        (returns . "A freshly initialized eval-context record seeded from OPTIONS and defaults.")
-        (effects . (pure)))
+      #((parameters
+         (options
+          (type any)
+          (description
+           ("Association list of user option overrides controlling"
+            "budgets, paths, capabilities, and context fields."))))
+        (returns
+         (type any)
+         (description
+          ("A freshly initialized eval-context record seeded from"
+           "OPTIONS and defaults.")))
+        (effects pure))
       (let ((include-directory
              (normalize-include-directory
               (option-ref options 'include-directory "."))))
@@ -2718,11 +3183,21 @@
 
     (define (record-audit-event! context event fields)
       "Record a Scheme-readable audit EVENT with FIELDS in CONTEXT."
-      #((parameters . ((context . "Evaluation context whose audit-event list is extended.")
-                       (event . "Symbol naming the audit event kind.")
-                       (fields . "List of field entries attached to the event.")))
-        (returns . "The newly constructed audit-entry datum.")
-        (effects . (state-write)))
+      #((parameters
+         (context
+          (type any)
+          (description
+           ("Evaluation context whose audit-event list is extended.")))
+         (event
+          (type any)
+          (description "Symbol naming the audit event kind."))
+         (fields
+          (type any)
+          (description "List of field entries attached to the event.")))
+        (returns
+         (type any)
+         (description "The newly constructed audit-entry datum."))
+        (effects state-write))
       (let ((entry (cons 'audit-entry
                          (cons (list 'event event) fields))))
         (set-context-audit-events!
@@ -2732,10 +3207,21 @@
 
     (define (record-agent-event! context event)
       "Record an ordered event-channel EVENT after enforcing event budgets."
-      #((parameters . ((context . "Evaluation context whose event count and audit-event list are updated.")
-                       (event . "Event datum to record, sized against the event-node budget.")))
-        (returns . "The recorded EVENT datum.")
-        (effects . (state-write error)))
+      #((parameters
+         (context
+          (type any)
+          (description
+           ("Evaluation context whose event count and audit-event list"
+            "are updated.")))
+         (event
+          (type any)
+          (description
+           ("Event datum to record, sized against the event-node"
+            "budget."))))
+        (returns
+         (type any)
+         (description "The recorded EVENT datum."))
+        (effects state-write error))
       (let ((node-count (value-node-count event '())))
         (if (> node-count (context-maximum-event-nodes context))
             (budget-stop! context 'event-nodes
@@ -2760,9 +3246,18 @@
       "Charge one evaluator step against the active step budget."
       "Each evaluation step also re-checks the wall-time budget so an opted-in"
       "wall-clock limit interrupts even a tight loop that allocates nothing."
-      #((parameters . ((context . "Evaluation context whose step counter is incremented and checked.")))
-        (returns . "The unspecified value, after possibly raising on budget exhaustion.")
-        (effects . (state-write error)))
+      #((parameters
+         (context
+          (type any)
+          (description
+           ("Evaluation context whose step counter is incremented and"
+            "checked."))))
+        (returns
+         (type any)
+         (description
+          ("The unspecified value, after possibly raising on budget"
+           "exhaustion.")))
+        (effects state-write error))
       (set-context-steps! context (+ (context-steps context) 1))
       (if (> (context-steps context) (context-maximum-steps context))
           (budget-stop! context 'steps
@@ -2774,9 +3269,18 @@
       "Enforce the wall-time budget when a limit and a host clock are set."
       "A run opts in by configuring `max-wall-time-ms' and a `wall-clock'"
       "thunk; otherwise no clock is read and evaluation stays deterministic."
-      #((parameters . ((context . "Evaluation context holding the wall-time limit, clock thunk, and start time.")))
-        (returns . "The unspecified value; raises when elapsed wall time exceeds the limit.")
-        (effects . (state-read state-write error)))
+      #((parameters
+         (context
+          (type any)
+          (description
+           ("Evaluation context holding the wall-time limit, clock"
+            "thunk, and start time."))))
+        (returns
+         (type any)
+         (description
+          ("The unspecified value; raises when elapsed wall time"
+           "exceeds the limit.")))
+        (effects state-read state-write error))
       (let ((limit (context-maximum-wall-time-ms context))
             (clock (context-wall-clock context)))
         (if (and limit clock)
@@ -2792,10 +3296,23 @@
 
     (define (note-host-callback! context primitive)
       "Charge one primitive callback against the host-callback budget."
-      #((parameters . ((context . "Evaluation context whose host-callback counter is incremented and checked.")
-                       (primitive . "Primitive procedure named in the diagnostic when the budget is exceeded.")))
-        (returns . "The unspecified value, after possibly raising on budget exhaustion.")
-        (effects . (state-write error)))
+      #((parameters
+         (context
+          (type any)
+          (description
+           ("Evaluation context whose host-callback counter is"
+            "incremented and checked.")))
+         (primitive
+          (type any)
+          (description
+           ("Primitive procedure named in the diagnostic when the"
+            "budget is exceeded."))))
+        (returns
+         (type any)
+         (description
+          ("The unspecified value, after possibly raising on budget"
+           "exhaustion.")))
+        (effects state-write error))
       (set-context-host-callbacks!
        context
        (+ (context-host-callbacks context) 1))
@@ -2812,9 +3329,18 @@
       "dimension rather than relying on the step budget as a proxy. Each call"
       "interns at most one new symbol, so the per-call charge is a conservative"
       "upper bound on the symbols the run adds to the global intern table."
-      #((parameters . ((context . "Evaluation context whose interned-symbol counter is incremented and checked.")))
-        (returns . "The unspecified value, after possibly raising on budget exhaustion.")
-        (effects . (state-write error)))
+      #((parameters
+         (context
+          (type any)
+          (description
+           ("Evaluation context whose interned-symbol counter is"
+            "incremented and checked."))))
+        (returns
+         (type any)
+         (description
+          ("The unspecified value, after possibly raising on budget"
+           "exhaustion.")))
+        (effects state-write error))
       (set-context-interned-symbols!
        context
        (+ (context-interned-symbols context) 1))
@@ -2830,10 +3356,22 @@
       "Port writes charge what they emit as they emit it, so an unbounded"
       "printing loop fails closed with the dimension named, exactly like the"
       "step and host-callback budgets."
-      #((parameters . ((context . "Evaluation context whose output-byte counter is incremented and checked.")
-                       (byte-count . "Number of output bytes to charge against the budget.")))
-        (returns . "The unspecified value, after possibly raising on budget exhaustion.")
-        (effects . (state-write error)))
+      #((parameters
+         (context
+          (type any)
+          (description
+           ("Evaluation context whose output-byte counter is"
+            "incremented and checked.")))
+         (byte-count
+          (type any)
+          (description
+           ("Number of output bytes to charge against the budget."))))
+        (returns
+         (type any)
+         (description
+          ("The unspecified value, after possibly raising on budget"
+           "exhaustion.")))
+        (effects state-write error))
       (set-context-output-bytes!
        context
        (+ (context-output-bytes context) byte-count))
@@ -2851,10 +3389,21 @@
       "than re-walking the reachable structure of every primitive result."
       "Enforcement fails closed with the unchanged \"value node budget"
       "exceeded\" diagnostic so an interpreted `guard` cannot catch it."
-      #((parameters . ((context . "Evaluation context whose value-node counter is incremented and checked.")
-                       (count . "Number of freshly allocated value nodes to charge.")))
-        (returns . "The unspecified value, after possibly raising on budget exhaustion.")
-        (effects . (state-write error)))
+      #((parameters
+         (context
+          (type any)
+          (description
+           ("Evaluation context whose value-node counter is incremented"
+            "and checked.")))
+         (count
+          (type any)
+          (description "Number of freshly allocated value nodes to charge.")))
+        (returns
+         (type any)
+         (description
+          ("The unspecified value, after possibly raising on budget"
+           "exhaustion.")))
+        (effects state-write error))
       (set-context-value-nodes!
        context
        (+ (context-value-nodes context) count))
@@ -2869,38 +3418,73 @@
       "Charge COUNT allocated nodes against CONTEXT and return VALUE."
       "A convenience wrapper so a constructor charges its allocation inline"
       "and still yields the constructed value in tail position."
-      #((parameters . ((value . "Constructed value to return after charging.")
-                       (count . "Number of allocated nodes to charge against the budget.")
-                       (context . "Evaluation context whose value-node budget is charged.")))
-        (returns . "The original VALUE, unchanged.")
-        (effects . (state-write error)))
+      #((parameters
+         (value
+          (type any)
+          (description "Constructed value to return after charging."))
+         (count
+          (type any)
+          (description
+           ("Number of allocated nodes to charge against the budget.")))
+         (context
+          (type any)
+          (description
+           ("Evaluation context whose value-node budget is charged."))))
+        (returns
+         (type any)
+         (description "The original VALUE, unchanged."))
+        (effects state-write error))
       (note-value-allocation! context count)
       value)
 
     (define (charge-string-allocation! value context)
       "Charge a freshly built string VALUE's nodes (1 + length) and return it."
-      #((parameters . ((value . "Freshly built string to return after charging.")
-                       (context . "Evaluation context whose value-node budget is charged.")))
-        (returns . "The original string VALUE, unchanged.")
-        (effects . (state-write error)))
+      #((parameters
+         (value
+          (type any)
+          (description "Freshly built string to return after charging."))
+         (context
+          (type any)
+          (description
+           ("Evaluation context whose value-node budget is charged."))))
+        (returns
+         (type any)
+         (description "The original string VALUE, unchanged."))
+        (effects state-write error))
       (note-value-allocation! context (+ 1 (string-length value)))
       value)
 
     (define (charge-bytevector-allocation! value context)
       "Charge a freshly built bytevector VALUE's nodes (1 + length) and return it."
-      #((parameters . ((value . "Freshly built bytevector to return after charging.")
-                       (context . "Evaluation context whose value-node budget is charged.")))
-        (returns . "The original bytevector VALUE, unchanged.")
-        (effects . (state-write error)))
+      #((parameters
+         (value
+          (type any)
+          (description "Freshly built bytevector to return after charging."))
+         (context
+          (type any)
+          (description
+           ("Evaluation context whose value-node budget is charged."))))
+        (returns
+         (type any)
+         (description "The original bytevector VALUE, unchanged."))
+        (effects state-write error))
       (note-value-allocation! context (+ 1 (bytevector-length value)))
       value)
 
     (define (charge-vector-allocation! value context)
       "Charge a freshly built vector VALUE's nodes (1 + length) and return it."
-      #((parameters . ((value . "Freshly built vector to return after charging.")
-                       (context . "Evaluation context whose value-node budget is charged.")))
-        (returns . "The original vector VALUE, unchanged.")
-        (effects . (state-write error)))
+      #((parameters
+         (value
+          (type any)
+          (description "Freshly built vector to return after charging."))
+         (context
+          (type any)
+          (description
+           ("Evaluation context whose value-node budget is charged."))))
+        (returns
+         (type any)
+         (description "The original vector VALUE, unchanged."))
+        (effects state-write error))
       (note-value-allocation! context (+ 1 (vector-length value)))
       value)
 
@@ -2908,10 +3492,19 @@
       "Charge a freshly consed proper list VALUE's pairs (its length) and"
       "return it. The shared empty-list tail and the already-charged elements"
       "are not recounted."
-      #((parameters . ((value . "Freshly consed proper list to return after charging.")
-                       (context . "Evaluation context whose value-node budget is charged.")))
-        (returns . "The original list VALUE, unchanged.")
-        (effects . (state-write error)))
+      #((parameters
+         (value
+          (type any)
+          (description
+           ("Freshly consed proper list to return after charging.")))
+         (context
+          (type any)
+          (description
+           ("Evaluation context whose value-node budget is charged."))))
+        (returns
+         (type any)
+         (description "The original list VALUE, unchanged."))
+        (effects state-write error))
       (note-value-allocation! context (length value))
       value)
 
@@ -2922,11 +3515,26 @@
       "internal-libraries grant, natively bound library procedures"
       "legitimately return their own host record types, so the"
       "canonical-value tripwire is relaxed only for that trusted posture."
-      #((parameters . ((value . "Runtime value whose reachable nodes are counted.")
-                       (seen . "List of already-visited compound values for cycle tolerance.")
-                       (maybe-tolerant . "Optional flag counting unrecognized host values as opaque leaves instead of raising.")))
-        (returns . "The total count of reachable value nodes as a host integer.")
-        (effects . (error)))
+      #((parameters
+         (value
+          (type any)
+          (description "Runtime value whose reachable nodes are counted."))
+         (seen
+          (type any)
+          (description
+           ("List of already-visited compound values for cycle"
+            "tolerance.")))
+         (maybe-tolerant
+          (type any)
+          (description
+           ("Optional flag counting unrecognized host values as opaque"
+            "leaves instead of raising."))))
+        (returns
+         (type any)
+         (description
+          ("The total count of reachable value nodes as a host"
+           "integer.")))
+        (effects error))
       (let ((tolerant (and (pair? maybe-tolerant) (car maybe-tolerant))))
         (cond
          ((or (boolean? value)
@@ -3000,10 +3608,19 @@
 
     (define (check-value-budget value context)
       "Reject VALUE when its reachable node count exceeds the result budget."
-      #((parameters . ((value . "Runtime value whose reachable node count is checked.")
-                       (context . "Evaluation context holding the value-node ceiling.")))
-        (returns . "The original VALUE when within budget; otherwise raises.")
-        (effects . (state-write error)))
+      #((parameters
+         (value
+          (type any)
+          (description
+           ("Runtime value whose reachable node count is checked.")))
+         (context
+          (type any)
+          (description "Evaluation context holding the value-node ceiling.")))
+        (returns
+         (type any)
+         (description
+          ("The original VALUE when within budget; otherwise raises.")))
+        (effects state-write error))
       (let ((count (value-node-count
                     value
                     '()
@@ -3023,10 +3640,18 @@
       "primitive path -- which keeps the literal result-size fixtures exact"
       "while the per-result walk is removed from constructor and accessor"
       "results."
-      #((parameters . ((value . "Literal datum whose node count is charged.")
-                       (context . "Evaluation context whose value-node budget is charged.")))
-        (returns . "The original literal VALUE, unchanged.")
-        (effects . (state-write error)))
+      #((parameters
+         (value
+          (type any)
+          (description "Literal datum whose node count is charged."))
+         (context
+          (type any)
+          (description
+           ("Evaluation context whose value-node budget is charged."))))
+        (returns
+         (type any)
+         (description "The original literal VALUE, unchanged."))
+        (effects state-write error))
       (note-value-allocation!
        context
        (value-node-count
@@ -3040,10 +3665,22 @@
       "SPEC is a `(budget (key value) ...)' datum or a bare field alist; KEYS"
       "lists the acceptable field names (so an alias such as `allocation-bytes'"
       "can stand in for `allocation-nodes')."
-      #((parameters . ((spec . "Budget specification datum or field alist to search.")
-                       (keys . "List of acceptable field names to look up, in priority order.")))
-        (returns . "The first matching numeric field value as a host number, or #f when none match.")
-        (effects . (pure)))
+      #((parameters
+         (spec
+          (type any)
+          (description
+           ("Budget specification datum or field alist to search.")))
+         (keys
+          (type any)
+          (description
+           ("List of acceptable field names to look up, in priority"
+            "order."))))
+        (returns
+         (type any)
+         (description
+          ("The first matching numeric field value as a host number,"
+           "or #f when none match.")))
+        (effects pure))
       (let ((fields (if (and (pair? spec) (eq? (car spec) 'budget))
                         (cdr spec)
                         spec)))
@@ -3063,9 +3700,13 @@
       "Return the counter dimensions a budget specification may tighten."
       "Each entry is (KEYS max-getter max-setter used-getter); KEYS are the"
       "specification field names that target the dimension."
-      #((parameters . ())
-        (returns . "A list of (keys max-getter max-setter used-getter) dimension descriptors.")
-        (effects . (pure)))
+      #((parameters)
+        (returns
+         (type any)
+         (description
+          ("A list of (keys max-getter max-setter used-getter)"
+           "dimension descriptors.")))
+        (effects pure))
       (list
        (list '(steps)
              context-maximum-steps set-context-maximum-steps!
@@ -3089,9 +3730,16 @@
 
     (define (budget-ceiling-snapshot context)
       "Capture CONTEXT's current tightenable ceilings for later restoration."
-      #((parameters . ((context . "Evaluation context whose ceilings are read.")))
-        (returns . "A list of the current ceiling values, ordered by budget dimension.")
-        (effects . (state-read)))
+      #((parameters
+         (context
+          (type any)
+          (description "Evaluation context whose ceilings are read.")))
+        (returns
+         (type any)
+         (description
+          ("A list of the current ceiling values, ordered by budget"
+           "dimension.")))
+        (effects state-read))
       (map (lambda (dimension) ((second dimension) context))
            (budget-spec-dimensions)))
 
@@ -3100,10 +3748,20 @@
       "A dimension absent from SPEC is left untouched, and the tightened ceiling"
       "never rises above the inherited outer ceiling, so nested `with-budget'"
       "forms compose monotonically."
-      #((parameters . ((context . "Evaluation context whose ceilings are tightened in place.")
-                       (spec . "Budget specification naming the dimensions and amounts to admit.")))
-        (returns . "The unspecified value.")
-        (effects . (state-read state-write)))
+      #((parameters
+         (context
+          (type any)
+          (description
+           ("Evaluation context whose ceilings are tightened in place.")))
+         (spec
+          (type any)
+          (description
+           ("Budget specification naming the dimensions and amounts to"
+            "admit."))))
+        (returns
+         (type any)
+         (description "The unspecified value."))
+        (effects state-read state-write))
       (for-each
        (lambda (dimension)
          (let ((requested (budget-spec-ref spec (car dimension))))
@@ -3118,10 +3776,20 @@
 
     (define (budget-restore! context saved)
       "Restore CONTEXT's tightenable ceilings from a SAVED snapshot."
-      #((parameters . ((context . "Evaluation context whose ceilings are restored in place.")
-                       (saved . "Snapshot list of ceiling values from budget-ceiling-snapshot.")))
-        (returns . "The unspecified value.")
-        (effects . (state-write)))
+      #((parameters
+         (context
+          (type any)
+          (description
+           ("Evaluation context whose ceilings are restored in place.")))
+         (saved
+          (type any)
+          (description
+           ("Snapshot list of ceiling values from"
+            "budget-ceiling-snapshot."))))
+        (returns
+         (type any)
+         (description "The unspecified value."))
+        (effects state-write))
       (for-each
        (lambda (dimension value) ((third dimension) context value))
        (budget-spec-dimensions)
@@ -3129,19 +3797,36 @@
 
     (define (values-list value)
       "Unpack a single or multiple-value result into a list."
-      #((parameters . ((value . "Single value or multiple-values result to unpack.")))
-        (returns . "A list of the contained values.")
-        (effects . (pure)))
+      #((parameters
+         (value
+          (type any)
+          (description "Single value or multiple-values result to unpack.")))
+        (returns
+         (type any)
+         (description "A list of the contained values."))
+        (effects pure))
       (if (multiple-values? value)
           (multiple-values-values value)
           (list value)))
 
     (define (single-value value description)
       "Require VALUE to contain exactly one Scheme value."
-      #((parameters . ((value . "Single value or multiple-values result to constrain.")
-                       (description . "Context phrase prefixed to the error when the count is not one.")))
-        (returns . "The single contained value; raises when VALUE holds zero or many values.")
-        (effects . (error)))
+      #((parameters
+         (value
+          (type any)
+          (description
+           ("Single value or multiple-values result to constrain.")))
+         (description
+          (type any)
+          (description
+           ("Context phrase prefixed to the error when the count is not"
+            "one."))))
+        (returns
+         (type any)
+         (description
+          ("The single contained value; raises when VALUE holds zero"
+           "or many values.")))
+        (effects error))
       (let ((values (values-list value)))
         (if (not (= (length values) 1))
             (eval-error
@@ -3151,34 +3836,64 @@
 
     (define (identity-continuation value)
       "Default continuation that returns its input value unchanged."
-      #((parameters . ((value . "Value to return unchanged.")))
-        (returns . "The original VALUE, unchanged.")
-        (effects . (pure)))
+      #((parameters
+         (value
+          (type any)
+          (description "Value to return unchanged.")))
+        (returns
+         (type any)
+         (description "The original VALUE, unchanged."))
+        (effects pure))
       value)
 
     (define (continue continuation value)
       "Invoke a continuation procedure with VALUE."
-      #((parameters . ((continuation . "Continuation procedure to invoke.")
-                       (value . "Value passed to the continuation.")))
-        (returns . "Whatever CONTINUATION returns when applied to VALUE.")
-        (effects . (pure)))
+      #((parameters
+         (continuation
+          (type any)
+          (description "Continuation procedure to invoke."))
+         (value
+          (type any)
+          (description "Value passed to the continuation.")))
+        (returns
+         (type any)
+         (description "Whatever CONTINUATION returns when applied to VALUE."))
+        (effects pure))
       (continuation value))
 
     (define (continuation-value arguments)
       "Package continuation arguments as one value or multiple values."
-      #((parameters . ((arguments . "List of values to package for the continuation.")))
-        (returns . "The sole value when ARGUMENTS has one element, else a multiple-values datum.")
-        (effects . (pure)))
+      #((parameters
+         (arguments
+          (type any)
+          (description "List of values to package for the continuation.")))
+        (returns
+         (type any)
+         (description
+          ("The sole value when ARGUMENTS has one element, else a"
+           "multiple-values datum.")))
+        (effects pure))
       (if (= (length arguments) 1)
           (car arguments)
           (make-multiple-values arguments)))
 
     (define (proper-list-elements datum description)
       "Return DATUM as a proper list or raise an evaluator error."
-      #((parameters . ((datum . "Datum expected to be a proper list.")
-                       (description . "Context phrase prefixed to the error when DATUM is improper.")))
-        (returns . "A fresh list of DATUM's elements; raises when DATUM is not a proper list.")
-        (effects . (error)))
+      #((parameters
+         (datum
+          (type any)
+          (description "Datum expected to be a proper list."))
+         (description
+          (type any)
+          (description
+           ("Context phrase prefixed to the error when DATUM is"
+            "improper."))))
+        (returns
+         (type any)
+         (description
+          ("A fresh list of DATUM's elements; raises when DATUM is not"
+           "a proper list.")))
+        (effects error))
       (let loop ((cursor datum) (elements '()))
         (cond
          ((null? cursor) (reverse elements))
@@ -3253,8 +3968,114 @@
        ((null? (cdr strings)) (car strings))
        (else
         (string-append (car strings)
-                       "\n"
+                       " "
                        (documentation-join-strings (cdr strings))))))
+
+    (define (documentation-normalize-description value)
+      "Return VALUE as a normalized description string, or #f."
+      (cond
+       ((string? value) value)
+       ((not (proper-list? value)) #f)
+       (else
+        (let loop ((rest value) (strings '()))
+          (cond
+           ((null? rest)
+            (documentation-join-strings (reverse strings)))
+	           ((string? (car rest))
+	            (loop (cdr rest) (cons (car rest) strings)))
+	           (else #f))))))
+
+    (define (documentation-string-list? value)
+      "Return #t when VALUE is a non-empty proper list of strings."
+      (and (pair? value)
+           (proper-list? value)
+           (let loop ((rest value))
+             (cond
+              ((null? rest) #t)
+              ((string? (car rest)) (loop (cdr rest)))
+              (else #f)))))
+
+    (define (documentation-descriptor-entry-value entry)
+      "Return ENTRY's single value, or #f."
+      (if (and (pair? entry)
+               (pair? (cdr entry))
+               (null? (cdr (cdr entry))))
+          (car (cdr entry))
+          #f))
+
+    (define (documentation-normalize-descriptor value)
+      "Return VALUE as a metadata descriptor, or #f."
+      (cond
+	       ((string? value)
+	        (list (list 'type 'any)
+	              (list 'description value)))
+	       ((documentation-string-list? value)
+	        (list (list 'type 'any)
+	              (list 'description
+	                    (documentation-join-strings value))))
+	       ((not (proper-list? value)) #f)
+       (else
+        (let loop ((rest value)
+                   (fields '())
+                   (names '())
+                   (type-present? #f))
+          (cond
+           ((null? rest)
+            (let ((normalized (reverse fields)))
+              (if type-present?
+                  normalized
+                  (cons (list 'type 'any) normalized))))
+           ((not (pair? (car rest))) #f)
+           ((not (symbol? (car (car rest)))) #f)
+           ((memq (car (car rest)) names) #f)
+           ((eq? (car (car rest)) 'type)
+            (let ((entry-value
+                   (documentation-descriptor-entry-value (car rest))))
+              (if entry-value
+                  (loop (cdr rest)
+                        (cons (list 'type entry-value) fields)
+                        (cons 'type names)
+                        #t)
+                  #f)))
+           ((eq? (car (car rest)) 'description)
+            (let ((entry-value
+                   (documentation-descriptor-entry-value (car rest))))
+              (if entry-value
+                  (let ((description
+                         (documentation-normalize-description entry-value)))
+                    (if description
+                        (loop (cdr rest)
+                              (cons (list 'description description) fields)
+                              (cons 'description names)
+                              type-present?)
+                        #f))
+                  #f)))
+           (else
+            (loop (cdr rest)
+                  (cons (car rest) fields)
+                  (cons (car (car rest)) names)
+                  type-present?)))))))
+
+    (define (documentation-normalize-parameters parameters)
+      "Return descriptor-shaped PARAMETERS, or #f when malformed."
+      (if (not (proper-list? parameters))
+          #f
+          (let loop ((rest parameters) (normalized '()) (names '()))
+            (cond
+             ((null? rest) (reverse normalized))
+             ((not (pair? (car rest))) #f)
+             ((not (symbol? (car (car rest)))) #f)
+             ((memq (car (car rest)) names) #f)
+             (else
+              (let ((descriptor
+                     (documentation-normalize-descriptor
+                      (cdr (car rest)))))
+                (if descriptor
+                    (loop (cdr rest)
+                          (cons (cons (car (car rest)) descriptor)
+                                normalized)
+                          (cons (car (car rest)) names))
+                    #f)))))))
 
     (define (documentation-parameter-names parameters)
       "Return `(ok . names)' for valid parameter alists, otherwise #f."
@@ -3302,9 +4123,11 @@
 
     (define (documentation-merge-parameters fields value)
       "Return FIELDS merged with parameter metadata VALUE, or #f if malformed."
-      (let ((new-names-result (documentation-parameter-names value))
-            (existing (documentation-field fields 'parameters)))
-        (if (not new-names-result)
+      (let* ((normalized (documentation-normalize-parameters value))
+             (new-names-result
+              (and normalized (documentation-parameter-names normalized)))
+             (existing (documentation-field fields 'parameters)))
+        (if (not (and normalized new-names-result))
             #f
             (let ((new-names (cdr new-names-result)))
               (cond
@@ -3324,14 +4147,22 @@
                           (documentation-set-field
                            fields
                            'parameters
-                           (append (cdr existing) value)))
+                           (append (cdr existing) normalized)))
                          ((memq (car rest) existing-names) #f)
                          (else
                           (duplicate-loop
                            (cdr rest)
                            existing-names)))))))
                (else
-                (documentation-add-field fields 'parameters value)))))))
+                (documentation-add-field fields 'parameters normalized)))))))
+
+    (define (documentation-merge-returns fields value)
+      "Return FIELDS merged with return metadata VALUE, or #f if malformed."
+      (let ((normalized (documentation-normalize-descriptor value)))
+        (cond
+         ((not normalized) #f)
+         ((documentation-field fields 'returns) #f)
+         (else (documentation-add-field fields 'returns normalized)))))
 
     (define (documentation-merge-field fields name value)
       "Return FIELDS merged with NAME/VALUE, or #f if malformed."
@@ -3345,11 +4176,13 @@
                       (documentation-set-field
                        fields
                        name
-                       (string-append (cdr existing) "\n" value))
+                       (string-append (cdr existing) " " value))
                       #f)
                   (documentation-add-field fields name value))))
          ((eq? name 'parameters)
           (documentation-merge-parameters fields value))
+         ((eq? name 'returns)
+          (documentation-merge-returns fields value))
          ((memq name documentation-list-field-names)
           (if (not (proper-list? value))
               #f
@@ -3429,12 +4262,32 @@
     (define (documentation-body-result
              body body-definition-form? retention . maybe-formals)
       "Return `(metadata . body)' after reading documentation literals from BODY."
-      #((parameters . ((body . "Body form list whose leading documentation literals are read.")
-                       (body-definition-form? . "Predicate recognizing internal definition forms to skip past.")
-                       (retention . "Docstring retention mode controlling which metadata is kept.")
-                       (maybe-formals . "Optional formals list used to validate parameter metadata.")))
-        (returns . "A pair of the parsed documentation metadata and the possibly rewritten body.")
-        (effects . (error)))
+      #((parameters
+         (body
+          (type any)
+          (description
+           ("Body form list whose leading documentation literals are"
+            "read.")))
+         (body-definition-form?
+          (type any)
+          (description
+           ("Predicate recognizing internal definition forms to skip"
+            "past.")))
+         (retention
+          (type any)
+          (description
+           ("Docstring retention mode controlling which metadata is"
+            "kept.")))
+         (maybe-formals
+          (type any)
+          (description
+           ("Optional formals list used to validate parameter metadata."))))
+        (returns
+         (type any)
+         (description
+          ("A pair of the parsed documentation metadata and the"
+           "possibly rewritten body.")))
+        (effects error))
       (let* ((retention (normalize-docstring-retention retention))
              (retained-base
               (documentation-base-metadata retention maybe-formals))
@@ -3511,11 +4364,25 @@
     (define (documentation-metadata-from-body
              body body-definition-form? . maybe-formals)
       "Return full documentation metadata from BODY."
-      #((parameters . ((body . "Body form list whose leading documentation literals are read.")
-                       (body-definition-form? . "Predicate recognizing internal definition forms to skip past.")
-                       (maybe-formals . "Optional formals list used to validate parameter metadata.")))
-        (returns . "The full documentation metadata parsed from BODY.")
-        (effects . (error)))
+      #((parameters
+         (body
+          (type any)
+          (description
+           ("Body form list whose leading documentation literals are"
+            "read.")))
+         (body-definition-form?
+          (type any)
+          (description
+           ("Predicate recognizing internal definition forms to skip"
+            "past.")))
+         (maybe-formals
+          (type any)
+          (description
+           ("Optional formals list used to validate parameter metadata."))))
+        (returns
+         (type any)
+         (description "The full documentation metadata parsed from BODY."))
+        (effects error))
       (car (apply documentation-body-result
                   body
                   body-definition-form?
@@ -3524,31 +4391,55 @@
 
     (define (second list)
       "Return the second element of LIST for parser helpers."
-      #((parameters . ((list . "List whose second element is returned.")))
-        (returns . "The second element of LIST.")
-        (effects . (error)))
+      #((parameters
+         (list
+          (type any)
+          (description "List whose second element is returned.")))
+        (returns
+         (type any)
+         (description "The second element of LIST."))
+        (effects error))
       (car (cdr list)))
 
     (define (third list)
       "Return the third element of LIST for parser helpers."
-      #((parameters . ((list . "List whose third element is returned.")))
-        (returns . "The third element of LIST.")
-        (effects . (error)))
+      #((parameters
+         (list
+          (type any)
+          (description "List whose third element is returned.")))
+        (returns
+         (type any)
+         (description "The third element of LIST."))
+        (effects error))
       (car (cdr (cdr list))))
 
     (define (fourth list)
       "Return the fourth element of LIST for parser helpers."
-      #((parameters . ((list . "List whose fourth element is returned.")))
-        (returns . "The fourth element of LIST.")
-        (effects . (error)))
+      #((parameters
+         (list
+          (type any)
+          (description "List whose fourth element is returned.")))
+        (returns
+         (type any)
+         (description "The fourth element of LIST."))
+        (effects error))
       (car (cdr (cdr (cdr list)))))
 
     (define (expect-symbol datum description)
       "Validate that DATUM is a symbol for a named syntax context."
-      #((parameters . ((datum . "Datum required to be a bare symbol.")
-                       (description . "Context phrase prefixed to the error when DATUM is not a symbol.")))
-        (returns . "The symbol DATUM; raises when DATUM is not a symbol.")
-        (effects . (error)))
+      #((parameters
+         (datum
+          (type any)
+          (description "Datum required to be a bare symbol."))
+         (description
+          (type any)
+          (description
+           ("Context phrase prefixed to the error when DATUM is not a"
+            "symbol."))))
+        (returns
+         (type any)
+         (description "The symbol DATUM; raises when DATUM is not a symbol."))
+        (effects error))
       (if (symbol? datum)
           datum
           (eval-error
@@ -3557,16 +4448,30 @@
 
     (define (identifier-datum? datum)
       "Report whether DATUM is a symbol or wrapped syntax identifier."
-      #((parameters . ((datum . "Datum to test for symbol or identifier shape.")))
-        (returns . "#t when DATUM is a symbol or syntax identifier, #f otherwise.")
-        (effects . (pure)))
+      #((parameters
+         (datum
+          (type any)
+          (description "Datum to test for symbol or identifier shape.")))
+        (returns
+         (type any)
+         (description
+          ("#t when DATUM is a symbol or syntax identifier, #f"
+           "otherwise.")))
+        (effects pure))
       (or (symbol? datum) (identifier? datum)))
 
     (define (identifier-datum-name datum)
       "Return the symbolic name from a raw or wrapped identifier."
-      #((parameters . ((datum . "Symbol or wrapped identifier to extract the name from.")))
-        (returns . "The underlying symbol name, or #f when DATUM is neither.")
-        (effects . (pure)))
+      #((parameters
+         (datum
+          (type any)
+          (description
+           ("Symbol or wrapped identifier to extract the name from."))))
+        (returns
+         (type any)
+         (description
+          ("The underlying symbol name, or #f when DATUM is neither.")))
+        (effects pure))
       (cond
        ((symbol? datum) datum)
        ((identifier? datum) (identifier-name datum))
@@ -3574,9 +4479,17 @@
 
     (define (identifier-key identifier)
       "Return the lookup key for an identifier, preserving macro context."
-      #((parameters . ((identifier . "Symbol or wrapped identifier whose lookup key is built.")))
-        (returns . "A context-tagged key list, the bare symbol, or raises on a non-identifier.")
-        (effects . (error)))
+      #((parameters
+         (identifier
+          (type any)
+          (description
+           ("Symbol or wrapped identifier whose lookup key is built."))))
+        (returns
+         (type any)
+         (description
+          ("A context-tagged key list, the bare symbol, or raises on a"
+           "non-identifier.")))
+        (effects error))
       (cond
        ((identifier? identifier)
         (let ((context (identifier-context identifier)))
@@ -3591,19 +4504,37 @@
 
     (define (identifier-named? datum name)
       "Report whether DATUM names the given symbol after identifier unwrapping."
-      #((parameters . ((datum . "Symbol or wrapped identifier to compare.")
-                       (name . "Symbol the datum is tested against.")))
-        (returns . "#t when DATUM unwraps to NAME, #f otherwise.")
-        (effects . (pure)))
+      #((parameters
+         (datum
+          (type any)
+          (description "Symbol or wrapped identifier to compare."))
+         (name
+          (type any)
+          (description "Symbol the datum is tested against.")))
+        (returns
+         (type any)
+         (description "#t when DATUM unwraps to NAME, #f otherwise."))
+        (effects pure))
       (let ((actual (identifier-datum-name datum)))
         (and actual (eq? actual name))))
 
     (define (expect-identifier-key datum description)
       "Return an identifier lookup key or raise a syntax-specific error."
-      #((parameters . ((datum . "Datum required to be a symbol or identifier.")
-                       (description . "Context phrase prefixed to the error when DATUM is not an identifier.")))
-        (returns . "The identifier lookup key; raises when DATUM is not an identifier.")
-        (effects . (error)))
+      #((parameters
+         (datum
+          (type any)
+          (description "Datum required to be a symbol or identifier."))
+         (description
+          (type any)
+          (description
+           ("Context phrase prefixed to the error when DATUM is not an"
+            "identifier."))))
+        (returns
+         (type any)
+         (description
+          ("The identifier lookup key; raises when DATUM is not an"
+           "identifier.")))
+        (effects error))
       (if (identifier-datum? datum)
           (identifier-key datum)
           (eval-error
@@ -3612,9 +4543,16 @@
 
     (define (consent-make-empty-environment . maybe-parent)
       "Public constructor for a mutable lexical environment with an optional parent."
-      #((parameters . ((maybe-parent . "Optional parent environment for the new frame.")))
-        (returns . "A fresh empty mutable environment, chained to the parent when given.")
-        (effects . (pure)))
+      #((parameters
+         (maybe-parent
+          (type any)
+          (description "Optional parent environment for the new frame.")))
+        (returns
+         (type any)
+         (description
+          ("A fresh empty mutable environment, chained to the parent"
+           "when given.")))
+        (effects pure))
       (make-environment
        '()
        (if (null? maybe-parent) #f (car maybe-parent))
@@ -3622,19 +4560,38 @@
 
     (define (frame-cell environment name)
       "Return the cell for NAME in ENVIRONMENT's current frame, or #f."
-      #((parameters . ((environment . "Environment whose current frame is searched.")
-                       (name . "Binding name to look up in the frame.")))
-        (returns . "The binding cell for NAME in the current frame, or #f when absent.")
-        (effects . (state-read)))
+      #((parameters
+         (environment
+          (type any)
+          (description "Environment whose current frame is searched."))
+         (name
+          (type any)
+          (description "Binding name to look up in the frame.")))
+        (returns
+         (type any)
+         (description
+          ("The binding cell for NAME in the current frame, or #f when"
+           "absent.")))
+        (effects state-read))
       (let ((cell (assoc name (environment-frame environment))))
         (if cell (cdr cell) #f)))
 
     (define (environment-cell environment name)
       "Return the nearest lexical cell for NAME, walking parent environments."
-      #((parameters . ((environment . "Innermost environment to begin the lexical search from.")
-                       (name . "Binding name to resolve.")))
-        (returns . "The nearest enclosing binding cell for NAME, or #f when unbound.")
-        (effects . (state-read)))
+      #((parameters
+         (environment
+          (type any)
+          (description
+           ("Innermost environment to begin the lexical search from.")))
+         (name
+          (type any)
+          (description "Binding name to resolve.")))
+        (returns
+         (type any)
+         (description
+          ("The nearest enclosing binding cell for NAME, or #f when"
+           "unbound.")))
+        (effects state-read))
       (let loop ((cursor environment))
         (cond
          ((not cursor) #f)
@@ -3643,10 +4600,19 @@
 
     (define (environment-cell-imported? environment cell)
       "Report whether CELL is marked imported in ENVIRONMENT or its parents."
-      #((parameters . ((environment . "Innermost environment to begin searching from.")
-                       (cell . "Binding cell whose imported status is checked.")))
-        (returns . "#t when CELL is bound under an imported name in any enclosing frame, #f otherwise.")
-        (effects . (state-read)))
+      #((parameters
+         (environment
+          (type any)
+          (description "Innermost environment to begin searching from."))
+         (cell
+          (type any)
+          (description "Binding cell whose imported status is checked.")))
+        (returns
+         (type any)
+         (description
+          ("#t when CELL is bound under an imported name in any"
+           "enclosing frame, #f otherwise.")))
+        (effects state-read))
       (let environment-loop ((cursor environment))
         (and cursor
              (or (let frame-loop ((frame (environment-frame cursor)))
@@ -3659,19 +4625,40 @@
 
     (define (current-environment-imported? environment name)
       "Report whether NAME is an imported binding in ENVIRONMENT's own frame."
-      #((parameters . ((environment . "Environment whose own imported-name list is consulted.")
-                       (name . "Binding name to test.")))
-        (returns . "A non-#f tail when NAME is imported in this frame, #f otherwise.")
-        (effects . (state-read)))
+      #((parameters
+         (environment
+          (type any)
+          (description
+           ("Environment whose own imported-name list is consulted.")))
+         (name
+          (type any)
+          (description "Binding name to test.")))
+        (returns
+         (type any)
+         (description
+          ("A non-#f tail when NAME is imported in this frame, #f"
+           "otherwise.")))
+        (effects state-read))
       (memq name (environment-imported-names environment)))
 
     (define (environment-define! environment name value)
       "Add NAME to ENVIRONMENT's current frame unless it would redefine import."
-      #((parameters . ((environment . "Environment whose current frame gains the binding.")
-                       (name . "Binding name to define.")
-                       (value . "Initial value stored in the new binding cell.")))
-        (returns . "The unspecified value; raises when NAME shadows an imported binding.")
-        (effects . (state-write error)))
+      #((parameters
+         (environment
+          (type any)
+          (description "Environment whose current frame gains the binding."))
+         (name
+          (type any)
+          (description "Binding name to define."))
+         (value
+          (type any)
+          (description "Initial value stored in the new binding cell.")))
+        (returns
+         (type any)
+         (description
+          ("The unspecified value; raises when NAME shadows an"
+           "imported binding.")))
+        (effects state-write error))
       (if (current-environment-imported? environment name)
           (eval-error "cannot redefine imported binding" name))
       (set-environment-frame!
@@ -3681,11 +4668,23 @@
 
     (define (environment-set! environment name value)
       "Mutate an existing lexical binding, rejecting unbound and imported names."
-      #((parameters . ((environment . "Innermost environment whose binding chain is searched.")
-                       (name . "Binding name to mutate.")
-                       (value . "New value stored in the resolved binding cell.")))
-        (returns . "The unspecified value; raises when NAME is unbound or imported.")
-        (effects . (state-write error)))
+      #((parameters
+         (environment
+          (type any)
+          (description
+           ("Innermost environment whose binding chain is searched.")))
+         (name
+          (type any)
+          (description "Binding name to mutate."))
+         (value
+          (type any)
+          (description "New value stored in the resolved binding cell.")))
+        (returns
+         (type any)
+         (description
+          ("The unspecified value; raises when NAME is unbound or"
+           "imported.")))
+        (effects state-write error))
       (let ((cell (environment-cell environment name)))
         (cond
          ((not cell)
@@ -3697,11 +4696,23 @@
 
     (define (environment-define-or-set! environment name value)
       "Update NAME in the current frame, or define it if no current cell exists."
-      #((parameters . ((environment . "Environment whose current frame is updated or extended.")
-                       (name . "Binding name to update or define.")
-                       (value . "Value stored in the binding cell.")))
-        (returns . "The unspecified value; raises when NAME shadows an imported binding.")
-        (effects . (state-write error)))
+      #((parameters
+         (environment
+          (type any)
+          (description
+           ("Environment whose current frame is updated or extended.")))
+         (name
+          (type any)
+          (description "Binding name to update or define."))
+         (value
+          (type any)
+          (description "Value stored in the binding cell.")))
+        (returns
+         (type any)
+         (description
+          ("The unspecified value; raises when NAME shadows an"
+           "imported binding.")))
+        (effects state-write error))
       (let ((cell (frame-cell environment name)))
         (if cell
             (begin
@@ -3712,10 +4723,20 @@
 
     (define (environment-ref environment name)
       "Return NAME's value, rejecting unbound or still-undefined bindings."
-      #((parameters . ((environment . "Innermost environment whose binding chain is searched.")
-                       (name . "Binding name to resolve.")))
-        (returns . "The value bound to NAME; raises when NAME is unbound or uninitialized.")
-        (effects . (state-read error)))
+      #((parameters
+         (environment
+          (type any)
+          (description
+           ("Innermost environment whose binding chain is searched.")))
+         (name
+          (type any)
+          (description "Binding name to resolve.")))
+        (returns
+         (type any)
+         (description
+          ("The value bound to NAME; raises when NAME is unbound or"
+           "uninitialized.")))
+        (effects state-read error))
       (let ((cell (environment-cell environment name)))
         (if (not cell)
             (eval-error "unbound identifier" name)
@@ -3731,10 +4752,19 @@
       "Hygienic identifiers first try their generated lexical key at the use"
       "site, then fall back to the macro definition environment for free"
       "template identifiers."
-      #((parameters . ((environment . "Use-site environment to resolve the identifier in.")
-                       (identifier . "Symbol or hygienic identifier to resolve.")))
-        (returns . "The resolved binding cell, or #f when the identifier is unbound.")
-        (effects . (state-read)))
+      #((parameters
+         (environment
+          (type any)
+          (description "Use-site environment to resolve the identifier in."))
+         (identifier
+          (type any)
+          (description "Symbol or hygienic identifier to resolve.")))
+        (returns
+         (type any)
+         (description
+          ("The resolved binding cell, or #f when the identifier is"
+           "unbound.")))
+        (effects state-read))
       (cond
        ((identifier? identifier)
         (let ((context (identifier-context identifier)))
@@ -3752,10 +4782,19 @@
 
     (define (environment-ref-identifier environment identifier)
       "Return IDENTIFIER's value after hygienic lookup and undefined checks."
-      #((parameters . ((environment . "Use-site environment to resolve the identifier in.")
-                       (identifier . "Symbol or hygienic identifier to dereference.")))
-        (returns . "The value bound to IDENTIFIER; raises when unbound or uninitialized.")
-        (effects . (state-read error)))
+      #((parameters
+         (environment
+          (type any)
+          (description "Use-site environment to resolve the identifier in."))
+         (identifier
+          (type any)
+          (description "Symbol or hygienic identifier to dereference.")))
+        (returns
+         (type any)
+         (description
+          ("The value bound to IDENTIFIER; raises when unbound or"
+           "uninitialized.")))
+        (effects state-read error))
       (let ((cell (environment-cell-for-identifier environment identifier)))
         (if (not cell)
             (eval-error "unbound identifier" (identifier-datum-name identifier))
@@ -3768,11 +4807,23 @@
 
     (define (environment-set-identifier! environment identifier value)
       "Mutate IDENTIFIER's binding after hygienic lookup and import checks."
-      #((parameters . ((environment . "Use-site environment to resolve the identifier in.")
-                       (identifier . "Symbol or hygienic identifier whose binding is mutated.")
-                       (value . "New value stored in the resolved binding cell.")))
-        (returns . "The unspecified value; raises when IDENTIFIER is unbound or imported.")
-        (effects . (state-write error)))
+      #((parameters
+         (environment
+          (type any)
+          (description "Use-site environment to resolve the identifier in."))
+         (identifier
+          (type any)
+          (description
+           ("Symbol or hygienic identifier whose binding is mutated.")))
+         (value
+          (type any)
+          (description "New value stored in the resolved binding cell.")))
+        (returns
+         (type any)
+         (description
+          ("The unspecified value; raises when IDENTIFIER is unbound"
+           "or imported.")))
+        (effects state-write error))
       (let ((cell (environment-cell-for-identifier environment identifier)))
         (cond
          ((not cell)
@@ -3786,10 +4837,20 @@
 
     (define (ensure-distinct-names names description)
       "Reject duplicate symbols in NAMES using DESCRIPTION for diagnostics."
-      #((parameters . ((names . "List of names checked for duplicates.")
-                       (description . "Context phrase prefixed to the error when a duplicate is found.")))
-        (returns . "The unspecified value; raises on the first duplicate name.")
-        (effects . (error)))
+      #((parameters
+         (names
+          (type any)
+          (description "List of names checked for duplicates."))
+         (description
+          (type any)
+          (description
+           ("Context phrase prefixed to the error when a duplicate is"
+            "found."))))
+        (returns
+         (type any)
+         (description
+          ("The unspecified value; raises on the first duplicate name.")))
+        (effects error))
       (let loop ((rest names) (seen '()))
         (if (not (null? rest))
             (begin
@@ -3801,9 +4862,18 @@
 
     (define (parse-formals formals)
       "Parse lambda formals into required-name and optional-rest metadata."
-      #((parameters . ((formals . "Lambda formals: a symbol, a proper list, or a dotted list of identifiers.")))
-        (returns . "A formals record of required-name keys and an optional rest key; raises on malformed formals.")
-        (effects . (error)))
+      #((parameters
+         (formals
+          (type any)
+          (description
+           ("Lambda formals: a symbol, a proper list, or a dotted list"
+            "of identifiers."))))
+        (returns
+         (type any)
+         (description
+          ("A formals record of required-name keys and an optional"
+           "rest key; raises on malformed formals.")))
+        (effects error))
       (cond
        ((symbol? formals)
         (make-formals '() (identifier-key formals)))

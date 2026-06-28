@@ -156,8 +156,10 @@ string)`.
 Every exported procedure in the runtime `scheme/` tree must carry the rich
 property record described in
 [Docstring Metadata Convention](docstring-metadata.md): a
-`#((parameters . ...) (returns . ...) (effects . ...))` vector following the
-simple string docstring. The
+`#((parameters ...) (returns ...) (effects ...))` vector following the simple
+string docstring. Public parameter and return descriptors must include explicit
+`(type ...)` metadata; missing type metadata still normalizes to `any` at read
+time, but the project lint treats it as incomplete public API documentation. The
 `consent-scheme-documentation-test-public-rich-docstrings` gate enforces this
 fail-closed -- it runs over every runtime `scheme/` source file by default
 rather than an opt-in allowlist, so a newly added file is covered automatically

@@ -281,9 +281,17 @@
 
     (define (test-run name-or-library)
       "Return a registered test group or result for NAME-OR-LIBRARY."
-      #((parameters . ((name-or-library . "Registered test name, test result, or test group datum.")))
-        (returns . "The matching test result/group, NAME-OR-LIBRARY unchanged when it is already a result, or a skipped run group.")
-        (effects . (state-read)))
+      #((parameters
+         (name-or-library
+          (type any)
+          (description
+           ("Registered test name, test result, or test group datum."))))
+        (returns
+         (type any)
+         (description
+          ("The matching test result/group, NAME-OR-LIBRARY unchanged"
+           "when it is already a result, or a skipped run group.")))
+        (effects state-read))
       (cond
        ((or (test-result? name-or-library)
             (test-group? name-or-library))
@@ -319,10 +327,17 @@
 
     (define (test-yield-failures result)
       "Yield failed tests from RESULT as one structured Consent Scheme event."
-      #((parameters . ((result . "Test result, test group, or registered test name to inspect.")))
-        (returns . "List of failed nested test result datums.")
-        (effects . (state-read agent-yield))
-        (see-also . (test-run)))
+      #((parameters
+         (result
+          (type any)
+          (description
+           ("Test result, test group, or registered test name to"
+            "inspect."))))
+        (returns
+         (type any)
+         (description "List of failed nested test result datums."))
+        (effects state-read agent-yield)
+        (see-also test-run))
       (let ((run (test-run result)))
         (let ((failures (result-failures run)))
           (if (not (null? failures))
@@ -471,11 +486,22 @@
 
     (define (skill-test skill-name test-datum)
       "Run and register TEST-DATUM for SKILL-NAME."
-      #((parameters . ((skill-name . "Skill name symbol or datum used as the registry key.")
-                       (test-datum . "Agent Test datum, SRFI 64 event, source test, or existing result.")))
-        (returns . "The normalized test result registered for SKILL-NAME.")
-        (effects . (state-write host-eval))
-        (see-also . (skill-test-run)))
+      #((parameters
+         (skill-name
+          (type any)
+          (description
+           ("Skill name symbol or datum used as the registry key.")))
+         (test-datum
+          (type any)
+          (description
+           ("Agent Test datum, SRFI 64 event, source test, or existing"
+            "result."))))
+        (returns
+         (type any)
+         (description
+          ("The normalized test result registered for SKILL-NAME.")))
+        (effects state-write host-eval)
+        (see-also skill-test-run))
       (register-skill-test!
        skill-name
        (run-skill-test-datum skill-name test-datum)))
@@ -502,10 +528,19 @@
 
     (define (skill-test-run skill-name)
       "Run registered tests for SKILL-NAME, or tests declared by a skill datum."
-      #((parameters . ((skill-name . "Skill name symbol, agent-skill datum, or agent-skill-candidate datum.")))
-        (returns . "An `agent-test-group` datum summarizing registered or declared skill tests.")
-        (effects . (state-read host-eval))
-        (see-also . (skill-test test-yield-failures)))
+      #((parameters
+         (skill-name
+          (type any)
+          (description
+           ("Skill name symbol, agent-skill datum, or"
+            "agent-skill-candidate datum."))))
+        (returns
+         (type any)
+         (description
+          ("An `agent-test-group` datum summarizing registered or"
+           "declared skill tests.")))
+        (effects state-read host-eval)
+        (see-also skill-test test-yield-failures))
       (cond
        ((or (record-kind? skill-name 'agent-skill)
             (record-kind? skill-name 'agent-skill-candidate))

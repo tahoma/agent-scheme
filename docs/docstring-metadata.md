@@ -60,8 +60,9 @@ ordinary Scheme code:
 
 A simple string in metadata position is shorthand for the `documentation` field.
 Adjacent simple strings in metadata position form one documentation string, with
-one newline inserted at each string boundary. The reader annotates the shortcut
-into the same rich field record shape that an explicit
+one space inserted at each string boundary. Use an explicit `\n` inside a string
+when the documentation should contain a real line or paragraph break. The reader
+annotates the shortcut into the same rich field record shape that an explicit
 `#((documentation . "..."))` property record would produce.
 
 ```scheme
@@ -77,7 +78,7 @@ into the same rich field record shape that an explicit
 The documentation field for `sum` is:
 
 ```scheme
-"Return the arithmetic sum of XS.\nXS must be a list of numbers."
+"Return the arithmetic sum of XS. XS must be a list of numbers."
 ```
 
 The live reflection surface exposes the same simple string through
@@ -159,10 +160,15 @@ behavior.
 
 ```scheme
 (define (open-agent-log path)
-  #((documentation . "Open PATH as an Consent Scheme log input port.")
-    (parameters . ((path . "Path to a readable log file.")))
-    (returns . "An input port.")
-    (effects . (file-read)))
+  "Open PATH as an Consent Scheme log input port."
+  #((parameters
+     (path
+      (type string)
+      (description "Path to a readable log file.")))
+    (returns
+     (type input-port)
+     (description "An input port."))
+    (effects file-read))
   (open-input-file path))
 ```
 
@@ -171,8 +177,13 @@ The simple string form and rich property form may appear together:
 ```scheme
 (define (normalize-name name)
   "Return NAME in canonical Consent Scheme identifier form."
-  #((parameters . ((name . "A string or symbol.")))
-    (returns . "A symbol."))
+  #((parameters
+     (name
+      (type (or string symbol))
+      (description "A string or symbol.")))
+    (returns
+     (type symbol)
+     (description "A symbol.")))
   (if (symbol? name)
       name
       (string->symbol name)))
@@ -193,8 +204,13 @@ When reflected through `(documentation subject)`, the string contributes the
   (fields
     ((arguments (name))
      (documentation "Return NAME in canonical Consent Scheme identifier form.")
-     (parameters ((name . "A string or symbol.")))
-     (returns "A symbol."))))
+     (parameters
+      ((name
+        (type (or string symbol))
+        (description "A string or symbol."))))
+     (returns
+      ((type symbol)
+       (description "A symbol."))))))
 ```
 
 ## Applies To
@@ -253,8 +269,13 @@ runtimes should expose one Scheme-readable record shape:
   (fields
     ((arguments (n))
      (documentation "Return the factorial of exact non-negative integer N.")
-     (parameters ((n "Exact non-negative integer.")))
-     (returns "Exact integer.")
+     (parameters
+      ((n
+        (type exact-non-negative-integer)
+        (description "Exact non-negative integer."))))
+     (returns
+      ((type exact-integer)
+       (description "Exact integer.")))
      (effects (pure)))))
 ```
 
@@ -281,8 +302,8 @@ Field values are ordinary Scheme-readable data. The initial field set is:
   reflect as `(x y)`, `(x . rest)`, `rest`, and `()`
 - `documentation`: string documentation for humans and agents
 - `summary`: short string suitable for indexes
-- `parameters`: association list from parameter symbol to string
-- `returns`: string or Scheme-readable result shape
+- `parameters`: association list from parameter symbol to a descriptor
+- `returns`: descriptor for the return value or values
 - `effects`: list of effect symbols, such as `(pure)` or `(file-read)`
 - `examples`: list of source/result example records
 - `see-also`: list of related binding, library, issue, or document references
@@ -294,22 +315,59 @@ Implementations may preserve unknown fields as Scheme-readable data for tools
 that understand them, but public documentation should prefer the field names
 above until a later issue extends the convention.
 
+Parameter and return descriptors are proper lists of descriptor entries. The
+initial descriptor fields are:
+
+- `type`: Scheme-readable type form; omitted type metadata defaults to
+  `(type any)` so metadata-free and partially documented definitions keep their
+  ordinary untyped meaning
+- `description`: string prose for the value; a non-empty list of strings is
+  accepted and joined with spaces, which lets source wrap descriptions without
+  changing the reflected prose
+
+For convenience, a parameter value or `returns` value may be just a string or a
+non-empty list of strings; that shorthand is normalized to a descriptor with
+`(type any)` and a `description`. Project library files should not rely on that
+shorthand for public exports: the project lint requires explicit `(type ...)`
+metadata for every public parameter and return value.
+
+The first type vocabulary is intentionally contract-shaped:
+
+- `(type any)` is the top type and the default for omitted type metadata
+- atomic Scheme value names, such as `boolean`, `symbol`, `string`, `number`,
+  `exact-integer`, `pair`, `list`, `vector`, and `procedure`
+- compound forms `(or type ...)`, `(list-of type)`, `(vector-of type)`,
+  `(pair car-type cdr-type)`, `(procedure (arg-type ...) return-type)`, and
+  `(values type ...)`
+- zero returned values are written `(type (values))`; multiple values are
+  written `(type (values type ...))`
+- custom type names are preserved as symbols for documentation, static tools,
+  and future contract lowering; implementations may treat names they do not
+  recognize as opaque extension points
+
+The form `(forall ...)` is reserved for future polymorphic metadata, but the
+first pass does not implement relationship-aware checking.
+
 ## Merge and Malformed Rules
 
 The metadata prefix is processed in source order.
 
 - The generated `arguments` field is derived from the procedure formals before
   body-literal metadata is merged.
-- Adjacent simple strings are joined with newline separators.
+- Adjacent simple strings are joined with space separators.
 - A simple string is equivalent to a `documentation` field.
 - Multiple `documentation` string values from simple strings and rich records
-  are joined in source order with newline separators.
+  are joined in source order with space separators.
 - `examples` and `see-also` values append in source order when each value is a
   list.
 - `parameters` values merge by parameter name; duplicate parameter names are
   malformed.
 - Every `parameters` key must be present in the generated `arguments` datum;
   documenting an unbound parameter name is malformed.
+- `returns` may appear at most once.
+- Descriptor shorthand strings and descriptor `description` string lists are
+  joined with spaces. Use explicit `\n` inside a string for a real line or
+  paragraph break.
 - Other duplicate scalar fields are malformed instead of silently replacing an
   earlier value.
 
@@ -370,3 +428,6 @@ representation work is left to a later reflection/metadata slice.
   (`consent-scheme-documentation-test-public-rich-docstrings`) from an opt-in
   allowlist to fail-closed coverage over all runtime `scheme/` source with an
   empty exclusion list.
+- #604 adds typed parameter and return descriptors, string-fragment prose
+  shorthands, space-joined docstring fragments, and the project lint requirement
+  that public runtime procedures spell out type metadata.

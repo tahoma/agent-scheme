@@ -17,17 +17,29 @@
   (begin
     (define (context-field name value)
       "Return a Scheme-readable context field named NAME with VALUE."
-      #((parameters . ((name . "Symbol naming the context field.")
-                       (value . "Scheme-readable field value.")))
-        (returns . "A two-element context field list.")
-        (effects . (pure)))
+      #((parameters
+         (name
+          (type any)
+          (description "Symbol naming the context field."))
+         (value
+          (type any)
+          (description "Scheme-readable field value.")))
+        (returns
+         (type any)
+         (description "A two-element context field list."))
+        (effects pure))
       (list name value))
 
     (define (context-present? value)
       "Return #t when VALUE is present in a context bundle."
-      #((parameters . ((value . "Optional context value to check.")))
-        (returns . "#t when VALUE is not #f; otherwise #f.")
-        (effects . (pure)))
+      #((parameters
+         (value
+          (type any)
+          (description "Optional context value to check.")))
+        (returns
+         (type any)
+         (description "#t when VALUE is not #f; otherwise #f."))
+        (effects pure))
       (not (eq? value #f)))
 
     (define (context-present-records records)
@@ -41,11 +53,22 @@
 
     (define (make-request-context request-id session-id request)
       "Return a request-context record, or #f when no request fields exist."
-      #((parameters . ((request-id . "Optional request id.")
-                       (session-id . "Optional session id.")
-                       (request . "Optional request payload datum.")))
-        (returns . "A `request-context` datum containing present fields, or #f.")
-        (effects . (pure)))
+      #((parameters
+         (request-id
+          (type any)
+          (description "Optional request id."))
+         (session-id
+          (type any)
+          (description "Optional session id."))
+         (request
+          (type any)
+          (description "Optional request payload datum.")))
+        (returns
+         (type any)
+         (description
+          ("A `request-context` datum containing present fields, or"
+           "#f.")))
+        (effects pure))
       (if (or request-id session-id request)
           (append
            (list 'request-context)
@@ -62,10 +85,18 @@
 
     (define (make-conversation-summary session-id summary)
       "Return a conversation-summary record, or #f when SUMMARY is absent."
-      #((parameters . ((session-id . "Optional session id associated with the summary.")
-                       (summary . "Conversation summary text or datum.")))
-        (returns . "A `conversation-summary` datum, or #f when SUMMARY is #f.")
-        (effects . (pure)))
+      #((parameters
+         (session-id
+          (type any)
+          (description "Optional session id associated with the summary."))
+         (summary
+          (type any)
+          (description "Conversation summary text or datum.")))
+        (returns
+         (type any)
+         (description
+          ("A `conversation-summary` datum, or #f when SUMMARY is #f.")))
+        (effects pure))
       (if summary
           (append
            (list 'conversation-summary)
@@ -77,9 +108,15 @@
 
     (define (make-focus-context records)
       "Return a focus-context from RECORDS, or #f when all records are absent."
-      #((parameters . ((records . "List of optional context records.")))
-        (returns . "A `focus-context` datum containing present records, or #f.")
-        (effects . (pure)))
+      #((parameters
+         (records
+          (type any)
+          (description "List of optional context records.")))
+        (returns
+         (type any)
+         (description
+          ("A `focus-context` datum containing present records, or #f.")))
+        (effects pure))
       (let ((present (context-present-records records)))
         (if (null? present)
             #f
@@ -87,7 +124,12 @@
 
     (define (make-context-bundle records)
       "Return a context bundle from RECORDS."
-      #((parameters . ((records . "List of optional context records.")))
-        (returns . "A `context` datum containing only present records.")
-        (effects . (pure)))
+      #((parameters
+         (records
+          (type any)
+          (description "List of optional context records.")))
+        (returns
+         (type any)
+         (description "A `context` datum containing only present records."))
+        (effects pure))
       (cons 'context (context-present-records records)))))

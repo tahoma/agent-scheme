@@ -29,19 +29,37 @@
   (begin
     (define (network-field name . values)
       "Return a Scheme-readable record field named NAME with VALUES."
-      #((parameters . ((name . "Symbol naming the field.")
-                       (values . "Zero or more Scheme-readable values for the field.")))
-        (returns . "A field pair whose car is NAME and whose cdr is VALUES.")
-        (effects . (pure)))
+      #((parameters
+         (name
+          (type any)
+          (description "Symbol naming the field."))
+         (values
+          (type any)
+          (description "Zero or more Scheme-readable values for the field.")))
+        (returns
+         (type any)
+         (description
+          ("A field pair whose car is NAME and whose cdr is VALUES.")))
+        (effects pure))
       (cons name values))
 
     (define (network-field-value record field default)
       "Return FIELD's first value from RECORD, or DEFAULT when absent."
-      #((parameters . ((record . "Network record represented as a tagged list.")
-                       (field . "Symbol naming the field to read.")
-                       (default . "Fallback value returned when FIELD is absent or empty.")))
-        (returns . "The first stored value for FIELD, or DEFAULT.")
-        (effects . (pure)))
+      #((parameters
+         (record
+          (type any)
+          (description "Network record represented as a tagged list."))
+         (field
+          (type any)
+          (description "Symbol naming the field to read."))
+         (default
+          (type any)
+          (description
+           ("Fallback value returned when FIELD is absent or empty."))))
+        (returns
+         (type any)
+         (description "The first stored value for FIELD, or DEFAULT."))
+        (effects pure))
       (let ((entry (and (pair? record) (assq field (cdr record)))))
         (if entry
             (if (null? (cdr entry)) default (cadr entry))
@@ -57,12 +75,27 @@
 
     (define (make-network-request id operation resource)
       "Return a host-adapter request datum for one network operation."
-      #((parameters . ((id . "Stable request id assigned by the caller or host adapter.")
-                       (operation . "Network operation symbol such as request or stream.")
-                       (resource . "Association list describing scheme, host, port, method, headers, payload, response, redirect, timeout, and stream limits.")))
-        (returns . "A `network-capability-request` datum ready for policy evaluation.")
-        (effects . (pure))
-        (see-also . (network-authorize-request make-network-capability-decision)))
+      #((parameters
+         (id
+          (type any)
+          (description
+           ("Stable request id assigned by the caller or host adapter.")))
+         (operation
+          (type any)
+          (description "Network operation symbol such as request or stream."))
+         (resource
+          (type any)
+          (description
+           ("Association list describing scheme, host, port, method,"
+            "headers, payload, response, redirect, timeout, and stream"
+            "limits."))))
+        (returns
+         (type any)
+         (description
+          ("A `network-capability-request` datum ready for policy"
+           "evaluation.")))
+        (effects pure)
+        (see-also network-authorize-request make-network-capability-decision))
       (list 'network-capability-request
             (network-field 'id id)
             (network-field 'operation operation)
@@ -102,32 +135,62 @@
 
     (define (network-request? datum)
       "Return #t when DATUM is a network request record."
-      #((parameters . ((datum . "Value to inspect.")))
-        (returns . "#t when DATUM is tagged as a network capability request; otherwise #f.")
-        (effects . (pure)))
+      #((parameters
+         (datum
+          (type any)
+          (description "Value to inspect.")))
+        (returns
+         (type any)
+         (description
+          ("#t when DATUM is tagged as a network capability request;"
+           "otherwise #f.")))
+        (effects pure))
       (network-record? datum 'network-capability-request))
 
     (define (network-request-id request)
       "Return REQUEST's stable identifier."
-      #((parameters . ((request . "Network capability request datum.")))
-        (returns . "The request id, or #f when absent.")
-        (effects . (pure)))
+      #((parameters
+         (request
+          (type any)
+          (description "Network capability request datum.")))
+        (returns
+         (type any)
+         (description "The request id, or #f when absent."))
+        (effects pure))
       (network-field-value request 'id #f))
 
     (define (network-request-operation request)
       "Return REQUEST's operation symbol."
-      #((parameters . ((request . "Network capability request datum.")))
-        (returns . "The operation symbol, or #f when absent.")
-        (effects . (pure)))
+      #((parameters
+         (request
+          (type any)
+          (description "Network capability request datum.")))
+        (returns
+         (type any)
+         (description "The operation symbol, or #f when absent."))
+        (effects pure))
       (network-field-value request 'operation #f))
 
     (define (make-network-grant id operations scope)
       "Return a scoped network authority grant record."
-      #((parameters . ((id . "Stable grant id.")
-                       (operations . "Allowed operation symbol, `all`, or list of operation symbols.")
-                       (scope . "Association list constraining schemes, hosts, ports, methods, headers, payloads, and limits.")))
-        (returns . "A `network-capability-grant` datum.")
-        (effects . (pure)))
+      #((parameters
+         (id
+          (type any)
+          (description "Stable grant id."))
+         (operations
+          (type any)
+          (description
+           ("Allowed operation symbol, `all`, or list of operation"
+            "symbols.")))
+         (scope
+          (type any)
+          (description
+           ("Association list constraining schemes, hosts, ports,"
+            "methods, headers, payloads, and limits."))))
+        (returns
+         (type any)
+         (description "A `network-capability-grant` datum."))
+        (effects pure))
       (list 'network-capability-grant
             (network-field 'id id)
             (network-field 'operations operations)
@@ -135,12 +198,23 @@
 
     (define (make-network-approval-decision id request-id status reason)
       "Return an explicit approval decision for one network request."
-      #((parameters . ((id . "Stable approval decision id.")
-                       (request-id . "Id of the request this decision answers.")
-                       (status . "Approval status symbol, usually approved or denied.")
-                       (reason . "Human-readable explanation for the decision.")))
-        (returns . "A `network-approval-decision` datum.")
-        (effects . (pure)))
+      #((parameters
+         (id
+          (type any)
+          (description "Stable approval decision id."))
+         (request-id
+          (type any)
+          (description "Id of the request this decision answers."))
+         (status
+          (type any)
+          (description "Approval status symbol, usually approved or denied."))
+         (reason
+          (type any)
+          (description "Human-readable explanation for the decision.")))
+        (returns
+         (type any)
+         (description "A `network-approval-decision` datum."))
+        (effects pure))
       (list 'network-approval-decision
             (network-field 'id id)
             (network-field 'request-id request-id)
@@ -149,13 +223,32 @@
 
     (define (make-network-capability-decision request status grant approval reason)
       "Return a network authorization decision record."
-      #((parameters . ((request . "Network capability request datum.")
-                       (status . "Decision status symbol, usually approved or denied.")
-                       (grant . "Grant datum that authorized or constrained the request, or #f.")
-                       (approval . "Approval decision datum that authorized the request, or #f.")
-                       (reason . "Human-readable policy explanation.")))
-        (returns . "A `network-capability-decision` datum summarizing the authorization result.")
-        (effects . (pure)))
+      #((parameters
+         (request
+          (type any)
+          (description "Network capability request datum."))
+         (status
+          (type any)
+          (description "Decision status symbol, usually approved or denied."))
+         (grant
+          (type any)
+          (description
+           ("Grant datum that authorized or constrained the request, or"
+            "#f.")))
+         (approval
+          (type any)
+          (description
+           ("Approval decision datum that authorized the request, or"
+            "#f.")))
+         (reason
+          (type any)
+          (description "Human-readable policy explanation.")))
+        (returns
+         (type any)
+         (description
+          ("A `network-capability-decision` datum summarizing the"
+           "authorization result.")))
+        (effects pure))
       (list 'network-capability-decision
             (network-field 'id (network-request-id request))
             (network-field 'operation (network-request-operation request))
@@ -176,25 +269,48 @@
 
     (define (network-capability-decision? datum)
       "Return #t when DATUM is a network decision record."
-      #((parameters . ((datum . "Value to inspect.")))
-        (returns . "#t when DATUM is tagged as a network capability decision; otherwise #f.")
-        (effects . (pure)))
+      #((parameters
+         (datum
+          (type any)
+          (description "Value to inspect.")))
+        (returns
+         (type any)
+         (description
+          ("#t when DATUM is tagged as a network capability decision;"
+           "otherwise #f.")))
+        (effects pure))
       (network-record? datum 'network-capability-decision))
 
     (define (network-capability-decision-status decision)
       "Return DECISION's status symbol."
-      #((parameters . ((decision . "Network capability decision datum.")))
-        (returns . "The decision status symbol, or #f when absent.")
-        (effects . (pure)))
+      #((parameters
+         (decision
+          (type any)
+          (description "Network capability decision datum.")))
+        (returns
+         (type any)
+         (description "The decision status symbol, or #f when absent."))
+        (effects pure))
       (network-field-value decision 'status #f))
 
     (define (make-network-response id status fields)
       "Return a host-adapter response datum for a network operation."
-      #((parameters . ((id . "Request id associated with the response.")
-                       (status . "Response status symbol.")
-                       (fields . "Additional response fields already shaped as network field pairs.")))
-        (returns . "A `network-response` datum.")
-        (effects . (pure)))
+      #((parameters
+         (id
+          (type any)
+          (description "Request id associated with the response."))
+         (status
+          (type any)
+          (description "Response status symbol."))
+         (fields
+          (type any)
+          (description
+           ("Additional response fields already shaped as network field"
+            "pairs."))))
+        (returns
+         (type any)
+         (description "A `network-response` datum."))
+        (effects pure))
       (append
        (list 'network-response
              (network-field 'id id)
@@ -203,13 +319,26 @@
 
     (define (make-network-stream-handle id request url grant status)
       "Return a Scheme-readable network stream handle datum."
-      #((parameters . ((id . "Stable handle id.")
-                       (request . "Network request datum that opened the stream.")
-                       (url . "Redacted or public URL metadata for display.")
-                       (grant . "Grant id or grant datum associated with the stream.")
-                       (status . "Current stream status symbol.")))
-        (returns . "A printable `handle` datum for a network stream.")
-        (effects . (pure)))
+      #((parameters
+         (id
+          (type any)
+          (description "Stable handle id."))
+         (request
+          (type any)
+          (description "Network request datum that opened the stream."))
+         (url
+          (type any)
+          (description "Redacted or public URL metadata for display."))
+         (grant
+          (type any)
+          (description "Grant id or grant datum associated with the stream."))
+         (status
+          (type any)
+          (description "Current stream status symbol.")))
+        (returns
+         (type any)
+         (description "A printable `handle` datum for a network stream."))
+        (effects pure))
       (list 'handle
             (network-field 'id id)
             (network-field 'kind 'network-stream)
@@ -222,15 +351,34 @@
     (define (make-network-port-capability
              id kind stream-handle operations grant limits status)
       "Return a Scheme-readable network-backed port capability datum."
-      #((parameters . ((id . "Stable port capability id.")
-                       (kind . "Port kind symbol, such as input or output.")
-                       (stream-handle . "Printable stream handle backing the port.")
-                       (operations . "List of allowed port operations.")
-                       (grant . "Grant id or grant datum associated with the port.")
-                       (limits . "Association list of byte, event, or lifetime limits.")
-                       (status . "Current capability status symbol.")))
-        (returns . "A `port-capability` datum backed by a network stream.")
-        (effects . (pure)))
+      #((parameters
+         (id
+          (type any)
+          (description "Stable port capability id."))
+         (kind
+          (type any)
+          (description "Port kind symbol, such as input or output."))
+         (stream-handle
+          (type any)
+          (description "Printable stream handle backing the port."))
+         (operations
+          (type any)
+          (description "List of allowed port operations."))
+         (grant
+          (type any)
+          (description "Grant id or grant datum associated with the port."))
+         (limits
+          (type any)
+          (description
+           ("Association list of byte, event, or lifetime limits.")))
+         (status
+          (type any)
+          (description "Current capability status symbol.")))
+        (returns
+         (type any)
+         (description
+          ("A `port-capability` datum backed by a network stream.")))
+        (effects pure))
       (list 'port-capability
             (network-field 'id id)
             (network-field 'kind kind)
@@ -243,11 +391,22 @@
 
     (define (make-network-audit request decision result)
       "Return a stable audit event for a network authorization and result."
-      #((parameters . ((request . "Network capability request datum.")
-                       (decision . "Network capability decision datum.")
-                       (result . "Network response or result datum.")))
-        (returns . "A `network-capability-audit` datum suitable for logs and transcripts.")
-        (effects . (pure)))
+      #((parameters
+         (request
+          (type any)
+          (description "Network capability request datum."))
+         (decision
+          (type any)
+          (description "Network capability decision datum."))
+         (result
+          (type any)
+          (description "Network response or result datum.")))
+        (returns
+         (type any)
+         (description
+          ("A `network-capability-audit` datum suitable for logs and"
+           "transcripts.")))
+        (effects pure))
       (list 'network-capability-audit
             (network-field 'event 'network-capability-audit)
             (network-field 'id (network-request-id request))
@@ -263,9 +422,16 @@
 
     (define (network-audit? datum)
       "Return #t when DATUM is a network audit record."
-      #((parameters . ((datum . "Value to inspect.")))
-        (returns . "#t when DATUM is tagged as a network capability audit record; otherwise #f.")
-        (effects . (pure)))
+      #((parameters
+         (datum
+          (type any)
+          (description "Value to inspect.")))
+        (returns
+         (type any)
+         (description
+          ("#t when DATUM is tagged as a network capability audit"
+           "record; otherwise #f.")))
+        (effects pure))
       (network-record? datum 'network-capability-audit))
 
     (define (network-resource-value resource field default)
@@ -392,13 +558,25 @@
 
     (define (network-authorize-request request grants approvals)
       "Return a fail-closed authorization decision for REQUEST."
-      #((parameters . ((request . "Network capability request datum to authorize.")
-                       (grants . "Active network grant datums to check first.")
-                       (approvals . "Explicit approval decision datums to check when grants do not authorize the request.")))
-        (returns . "A network capability decision approving or denying REQUEST with an explanatory reason.")
-        (effects . (pure))
-        (see-also . (make-network-request make-network-grant
-                     make-network-approval-decision)))
+      #((parameters
+         (request
+          (type any)
+          (description "Network capability request datum to authorize."))
+         (grants
+          (type any)
+          (description "Active network grant datums to check first."))
+         (approvals
+          (type any)
+          (description
+           ("Explicit approval decision datums to check when grants do"
+            "not authorize the request."))))
+        (returns
+         (type any)
+         (description
+          ("A network capability decision approving or denying REQUEST"
+           "with an explanatory reason.")))
+        (effects pure)
+        (see-also make-network-request make-network-grant make-network-approval-decision))
       (let ((match (network-find-grant request grants)))
         (cond
          ((and match (eq? (car match) 'approved))

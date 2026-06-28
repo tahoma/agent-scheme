@@ -28,18 +28,38 @@
   (begin
     (define (result-field name . values)
       "Construct a named field for public result datums."
-      #((parameters . ((name . "Symbol naming the result field.")
-                       (values . "Zero or more Scheme-readable field values.")))
-        (returns . "A field pair whose car is NAME and whose cdr is VALUES.")
-        (effects . (pure)))
+      #((parameters
+         (name
+          (type any)
+          (description "Symbol naming the result field."))
+         (values
+          (type any)
+          (description "Zero or more Scheme-readable field values.")))
+        (returns
+         (type any)
+         (description
+          ("A field pair whose car is NAME and whose cdr is VALUES.")))
+        (effects pure))
       (cons name values))
 
     (define (value->result-datum value . maybe-seen)
       "Return VALUE converted to a public result datum."
-      #((parameters . ((value . "Runtime value to render as stable Scheme-readable data.")
-                       (maybe-seen . "Internal cycle-detection list used while rendering compound values.")))
-        (returns . "A public datum representation of VALUE suitable for evaluation-result records.")
-        (effects . (pure)))
+      #((parameters
+         (value
+          (type any)
+          (description
+           ("Runtime value to render as stable Scheme-readable data.")))
+         (maybe-seen
+          (type any)
+          (description
+           ("Internal cycle-detection list used while rendering"
+            "compound values."))))
+        (returns
+         (type any)
+         (description
+          ("A public datum representation of VALUE suitable for"
+           "evaluation-result records.")))
+        (effects pure))
       (let ((seen (if (null? maybe-seen) '() (car maybe-seen))))
         (cond
          ((or (boolean? value)
@@ -111,10 +131,21 @@
 
     (define (strip-identifiers value . maybe-seen)
       "Remove hygienic identifier wrappers from VALUE for readable output."
-      #((parameters . ((value . "Runtime value to simplify for display.")
-                       (maybe-seen . "Internal cycle-detection list used while walking compound values.")))
-        (returns . "VALUE with identifiers replaced by their names inside lists and vectors.")
-        (effects . (pure)))
+      #((parameters
+         (value
+          (type any)
+          (description "Runtime value to simplify for display."))
+         (maybe-seen
+          (type any)
+          (description
+           ("Internal cycle-detection list used while walking compound"
+            "values."))))
+        (returns
+         (type any)
+         (description
+          ("VALUE with identifiers replaced by their names inside"
+           "lists and vectors.")))
+        (effects pure))
       (let ((seen (if (null? maybe-seen) '() (car maybe-seen))))
         (cond
          ((identifier? value)
@@ -139,9 +170,16 @@
 
     (define (budget-result-field context)
       "Build the budget field for a public evaluation-result datum."
-      #((parameters . ((context . "Evaluation context containing budget counters.")))
-        (returns . "A `budget` result field with steps-used and host-calls counters.")
-        (effects . (state-read)))
+      #((parameters
+         (context
+          (type any)
+          (description "Evaluation context containing budget counters.")))
+        (returns
+         (type any)
+         (description
+          ("A `budget` result field with steps-used and host-calls"
+           "counters.")))
+        (effects state-read))
       (result-field
        'budget
        (result-field
@@ -351,9 +389,13 @@
 
     (define (debugger-default-restarts)
       "Return debugger restarts that are always safe to advertise."
-      #((parameters . ())
-        (returns . "List of debugger restart datums available for ordinary evaluation failures.")
-        (effects . (pure)))
+      #((parameters)
+        (returns
+         (type any)
+         (description
+          ("List of debugger restart datums available for ordinary"
+           "evaluation failures.")))
+        (effects pure))
       (list
        (debugger-restart-record 'abort 'abort 'pure-r7rs)
        (debugger-restart-record 'retry 'retry 'debugger-recovery)
@@ -370,28 +412,49 @@
 
     (define (debugger-field-values datum field)
       "Return values for FIELD from a debugger datum."
-      #((parameters . ((datum . "Debugger datum represented as a tagged list.")
-                       (field . "Symbol naming the field to read.")))
-        (returns . "The field values for FIELD, or the empty list.")
-        (effects . (pure)))
+      #((parameters
+         (datum
+          (type any)
+          (description "Debugger datum represented as a tagged list."))
+         (field
+          (type any)
+          (description "Symbol naming the field to read.")))
+        (returns
+         (type any)
+         (description "The field values for FIELD, or the empty list."))
+        (effects pure))
       (let ((entry (and (pair? datum) (assq field (cdr datum)))))
         (if entry (cdr entry) '())))
 
     (define (debugger-field-value datum field)
       "Return the first value for FIELD from a debugger datum."
-      #((parameters . ((datum . "Debugger datum represented as a tagged list.")
-                       (field . "Symbol naming the field to read.")))
-        (returns . "The first field value for FIELD, or #f.")
-        (effects . (pure)))
+      #((parameters
+         (datum
+          (type any)
+          (description "Debugger datum represented as a tagged list."))
+         (field
+          (type any)
+          (description "Symbol naming the field to read.")))
+        (returns
+         (type any)
+         (description "The first field value for FIELD, or #f."))
+        (effects pure))
       (let ((values (debugger-field-values datum field)))
         (if (null? values) #f (car values))))
 
     (define (debugger-expect-condition datum operation)
       "Return DATUM or raise when OPERATION expected a debugger condition."
-      #((parameters . ((datum . "Value expected to be a debugger condition datum.")
-                       (operation . "Operation name used in the error message.")))
-        (returns . "DATUM when it is tagged as a debugger condition.")
-        (effects . (error)))
+      #((parameters
+         (datum
+          (type any)
+          (description "Value expected to be a debugger condition datum."))
+         (operation
+          (type any)
+          (description "Operation name used in the error message.")))
+        (returns
+         (type any)
+         (description "DATUM when it is tagged as a debugger condition."))
+        (effects error))
       (if (not (and (pair? datum) (eq? (car datum) 'condition)))
           (eval-error
            (string-append operation " expected a debugger condition")))
@@ -399,9 +462,14 @@
 
     (define (debugger-restart-id-name id)
       "Return ID as a debugger restart symbol."
-      #((parameters . ((id . "Restart id as a symbol or string.")))
-        (returns . "ID as a symbol.")
-        (effects . (error)))
+      #((parameters
+         (id
+          (type any)
+          (description "Restart id as a symbol or string.")))
+        (returns
+         (type any)
+         (description "ID as a symbol."))
+        (effects error))
       (cond
        ((symbol? id) id)
        ((string? id) (string->symbol id))
@@ -409,10 +477,20 @@
 
     (define (debugger-condition-datum condition context)
       "Build a Scheme-readable debugger condition datum."
-      #((parameters . ((condition . "Host or Consent Scheme condition value.")
-                       (context . "Evaluation context used for current frame and restart metadata.")))
-        (returns . "A `condition` datum for debugger and result consumers.")
-        (effects . (state-read)))
+      #((parameters
+         (condition
+          (type any)
+          (description "Host or Consent Scheme condition value."))
+         (context
+          (type any)
+          (description
+           ("Evaluation context used for current frame and restart"
+            "metadata."))))
+        (returns
+         (type any)
+         (description
+          ("A `condition` datum for debugger and result consumers.")))
+        (effects state-read))
       (let* ((message (condition-message condition))
              (type (debugger-condition-type condition message))
              (frame-id 'f-0)
@@ -443,10 +521,19 @@
 
     (define (debugger-exception-datum exception context)
       "Build a debugger condition for a Scheme-raised EXCEPTION value."
-      #((parameters . ((exception . "Scheme value raised as an exception.")
-                       (context . "Evaluation context used for debugger metadata.")))
-        (returns . "A debugger condition datum that preserves EXCEPTION as a public result value.")
-        (effects . (state-read)))
+      #((parameters
+         (exception
+          (type any)
+          (description "Scheme value raised as an exception."))
+         (context
+          (type any)
+          (description "Evaluation context used for debugger metadata.")))
+        (returns
+         (type any)
+         (description
+          ("A debugger condition datum that preserves EXCEPTION as a"
+           "public result value.")))
+        (effects state-read))
       (append
        (debugger-condition-datum
         (make-consent-error-object
@@ -457,10 +544,19 @@
 
     (define (ok-result-datum value context)
       "Build a successful evaluation-result datum for VALUE."
-      #((parameters . ((value . "Runtime value returned by evaluation.")
-                       (context . "Evaluation context containing events and budget counters.")))
-        (returns . "An `evaluation-result` datum with status ok or values.")
-        (effects . (state-read)))
+      #((parameters
+         (value
+          (type any)
+          (description "Runtime value returned by evaluation."))
+         (context
+          (type any)
+          (description
+           ("Evaluation context containing events and budget counters."))))
+        (returns
+         (type any)
+         (description
+          ("An `evaluation-result` datum with status ok or values.")))
+        (effects state-read))
       (if (multiple-values? value)
           (list 'evaluation-result
                 (result-field 'status 'values)
@@ -478,10 +574,19 @@
 
     (define (condition-result-datum condition context)
       "Build an error evaluation-result datum for CONDITION."
-      #((parameters . ((condition . "Host or Consent Scheme condition value.")
-                       (context . "Evaluation context to update with the current debugger error.")))
-        (returns . "An `evaluation-result` datum with status error.")
-        (effects . (state-write)))
+      #((parameters
+         (condition
+          (type any)
+          (description "Host or Consent Scheme condition value."))
+         (context
+          (type any)
+          (description
+           ("Evaluation context to update with the current debugger"
+            "error."))))
+        (returns
+         (type any)
+         (description "An `evaluation-result` datum with status error."))
+        (effects state-write))
       (let ((debugger-condition
              (debugger-condition-datum condition context)))
         (set-context-current-error! context debugger-condition)
@@ -497,9 +602,14 @@
 
     (define (budget-exhausted-condition? value)
       "Report whether VALUE is a budget-exhaustion condition or stop receipt."
-      #((parameters . ((value . "Condition datum or evaluation-result error datum.")))
-        (returns . "#t when VALUE names a budget exhaustion, else #f.")
-        (effects . (pure)))
+      #((parameters
+         (value
+          (type any)
+          (description "Condition datum or evaluation-result error datum.")))
+        (returns
+         (type any)
+         (description "#t when VALUE names a budget exhaustion, else #f."))
+        (effects pure))
       (and (pair? value)
            (cond
             ((eq? (car value) 'condition)
@@ -515,16 +625,28 @@
 
     (define (consent-result->external result)
       "Render an evaluation-result datum using the reader/writer external form."
-      #((parameters . ((result . "Public evaluation-result datum.")))
-        (returns . "External written text for RESULT.")
-        (effects . (pure)))
+      #((parameters
+         (result
+          (type any)
+          (description "Public evaluation-result datum.")))
+        (returns
+         (type any)
+         (description "External written text for RESULT."))
+        (effects pure))
       (consent-datum->external result))
 
     (define (consent-value->external value)
       "Render runtime VALUE for diagnostics using stable external text."
-      #((parameters . ((value . "Runtime value to render.")))
-        (returns . "Stable external text suitable for tests, diagnostics, and logs.")
-        (effects . (pure)))
+      #((parameters
+         (value
+          (type any)
+          (description "Runtime value to render.")))
+        (returns
+         (type any)
+         (description
+          ("Stable external text suitable for tests, diagnostics, and"
+           "logs.")))
+        (effects pure))
       (cond
        ((consent-unspecified? value)
         "#<unspecified>")

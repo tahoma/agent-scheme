@@ -113,9 +113,13 @@
 
     (define (consent-make-session-store)
       "Construct an empty portable session store."
-      #((parameters . ())
-        (returns . "A mutable session store with no durable sessions and fresh id counters.")
-        (effects . (allocation)))
+      #((parameters)
+        (returns
+         (type any)
+         (description
+          ("A mutable session store with no durable sessions and fresh"
+           "id counters.")))
+        (effects allocation))
       (make-session-store '() 0 0))
 
     (define (member-equal? value list)
@@ -200,9 +204,14 @@
 
     (define (session-datum-id session-datum)
       "Return the id field from a public SESSION-DATUM."
-      #((parameters . ((session-datum . "Public session datum.")))
-        (returns . "The session id field.")
-        (effects . (pure)))
+      #((parameters
+         (session-datum
+          (type any)
+          (description "Public session datum.")))
+        (returns
+         (type any)
+         (description "The session id field."))
+        (effects pure))
       (cadr (cadr session-datum)))
 
     (define (session-datum-field session-datum name)
@@ -215,19 +224,35 @@
 
     (define (session-handles session-datum)
       "Return handle references recorded in public SESSION-DATUM."
-      #((parameters . ((session-datum . "Public session datum.")))
-        (returns . "The session datum's `handles` field.")
-        (effects . (pure)))
+      #((parameters
+         (session-datum
+          (type any)
+          (description "Public session datum.")))
+        (returns
+         (type any)
+         (description "The session datum's `handles` field."))
+        (effects pure))
       (let ((field (session-datum-field session-datum 'handles)))
         (if field (cadr field) '())))
 
     (define (session-create! store scope options)
       "Create a session in STORE for SCOPE using OPTIONS."
-      #((parameters . ((store . "Session store to mutate.")
-                       (scope . "Session scope symbol.")
-                       (options . "Association list overriding id and initial construction fields.")))
-        (returns . "The created public session datum.")
-        (effects . (state-write error)))
+      #((parameters
+         (store
+          (type any)
+          (description "Session store to mutate."))
+         (scope
+          (type any)
+          (description "Session scope symbol."))
+         (options
+          (type any)
+          (description
+           ("Association list overriding id and initial construction"
+            "fields."))))
+        (returns
+         (type any)
+         (description "The created public session datum."))
+        (effects state-write error))
       (let* ((normalized-scope (normalize-scope scope))
              (id (option-ref options
                              'id
@@ -254,19 +279,33 @@
 
     (define (session-ref store id)
       "Return a session datum by ID from STORE, or #f."
-      #((parameters . ((store . "Session store to search.")
-                       (id . "Session id symbol.")))
-        (returns . "The public session datum, or #f when ID is unknown.")
-        (effects . (state-read)))
+      #((parameters
+         (store
+          (type any)
+          (description "Session store to search."))
+         (id
+          (type any)
+          (description "Session id symbol.")))
+        (returns
+         (type any)
+         (description "The public session datum, or #f when ID is unknown."))
+        (effects state-read))
       (let ((session (find-session store id)))
         (if session (session->datum session) #f)))
 
     (define (session-list store . maybe-scope)
       "Return session datums from STORE, optionally filtered by SCOPE."
-      #((parameters . ((store . "Session store to inspect.")
-                       (maybe-scope . "Optional session scope symbol.")))
-        (returns . "List of public session datums in creation order.")
-        (effects . (state-read error)))
+      #((parameters
+         (store
+          (type any)
+          (description "Session store to inspect."))
+         (maybe-scope
+          (type any)
+          (description "Optional session scope symbol.")))
+        (returns
+         (type any)
+         (description "List of public session datums in creation order."))
+        (effects state-read error))
       (let ((scope (if (null? maybe-scope)
                        #f
                        (normalize-scope (car maybe-scope)))))
@@ -295,18 +334,32 @@
 
     (define (session-suspend! store id)
       "Suspend session ID in STORE."
-      #((parameters . ((store . "Session store to mutate.")
-                       (id . "Session id symbol.")))
-        (returns . "The suspended public session datum.")
-        (effects . (state-write error)))
+      #((parameters
+         (store
+          (type any)
+          (description "Session store to mutate."))
+         (id
+          (type any)
+          (description "Session id symbol.")))
+        (returns
+         (type any)
+         (description "The suspended public session datum."))
+        (effects state-write error))
       (transition! (require-session store id) 'suspended))
 
     (define (session-resume! store id)
       "Resume session ID in STORE."
-      #((parameters . ((store . "Session store to mutate.")
-                       (id . "Session id symbol.")))
-        (returns . "The active public session datum.")
-        (effects . (state-write error)))
+      #((parameters
+         (store
+          (type any)
+          (description "Session store to mutate."))
+         (id
+          (type any)
+          (description "Session id symbol.")))
+        (returns
+         (type any)
+         (description "The active public session datum."))
+        (effects state-write error))
       (transition! (require-session store id) 'active))
 
     (define (snapshot-datum session snapshot-id)
@@ -330,11 +383,21 @@
 
     (define (session-snapshot! store id options)
       "Snapshot session ID in STORE using OPTIONS."
-      #((parameters . ((store . "Session store to mutate.")
-                       (id . "Session id symbol.")
-                       (options . "Association list overriding the generated snapshot id.")))
-        (returns . "A `session-snapshot` datum.")
-        (effects . (state-write error)))
+      #((parameters
+         (store
+          (type any)
+          (description "Session store to mutate."))
+         (id
+          (type any)
+          (description "Session id symbol."))
+         (options
+          (type any)
+          (description
+           ("Association list overriding the generated snapshot id."))))
+        (returns
+         (type any)
+         (description "A `session-snapshot` datum."))
+        (effects state-write error))
       (let* ((session (require-session store id))
              (snapshot-id
               (option-ref options 'id (generated-snapshot-id store)))
@@ -346,11 +409,20 @@
 
     (define (session-fork! store id options)
       "Fork session ID in STORE using OPTIONS and return the fork datum."
-      #((parameters . ((store . "Session store to mutate.")
-                       (id . "Source session id symbol.")
-                       (options . "Association list overriding the generated fork id.")))
-        (returns . "The forked public session datum.")
-        (effects . (state-write error)))
+      #((parameters
+         (store
+          (type any)
+          (description "Session store to mutate."))
+         (id
+          (type any)
+          (description "Source session id symbol."))
+         (options
+          (type any)
+          (description "Association list overriding the generated fork id.")))
+        (returns
+         (type any)
+         (description "The forked public session datum."))
+        (effects state-write error))
       (let* ((source (require-session store id))
              (fork-id
               (option-ref options
@@ -376,34 +448,63 @@
 
     (define (session-retire! store id)
       "Retire session ID in STORE and return its datum."
-      #((parameters . ((store . "Session store to mutate.")
-                       (id . "Session id symbol.")))
-        (returns . "The retired public session datum with live handles cleared.")
-        (effects . (state-write error)))
+      #((parameters
+         (store
+          (type any)
+          (description "Session store to mutate."))
+         (id
+          (type any)
+          (description "Session id symbol.")))
+        (returns
+         (type any)
+         (description
+          ("The retired public session datum with live handles"
+           "cleared.")))
+        (effects state-write error))
       (let ((session (require-session store id)))
         (set-session-record-handles! session '())
         (transition! session 'retired)))
 
     (define (consent-make-session-manager)
       "Construct an empty live session manager."
-      #((parameters . ())
-        (returns . "A session manager with an empty store, no live contexts, no default session, and no context factory.")
-        (effects . (allocation)))
+      #((parameters)
+        (returns
+         (type any)
+         (description
+          ("A session manager with an empty store, no live contexts,"
+           "no default session, and no context factory.")))
+        (effects allocation))
       (make-session-manager (consent-make-session-store) '() #f #f))
 
     (define (session-manager-set-context-factory! manager factory)
       "Install FACTORY as MANAGER's interaction-context factory."
-      #((parameters . ((manager . "Session manager to configure.")
-                       (factory . "Procedure of (id scope options) returning a live interaction context for a session.")))
-        (returns . "Unspecified.")
-        (effects . (state-write)))
+      #((parameters
+         (manager
+          (type any)
+          (description "Session manager to configure."))
+         (factory
+          (type any)
+          (description
+           ("Procedure of (id scope options) returning a live"
+            "interaction context for a session."))))
+        (returns
+         (type any)
+         (description "Unspecified."))
+        (effects state-write))
       (set-manager-context-factory! manager factory))
 
     (define (session-manager-context-factory manager)
       "Return MANAGER's installed interaction-context factory, or #f."
-      #((parameters . ((manager . "Session manager to inspect.")))
-        (returns . "The installed context factory procedure, or #f when none is set.")
-        (effects . (state-read)))
+      #((parameters
+         (manager
+          (type any)
+          (description "Session manager to inspect.")))
+        (returns
+         (type any)
+         (description
+          ("The installed context factory procedure, or #f when none"
+           "is set.")))
+        (effects state-read))
       (manager-context-factory manager))
 
     (define (session-manager-reset! manager)
@@ -411,25 +512,41 @@
       "The manager is process-local and shared across evaluations, so a REPL"
       "run resets it at the start to keep multiple runs in one process (tests,"
       "embeddings) from leaking sessions or already-imported environments."
-      #((parameters . ((manager . "Session manager to reset.")))
-        (returns . "Unspecified.  The installed context factory is preserved.")
-        (effects . (state-write)))
+      #((parameters
+         (manager
+          (type any)
+          (description "Session manager to reset.")))
+        (returns
+         (type any)
+         (description
+          ("Unspecified. The installed context factory is preserved.")))
+        (effects state-write))
       (set-manager-store! manager (consent-make-session-store))
       (set-manager-contexts! manager '())
       (set-manager-default-id! manager #f))
 
     (define (session-manager-store manager)
       "Return MANAGER's underlying lifecycle store."
-      #((parameters . ((manager . "Session manager to inspect.")))
-        (returns . "The manager's session store.")
-        (effects . (state-read)))
+      #((parameters
+         (manager
+          (type any)
+          (description "Session manager to inspect.")))
+        (returns
+         (type any)
+         (description "The manager's session store."))
+        (effects state-read))
       (manager-store manager))
 
     (define (session-manager-current-id manager)
       "Return MANAGER's default session id, or #f when none is selected."
-      #((parameters . ((manager . "Session manager to inspect.")))
-        (returns . "The default session id symbol, or #f.")
-        (effects . (state-read)))
+      #((parameters
+         (manager
+          (type any)
+          (description "Session manager to inspect.")))
+        (returns
+         (type any)
+         (description "The default session id symbol, or #f."))
+        (effects state-read))
       (manager-default-id manager))
 
     (define (manager-context-cell manager id)
@@ -442,10 +559,17 @@
 
     (define (session-manager-context-ref manager id)
       "Return MANAGER's live interaction context for ID, or #f when absent."
-      #((parameters . ((manager . "Session manager to inspect.")
-                       (id . "Session id symbol.")))
-        (returns . "The live interaction context for ID, or #f.")
-        (effects . (state-read)))
+      #((parameters
+         (manager
+          (type any)
+          (description "Session manager to inspect."))
+         (id
+          (type any)
+          (description "Session id symbol.")))
+        (returns
+         (type any)
+         (description "The live interaction context for ID, or #f."))
+        (effects state-read))
       (let ((cell (manager-context-cell manager id)))
         (if cell (cdr cell) #f)))
 
@@ -469,11 +593,23 @@
 
     (define (session-manager-create! manager scope options)
       "Create a SCOPE session in MANAGER with a fresh sandbox context."
-      #((parameters . ((manager . "Session manager to mutate.")
-                       (scope . "Session scope symbol.")
-                       (options . "Association list overriding id and construction fields.")))
-        (returns . "The created public session datum.  Does not change the default session.")
-        (effects . (state-write error)))
+      #((parameters
+         (manager
+          (type any)
+          (description "Session manager to mutate."))
+         (scope
+          (type any)
+          (description "Session scope symbol."))
+         (options
+          (type any)
+          (description
+           ("Association list overriding id and construction fields."))))
+        (returns
+         (type any)
+         (description
+          ("The created public session datum. Does not change the"
+           "default session.")))
+        (effects state-write error))
       (let* ((datum (session-create! (manager-store manager) scope options))
              (id (session-datum-id datum)))
         (manager-register-context!
@@ -482,12 +618,24 @@
 
     (define (session-manager-seed! manager id scope context)
       "Register a pre-built CONTEXT as session ID (SCOPE) and make it default."
-      #((parameters . ((manager . "Session manager to mutate.")
-                       (id . "Session id symbol for the seeded session.")
-                       (scope . "Session scope symbol.")
-                       (context . "Pre-built live interaction context to adopt.")))
-        (returns . "The seeded public session datum, now the default session.")
-        (effects . (state-write error)))
+      #((parameters
+         (manager
+          (type any)
+          (description "Session manager to mutate."))
+         (id
+          (type any)
+          (description "Session id symbol for the seeded session."))
+         (scope
+          (type any)
+          (description "Session scope symbol."))
+         (context
+          (type any)
+          (description "Pre-built live interaction context to adopt.")))
+        (returns
+         (type any)
+         (description
+          ("The seeded public session datum, now the default session.")))
+        (effects state-write error))
       (let ((datum (session-create! (manager-store manager)
                                     scope
                                     (list (list 'id id)))))
@@ -497,10 +645,17 @@
 
     (define (session-manager-switch! manager id)
       "Make ID MANAGER's default session, building a context if needed."
-      #((parameters . ((manager . "Session manager to mutate.")
-                       (id . "Existing session id symbol to switch to.")))
-        (returns . "ID's public session datum, or #f when ID is unknown.")
-        (effects . (state-write)))
+      #((parameters
+         (manager
+          (type any)
+          (description "Session manager to mutate."))
+         (id
+          (type any)
+          (description "Existing session id symbol to switch to.")))
+        (returns
+         (type any)
+         (description "ID's public session datum, or #f when ID is unknown."))
+        (effects state-write))
       (let ((datum (session-ref (manager-store manager) id)))
         (if datum
             (begin
@@ -513,26 +668,45 @@
 
     (define (session-manager-current manager)
       "Return MANAGER's default session datum, or #f when none is selected."
-      #((parameters . ((manager . "Session manager to inspect.")))
-        (returns . "The default session's public datum, or #f.")
-        (effects . (state-read)))
+      #((parameters
+         (manager
+          (type any)
+          (description "Session manager to inspect.")))
+        (returns
+         (type any)
+         (description "The default session's public datum, or #f."))
+        (effects state-read))
       (let ((id (manager-default-id manager)))
         (if id (session-ref (manager-store manager) id) #f)))
 
     (define (session-manager-list manager . maybe-scope)
       "Return MANAGER's session datums, optionally filtered by SCOPE."
-      #((parameters . ((manager . "Session manager to inspect.")
-                       (maybe-scope . "Optional session scope symbol.")))
-        (returns . "List of public session datums in creation order.")
-        (effects . (state-read error)))
+      #((parameters
+         (manager
+          (type any)
+          (description "Session manager to inspect."))
+         (maybe-scope
+          (type any)
+          (description "Optional session scope symbol.")))
+        (returns
+         (type any)
+         (description "List of public session datums in creation order."))
+        (effects state-read error))
       (apply session-list (manager-store manager) maybe-scope))
 
     (define (session-manager-close! manager id)
       "Retire session ID in MANAGER and drop its live context."
-      #((parameters . ((manager . "Session manager to mutate.")
-                       (id . "Session id symbol to retire.")))
-        (returns . "The retired public session datum.")
-        (effects . (state-write error)))
+      #((parameters
+         (manager
+          (type any)
+          (description "Session manager to mutate."))
+         (id
+          (type any)
+          (description "Session id symbol to retire.")))
+        (returns
+         (type any)
+         (description "The retired public session datum."))
+        (effects state-write error))
       (let ((datum (session-retire! (manager-store manager) id)))
         (set-manager-contexts!
          manager
