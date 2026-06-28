@@ -186,6 +186,13 @@ if [ -s "$violations" ]; then
   count=$(sort -u "$violations" | wc -l | tr -d ' ')
   printf '\nbranding gate failed: %s match(es). See AGENTS.md: no assistant, tool, vendor, or workflow branding in branch names, PR titles/bodies, commit messages, docs, or artifacts.\n' \
     "$count" >&2
+  # Self-documenting remediation: a PR title/body hit is usually a "Generated
+  # by" trailer the PR-creation tooling appends after a clean body, so the fix
+  # is not in the diff. Point at it so the red check explains how to clear
+  # itself without the resolution being rediscovered each time.
+  if grep -Eq 'branding violation \[PR (title|body)\]' "$violations"; then
+    printf 'remediation (PR title/body): this is usually a trailer the pull-request-creation tooling appends after a clean body is supplied. Edit the PR description to remove it (an explicit pull-request update, or the PR edit UI) and re-check; an explicit update is not re-injected, only PR creation adds it. Re-read the description to confirm. See docs/contributing.md "Branding gate".\n' >&2
+  fi
   exit 1
 fi
 
