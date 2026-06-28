@@ -264,10 +264,13 @@ The `lint-branding` gate (`tools/lint-branding.sh`, run in CI by the dedicated
 `Branding` workflow and, as a fallback, through the `lint-elisp` job) fails on
 assistant, tool, vendor, or workflow branding in tracked files, the branch name,
 commit messages, commit author/committer identity, and the pull request title
-and body, per the AGENTS.md rule. The dedicated workflow enforces every
-dimension deterministically on each pull request; the `lint-elisp` piggyback
-backstops it on a shallow checkout (files and branch name always, commit range
-when a base ref is present, PR title/body best-effort).
+and body, per the AGENTS.md rule. The dedicated workflow runs on PR
+`opened`/`synchronize`/`reopened`/`edited` (so a trailer added to the title or
+body after creation is re-scanned) and its check
+(`Assistant/tool/vendor branding gate`) is a **required status check** on
+`main`, so a failure blocks merge. The `lint-elisp` piggyback backstops it on a
+shallow checkout (files and branch name always, commit range when a base ref is
+present, PR title/body best-effort) but is not itself a merge gate.
 
 Resolving a failure depends on which context it names:
 
