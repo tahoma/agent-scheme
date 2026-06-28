@@ -99,8 +99,17 @@ if [ -n "$emoji_matches" ]; then
 fi
 
 # --- Commit messages on the branch (TIER A + TIER B) ----------------------
+# Base resolution order: an explicit override, then the GitHub Actions base ref
+# (set on pull_request runs), then origin/main. The commit scan runs only when
+# that base is actually present locally, so it degrades cleanly to a no-op on a
+# shallow checkout rather than forcing a network fetch inside a piggybacked job.
 base=${CONSENT_BRANDING_BASE:-}
 head=${CONSENT_BRANDING_HEAD:-HEAD}
+if [ -z "$base" ] && [ -n "${GITHUB_BASE_REF:-}" ] && \
+   git rev-parse --verify --quiet "origin/$GITHUB_BASE_REF" >/dev/null 2>&1
+then
+  base=origin/$GITHUB_BASE_REF
+fi
 if [ -z "$base" ] && git rev-parse --verify --quiet origin/main >/dev/null 2>&1
 then
   base=origin/main
@@ -118,7 +127,16 @@ if [ -n "$range" ]; then
 fi
 
 # --- Branch name (TIER A + TIER B) ----------------------------------------
+# Branch resolution order: an explicit override, then the GitHub Actions head
+# ref (auto-set on pull_request runs, so a piggybacked job catches a branded
+# branch with no workflow change), then the push ref name, then the local HEAD.
 branch=${CONSENT_BRANDING_BRANCH:-}
+if [ -z "$branch" ]; then
+  branch=${GITHUB_HEAD_REF:-}
+fi
+if [ -z "$branch" ]; then
+  branch=${GITHUB_REF_NAME:-}
+fi
 if [ -z "$branch" ]; then
   branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
 fi

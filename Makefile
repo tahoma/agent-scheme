@@ -327,7 +327,13 @@ compile-elisp:
 # one Emacs but not another. Docstring style and width are owned by the separate
 # checkdoc slice, not this gate; this target enforces the semantic warning
 # classes the issue motivates.
-lint-elisp:
+# `lint-branding' is a prerequisite so the always-run `lint-elisp' CI job (which
+# invokes `make lint-elisp') also runs the branding gate, wiring it into CI
+# through normal build code rather than a workflow-scoped change. In a CI run
+# the gate reads GITHUB_HEAD_REF for the branch name and scans tracked files;
+# the PR title/body dimension still requires a dedicated workflow that injects
+# those fields (see docs/development.md).
+lint-elisp: lint-branding
 	@rm -rf '$(CONSENT_LINT_BUILD_DIR)'
 	@mkdir -p '$(CONSENT_LINT_BUILD_DIR)'
 	$(EMACS) -Q --batch -L lisp \
