@@ -1055,6 +1055,92 @@
               (cadr (assq 'source-file lazy-spec)))
          "scheme/standard-library/lazy.sld"))
 
+(check-external 'srfi-180-json-read
+                "(import (scheme base) (srfi 180))
+                 (let* ((datum
+                         (json-read
+                          (open-input-string
+                           \"{\\\"name\\\":\\\"Ada\\\",\\\"scores\\\":[1,true,null],\\\"nested\\\":{\\\"ok\\\":false}}\")))
+                        (scores (cdr (assq 'scores datum)))
+                        (nested (cdr (assq 'nested datum))))
+                   (list (cdr (assq 'name datum))
+                         (vector-ref scores 0)
+                         (vector-ref scores 1)
+                         (json-null? (vector-ref scores 2))
+                         (cdr (assq 'ok nested))))"
+                "(\"Ada\" 1 #t #t #f)")
+
+(check-external 'srfi-180-json-write-round-trip
+                "(import (scheme base) (srfi 180))
+                 (let ((out (open-output-string)))
+                   (json-write
+                    '((name . \"Ada\")
+                      (scores . #(1 #t null))
+                      (empty . ()))
+                    out)
+                   (let* ((datum
+                           (json-read
+                            (open-input-string (get-output-string out))))
+                          (scores (cdr (assq 'scores datum))))
+                     (list (cdr (assq 'name datum))
+                           (vector-ref scores 0)
+                           (vector-ref scores 1)
+                           (json-null? (vector-ref scores 2))
+                           (cdr (assq 'empty datum)))))"
+                "(\"Ada\" 1 #t #t ())")
+
+(check-external 'srfi-180-json-error
+                "(import (scheme base) (srfi 180))
+                 (guard (condition
+                         ((json-error? condition) #t)
+                         (else 'wrong-condition))
+                   (json-read (open-input-string \"{\\\"bad\\\":[1,]}\"))
+                   'no-error)"
+                "#t")
+
+(check-external 'srfi-180-json-write-rejects-non-json-number
+                "(import (scheme base) (srfi 180))
+                 (guard (condition
+                         ((json-error? condition) #t)
+                         (else 'wrong-condition))
+                   (json-write '((half . 1/2)) (open-output-string))
+                   'no-error)"
+                "#t")
+
+(check-external 'srfi-180-json-read-character-limit
+                "(import (scheme base) (srfi 180))
+                 (guard (condition
+                         ((json-error? condition) #t)
+                         (else 'wrong-condition))
+                   (parameterize ((json-number-of-character-limit 4))
+                     (json-read (open-input-string \"[1,2,3]\")))
+                   'no-error)"
+                "#t")
+
+(check-external 'srfi-180-alias-import
+                "(import (scheme base) (srfi srfi-180))
+                 (json-null? (json-read (open-input-string \"null\")))"
+                "#t")
+
+(check-external 'consent-json-import
+                "(import (scheme base) (consent json))
+                 (json-null? (json-read (open-input-string \"null\")))"
+                "#t")
+
+(check-external 'consent-json-read-subset-import
+                "(import (scheme base) (consent json read))
+                 (json-null? (json-read (open-input-string \"null\")))"
+                "#t")
+
+(check-external 'srfi-180-manifest
+                "(import (scheme base) (srfi manifest))
+                 (let ((entry (srfi-manifest-ref '(srfi 180))))
+                   (list (cdr (assq 'status entry))
+                         (cdr (assq 'implementation-library entry))
+                         (cdr (assq 'upstream-license entry))
+                         (cdr (assq 'import-aliases entry))))"
+                "(direct-portable-implementation (consent json) \"MIT\" ((srfi 180) (srfi srfi-180)))")
+
 (check-external 'base-list-helpers
                 "(list (length (append '(1 2) '(3 4)))
                        (cadr '(alpha beta gamma))
@@ -4380,6 +4466,17 @@
                  "(write-u8 33 (current-error-port))"
                  'program-error-byte-writer program-error-grant)))
   (check 'program-binary-error-granted-bytes (car captured) '(33)))
+
+;; Keep this import-error regression at the end: Racket's R7RS host preserves
+;; enough handler state after this rejected import to perturb later checks.
+(check 'consent-json-read-subset-excludes-write
+       (raises?
+        (lambda ()
+          (consent-eval-source
+           "(import (scheme base)
+                    (only (consent json read) json-write))
+            json-write")))
+       #t)
 
 (if (= failures 0)
     (begin
