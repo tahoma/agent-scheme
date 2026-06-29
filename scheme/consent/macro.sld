@@ -1899,7 +1899,7 @@
       "Return syntax export metadata for LIBRARY-NAME."
       #((parameters
          (library-name
-          (type list)
+          (type (list-of (or symbol exact-integer)))
           (description "Library name to resolve and inspect."))
          (environment
           (type environment)

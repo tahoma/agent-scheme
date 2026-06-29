@@ -95,7 +95,7 @@
           (type agent-helper-library)
           (description "Helper record datum.")))
         (returns
-         (type list)
+         (type (list-of (or symbol exact-integer)))
          (description "The helper library name field."))
         (effects pure))
       (field-value record 'name))
@@ -162,7 +162,7 @@
           (type symbol)
           (description "Helper scope symbol."))
          (library-name
-          (type list)
+          (type (list-of (or symbol exact-integer)))
           (description "Scheme library name for the helper.")))
         (returns
          (type (or agent-helper-library boolean))
@@ -214,7 +214,7 @@
           (type symbol)
           (description "Helper scope symbol."))
          (library-name
-          (type list)
+          (type (list-of (or symbol exact-integer)))
           (description "Scheme library name for the helper."))
          (forms . "Helper source forms as Scheme-readable data.")
          (source . "Source metadata describing where the helper came from."))
