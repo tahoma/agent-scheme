@@ -91,7 +91,11 @@ library-resolution, and capability layers land.
 
 Portable core code belongs in `scheme/` whenever practical and should avoid
 assuming Emacs, a current editor buffer, a process supervisor, or local
-filesystem authority. It owns:
+filesystem authority. This is the default ownership rule: if behavior can be
+implemented as portable Scheme without performing a host effect, it belongs in
+the portable layer before any host-specific duplicate is added. The dual-core
+surface should stay limited to the smallest subset that must be implemented
+separately by a bootstrap or host adapter. Portable core owns:
 
 - reader, datum validation, writer, evaluator, macro expander, and library
   semantics
@@ -100,6 +104,8 @@ filesystem authority. It owns:
 - canonical datums for memory records, plans, rules, skills, transcripts,
   session records, results, events, approvals, and audit entries
 - portable helper libraries and Consent Scheme-native manifests
+- protocol datums, host-neutral codecs, deterministic parsers, and request or
+  response normalization
 - conformance fixtures, reference data, and portable tests
 - deterministic library names and imports such as `(scheme base)`,
   `(agent memory)`, and `(agent plan)`
@@ -121,7 +127,8 @@ owns:
 - process, network, filesystem, project, VCS, diagnostics, and documentation
   integration
 - persistence plumbing and migration hooks for host-managed storage
-- model provider transport and stream handling
+- model provider wire I/O, effectful stream delivery, and host-specific retry,
+  timeout, or credential handling
 - performance shortcuts such as indexes, caches, native handles, and compiled
   fast paths
 
@@ -159,11 +166,12 @@ without changing the language that Consent Scheme promises to users.
 
 Bootstrap work should proceed in this order:
 
-1. Maintain architectural parity between the Emacs Lisp bootstrap
-   implementation and portable R7RS modules against the same conformance
+1. Put new host-neutral semantics, derived helpers, codecs, protocol surfaces,
+   and libraries in portable Scheme as soon as the evaluator can run them.
+2. Maintain architectural parity between the Emacs Lisp bootstrap
+   implementation and portable R7RS modules only for the irreducible dual-core
+   slice that cannot yet be single-sourced against the same conformance
    fixtures.
-2. Move derived helpers and host-neutral libraries into portable Scheme as soon
-   as the evaluator can run them.
 3. Keep host effects policy-gated and represented as data before adapter code
    performs them.
 4. Use an external R7RS implementation to validate portable reader, evaluator,
