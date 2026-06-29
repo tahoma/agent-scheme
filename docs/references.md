@@ -400,17 +400,72 @@ see [Agentic-Harness and Language-Agent Prior-Art Synthesis](agentic-harness-ide
   tool/API sets via retrieval; its
   [Berkeley Function-Calling Leaderboard](https://github.com/ShishirPatil/gorilla)
   is a running evaluation of tool-calling behavior.
+
+### Agent Protocol and Transport Specifications
+
 - [Model Context Protocol specification](https://modelcontextprotocol.io/specification)
-  and its [announcement](https://www.anthropic.com/news/model-context-protocol)
-  define the open protocol for exposing tools/resources/prompts to model clients.
-  The project's intended external tool boundary; MCP is a wire encoding over
-  Scheme-readable result/event datums, not the canonical internal model.
+  and its
+  [transports](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports)
+  define the open protocol for exposing tools, resources, and prompts to model
+  clients. The project's intended external tool boundary; MCP is a wire encoding
+  over Scheme-readable result/event datums, not the canonical internal model.
+- [Agent2Agent Protocol specification](https://a2a-protocol.org/latest/specification/)
+  defines a JSON-RPC-based agent-to-agent task and message protocol, with
+  explicit parts, artifacts, streaming updates, and push notifications. Useful
+  prior art for cross-agent handoff and long-running task state, even though
+  Consent Scheme should keep its internal task state as Scheme-readable data.
+- [Agent Client Protocol overview](https://agentclientprotocol.com/protocol/v1/overview)
+  and its
+  [transports](https://agentclientprotocol.com/protocol/v1/transports) describe
+  a JSON-RPC protocol between editors/clients and coding agents. Relevant to
+  editor-facing session control, thread/session identity, tool-call lifecycle
+  events, and transport boundaries around an interactive agent runtime.
+- [AG-UI](https://docs.ag-ui.com/introduction) defines an event protocol for
+  connecting agents to user interfaces; see also its
+  [protocol comparison](https://docs.ag-ui.com/agentic-protocols),
+  [events](https://docs.ag-ui.com/concepts/events), and
+  [serialization](https://docs.ag-ui.com/concepts/serialization) references.
+  Useful when designing streamed UI state and human-visible agent events without
+  treating the UI protocol as canonical agent memory.
 - [Apertus Chat Format Specification](https://github.com/swiss-ai/apertus-format/blob/main/docs/format.md)
   documents a structured chat-template format with assistant blocks for
   thoughts, tool calls, tool outputs, and public responses. Useful prior art for
   model-facing prompt serialization and local chat-template renderers, while
   Consent Scheme keeps call IDs, provenance, policy gates, and canonical
   Scheme-readable tool/result datums outside the template edge.
+
+### Provider Tool-Calling and Model API Surfaces
+
+- [OpenAI function calling](https://platform.openai.com/docs/guides/function-calling)
+  and the
+  [Responses API reference](https://platform.openai.com/docs/api-reference/responses)
+  document the provider surface for tool schemas, tool calls, and response
+  items. Relevant to local OpenAI-compatible transport adapters while keeping
+  provider JSON as an edge encoding.
+- [Anthropic Claude tool use](https://docs.anthropic.com/en/docs/agents-and-tools/tool-use/overview)
+  and the
+  [Messages API](https://docs.anthropic.com/en/api/messages) document the
+  provider-native messages and tool-use protocol. Relevant prior art for an
+  Anthropic transport adapter with `tool_use` and `tool_result` blocks.
+- [OpenRouter API reference](https://openrouter.ai/docs/api-reference/overview),
+  [Ollama OpenAI compatibility](https://docs.ollama.com/openai), and the
+  [vLLM OpenAI-compatible server](https://docs.vllm.ai/en/latest/serving/openai_compatible_server/)
+  document common OpenAI-compatible local and aggregator model-provider
+  surfaces. Relevant to one hardened OpenAI-compatible edge that can span local
+  servers and hosted routing providers.
+
+### Protocol Encoding and Streaming Substrates
+
+- [JSON-RPC 2.0](https://www.jsonrpc.org/specification) is the RPC envelope
+  shared by several agent/client protocols; useful as transport prior art, not
+  as an internal runtime representation.
+- [Server-Sent Events](https://html.spec.whatwg.org/multipage/server-sent-events.html)
+  is the browser and HTTP streaming substrate used by many provider and agent
+  protocols for incremental events.
+- [JSON Patch (RFC 6902)](https://www.rfc-editor.org/rfc/rfc6902) and
+  [JSON Canonicalization Scheme (RFC 8785)](https://www.rfc-editor.org/rfc/rfc8785)
+  are useful references for structured deltas, fixtures, signatures, and audit
+  trails at JSON protocol edges.
 
 ### Code as Action and Agent-Computer Interfaces
 
