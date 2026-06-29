@@ -1782,7 +1782,7 @@
       "Report whether NAME is a known or already registered library."
       #((parameters
          (name
-          (type list)
+          (type (list-of (or symbol exact-integer)))
           (description "Library name to test for availability."))
          (context
           (type eval-context)
@@ -1811,7 +1811,7 @@
       "Resolve NAME to a library, registering lazy standard libraries as needed."
       #((parameters
          (name
-          (type list)
+          (type (list-of (or symbol exact-integer)))
           (description "Library name to resolve to a registered library."))
          (context
           . ("Evaluation context whose registry receives lazily"
