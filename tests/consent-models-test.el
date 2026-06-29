@@ -27,6 +27,19 @@
   (push (list provider model request) consent-models-test--requests)
   "mock completion")
 
+(defun consent-models-test--tool-call-transport
+    (provider model request _context)
+  "Return a fake tool-calling completion for PROVIDER, MODEL, and REQUEST."
+  (push (list provider model request) consent-models-test--requests)
+  (consent-read
+   "(model-message
+      (text \"Need the local echo tool.\")
+      (tool-calls
+       ((tool-call
+         (id \"call-1\")
+         (name local-echo)
+         (arguments ((text \"hello\")))))))"))
+
 (defun consent-models-test--external (source)
   "Evaluate SOURCE and return its stable external value representation."
   (consent-value->external
@@ -143,6 +156,219 @@
       (should (equal (plist-get model :id) "qwen-coder"))
       (should (equal (plist-get payload :prompt)
                      "Write a Scheme helper.")))))
+
+(ert-deftest consent-models-test-tool-spec-derived-and-routed ()
+  "Derive tool specs from metadata and route canonical tool calls."
+  (consent-models-test--reset)
+  (let ((consent-models-transport-function
+         #'consent-models-test--tool-call-transport))
+    (should
+     (equal
+      (consent-models-test--external
+       "(import (scheme base) (agent models))
+        (define (field datum name)
+          (let loop ((fields (cdr datum)))
+            (cond
+             ((null? fields) #f)
+             ((eq? (car (car fields)) name) (cadr (car fields)))
+             (else (loop (cdr fields))))))
+        (define (local-echo text)
+          \"Echo TEXT through a pure local helper.\"
+          #((parameters
+             (text (type string)
+              (description \"Text to echo.\")))
+            (returns (type string)
+             (description \"The echoed text.\"))
+            (effects pure))
+          text)
+        (model-provider-register!
+         '(model-provider
+           (id local-tools)
+           (kind local)
+           (transport openai-compatible-http)
+           (endpoint \"http://127.0.0.1:11434/v1\")
+           (models
+            (((id qwen-coder)
+              (roles (scheme-scripter code))
+              (privacy local))))))
+        (let* ((tool (model-tool-spec 'local-echo))
+               (response
+                (model-complete 'scheme-scripter
+                                \"Call local-echo with hello.\"
+                                (list (list 'tools (list tool))
+                                      (list 'tool-choice 'auto)))))
+          (list (field tool 'name)
+                (field tool 'parameters)
+                (field tool 'returns)
+                (field tool 'effects)
+                (field tool 'schema)
+                (field tool 'example)
+                (field tool 'gate)
+                response))")
+      (concat
+       "(local-echo "
+       "((text (type string) (description \"Text to echo.\"))) "
+       "((type string) (description \"The echoed text.\")) "
+       "(pure) "
+       "(openai-tool (type function) "
+       "(function (name \"local-echo\") "
+       "(description \"Echo TEXT through a pure local helper.\") "
+       "(parameters ((type \"object\") "
+       "(properties ((text ((type \"string\") "
+       "(description \"Text to echo.\"))))) "
+       "(required (\"text\")))))) "
+       "(tool-call (name local-echo) "
+       "(arguments ((text \"<string>\")))) "
+       "(tool-gate (decision pure-under-budget) (effects (pure))) "
+       "(model-message (text \"Need the local echo tool.\") "
+       "(tool-calls ((tool-call (id \"call-1\") "
+       "(name local-echo) (arguments ((text \"hello\"))))))))")))
+    (should (= (length consent-models-test--requests) 1))
+    (let* ((payload (caddr (car consent-models-test--requests)))
+           (tools (plist-get payload :tools))
+           (tool-choice (plist-get payload :tool-choice)))
+      (should (equal (consent-result->external tool-choice) "auto"))
+      (should
+       (string-match-p
+        "(model-tool (name local-echo)"
+        (consent-result->external tools))))))
+
+(ert-deftest consent-models-test-tool-spec-any-schema-default ()
+  "Keep `any' parameter schemas JSON-object shaped when prose is absent."
+  (consent-models-test--reset)
+  (should
+   (equal
+    (consent-models-test--external
+     "(import (scheme base) (agent models))
+      (define (field datum name)
+        (let loop ((fields (cdr datum)))
+          (cond
+           ((null? fields) #f)
+           ((eq? (car (car fields)) name) (cadr (car fields)))
+           (else (loop (cdr fields))))))
+      (define (local-inspect value)
+        \"Inspect VALUE locally.\"
+        #((parameters (value (type any)))
+          (returns (type any))
+          (effects pure))
+        value)
+      (field (model-tool-spec 'local-inspect) 'schema)")
+    (concat
+     "(openai-tool (type function) "
+     "(function (name \"local-inspect\") "
+     "(description \"Inspect VALUE locally.\") "
+     "(parameters ((type \"object\") "
+     "(properties ((value ((description "
+     "\"Any Scheme-readable value.\"))))) "
+     "(required (\"value\"))))))"))))
+
+(ert-deftest consent-models-test-openai-response-tool-calls ()
+  "Decode OpenAI-compatible tool_calls into canonical model-message datums."
+  (should
+   (equal
+    (consent-result->external
+     (consent-models--parse-openai-response
+      "{\"choices\":[{\"message\":{\"content\":\"Use a tool.\",\"tool_calls\":[{\"id\":\"call-1\",\"type\":\"function\",\"function\":{\"name\":\"local-echo\",\"arguments\":\"{\\\"text\\\":\\\"hello\\\"}\"}}]}}]}"))
+    (concat
+     "(model-message (text \"Use a tool.\") "
+     "(tool-calls ((tool-call (id \"call-1\") "
+     "(name local-echo) (arguments ((text \"hello\")))))))"))))
+
+(ert-deftest consent-models-test-openai-request-includes-tools ()
+  "Lower canonical model-tool datums into OpenAI tools and tool_choice."
+  (let* ((json-object-type 'alist)
+         (json-array-type 'list)
+         (json-key-type 'symbol)
+         (tool
+          (consent-read
+           "(model-tool
+              (name local-echo)
+              (schema
+               (openai-tool
+                (type function)
+                (function
+                 (name \"local-echo\")
+                 (description \"Echo text.\")
+                 (parameters
+                  ((type \"object\")
+                   (properties
+                    ((text ((type \"string\")
+                            (description \"Text to echo.\")))))
+                   (required (\"text\"))))))))"))
+         (payload
+          (json-read-from-string
+           (consent-models--openai-request-data
+            '(:id "qwen-coder")
+            (list :prompt "Call local-echo."
+                  :tools (list tool)
+                  :tool-choice (consent--syntax-symbol "auto"))))))
+    (should (equal (alist-get 'tool_choice payload) "auto"))
+    (should (= (length (alist-get 'tools payload)) 1))
+    (let* ((tool-json (car (alist-get 'tools payload)))
+           (function (alist-get 'function tool-json))
+           (parameters (alist-get 'parameters function))
+           (properties (alist-get 'properties parameters))
+           (text (alist-get 'text properties)))
+      (should (equal (alist-get 'type tool-json) "function"))
+      (should (equal (alist-get 'name function) "local-echo"))
+      (should (equal (alist-get 'type parameters) "object"))
+      (should (equal (alist-get 'type text) "string"))
+      (should (equal (alist-get 'required parameters) '("text"))))))
+
+(ert-deftest consent-models-test-local-retry-uses-request-timeout ()
+  "Retry local transport errors within the configured request timeout."
+  (let ((calls 0)
+        (seen-timeouts nil))
+    (cl-letf (((symbol-function 'url-retrieve-synchronously)
+               (lambda (_url _silent _inhibit-cookies timeout)
+                 (push timeout seen-timeouts)
+                 (setq calls (1+ calls))
+                 (when (= calls 2)
+                   (generate-new-buffer " *model-response*")))))
+      (let ((buffer
+             (consent-models--retrieve-synchronously
+              "http://127.0.0.1:11434/v1/chat/completions"
+              '(:timeout-seconds 7 :retry-count 1))))
+        (unwind-protect
+            (progn
+              (should (buffer-live-p buffer))
+              (should (= calls 2))
+              (should (equal seen-timeouts '(7 7))))
+          (when (buffer-live-p buffer)
+            (kill-buffer buffer)))))))
+
+(ert-deftest consent-models-test-transport-error-maps-to-provider-error ()
+  "Map local transport failures to structured model-provider-error data."
+  (consent-models-test--reset)
+  (consent-models-register-provider!
+   (consent-read
+    "(model-provider
+      (id local-errors)
+      (kind local)
+      (transport openai-compatible-http)
+      (endpoint \"http://127.0.0.1:11434/v1\")
+      (models
+       (((id qwen-coder)
+         (roles (scheme-scripter))
+         (privacy local)))))"))
+  (let ((consent-models-transport-function
+         (lambda (_provider _model _request _context)
+           (signal 'consent-models-error
+                   (list "connection refused")))))
+    (let ((error
+           (should-error
+            (consent-models-complete 'scheme-scripter
+                                     "Write a helper."
+                                     '())
+            :type 'consent-models-error)))
+      (should
+       (string-match-p
+        "(model-provider-error"
+        (consent-result->external (cadr error))))
+      (should
+       (string-match-p
+        "(status unavailable)"
+        (consent-result->external (cadr error)))))))
 
 (ert-deftest consent-models-test-live-local-openai-compatible-completion ()
   "Opt-in live proof that `model-complete' reaches a local model endpoint."

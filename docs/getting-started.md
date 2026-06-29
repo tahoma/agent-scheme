@@ -252,6 +252,42 @@ with a fake function, so CI does not require a running model server. The
 portable Scheme implementation registers the same library and routing surface;
 portable completion reports that no portable host transport is configured.
 
+Tool specs are derived from typed docstring metadata rather than written as
+hand-authored JSON. Pass the resulting `model-tool` datums through the `tools`
+option; the local OpenAI-compatible transport lowers them to wire JSON and
+returns tool calls as Scheme-readable `model-message` datums:
+
+```scheme
+(define (local-echo text)
+  "Echo TEXT through a pure local helper."
+  #((parameters
+     (text (type string)
+      (description "Text to echo.")))
+    (returns (type string)
+     (description "The echoed text."))
+    (effects pure))
+  text)
+
+(define echo-tool (model-tool-spec 'local-echo))
+
+(model-complete 'scheme-scripter
+                "Call local-echo with hello."
+                `((tools (,echo-tool))
+                  (tool-choice auto)))
+;; =>
+;; (model-message
+;;  (text "...")
+;;  (tool-calls
+;;   ((tool-call
+;;     (id "...")
+;;     (name local-echo)
+;;     (arguments ((text "hello")))))))
+```
+
+The endpoint must still be loopback/local. Ollama, LM Studio, llama.cpp-server,
+and vLLM can all use the same `openai-compatible-http` transport by changing
+only the provider `endpoint` and model id.
+
 ### Ollama Setup
 
 Ollama is the simplest local OpenAI-compatible provider to use while this layer

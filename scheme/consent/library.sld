@@ -1506,6 +1506,10 @@
                                   'primitive-model-route
                                   1
                                   2)
+          (library-primitive-spec 'model-tool-spec
+                                  'primitive-model-tool-spec
+                                  1
+                                  1)
           (library-primitive-spec 'model-complete
                                   'primitive-model-complete
                                   2

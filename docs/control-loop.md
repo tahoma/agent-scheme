@@ -524,6 +524,18 @@ errors, budgets, cancellation, transcript entries, and audit entries.
    (messages
     ((system "Plan the next Consent Scheme task step.")
      (user "Use the observations and current plan."))))
+  (tools
+   ((model-tool
+      (name local-echo)
+      (description "Echo TEXT through a pure local helper.")
+      (parameters
+       ((text (type string)
+         (description "Text to echo."))))
+      (returns
+       ((type string)
+        (description "The echoed text.")))
+      (effects (pure)))))
+  (tool-choice auto)
   (context
    ((task task-17)
     (plan plan-17)
@@ -550,7 +562,12 @@ errors, budgets, cancellation, transcript entries, and audit entries.
   (status ok)
   (content
    (model-message
-     (text "Observe the diff, then run the focused test.")))
+     (text "Observe the diff, then run the focused test.")
+     (tool-calls
+      ((tool-call
+        (id "call-1")
+        (name local-echo)
+        (arguments ((text "hello"))))))))
   (usage
    (provider-usage
      (input-tokens 1420)
@@ -562,6 +579,14 @@ errors, budgets, cancellation, transcript entries, and audit entries.
       (index 3))))
   (audit audit-104))
 ```
+
+For OpenAI-compatible transports, `tools`, `tool-choice`, and response
+`tool-calls` are a transport-edge projection of the canonical Scheme-readable
+records. Tool specs come from typed docstring metadata: the same `parameters`,
+`returns`, and `effects` descriptors generate the wire schema, an in-context
+example call, and the pure-under-budget versus `capability-request` gate hint.
+The JSON projection is one-way; downstream loop, gate, transcript, and audit
+code consume the Scheme-readable `model-tool` and `tool-call` datums.
 
 ```scheme
 (model-provider-stream-event
