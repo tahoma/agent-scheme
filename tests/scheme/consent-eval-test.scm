@@ -3385,6 +3385,52 @@
   (model-route 'scheme-scripter '())"
  "(model-routing-decision (status selected) (role scheme-scripter) (provider portable-local) (model portable-coder) (kind local) (transport openai-compatible-http) (endpoint \"http://127.0.0.1:11434/v1\"))")
 
+(check-external
+ 'agent-models-tool-spec-from-docstring-metadata
+ "(import (scheme base) (agent models))
+  (define (field datum name)
+    (let loop ((fields (cdr datum)))
+      (cond
+       ((null? fields) #f)
+       ((eq? (car (car fields)) name) (cadr (car fields)))
+       (else (loop (cdr fields))))))
+  (define (local-echo text)
+    \"Echo TEXT through a pure local helper.\"
+    #((parameters
+       (text (type string)
+        (description \"Text to echo.\")))
+      (returns (type string)
+       (description \"The echoed text.\"))
+      (effects pure))
+    text)
+  (let ((tool (model-tool-spec 'local-echo)))
+    (list (field tool 'name)
+          (field tool 'parameters)
+          (field tool 'returns)
+          (field tool 'effects)
+          (field tool 'schema)
+          (field tool 'example)
+          (field tool 'gate)))"
+ "(local-echo ((text (type string) (description \"Text to echo.\"))) ((type string) (description \"The echoed text.\")) (pure) (openai-tool (type function) (function (name \"local-echo\") (description \"Echo TEXT through a pure local helper.\") (parameters ((type \"object\") (properties ((text ((type \"string\") (description \"Text to echo.\"))))) (required (\"text\")))))) (tool-call (name local-echo) (arguments ((text \"<string>\")))) (tool-gate (decision pure-under-budget) (effects (pure))))")
+
+(check-external
+ 'agent-models-tool-spec-any-schema-default
+ "(import (scheme base) (agent models))
+  (define (field datum name)
+    (let loop ((fields (cdr datum)))
+      (cond
+       ((null? fields) #f)
+       ((eq? (car (car fields)) name) (cadr (car fields)))
+       (else (loop (cdr fields))))))
+  (define (local-inspect value)
+    \"Inspect VALUE locally.\"
+    #((parameters (value (type any)))
+      (returns (type any))
+      (effects pure))
+    value)
+  (field (model-tool-spec 'local-inspect) 'schema)"
+ "(openai-tool (type function) (function (name \"local-inspect\") (description \"Inspect VALUE locally.\") (parameters ((type \"object\") (properties ((value ((description \"Any Scheme-readable value.\"))))) (required (\"value\"))))))")
+
 (let* ((result
         (consent-eval-source-result
          "(import (scheme base) (consent capability))
