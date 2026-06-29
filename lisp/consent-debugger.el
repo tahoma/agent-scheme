@@ -189,6 +189,9 @@ hosts.  Other conditions keep their raw host message."
      ((equal origins '("primitive-manifest-string"))
       (list (consent-debugger--symbol "primitive-manifest")
             (consent-debugger--symbol "string")))
+     ((equal origins '("primitive-manifest-metadata"))
+      (list (consent-debugger--symbol "primitive-manifest")
+            (consent-debugger--symbol "metadata")))
      (t
       (cons (consent-debugger--symbol "body-literal")
             (mapcar #'consent-debugger--symbol origins))))))

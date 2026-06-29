@@ -79,6 +79,7 @@
                  "(origin (signature))"
                  "(origin (body-literal string))"
                  "(origin (body-literal string vector))"
+                 "(origin (primitive-manifest metadata))"
                  "(origin (primitive-manifest string))"
                  "(origin (implementation-procedure string))"
                  "`arguments`: the procedure formals"

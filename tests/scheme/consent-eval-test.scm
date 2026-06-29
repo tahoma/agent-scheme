@@ -381,7 +381,36 @@
                        (field (documentation 'current-second) 'source)
                        (field (documentation 'current-second) 'origin)
                        (metadata-field 'current-second 'documentation))"
-                "((binding +) (scheme base) kernel (primitive-manifest string) \"Return the sum of all numeric arguments, or 0 when called with no arguments.\" (procedure) \"Return the sum of all numeric arguments, or 0 when called with no arguments.\" (scheme time) host-capability (primitive-manifest string) \"Return the current time as a real number of seconds since the Unix epoch, subject to the clock capability policy.\")")
+                "((binding +) (scheme base) kernel (primitive-manifest metadata) \"Return the sum of all numeric arguments, or 0 when called with no arguments.\" (procedure) \"Return the sum of all numeric arguments, or 0 when called with no arguments.\" (scheme time) host-capability (primitive-manifest string) \"Return the current time as a real number of seconds since the Unix epoch, subject to the clock capability policy.\")")
+
+(check-external 'primitive-manifest-rich-metadata-reflection
+                "(import (scheme base) (agent reflect))
+                 (define (field datum name)
+                   (cadr (assq name (cdr datum))))
+                 (define (metadata-field subject name)
+                   (let ((datum (documentation subject)))
+                     (if datum
+                         (let ((entry (assq name (field datum 'fields))))
+                           (if entry (cadr entry) #f))
+                       #f)))
+                 (define (descriptor-type descriptor)
+                   (cadr (assq 'type descriptor)))
+                 (define (parameter-type subject name)
+                   (descriptor-type
+                    (cdr (assq name (metadata-field subject 'parameters)))))
+                 (define (return-type subject)
+                   (descriptor-type (metadata-field subject 'returns)))
+                 (list (parameter-type '+ 'numbers)
+                       (return-type '+)
+                       (metadata-field '+ 'effects)
+                       (parameter-type 'vector-ref 'k)
+                       (return-type 'floor/)
+                       (parameter-type 'read-char 'port)
+                       (return-type 'read-char)
+                       (parameter-type 'bytevector-u8-set! 'byte)
+                       (return-type 'bytevector-u8-set!)
+                       (metadata-field 'bytevector-u8-set! 'effects))"
+                "((list-of number) number (pure) exact-non-negative-integer (values integer integer) textual-input-port (or char eof-object) byte unspecified (mutation))")
 
 (check-external/options 'docstring-edge-cases
                 "(import (scheme base) (agent reflect))

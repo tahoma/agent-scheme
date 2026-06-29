@@ -33,6 +33,41 @@
          (entry (assoc "documentation" fields)))
     (and entry (cdr entry))))
 
+(defun consent-base-test--documentation-field (spec name)
+  "Return documentation field NAME from SPEC, or nil."
+  (let* ((documentation (plist-get spec :documentation))
+         (fields (consent--documentation-metadata-fields documentation))
+         (entry (assoc name fields)))
+    (and entry (cdr entry))))
+
+(defun consent-base-test--documentation-field-present-p (spec name)
+  "Return non-nil when SPEC has documentation field NAME."
+  (let* ((documentation (plist-get spec :documentation))
+         (fields (consent--documentation-metadata-fields documentation)))
+    (and (assoc name fields) t)))
+
+(defun consent-base-test--descriptor-field (descriptor name)
+  "Return descriptor field NAME from DESCRIPTOR, or nil."
+  (let ((entry (assq name descriptor)))
+    (and entry
+         (consp (cdr entry))
+         (null (cddr entry))
+         (cadr entry))))
+
+(defun consent-base-test--parameter-type (spec name)
+  "Return parameter NAME's documented type in SPEC, or nil."
+  (let* ((parameters
+          (consent-base-test--documentation-field spec "parameters"))
+         (entry (assq name parameters)))
+    (and entry
+         (consent-base-test--descriptor-field (cdr entry) 'type))))
+
+(defun consent-base-test--return-type (spec)
+  "Return SPEC's documented return type, or nil."
+  (consent-base-test--descriptor-field
+   (consent-base-test--documentation-field spec "returns")
+   'type))
+
 (ert-deftest consent-base-test-registry-is-discoverable ()
   "Expose kernel and prelude binding metadata from Emacs."
   (let ((names (consent-base-primitive-names))
@@ -129,11 +164,69 @@
     (let ((documentation (consent-base-test--documentation-text spec)))
       (should (stringp documentation))
       (should (> (length documentation) 0))
-      (when (memq (plist-get spec :source) '(kernel host-capability))
+      (when (eq (plist-get spec :source) 'kernel)
+        (should
+         (member "primitive-manifest-metadata"
+                 (consent--documentation-metadata-origins
+                  (plist-get spec :documentation)))))
+      (when (eq (plist-get spec :source) 'host-capability)
         (should
          (member "primitive-manifest-string"
                  (consent--documentation-metadata-origins
                   (plist-get spec :documentation))))))))
+
+(ert-deftest consent-base-test-kernel-manifest-docs-have-rich-metadata ()
+  "Kernel primitive manifest documentation carries spec-derived signatures."
+  (dolist (spec (consent-primitive-manifest-binding-specs))
+    (when (eq (plist-get spec :source) 'kernel)
+      (should
+       (consent-base-test--documentation-field-present-p
+        spec
+        "documentation"))
+      (should
+       (consent-base-test--documentation-field-present-p spec "parameters"))
+      (should
+       (consent-base-test--documentation-field-present-p spec "returns"))
+      (should
+       (consent-base-test--documentation-field-present-p spec "effects"))
+      (should
+       (equal (consent-base-test--documentation-field spec "effects")
+              (list (plist-get spec :effect))))))
+  (let ((plus (consent-base-test--manifest-spec "(scheme base)" "+"))
+        (floor-divide (consent-base-test--manifest-spec
+                       "(scheme base)"
+                       "floor/"))
+        (vector-ref (consent-base-test--manifest-spec
+                     "(scheme base)"
+                     "vector-ref"))
+        (read-char (consent-base-test--manifest-spec
+                    "(scheme base)"
+                    "read-char"))
+        (bytevector-u8-set (consent-base-test--manifest-spec
+                            "(scheme base)"
+                            "bytevector-u8-set!")))
+    (should (equal (consent-base-test--parameter-type plus 'numbers)
+                   '(list-of number)))
+    (should (eq (consent-base-test--return-type plus) 'number))
+    (should (eq (consent-base-test--parameter-type vector-ref 'vector)
+                'vector))
+    (should
+     (eq (consent-base-test--parameter-type vector-ref 'k)
+         'exact-non-negative-integer))
+    (should (eq (consent-base-test--return-type vector-ref) 'any))
+    (should
+     (equal (consent-base-test--return-type floor-divide)
+            '(values integer integer)))
+    (should
+     (eq (consent-base-test--parameter-type read-char 'port)
+         'textual-input-port))
+    (should (equal (consent-base-test--return-type read-char)
+                   '(or char eof-object)))
+    (should
+     (eq (consent-base-test--parameter-type bytevector-u8-set 'byte)
+         'byte))
+    (should (eq (consent-base-test--return-type bytevector-u8-set)
+                'unspecified))))
 
 (ert-deftest consent-base-test-effectful-manifest-has-backend-policy-path ()
   "Effectful manifest entries identify the shared backend policy path."
