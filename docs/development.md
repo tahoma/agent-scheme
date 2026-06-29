@@ -166,6 +166,9 @@ rejects shorthand or expanded `(type any)` when descriptor prose names an
 obvious primitive type; use explicit types in those cases. Custom type names
 should normally follow local predicates by dropping the trailing `?`, while
 tagged datums without predicates should use structural types such as `list`.
+Expanded descriptors should keep `(type ...)` on the same line as the
+parameter or `returns` head when the line fits within the soft line limit, with
+the description on the following line. Keep longer type forms on their own line.
 The `consent-scheme-documentation-test-public-rich-docstrings` gate enforces
 this fail-closed -- it runs over every runtime `scheme/` source file by default
 rather than an opt-in allowlist, so a newly added file is covered automatically

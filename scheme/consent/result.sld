@@ -29,14 +29,11 @@
     (define (result-field name . values)
       "Construct a named field for public result datums."
       #((parameters
-         (name
-          (type symbol)
+         (name (type symbol)
           (description "Symbol naming the result field."))
-         (values
-          (type list)
+         (values (type list)
           (description "Zero or more Scheme-readable field values.")))
-        (returns
-         (type pair)
+        (returns (type pair)
          (description ("A field pair whose car is NAME and whose cdr is VALUES.")))
         (effects pure))
       (cons name values))
@@ -45,8 +42,7 @@
       "Return VALUE converted to a public result datum."
       #((parameters
          (value . ("Runtime value to render as stable Scheme-readable data."))
-         (maybe-seen
-          (type list)
+         (maybe-seen (type list)
           (description
            ("Internal cycle-detection list used while rendering"
              "compound values."))))
@@ -127,8 +123,7 @@
       "Remove hygienic identifier wrappers from VALUE for readable output."
       #((parameters
          (value . "Runtime value to simplify for display.")
-         (maybe-seen
-          (type list)
+         (maybe-seen (type list)
           (description
            ("Internal cycle-detection list used while walking compound"
              "values."))))
@@ -161,11 +156,9 @@
     (define (budget-result-field context)
       "Build the budget field for a public evaluation-result datum."
       #((parameters
-         (context
-          (type eval-context)
+         (context (type eval-context)
           (description "Evaluation context containing budget counters.")))
-        (returns
-         (type pair)
+        (returns (type pair)
          (description
           ("A `budget` result field with steps-used and host-calls"
             "counters.")))
@@ -380,8 +373,7 @@
     (define (debugger-default-restarts)
       "Return debugger restarts that are always safe to advertise."
       #((parameters)
-        (returns
-         (type list)
+        (returns (type list)
          (description
           ("List of debugger restart datums available for ordinary"
             "evaluation failures.")))
@@ -403,14 +395,11 @@
     (define (debugger-field-values datum field)
       "Return values for FIELD from a debugger datum."
       #((parameters
-         (datum
-          (type pair)
+         (datum (type pair)
           (description "Debugger datum represented as a tagged list."))
-         (field
-          (type symbol)
+         (field (type symbol)
           (description "Symbol naming the field to read.")))
-        (returns
-         (type list)
+        (returns (type list)
          (description "The field values for FIELD, or the empty list."))
         (effects pure))
       (let ((entry (and (pair? datum) (assq field (cdr datum)))))
@@ -419,11 +408,9 @@
     (define (debugger-field-value datum field)
       "Return the first value for FIELD from a debugger datum."
       #((parameters
-         (datum
-          (type pair)
+         (datum (type pair)
           (description "Debugger datum represented as a tagged list."))
-         (field
-          (type symbol)
+         (field (type symbol)
           (description "Symbol naming the field to read.")))
         (returns . "The first field value for FIELD, or #f.")
         (effects pure))
@@ -433,14 +420,11 @@
     (define (debugger-expect-condition datum operation)
       "Return DATUM or raise when OPERATION expected a debugger condition."
       #((parameters
-         (datum
-          (type pair)
+         (datum (type pair)
           (description "Value expected to be a debugger condition datum."))
-         (operation
-          (type string)
+         (operation (type string)
           (description "Operation name used in the error message.")))
-        (returns
-         (type pair)
+        (returns (type pair)
          (description "DATUM when it is tagged as a debugger condition."))
         (effects error))
       (if (not (and (pair? datum) (eq? (car datum) 'condition)))
@@ -451,11 +435,9 @@
     (define (debugger-restart-id-name id)
       "Return ID as a debugger restart symbol."
       #((parameters
-         (id
-          (type (or symbol string))
+         (id (type (or symbol string))
           (description "Restart id as a symbol or string.")))
-        (returns
-         (type symbol)
+        (returns (type symbol)
          (description "ID as a symbol."))
         (effects error))
       (cond
@@ -467,13 +449,11 @@
       "Build a Scheme-readable debugger condition datum."
       #((parameters
          (condition . "Host or Consent Scheme condition value.")
-         (context
-          (type eval-context)
+         (context (type eval-context)
           (description
            ("Evaluation context used for current frame and restart"
              "metadata."))))
-        (returns
-         (type condition)
+        (returns (type condition)
          (description "A `condition` datum for debugger and result consumers."))
         (effects state-read))
       (let* ((message (condition-message condition))
@@ -508,11 +488,9 @@
       "Build a debugger condition for a Scheme-raised EXCEPTION value."
       #((parameters
          (exception . "Scheme value raised as an exception.")
-         (context
-          (type eval-context)
+         (context (type eval-context)
           (description "Evaluation context used for debugger metadata.")))
-        (returns
-         (type condition)
+        (returns (type condition)
          (description
           ("A debugger condition datum that preserves EXCEPTION as a"
             "public result value.")))
@@ -529,11 +507,9 @@
       "Build a successful evaluation-result datum for VALUE."
       #((parameters
          (value . "Runtime value returned by evaluation.")
-         (context
-          (type eval-context)
+         (context (type eval-context)
           (description ("Evaluation context containing events and budget counters."))))
-        (returns
-         (type evaluation-result)
+        (returns (type evaluation-result)
          (description "An `evaluation-result` datum with status ok or values."))
         (effects state-read))
       (if (multiple-values? value)
@@ -555,13 +531,11 @@
       "Build an error evaluation-result datum for CONDITION."
       #((parameters
          (condition . "Host or Consent Scheme condition value.")
-         (context
-          (type eval-context)
+         (context (type eval-context)
           (description
            ("Evaluation context to update with the current debugger"
              "error."))))
-        (returns
-         (type evaluation-result)
+        (returns (type evaluation-result)
          (description "An `evaluation-result` datum with status error."))
         (effects state-write))
       (let ((debugger-condition
@@ -580,11 +554,9 @@
     (define (budget-exhausted-condition? value)
       "Report whether VALUE is a budget-exhaustion condition or stop receipt."
       #((parameters
-         (value
-          (type pair)
+         (value (type pair)
           (description "Condition datum or evaluation-result error datum.")))
-        (returns
-         (type boolean)
+        (returns (type boolean)
          (description "#t when VALUE names a budget exhaustion, else #f."))
         (effects pure))
       (and (pair? value)
@@ -603,11 +575,9 @@
     (define (consent-result->external result)
       "Render an evaluation-result datum using the reader/writer external form."
       #((parameters
-         (result
-          (type evaluation-result)
+         (result (type evaluation-result)
           (description "Public evaluation-result datum.")))
-        (returns
-         (type string)
+        (returns (type string)
          (description "External written text for RESULT."))
         (effects pure))
       (consent-datum->external result))
@@ -616,8 +586,7 @@
       "Render runtime VALUE for diagnostics using stable external text."
       #((parameters
          (value . "Runtime value to render."))
-        (returns
-         (type string)
+        (returns (type string)
          (description
           ("Stable external text suitable for tests, diagnostics, and"
             "logs.")))

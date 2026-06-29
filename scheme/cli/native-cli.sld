@@ -400,13 +400,11 @@
       "port.  Performs the real host operation through (cli process-host) only"
       "after the request is approved."
       #((parameters
-         (options
-          (type list)
+         (options (type list)
           (description
            ("Parsed options alist naming the subcommand, mode, session,"
              "resource, and gate inputs for the request."))))
-        (returns
-         (type list)
+        (returns (type list)
          (description
           ("A `(EXIT RECORDS PROMPTS)' list whose RECORDS are"
             "Scheme-readable boundary records and PROMPTS are"
@@ -445,13 +443,11 @@
       "`cli-native-cli-execute'.  Leading \"--\" separators are ignored so a"
       "host can pass a clean argument vector after its own option processing."
       #((parameters
-         (arguments
-          (type string)
+         (arguments (type string)
           (description
            ("List of command-line argument strings: a leading"
              "subcommand followed by recognized flags and their values."))))
-        (returns
-         (type list)
+        (returns (type list)
          (description
           ("An options alist consumed by `cli-native-cli-execute',"
             "defaults seeded and flag overrides consed to the front.")))

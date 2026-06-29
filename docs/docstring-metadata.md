@@ -162,11 +162,9 @@ behavior.
 (define (open-agent-log path)
   "Open PATH as an Consent Scheme log input port."
   #((parameters
-     (path
-      (type string)
+     (path (type string)
       (description "Path to a readable log file.")))
-    (returns
-     (type input-port)
+    (returns (type input-port)
      (description "An input port."))
     (effects file-read))
   (open-input-file path))
@@ -178,11 +176,9 @@ The simple string form and rich property form may appear together:
 (define (normalize-name name)
   "Return NAME in canonical Consent Scheme identifier form."
   #((parameters
-     (name
-      (type (or string symbol))
+     (name (type (or string symbol))
       (description "A string or symbol.")))
-    (returns
-     (type symbol)
+    (returns (type symbol)
      (description "A symbol.")))
   (if (symbol? name)
       name
@@ -336,6 +332,23 @@ return descriptors that omit `(type ...)`. The lint also rejects shorthand or
 expanded `(type any)` descriptors whose prose names an obvious primitive type
 such as string, symbol, list, vector, procedure, port, or boolean; spell the
 narrower type in those cases.
+
+For expanded descriptors, prefer the compact layout that keeps `(type ...)` on
+the same line as the parameter name or `returns` head when the line fits within
+the soft line limit:
+
+```scheme
+#((parameters
+   (field (type symbol)
+    (description "Symbol naming the field.")))
+  (returns (type pair)
+   (description "The matching field pair."))
+  (effects pure))
+```
+
+Keep longer type forms on their own line, and prefer a plain description string
+when it fits. Use a list of description strings only when the prose itself needs
+wrapping.
 
 The first type vocabulary is intentionally contract-shaped:
 

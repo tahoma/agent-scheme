@@ -175,24 +175,18 @@
       "error on a host without a process module, so a denied or unsupported"
       "request never reaches the shell."
       #((parameters
-         (command
-          (type string)
+         (command (type string)
           (description "Executable name or path to spawn as the child."))
-         (arguments
-          (type (list-of string))
+         (arguments (type (list-of string))
           (description ("List of string arguments passed to COMMAND as one group.")))
-         (stdin-file
-          (type (or string boolean))
+         (stdin-file (type (or string boolean))
           (description ("Path backing the child's standard input, or #f for none.")))
-         (stderr-file
-          (type (or string boolean))
+         (stderr-file (type (or string boolean))
           (description ("Path capturing the child's standard error, or #f for none.")))
          (cwd . ("Granted working directory for the child, or #f to inherit."))
-         (environment
-          (type list)
+         (environment (type list)
           (description ("Alist of (NAME . VALUE) string pairs granted to the child."))))
-        (returns
-         (type list)
+        (returns (type list)
          (description
           ("A list (EXIT-STATUS STDOUT STDERR): the child's exit"
             "status and its captured standard output and standard"

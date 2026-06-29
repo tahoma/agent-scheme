@@ -284,8 +284,7 @@
       #((parameters
          (name-or-library
           . ("Registered test name, test result, or test group datum.")))
-        (returns
-         (type (or agent-test-result agent-test-group))
+        (returns (type (or agent-test-result agent-test-group))
          (description
           ("The matching test result/group, NAME-OR-LIBRARY unchanged"
             "when it is already a result, or a skipped run group.")))
@@ -326,13 +325,11 @@
     (define (test-yield-failures result)
       "Yield failed tests from RESULT as one structured Consent Scheme event."
       #((parameters
-         (result
-          (type (or symbol agent-test-result agent-test-group))
+         (result (type (or symbol agent-test-result agent-test-group))
           (description
            ("Test result, test group, or registered test name to"
              "inspect."))))
-        (returns
-         (type (list-of agent-test-result))
+        (returns (type (list-of agent-test-result))
          (description "List of failed nested test result datums."))
         (effects state-read agent-yield)
         (see-also test-run))
@@ -485,14 +482,12 @@
     (define (skill-test skill-name test-datum)
       "Run and register TEST-DATUM for SKILL-NAME."
       #((parameters
-         (skill-name
-          (type symbol)
+         (skill-name (type symbol)
           (description ("Skill name symbol or datum used as the registry key.")))
          (test-datum
           . ("Agent Test datum, SRFI 64 event, source test, or existing"
              "result.")))
-        (returns
-         (type agent-test-result)
+        (returns (type agent-test-result)
          (description "The normalized test result registered for SKILL-NAME."))
         (effects state-write host-eval)
         (see-also skill-test-run))
@@ -523,13 +518,11 @@
     (define (skill-test-run skill-name)
       "Run registered tests for SKILL-NAME, or tests declared by a skill datum."
       #((parameters
-         (skill-name
-          (type symbol)
+         (skill-name (type symbol)
           (description
            ("Skill name symbol, agent-skill datum, or"
              "agent-skill-candidate datum."))))
-        (returns
-         (type agent-test-group)
+        (returns (type agent-test-group)
          (description
           ("An `agent-test-group` datum summarizing registered or"
             "declared skill tests.")))

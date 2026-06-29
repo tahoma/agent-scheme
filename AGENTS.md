@@ -64,6 +64,11 @@ Repository conventions override generic workflow defaults. In particular:
 - For Scheme-specific language questions, consult the local R7RS-small report
   reference and canonical Scheme references before relying on memory or
   incidental web search results.
+- When editing expanded Scheme docstring metadata, keep a descriptor's
+  `(type ...)` on the same line as the parameter or `returns` head when that
+  line fits within the soft line limit; keep longer type forms on their own
+  line. Prefer plain description strings when they fit, and reserve
+  string-list descriptions for wrapping prose.
 - Do not put assistant, tool, vendor, or workflow branding in branch names, pull
   request titles, commit messages, issue text, documentation, or generated
   artifacts.
