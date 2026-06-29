@@ -143,6 +143,7 @@ native_library_table() {
   cat <<'EOF'
 (agent task)|agent/task.sld|consent-main:agent-task:
 (agent transcript)|agent/transcript.sld|consent-main:agent-transcript:
+(agent models openai)|agent/models/openai.sld|consent-main:agent-models-openai:
 (agent registry)|agent/registry.sld|consent-main:agent-registry:
 (agent proposal)|agent/proposal.sld|consent-main:agent-proposal:
 (agent runner)|agent/runner.sld|consent-main:agent-runner:
@@ -154,6 +155,7 @@ native_library_table() {
 (consent helper)|consent/helper.sld|consent-main:helper:
 (consent interpreter)|consent/interpreter.sld|consent-main:interpreter:
 (consent job)|consent/job.sld|consent-main:job:
+(consent json)|consent/json.sld|consent-main:json:
 (consent library)|consent/library.sld|consent-main:library:
 (consent macro)|consent/macro.sld|consent-main:macro:
 (consent memory)|consent/memory.sld|consent-main:memory:
@@ -305,6 +307,7 @@ write_racket_main_common() {
         (scheme write)
         (prefix (agent task) consent-main:agent-task:)
         (prefix (agent transcript) consent-main:agent-transcript:)
+        (prefix (agent models openai) consent-main:agent-models-openai:)
         (prefix (agent registry) consent-main:agent-registry:)
         (prefix (agent proposal) consent-main:agent-proposal:)
         (prefix (agent runner) consent-main:agent-runner:)
@@ -316,6 +319,7 @@ write_racket_main_common() {
         (prefix (consent helper) consent-main:helper:)
         (prefix (consent interpreter) consent-main:interpreter:)
         (prefix (consent job) consent-main:job:)
+        (prefix (consent json) consent-main:json:)
         (prefix (consent library) consent-main:library:)
         (prefix (consent macro) consent-main:macro:)
         (prefix (consent memory) consent-main:memory:)
@@ -594,6 +598,7 @@ write_gambit_main_common() {
         (scheme write)
         (prefix (agent task) consent-main:agent-task:)
         (prefix (agent transcript) consent-main:agent-transcript:)
+        (prefix (agent models openai) consent-main:agent-models-openai:)
         (prefix (agent registry) consent-main:agent-registry:)
         (prefix (agent proposal) consent-main:agent-proposal:)
         (prefix (agent runner) consent-main:agent-runner:)
@@ -605,6 +610,7 @@ write_gambit_main_common() {
         (prefix (consent helper) consent-main:helper:)
         (prefix (consent interpreter) consent-main:interpreter:)
         (prefix (consent job) consent-main:job:)
+        (prefix (consent json) consent-main:json:)
         (prefix (consent library) consent-main:library:)
         (prefix (consent macro) consent-main:macro:)
         (prefix (consent memory) consent-main:memory:)
@@ -1414,6 +1420,9 @@ compile_gambit() {
     "$scheme_dir/consent/job.sld" \
     "$src_dir/consent/job.sld"
   copy_gambit_source \
+    "$scheme_dir/consent/json.sld" \
+    "$src_dir/consent/json.sld"
+  copy_gambit_source \
     "$scheme_dir/consent/memory.sld" \
     "$src_dir/consent/memory.sld"
   copy_gambit_source \
@@ -1437,6 +1446,9 @@ compile_gambit() {
   copy_gambit_source \
     "$scheme_dir/agent/transcript.sld" \
     "$src_dir/agent/transcript.sld"
+  copy_gambit_source \
+    "$scheme_dir/agent/models/openai.sld" \
+    "$src_dir/agent/models/openai.sld"
   copy_gambit_source \
     "$scheme_dir/agent/registry.sld" \
     "$src_dir/agent/registry.sld"
@@ -1487,7 +1499,7 @@ compile_gambit() {
   # the per-module compiled artifacts are $src_dir/<ref>.c and $src_dir/<ref>.o.
   # (consent embedded-source) is generated into $src_dir; every other module's
   # source lives under $scheme_dir.
-  gambit_module_order='consent/version consent/reader consent/runtime consent/base consent/library consent/result consent/macro consent/approval consent/context consent/helper consent/job consent/memory consent/plan consent/redaction consent/session agent/task agent/transcript agent/registry agent/proposal agent/runner agent/prompt consent/interpreter consent/eval cli/process-host cli/native-cli cli/repl-chrome cli/repl-shell cli/script consent/embedded-source'
+  gambit_module_order='consent/version consent/reader consent/runtime consent/base consent/library consent/result consent/macro consent/approval consent/context consent/helper consent/job consent/json consent/memory consent/plan consent/redaction consent/session cli/process-host agent/models/openai agent/task agent/transcript agent/registry agent/proposal agent/runner agent/prompt consent/interpreter consent/eval cli/native-cli cli/repl-chrome cli/repl-shell cli/script consent/embedded-source'
 
   gambit_module_source() {
     case "$1" in

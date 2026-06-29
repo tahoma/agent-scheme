@@ -294,7 +294,7 @@ Ollama is the simplest local OpenAI-compatible provider to use while this layer
 is bootstrapping. Install Ollama for your platform, then pull a small model:
 
 ```sh
-ollama pull qwen2.5-coder:0.5b
+ollama pull qwen3:0.6b
 ```
 
 Start the local server if it is not already running:
@@ -316,7 +316,7 @@ Register that local server from Consent Scheme:
    (transport openai-compatible-http)
    (endpoint "http://127.0.0.1:11434/v1")
    (models
-    (((id qwen2.5-coder:0.5b)
+    (((id qwen3:0.6b)
       (roles (cheap-background scheme-scripter coder))
       (privacy local))))))
 
@@ -378,7 +378,7 @@ make test-live-model
 ```
 
 The test defaults to `http://127.0.0.1:11434/v1` and
-`qwen2.5-coder:0.5b`. Override those with
+`qwen3:0.6b`. Override those with
 `CONSENT_LIVE_MODEL_ENDPOINT` and `CONSENT_LIVE_MODEL_ID`.
 The Make targets set `CONSENT_LIVE_MODEL_TEST=1`; `make test-live-model`
 also sets `CONSENT_LIVE_MODEL_MATRIX=1`. The matrix test checks that each
