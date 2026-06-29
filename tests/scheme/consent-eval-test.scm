@@ -3385,7 +3385,7 @@
   (model-route 'scheme-scripter '())"
  "(model-routing-decision (status selected) (role scheme-scripter) (provider portable-local) (model portable-coder) (kind local) (transport openai-compatible-http) (endpoint \"http://127.0.0.1:11434/v1\"))")
 
-(check-external
+(check-external/options
  'agent-models-tool-spec-from-docstring-metadata
  "(import (scheme base) (agent models))
   (define (field datum name)
@@ -3411,9 +3411,10 @@
           (field tool 'schema)
           (field tool 'example)
           (field tool 'gate)))"
+ '((docstring-retention . full))
  "(local-echo ((text (type string) (description \"Text to echo.\"))) ((type string) (description \"The echoed text.\")) (pure) (openai-tool (type function) (function (name \"local-echo\") (description \"Echo TEXT through a pure local helper.\") (parameters ((type \"object\") (properties ((text ((type \"string\") (description \"Text to echo.\"))))) (required (\"text\")))))) (tool-call (name local-echo) (arguments ((text \"<string>\")))) (tool-gate (decision pure-under-budget) (effects (pure))))")
 
-(check-external
+(check-external/options
  'agent-models-tool-spec-any-schema-default
  "(import (scheme base) (agent models))
   (define (field datum name)
@@ -3429,6 +3430,7 @@
       (effects pure))
     value)
   (field (model-tool-spec 'local-inspect) 'schema)"
+ '((docstring-retention . full))
  "(openai-tool (type function) (function (name \"local-inspect\") (description \"Inspect VALUE locally.\") (parameters ((type \"object\") (properties ((value ((description \"Any Scheme-readable value.\"))))) (required (\"value\"))))))")
 
 (let* ((result
