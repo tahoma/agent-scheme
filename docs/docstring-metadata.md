@@ -186,7 +186,10 @@ The simple string form and rich property form may appear together:
 ```
 
 When reflected through `(documentation subject)`, the string contributes the
-`documentation` field and rich properties preserve their Scheme-readable values:
+`documentation` field and rich properties preserve their Scheme-readable values.
+In reflected metadata, every field entry has the record-field shape
+`(field-name value ...)`; therefore `(returns ((type ...) ...))` means the
+single value of the `returns` field is the return descriptor:
 
 ```scheme
 (documentation 'normalize-name)
@@ -253,7 +256,9 @@ ordinary R7RS datums.
 ## Metadata Records
 
 Runtime reflection, static reference generation, logs, yields, and compiled
-runtimes should expose one Scheme-readable record shape:
+runtimes should expose one Scheme-readable record shape. The `fields` member is
+a list of record fields shaped as `(field-name value ...)`, so the reflected
+`returns` entry wraps the return descriptor as its single value:
 
 ```scheme
 (documentation-metadata
