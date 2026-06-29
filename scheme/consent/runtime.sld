@@ -3040,12 +3040,14 @@
       "Each evaluation step also re-checks the wall-time budget so an opted-in"
       "wall-clock limit interrupts even a tight loop that allocates nothing."
       #((parameters
-         (context
-          . ("Evaluation context whose step counter is incremented and"
-             "checked.")))
-        (returns
-         . ("The unspecified value, after possibly raising on budget"
-            "exhaustion."))
+         (context (type eval-context)
+          (description
+           ("Evaluation context whose step counter is incremented and"
+             "checked."))))
+        (returns (type any)
+         (description
+          ("The unspecified value, after possibly raising on budget"
+            "exhaustion.")))
         (effects state-write error))
       (set-context-steps! context (+ (context-steps context) 1))
       (if (> (context-steps context) (context-maximum-steps context))
@@ -3453,7 +3455,8 @@
     (define (budget-ceiling-snapshot context)
       "Capture CONTEXT's current tightenable ceilings for later restoration."
       #((parameters
-         (context . "Evaluation context whose ceilings are read."))
+         (context (type eval-context)
+          (description "Evaluation context whose ceilings are read.")))
         (returns (type list)
          (description
           ("A list of the current ceiling values, ordered by budget"
@@ -3468,7 +3471,9 @@
       "never rises above the inherited outer ceiling, so nested `with-budget'"
       "forms compose monotonically."
       #((parameters
-         (context . ("Evaluation context whose ceilings are tightened in place."))
+         (context (type eval-context)
+          (description
+           ("Evaluation context whose ceilings are tightened in place.")))
          (spec (type list)
           (description
            ("Budget specification naming the dimensions and amounts to"
@@ -3490,7 +3495,9 @@
     (define (budget-restore! context saved)
       "Restore CONTEXT's tightenable ceilings from a SAVED snapshot."
       #((parameters
-         (context . ("Evaluation context whose ceilings are restored in place."))
+         (context (type eval-context)
+          (description
+           ("Evaluation context whose ceilings are restored in place.")))
          (saved (type list)
           (description
            ("Snapshot list of ceiling values from"

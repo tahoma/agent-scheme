@@ -1133,7 +1133,8 @@
           (description "A define-syntax form to evaluate."))
          (environment (type environment)
           (description "Value environment captured by the transformer."))
-         (context . "Evaluation context (unused beyond parsing).")
+         (context (type eval-context)
+          (description "Evaluation context (unused beyond parsing)."))
          (syntax-environment (type syntax-environment)
           (description "Syntax environment that receives the binding.")))
         (returns

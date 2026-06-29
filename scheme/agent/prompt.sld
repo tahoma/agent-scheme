@@ -714,9 +714,10 @@
     (define (agents . maybe-harness)
       "Return the registered agents discoverable through a harness."
       #((parameters
-         (maybe-harness
-          . ("Optional explicit `prompt-harness'; defaults to the"
-             "ambient harness.")))
+         (maybe-harness (type list)
+          (description
+           ("Rest-argument list containing zero or one explicit"
+             "`prompt-harness'; empty defaults to the ambient harness."))))
         (returns (type list)
          (description "A list of agent datums in registration order."))
         (effects state-read)
@@ -726,9 +727,10 @@
     (define (roles . maybe-harness)
       "Return the distinct agent roles discoverable through a harness."
       #((parameters
-         (maybe-harness
-          . ("Optional explicit `prompt-harness'; defaults to the"
-             "ambient harness.")))
+         (maybe-harness (type list)
+          (description
+           ("Rest-argument list containing zero or one explicit"
+             "`prompt-harness'; empty defaults to the ambient harness."))))
         (returns (type list)
          (description ("A list of distinct role symbols in registration order.")))
         (effects state-read)
@@ -738,9 +740,10 @@
     (define (models . maybe-harness)
       "Return the distinct agent models discoverable through a harness."
       #((parameters
-         (maybe-harness
-          . ("Optional explicit `prompt-harness'; defaults to the"
-             "ambient harness.")))
+         (maybe-harness (type list)
+          (description
+           ("Rest-argument list containing zero or one explicit"
+             "`prompt-harness'; empty defaults to the ambient harness."))))
         (returns (type list)
          (description
           ("A list of distinct model specifications in registration"

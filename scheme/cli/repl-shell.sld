@@ -865,15 +865,18 @@
       "as a `condition' is the documented fail-closed signal for a live"
       "host effect the replay posture does not grant."
       #((parameters
-         (captured
-          . ("Captured contract record stream providing the reference"
-             "outcomes."))
-         (replayed
-          . ("Replayed contract record stream compared against the"
-             "captured outcomes.")))
-        (returns
-         . ("A `repl-replay-report' datum: reproduced, or diverged with"
-            "per-submission divergences."))
+         (captured (type list)
+          (description
+           ("Captured contract record stream providing the reference"
+             "outcomes.")))
+         (replayed (type list)
+          (description
+           ("Replayed contract record stream compared against the"
+             "captured outcomes."))))
+        (returns (type repl-replay-report)
+         (description
+          ("A `repl-replay-report' datum: reproduced, or diverged with"
+            "per-submission divergences.")))
         (effects allocation))
       (let* ((captured-outcomes (repl--submission-outcomes captured))
              (replayed-outcomes (repl--submission-outcomes replayed))
