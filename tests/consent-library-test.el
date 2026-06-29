@@ -11,6 +11,7 @@
 
 (require 'cl-lib)
 (require 'ert)
+(require 'json)
 (require 'consent-audit)
 (require 'consent-eval)
 (require 'consent-result)
@@ -108,6 +109,10 @@
   (cl-find name specs
            :key (lambda (spec) (plist-get spec :name))
            :test #'equal))
+
+(defun consent-library-test--scheme-string-literal (text)
+  "Return TEXT rendered as a Scheme string literal."
+  (prin1-to-string text))
 
 (ert-deftest consent-library-test-imports-scheme-base-into-empty-environment ()
   "Import `(scheme base)' into an otherwise empty program environment."
@@ -338,6 +343,138 @@
           (all all))
         'a 'b))")
     "((1 2 (3 4)) (a b))")))
+
+(ert-deftest consent-library-test-srfi-180-imports-and-round-trips-json ()
+  "Import `(srfi 180)' through the library registry and use JSON."
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (srfi 180))
+      (let ((out (open-output-string)))
+        (json-write '((name . \"Ada\") (scores . #(1 #t null))) out)
+        (let* ((datum (json-read (open-input-string (get-output-string out))))
+               (scores (cdr (assq 'scores datum))))
+          (list (cdr (assq 'name datum))
+                (vector-ref scores 0)
+                (vector-ref scores 1)
+                (json-null? (vector-ref scores 2)))))")
+    "(\"Ada\" 1 #t #t)"))
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (srfi srfi-180))
+      (json-null? (json-read (open-input-string \"null\")))")
+    "#t"))
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (consent json))
+      (json-null? (json-read (open-input-string \"null\")))")
+    "#t")))
+
+(ert-deftest consent-library-test-json-read-subset-filters-exports ()
+  "Import the read-side JSON facade without the write-side API."
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (consent json read))
+      (json-null? (json-read (open-input-string \"null\")))")
+    "#t"))
+  (should-error
+   (consent-library-test--external
+    "(import (scheme base)
+             (only (consent json read) json-write))
+     json-write")
+   :type 'consent-eval-error))
+
+(ert-deftest consent-library-test-srfi-180-rejects-non-json-number ()
+  "Reject Scheme numbers that have no JSON number spelling."
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (srfi 180))
+      (guard (condition
+              ((json-error? condition) #t)
+              (else 'wrong-condition))
+        (json-write '((half . 1/2)) (open-output-string))
+        'no-error)")
+    "#t")))
+
+(ert-deftest consent-library-test-srfi-180-character-limit ()
+  "Enforce the SRFI 180 character limit parameter while reading JSON."
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (srfi 180))
+      (guard (condition
+              ((json-error? condition) #t)
+              (else 'wrong-condition))
+        (parameterize ((json-number-of-character-limit 4))
+          (json-read (open-input-string \"[1,2,3]\")))
+        'no-error)")
+    "#t")))
+
+(ert-deftest consent-library-test-srfi-manifest-documents-180 ()
+  "Expose SRFI 180 support status through a Scheme-readable manifest."
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (srfi manifest))
+      (let ((entry (srfi-manifest-ref '(srfi 180))))
+        (list (cdr (assq 'status entry))
+              (cdr (assq 'implementation-library entry))
+              (cdr (assq 'upstream-license entry))
+              (cdr (assq 'import-aliases entry))))")
+    "(direct-portable-implementation (consent json) \"MIT\" ((srfi 180) (srfi srfi-180)))")))
+
+(ert-deftest consent-library-test-srfi-180-emacs-json-oracle ()
+  "Cross-check portable SRFI 180 behavior against Emacs json.el."
+  (let* ((json-array-type 'vector)
+         (json-object-type 'alist)
+         (json-key-type 'symbol)
+         (json-false :json-false)
+         (json-null :json-null)
+         (oracle-json
+          (json-encode
+           `((name . "Ada")
+             (scores . [1 t :json-null])
+             (nested . ((ok . ,json-false)))))))
+    (should
+     (equal
+      (consent-library-test--external
+       (format
+        "(import (scheme base) (srfi 180))
+         (let* ((datum (json-read (open-input-string %s)))
+                (scores (cdr (assq 'scores datum)))
+                (nested (cdr (assq 'nested datum))))
+           (list (cdr (assq 'name datum))
+                 (vector-ref scores 0)
+                 (vector-ref scores 1)
+                 (json-null? (vector-ref scores 2))
+                 (cdr (assq 'ok nested))))"
+        (consent-library-test--scheme-string-literal oracle-json)))
+      "(\"Ada\" 1 #t #t #f)"))
+    (let* ((portable-json
+            (consent-eval-source
+             "(import (scheme base) (srfi 180))
+              (let ((out (open-output-string)))
+                (json-write
+                 '((name . \"Ada\")
+                   (scores . #(1 #t null))
+                   (nested . ((ok . #f))))
+                 out)
+                (get-output-string out))"))
+           (parsed (let ((json-array-type 'vector)
+                         (json-object-type 'alist)
+                         (json-key-type 'symbol)
+                         (json-false :json-false)
+                         (json-null :json-null))
+                     (json-read-from-string portable-json))))
+      (should (equal (alist-get 'name parsed) "Ada"))
+      (should (equal (aref (alist-get 'scores parsed) 0) 1))
+      (should (equal (aref (alist-get 'scores parsed) 1) t))
+      (should (eq (aref (alist-get 'scores parsed) 2) :json-null))
+      (should (eq (alist-get 'ok (alist-get 'nested parsed)) :json-false)))))
 
 (ert-deftest consent-library-test-standard-char-and-cxr-imports ()
   "Import `(scheme char)' and `(scheme cxr)' bindings."

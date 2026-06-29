@@ -7,6 +7,7 @@
 
 (define-library (consent library)
   (export consent-standard-source-library-specs
+          consent-srfi-source-library-specs
           consent-runtime-source-files
           consent-install-library-backend!
           consent-apply-callable
@@ -141,6 +142,42 @@
         (scheme time)
         (scheme write)))
 
+    ;; SRFI / stdlib-plus library keys recognized by the portable registry.
+    (define srfi-source-library-keys
+      '((srfi manifest)
+        (consent json)))
+
+    ;; Registry aliases can expose a target library directly or as a subset.
+    (define srfi-library-aliases
+      '(((alias . (srfi 180))
+         (target . (consent json)))
+        ((alias . (srfi srfi-180))
+         (target . (consent json)))
+        ((alias . (consent json read))
+         (target . (consent json))
+         (exports json-number-of-character-limit
+                  json-nesting-depth-limit
+                  json-null?
+                  json-error?
+                  json-error-reason
+                  json-fold
+                  json-generator
+                  json-read
+                  json-lines-read
+                  json-sequence-read))))
+
+    ;; Alias specs are alists so new optional fields remain backwards-compatible.
+    (define (library-alias-field spec field)
+      "Return FIELD from alias SPEC, or #f when absent."
+      (let ((entry (assq field spec)))
+        (if entry (cdr entry) #f)))
+
+    ;; Recognized SRFI names include concrete source libraries and aliases.
+    (define srfi-library-keys
+      (append srfi-source-library-keys
+              (map (lambda (alias) (library-alias-field alias 'alias))
+                   srfi-library-aliases)))
+
     ;; Agent interaction library keys recognized by the portable registry.
     (define agent-library-keys
       '((agent io)
@@ -221,8 +258,21 @@
          "scheme/standard-library/lazy.sld"
          "standard-library/lazy.sld")))
 
+    ;; Checked-in optional SRFI / stdlib-plus libraries loaded as portable
+    ;; Scheme source files.
+    (define srfi-source-library-load-paths
+      '(((srfi manifest)
+         "scheme/srfi/manifest.sld"
+         "srfi/manifest.sld")
+        ((consent json)
+         "scheme/consent/json.sld"
+         "consent/json.sld")))
+
     ;; Cache selected source path and contents by standard library key.
     (define standard-source-library-source-cache '())
+
+    ;; Cache selected source path and contents by SRFI library key.
+    (define srfi-source-library-source-cache '())
 
     ;; Cache selected source path and contents by Agent library key.
     (define agent-source-library-source-cache '())
@@ -244,6 +294,9 @@
                     (cond
                      ((null? rest) #t)
                      ((or (symbol? (car rest))
+                          (and (integer? (car rest))
+                               (exact? (car rest))
+                               (>= (car rest) 0))
                           (and (consent-number? (car rest))
                                (eq? (consent-number-kind (car rest))
                                     'integer)
@@ -252,6 +305,12 @@
                                (>= (consent-number-value (car rest)) 0)))
                       (loop (cdr rest)))
                      (else #f)))))))
+
+    (define (library-name-part-key part)
+      "Return PART normalized for registry-key comparison."
+      (if (consent-number? part)
+          (consent-number-value part)
+          part))
 
     (define (library-name-key name)
       "Validate and return NAME as a library registry key."
@@ -262,7 +321,7 @@
          (description "NAME unchanged when it is a proper library name."))
         (effects error))
       (if (proper-library-name? name)
-          name
+          (map library-name-part-key name)
           (eval-error "invalid library name" name)))
 
     (define (assoc/equal key alist)
@@ -278,6 +337,13 @@
         (if entry
             (cdr entry)
             (eval-error "standard source library is not available" key))))
+
+    (define (srfi-source-library-paths key)
+      "Return the configured path candidates for source-backed SRFI library KEY."
+      (let ((entry (assoc/equal key srfi-source-library-load-paths)))
+        (if entry
+            (cdr entry)
+            (eval-error "SRFI source library is not available" key))))
 
     (define (source-library-relative-path paths)
       "Return the canonical datadir/embedded-relative path for a source"
@@ -305,6 +371,8 @@
              (source-library-relative-path consent-base-syntax-load-paths))
        (map (lambda (entry) (source-library-relative-path (cdr entry)))
             standard-source-library-load-paths)
+       (map (lambda (entry) (source-library-relative-path (cdr entry)))
+            srfi-source-library-load-paths)
        (map (lambda (entry) (source-library-relative-path (cdr entry)))
             agent-source-library-load-paths)
        (map (lambda (entry) (source-library-relative-path (cdr entry)))
@@ -334,6 +402,31 @@
     (define (standard-source-library-source key)
       "Return KEY's portable source text."
       (cdr (standard-source-library-source-entry key)))
+
+    (define (load-srfi-source-library-source key)
+      "Read SRFI library KEY's source through the host/core resolution"
+      "contract (search dirs, source tree, embedded)."
+      (let* ((paths (srfi-source-library-paths key))
+             (relative (source-library-relative-path paths))
+             (entry (resolve-source-entry relative paths)))
+        (if entry
+            entry
+            (eval-error "unable to load SRFI source library" key))))
+
+    (define (srfi-source-library-source-entry key)
+      "Return cached source-file/source pair for SRFI library KEY."
+      (let ((cached (assoc/equal key srfi-source-library-source-cache)))
+        (if cached
+            (cdr cached)
+            (let ((loaded (load-srfi-source-library-source key)))
+              (set! srfi-source-library-source-cache
+                    (cons (cons key loaded)
+                          srfi-source-library-source-cache))
+              loaded))))
+
+    (define (srfi-source-library-source key)
+      "Return KEY's SRFI library source text."
+      (cdr (srfi-source-library-source-entry key)))
 
     (define (agent-source-library-paths key)
       "Return configured source path candidates for agent or consent KEY."
@@ -368,25 +461,31 @@
       "Return KEY's Agent library source text."
       (cdr (agent-source-library-source-entry key)))
 
-    (define (standard-source-library-form key)
-      "Return the single define-library form read from KEY's source file."
-      (let ((forms (consent-read-all
-                    (standard-source-library-source key))))
+    (define (source-library-form key source description)
+      "Return the single define-library form read from SOURCE for KEY."
+      (let ((forms (consent-read-all source)))
         (if (not (= (length forms) 1))
             (eval-error
-             "standard source library must contain exactly one form"
+             (string-append description " must contain exactly one form")
              key))
         (let* ((form (car forms))
                (parts (proper-list-elements
                        form
-                       "standard source library")))
+                       description)))
           (if (not (and (>= (length parts) 2)
                         (identifier-named? (car parts) 'define-library)
-                        (equal? (second parts) key)))
+                        (equal? (library-name-key (second parts)) key)))
               (eval-error
-               "standard source library name does not match registry key"
+               (string-append description " name does not match registry key")
                key))
           form)))
+
+    (define (standard-source-library-form key)
+      "Return the single define-library form read from KEY's source file."
+      (source-library-form
+       key
+       (standard-source-library-source key)
+       "standard source library"))
 
     (define (standard-source-library-export-names form)
       "Return external export names declared by source library FORM."
@@ -423,6 +522,29 @@
                    (standard-source-library-form key)))
             (list 'source-file (car source-entry)))))
        standard-source-library-load-paths))
+
+    (define (consent-srfi-source-library-specs)
+      "Public metadata accessor for SRFI libraries backed by source files."
+      #((parameters)
+        (returns (type list)
+         (description
+          ("A list of name, exports, and source-file metadata entries"
+            "for each source-backed SRFI library.")))
+        (effects state-read state-write))
+      (map
+       (lambda (entry)
+         (let* ((key (car entry))
+                (source-entry (srfi-source-library-source-entry key)))
+           (list
+            (list 'name key)
+            (list 'exports
+                  (standard-source-library-export-names
+                   (source-library-form
+                    key
+                    (srfi-source-library-source key)
+                    "SRFI source library")))
+            (list 'source-file (car source-entry)))))
+       srfi-source-library-load-paths))
 
     (define (library-registry-ref context key)
       "Return the registered library for KEY in CONTEXT, or #f."
@@ -942,6 +1064,56 @@
               exports
               (library-value-environment base-library)
               (library-syntax-environment base-library))))))
+
+    (define (filter-library-exports exports export-names key)
+      "Return EXPORTS narrowed to EXPORT-NAMES for alias library KEY."
+      (for-each
+       (lambda (name)
+         (if (not (find-library-export name exports))
+             (eval-error "alias export is not available" key name)))
+       export-names)
+      (let loop ((rest exports) (result '()))
+        (cond
+         ((null? rest) (reverse result))
+         ((memq (library-binding-name (car rest)) export-names)
+          (loop (cdr rest) (cons (car rest) result)))
+         (else (loop (cdr rest) result)))))
+
+    (define (register-library-alias! spec context environment)
+      "Register alias SPEC using its target library and optional exports."
+      (let ((key (library-alias-field spec 'alias))
+            (target-key (library-alias-field spec 'target))
+            (export-names-entry (assq 'exports spec)))
+        (if (not key)
+            (eval-error "library alias has no alias name" spec))
+        (if (not target-key)
+            (eval-error "library alias has no target" key))
+        (if (not (library-registry-ref context key))
+            (let* ((target-library
+                    (resolve-library target-key context environment))
+                   (target-exports (library-exports target-library)))
+              (library-registry-set!
+               context
+               key
+               (make-library
+                key
+                key
+                (if export-names-entry
+                    (filter-library-exports
+                     target-exports
+                     (cdr export-names-entry)
+                     key)
+                    target-exports)
+                (library-value-environment target-library)
+                (library-syntax-environment target-library)))))))
+
+    (define (library-alias-spec key aliases)
+      "Return KEY's alias spec from ALIASES, or #f when KEY is not an alias."
+      (cond
+       ((null? aliases) #f)
+       ((equal? key (library-alias-field (car aliases) 'alias))
+        (car aliases))
+       (else (library-alias-spec key (cdr aliases)))))
 
     (define (register-primitive-library! key primitive-specs context)
       "Register KEY as a library populated from primitive specs."
@@ -1761,6 +1933,23 @@
        (else
         (eval-error "unknown consent library" key))))
 
+    (define (register-srfi-library! key context environment)
+      "Register a supported optional SRFI / stdlib-plus library by KEY."
+      (let ((alias-spec (library-alias-spec key srfi-library-aliases)))
+        (cond
+         (alias-spec
+          (register-library-alias! alias-spec context environment))
+         ((assoc/equal key srfi-source-library-load-paths)
+          (if (not (library-registry-ref context key))
+              (register-source-library!
+               (srfi-source-library-source key)
+               context
+               environment)))
+         ((member key srfi-library-keys)
+          (eval-error "SRFI library has no registration strategy" key))
+         (else
+          (eval-error "unknown SRFI library" key)))))
+
     (define (library-available? name context environment)
       "Report whether NAME is a known or already registered library."
       #((parameters
@@ -1780,6 +1969,7 @@
       (let ((key (library-name-key name)))
         (or (equal? key scheme-base-library-key)
             (member key standard-library-keys)
+            (member key srfi-library-keys)
             (member key agent-library-keys)
             (member key consent-library-keys)
             (member key empty-emacs-capability-library-keys)
@@ -1806,6 +1996,8 @@
           (register-scheme-base-library! context environment))
          ((member key standard-library-keys)
           (register-standard-library! key context environment))
+         ((member key srfi-library-keys)
+          (register-srfi-library! key context environment))
          ((member key agent-library-keys)
           (register-agent-library! key context environment))
          ((member key consent-library-keys)
