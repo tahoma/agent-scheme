@@ -176,34 +176,27 @@
       "request never reaches the shell."
       #((parameters
          (command
-          (type any)
+          (type string)
           (description "Executable name or path to spawn as the child."))
          (arguments
-          (type any)
-          (description
-           ("List of string arguments passed to COMMAND as one group.")))
+          (type (list-of string))
+          (description ("List of string arguments passed to COMMAND as one group.")))
          (stdin-file
-          (type any)
-          (description
-           ("Path backing the child's standard input, or #f for none.")))
+          (type (or string boolean))
+          (description ("Path backing the child's standard input, or #f for none.")))
          (stderr-file
-          (type any)
-          (description
-           ("Path capturing the child's standard error, or #f for none.")))
-         (cwd
-          (type any)
-          (description
-           ("Granted working directory for the child, or #f to inherit.")))
+          (type (or string boolean))
+          (description ("Path capturing the child's standard error, or #f for none.")))
+         (cwd . ("Granted working directory for the child, or #f to inherit."))
          (environment
-          (type any)
-          (description
-           ("Alist of (NAME . VALUE) string pairs granted to the child."))))
+          (type list)
+          (description ("Alist of (NAME . VALUE) string pairs granted to the child."))))
         (returns
-         (type any)
+         (type list)
          (description
           ("A list (EXIT-STATUS STDOUT STDERR): the child's exit"
-           "status and its captured standard output and standard"
-           "error.")))
+            "status and its captured standard output and standard"
+            "error.")))
         (effects host-eval error))
       (unless (cli-host-available?)
         (error "cli-host-run: process spawning is unavailable on this host"))

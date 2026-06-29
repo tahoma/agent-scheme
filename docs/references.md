@@ -128,7 +128,8 @@ checks, and tool schemas without changing the source metadata shape.
   compiler. Missing annotations default to the generic `obj` type and the
   interpreter ignores annotations, which is useful contrast for Consent Scheme:
   the metadata reader can default omission to `any`, while the project-specific
-  linter can still require explicit public type metadata.
+  linter can still require public metadata to spell a type explicitly or use
+  shorthand that means intentional `any`.
 - [Common Lisp HyperSpec: Type Specifiers](https://www.lispworks.com/documentation/HyperSpec/Body/04_bc.htm)
   and [DECLARE](https://www.lispworks.com/documentation/HyperSpec/Body/s_declar.htm)
   standardize symbol and list type specifiers, local declaration placement,

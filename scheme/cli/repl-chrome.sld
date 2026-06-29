@@ -277,21 +277,21 @@
       "streams."
       #((parameters
          (name
-          (type any)
+          (type symbol)
           (description
            ("Chrome name as a symbol or string, looked up against the"
-            "registry.")))
+             "registry.")))
          (session
-          (type any)
+          (type symbol)
           (description
            ("Session id as a symbol or string, used to align the output"
-            "gutter."))))
+             "gutter."))))
         (returns
-         (type any)
+         (type procedure)
          (description
           ("A one-argument procedure mapping a program-output chunk to"
-           "control-channel painter input for the `comment' chrome, or"
-           "to #f for every other chrome.")))
+            "control-channel painter input for the `comment' chrome, or"
+            "to #f for every other chrome.")))
         (effects allocation))
       (let ((symbol (if (string? name) (string->symbol name) name))
             (session-symbol (if (string? session)
@@ -403,15 +403,15 @@
       "Return the chrome procedure registered under NAME (a symbol or string), or #f."
       #((parameters
          (name
-          (type any)
+          (type symbol)
           (description
            ("Chrome name as a symbol or string to resolve against the"
-            "registry."))))
+             "registry."))))
         (returns
-         (type any)
+         (type (or procedure boolean))
          (description
           ("The render procedure registered under NAME, or #f when no"
-           "chrome matches.")))
+            "chrome matches.")))
         (effects state-read))
       (let* ((symbol (if (string? name) (string->symbol name) name))
              (entry (assq symbol chrome--registry)))
@@ -421,10 +421,10 @@
       "Return the list of registered chrome name symbols, in declaration order."
       #((parameters)
         (returns
-         (type any)
+         (type symbol)
          (description
           ("A freshly allocated list of the registered chrome name"
-           "symbols, in declaration order.")))
+            "symbols, in declaration order.")))
         (effects state-read allocation))
       (map car chrome--registry))
 
@@ -432,9 +432,8 @@
       "Return the default chrome name."
       #((parameters)
         (returns
-         (type any)
-         (description
-          ("The symbol `comment', the name of the default chrome.")))
+         (type symbol)
+         (description ("The symbol `comment', the name of the default chrome.")))
         (effects pure))
       'comment)
 
@@ -478,21 +477,21 @@
       "plain string is returned verbatim and never colored."
       #((parameters
          (result
-          (type any)
+          (type (or string list boolean))
           (description
            ("A chrome result: #f, a verbatim string, or a list of"
-            "`(role . text)' segments.")))
+             "`(role . text)' segments.")))
          (color?
-          (type any)
+          (type boolean)
           (description
            ("When #t, wrap colorable segments in ANSI SGR escapes by"
-            "their role."))))
+             "their role."))))
         (returns
-         (type any)
+         (type (or string boolean))
          (description
           ("#f when RESULT is #f, the string unchanged when RESULT is"
-           "a string, otherwise the concatenated segment text with"
-           "per-role SGR applied when COLOR? is true.")))
+            "a string, otherwise the concatenated segment text with"
+            "per-role SGR applied when COLOR? is true.")))
         (effects allocation))
       (cond
        ((not result) #f)
@@ -516,21 +515,19 @@
       "variable is set, and TTY? is #t when the control channel is a terminal."
       #((parameters
          (mode
-          (type any)
+          (type symbol)
           (description "Color mode symbol: `auto', `always', or `never'."))
          (no-color?
-          (type any)
+          (type boolean)
           (description
            ("#t when the NO_COLOR environment variable is set, forcing"
-            "plain output under `auto'.")))
+             "plain output under `auto'.")))
          (tty?
-          (type any)
+          (type boolean)
           (description
            ("#t when the control channel is a terminal, enabling color"
-            "under `auto'."))))
-        (returns
-         (type any)
-         (description "#t to colorize output, #f to leave it plain."))
+             "under `auto'."))))
+        (returns . "#t to colorize output, #f to leave it plain.")
         (effects pure))
       (cond
        ((eq? mode 'never) #f)

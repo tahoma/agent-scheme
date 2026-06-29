@@ -53,41 +53,34 @@
     (define (definition-form? form)
       "Report whether FORM is a core define form headed by the raw symbol."
       #((parameters
-         (form
-          (type any)
-          (description "Candidate form to classify.")))
+         (form . "Candidate form to classify."))
         (returns
-         (type any)
+         (type boolean)
          (description
           ("True when FORM is a pair whose head is the raw symbol"
-           "define.")))
+            "define.")))
         (effects pure))
       (and (pair? form) (eq? (car form) 'define)))
 
     (define (define-values-form? form)
       "Report whether FORM is a define-values form after identifier unwrapping."
       #((parameters
-         (form
-          (type any)
-          (description "Candidate form to classify.")))
+         (form . "Candidate form to classify."))
         (returns
-         (type any)
-         (description
-          ("True when FORM is a pair whose head names define-values.")))
+         (type boolean)
+         (description ("True when FORM is a pair whose head names define-values.")))
         (effects pure))
       (and (pair? form) (identifier-named? (car form) 'define-values)))
 
     (define (begin-form? form)
       "Report whether FORM is a core begin form headed by the raw symbol."
       #((parameters
-         (form
-          (type any)
-          (description "Candidate form to classify.")))
+         (form . "Candidate form to classify."))
         (returns
-         (type any)
+         (type boolean)
          (description
           ("True when FORM is a pair whose head is the raw symbol"
-           "begin.")))
+            "begin.")))
         (effects pure))
       (and (pair? form) (eq? (car form) 'begin)))
 
@@ -95,30 +88,28 @@
       "Construct the lambda expression used by function-definition shorthand."
       #((parameters
          (formals
-          (type any)
+          (type list)
           (description "Formal parameter list for the lambda."))
          (body
-          (type any)
+          (type list)
           (description "List of body forms for the lambda.")))
         (returns
-         (type any)
+         (type pair)
          (description
           ("A lambda expression consing FORMALS and BODY after the"
-           "lambda symbol.")))
+            "lambda symbol.")))
         (effects allocation))
       (cons 'lambda (cons formals body)))
 
     (define (parse-definition form)
       "Parse variable or procedure define syntax into a name/expression pair."
       #((parameters
-         (form
-          (type any)
-          (description "A define form to parse.")))
+         (form . "A define form to parse."))
         (returns
-         (type any)
+         (type pair)
          (description
           ("A pair of the bound identifier key and its value"
-           "expression.")))
+            "expression.")))
         (effects error))
       (let ((parts (proper-list-elements form "define form")))
         (if (< (length parts) 3)
@@ -153,14 +144,12 @@
     (define (parse-define-values form)
       "Parse define-values syntax into formals metadata and an initializer."
       #((parameters
-         (form
-          (type any)
-          (description "A define-values form to parse.")))
+         (form . "A define-values form to parse."))
         (returns
-         (type any)
+         (type pair)
          (description
           ("A pair of parsed formals metadata and the initializer"
-           "expression.")))
+            "expression.")))
         (effects error))
       (let ((parts (proper-list-elements form "define-values form")))
         (if (not (= (length parts) 3))
@@ -173,13 +162,13 @@
       "Return every symbol named by parsed FORMALS."
       #((parameters
          (formals
-          (type any)
+          (type formals)
           (description "Parsed formals metadata to enumerate.")))
         (returns
-         (type any)
+         (type (list-of symbol))
          (description
           ("A list of required parameter names plus the rest name when"
-           "present.")))
+            "present.")))
         (effects state-read))
       (if (formals-rest formals)
           (append (formals-required formals) (list (formals-rest formals)))
@@ -188,11 +177,9 @@
     (define (define-values-bound-names form)
       "Return every name bound by a define-values form."
       #((parameters
-         (form
-          (type any)
-          (description "A define-values form to inspect.")))
+         (form . "A define-values form to inspect."))
         (returns
-         (type any)
+         (type (list-of symbol))
          (description "A list of every name the define-values form binds."))
         (effects error))
       (formals-names (car (parse-define-values form))))
@@ -200,28 +187,24 @@
     (define (record-definition-form? form)
       "Report whether FORM is a define-record-type form."
       #((parameters
-         (form
-          (type any)
-          (description "Candidate form to classify.")))
+         (form . "Candidate form to classify."))
         (returns
-         (type any)
+         (type boolean)
          (description
           ("True when FORM is a pair whose head names"
-           "define-record-type.")))
+            "define-record-type.")))
         (effects pure))
       (and (pair? form) (identifier-named? (car form) 'define-record-type)))
 
     (define (body-definition-form? form)
       "Report whether FORM is any definition accepted at body start."
       #((parameters
-         (form
-          (type any)
-          (description "Candidate form to classify.")))
+         (form . "Candidate form to classify."))
         (returns
-         (type any)
+         (type boolean)
          (description
           ("True when FORM is a define, define-values, or record"
-           "definition.")))
+            "definition.")))
         (effects pure))
       (or (definition-form? form)
           (define-values-form? form)
@@ -231,15 +214,13 @@
       "Report whether DATUM is a pair headed by identifier TAG."
       #((parameters
          (datum
-          (type any)
-          (description "Candidate datum to classify."))
+          . "Candidate datum to classify.")
          (tag
-          (type any)
+          (type symbol)
           (description "Symbol the head identifier must name.")))
         (returns
-         (type any)
-         (description
-          ("True when DATUM is a pair whose head identifier names TAG.")))
+         (type boolean)
+         (description ("True when DATUM is a pair whose head identifier names TAG.")))
         (effects pure))
       (and (pair? datum)
            (identifier-named? (car datum) tag)))
@@ -247,15 +228,11 @@
     (define (single-argument-syntax form description)
       "Return the sole operand from FORM or raise a syntax error."
       #((parameters
-         (form
-          (type any)
-          (description "A one-operand syntactic form to validate."))
+         (form . "A one-operand syntactic form to validate.")
          (description
-          (type any)
+          (type string)
           (description "Form name used in any raised error message.")))
-        (returns
-         (type any)
-         (description "The single operand of FORM."))
+        (returns . "The single operand of FORM.")
         (effects error))
       (let ((parts (proper-list-elements form description)))
         (if (not (= (length parts) 2))
@@ -267,14 +244,12 @@
     (define (syntax-error-form? form)
       "Report whether FORM is a syntax-error expansion result."
       #((parameters
-         (form
-          (type any)
-          (description "Candidate form to classify.")))
+         (form . "Candidate form to classify."))
         (returns
-         (type any)
+         (type boolean)
          (description
           ("True when FORM is a list headed by the syntax-error"
-           "identifier.")))
+            "identifier.")))
         (effects pure))
       (tagged-list? form 'syntax-error))
 
@@ -282,14 +257,12 @@
       "Render syntax-error operands into one diagnostic message."
       #((parameters
          (form
-          (type any)
-          (description
-           ("A syntax-error form whose operands form the message."))))
+          . ("A syntax-error form whose operands form the message.")))
         (returns
-         (type any)
+         (type string)
          (description
           ("A space-joined string of the syntax-error operands"
-           "rendered externally.")))
+            "rendered externally.")))
         (effects error))
       (let ((parts (proper-list-elements form "syntax-error form")))
         (let loop ((rest (cdr parts)) (message ""))
@@ -308,15 +281,12 @@
       "Raise the diagnostic represented by a syntax-error form."
       #((parameters
          (form
-          (type any)
-          (description
-           ("A syntax-error form supplying the diagnostic message.")))
+          (type pair)
+          (description ("A syntax-error form supplying the diagnostic message.")))
          (maybe-source-form
-          (type any)
+          (type list)
           (description "Optional source form named in the error.")))
-        (returns
-         (type any)
-         (description "Does not return; always raises an evaluation error."))
+        (returns . "Does not return; always raises an evaluation error.")
         (effects error))
       (let ((message (syntax-error-message form)))
         (if (null? maybe-source-form)
@@ -332,13 +302,13 @@
       "Construct an empty syntax environment with an optional parent."
       #((parameters
          (parent
-          (type any)
+          (type (or syntax-environment boolean))
           (description "Parent syntax environment, or #f for a root.")))
         (returns
-         (type any)
+         (type syntax-environment)
          (description
           ("A fresh syntax environment with an empty frame and no"
-           "imports.")))
+            "imports.")))
         (effects allocation))
       (make-syntax-environment '() parent '()))
 
@@ -346,15 +316,14 @@
       "Return NAME's syntax transformer by walking syntax-environment parents."
       #((parameters
          (syntax-environment
-          (type any)
+          (type syntax-environment)
           (description "Syntax environment to search."))
          (name
-          (type any)
+          (type symbol)
           (description "Keyword symbol whose transformer is sought.")))
         (returns
-         (type any)
-         (description
-          ("NAME's syntax transformer, or #f when no parent binds it.")))
+         (type (or syntax-transformer boolean))
+         (description "NAME's syntax transformer, or #f when no parent binds it."))
         (effects state-read))
       (let loop ((cursor syntax-environment))
         (cond
@@ -367,18 +336,15 @@
       "Add a syntax binding unless NAME is imported into this syntax frame."
       #((parameters
          (syntax-environment
-          (type any)
+          (type syntax-environment)
           (description "Syntax environment to mutate."))
          (name
-          (type any)
+          (type symbol)
           (description "Keyword symbol to bind."))
          (transformer
-          (type any)
+          (type syntax-transformer)
           (description "Syntax transformer to associate with NAME.")))
-        (returns
-         (type any)
-         (description
-          ("An unspecified value; the frame gains the new binding.")))
+        (returns . ("An unspecified value; the frame gains the new binding."))
         (effects state-write error))
       (if (memq name (syntax-environment-imported-names syntax-environment))
           (eval-error "cannot redefine imported syntax binding" name))
@@ -391,20 +357,17 @@
       "Run THUNK with CONTEXT temporarily using SYNTAX-ENVIRONMENT."
       #((parameters
          (context
-          (type any)
-          (description
-           ("Evaluation context whose syntax environment is swapped.")))
+          (type eval-context)
+          (description ("Evaluation context whose syntax environment is swapped.")))
          (syntax-environment
-          (type any)
+          (type syntax-environment)
           (description "Syntax environment to install for the call."))
          (thunk
-          (type any)
+          (type procedure)
           (description "Zero-argument procedure to run under the swap.")))
         (returns
-         (type any)
-         (description
-          ("THUNK's result, after restoring the prior syntax"
-           "environment.")))
+         . ("THUNK's result, after restoring the prior syntax"
+            "environment."))
         (effects state-write))
       (let ((old-syntax-environment (context-syntax-environment context)))
         (set-context-syntax-environment! context syntax-environment)
@@ -420,16 +383,15 @@
       "Report whether OPERATOR can still dispatch as syntax in ENVIRONMENT."
       #((parameters
          (operator
-          (type any)
-          (description "Candidate operator identifier datum."))
+          . "Candidate operator identifier datum.")
          (environment
-          (type any)
+          (type environment)
           (description "Value environment that may shadow the operator.")))
         (returns
-         (type any)
+         (type boolean)
          (description
           ("True when OPERATOR is an identifier not shadowed by a"
-           "value binding.")))
+            "value binding.")))
         (effects state-read))
       (and (identifier-datum? operator)
            (or (identifier? operator)
@@ -442,21 +404,20 @@
       "value binding shadows the syntactic keyword."
       #((parameters
          (operator
-          (type any)
-          (description "Operator identifier datum to resolve."))
+          . "Operator identifier datum to resolve.")
          (environment
-          (type any)
+          (type environment)
           (description "Value environment that may shadow the keyword."))
          (context
-          (type any)
+          (type eval-context)
           (description
            ("Evaluation context supplying the active syntax"
-            "environment."))))
+             "environment."))))
         (returns
-         (type any)
+         (type (or syntax-transformer boolean))
          (description
           ("OPERATOR's active syntax transformer, or #f when none"
-           "applies.")))
+            "applies.")))
         (effects state-read))
       (let ((name (identifier-datum-name operator)))
         (if (and name (not (operator-shadowed? operator environment)))
@@ -485,12 +446,11 @@
       "Return DATUM's list elements, or #f when DATUM is not a proper list."
       #((parameters
          (datum
-          (type any)
+          (type list)
           (description "Candidate proper list to flatten.")))
         (returns
-         (type any)
-         (description
-          ("DATUM's elements as a list, or #f when DATUM is improper.")))
+         (type (or list boolean))
+         (description ("DATUM's elements as a list, or #f when DATUM is improper.")))
         (effects allocation))
       (let loop ((cursor datum) (elements '()))
         (cond
@@ -639,15 +599,10 @@
       "Append ELEMENTS in front of TAIL without requiring TAIL to be a list."
       #((parameters
          (elements
-          (type any)
+          (type list)
           (description "Proper list of leading elements."))
-         (tail
-          (type any)
-          (description "Final tail value, which may be improper.")))
-        (returns
-         (type any)
-         (description
-          ("A structure consing ELEMENTS onto TAIL, possibly improper.")))
+         (tail . "Final tail value, which may be improper."))
+        (returns . ("A structure consing ELEMENTS onto TAIL, possibly improper."))
         (effects allocation))
       (if (null? elements)
           tail
@@ -1204,13 +1159,10 @@
     (define (syntax-definition-form? form)
       "Report whether FORM is a define-syntax form."
       #((parameters
-         (form
-          (type any)
-          (description "Candidate form to classify.")))
+         (form . "Candidate form to classify."))
         (returns
-         (type any)
-         (description
-          ("True when FORM is a pair whose head names define-syntax.")))
+         (type boolean)
+         (description ("True when FORM is a pair whose head names define-syntax.")))
         (effects pure))
       (and (pair? form) (identifier-named? (car form) 'define-syntax)))
 
@@ -1218,22 +1170,18 @@
       "Evaluate a define-syntax form and install its transformer."
       #((parameters
          (form
-          (type any)
+          (type pair)
           (description "A define-syntax form to evaluate."))
          (environment
-          (type any)
+          (type environment)
           (description "Value environment captured by the transformer."))
-         (context
-          (type any)
-          (description "Evaluation context (unused beyond parsing)."))
+         (context . "Evaluation context (unused beyond parsing).")
          (syntax-environment
-          (type any)
+          (type syntax-environment)
           (description "Syntax environment that receives the binding.")))
         (returns
-         (type any)
-         (description
-          ("The unspecified value after installing the keyword's"
-           "transformer.")))
+         . ("The unspecified value after installing the keyword's"
+            "transformer."))
         (effects state-write error))
       (let ((parts (proper-list-elements form "define-syntax form")))
         (if (not (= (length parts) 3))
@@ -1264,23 +1212,22 @@
       "Build the syntax scope created by let-syntax or letrec-syntax."
       #((parameters
          (parts
-          (type any)
+          (type list)
           (description "Operator and operands of the let-syntax form."))
          (environment
-          (type any)
+          (type environment)
           (description "Value environment captured by the transformers."))
          (context
-          (type any)
-          (description
-           ("Evaluation context supplying the outer syntax environment.")))
+          (type eval-context)
+          (description ("Evaluation context supplying the outer syntax environment.")))
          (recursive?
-          (type any)
+          (type boolean)
           (description "True for letrec-syntax so bindings see each other.")))
         (returns
-         (type any)
+         (type syntax-scope)
          (description
           ("A syntax scope pairing the body forms with the local"
-           "syntax environment.")))
+            "syntax environment.")))
         (effects allocation error))
       (if (< (length parts) 3)
           (eval-error
@@ -1314,21 +1261,16 @@
     (define (expand-expression expression environment context)
       "Expand one expression enough to expose core forms or syntax scopes."
       #((parameters
-         (expression
-          (type any)
-          (description "Expression to expand one syntactic layer."))
+         (expression . "Expression to expand one syntactic layer.")
          (environment
-          (type any)
+          (type environment)
           (description "Value environment used for shadowing checks."))
          (context
-          (type any)
-          (description
-           ("Evaluation context supplying the syntax environment."))))
+          (type environment)
+          (description ("Evaluation context supplying the syntax environment."))))
         (returns
-         (type any)
-         (description
-          ("The single-step expansion: a syntax scope, a transformed"
-           "form, or EXPRESSION unchanged.")))
+         . ("The single-step expansion: a syntax scope, a transformed"
+            "form, or EXPRESSION unchanged."))
         (effects state-read error))
       (if (not (pair? expression))
           expression
@@ -1499,20 +1441,16 @@
     (define (expand-expression/fully expression environment context)
       "Recursively expand EXPRESSION until no macro expansion remains."
       #((parameters
-         (expression
-          (type any)
-          (description "Expression to expand to a fixed point."))
+         (expression . "Expression to expand to a fixed point.")
          (environment
-          (type any)
+          (type environment)
           (description "Value environment used for shadowing checks."))
          (context
-          (type any)
+          (type eval-context)
           (description "Evaluation context tracking expansion step budget.")))
         (returns
-         (type any)
-         (description
-          ("The fully expanded expression with all macros and core"
-           "forms resolved.")))
+         . ("The fully expanded expression with all macros and core"
+            "forms resolved."))
         (effects state-write error))
       (note-step! context)
       (let ((expanded (expand-expression expression environment context)))
@@ -1540,22 +1478,21 @@
       "Fully expand a sequence, executing allowed definition-time forms."
       #((parameters
          (forms
-          (type any)
+          (type list)
           (description "Sequence of forms to expand in order."))
          (environment
-          (type any)
+          (type environment)
           (description "Value environment used during expansion."))
          (context
-          (type any)
-          (description
-           ("Evaluation context whose syntax environment is mutated.")))
+          (type eval-context)
+          (description ("Evaluation context whose syntax environment is mutated.")))
          (allow-definitions?
-          (type any)
+          (type boolean)
           (description
            ("True to run import, library, and syntax definitions in"
-            "place."))))
+             "place."))))
         (returns
-         (type any)
+         (type list)
          (description "A list of the expanded forms in source order."))
         (effects state-write error))
       (let loop ((rest forms) (expanded '()))
@@ -1618,15 +1555,11 @@
     (define (consent-expand expression . rest)
       "Fully expand one already-read expression without evaluating its result."
       #((parameters
-         (expression
-          (type any)
-          (description "Already-read expression to expand."))
+         (expression . "Already-read expression to expand.")
          (rest
-          (type any)
+          (type list)
           (description "Optional caller environment then options alist.")))
-        (returns
-         (type any)
-         (description "The fully expanded expression."))
+        (returns . "The fully expanded expression.")
         (effects state-write error))
       (let ((context (new-eval-context (macro-rest-options rest)))
             (environment (macro-rest-environment rest)))
@@ -1638,13 +1571,13 @@
       "for tests and future compiler/backend passes."
       #((parameters
          (source
-          (type any)
+          (type string)
           (description "Source text to read into a form sequence."))
          (rest
-          (type any)
+          (type list)
           (description "Optional caller environment then options alist.")))
         (returns
-         (type any)
+         (type list)
          (description "A list of expanded top-level forms in source order."))
         (effects state-write error))
       (let ((context (new-eval-context (macro-rest-options rest)))
@@ -1866,46 +1799,42 @@
     (define (consent-macroexpand form environment context options)
       "Return a full macro expansion introspection datum for FORM."
       #((parameters
-         (form
-          (type any)
-          (description "Form to fully macroexpand."))
+         (form . "Form to fully macroexpand.")
          (environment
-          (type any)
+          (type environment)
           (description "Value environment used during expansion."))
          (context
-          (type any)
+          (type eval-context)
           (description "Parent context whose macro state is shared."))
          (options
-          (type any)
+          (type list)
           (description "Scheme-readable expansion option list.")))
         (returns
-         (type any)
+         (type macro-expansion)
          (description
           ("A Scheme-readable macro-expansion datum for the full"
-           "expansion.")))
+            "expansion.")))
         (effects state-write error))
       (macroexpand/result form environment context options 'full))
 
     (define (consent-macroexpand-1 form environment context options)
       "Return a one-step macro expansion introspection datum for FORM."
       #((parameters
-         (form
-          (type any)
-          (description "Form to macroexpand by a single step."))
+         (form . "Form to macroexpand by a single step.")
          (environment
-          (type any)
+          (type environment)
           (description "Value environment used during expansion."))
          (context
-          (type any)
+          (type eval-context)
           (description "Parent context whose macro state is shared."))
          (options
-          (type any)
+          (type list)
           (description "Scheme-readable expansion option list.")))
         (returns
-         (type any)
+         (type macro-expansion)
          (description
           ("A Scheme-readable macro-expansion datum for the one-step"
-           "expansion.")))
+            "expansion.")))
         (effects state-write error))
       (macroexpand/result form environment context options 'one-step))
 
@@ -1913,20 +1842,19 @@
       "Return syntax binding metadata for IDENTIFIER in CONTEXT."
       #((parameters
          (identifier
-          (type any)
+          (type symbol)
           (description "Identifier whose syntax binding is queried."))
          (environment
-          (type any)
+          (type environment)
           (description "Value environment (unused by this lookup)."))
          (context
-          (type any)
-          (description
-           ("Evaluation context supplying the syntax environment."))))
+          (type eval-context)
+          (description ("Evaluation context supplying the syntax environment."))))
         (returns
-         (type any)
+         (type (or macro-binding boolean))
          (description
           ("A Scheme-readable macro-binding record, or #f when"
-           "IDENTIFIER is unbound as syntax.")))
+            "IDENTIFIER is unbound as syntax.")))
         (effects state-read error))
       (let ((name (expect-symbol identifier "macro-binding-info identifier")))
         (if (syntax-environment-ref (context-syntax-environment context) name)
@@ -1940,14 +1868,10 @@
     (define (consent-syntax-source datum)
       "Return source metadata for DATUM, or #f when none is attached."
       #((parameters
-         (datum
-          (type any)
-          (description "Datum whose attached source metadata is read.")))
+         (datum . "Datum whose attached source metadata is read."))
         (returns
-         (type any)
-         (description
-          ("The source metadata attached to DATUM, or #f when none"
-           "exists.")))
+         . ("The source metadata attached to DATUM, or #f when none"
+            "exists."))
         (effects state-read))
       (consent-datum-source datum))
 
@@ -1975,22 +1899,22 @@
       "Return syntax export metadata for LIBRARY-NAME."
       #((parameters
          (library-name
-          (type any)
+          (type list)
           (description "Library name to resolve and inspect."))
          (environment
-          (type any)
+          (type environment)
           (description "Value environment used to resolve the library."))
          (context
-          (type any)
+          (type eval-context)
           (description "Parent context whose macro state is shared."))
          (options
-          (type any)
+          (type list)
           (description "Scheme-readable expansion option list.")))
         (returns
-         (type any)
+         (type macro-library)
          (description
           ("A Scheme-readable macro-library record of the library's"
-           "syntax exports.")))
+            "syntax exports.")))
         (effects state-write error))
       (let ((child (macro-introspection-context context options)))
         (guard (condition

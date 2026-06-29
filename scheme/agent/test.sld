@@ -283,14 +283,12 @@
       "Return a registered test group or result for NAME-OR-LIBRARY."
       #((parameters
          (name-or-library
-          (type any)
-          (description
-           ("Registered test name, test result, or test group datum."))))
+          . ("Registered test name, test result, or test group datum.")))
         (returns
-         (type any)
+         (type (or agent-test-result agent-test-group))
          (description
           ("The matching test result/group, NAME-OR-LIBRARY unchanged"
-           "when it is already a result, or a skipped run group.")))
+            "when it is already a result, or a skipped run group.")))
         (effects state-read))
       (cond
        ((or (test-result? name-or-library)
@@ -329,12 +327,12 @@
       "Yield failed tests from RESULT as one structured Consent Scheme event."
       #((parameters
          (result
-          (type any)
+          (type (or symbol agent-test-result agent-test-group))
           (description
            ("Test result, test group, or registered test name to"
-            "inspect."))))
+             "inspect."))))
         (returns
-         (type any)
+         (type (list-of agent-test-result))
          (description "List of failed nested test result datums."))
         (effects state-read agent-yield)
         (see-also test-run))
@@ -488,18 +486,14 @@
       "Run and register TEST-DATUM for SKILL-NAME."
       #((parameters
          (skill-name
-          (type any)
-          (description
-           ("Skill name symbol or datum used as the registry key.")))
+          (type symbol)
+          (description ("Skill name symbol or datum used as the registry key.")))
          (test-datum
-          (type any)
-          (description
-           ("Agent Test datum, SRFI 64 event, source test, or existing"
-            "result."))))
+          . ("Agent Test datum, SRFI 64 event, source test, or existing"
+             "result.")))
         (returns
-         (type any)
-         (description
-          ("The normalized test result registered for SKILL-NAME.")))
+         (type agent-test-result)
+         (description "The normalized test result registered for SKILL-NAME."))
         (effects state-write host-eval)
         (see-also skill-test-run))
       (register-skill-test!
@@ -530,15 +524,15 @@
       "Run registered tests for SKILL-NAME, or tests declared by a skill datum."
       #((parameters
          (skill-name
-          (type any)
+          (type symbol)
           (description
            ("Skill name symbol, agent-skill datum, or"
-            "agent-skill-candidate datum."))))
+             "agent-skill-candidate datum."))))
         (returns
-         (type any)
+         (type agent-test-group)
          (description
           ("An `agent-test-group` datum summarizing registered or"
-           "declared skill tests.")))
+            "declared skill tests.")))
         (effects state-read host-eval)
         (see-also skill-test test-yield-failures))
       (cond

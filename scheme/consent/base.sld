@@ -52,23 +52,21 @@
       "Install the evaluator backend hooks used for base bootstrapping."
       #((parameters
          (primitive-resolver
-          (type any)
+          (type procedure)
           (description
            ("Procedure mapping a registry implementation name to its"
-            "primitive function.")))
+             "primitive function.")))
          (trampoline
-          (type any)
+          (type procedure)
           (description
            ("Procedure that evaluates a derived base prelude sequence"
-            "in an environment and context.")))
+             "in an environment and context.")))
          (define-syntax
-          (type any)
+          (type procedure)
           (description
            ("Procedure that installs a derived base syntax form into a"
-            "syntax environment."))))
-        (returns
-         (type any)
-         (description "The unspecified value."))
+             "syntax environment."))))
+        (returns . "The unspecified value.")
         (effects state-write))
       (set! base-primitive-resolver primitive-resolver)
       (set! base-trampoline trampoline)
@@ -567,10 +565,10 @@
       "closures."
       #((parameters)
         (returns
-         (type any)
+         (type (list-of symbol))
          (description
           ("A list of the symbol names of every registered kernel"
-           "primitive.")))
+            "primitive.")))
         (effects state-read allocation))
       (map car base-primitive-registry))
 
@@ -578,11 +576,11 @@
       "Public metadata accessor for kernel primitive arity and source specs."
       #((parameters)
         (returns
-         (type any)
+         (type list)
          (description
           ("A list of association lists, one per kernel primitive,"
-           "carrying its name, minimum and maximum arity, source, and"
-           "effect fields.")))
+            "carrying its name, minimum and maximum arity, source, and"
+            "effect fields.")))
         (effects state-read allocation))
       (map (lambda (spec)
              (list (assq 'name spec)
@@ -616,12 +614,11 @@
       "Read all characters from PORT into a string."
       #((parameters
          (port
-          (type any)
+          (type port)
           (description "Open textual input port to drain to end of file.")))
         (returns
-         (type any)
-         (description
-          ("A string containing every character read from the port.")))
+         (type string)
+         (description ("A string containing every character read from the port.")))
         (effects state-read allocation))
       (let loop ((chars '()))
         (let ((char (read-char port)))
@@ -633,14 +630,13 @@
       "Read and parse all datums from PORT."
       #((parameters
          (port
-          (type any)
+          (type port)
           (description
            ("Open textual input port whose contents are read and"
-            "parsed."))))
+             "parsed."))))
         (returns
-         (type any)
-         (description
-          ("A list of every datum parsed from the port's contents.")))
+         (type list)
+         (description ("A list of every datum parsed from the port's contents.")))
         (effects state-read allocation))
       (consent-read-all (read-port-string port)))
 
@@ -660,18 +656,18 @@
       "RELATIVE-PATH for embedded source."
       #((parameters
          (relative-path
-          (type any)
+          (type string)
           (description "Logical path of the source resource to resolve."))
          (default-paths
-          (type any)
+          (type list)
           (description
            ("List of built-in cwd-relative fallback paths searched"
-            "before embedded source."))))
+             "before embedded source."))))
         (returns
-         (type any)
+         (type (or pair boolean))
          (description
           ("A pair (RESOLVED-PATH . TEXT) from the first source that"
-           "works, or #f when none resolve.")))
+            "works, or #f when none resolve.")))
         (effects state-read allocation))
       (let loop-dirs ((dirs (consent-library-search-directory-list)))
         (if (pair? dirs)
@@ -693,18 +689,18 @@
       "Return runtime source TEXT for logical RELATIVE-PATH, or #f when none is found."
       #((parameters
          (relative-path
-          (type any)
+          (type string)
           (description "Logical path of the source resource to resolve."))
          (default-paths
-          (type any)
+          (type list)
           (description
            ("List of built-in cwd-relative fallback paths searched"
-            "before embedded source."))))
+             "before embedded source."))))
         (returns
-         (type any)
+         (type (or string boolean))
          (description
           ("The source text string for the resolved resource, or #f"
-           "when none is found.")))
+            "when none is found.")))
         (effects state-read allocation))
       (let ((entry (resolve-source-entry relative-path default-paths)))
         (and entry (cdr entry))))
@@ -714,10 +710,10 @@
       "depends on each top-level form remaining one define."
       #((parameters)
         (returns
-         (type any)
+         (type list)
          (description
           ("The list of parsed top-level base prelude forms, cached"
-           "after first read.")))
+            "after first read.")))
         (effects state-read state-write allocation error))
       (or base-prelude-forms-cache
           (let ((text (resolve-source-text "consent/base-prelude.scm"
@@ -733,10 +729,10 @@
       "current syntax environment, not the value environment."
       #((parameters)
         (returns
-         (type any)
+         (type list)
          (description
           ("The list of parsed top-level base syntax prelude forms,"
-           "cached after first read.")))
+            "cached after first read.")))
         (effects state-read state-write allocation error))
       (or base-syntax-forms-cache
           (let ((text (resolve-source-text "consent/base-syntax.scm"
@@ -834,10 +830,10 @@
       "primitives so tests can catch accidental boundary movement."
       #((parameters)
         (returns
-         (type any)
+         (type list)
          (description
           ("A list of association lists describing each derived"
-           "prelude binding's name, arity, source, and documentation.")))
+            "prelude binding's name, arity, source, and documentation.")))
         (effects state-read state-write allocation error))
       (map prelude-definition-spec (base-prelude-forms)))
 
@@ -845,10 +841,10 @@
       "Public metadata accessor for derived base prelude names."
       #((parameters)
         (returns
-         (type any)
+         (type symbol)
          (description
           ("A list of the symbol names of every derived base prelude"
-           "binding.")))
+            "binding.")))
         (effects state-read state-write allocation error))
       (map (lambda (spec)
              (second (assq 'name spec)))
@@ -858,10 +854,10 @@
       "Public metadata accessor for all base binding specs."
       #((parameters)
         (returns
-         (type any)
+         (type list)
          (description
           ("A list of binding specs covering both kernel primitives"
-           "and derived prelude bindings.")))
+            "and derived prelude bindings.")))
         (effects state-read state-write allocation error))
       (append (consent-base-primitive-specs)
               (consent-base-prelude-binding-specs)))
@@ -1219,11 +1215,11 @@
       "Public manifest accessor shared by portable tests and future tools."
       #((parameters)
         (returns
-         (type any)
+         (type list)
          (description
           ("A list of manifest specs covering kernel primitives,"
-           "derived prelude bindings, and host-effecting standard"
-           "primitives.")))
+            "derived prelude bindings, and host-effecting standard"
+            "primitives.")))
         (effects state-read state-write allocation error))
       (append (map base-primitive-manifest-spec base-primitive-registry)
               (map prelude-manifest-spec
@@ -1238,24 +1234,21 @@
       "Install a primitive procedure binding into ENVIRONMENT."
       #((parameters
          (environment
-          (type any)
-          (description
-           ("Target environment to receive the primitive binding.")))
+          (type environment)
+          (description ("Target environment to receive the primitive binding.")))
          (name
-          (type any)
+          (type symbol)
           (description "Symbol under which the primitive is bound."))
          (function
-          (type any)
+          (type procedure)
           (description "Host procedure implementing the primitive."))
          (minimum-arity
-          (type any)
+          (type exact-integer)
           (description "Minimum number of arguments the primitive accepts."))
          (maximum-arity
-          (type any)
+          (type (or exact-integer boolean))
           (description "Maximum number of arguments, or #f for unbounded.")))
-        (returns
-         (type any)
-         (description "The unspecified result of installing the binding."))
+        (returns . "The unspecified result of installing the binding.")
         (effects state-write allocation))
       (environment-define!
        environment
@@ -1268,10 +1261,8 @@
       "evaluates derived Scheme definitions in the same environment."
       #((parameters)
         (returns
-         (type any)
-         (description
-          ("A fresh environment populated with kernel primitives and"
-           "derived base definitions.")))
+         . ("A fresh environment populated with kernel primitives and"
+            "derived base definitions."))
         (effects state-read state-write allocation host-eval error))
       (let ((environment (consent-make-empty-environment)))
         (let loop ((rest base-primitive-registry))
@@ -1296,20 +1287,18 @@
       "Install derived base syntax into CONTEXT once."
       #((parameters
          (context
-          (type any)
+          (type eval-context)
           (description
            ("Evaluation context tracking whether base syntax is already"
-            "installed.")))
+             "installed.")))
          (environment
-          (type any)
+          (type environment)
           (description
            ("Environment into which the derived syntax forms are"
-            "installed."))))
+             "installed."))))
         (returns
-         (type any)
-         (description
-          ("The unspecified value once base syntax is installed in the"
-           "context.")))
+         . ("The unspecified value once base syntax is installed in the"
+            "context."))
         (effects state-read state-write allocation host-eval error))
       (if (not (context-base-syntax-installed context))
           (begin
