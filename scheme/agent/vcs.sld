@@ -56,14 +56,11 @@
     (define (vcs-field name . values)
       "Return a Scheme-readable record field named NAME with VALUES."
       #((parameters
-         (name
-          (type symbol)
+         (name (type symbol)
           (description "Symbol naming the VCS field."))
-         (values
-          (type list)
+         (values (type list)
           (description "Zero or more Scheme-readable field values.")))
-        (returns
-         (type pair)
+        (returns (type pair)
          (description ("A field pair whose car is NAME and whose cdr is VALUES.")))
         (effects pure))
       (cons name values))
@@ -71,11 +68,9 @@
     (define (vcs-field-value record field default)
       "Return FIELD's first value from RECORD, or DEFAULT when absent."
       #((parameters
-         (record
-          (type pair)
+         (record (type pair)
           (description "VCS record represented as a tagged list."))
-         (field
-          (type symbol)
+         (field (type symbol)
           (description "Symbol naming the field to read."))
          (default
           . ("Fallback value returned when FIELD is absent or empty.")))
@@ -93,17 +88,13 @@
     (define (make-vcs-repository system root identity)
       "Return an explicit repository identity/root record."
       #((parameters
-         (system
-          (type symbol)
+         (system (type symbol)
           (description "VCS system symbol, such as git."))
-         (root
-          (type (or string pair))
+         (root (type (or string pair))
           (description "Repository root path or handle metadata."))
-         (identity
-          (type (or string pair boolean))
+         (identity (type (or string pair boolean))
           (description "Stable repository identity metadata, or #f.")))
-        (returns
-         (type vcs-repository)
+        (returns (type vcs-repository)
          (description "A `vcs-repository` datum."))
         (effects pure))
       (list 'vcs-repository
@@ -114,24 +105,18 @@
     (define (make-vcs-branch head oid upstream ahead behind detached?)
       "Return a branch or detached-head record."
       #((parameters
-         (head
-          (type (or string boolean))
+         (head (type (or string boolean))
           (description "Branch name, or #f when detached."))
          (oid . "Current object id, or #f when unavailable.")
-         (upstream
-          (type (or string boolean))
+         (upstream (type (or string boolean))
           (description "Upstream branch name, or #f."))
-         (ahead
-          (type exact-integer)
+         (ahead (type exact-integer)
           (description "Ahead count relative to upstream."))
-         (behind
-          (type exact-integer)
+         (behind (type exact-integer)
           (description "Behind count relative to upstream."))
-         (detached?
-          (type boolean)
+         (detached? (type boolean)
           (description "#t when the worktree is detached from a branch.")))
-        (returns
-         (type vcs-branch)
+        (returns (type vcs-branch)
          (description "A `vcs-branch` datum."))
         (effects pure))
       (list 'vcs-branch
@@ -145,14 +130,11 @@
     (define (make-vcs-remote name url-metadata)
       "Return safe remote metadata without requiring a raw host remote object."
       #((parameters
-         (name
-          (type string)
+         (name (type string)
           (description "Remote name."))
-         (url-metadata
-          (type (or string list))
+         (url-metadata (type (or string list))
           (description "Safe, redacted, or classified URL metadata.")))
-        (returns
-         (type vcs-remote)
+        (returns (type vcs-remote)
          (description "A `vcs-remote` datum."))
         (effects pure))
       (list 'vcs-remote
@@ -163,18 +145,14 @@
       "Return a compact commit summary record suitable for log adapters."
       #((parameters
          (oid . "Commit object id.")
-         (parents
-          (type (list-of string))
+         (parents (type (list-of string))
           (description "List of parent object ids."))
          (subject . "Commit subject line.")
-         (author
-          (type (or string list))
+         (author (type (or string list))
           (description "Author metadata safe for this context."))
-         (timestamp
-          (type (or exact-integer string))
+         (timestamp (type (or exact-integer string))
           (description "Commit timestamp datum.")))
-        (returns
-         (type vcs-commit-summary)
+        (returns (type vcs-commit-summary)
          (description "A `vcs-commit-summary` datum."))
         (effects pure))
       (list 'vcs-commit-summary
@@ -187,28 +165,21 @@
     (define (make-vcs-status system repository branch entries operation-state outcome)
       "Return a repository status snapshot from pure Scheme-readable fields."
       #((parameters
-         (system
-          (type symbol)
+         (system (type symbol)
           (description "VCS system symbol, such as git."))
-         (repository
-          (type vcs-repository)
+         (repository (type vcs-repository)
           (description "Repository record."))
-         (branch
-          (type vcs-branch)
+         (branch (type vcs-branch)
           (description "Branch record."))
-         (entries
-          (type (list-of vcs-status-entry))
+         (entries (type (list-of vcs-status-entry))
           (description "List of status entry records."))
-         (operation-state
-          (type vcs-operation-state)
+         (operation-state (type vcs-operation-state)
           (description
            ("Operation-state record for merge, rebase, cherry-pick, or"
              "bisect context.")))
-         (outcome
-          (type vcs-outcome)
+         (outcome (type vcs-outcome)
           (description "Outcome datum describing adapter status.")))
-        (returns
-         (type vcs-status)
+        (returns (type vcs-status)
          (description "A `vcs-status` snapshot datum."))
         (effects pure))
       (list 'vcs-status
@@ -223,8 +194,7 @@
       "Return #t when DATUM is a VCS status record."
       #((parameters
          (datum . "Value to inspect."))
-        (returns
-         (type boolean)
+        (returns (type boolean)
          (description
           ("#t when DATUM is tagged as a VCS status record; otherwise"
             "#f.")))
@@ -234,11 +204,9 @@
     (define (vcs-status-branch status)
       "Return STATUS's branch or detached-head record."
       #((parameters
-         (status
-          (type vcs-status)
+         (status (type vcs-status)
           (description "VCS status datum.")))
-        (returns
-         (type (or vcs-branch boolean))
+        (returns (type (or vcs-branch boolean))
          (description "The branch record, or #f when absent."))
         (effects pure))
       (vcs-field-value status 'branch #f))
@@ -246,11 +214,9 @@
     (define (vcs-status-entries status)
       "Return STATUS's status entry list."
       #((parameters
-         (status
-          (type vcs-status)
+         (status (type vcs-status)
           (description "VCS status datum.")))
-        (returns
-         (type list)
+        (returns (type list)
          (description "The status entry list, or the empty list."))
         (effects pure))
       (vcs-field-value status 'entries '()))
@@ -258,23 +224,17 @@
     (define (make-vcs-status-entry kind path index-status worktree-status details)
       "Return a worktree/index status entry with additional DETAILS fields."
       #((parameters
-         (kind
-          (type symbol)
+         (kind (type symbol)
           (description "Normalized entry kind symbol."))
-         (path
-          (type string)
+         (path (type string)
           (description "Repository-relative path."))
-         (index-status
-          (type symbol)
+         (index-status (type symbol)
           (description "Index-side status symbol."))
-         (worktree-status
-          (type symbol)
+         (worktree-status (type symbol)
           (description "Worktree-side status symbol."))
-         (details
-          (type list)
+         (details (type list)
           (description ("Additional VCS fields for backend-specific metadata."))))
-        (returns
-         (type vcs-status-entry)
+        (returns (type vcs-status-entry)
          (description "A `vcs-status-entry` datum."))
         (effects pure))
       (append
@@ -289,8 +249,7 @@
       "Return #t when DATUM is a VCS status entry record."
       #((parameters
          (datum . "Value to inspect."))
-        (returns
-         (type boolean)
+        (returns (type boolean)
          (description
           ("#t when DATUM is tagged as a VCS status entry; otherwise"
             "#f.")))
@@ -300,11 +259,9 @@
     (define (vcs-status-entry-kind entry)
       "Return ENTRY's normalized kind."
       #((parameters
-         (entry
-          (type vcs-status-entry)
+         (entry (type vcs-status-entry)
           (description "VCS status entry datum.")))
-        (returns
-         (type (or symbol boolean))
+        (returns (type (or symbol boolean))
          (description "The normalized entry kind, or #f when absent."))
         (effects pure))
       (vcs-field-value entry 'kind #f))
@@ -312,11 +269,9 @@
     (define (vcs-status-entry-path entry)
       "Return ENTRY's repository-relative path."
       #((parameters
-         (entry
-          (type vcs-status-entry)
+         (entry (type vcs-status-entry)
           (description "VCS status entry datum.")))
-        (returns
-         (type (or string boolean))
+        (returns (type (or string boolean))
          (description "The repository-relative path, or #f when absent."))
         (effects pure))
       (vcs-field-value entry 'path #f))
@@ -324,11 +279,9 @@
     (define (vcs-status-entry-index-status entry)
       "Return ENTRY's index-side status."
       #((parameters
-         (entry
-          (type vcs-status-entry)
+         (entry (type vcs-status-entry)
           (description "VCS status entry datum.")))
-        (returns
-         (type (or symbol boolean))
+        (returns (type (or symbol boolean))
          (description "The index-side status symbol, or #f when absent."))
         (effects pure))
       (vcs-field-value entry 'index-status #f))
@@ -336,11 +289,9 @@
     (define (vcs-status-entry-worktree-status entry)
       "Return ENTRY's worktree-side status."
       #((parameters
-         (entry
-          (type vcs-status-entry)
+         (entry (type vcs-status-entry)
           (description "VCS status entry datum.")))
-        (returns
-         (type (or symbol boolean))
+        (returns (type (or symbol boolean))
          (description "The worktree-side status symbol, or #f when absent."))
         (effects pure))
       (vcs-field-value entry 'worktree-status #f))
@@ -348,11 +299,9 @@
     (define (vcs-status-entry-conflict? entry)
       "Return #t when ENTRY represents an unresolved conflict."
       #((parameters
-         (entry
-          (type vcs-status-entry)
+         (entry (type vcs-status-entry)
           (description "VCS status entry datum.")))
-        (returns
-         (type boolean)
+        (returns (type boolean)
          (description "#t when ENTRY is marked as conflicted; otherwise #f."))
         (effects pure))
       (eq? (vcs-field-value entry 'kind #f) 'conflicted))
@@ -360,20 +309,15 @@
     (define (make-vcs-operation-state merge rebase cherry-pick bisect)
       "Return merge/rebase/cherry-pick/bisect state as explicit data."
       #((parameters
-         (merge
-          (type (or list boolean))
+         (merge (type (or list boolean))
           (description "Merge state metadata, or #f."))
-         (rebase
-          (type (or list boolean))
+         (rebase (type (or list boolean))
           (description "Rebase state metadata, or #f."))
-         (cherry-pick
-          (type (or list boolean))
+         (cherry-pick (type (or list boolean))
           (description "Cherry-pick state metadata, or #f."))
-         (bisect
-          (type (or list boolean))
+         (bisect (type (or list boolean))
           (description "Bisect state metadata, or #f.")))
-        (returns
-         (type vcs-operation-state)
+        (returns (type vcs-operation-state)
          (description "A `vcs-operation-state` datum."))
         (effects pure))
       (list 'vcs-operation-state
@@ -385,14 +329,11 @@
     (define (make-vcs-conflict-state type paths)
       "Return conflict state independent of any host-native merge object."
       #((parameters
-         (type
-          (type symbol)
+         (type (type symbol)
           (description "Conflict type symbol."))
-         (paths
-          (type (list-of string))
+         (paths (type (list-of string))
           (description ("Repository-relative paths participating in the conflict."))))
-        (returns
-         (type vcs-conflict-state)
+        (returns (type vcs-conflict-state)
          (description "A `vcs-conflict-state` datum."))
         (effects pure))
       (list 'vcs-conflict-state
@@ -402,14 +343,11 @@
     (define (make-vcs-diff-summary system files)
       "Return a diff summary whose files may compose with `(agent diff)' hunks."
       #((parameters
-         (system
-          (type symbol)
+         (system (type symbol)
           (description "VCS system symbol, such as git."))
-         (files
-          (type (list-of vcs-diff-file))
+         (files (type (list-of vcs-diff-file))
           (description "List of file-level diff summary records.")))
-        (returns
-         (type vcs-diff-summary)
+        (returns (type vcs-diff-summary)
          (description "A `vcs-diff-summary` datum."))
         (effects pure))
       (list 'vcs-diff-summary
@@ -420,28 +358,21 @@
                                 old-object new-object score)
       "Return one file-level raw diff summary."
       #((parameters
-         (status
-          (type symbol)
+         (status (type symbol)
           (description "Normalized file diff status symbol."))
-         (path
-          (type string)
+         (path (type string)
           (description "Current repository-relative path."))
-         (orig-path
-          (type (or string boolean))
+         (orig-path (type (or string boolean))
           (description "Original path for renames/copies, or #f."))
-         (old-mode
-          (type string)
+         (old-mode (type string)
           (description "Old file mode token."))
-         (new-mode
-          (type string)
+         (new-mode (type string)
           (description "New file mode token."))
          (old-object . "Old object id token.")
          (new-object . "New object id token.")
-         (score
-          (type (or exact-integer boolean))
+         (score (type (or exact-integer boolean))
           (description "Rename/copy score, or #f.")))
-        (returns
-         (type vcs-diff-file)
+        (returns (type vcs-diff-file)
          (description "A `vcs-diff-file` datum."))
         (effects pure))
       (list 'vcs-diff-file
@@ -457,11 +388,9 @@
     (define (vcs-diff-summary-files diff)
       "Return DIFF's file summary list."
       #((parameters
-         (diff
-          (type vcs-diff-summary)
+         (diff (type vcs-diff-summary)
           (description "VCS diff summary datum.")))
-        (returns
-         (type list)
+        (returns (type list)
          (description "The file summary list, or the empty list."))
         (effects pure))
       (vcs-field-value diff 'files '()))
@@ -470,17 +399,13 @@
       "Return a host-adapter request datum for a VCS operation."
       #((parameters
          (id . "Stable request id.")
-         (operation
-          (type symbol)
+         (operation (type symbol)
           (description "VCS operation symbol."))
-         (authority
-          (type symbol)
+         (authority (type symbol)
           (description "Requested authority family."))
-         (arguments
-          (type list)
+         (arguments (type list)
           (description "Operation arguments as Scheme-readable data.")))
-        (returns
-         (type vcs-capability-request)
+        (returns (type vcs-capability-request)
          (description
           ("A `vcs-capability-request` datum with derived authority"
             "metadata.")))
@@ -500,8 +425,7 @@
       "Return #t when DATUM is a VCS capability request record."
       #((parameters
          (datum . "Value to inspect."))
-        (returns
-         (type boolean)
+        (returns (type boolean)
          (description
           ("#t when DATUM is tagged as a VCS capability request;"
             "otherwise #f.")))
@@ -511,8 +435,7 @@
     (define (vcs-capability-request-id request)
       "Return REQUEST's stable identifier."
       #((parameters
-         (request
-          (type vcs-capability-request)
+         (request (type vcs-capability-request)
           (description "VCS capability request datum.")))
         (returns . "The request id, or #f when absent.")
         (effects pure))
@@ -521,11 +444,9 @@
     (define (vcs-capability-request-operation request)
       "Return REQUEST's operation symbol."
       #((parameters
-         (request
-          (type vcs-capability-request)
+         (request (type vcs-capability-request)
           (description "VCS capability request datum.")))
-        (returns
-         (type (or symbol boolean))
+        (returns (type (or symbol boolean))
          (description "The operation symbol, or #f when absent."))
         (effects pure))
       (vcs-field-value request 'operation #f))
@@ -534,12 +455,10 @@
       "Return a host-adapter result datum for a VCS operation."
       #((parameters
          (id . "Request id associated with the result.")
-         (status
-          (type symbol)
+         (status (type symbol)
           (description "Result status symbol."))
          (value . "Result payload, often a VCS record or outcome datum."))
-        (returns
-         (type vcs-capability-result)
+        (returns (type vcs-capability-result)
          (description "A `vcs-capability-result` datum."))
         (effects pure))
       (list 'vcs-capability-result
@@ -552,19 +471,15 @@
       #((parameters
          (id . "Stable grant id.")
          (authority . "Authority family granted, or all.")
-         (operations
-          (type (or symbol list))
+         (operations (type (or symbol list))
           (description
            ("Allowed operation symbol, `all`, or list of operation"
              "symbols.")))
-         (repository
-          (type (or string symbol boolean))
+         (repository (type (or string symbol boolean))
           (description "Repository scope value, or #f/all for unrestricted."))
-         (remote
-          (type (or string symbol boolean))
+         (remote (type (or string symbol boolean))
           (description "Remote scope value, or #f/all for unrestricted.")))
-        (returns
-         (type vcs-capability-grant)
+        (returns (type vcs-capability-grant)
          (description "A `vcs-capability-grant` datum."))
         (effects pure))
       (list 'vcs-capability-grant
@@ -579,14 +494,11 @@
       #((parameters
          (id . "Stable approval decision id.")
          (request-id . "Id of the request this decision answers.")
-         (status
-          (type symbol)
+         (status (type symbol)
           (description "Approval status symbol, usually approved or denied."))
-         (reason
-          (type string)
+         (reason (type string)
           (description "Human-readable explanation for the decision.")))
-        (returns
-         (type vcs-approval-decision)
+        (returns (type vcs-approval-decision)
          (description "A `vcs-approval-decision` datum."))
         (effects pure))
       (list 'vcs-approval-decision
@@ -598,25 +510,19 @@
     (define (make-vcs-capability-decision request status grant approval reason)
       "Return a VCS capability authorization decision record."
       #((parameters
-         (request
-          (type vcs-capability-request)
+         (request (type vcs-capability-request)
           (description "VCS capability request datum."))
-         (status
-          (type symbol)
+         (status (type symbol)
           (description "Decision status symbol, usually approved or denied."))
-         (grant
-          (type (or vcs-capability-grant boolean))
+         (grant (type (or vcs-capability-grant boolean))
           (description "Grant datum that authorized the request, or #f."))
-         (approval
-          (type (or vcs-approval-decision boolean))
+         (approval (type (or vcs-approval-decision boolean))
           (description
            ("Approval decision datum that authorized the request, or"
              "#f.")))
-         (reason
-          (type string)
+         (reason (type string)
           (description "Human-readable policy explanation.")))
-        (returns
-         (type vcs-capability-decision)
+        (returns (type vcs-capability-decision)
          (description
           ("A `vcs-capability-decision` datum summarizing the"
             "authorization result.")))
@@ -643,8 +549,7 @@
       "Return #t when DATUM is a VCS capability decision record."
       #((parameters
          (datum . "Value to inspect."))
-        (returns
-         (type boolean)
+        (returns (type boolean)
          (description
           ("#t when DATUM is tagged as a VCS capability decision;"
             "otherwise #f.")))
@@ -654,11 +559,9 @@
     (define (vcs-capability-decision-status decision)
       "Return DECISION's status symbol."
       #((parameters
-         (decision
-          (type vcs-capability-decision)
+         (decision (type vcs-capability-decision)
           (description "VCS capability decision datum.")))
-        (returns
-         (type (or symbol boolean))
+        (returns (type (or symbol boolean))
          (description "The decision status symbol, or #f when absent."))
         (effects pure))
       (vcs-field-value decision 'status #f))
@@ -666,14 +569,11 @@
     (define (make-vcs-outcome status message)
       "Return an explicit VCS outcome instead of a generic error."
       #((parameters
-         (status
-          (type symbol)
+         (status (type symbol)
           (description "Outcome status symbol."))
-         (message
-          (type string)
+         (message (type string)
           (description "Human-readable outcome message.")))
-        (returns
-         (type vcs-outcome)
+        (returns (type vcs-outcome)
          (description "A `vcs-outcome` datum."))
         (effects pure))
       (list 'vcs-outcome
@@ -683,11 +583,9 @@
     (define (vcs-outcome-status outcome)
       "Return OUTCOME's status symbol."
       #((parameters
-         (outcome
-          (type vcs-outcome)
+         (outcome (type vcs-outcome)
           (description "VCS outcome datum.")))
-        (returns
-         (type (or symbol boolean))
+        (returns (type (or symbol boolean))
          (description "The outcome status symbol, or #f when absent."))
         (effects pure))
       (vcs-field-value outcome 'status #f))
@@ -718,11 +616,9 @@
     (define (vcs-read-only-operation? operation)
       "Return #t when OPERATION is a read-only VCS observation."
       #((parameters
-         (operation
-          (type symbol)
+         (operation (type symbol)
           (description "VCS operation symbol to classify.")))
-        (returns
-         (type boolean)
+        (returns (type boolean)
          (description "#t when OPERATION is read-only; otherwise #f."))
         (effects pure))
       (if (memq operation vcs-read-only-operations) #t #f))
@@ -730,11 +626,9 @@
     (define (vcs-mutating-operation? operation)
       "Return #t when OPERATION mutates repository state."
       #((parameters
-         (operation
-          (type symbol)
+         (operation (type symbol)
           (description "VCS operation symbol to classify.")))
-        (returns
-         (type boolean)
+        (returns (type boolean)
          (description ("#t when OPERATION mutates repository state; otherwise #f.")))
         (effects pure))
       (if (memq operation vcs-mutating-operations) #t #f))
@@ -742,11 +636,9 @@
     (define (vcs-remote-operation? operation)
       "Return #t when OPERATION communicates with a remote VCS endpoint."
       #((parameters
-         (operation
-          (type symbol)
+         (operation (type symbol)
           (description "VCS operation symbol to classify.")))
-        (returns
-         (type boolean)
+        (returns (type boolean)
          (description
           ("#t when OPERATION may communicate with a remote endpoint;"
             "otherwise #f.")))
@@ -756,11 +648,9 @@
     (define (vcs-operation-required-authority operation)
       "Return OPERATION's required policy authority family."
       #((parameters
-         (operation
-          (type symbol)
+         (operation (type symbol)
           (description "VCS operation symbol to classify.")))
-        (returns
-         (type symbol)
+        (returns (type symbol)
          (description
           ("Authority family symbol: read-only-observation,"
             "repository-mutation, remote-mutation, or unknown.")))
@@ -774,11 +664,9 @@
     (define (vcs-known-outcome? status)
       "Return #t when STATUS is part of the shared outcome vocabulary."
       #((parameters
-         (status
-          (type symbol)
+         (status (type symbol)
           (description "Outcome status symbol to check.")))
-        (returns
-         (type boolean)
+        (returns (type boolean)
          (description "#t when STATUS is a known VCS outcome; otherwise #f."))
         (effects pure))
       (if (memq status vcs-known-outcomes) #t #f))
@@ -851,19 +739,15 @@
     (define (vcs-authorize-capability-request request grants approvals)
       "Return a fail-closed authorization decision for REQUEST."
       #((parameters
-         (request
-          (type vcs-capability-request)
+         (request (type vcs-capability-request)
           (description "VCS capability request datum to authorize."))
-         (grants
-          (type (list-of vcs-capability-grant))
+         (grants (type (list-of vcs-capability-grant))
           (description "Active VCS grant datums to check first."))
-         (approvals
-          (type (list-of vcs-approval-decision))
+         (approvals (type (list-of vcs-approval-decision))
           (description
            ("Explicit approval decision datums to check when grants do"
              "not authorize the request."))))
-        (returns
-         (type vcs-capability-decision)
+        (returns (type vcs-capability-decision)
          (description
           ("A VCS capability decision approving or denying REQUEST"
             "with an explanatory reason.")))
@@ -916,17 +800,13 @@
     (define (make-vcs-capability-audit request decision result)
       "Return a stable audit event for a VCS authorization and result."
       #((parameters
-         (request
-          (type vcs-capability-request)
+         (request (type vcs-capability-request)
           (description "VCS capability request datum."))
-         (decision
-          (type vcs-capability-decision)
+         (decision (type vcs-capability-decision)
           (description "VCS capability decision datum."))
-         (result
-          (type vcs-capability-result)
+         (result (type vcs-capability-result)
           (description "VCS capability result datum.")))
-        (returns
-         (type vcs-capability-audit)
+        (returns (type vcs-capability-audit)
          (description
           ("A `vcs-capability-audit` datum suitable for logs and"
             "transcripts.")))
@@ -948,8 +828,7 @@
       "Return #t when DATUM is a VCS capability audit record."
       #((parameters
          (datum . "Value to inspect."))
-        (returns
-         (type boolean)
+        (returns (type boolean)
          (description
           ("#t when DATUM is tagged as a VCS capability audit record;"
             "otherwise #f.")))
@@ -1215,13 +1094,11 @@
     (define (parse-git-status-porcelain-v2-z text)
       "Parse Git status --porcelain=v2 -z --branch output into a status datum."
       #((parameters
-         (text
-          (type string)
+         (text (type string)
           (description
            ("NUL-delimited output from `git status --porcelain=v2 -z"
              "--branch`."))))
-        (returns
-         (type vcs-status)
+        (returns (type vcs-status)
          (description
           ("A `vcs-status` datum with branch, entries, operation"
             "state, and parse outcome.")))
@@ -1401,13 +1278,11 @@
     (define (parse-git-raw-diff-z text)
       "Parse Git diff --raw -z output into a file-level summary datum."
       #((parameters
-         (text
-          (type string)
+         (text (type string)
           (description
            ("NUL-delimited output from `git diff --raw -z` or"
              "compatible Git raw diff command."))))
-        (returns
-         (type vcs-diff-summary)
+        (returns (type vcs-diff-summary)
          (description
           ("A `vcs-diff-summary` datum containing file-level diff"
             "records.")))

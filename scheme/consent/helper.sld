@@ -36,8 +36,7 @@
     (define (consent-make-helper-store)
       "Construct an empty helper store."
       #((parameters)
-        (returns
-         (type consent-helper-store)
+        (returns (type consent-helper-store)
          (description
           ("A mutable helper store with no helpers, no artifacts, and"
             "the next generated id set to zero.")))
@@ -91,11 +90,9 @@
     (define (helper-record-name record)
       "Return RECORD's helper library name."
       #((parameters
-         (record
-          (type agent-helper-library)
+         (record (type agent-helper-library)
           (description "Helper record datum.")))
-        (returns
-         (type (list-of (or symbol exact-integer)))
+        (returns (type (list-of (or symbol exact-integer)))
          (description "The helper library name field."))
         (effects pure))
       (field-value record 'name))
@@ -103,11 +100,9 @@
     (define (helper-record-forms record)
       "Return RECORD's helper source forms."
       #((parameters
-         (record
-          (type agent-helper-library)
+         (record (type agent-helper-library)
           (description "Helper record datum.")))
-        (returns
-         (type list)
+        (returns (type list)
          (description "The helper source forms field."))
         (effects pure))
       (field-value record 'forms))
@@ -155,17 +150,13 @@
     (define (helper-ref store scope library-name)
       "Return a helper record from STORE by SCOPE and LIBRARY-NAME, or #f."
       #((parameters
-         (store
-          (type consent-helper-store)
+         (store (type consent-helper-store)
           (description "Helper store to search."))
-         (scope
-          (type symbol)
+         (scope (type symbol)
           (description "Helper scope symbol."))
-         (library-name
-          (type (list-of (or symbol exact-integer)))
+         (library-name (type (list-of (or symbol exact-integer)))
           (description "Scheme library name for the helper.")))
-        (returns
-         (type (or agent-helper-library boolean))
+        (returns (type (or agent-helper-library boolean))
          (description "The matching helper record datum, or #f."))
         (effects state-read error))
       (let ((name (normalize-library-name library-name)))
@@ -178,14 +169,11 @@
     (define (helper-list store scope)
       "Return helper records in SCOPE."
       #((parameters
-         (store
-          (type consent-helper-store)
+         (store (type consent-helper-store)
           (description "Helper store to inspect."))
-         (scope
-          (type symbol)
+         (scope (type symbol)
           (description "Helper scope symbol.")))
-        (returns
-         (type (list-of agent-helper-library))
+        (returns (type (list-of agent-helper-library))
          (description "Helper record datums in SCOPE, newest first."))
         (effects state-read error))
       (scope-helpers store scope))
@@ -207,19 +195,15 @@
     (define (helper-save! store scope library-name forms source)
       "Store FORMS as helper LIBRARY-NAME in SCOPE and return its record."
       #((parameters
-         (store
-          (type consent-helper-store)
+         (store (type consent-helper-store)
           (description "Helper store to mutate."))
-         (scope
-          (type symbol)
+         (scope (type symbol)
           (description "Helper scope symbol."))
-         (library-name
-          (type (list-of (or symbol exact-integer)))
+         (library-name (type (list-of (or symbol exact-integer)))
           (description "Scheme library name for the helper."))
          (forms . "Helper source forms as Scheme-readable data.")
          (source . "Source metadata describing where the helper came from."))
-        (returns
-         (type agent-helper-library)
+        (returns (type agent-helper-library)
          (description "The stored helper record datum."))
         (effects state-write error))
       (let* ((normalized-scope (normalize-scope scope))
@@ -264,19 +248,15 @@
     (define (artifact-save! store scope name datum source)
       "Store artifact NAME with DATUM in SCOPE and return its record."
       #((parameters
-         (store
-          (type consent-helper-store)
+         (store (type consent-helper-store)
           (description "Helper store to mutate."))
-         (scope
-          (type symbol)
+         (scope (type symbol)
           (description "Helper artifact scope symbol."))
-         (name
-          (type (or symbol string))
+         (name (type (or symbol string))
           (description "Artifact name symbol or string."))
          (datum . "Artifact payload as Scheme-readable data.")
          (source . "Source metadata describing where the artifact came from."))
-        (returns
-         (type agent-artifact)
+        (returns (type agent-artifact)
          (description "The stored artifact record datum."))
         (effects state-write error))
       (let* ((normalized-scope (normalize-scope scope))
@@ -332,16 +312,13 @@
     (define (helper-promote-to-skill helper-record options)
       "Promote HELPER-RECORD into a native skill candidate datum."
       #((parameters
-         (helper-record
-          (type agent-helper-library)
+         (helper-record (type agent-helper-library)
           (description "Helper record datum to promote."))
-         (options
-          (type list)
+         (options (type list)
           (description
            ("Association list overriding name, description, resources,"
              "tests, and tags."))))
-        (returns
-         (type agent-skill-candidate)
+        (returns (type agent-skill-candidate)
          (description
           ("An `agent-skill-candidate` datum derived from"
             "HELPER-RECORD.")))

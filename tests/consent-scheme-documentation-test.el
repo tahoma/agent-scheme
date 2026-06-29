@@ -32,6 +32,9 @@ artifacts, not source, so it is excluded."
    (expand-file-name "scheme" consent--test-root)
    "\\.s\\(?:cm\\|ld\\)\\'"))
 
+(defconst consent--scheme-documentation-soft-line-limit 79
+  "Soft source line length for Scheme documentation metadata style.")
+
 (defun consent--scheme-documentation-top-level-binding-p (file line)
   "Return non-nil when LINE is a top-level binding form in FILE."
   (let ((maximum-indent (if (string-suffix-p ".sld" file) 4 0)))
@@ -547,6 +550,43 @@ docs/docstring-metadata.md.")
                        errors))))
     (nreverse errors)))
 
+(defun consent--scheme-documentation-compact-type-style-errors (file)
+  "Return errors for expanded metadata types that should be compact."
+  (let* ((text (with-temp-buffer
+                 (insert-file-contents file)
+                 (buffer-string)))
+         (lines (split-string text "\n"))
+         (relative-file (file-relative-name file consent--test-root))
+         errors)
+    (cl-loop for line in lines
+             for next in (cdr lines)
+             for index from 0
+             for head = (and
+                         (string-match
+                          "\\`\\([[:space:]]*\\)(\\([^[:space:]()]+\\)[[:space:]]*\\'"
+                          line)
+                         (list (match-string 1 line)
+                               (match-string 2 line)))
+             for type = (and
+                         (string-match
+                          "\\`[[:space:]]*\\((type[[:space:]]+.*)\\)[[:space:]]*\\'"
+                          next)
+                         (match-string 1 next))
+             when (and head type)
+             do
+             (let ((combined
+                    (format "%s(%s %s"
+                            (car head)
+                            (cadr head)
+                            type)))
+               (when (<= (length combined)
+                         consent--scheme-documentation-soft-line-limit)
+                 (push (format "%s:%d compact `(type ...)' metadata onto the descriptor head line"
+                               relative-file
+                               (1+ index))
+                       errors))))
+    (nreverse errors)))
+
 (ert-deftest consent-scheme-documentation-test-rich-type-shorthand ()
   "Treat dotted descriptor shorthand as intentional `any' metadata."
   (let ((shorthand
@@ -597,6 +637,16 @@ docs/docstring-metadata.md.")
     (should-not
      (consent--scheme-documentation-rich-vector-p obvious-shorthand))
     (should (consent--scheme-documentation-rich-vector-p explicit-type))))
+
+(ert-deftest consent-scheme-documentation-test-compact-type-style ()
+  "Require compact expanded type metadata when the head line fits."
+  (let ((errors
+         (cl-loop for file in (consent--scheme-documentation-source-files)
+                  append
+                  (consent--scheme-documentation-compact-type-style-errors
+                   file))))
+    (when errors
+      (ert-fail (mapconcat #'identity errors "\n")))))
 
 (ert-deftest consent-scheme-documentation-test-runtime-docstrings ()
   "Ensure representative public Scheme bindings carry runtime docstrings."

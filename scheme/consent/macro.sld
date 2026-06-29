@@ -54,8 +54,7 @@
       "Report whether FORM is a core define form headed by the raw symbol."
       #((parameters
          (form . "Candidate form to classify."))
-        (returns
-         (type boolean)
+        (returns (type boolean)
          (description
           ("True when FORM is a pair whose head is the raw symbol"
             "define.")))
@@ -66,8 +65,7 @@
       "Report whether FORM is a define-values form after identifier unwrapping."
       #((parameters
          (form . "Candidate form to classify."))
-        (returns
-         (type boolean)
+        (returns (type boolean)
          (description ("True when FORM is a pair whose head names define-values.")))
         (effects pure))
       (and (pair? form) (identifier-named? (car form) 'define-values)))
@@ -76,8 +74,7 @@
       "Report whether FORM is a core begin form headed by the raw symbol."
       #((parameters
          (form . "Candidate form to classify."))
-        (returns
-         (type boolean)
+        (returns (type boolean)
          (description
           ("True when FORM is a pair whose head is the raw symbol"
             "begin.")))
@@ -87,14 +84,11 @@
     (define (make-lambda-expression formals body)
       "Construct the lambda expression used by function-definition shorthand."
       #((parameters
-         (formals
-          (type list)
+         (formals (type list)
           (description "Formal parameter list for the lambda."))
-         (body
-          (type list)
+         (body (type list)
           (description "List of body forms for the lambda.")))
-        (returns
-         (type pair)
+        (returns (type pair)
          (description
           ("A lambda expression consing FORMALS and BODY after the"
             "lambda symbol.")))
@@ -105,8 +99,7 @@
       "Parse variable or procedure define syntax into a name/expression pair."
       #((parameters
          (form . "A define form to parse."))
-        (returns
-         (type pair)
+        (returns (type pair)
          (description
           ("A pair of the bound identifier key and its value"
             "expression.")))
@@ -145,8 +138,7 @@
       "Parse define-values syntax into formals metadata and an initializer."
       #((parameters
          (form . "A define-values form to parse."))
-        (returns
-         (type pair)
+        (returns (type pair)
          (description
           ("A pair of parsed formals metadata and the initializer"
             "expression.")))
@@ -161,11 +153,9 @@
     (define (formals-names formals)
       "Return every symbol named by parsed FORMALS."
       #((parameters
-         (formals
-          (type formals)
+         (formals (type formals)
           (description "Parsed formals metadata to enumerate.")))
-        (returns
-         (type (list-of symbol))
+        (returns (type (list-of symbol))
          (description
           ("A list of required parameter names plus the rest name when"
             "present.")))
@@ -178,8 +168,7 @@
       "Return every name bound by a define-values form."
       #((parameters
          (form . "A define-values form to inspect."))
-        (returns
-         (type (list-of symbol))
+        (returns (type (list-of symbol))
          (description "A list of every name the define-values form binds."))
         (effects error))
       (formals-names (car (parse-define-values form))))
@@ -188,8 +177,7 @@
       "Report whether FORM is a define-record-type form."
       #((parameters
          (form . "Candidate form to classify."))
-        (returns
-         (type boolean)
+        (returns (type boolean)
          (description
           ("True when FORM is a pair whose head names"
             "define-record-type.")))
@@ -200,8 +188,7 @@
       "Report whether FORM is any definition accepted at body start."
       #((parameters
          (form . "Candidate form to classify."))
-        (returns
-         (type boolean)
+        (returns (type boolean)
          (description
           ("True when FORM is a define, define-values, or record"
             "definition.")))
@@ -215,11 +202,9 @@
       #((parameters
          (datum
           . "Candidate datum to classify.")
-         (tag
-          (type symbol)
+         (tag (type symbol)
           (description "Symbol the head identifier must name.")))
-        (returns
-         (type boolean)
+        (returns (type boolean)
          (description ("True when DATUM is a pair whose head identifier names TAG.")))
         (effects pure))
       (and (pair? datum)
@@ -229,8 +214,7 @@
       "Return the sole operand from FORM or raise a syntax error."
       #((parameters
          (form . "A one-operand syntactic form to validate.")
-         (description
-          (type string)
+         (description (type string)
           (description "Form name used in any raised error message.")))
         (returns . "The single operand of FORM.")
         (effects error))
@@ -245,8 +229,7 @@
       "Report whether FORM is a syntax-error expansion result."
       #((parameters
          (form . "Candidate form to classify."))
-        (returns
-         (type boolean)
+        (returns (type boolean)
          (description
           ("True when FORM is a list headed by the syntax-error"
             "identifier.")))
@@ -258,8 +241,7 @@
       #((parameters
          (form
           . ("A syntax-error form whose operands form the message.")))
-        (returns
-         (type string)
+        (returns (type string)
          (description
           ("A space-joined string of the syntax-error operands"
             "rendered externally.")))
@@ -280,11 +262,9 @@
     (define (raise-syntax-error form . maybe-source-form)
       "Raise the diagnostic represented by a syntax-error form."
       #((parameters
-         (form
-          (type pair)
+         (form (type pair)
           (description ("A syntax-error form supplying the diagnostic message.")))
-         (maybe-source-form
-          (type list)
+         (maybe-source-form (type list)
           (description "Optional source form named in the error.")))
         (returns . "Does not return; always raises an evaluation error.")
         (effects error))
@@ -301,11 +281,9 @@
     (define (make-empty-syntax-environment parent)
       "Construct an empty syntax environment with an optional parent."
       #((parameters
-         (parent
-          (type (or syntax-environment boolean))
+         (parent (type (or syntax-environment boolean))
           (description "Parent syntax environment, or #f for a root.")))
-        (returns
-         (type syntax-environment)
+        (returns (type syntax-environment)
          (description
           ("A fresh syntax environment with an empty frame and no"
             "imports.")))
@@ -315,14 +293,11 @@
     (define (syntax-environment-ref syntax-environment name)
       "Return NAME's syntax transformer by walking syntax-environment parents."
       #((parameters
-         (syntax-environment
-          (type syntax-environment)
+         (syntax-environment (type syntax-environment)
           (description "Syntax environment to search."))
-         (name
-          (type symbol)
+         (name (type symbol)
           (description "Keyword symbol whose transformer is sought.")))
-        (returns
-         (type (or syntax-transformer boolean))
+        (returns (type (or syntax-transformer boolean))
          (description "NAME's syntax transformer, or #f when no parent binds it."))
         (effects state-read))
       (let loop ((cursor syntax-environment))
@@ -335,14 +310,11 @@
     (define (syntax-environment-define! syntax-environment name transformer)
       "Add a syntax binding unless NAME is imported into this syntax frame."
       #((parameters
-         (syntax-environment
-          (type syntax-environment)
+         (syntax-environment (type syntax-environment)
           (description "Syntax environment to mutate."))
-         (name
-          (type symbol)
+         (name (type symbol)
           (description "Keyword symbol to bind."))
-         (transformer
-          (type syntax-transformer)
+         (transformer (type syntax-transformer)
           (description "Syntax transformer to associate with NAME.")))
         (returns . ("An unspecified value; the frame gains the new binding."))
         (effects state-write error))
@@ -356,14 +328,11 @@
     (define (with-syntax-environment context syntax-environment thunk)
       "Run THUNK with CONTEXT temporarily using SYNTAX-ENVIRONMENT."
       #((parameters
-         (context
-          (type eval-context)
+         (context (type eval-context)
           (description ("Evaluation context whose syntax environment is swapped.")))
-         (syntax-environment
-          (type syntax-environment)
+         (syntax-environment (type syntax-environment)
           (description "Syntax environment to install for the call."))
-         (thunk
-          (type procedure)
+         (thunk (type procedure)
           (description "Zero-argument procedure to run under the swap.")))
         (returns
          . ("THUNK's result, after restoring the prior syntax"
@@ -384,11 +353,9 @@
       #((parameters
          (operator
           . "Candidate operator identifier datum.")
-         (environment
-          (type environment)
+         (environment (type environment)
           (description "Value environment that may shadow the operator.")))
-        (returns
-         (type boolean)
+        (returns (type boolean)
          (description
           ("True when OPERATOR is an identifier not shadowed by a"
             "value binding.")))
@@ -405,16 +372,13 @@
       #((parameters
          (operator
           . "Operator identifier datum to resolve.")
-         (environment
-          (type environment)
+         (environment (type environment)
           (description "Value environment that may shadow the keyword."))
-         (context
-          (type eval-context)
+         (context (type eval-context)
           (description
            ("Evaluation context supplying the active syntax"
              "environment."))))
-        (returns
-         (type (or syntax-transformer boolean))
+        (returns (type (or syntax-transformer boolean))
          (description
           ("OPERATOR's active syntax transformer, or #f when none"
             "applies.")))
@@ -445,11 +409,9 @@
     (define (proper-list-elements/maybe datum)
       "Return DATUM's list elements, or #f when DATUM is not a proper list."
       #((parameters
-         (datum
-          (type list)
+         (datum (type list)
           (description "Candidate proper list to flatten.")))
-        (returns
-         (type (or list boolean))
+        (returns (type (or list boolean))
          (description ("DATUM's elements as a list, or #f when DATUM is improper.")))
         (effects allocation))
       (let loop ((cursor datum) (elements '()))
@@ -598,8 +560,7 @@
     (define (append-tail elements tail)
       "Append ELEMENTS in front of TAIL without requiring TAIL to be a list."
       #((parameters
-         (elements
-          (type list)
+         (elements (type list)
           (description "Proper list of leading elements."))
          (tail . "Final tail value, which may be improper."))
         (returns . ("A structure consing ELEMENTS onto TAIL, possibly improper."))
@@ -1160,8 +1121,7 @@
       "Report whether FORM is a define-syntax form."
       #((parameters
          (form . "Candidate form to classify."))
-        (returns
-         (type boolean)
+        (returns (type boolean)
          (description ("True when FORM is a pair whose head names define-syntax.")))
         (effects pure))
       (and (pair? form) (identifier-named? (car form) 'define-syntax)))
@@ -1169,15 +1129,12 @@
     (define (eval-define-syntax form environment context syntax-environment)
       "Evaluate a define-syntax form and install its transformer."
       #((parameters
-         (form
-          (type pair)
+         (form (type pair)
           (description "A define-syntax form to evaluate."))
-         (environment
-          (type environment)
+         (environment (type environment)
           (description "Value environment captured by the transformer."))
          (context . "Evaluation context (unused beyond parsing).")
-         (syntax-environment
-          (type syntax-environment)
+         (syntax-environment (type syntax-environment)
           (description "Syntax environment that receives the binding.")))
         (returns
          . ("The unspecified value after installing the keyword's"
@@ -1211,20 +1168,15 @@
     (define (make-local-syntax-scope parts environment context recursive?)
       "Build the syntax scope created by let-syntax or letrec-syntax."
       #((parameters
-         (parts
-          (type list)
+         (parts (type list)
           (description "Operator and operands of the let-syntax form."))
-         (environment
-          (type environment)
+         (environment (type environment)
           (description "Value environment captured by the transformers."))
-         (context
-          (type eval-context)
+         (context (type eval-context)
           (description ("Evaluation context supplying the outer syntax environment.")))
-         (recursive?
-          (type boolean)
+         (recursive? (type boolean)
           (description "True for letrec-syntax so bindings see each other.")))
-        (returns
-         (type syntax-scope)
+        (returns (type syntax-scope)
          (description
           ("A syntax scope pairing the body forms with the local"
             "syntax environment.")))
@@ -1262,11 +1214,9 @@
       "Expand one expression enough to expose core forms or syntax scopes."
       #((parameters
          (expression . "Expression to expand one syntactic layer.")
-         (environment
-          (type environment)
+         (environment (type environment)
           (description "Value environment used for shadowing checks."))
-         (context
-          (type environment)
+         (context (type environment)
           (description ("Evaluation context supplying the syntax environment."))))
         (returns
          . ("The single-step expansion: a syntax scope, a transformed"
@@ -1442,11 +1392,9 @@
       "Recursively expand EXPRESSION until no macro expansion remains."
       #((parameters
          (expression . "Expression to expand to a fixed point.")
-         (environment
-          (type environment)
+         (environment (type environment)
           (description "Value environment used for shadowing checks."))
-         (context
-          (type eval-context)
+         (context (type eval-context)
           (description "Evaluation context tracking expansion step budget.")))
         (returns
          . ("The fully expanded expression with all macros and core"
@@ -1477,22 +1425,17 @@
     (define (expand-sequence-forms forms environment context allow-definitions?)
       "Fully expand a sequence, executing allowed definition-time forms."
       #((parameters
-         (forms
-          (type list)
+         (forms (type list)
           (description "Sequence of forms to expand in order."))
-         (environment
-          (type environment)
+         (environment (type environment)
           (description "Value environment used during expansion."))
-         (context
-          (type eval-context)
+         (context (type eval-context)
           (description ("Evaluation context whose syntax environment is mutated.")))
-         (allow-definitions?
-          (type boolean)
+         (allow-definitions? (type boolean)
           (description
            ("True to run import, library, and syntax definitions in"
              "place."))))
-        (returns
-         (type list)
+        (returns (type list)
          (description "A list of the expanded forms in source order."))
         (effects state-write error))
       (let loop ((rest forms) (expanded '()))
@@ -1556,8 +1499,7 @@
       "Fully expand one already-read expression without evaluating its result."
       #((parameters
          (expression . "Already-read expression to expand.")
-         (rest
-          (type list)
+         (rest (type list)
           (description "Optional caller environment then options alist.")))
         (returns . "The fully expanded expression.")
         (effects state-write error))
@@ -1570,14 +1512,11 @@
       "Read and expand a source body, preserving top-level definition structure"
       "for tests and future compiler/backend passes."
       #((parameters
-         (source
-          (type string)
+         (source (type string)
           (description "Source text to read into a form sequence."))
-         (rest
-          (type list)
+         (rest (type list)
           (description "Optional caller environment then options alist.")))
-        (returns
-         (type list)
+        (returns (type list)
          (description "A list of expanded top-level forms in source order."))
         (effects state-write error))
       (let ((context (new-eval-context (macro-rest-options rest)))
@@ -1800,17 +1739,13 @@
       "Return a full macro expansion introspection datum for FORM."
       #((parameters
          (form . "Form to fully macroexpand.")
-         (environment
-          (type environment)
+         (environment (type environment)
           (description "Value environment used during expansion."))
-         (context
-          (type eval-context)
+         (context (type eval-context)
           (description "Parent context whose macro state is shared."))
-         (options
-          (type list)
+         (options (type list)
           (description "Scheme-readable expansion option list.")))
-        (returns
-         (type macro-expansion)
+        (returns (type macro-expansion)
          (description
           ("A Scheme-readable macro-expansion datum for the full"
             "expansion.")))
@@ -1821,17 +1756,13 @@
       "Return a one-step macro expansion introspection datum for FORM."
       #((parameters
          (form . "Form to macroexpand by a single step.")
-         (environment
-          (type environment)
+         (environment (type environment)
           (description "Value environment used during expansion."))
-         (context
-          (type eval-context)
+         (context (type eval-context)
           (description "Parent context whose macro state is shared."))
-         (options
-          (type list)
+         (options (type list)
           (description "Scheme-readable expansion option list.")))
-        (returns
-         (type macro-expansion)
+        (returns (type macro-expansion)
          (description
           ("A Scheme-readable macro-expansion datum for the one-step"
             "expansion.")))
@@ -1841,17 +1772,13 @@
     (define (consent-macro-binding-info identifier environment context)
       "Return syntax binding metadata for IDENTIFIER in CONTEXT."
       #((parameters
-         (identifier
-          (type symbol)
+         (identifier (type symbol)
           (description "Identifier whose syntax binding is queried."))
-         (environment
-          (type environment)
+         (environment (type environment)
           (description "Value environment (unused by this lookup)."))
-         (context
-          (type eval-context)
+         (context (type eval-context)
           (description ("Evaluation context supplying the syntax environment."))))
-        (returns
-         (type (or macro-binding boolean))
+        (returns (type (or macro-binding boolean))
          (description
           ("A Scheme-readable macro-binding record, or #f when"
             "IDENTIFIER is unbound as syntax.")))
@@ -1898,20 +1825,15 @@
                                               context options)
       "Return syntax export metadata for LIBRARY-NAME."
       #((parameters
-         (library-name
-          (type (list-of (or symbol exact-integer)))
+         (library-name (type (list-of (or symbol exact-integer)))
           (description "Library name to resolve and inspect."))
-         (environment
-          (type environment)
+         (environment (type environment)
           (description "Value environment used to resolve the library."))
-         (context
-          (type eval-context)
+         (context (type eval-context)
           (description "Parent context whose macro state is shared."))
-         (options
-          (type list)
+         (options (type list)
           (description "Scheme-readable expansion option list.")))
-        (returns
-         (type macro-library)
+        (returns (type macro-library)
          (description
           ("A Scheme-readable macro-library record of the library's"
             "syntax exports.")))

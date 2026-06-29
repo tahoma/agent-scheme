@@ -18,8 +18,7 @@
       "Return #t when OBJ is an Consent Scheme promise record."
       #((parameters
          (obj . "Value to inspect."))
-        (returns
-         (type boolean)
+        (returns (type boolean)
          (description
           ("#t when OBJ has the portable promise record shape;"
             "otherwise #f.")))

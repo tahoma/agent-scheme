@@ -8407,8 +8407,7 @@ cursor across sessions."
       "genuinely in-memory input; it is never a way to model a live stdin,"
       "which has a time dimension a buffer cannot represent."
       #((parameters
-         (content
-          (type string)
+         (content (type string)
           (description
            ("String holding the whole finite program input, yielded"
              "once."))))
@@ -8435,8 +8434,7 @@ cursor across sessions."
       "fixtures and captured byte streams; for a live byte pipe the host"
       "supplies its own incremental byte reader."
       #((parameters
-         (content
-          (type bytevector)
+         (content (type bytevector)
           (description
            ("Bytevector holding the whole finite binary input, yielded"
              "once."))))
@@ -8910,8 +8908,7 @@ cursor across sessions."
       "fresh base environment when no environment is provided."
       #((parameters
          (expression . "Already-read datum to evaluate.")
-         (rest
-          (type list)
+         (rest (type list)
           (description
            ("Optional environment then options alist; both default when"
              "absent."))))
@@ -8928,11 +8925,9 @@ cursor across sessions."
       "Read and evaluate a source body as a sequence that may contain"
       "definitions, imports, libraries, and expressions."
       #((parameters
-         (source
-          (type (or string port))
+         (source (type (or string port))
           (description ("Program source text or port read into a form sequence.")))
-         (rest
-          (type list)
+         (rest (type list)
           (description
            ("Optional environment then options alist; both default when"
              "absent."))))
@@ -8964,8 +8959,7 @@ cursor across sessions."
       "to the host."
       #((parameters
          (expression . "Already-read datum to evaluate.")
-         (rest
-          (type list)
+         (rest (type list)
           (description
            ("Optional environment then options alist; both default when"
              "absent."))))
@@ -8989,11 +8983,9 @@ cursor across sessions."
       "Source result evaluation combines reader, evaluator, condition"
       "capture, and budget reporting for REPL and protocol-boundary callers."
       #((parameters
-         (source
-          (type (or string port))
+         (source (type (or string port))
           (description ("Program source text or port read into a form sequence.")))
-         (rest
-          (type list)
+         (rest (type list)
           (description
            ("Optional environment then options alist; both default when"
              "absent."))))
@@ -9071,13 +9063,11 @@ cursor across sessions."
       "single stdin cursor (the REPL form reader and evaluated reads draw from"
       "it); otherwise program input stays disconnected and reads fail closed."
       #((parameters
-         (rest
-          (type list)
+         (rest (type list)
           (description
            ("Optional single options alist (session-id, policy-actions,"
              "capability-grants, program-input port/reader)."))))
-        (returns
-         (type consent-interaction-context)
+        (returns (type consent-interaction-context)
          (description
           ("A durable `<consent-interaction-context>' record reused"
             "across submissions.")))
@@ -9109,11 +9099,9 @@ cursor across sessions."
     (define (consent-session-manager-current-context manager)
       "Return MANAGER's default session interaction context, or #f when none."
       #((parameters
-         (manager
-          (type consent-session-manager)
+         (manager (type consent-session-manager)
           (description ("Session manager whose current session is looked up."))))
-        (returns
-         (type (or consent-interaction-context boolean))
+        (returns (type (or consent-interaction-context boolean))
          (description
           ("The current session's interaction context, or #f when no"
             "session is current.")))
@@ -9129,19 +9117,15 @@ cursor across sessions."
       "keeps a single stdin cursor, and registers the initial session as the"
       "default."
       #((parameters
-         (manager
-          (type consent-session-manager)
+         (manager (type consent-session-manager)
           (description "Session manager to reset and seed."))
-         (session-id
-          (type (or symbol string))
+         (session-id (type (or symbol string))
           (description ("Symbol or string naming the initial default session.")))
-         (options
-          (type list)
+         (options (type list)
           (description
            ("Options alist seeded into every session's interaction"
              "context."))))
-        (returns
-         (type consent-session-manager)
+        (returns (type consent-session-manager)
          (description "The seeded MANAGER."))
         (effects state-write allocation))
       (session-model:session-manager-reset! manager)
@@ -9164,11 +9148,9 @@ cursor across sessions."
     (define (consent-interaction-program-input-port interaction)
       "Return INTERACTION's shared program-input port, or #f when disconnected."
       #((parameters
-         (interaction
-          (type consent-interaction-context)
+         (interaction (type consent-interaction-context)
           (description ("Interaction context whose shared stdin port is read."))))
-        (returns
-         (type (or port boolean))
+        (returns (type (or port boolean))
          (description
           ("The shared program-input port, or #f when program input is"
             "not connected.")))
@@ -9182,11 +9164,9 @@ cursor across sessions."
       "not connected.  The end-of-stream flag is left untouched: once the"
       "host stream truly ends, both form and program reads are at end."
       #((parameters
-         (interaction
-          (type consent-interaction-context)
+         (interaction (type consent-interaction-context)
           (description ("Interaction context holding the shared stdin cursor.")))
-         (text
-          (type string)
+         (text (type string)
           (description "Post-form remainder string to seed at position 0.")))
         (returns
          . ("An unspecified value; called for its effect on the shared"
@@ -9204,11 +9184,9 @@ cursor across sessions."
       "not connected.  The REPL engine threads this back as the next"
       "form-reading buffer, so neither reader steals the other's characters."
       #((parameters
-         (interaction
-          (type consent-interaction-context)
+         (interaction (type consent-interaction-context)
           (description ("Interaction context holding the shared stdin cursor."))))
-        (returns
-         (type (or string boolean))
+        (returns (type (or string boolean))
          (description
           ("The unconsumed remainder string after the port position,"
             "or #f when disconnected.")))
@@ -9222,8 +9200,7 @@ cursor across sessions."
     (define (consent-interaction-context-session-id interaction)
       "Return the session id INTERACTION evaluates under, or #f when unsessioned."
       #((parameters
-         (interaction
-          (type consent-interaction-context)
+         (interaction (type consent-interaction-context)
           (description ("Interaction context whose options carry the session id."))))
         (returns
          . ("The configured session id, or #f when the context is"
@@ -9237,11 +9214,9 @@ cursor across sessions."
       "`consent-interaction-eval-form' submission wrote, cleared before each"
       "evaluation."
       #((parameters
-         (interaction
-          (type consent-interaction-context)
+         (interaction (type consent-interaction-context)
           (description ("Interaction context whose program-output port is read."))))
-        (returns
-         (type string)
+        (returns (type string)
          (description
           ("The string written to program output by the most recent"
             "submission.")))
@@ -9255,8 +9230,7 @@ cursor across sessions."
       "`evaluation-result' datum (ok/values or captured error) like"
       "`consent-eval-source-result'."
       #((parameters
-         (interaction
-          (type consent-interaction-context)
+         (interaction (type consent-interaction-context)
           (description
            ("Durable interaction context supplying persistent"
              "environments and ports.")))

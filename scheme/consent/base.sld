@@ -51,18 +51,15 @@
              primitive-resolver trampoline define-syntax)
       "Install the evaluator backend hooks used for base bootstrapping."
       #((parameters
-         (primitive-resolver
-          (type procedure)
+         (primitive-resolver (type procedure)
           (description
            ("Procedure mapping a registry implementation name to its"
              "primitive function.")))
-         (trampoline
-          (type procedure)
+         (trampoline (type procedure)
           (description
            ("Procedure that evaluates a derived base prelude sequence"
              "in an environment and context.")))
-         (define-syntax
-          (type procedure)
+         (define-syntax (type procedure)
           (description
            ("Procedure that installs a derived base syntax form into a"
              "syntax environment."))))
@@ -564,8 +561,7 @@
       "it describes the kernel surface without exposing implementation"
       "closures."
       #((parameters)
-        (returns
-         (type (list-of symbol))
+        (returns (type (list-of symbol))
          (description
           ("A list of the symbol names of every registered kernel"
             "primitive.")))
@@ -575,8 +571,7 @@
     (define (consent-base-primitive-specs)
       "Public metadata accessor for kernel primitive arity and source specs."
       #((parameters)
-        (returns
-         (type list)
+        (returns (type list)
          (description
           ("A list of association lists, one per kernel primitive,"
             "carrying its name, minimum and maximum arity, source, and"
@@ -613,11 +608,9 @@
     (define (read-port-string port)
       "Read all characters from PORT into a string."
       #((parameters
-         (port
-          (type port)
+         (port (type port)
           (description "Open textual input port to drain to end of file.")))
-        (returns
-         (type string)
+        (returns (type string)
          (description ("A string containing every character read from the port.")))
         (effects state-read allocation))
       (let loop ((chars '()))
@@ -629,13 +622,11 @@
     (define (read-all-datums port)
       "Read and parse all datums from PORT."
       #((parameters
-         (port
-          (type port)
+         (port (type port)
           (description
            ("Open textual input port whose contents are read and"
              "parsed."))))
-        (returns
-         (type list)
+        (returns (type list)
          (description ("A list of every datum parsed from the port's contents.")))
         (effects state-read allocation))
       (consent-read-all (read-port-string port)))
@@ -655,16 +646,13 @@
       "zero-dependency floor). RESOLVED-PATH is the on-disk path read, or"
       "RELATIVE-PATH for embedded source."
       #((parameters
-         (relative-path
-          (type string)
+         (relative-path (type string)
           (description "Logical path of the source resource to resolve."))
-         (default-paths
-          (type list)
+         (default-paths (type list)
           (description
            ("List of built-in cwd-relative fallback paths searched"
              "before embedded source."))))
-        (returns
-         (type (or pair boolean))
+        (returns (type (or pair boolean))
          (description
           ("A pair (RESOLVED-PATH . TEXT) from the first source that"
             "works, or #f when none resolve.")))
@@ -688,16 +676,13 @@
     (define (resolve-source-text relative-path default-paths)
       "Return runtime source TEXT for logical RELATIVE-PATH, or #f when none is found."
       #((parameters
-         (relative-path
-          (type string)
+         (relative-path (type string)
           (description "Logical path of the source resource to resolve."))
-         (default-paths
-          (type list)
+         (default-paths (type list)
           (description
            ("List of built-in cwd-relative fallback paths searched"
              "before embedded source."))))
-        (returns
-         (type (or string boolean))
+        (returns (type (or string boolean))
          (description
           ("The source text string for the resolved resource, or #f"
             "when none is found.")))
@@ -709,8 +694,7 @@
       "Prelude forms are cached after reader validation; metadata extraction"
       "depends on each top-level form remaining one define."
       #((parameters)
-        (returns
-         (type list)
+        (returns (type list)
          (description
           ("The list of parsed top-level base prelude forms, cached"
             "after first read.")))
@@ -728,8 +712,7 @@
       "Syntax prelude forms are cached separately because they install into the"
       "current syntax environment, not the value environment."
       #((parameters)
-        (returns
-         (type list)
+        (returns (type list)
          (description
           ("The list of parsed top-level base syntax prelude forms,"
             "cached after first read.")))
@@ -829,8 +812,7 @@
       "Prelude binding specs identify derived procedures separately from kernel"
       "primitives so tests can catch accidental boundary movement."
       #((parameters)
-        (returns
-         (type list)
+        (returns (type list)
          (description
           ("A list of association lists describing each derived"
             "prelude binding's name, arity, source, and documentation.")))
@@ -840,8 +822,7 @@
     (define (consent-base-prelude-binding-names)
       "Public metadata accessor for derived base prelude names."
       #((parameters)
-        (returns
-         (type symbol)
+        (returns (type symbol)
          (description
           ("A list of the symbol names of every derived base prelude"
             "binding.")))
@@ -853,8 +834,7 @@
     (define (consent-base-binding-specs)
       "Public metadata accessor for all base binding specs."
       #((parameters)
-        (returns
-         (type list)
+        (returns (type list)
          (description
           ("A list of binding specs covering both kernel primitives"
             "and derived prelude bindings.")))
@@ -1214,8 +1194,7 @@
     (define (consent-primitive-manifest-binding-specs)
       "Public manifest accessor shared by portable tests and future tools."
       #((parameters)
-        (returns
-         (type list)
+        (returns (type list)
          (description
           ("A list of manifest specs covering kernel primitives,"
             "derived prelude bindings, and host-effecting standard"
@@ -1233,20 +1212,15 @@
                                maximum-arity)
       "Install a primitive procedure binding into ENVIRONMENT."
       #((parameters
-         (environment
-          (type environment)
+         (environment (type environment)
           (description ("Target environment to receive the primitive binding.")))
-         (name
-          (type symbol)
+         (name (type symbol)
           (description "Symbol under which the primitive is bound."))
-         (function
-          (type procedure)
+         (function (type procedure)
           (description "Host procedure implementing the primitive."))
-         (minimum-arity
-          (type exact-integer)
+         (minimum-arity (type exact-integer)
           (description "Minimum number of arguments the primitive accepts."))
-         (maximum-arity
-          (type (or exact-integer boolean))
+         (maximum-arity (type (or exact-integer boolean))
           (description "Maximum number of arguments, or #f for unbounded.")))
         (returns . "The unspecified result of installing the binding.")
         (effects state-write allocation))
@@ -1286,13 +1260,11 @@
     (define (ensure-base-syntax! context environment)
       "Install derived base syntax into CONTEXT once."
       #((parameters
-         (context
-          (type eval-context)
+         (context (type eval-context)
           (description
            ("Evaluation context tracking whether base syntax is already"
              "installed.")))
-         (environment
-          (type environment)
+         (environment (type environment)
           (description
            ("Environment into which the derived syntax forms are"
              "installed."))))

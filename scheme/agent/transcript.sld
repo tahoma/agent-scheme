@@ -77,11 +77,9 @@
     (define (transcript-field-value datum name . maybe-default)
       "Return field NAME from DATUM, or DEFAULT when absent."
       #((parameters
-         (datum
-          (type list)
+         (datum (type list)
           (description "Transcript record or field list to inspect."))
-         (name
-          (type symbol)
+         (name (type symbol)
           (description "Symbol naming the field to read."))
          (maybe-default . "Optional fallback value; defaults to #f."))
         (returns . "The field value, or DEFAULT when NAME is absent.")
@@ -94,8 +92,7 @@
       "Return #t when DATUM is a transcript event record."
       #((parameters
          (datum . "Value to inspect."))
-        (returns
-         (type boolean)
+        (returns (type boolean)
          (description
           ("#t when DATUM is tagged as a transcript event; otherwise"
             "#f.")))
@@ -179,16 +176,13 @@
     (define (make-transcript-event kind fields)
       "Create a transcript event with deterministic defaults for missing fields."
       #((parameters
-         (kind
-          (type symbol)
+         (kind (type symbol)
           (description "Transcript event kind symbol."))
-         (fields
-          (type list)
+         (fields (type list)
           (description
            ("Field list supplied by the caller; reserved construction"
              "fields are normalized."))))
-        (returns
-         (type transcript-event)
+        (returns (type transcript-event)
          (description
           ("A `transcript-event` datum with id, kind, time, and replay"
             "metadata.")))
@@ -210,11 +204,9 @@
     (define (transcript-event-replay-mode event)
       "Return EVENT's replay mode."
       #((parameters
-         (event
-          (type transcript-event)
+         (event (type transcript-event)
           (description "Transcript event datum.")))
-        (returns
-         (type symbol)
+        (returns (type symbol)
          (description
           ("Replay mode symbol such as deterministic-pure,"
             "fixture-generation, recorded-observation, or audit-only.")))
@@ -224,11 +216,9 @@
     (define (transcript-replayable? event)
       "Return #t when EVENT can drive deterministic replay or fixtures."
       #((parameters
-         (event
-          (type transcript-event)
+         (event (type transcript-event)
           (description "Transcript event datum.")))
-        (returns
-         (type boolean)
+        (returns (type boolean)
          (description
           ("#t when EVENT can be replayed or converted into a fixture;"
             "otherwise #f.")))
@@ -239,11 +229,9 @@
     (define (transcript-recorded-observation? event)
       "Return #t when EVENT represents a recorded host observation."
       #((parameters
-         (event
-          (type transcript-event)
+         (event (type transcript-event)
           (description "Transcript event datum.")))
-        (returns
-         (type boolean)
+        (returns (type boolean)
          (description
           ("#t when EVENT is host observation data rather than"
             "replayable computation; otherwise #f.")))
@@ -274,11 +262,9 @@
     (define (transcript-event->fixture-case event)
       "Generate a shared fixture case from EVENT when replay permits it."
       #((parameters
-         (event
-          (type transcript-event)
+         (event (type transcript-event)
           (description "Transcript event datum.")))
-        (returns
-         (type (or list boolean))
+        (returns (type (or list boolean))
          (description
           ("A shared fixture case datum when EVENT can seed one;"
             "otherwise #f.")))
@@ -330,11 +316,9 @@
     (define (transcript-event-summary event)
       "Return a human-readable one-line summary for EVENT."
       #((parameters
-         (event
-          (type transcript-event)
+         (event (type transcript-event)
           (description "Transcript event datum.")))
-        (returns
-         (type string)
+        (returns (type string)
          (description
           ("A compact text summary suitable for logs or transcript"
             "lists.")))
@@ -365,11 +349,9 @@
     (define (transcript-raw-view events)
       "Return EVENTS as raw Scheme-readable datums."
       #((parameters
-         (events
-          (type list)
+         (events (type list)
           (description "Chronological list of transcript event datums.")))
-        (returns
-         (type (list-of transcript-event))
+        (returns (type (list-of transcript-event))
          (description "EVENTS unchanged."))
         (effects pure))
       events)
@@ -377,11 +359,9 @@
     (define (transcript-summary-view events)
       "Return human-readable summaries for EVENTS."
       #((parameters
-         (events
-          (type list)
+         (events (type list)
           (description "Chronological list of transcript event datums.")))
-        (returns
-         (type (list-of string))
+        (returns (type (list-of string))
          (description "List of one-line summary strings."))
         (effects pure))
       (map transcript-event-summary events))
@@ -395,14 +375,11 @@
     (define (transcript-rotate events keep)
       "Return the newest KEEP events from chronological EVENTS."
       #((parameters
-         (events
-          (type list)
+         (events (type list)
           (description "Chronological list of transcript event datums."))
-         (keep
-          (type exact-integer)
+         (keep (type exact-integer)
           (description "Maximum number of newest events to retain.")))
-        (returns
-         (type list)
+        (returns (type list)
          (description "A suffix of EVENTS containing at most KEEP records."))
         (effects pure))
       (let ((count (length events)))
@@ -423,16 +400,13 @@
     (define (transcript-export events format)
       "Return a transcript view for EVENTS in FORMAT."
       #((parameters
-         (events
-          (type list)
+         (events (type list)
           (description "Chronological list of transcript event datums."))
-         (format
-          (type symbol)
+         (format (type symbol)
           (description
            ("Export format symbol: scheme-datum, text-summary, or"
              "fixture-cases."))))
-        (returns
-         (type list)
+        (returns (type list)
          (description
           ("Raw events, summary strings, or generated fixture cases"
             "for EVENTS.")))
