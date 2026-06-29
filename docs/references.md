@@ -405,6 +405,12 @@ see [Agentic-Harness and Language-Agent Prior-Art Synthesis](agentic-harness-ide
   define the open protocol for exposing tools/resources/prompts to model clients.
   The project's intended external tool boundary; MCP is a wire encoding over
   Scheme-readable result/event datums, not the canonical internal model.
+- [Apertus Chat Format Specification](https://github.com/swiss-ai/apertus-format/blob/main/docs/format.md)
+  documents a structured chat-template format with assistant blocks for
+  thoughts, tool calls, tool outputs, and public responses. Useful prior art for
+  model-facing prompt serialization and local chat-template renderers, while
+  Consent Scheme keeps call IDs, provenance, policy gates, and canonical
+  Scheme-readable tool/result datums outside the template edge.
 
 ### Code as Action and Agent-Computer Interfaces
 
