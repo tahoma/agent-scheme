@@ -796,7 +796,7 @@ jobs:
 
     env:
       CONSENT_LIVE_MODEL_ENDPOINT: http://127.0.0.1:11434/v1
-      CONSENT_LIVE_MODEL_ID: qwen2.5-coder:0.5b
+      CONSENT_LIVE_MODEL_ID: qwen3:0.6b
       OLLAMA_VERSION: 0.24.0
 
     steps:
@@ -806,13 +806,34 @@ jobs:
       - name: Install runtime dependencies
         uses: ./.github/actions/apt-install
         with:
-          packages: ca-certificates curl emacs-nox zstd
+          packages: ca-certificates curl emacs-nox make racket zstd
+
+      - name: Cache Racket R7RS package
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.local/share/racket
+            ~/.cache/racket
+          key: ${{ runner.os }}-racket-r7rs-v1
+
+      - name: Cache Racket compiled build tree
+        uses: actions/cache@v4
+        with:
+          path: build/compile/racket
+          key: ${{ runner.os }}-racket-build-v1-${{ hashFiles('scheme/**', 'tools/compile-portable.sh') }}
+          restore-keys: |
+            ${{ runner.os }}-racket-build-v1-
+
+      - name: Verify Racket host
+        run: |
+          raco pkg install --batch --auto --skip-installed --no-docs r7rs
+          racket -I r7rs -e '(import (scheme base) (scheme write)) (write (+ 1 2)) (newline)'
 
       - name: Cache Ollama models
         uses: actions/cache@v5
         with:
           path: ~/.ollama/models
-          key: ${{ runner.os }}-ollama-qwen25-coder-05b-v1
+          key: ${{ runner.os }}-ollama-qwen3-06b-v1
 
       - name: Install Ollama
         run: |

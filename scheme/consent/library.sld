@@ -186,13 +186,16 @@
         (agent helper)
         (agent job)
         (agent test)
+        (agent diagnostics)
         (agent diff)
         (agent vcs)
         (agent network)
         (agent test primitive)
+        (agent task)
         (agent memory)
         (agent plan)
         (agent models)
+        (agent models primitive)
         (agent context)
         (agent reflect)
         (agent redaction)
@@ -214,7 +217,10 @@
     ;; Checked-in Consent Scheme source libraries loaded by the portable
     ;; evaluator when a public agent library needs syntax definitions.
     (define agent-source-library-load-paths
-      '(((agent diff)
+      '(((agent diagnostics)
+         "scheme/agent/diagnostics.sld"
+         "agent/diagnostics.sld")
+        ((agent diff)
          "scheme/agent/diff.sld"
          "agent/diff.sld")
         ((agent vcs)
@@ -223,6 +229,9 @@
         ((agent network)
          "scheme/agent/network.sld"
          "agent/network.sld")
+        ((agent models)
+         "scheme/agent/models.sld"
+         "agent/models.sld")
         ((agent registry)
          "scheme/agent/registry.sld"
          "agent/registry.sld")
@@ -235,6 +244,9 @@
         ((agent prompt)
          "scheme/agent/prompt.sld"
          "agent/prompt.sld")
+        ((agent task)
+         "scheme/agent/task.sld"
+         "agent/task.sld")
         ((agent test)
          "scheme/agent/test.sld"
          "agent/test.sld")
@@ -1559,6 +1571,12 @@
              (agent-source-library-source key)
              context
              environment)))
+       ((equal? key '(agent diagnostics))
+        (if (not (library-registry-ref context key))
+            (register-source-library!
+             (agent-source-library-source key)
+             context
+             environment)))
        ((equal? key '(agent diff))
         (if (not (library-registry-ref context key))
             (register-source-library!
@@ -1596,6 +1614,12 @@
              context
              environment)))
        ((equal? key '(agent prompt))
+        (if (not (library-registry-ref context key))
+            (register-source-library!
+             (agent-source-library-source key)
+             context
+             environment)))
+       ((equal? key '(agent task))
         (if (not (library-registry-ref context key))
             (register-source-library!
              (agent-source-library-source key)
@@ -1663,30 +1687,32 @@
                                   1))
          context))
        ((equal? key '(agent models))
+        (if (not (library-registry-ref context key))
+            (register-source-library!
+             (agent-source-library-source key)
+             context
+             environment)))
+       ((equal? key '(agent models primitive))
         (register-primitive-library!
          key
          (list
-          (library-primitive-spec 'model-provider-register!
+          (library-primitive-spec 'primitive-model-provider-register!
                                   'primitive-model-provider-register!
                                   1
                                   1)
-          (library-primitive-spec 'model-providers
+          (library-primitive-spec 'primitive-model-providers
                                   'primitive-model-providers
                                   0
                                   0)
-          (library-primitive-spec 'model-route
+          (library-primitive-spec 'primitive-model-route
                                   'primitive-model-route
                                   1
                                   2)
-          (library-primitive-spec 'model-tool-spec
-                                  'primitive-model-tool-spec
-                                  1
-                                  1)
-          (library-primitive-spec 'model-complete
+          (library-primitive-spec 'primitive-model-complete
                                   'primitive-model-complete
                                   2
                                   3)
-          (library-primitive-spec 'model-provider-diagnostics
+          (library-primitive-spec 'primitive-model-provider-diagnostics
                                   'primitive-model-provider-diagnostics
                                   0
                                   1))

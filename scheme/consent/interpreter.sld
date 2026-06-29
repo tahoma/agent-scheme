@@ -66,6 +66,7 @@
           (prefix (consent job) job-model:)
           (prefix (consent memory) memory-model:)
           (prefix (consent plan) plan-model:)
+          (prefix (agent models openai) model-openai:)
           (prefix (consent redaction) redaction-model:)
           (prefix (consent session) session-model:)
           (consent macro))
@@ -6069,171 +6070,6 @@ cursor across sessions."
       (map (lambda (item) (model-name item description))
            (proper-list-elements datum description)))
 
-    (define (model-descriptor-field descriptor name default)
-      "Return descriptor field NAME from DESCRIPTOR, or DEFAULT."
-      (model-field-value descriptor name default))
-
-    (define (model-json-type-name type)
-      "Return a JSON-schema type name for metadata TYPE, or #f."
-      (let ((name (and (symbol? type) (symbol->string type))))
-        (if (not name)
-            #f
-            (cond
-             ((or (string=? name "string")
-                  (string=? name "symbol")
-                  (string=? name "character"))
-              "string")
-             ((or (string=? name "boolean") (string=? name "bool"))
-              "boolean")
-             ((or (string=? name "exact-integer")
-                  (string=? name "integer")
-                  (string=? name "nonnegative-integer"))
-              "integer")
-             ((or (string=? name "number")
-                  (string=? name "real")
-                  (string=? name "rational")
-                  (string=? name "complex"))
-              "number")
-             ((or (string=? name "list") (string=? name "vector"))
-              "array")
-             ((or (string=? name "pair")
-                  (string=? name "record")
-                  (string=? name "procedure"))
-              "object")
-             (else #f)))))
-
-    (define (model-schema-for-type type . maybe-description)
-      "Return a Scheme-readable JSON-schema subset for TYPE."
-      (let* ((description
-              (if (null? maybe-description) #f (car maybe-description)))
-             (schema
-              (cond
-               ((and (pair? type) (eq? (car type) 'or))
-                (list (list 'anyOf
-                            (map model-schema-for-type (cdr type)))))
-               ((and (pair? type)
-                     (or (eq? (car type) 'list-of)
-                         (eq? (car type) 'vector-of)))
-                (list (list 'type "array")
-                      (list 'items
-                            (model-schema-for-type (second type)))))
-               (else
-                (let ((json-type (model-json-type-name type)))
-                  (if json-type
-                      (list (list 'type json-type))
-                      '()))))))
-        (cond
-         ((and description (not (string=? description "")))
-          (append schema (list (list 'description description))))
-         ((null? schema)
-          '((description "Any Scheme-readable value.")))
-         (else schema))))
-
-    (define (model-example-for-type type)
-      "Return an in-context example value for metadata TYPE."
-      (let ((name (and (symbol? type) (symbol->string type))))
-        (cond
-         ((or (and name
-                   (or (string=? name "string")
-                       (string=? name "symbol")
-                       (string=? name "character")))
-              (and (pair? type) (eq? (car type) 'or)))
-          "<string>")
-         ((and name (string=? name "boolean")) #f)
-         ((and name
-               (or (string=? name "exact-integer")
-                   (string=? name "integer")
-                   (string=? name "nonnegative-integer")
-                   (string=? name "number")
-                   (string=? name "real")
-                   (string=? name "rational")
-                   (string=? name "complex")))
-          (consent-make-canonical-integer 0))
-         ((and name
-               (or (string=? name "list") (string=? name "vector")))
-          '())
-         (else "<value>"))))
-
-    (define (model-parameter-schema parameter)
-      "Return a `(name schema)' property entry for PARAMETER metadata."
-      (let* ((name (model-name (car parameter) "tool parameter"))
-             (descriptor (cdr parameter))
-             (type (model-descriptor-field descriptor 'type 'any))
-             (description
-              (model-descriptor-field descriptor 'description "")))
-        (list name (model-schema-for-type type description))))
-
-    (define (model-parameter-example parameter)
-      "Return a `(name example)' entry for PARAMETER metadata."
-      (let* ((name (model-name (car parameter) "tool parameter"))
-             (descriptor (cdr parameter))
-             (type (model-descriptor-field descriptor 'type 'any)))
-        (list name (model-example-for-type type))))
-
-    (define (model-tool-schema name description parameters)
-      "Return OpenAI-compatible tool schema datum for NAME."
-      (list 'openai-tool
-            (list 'type 'function)
-            (list 'function
-                  (list 'name name)
-                  (list 'description description)
-                  (list 'parameters
-                        (list (list 'type "object")
-                              (list 'properties
-                                    (map model-parameter-schema
-                                         parameters))
-                              (list 'required
-                                    (map (lambda (parameter)
-                                           (model-name-string
-                                            (car parameter)
-                                            "tool parameter"))
-                                         parameters)))))))
-
-    (define (model-tool-gate effects)
-      "Return a capability gate summary derived from EFFECTS."
-      (let ((pure (and (pair? effects)
-                       (null? (cdr effects))
-                       (eq? (car effects) 'pure))))
-        (list 'tool-gate
-              (list 'decision
-                    (if pure
-                        'pure-under-budget
-                        'capability-request))
-              (list 'effects effects))))
-
-    (define (model-tool-spec subject context)
-      "Return a canonical model tool spec for documented SUBJECT."
-      (let* ((name-symbol (model-name subject "tool subject"))
-             (name (symbol->string name-symbol))
-             (documentation (reflect-documentation subject context)))
-        (if (not documentation)
-            (eval-error "model-tool-spec expected a documented procedure"
-                        subject))
-        (let* ((fields (model-field-value documentation 'fields '()))
-               (description
-                (model-field-value fields 'documentation ""))
-               (parameters
-                (model-field-value fields 'parameters '()))
-               (returns
-                (model-field-value fields 'returns '((type any))))
-               (effects
-                (model-field-value fields 'effects '(pure))))
-          (list 'model-tool
-                (list 'name name-symbol)
-                (list 'description description)
-                (list 'parameters parameters)
-                (list 'returns returns)
-                (list 'effects effects)
-                (list 'schema
-                      (model-tool-schema name description parameters))
-                (list 'example
-                      (list 'tool-call
-                            (list 'name name-symbol)
-                            (list 'arguments
-                                  (map model-parameter-example
-                                       parameters))))
-                (list 'gate (model-tool-gate effects))))))
-
     (define (model-truthy? value)
       "Return VALUE's truth value using Scheme conventions."
       (if value #t #f))
@@ -6419,17 +6255,20 @@ cursor across sessions."
              (candidate (model-select role)))
         (model-routing-decision role candidate)))
 
-    (define (primitive-model-tool-spec arguments context)
-      "Return a metadata-derived model tool spec."
-      (model-tool-spec (car arguments) context))
-
     (define (primitive-model-complete arguments context)
-      "Portable completion has the same routing surface but no host transport."
+      "Complete through the portable local OpenAI-compatible transport."
       (let* ((role (model-name (car arguments) "model role"))
+             (prompt (expect-string (cadr arguments) "model-complete prompt"))
+             (options (if (null? (cddr arguments)) '() (third arguments)))
              (candidate (model-select role)))
         (if (not candidate)
             (eval-error "no registered provider model supports role" role)
-            (eval-error "portable model transport is not configured" role))))
+            (model-openai:model-openai-compatible-http-complete
+             (car candidate)
+             (cdr candidate)
+             role
+             prompt
+             options))))
 
     (define (primitive-model-provider-diagnostics arguments context)
       "Return redacted portable model provider diagnostics."
@@ -8284,7 +8123,6 @@ cursor across sessions."
              primitive-model-provider-register!)
        (cons 'primitive-model-providers primitive-model-providers)
        (cons 'primitive-model-route primitive-model-route)
-       (cons 'primitive-model-tool-spec primitive-model-tool-spec)
        (cons 'primitive-model-complete primitive-model-complete)
        (cons 'primitive-model-provider-diagnostics
              primitive-model-provider-diagnostics)

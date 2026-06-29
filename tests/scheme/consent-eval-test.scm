@@ -1089,6 +1089,35 @@
                            (cdr (assq 'empty datum)))))"
                 "(\"Ada\" 1 #t #t ())")
 
+(check-external 'srfi-180-json-write-nested-object-fields
+                "(import (scheme base) (srfi 180))
+                 (define (ref object name)
+                   (cdr (assq name object)))
+                 (let ((out (open-output-string)))
+                   (json-write
+                    '((outer
+                       (first . \"one\")
+                       (second
+                        (third . 3)
+                        (fourth . #t))
+                       (array . #(((name . \"nested\") (enabled . #f))
+                                  null))))
+                    out)
+                   (let* ((datum
+                           (json-read
+                            (open-input-string (get-output-string out))))
+                          (outer (ref datum 'outer))
+                          (second (ref outer 'second))
+                          (array (ref outer 'array))
+                          (nested (vector-ref array 0)))
+                     (list (ref outer 'first)
+                           (ref second 'third)
+                           (ref second 'fourth)
+                           (ref nested 'name)
+                           (ref nested 'enabled)
+                           (json-null? (vector-ref array 1)))))"
+                "(\"one\" 3 #t \"nested\" #f #t)")
+
 (check-external 'srfi-180-json-error
                 "(import (scheme base) (srfi 180))
                  (guard (condition
@@ -3454,6 +3483,19 @@
                 "(policy local-only)) #f)"))
               #t)
          #t))
+
+(check-external
+ 'agent-source-libraries-import-through-portable-registry
+ "(import (scheme base)
+          (agent diagnostics)
+          (agent task)
+          (agent models))
+  (list (diagnostic-severity
+         (make-diagnostic 'warning \"careful\" 'scheme \"source.scm\"
+                          #f #f '()))
+        (task-state? 'planning)
+        (if (pair? (model-providers)) 'providers-ok 'providers-bad))"
+ "(warning #t providers-ok)")
 
 (check-external
  'agent-models-register-and-route

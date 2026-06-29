@@ -21,7 +21,6 @@
 (require 'consent-audit)
 (require 'consent-policy)
 (require 'consent-redaction)
-(require 'consent-reflect)
 (require 'consent-result)
 (require 'consent-runtime)
 
@@ -376,188 +375,6 @@ transport is `openai-compatible-http'."
 (defun consent-models--model-message-p (datum)
   "Return non-nil when DATUM is a canonical model-message record."
   (consent-models--record-p datum "model-message"))
-
-(defun consent-models--descriptor-field (descriptor name &optional default)
-  "Return descriptor field NAME from DESCRIPTOR, or DEFAULT."
-  (consent-models--field-value descriptor name default))
-
-(defun consent-models--json-type-name (type)
-  "Return the JSON-schema type name for Consent metadata TYPE."
-  (let ((name (consent-models--symbol-name type)))
-    (cond
-     ((member name '("string" "symbol" "character"))
-      "string")
-     ((member name '("boolean" "bool"))
-      "boolean")
-     ((member name '("exact-integer" "integer" "nonnegative-integer"))
-      "integer")
-     ((member name '("number" "real" "rational" "complex"))
-      "number")
-     ((member name '("list" "vector"))
-      "array")
-     ((member name '("pair" "record" "procedure"))
-      "object")
-     ((equal name "any")
-      nil)
-     (t nil))))
-
-(defun consent-models--schema-for-type (type &optional description)
-  "Return a Scheme-readable JSON schema subset for TYPE."
-  (let* ((head (and (consp type)
-                    (consent-models--symbol-name (car type))))
-         (schema
-          (cond
-           ((equal head "or")
-            (list
-             (list (consent-models--symbol "anyOf")
-                   (mapcar #'consent-models--schema-for-type
-                           (cdr type)))))
-           ((member head '("list-of" "vector-of"))
-            (list
-             (list (consent-models--symbol "type") "array")
-             (list (consent-models--symbol "items")
-                   (consent-models--schema-for-type (cadr type)))))
-           (t
-            (let ((json-type (consent-models--json-type-name type)))
-              (if json-type
-                  (list (list (consent-models--symbol "type")
-                              json-type))
-                '()))))))
-    (cond
-     ((and description (> (length description) 0))
-      (append schema
-              (list
-               (list (consent-models--symbol "description")
-                     description))))
-     (schema schema)
-     (t
-      (list
-       (list (consent-models--symbol "description")
-             "Any Scheme-readable value."))))))
-
-(defun consent-models--example-for-type (type)
-  "Return an in-context example value for metadata TYPE."
-  (let ((name (consent-models--symbol-name type))
-        (head (and (consp type)
-                   (consent-models--symbol-name (car type)))))
-    (cond
-     ((or (equal name "string")
-          (equal name "symbol")
-          (equal name "character")
-          (equal head "or"))
-      "<string>")
-     ((equal name "boolean")
-      consent-false)
-     ((member name '("exact-integer" "integer" "nonnegative-integer"))
-      (consent--make-canonical-integer 0))
-     ((member name '("number" "real" "rational" "complex"))
-      (consent--make-canonical-integer 0))
-     ((member name '("list" "vector"))
-      '())
-     (t "<value>"))))
-
-(defun consent-models--parameter-schema (parameter)
-  "Return a `(name schema)' property entry for PARAMETER metadata."
-  (let* ((name (consent-models--expect-name
-                (car parameter)
-                "tool parameter"))
-         (descriptor (cdr parameter))
-         (type (consent-models--descriptor-field
-                descriptor "type" (consent-models--symbol "any")))
-         (description
-          (consent-models--descriptor-field descriptor "description" "")))
-    (list (consent-models--symbol name)
-          (consent-models--schema-for-type type description))))
-
-(defun consent-models--parameter-example (parameter)
-  "Return a `(name example)' entry for PARAMETER metadata."
-  (let* ((name (consent-models--expect-name
-                (car parameter)
-                "tool parameter"))
-         (descriptor (cdr parameter))
-         (type (consent-models--descriptor-field
-                descriptor "type" (consent-models--symbol "any"))))
-    (list (consent-models--symbol name)
-          (consent-models--example-for-type type))))
-
-(defun consent-models--tool-schema (name description parameters)
-  "Return OpenAI-compatible tool schema datum for NAME."
-  (list
-   (consent-models--symbol "openai-tool")
-   (list (consent-models--symbol "type")
-         (consent-models--symbol "function"))
-   (list
-    (consent-models--symbol "function")
-    (list (consent-models--symbol "name") name)
-    (list (consent-models--symbol "description") description)
-    (list
-     (consent-models--symbol "parameters")
-     (list
-      (list (consent-models--symbol "type") "object")
-      (list (consent-models--symbol "properties")
-            (mapcar #'consent-models--parameter-schema parameters))
-      (list (consent-models--symbol "required")
-            (mapcar
-             (lambda (parameter)
-               (consent-models--expect-name
-                (car parameter)
-                "tool parameter"))
-             parameters)))))))
-
-(defun consent-models--tool-gate (effects)
-  "Return a capability gate summary derived from EFFECTS."
-  (let ((pure (and effects
-                   (null (cdr effects))
-                   (equal (consent-models--symbol-name (car effects))
-                          "pure"))))
-    (list
-     (consent-models--symbol "tool-gate")
-     (list (consent-models--symbol "decision")
-           (consent-models--symbol
-            (if pure "pure-under-budget" "capability-request")))
-     (list (consent-models--symbol "effects") effects))))
-
-(defun consent-models-tool-spec (subject context)
-  "Return a canonical model tool spec for documented SUBJECT."
-  (let* ((name (consent-models--expect-name subject "tool subject"))
-         (documentation (consent-reflect-documentation subject context)))
-    (when (eq documentation consent-false)
-      (signal 'consent-models-error
-              (list "model-tool-spec expected a documented procedure"
-                    subject)))
-    (let* ((fields (consent-models--field-value documentation "fields"))
-           (description
-            (or (consent-models--field-value fields "documentation")
-                ""))
-           (parameters
-            (or (consent-models--field-value fields "parameters")
-                '()))
-           (returns
-            (or (consent-models--field-value fields "returns")
-                (list (list (consent-models--symbol "type")
-                            (consent-models--symbol "any")))))
-           (effects
-            (or (consent-models--field-value fields "effects")
-                (list (consent-models--symbol "pure"))))
-           (name-symbol (consent-models--symbol name)))
-      (list
-       (consent-models--symbol "model-tool")
-       (list (consent-models--symbol "name") name-symbol)
-       (list (consent-models--symbol "description") description)
-       (list (consent-models--symbol "parameters") parameters)
-       (list (consent-models--symbol "returns") returns)
-       (list (consent-models--symbol "effects") effects)
-       (list (consent-models--symbol "schema")
-             (consent-models--tool-schema name description parameters))
-       (list
-        (consent-models--symbol "example")
-        (list (consent-models--symbol "tool-call")
-              (list (consent-models--symbol "name") name-symbol)
-              (list (consent-models--symbol "arguments")
-                    (mapcar #'consent-models--parameter-example
-                            parameters))))
-       (list (consent-models--symbol "gate")
-             (consent-models--tool-gate effects))))))
 
 (defun consent-models--normalize-tools (tools)
   "Return normalized canonical TOOLS, or nil when absent."
@@ -1019,10 +836,6 @@ transport is `openai-compatible-http'."
   "Primitive model-route over ARGUMENTS."
   (consent-models-route (car arguments) (cadr arguments) context))
 
-(defun consent-models--primitive-tool-spec (arguments context)
-  "Primitive model-tool-spec over ARGUMENTS."
-  (consent-models-tool-spec (car arguments) context))
-
 (defun consent-models--primitive-complete (arguments context)
   "Primitive model-complete over ARGUMENTS."
   (consent-models-complete
@@ -1038,14 +851,13 @@ transport is `openai-compatible-http'."
 
 ;;;###autoload
 (defun consent-models-primitive-specs ()
-  "Return primitive specs for the `(agent models)' library."
-  `(("model-provider-register!"
+  "Return primitive specs for the `(agent models primitive)' library."
+  `(("primitive-model-provider-register!"
      ,#'consent-models--primitive-register-provider 1 1)
-    ("model-providers" ,#'consent-models--primitive-providers 0 0)
-    ("model-route" ,#'consent-models--primitive-route 1 2)
-    ("model-tool-spec" ,#'consent-models--primitive-tool-spec 1 1)
-    ("model-complete" ,#'consent-models--primitive-complete 2 3)
-    ("model-provider-diagnostics"
+    ("primitive-model-providers" ,#'consent-models--primitive-providers 0 0)
+    ("primitive-model-route" ,#'consent-models--primitive-route 1 2)
+    ("primitive-model-complete" ,#'consent-models--primitive-complete 2 3)
+    ("primitive-model-provider-diagnostics"
      ,#'consent-models--primitive-diagnostics 0 1)))
 
 (provide 'consent-models)
