@@ -144,10 +144,12 @@ Current procedures:
   signature metadata through `arguments` plus canonical body-literal fields
   such as `documentation`, `parameters`, `returns`, `effects`, `examples`, and
   `see-also`. Public primitive manifest entries carry manifest
-  `documentation` metadata with origin `(primitive-manifest string)`;
-  implementation docstrings remain a fallback for implementation-only or
-  generated primitive hooks. Body-literal origin reports string, vector, or
-  both literal forms; primitive implementation fallback reports
+  `documentation` metadata with origin `(primitive-manifest metadata)` when the
+  manifest supplies rich fields, or `(primitive-manifest string)` for
+  string-only manifest documentation; implementation docstrings remain a
+  fallback for implementation-only or generated primitive hooks. Body-literal
+  origin reports string, vector, or both literal forms; primitive
+  implementation fallback reports
   `(implementation-procedure string)`; argument-only metadata reports
   `(signature)`.
 - `(current-policy)` returns the active policy category actions and per-run

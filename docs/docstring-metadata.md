@@ -232,12 +232,15 @@ Primitive bindings are not read as ordinary procedure bodies. Kernel
 primitives, standard host-effecting bindings, Agent primitive libraries, and
 host capability primitives therefore use the primitive manifest as their
 runtime documentation source. Public primitive manifest entries should carry
-explicit `documentation` metadata with origin `(primitive-manifest string)`;
-tests guard that surface. When an implementation-only or generated manifest
-entry lacks explicit documentation, the bootstrap may derive a documentation
-field from the registered implementation procedure's own docstring. Reflected
-fallback metadata reports `(origin (implementation-procedure string))` instead
-of `(origin (body-literal string))` so tools can distinguish source body
+explicit `documentation` metadata with origin `(primitive-manifest metadata)`
+when the manifest supplies rich fields, or `(primitive-manifest string)` for
+string-only manifest documentation. Reflected string-only entries report
+`(origin (primitive-manifest string))`. Tests guard that surface. When an
+implementation-only or generated manifest entry lacks explicit documentation,
+the bootstrap may derive a documentation field from the registered
+implementation procedure's own docstring. Reflected fallback metadata reports
+`(origin (implementation-procedure string))` instead of
+`(origin (body-literal string))` so tools can distinguish source body
 docstrings from host or bootstrap implementation docs.
 
 This convention does not make simple string docstrings for these surfaces:
@@ -290,10 +293,18 @@ Manifest-backed primitive documentation uses the same record shape:
   (kind procedure)
   (library (scheme base))
   (source kernel)
-  (origin (primitive-manifest string))
+  (origin (primitive-manifest metadata))
   (fields
     ((documentation
-      "Return the sum of all numeric arguments, or 0 when called with no arguments."))))
+      "Return the sum of all numeric arguments, or 0 when called with no arguments.")
+     (parameters
+      ((numbers
+        (type (list-of number))
+        (description "Numeric addends to sum."))))
+     (returns
+      ((type number)
+       (description "The numeric sum.")))
+     (effects (pure)))))
 ```
 
 Field values are ordinary Scheme-readable data. The initial field set is:

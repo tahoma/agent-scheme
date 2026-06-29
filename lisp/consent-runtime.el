@@ -710,9 +710,13 @@ proper list."
 
 (defun consent--primitive-manifest-documentation (documentation)
   "Return normalized manifest documentation metadata for DOCUMENTATION."
-  (consent--make-documentation-metadata
-   (list (cons "documentation" documentation))
-   '("primitive-manifest-string")))
+  (if (stringp documentation)
+      (consent--make-documentation-metadata
+       (list (cons "documentation" documentation))
+       '("primitive-manifest-string"))
+    (consent--make-documentation-metadata
+     documentation
+     '("primitive-manifest-metadata"))))
 
 (defun consent--primitive-manifest-documentation-properties (documentation)
   "Return an optional `:documentation' plist for DOCUMENTATION."

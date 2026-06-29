@@ -251,6 +251,9 @@
      ((equal origins '("primitive-manifest-string"))
       (list (consent-reflect--symbol "primitive-manifest")
             (consent-reflect--symbol "string")))
+     ((equal origins '("primitive-manifest-metadata"))
+      (list (consent-reflect--symbol "primitive-manifest")
+            (consent-reflect--symbol "metadata")))
      (t
       (cons (consent-reflect--symbol "body-literal")
             (mapcar #'consent-reflect--symbol origins))))))

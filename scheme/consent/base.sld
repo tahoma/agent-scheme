@@ -250,195 +250,632 @@
        (list 'write-u8 'primitive-write-u8 1 2)))
 
     ;; User-facing documentation for kernel primitive bindings.
-    (define base-primitive-documentation-table
-      '((* . "Return the product of all numeric arguments, or 1 when called with no arguments.")
-        (+ . "Return the sum of all numeric arguments, or 0 when called with no arguments.")
-        (- . "Return the negation of one number, or subtract each later number from the first.")
-        (/ . "Return the reciprocal of one number, or divide the first by each later number.")
-        (< . "Return #t when the numeric arguments are strictly increasing.")
-        (<= . "Return #t when the numeric arguments are monotonically nondecreasing.")
-        (= . "Return #t when all numeric arguments are numerically equal.")
-        (> . "Return #t when the numeric arguments are strictly decreasing.")
-        (>= . "Return #t when the numeric arguments are monotonically nonincreasing.")
-        (apply .
-         "Call a procedure with leading arguments plus elements of the final list argument.")
-        (binary-port? . "Return #t when an object is a binary input or output port.")
-        (boolean=? . "Return #t when all boolean arguments have the same truth value.")
-        (boolean? . "Return #t when an object is either #t or #f.")
-        (bytevector . "Return a newly allocated bytevector containing the given byte values.")
-        (bytevector-append .
-         "Return a newly allocated bytevector containing the bytes from each argument in order.")
-        (bytevector-copy . "Return a newly allocated copy of a bytevector slice.")
-        (bytevector-copy! .
-                          "Copy bytes from one bytevector slice into another bytevector in place.")
-        (bytevector-length . "Return the number of bytes in a bytevector.")
-        (bytevector-u8-ref . "Return the byte at a zero-based bytevector index.")
-        (bytevector-u8-set! . "Store an unsigned byte at a zero-based bytevector index.")
-        (bytevector? . "Return #t when an object is a bytevector.")
-        (call-with-current-continuation .
-         "Call a procedure with the current continuation as an escape procedure.")
-        (call-with-port .
-         "Call a procedure with a port and close the port after the procedure returns or raises.")
-        (call-with-values . "Call a producer and pass all produced values to a consumer.")
-        (call/cc . "Alias for `call-with-current-continuation`.")
-        (car . "Return the first field of a pair.")
-        (cdr . "Return the second field of a pair.")
-        (ceiling . "Return the least integer not less than a real number.")
-        (char->integer . "Return a character's Unicode scalar value.")
-        (char<=? . "Return #t when the characters are monotonically nondecreasing by scalar value.")
-        (char<? . "Return #t when the characters are strictly increasing by scalar value.")
-        (char=? . "Return #t when all characters have the same scalar value.")
-        (char>=? . "Return #t when the characters are monotonically nonincreasing by scalar value.")
-        (char>? . "Return #t when the characters are strictly decreasing by scalar value.")
-        (char-ready? .
-         "Return #t when a character can be read from a textual input port without blocking.")
-        (char? . "Return #t when an object is a character.")
-        (close-input-port . "Close an input port.")
-        (close-output-port . "Close an output port.")
-        (close-port . "Close an input, output, or bidirectional port.")
-        (complex? . "Return #t when an object is a complex number.")
-        (cons . "Return a newly allocated pair whose car and cdr are the two arguments.")
-        (current-error-port . "Return the current textual error output port.")
-        (current-input-port . "Return the current textual input port.")
-        (current-output-port . "Return the current textual output port.")
-        (dynamic-wind .
-         "Run before, thunk, and after while preserving dynamic entry and exit behavior.")
-        (eq? . "Return #t when two objects are the same object under `eq?` identity.")
-        (equal? . "Return #t when two objects have recursively equivalent contents.")
-        (eqv? . "Return #t when two objects are equivalent under R7RS `eqv?` rules.")
-        (eof-object . "Return the distinguished end-of-file object.")
-        (eof-object? . "Return #t when an object is the distinguished end-of-file object.")
-        (error . "Raise a non-continuable error object with a message and optional irritants.")
-        (error-object-irritants . "Return the irritants carried by an error object.")
-        (error-object-message . "Return the message string carried by an error object.")
-        (error-object? . "Return #t when an object is an error object.")
-        (denominator . "Return the denominator of a rational number in lowest terms.")
-        (exact . "Return an exact representation of a number when one is available.")
-        (exact-integer-sqrt .
-         "Return the exact integer square root and remainder for a nonnegative exact integer.")
-        (exact-integer? . "Return #t when an object is both exact and an integer.")
-        (exact? . "Return #t when a number is represented exactly.")
-        (expt . "Return a number raised to a numeric power.")
-        (features . "Return the implementation feature identifiers available to `cond-expand`.")
-        (file-error? . "Return #t when an object is an error object caused by file-system access.")
-        (floor . "Return the greatest integer not greater than a real number.")
-        (floor/ . "Return floor quotient and floor remainder for two integers.")
-        (floor-quotient . "Return the floor quotient for two integers.")
-        (floor-remainder . "Return the floor remainder for two integers.")
-        (flush-output-port . "Flush buffered output on an output port.")
-        (gcd .
-             "Return the greatest common divisor of all integer arguments, or 0 with no arguments.")
-        (get-output-bytevector . "Return the accumulated bytes from an output bytevector port.")
-        (get-output-string . "Return the accumulated text from an output string port.")
-        (inexact . "Return an inexact representation of a number.")
-        (inexact? . "Return #t when a number is represented inexactly.")
-        (input-port-open? . "Return #t when an input port is still open.")
-        (input-port? . "Return #t when an object is an input port.")
-        (integer->char . "Return the character for a Unicode scalar value.")
-        (integer? . "Return #t when an object is an integer.")
-        (lcm . "Return the least common multiple of all integer arguments, or 1 with no arguments.")
-        (list->string . "Return a newly allocated string containing the characters from a list.")
-        (list->vector . "Return a newly allocated vector containing the elements from a list.")
-        (list? . "Return #t when an object is a proper list.")
-        (make-bytevector .
-         "Return a newly allocated bytevector of a given length and optional fill byte.")
-        (make-parameter .
-         "Return a parameter procedure with an initial value and optional converter.")
-        (make-string .
-         "Return a newly allocated string of a given length and optional fill character.")
-        (make-vector . "Return a newly allocated vector of a given length and optional fill value.")
-        (modulo . "Return the modulo remainder for two integers.")
-        (newline . "Write a newline character to an output port.")
-        (null? . "Return #t when an object is the empty list.")
-        (number->string .
-                        "Return the textual representation of a number, optionally using a radix.")
-        (number? . "Return #t when an object is a number.")
-        (numerator . "Return the numerator of a rational number in lowest terms.")
-        (open-input-bytevector . "Return a binary input port that reads from a bytevector.")
-        (open-input-string . "Return a textual input port that reads from a string.")
-        (open-output-bytevector . "Return a binary output port that accumulates bytes in memory.")
-        (open-output-string . "Return a textual output port that accumulates characters in memory.")
-        (output-port-open? . "Return #t when an output port is still open.")
-        (output-port? . "Return #t when an object is an output port.")
-        (pair? . "Return #t when an object is a pair.")
-        (peek-char . "Return the next character from a textual input port without consuming it.")
-        (peek-u8 . "Return the next byte from a binary input port without consuming it.")
-        (port? . "Return #t when an object is an input or output port.")
-        (procedure? . "Return #t when an object is a callable procedure.")
-        (quotient . "Return the truncated integer quotient for two integers.")
-        (raise . "Raise a non-continuable exception object.")
-        (raise-continuable . "Raise a continuable exception object.")
-        (rational? . "Return #t when an object is a rational number.")
-        (rationalize . "Return the simplest rational number within a tolerance of a real number.")
-        (read-bytevector . "Read up to a requested number of bytes from a binary input port.")
-        (read-bytevector! . "Read bytes from a binary input port into a bytevector slice.")
-        (read-char . "Read and consume one character from a textual input port.")
-        (read-error? . "Return #t when an object is an error object caused by reading input.")
-        (read-line . "Read one line of text from a textual input port.")
-        (read-string . "Read up to a requested number of characters from a textual input port.")
-        (read-u8 . "Read and consume one byte from a binary input port.")
-        (real? . "Return #t when an object is a real number.")
-        (remainder . "Return the truncated integer remainder for two integers.")
-        (round .
-         "Return the nearest integer to a real number, using the implementation's tie behavior.")
-        (set-car! . "Replace the first field of a mutable pair.")
-        (set-cdr! . "Replace the second field of a mutable pair.")
-        (string . "Return a newly allocated string containing the given characters.")
-        (string->list . "Return a list containing the characters from a string slice.")
-        (string->number . "Parse a number from a string, optionally using a radix.")
-        (string->symbol . "Return the symbol whose name is a string.")
-        (string->utf8 . "Encode a string slice as a UTF-8 bytevector.")
-        (string->vector . "Return a vector containing the characters from a string slice.")
-        (string-append .
-         "Return a newly allocated string containing each argument's characters in order.")
-        (string-copy . "Return a newly allocated copy of a string slice.")
-        (string-copy! . "Copy characters from one string slice into another string in place.")
-        (string-fill! . "Fill a string slice with a character in place.")
-        (string-length . "Return the number of characters in a string.")
-        (string-ref . "Return the character at a zero-based string index.")
-        (string-set! . "Store a character at a zero-based string index.")
-        (string<=? . "Return #t when strings are monotonically nondecreasing by character order.")
-        (string<? . "Return #t when strings are strictly increasing by character order.")
-        (string=? . "Return #t when all strings have the same characters.")
-        (string>=? . "Return #t when strings are monotonically nonincreasing by character order.")
-        (string>? . "Return #t when strings are strictly decreasing by character order.")
-        (string? . "Return #t when an object is a string.")
-        (substring . "Return a newly allocated string slice between start and end indexes.")
-        (symbol->string . "Return a symbol's name as a string.")
-        (symbol=? . "Return #t when all symbols have the same name.")
-        (symbol? . "Return #t when an object is a symbol.")
-        (textual-port? . "Return #t when an object is a textual input or output port.")
-        (truncate . "Return the integer nearest to zero for a real number.")
-        (truncate/ . "Return truncated quotient and truncated remainder for two integers.")
-        (truncate-quotient . "Return the truncated quotient for two integers.")
-        (truncate-remainder . "Return the truncated remainder for two integers.")
-        (u8-ready? . "Return #t when a byte can be read from a binary input port without blocking.")
-        (utf8->string . "Decode a UTF-8 bytevector slice as a string.")
-        (vector . "Return a newly allocated vector containing the given values.")
-        (vector->list . "Return a list containing the elements from a vector slice.")
-        (vector->string . "Return a string containing the characters from a vector slice.")
-        (vector-append .
-         "Return a newly allocated vector containing each argument's elements in order.")
-        (vector-copy . "Return a newly allocated copy of a vector slice.")
-        (vector-copy! . "Copy elements from one vector slice into another vector in place.")
-        (vector-fill! . "Fill a vector slice with a value in place.")
-        (vector-length . "Return the number of elements in a vector.")
-        (vector-ref . "Return the element at a zero-based vector index.")
-        (vector-set! . "Store a value at a zero-based vector index.")
-        (vector? . "Return #t when an object is a vector.")
-        (values . "Return all arguments as multiple values.")
-        (with-exception-handler .
-         "Call a thunk with an exception handler installed for its dynamic extent.")
-        (write-bytevector . "Write bytes from a bytevector slice to a binary output port.")
-        (write-char . "Write one character to a textual output port.")
-        (write-string . "Write characters from a string slice to a textual output port.")
-        (write-u8 . "Write one byte to a binary output port.")))
+    (define (base-primitive-documentation-descriptor signature)
+      "Return a rich metadata descriptor for compact primitive SIGNATURE."
+      (list (list 'type (car signature))
+            (list 'description (cadr signature))))
 
-    (define (primitive-manifest-documentation text)
-      "Return normalized primitive manifest documentation for TEXT."
-      (make-documentation-metadata
-       (list (cons 'documentation text))
-       '(primitive-manifest-string)))
+    (define (base-primitive-documentation-parameter parameter)
+      "Return a rich metadata parameter descriptor for compact PARAMETER."
+      (cons (car parameter)
+            (base-primitive-documentation-descriptor (cdr parameter))))
+
+    (define (base-primitive-documentation-fields name signature)
+      "Return rich manifest documentation fields for primitive NAME SIGNATURE."
+      (list
+       (cons 'documentation (car signature))
+       (cons 'parameters
+             (map base-primitive-documentation-parameter
+                  (cadr signature)))
+       (cons 'returns
+             (base-primitive-documentation-descriptor
+              (car (cdr (cdr signature)))))
+       (cons 'effects (list (primitive-effect-for-name name)))))
+
+    ;; Compact per-primitive signatures: name, prose, parameters, and returns.
+    (define base-primitive-documentation-table
+      '((* "Return the product of all numeric arguments, or 1 when called with no arguments."
+         ((numbers (list-of number) "Numeric factors to multiply."))
+         (number "The numeric product."))
+        (+ "Return the sum of all numeric arguments, or 0 when called with no arguments."
+         ((numbers (list-of number) "Numeric addends to sum."))
+         (number "The numeric sum."))
+        (- "Return the negation of one number, or subtract each later number from the first."
+         ((numbers (list-of number) "One or more numeric minuend/subtrahend values."))
+         (number "The numeric negation or difference."))
+        (/ "Return the reciprocal of one number, or divide the first by each later number."
+         ((numbers (list-of number) "One or more numeric dividend/divisor values."))
+         (number "The numeric reciprocal or quotient."))
+        (< "Return #t when the numeric arguments are strictly increasing."
+         ((numbers (list-of real) "Real numbers to compare."))
+         (boolean "Whether the numbers are strictly increasing."))
+        (<= "Return #t when the numeric arguments are monotonically nondecreasing."
+         ((numbers (list-of real) "Real numbers to compare."))
+         (boolean "Whether the numbers are monotonically nondecreasing."))
+        (= "Return #t when all numeric arguments are numerically equal."
+         ((numbers (list-of number) "Numbers to compare."))
+         (boolean "Whether all numbers are numerically equal."))
+        (> "Return #t when the numeric arguments are strictly decreasing."
+         ((numbers (list-of real) "Real numbers to compare."))
+         (boolean "Whether the numbers are strictly decreasing."))
+        (>= "Return #t when the numeric arguments are monotonically nonincreasing."
+         ((numbers (list-of real) "Real numbers to compare."))
+         (boolean "Whether the numbers are monotonically nonincreasing."))
+        (apply
+         "Call a procedure with leading arguments followed by the final list argument."
+         ((proc procedure "Procedure to call.")
+          (arguments (list-of any) "Leading arguments followed by the final list."))
+         (any "Values returned by PROC."))
+        (binary-port? "Return #t when an object is a binary input or output port."
+         ((obj any "Object to test."))
+         (boolean "Whether OBJ is a binary port."))
+        (boolean=? "Return #t when all boolean arguments have the same truth value."
+         ((booleans (list-of boolean) "Boolean values to compare."))
+         (boolean "Whether all booleans have the same truth value."))
+        (boolean? "Return #t when an object is either #t or #f."
+         ((obj any "Object to test."))
+         (boolean "Whether OBJ is a boolean."))
+        (bytevector "Return a newly allocated bytevector containing the given byte values."
+         ((bytes (list-of byte) "Byte values for the new bytevector."))
+         (bytevector "A newly allocated bytevector."))
+        (bytevector-append
+         "Return a newly allocated bytevector containing each argument's bytes."
+         ((bytevectors (list-of bytevector) "Bytevectors to concatenate."))
+         (bytevector "A newly allocated concatenated bytevector."))
+        (bytevector-copy "Return a newly allocated copy of a bytevector slice."
+         ((bytevector bytevector "Bytevector to copy.")
+          (start exact-non-negative-integer "Inclusive start index.")
+          (end exact-non-negative-integer "Exclusive end index."))
+         (bytevector "A newly allocated bytevector slice."))
+        (bytevector-copy! "Copy bytes from one bytevector slice into another in place."
+         ((to bytevector "Destination bytevector.")
+          (at exact-non-negative-integer "Destination start index.")
+          (from bytevector "Source bytevector.")
+          (start exact-non-negative-integer "Inclusive source start index.")
+          (end exact-non-negative-integer "Exclusive source end index."))
+         (unspecified "The unspecified value."))
+        (bytevector-length "Return the number of bytes in a bytevector."
+         ((bytevector bytevector "Bytevector whose length is requested."))
+         (exact-non-negative-integer "The bytevector length."))
+        (bytevector-u8-ref "Return the byte at a zero-based bytevector index."
+         ((bytevector bytevector "Bytevector to read.")
+          (k exact-non-negative-integer "Zero-based bytevector index."))
+         (byte "The byte at index K."))
+        (bytevector-u8-set! "Store an unsigned byte at a zero-based bytevector index."
+         ((bytevector bytevector "Bytevector to mutate.")
+          (k exact-non-negative-integer "Zero-based bytevector index.")
+          (byte byte "Byte value to store."))
+         (unspecified "The unspecified value."))
+        (bytevector? "Return #t when an object is a bytevector."
+         ((obj any "Object to test."))
+         (boolean "Whether OBJ is a bytevector."))
+        (call-with-current-continuation
+         "Call a procedure with the current continuation as an escape procedure."
+         ((proc procedure "Procedure that accepts the current continuation."))
+         (any "Values delivered to the captured continuation."))
+        (call-with-port
+         "Call a procedure with a port and close the port when control leaves it."
+         ((port port "Port passed to PROC and then closed.")
+          (proc procedure "Procedure to call with PORT."))
+         (any "Values returned by PROC."))
+        (call-with-values "Call a producer and pass all produced values to a consumer."
+         ((producer procedure "Zero-argument producer procedure.")
+          (consumer procedure "Consumer procedure receiving producer values."))
+         (any "Values returned by CONSUMER."))
+        (call/cc "Alias for `call-with-current-continuation`."
+         ((proc procedure "Procedure that accepts the current continuation."))
+         (any "Values delivered to the captured continuation."))
+        (car "Return the first field of a pair."
+         ((pair pair "Pair to inspect."))
+         (any "The pair's car field."))
+        (cdr "Return the second field of a pair."
+         ((pair pair "Pair to inspect."))
+         (any "The pair's cdr field."))
+        (ceiling "Return the least integer not less than a real number."
+         ((x real "Real number to round upward."))
+         (integer "The least integer not less than X."))
+        (char->integer "Return a character's Unicode scalar value."
+         ((char char "Character to convert."))
+         (exact-integer "The character scalar value."))
+        (char<=? "Return #t when characters are monotonically nondecreasing."
+         ((chars (list-of char) "Characters to compare."))
+         (boolean "Whether the characters are monotonically nondecreasing."))
+        (char<? "Return #t when the characters are strictly increasing."
+         ((chars (list-of char) "Characters to compare."))
+         (boolean "Whether the characters are strictly increasing."))
+        (char=? "Return #t when all characters have the same scalar value."
+         ((chars (list-of char) "Characters to compare."))
+         (boolean "Whether all characters have the same scalar value."))
+        (char>=? "Return #t when characters are monotonically nonincreasing."
+         ((chars (list-of char) "Characters to compare."))
+         (boolean "Whether the characters are monotonically nonincreasing."))
+        (char>? "Return #t when the characters are strictly decreasing."
+         ((chars (list-of char) "Characters to compare."))
+         (boolean "Whether the characters are strictly decreasing."))
+        (char-ready? "Return #t when a character can be read without blocking."
+         ((port textual-input-port "Textual input port to query."))
+         (boolean "Whether a character is ready."))
+        (char? "Return #t when an object is a character."
+         ((obj any "Object to test."))
+         (boolean "Whether OBJ is a character."))
+        (close-input-port "Close an input port."
+         ((port input-port "Input port to close."))
+         (unspecified "The unspecified value."))
+        (close-output-port "Close an output port."
+         ((port output-port "Output port to close."))
+         (unspecified "The unspecified value."))
+        (close-port "Close an input, output, or bidirectional port."
+         ((port port "Port to close."))
+         (unspecified "The unspecified value."))
+        (complex? "Return #t when an object is a complex number."
+         ((obj any "Object to test."))
+         (boolean "Whether OBJ is a complex number."))
+        (cons "Return a newly allocated pair whose car and cdr are the arguments."
+         ((obj1 any "Value for the new pair's car.")
+          (obj2 any "Value for the new pair's cdr."))
+         (pair "A newly allocated pair."))
+        (current-error-port "Return the current textual error output port."
+         ()
+         (textual-output-port "The current textual error output port."))
+        (current-input-port "Return the current textual input port."
+         ()
+         (textual-input-port "The current textual input port."))
+        (current-output-port "Return the current textual output port."
+         ()
+         (textual-output-port "The current textual output port."))
+        (dynamic-wind "Call before, thunk, and after around dynamic extent changes."
+         ((before procedure "Zero-argument procedure called on entry.")
+          (thunk procedure "Zero-argument procedure whose values are returned.")
+          (after procedure "Zero-argument procedure called on exit."))
+         (any "Values returned by THUNK."))
+        (eq? "Return #t when two objects are the same under `eq?` identity."
+         ((obj1 any "First object to compare.")
+          (obj2 any "Second object to compare."))
+         (boolean "Whether the objects are the same under `eq?`."))
+        (equal? "Return #t when two objects have recursively equivalent contents."
+         ((obj1 any "First object to compare.")
+          (obj2 any "Second object to compare."))
+         (boolean "Whether the objects are recursively equivalent."))
+        (eqv? "Return #t when two objects are equivalent under R7RS `eqv?` rules."
+         ((obj1 any "First object to compare.")
+          (obj2 any "Second object to compare."))
+         (boolean "Whether the objects are equivalent under `eqv?`."))
+        (eof-object "Return the distinguished end-of-file object."
+         ()
+         (eof-object "An end-of-file object."))
+        (eof-object? "Return #t when an object is the distinguished end-of-file object."
+         ((obj any "Object to test."))
+         (boolean "Whether OBJ is an end-of-file object."))
+        (error "Raise a non-continuable error object with optional irritants."
+         ((message string "Error message string.")
+          (irritants (list-of any) "Additional error irritants."))
+         (never "This procedure does not return."))
+        (error-object-irritants "Return the irritants carried by an error object."
+         ((error-object error-object "Error object to inspect."))
+         (list "The error object's irritants."))
+        (error-object-message "Return the message string carried by an error object."
+         ((error-object error-object "Error object to inspect."))
+         (string "The error object's message."))
+        (error-object? "Return #t when an object is an error object."
+         ((obj any "Object to test."))
+         (boolean "Whether OBJ is an error object."))
+        (denominator "Return a rational number's positive denominator."
+         ((q rational "Rational number to inspect."))
+         (integer "The denominator in lowest terms."))
+        (exact "Return an exact representation of a number when one is available."
+         ((z number "Number to convert."))
+         (number "An exact representation of Z."))
+        (exact-integer-sqrt "Return the exact integer square root and remainder."
+         ((k exact-non-negative-integer "Non-negative exact integer."))
+         ((values exact-non-negative-integer exact-non-negative-integer)
+          "The square root and remainder."))
+        (exact-integer? "Return #t when an object is both exact and an integer."
+         ((z number "Number to test."))
+         (boolean "Whether Z is an exact integer."))
+        (exact? "Return #t when a number is represented exactly."
+         ((z number "Number to test."))
+         (boolean "Whether Z is exact."))
+        (expt "Return a number raised to a numeric power."
+         ((z1 number "Base number.")
+          (z2 number "Exponent number."))
+         (number "Z1 raised to the power Z2."))
+        (features "Return the feature identifiers available to `cond-expand`."
+         ()
+         ((list-of symbol) "Feature identifiers true for `cond-expand`."))
+        (file-error? "Return #t when an object is a file-system error object."
+         ((obj any "Object to test."))
+         (boolean "Whether OBJ is a file error object."))
+        (flush-output-port "Flush buffered output on an output port."
+         ((port output-port "Output port to flush."))
+         (unspecified "The unspecified value."))
+        (floor "Return the greatest integer not greater than a real number."
+         ((x real "Real number to round downward."))
+         (integer "The greatest integer not greater than X."))
+        (floor/ "Return floor quotient and floor remainder for two integers."
+         ((n1 integer "Dividend integer.")
+          (n2 integer "Divisor integer."))
+         ((values integer integer) "The floor quotient and floor remainder."))
+        (floor-quotient "Return the floor quotient for two integers."
+         ((n1 integer "Dividend integer.")
+          (n2 integer "Divisor integer."))
+         (integer "The floor quotient."))
+        (floor-remainder "Return the floor remainder for two integers."
+         ((n1 integer "Dividend integer.")
+          (n2 integer "Divisor integer."))
+         (integer "The floor remainder."))
+        (gcd "Return the greatest common divisor, or 0 with no arguments."
+         ((integers (list-of integer) "Integer arguments."))
+         (integer "The non-negative greatest common divisor."))
+        (get-output-bytevector "Return accumulated bytes from an output bytevector port."
+         ((port binary-output-port "Output bytevector port to drain."))
+         (bytevector "Accumulated output bytes."))
+        (get-output-string "Return accumulated text from an output string port."
+         ((port textual-output-port "Output string port to drain."))
+         (string "Accumulated output text."))
+        (inexact "Return an inexact representation of a number."
+         ((z number "Number to convert."))
+         (number "An inexact representation of Z."))
+        (inexact? "Return #t when a number is represented inexactly."
+         ((z number "Number to test."))
+         (boolean "Whether Z is inexact."))
+        (input-port-open? "Return #t when an input port is still open."
+         ((port input-port "Input port to inspect."))
+         (boolean "Whether PORT is open for input."))
+        (input-port? "Return #t when an object is an input port."
+         ((obj any "Object to test."))
+         (boolean "Whether OBJ is an input port."))
+        (integer->char "Return the character for a Unicode scalar value."
+         ((n exact-integer "Character scalar value."))
+         (char "The character represented by N."))
+        (integer? "Return #t when an object is an integer."
+         ((obj any "Object to test."))
+         (boolean "Whether OBJ is an integer."))
+        (lcm "Return the least common multiple, or 1 with no arguments."
+         ((integers (list-of integer) "Integer arguments."))
+         (integer "The non-negative least common multiple."))
+        (list->string "Return a newly allocated string containing list characters."
+         ((list (list-of char) "List of characters."))
+         (string "A newly allocated string."))
+        (list->vector "Return a newly allocated vector containing list elements."
+         ((list list "List whose elements become vector elements."))
+         (vector "A newly allocated vector."))
+        (list? "Return #t when an object is a proper list."
+         ((obj any "Object to test."))
+         (boolean "Whether OBJ is a proper list."))
+        (make-bytevector "Return a newly allocated bytevector."
+         ((k exact-non-negative-integer "Requested bytevector length.")
+          (byte byte "Optional fill byte."))
+         (bytevector "A newly allocated bytevector."))
+        (make-parameter "Return a parameter procedure."
+         ((init any "Initial parameter value.")
+          (converter procedure "Optional converter procedure."))
+         (procedure "A parameter procedure."))
+        (make-string "Return a newly allocated string."
+         ((k exact-non-negative-integer "Requested string length.")
+          (char char "Optional fill character."))
+         (string "A newly allocated string."))
+        (make-vector "Return a newly allocated vector."
+         ((k exact-non-negative-integer "Requested vector length.")
+          (fill any "Optional fill value."))
+         (vector "A newly allocated vector."))
+        (modulo "Return the modulo remainder for two integers."
+         ((n1 integer "Dividend integer.")
+          (n2 integer "Divisor integer."))
+         (integer "The modulo remainder."))
+        (newline "Write a newline character to an output port."
+         ((port textual-output-port "Textual output port to write."))
+         (unspecified "The unspecified value."))
+        (null? "Return #t when an object is the empty list."
+         ((obj any "Object to test."))
+         (boolean "Whether OBJ is the empty list."))
+        (number->string "Return a number's textual representation."
+         ((z number "Number to render.")
+          (radix exact-integer "Optional radix: 2, 8, 10, or 16."))
+         (string "External representation of Z."))
+        (number? "Return #t when an object is a number."
+         ((obj any "Object to test."))
+         (boolean "Whether OBJ is a number."))
+        (numerator "Return the numerator of a rational number in lowest terms."
+         ((q rational "Rational number to inspect."))
+         (integer "The numerator in lowest terms."))
+        (open-input-bytevector "Return a binary input port reading from a bytevector."
+         ((bytevector bytevector "Bytevector backing the input port."))
+         (binary-input-port "A binary input port."))
+        (open-input-string "Return a textual input port reading from a string."
+         ((string string "String backing the input port."))
+         (textual-input-port "A textual input port."))
+        (open-output-bytevector "Return a binary output port accumulating bytes."
+         ()
+         (binary-output-port "A binary output bytevector port."))
+        (open-output-string "Return a textual output port accumulating characters."
+         ()
+         (textual-output-port "A textual output string port."))
+        (output-port-open? "Return #t when an output port is still open."
+         ((port output-port "Output port to inspect."))
+         (boolean "Whether PORT is open for output."))
+        (output-port? "Return #t when an object is an output port."
+         ((obj any "Object to test."))
+         (boolean "Whether OBJ is an output port."))
+        (pair? "Return #t when an object is a pair."
+         ((obj any "Object to test."))
+         (boolean "Whether OBJ is a pair."))
+        (peek-char "Return the next character without consuming it."
+         ((port textual-input-port "Textual input port to inspect."))
+         ((or char eof-object) "The next character, or an end-of-file object."))
+        (peek-u8 "Return the next byte without consuming it."
+         ((port binary-input-port "Binary input port to inspect."))
+         ((or byte eof-object) "The next byte, or an end-of-file object."))
+        (port? "Return #t when an object is an input or output port."
+         ((obj any "Object to test."))
+         (boolean "Whether OBJ is a port."))
+        (procedure? "Return #t when an object is a callable procedure."
+         ((obj any "Object to test."))
+         (boolean "Whether OBJ is a procedure."))
+        (quotient "Return the truncated integer quotient for two integers."
+         ((n1 integer "Dividend integer.")
+          (n2 integer "Divisor integer."))
+         (integer "The truncated quotient."))
+        (raise "Raise a non-continuable exception object."
+         ((obj any "Exception object to raise."))
+         (never "This procedure does not return normally."))
+        (raise-continuable "Raise a continuable exception object."
+         ((obj any "Exception object to raise."))
+         (any "Values returned by the exception handler."))
+        (rational? "Return #t when an object is a rational number."
+         ((obj any "Object to test."))
+         (boolean "Whether OBJ is a rational number."))
+        (rationalize "Return the simplest rational number within a tolerance."
+         ((x real "Real number to approximate.")
+          (y real "Real tolerance."))
+         (rational "The simplest rational within tolerance."))
+        (read-bytevector "Read up to a requested number of bytes."
+         ((k exact-non-negative-integer "Maximum number of bytes to read.")
+          (port binary-input-port "Binary input port to read."))
+         ((or bytevector eof-object) "Bytes read, or an end-of-file object."))
+        (read-bytevector! "Read bytes from a binary input port into a bytevector."
+         ((bytevector bytevector "Destination bytevector.")
+          (port binary-input-port "Binary input port to read.")
+          (start exact-non-negative-integer "Inclusive destination start index.")
+          (end exact-non-negative-integer "Exclusive destination end index."))
+         ((or exact-non-negative-integer eof-object)
+          "Number of bytes read, or an end-of-file object."))
+        (read-char "Read and consume one character from a textual input port."
+         ((port textual-input-port "Textual input port to read."))
+         ((or char eof-object) "The next character, or an end-of-file object."))
+        (read-error? "Return #t when an object is an error caused by reading."
+         ((obj any "Object to test."))
+         (boolean "Whether OBJ is a read error object."))
+        (read-line "Read one line of text from a textual input port."
+         ((port textual-input-port "Textual input port to read."))
+         ((or string eof-object) "The next line, or an end-of-file object."))
+        (read-string "Read up to a requested number of characters."
+         ((k exact-non-negative-integer "Maximum number of characters to read.")
+          (port textual-input-port "Textual input port to read."))
+         ((or string eof-object) "Characters read, or an end-of-file object."))
+        (read-u8 "Read and consume one byte from a binary input port."
+         ((port binary-input-port "Binary input port to read."))
+         ((or byte eof-object) "The next byte, or an end-of-file object."))
+        (real? "Return #t when an object is a real number."
+         ((obj any "Object to test."))
+         (boolean "Whether OBJ is a real number."))
+        (remainder "Return the truncated integer remainder for two integers."
+         ((n1 integer "Dividend integer.")
+          (n2 integer "Divisor integer."))
+         (integer "The truncated remainder."))
+        (round "Return the nearest integer to a real number."
+         ((x real "Real number to round."))
+         (integer "The nearest integer to X."))
+        (set-car! "Replace the first field of a mutable pair."
+         ((pair pair "Pair to mutate.")
+          (obj any "New car value."))
+         (unspecified "The unspecified value."))
+        (set-cdr! "Replace the second field of a mutable pair."
+         ((pair pair "Pair to mutate.")
+          (obj any "New cdr value."))
+         (unspecified "The unspecified value."))
+        (string "Return a newly allocated string containing the given characters."
+         ((chars (list-of char) "Characters for the new string."))
+         (string "A newly allocated string."))
+        (string->list "Return a list containing characters from a string slice."
+         ((string string "String to copy from.")
+          (start exact-non-negative-integer "Inclusive start index.")
+          (end exact-non-negative-integer "Exclusive end index."))
+         ((list-of char) "A newly allocated list of characters."))
+        (string->number "Parse a number from a string, optionally using a radix."
+         ((string string "String to parse.")
+          (radix exact-integer "Optional radix: 2, 8, 10, or 16."))
+         ((or number boolean) "The parsed number, or #f."))
+        (string->symbol "Return the symbol whose name is a string."
+         ((string string "Symbol name."))
+         (symbol "The interned symbol named by STRING."))
+        (string->utf8 "Encode a string slice as a UTF-8 bytevector."
+         ((string string "String to encode.")
+          (start exact-non-negative-integer "Inclusive start index.")
+          (end exact-non-negative-integer "Exclusive end index."))
+         (bytevector "A UTF-8 encoded bytevector."))
+        (string->vector "Return a vector containing characters from a string slice."
+         ((string string "String to copy from.")
+          (start exact-non-negative-integer "Inclusive start index.")
+          (end exact-non-negative-integer "Exclusive end index."))
+         ((vector-of char) "A newly allocated vector of characters."))
+        (string-append "Return a newly allocated string containing each argument."
+         ((strings (list-of string) "Strings to concatenate."))
+         (string "A newly allocated concatenated string."))
+        (string-copy "Return a newly allocated copy of a string slice."
+         ((string string "String to copy.")
+          (start exact-non-negative-integer "Inclusive start index.")
+          (end exact-non-negative-integer "Exclusive end index."))
+         (string "A newly allocated string slice."))
+        (string-copy! "Copy characters from one string slice into another in place."
+         ((to string "Destination string.")
+          (at exact-non-negative-integer "Destination start index.")
+          (from string "Source string.")
+          (start exact-non-negative-integer "Inclusive source start index.")
+          (end exact-non-negative-integer "Exclusive source end index."))
+         (unspecified "The unspecified value."))
+        (string-fill! "Fill a string slice with a character in place."
+         ((string string "String to mutate.")
+          (fill char "Character to store.")
+          (start exact-non-negative-integer "Inclusive start index.")
+          (end exact-non-negative-integer "Exclusive end index."))
+         (unspecified "The unspecified value."))
+        (string-length "Return the number of characters in a string."
+         ((string string "String whose length is requested."))
+         (exact-non-negative-integer "The string length."))
+        (string-ref "Return the character at a zero-based string index."
+         ((string string "String to read.")
+          (k exact-non-negative-integer "Zero-based string index."))
+         (char "The character at index K."))
+        (string-set! "Store a character at a zero-based string index."
+         ((string string "String to mutate.")
+          (k exact-non-negative-integer "Zero-based string index.")
+          (char char "Character to store."))
+         (unspecified "The unspecified value."))
+        (string<=? "Return #t when strings are monotonically nondecreasing."
+         ((strings (list-of string) "Strings to compare."))
+         (boolean "Whether the strings are monotonically nondecreasing."))
+        (string<? "Return #t when strings are strictly increasing."
+         ((strings (list-of string) "Strings to compare."))
+         (boolean "Whether the strings are strictly increasing."))
+        (string=? "Return #t when all strings have the same characters."
+         ((strings (list-of string) "Strings to compare."))
+         (boolean "Whether all strings have the same characters."))
+        (string>=? "Return #t when strings are monotonically nonincreasing."
+         ((strings (list-of string) "Strings to compare."))
+         (boolean "Whether the strings are monotonically nonincreasing."))
+        (string>? "Return #t when strings are strictly decreasing."
+         ((strings (list-of string) "Strings to compare."))
+         (boolean "Whether the strings are strictly decreasing."))
+        (string? "Return #t when an object is a string."
+         ((obj any "Object to test."))
+         (boolean "Whether OBJ is a string."))
+        (substring "Return a newly allocated string slice."
+         ((string string "String to copy.")
+          (start exact-non-negative-integer "Inclusive start index.")
+          (end exact-non-negative-integer "Exclusive end index."))
+         (string "A newly allocated string slice."))
+        (symbol->string "Return a symbol's name as a string."
+         ((symbol symbol "Symbol to inspect."))
+         (string "The symbol's name."))
+        (symbol=? "Return #t when all symbols have the same name."
+         ((symbols (list-of symbol) "Symbols to compare."))
+         (boolean "Whether all symbols have the same name."))
+        (symbol? "Return #t when an object is a symbol."
+         ((obj any "Object to test."))
+         (boolean "Whether OBJ is a symbol."))
+        (textual-port? "Return #t when an object is a textual input or output port."
+         ((obj any "Object to test."))
+         (boolean "Whether OBJ is a textual port."))
+        (truncate "Return the integer nearest to zero for a real number."
+         ((x real "Real number to truncate."))
+         (integer "The integer nearest to zero."))
+        (truncate/ "Return truncated quotient and remainder for two integers."
+         ((n1 integer "Dividend integer.")
+          (n2 integer "Divisor integer."))
+         ((values integer integer) "The truncated quotient and remainder."))
+        (truncate-quotient "Return the truncated quotient for two integers."
+         ((n1 integer "Dividend integer.")
+          (n2 integer "Divisor integer."))
+         (integer "The truncated quotient."))
+        (truncate-remainder "Return the truncated remainder for two integers."
+         ((n1 integer "Dividend integer.")
+          (n2 integer "Divisor integer."))
+         (integer "The truncated remainder."))
+        (u8-ready? "Return #t when a byte can be read without blocking."
+         ((port binary-input-port "Binary input port to query."))
+         (boolean "Whether a byte is ready."))
+        (utf8->string "Decode a UTF-8 bytevector slice as a string."
+         ((bytevector bytevector "UTF-8 bytevector to decode.")
+          (start exact-non-negative-integer "Inclusive start index.")
+          (end exact-non-negative-integer "Exclusive end index."))
+         (string "A newly allocated decoded string."))
+        (vector "Return a newly allocated vector containing the given values."
+         ((values (list-of any) "Values for the new vector."))
+         (vector "A newly allocated vector."))
+        (vector->list "Return a list containing elements from a vector slice."
+         ((vector vector "Vector to copy from.")
+          (start exact-non-negative-integer "Inclusive start index.")
+          (end exact-non-negative-integer "Exclusive end index."))
+         (list "A newly allocated list."))
+        (vector->string "Return a string containing characters from a vector slice."
+         ((vector (vector-of char) "Vector of characters to copy from.")
+          (start exact-non-negative-integer "Inclusive start index.")
+          (end exact-non-negative-integer "Exclusive end index."))
+         (string "A newly allocated string."))
+        (vector-append "Return a newly allocated vector containing each argument."
+         ((vectors (list-of vector) "Vectors to concatenate."))
+         (vector "A newly allocated concatenated vector."))
+        (vector-copy "Return a newly allocated copy of a vector slice."
+         ((vector vector "Vector to copy.")
+          (start exact-non-negative-integer "Inclusive start index.")
+          (end exact-non-negative-integer "Exclusive end index."))
+         (vector "A newly allocated vector slice."))
+        (vector-copy! "Copy elements from one vector slice into another in place."
+         ((to vector "Destination vector.")
+          (at exact-non-negative-integer "Destination start index.")
+          (from vector "Source vector.")
+          (start exact-non-negative-integer "Inclusive source start index.")
+          (end exact-non-negative-integer "Exclusive source end index."))
+         (unspecified "The unspecified value."))
+        (vector-fill! "Fill a vector slice with a value in place."
+         ((vector vector "Vector to mutate.")
+          (fill any "Value to store.")
+          (start exact-non-negative-integer "Inclusive start index.")
+          (end exact-non-negative-integer "Exclusive end index."))
+         (unspecified "The unspecified value."))
+        (vector-length "Return the number of elements in a vector."
+         ((vector vector "Vector whose length is requested."))
+         (exact-non-negative-integer "The vector length."))
+        (vector-ref "Return the element at a zero-based vector index."
+         ((vector vector "Vector to read.")
+          (k exact-non-negative-integer "Zero-based vector index."))
+         (any "The element at index K."))
+        (vector-set! "Store a value at a zero-based vector index."
+         ((vector vector "Vector to mutate.")
+          (k exact-non-negative-integer "Zero-based vector index.")
+          (obj any "Value to store."))
+         (unspecified "The unspecified value."))
+        (vector? "Return #t when an object is a vector."
+         ((obj any "Object to test."))
+         (boolean "Whether OBJ is a vector."))
+        (values "Return all arguments as multiple values."
+         ((values (list-of any) "Values to deliver to the continuation."))
+         (values "The supplied arguments as multiple values."))
+        (with-exception-handler
+         "Call a thunk with an exception handler installed for its dynamic extent."
+         ((handler procedure "One-argument exception handler.")
+          (thunk procedure "Zero-argument thunk to call."))
+         (any "Values returned by THUNK."))
+        (write-bytevector "Write bytes from a bytevector slice."
+         ((bytevector bytevector "Bytevector to write.")
+          (port binary-output-port "Binary output port to write.")
+          (start exact-non-negative-integer "Inclusive start index.")
+          (end exact-non-negative-integer "Exclusive end index."))
+         (unspecified "The unspecified value."))
+        (write-char "Write one character to a textual output port."
+         ((char char "Character to write.")
+          (port textual-output-port "Textual output port to write."))
+         (unspecified "The unspecified value."))
+        (write-string "Write characters from a string slice."
+         ((string string "String to write.")
+          (port textual-output-port "Textual output port to write.")
+          (start exact-non-negative-integer "Inclusive start index.")
+          (end exact-non-negative-integer "Exclusive end index."))
+         (unspecified "The unspecified value."))
+        (write-u8 "Write one byte to a binary output port."
+         ((byte byte "Byte to write.")
+          (port binary-output-port "Binary output port to write."))
+         (unspecified "The unspecified value."))))
+
+    (define (primitive-manifest-documentation documentation)
+      "Return normalized primitive manifest DOCUMENTATION metadata."
+      (if (string? documentation)
+          (make-documentation-metadata
+           (list (cons 'documentation documentation))
+           '(primitive-manifest-string))
+          (make-documentation-metadata
+           documentation
+           '(primitive-manifest-metadata))))
 
     (define (primitive-manifest-documentation-field text)
       "Return an optional manifest documentation field for TEXT."
@@ -450,7 +887,8 @@
     (define (base-primitive-documentation name)
       "Return public manifest documentation for kernel primitive NAME."
       (let ((entry (assq name base-primitive-documentation-table)))
-        (and entry (cdr entry))))
+        (and entry
+             (base-primitive-documentation-fields name (cdr entry)))))
 
     ;; Kernel primitive names grouped by effect tier for manifest metadata.
     (define primitive-mutation-names
