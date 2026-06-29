@@ -89,9 +89,10 @@
           (description "Number of new-text lines covered."))
          (lines (type (list-of pair))
           (description "List of line records returned by `diff-line`.")))
-        (returns
-         . ("A `(hunk ...)` record that can be rendered by"
-            "`diff-render-unified`."))
+        (returns (type pair)
+         (description
+          ("A `(hunk ...)` record that can be rendered by"
+            "`diff-render-unified`.")))
         (effects pure))
       (list 'hunk
             (diff-field 'old-start old-start)
@@ -126,7 +127,8 @@
     (define (no-change-diff source label)
       "Return an explicit no-change diff for SOURCE and LABEL."
       #((parameters
-         (source . "Datum naming the unchanged resource.")
+         (source (type (or symbol string pair))
+          (description "Datum naming the unchanged resource."))
          (label (type string)
           (description "Display label used for both old and new sides.")))
         (returns (type diff)
@@ -160,7 +162,8 @@
       #((parameters
          (diff (type diff)
           (description "Canonical diff datum.")))
-        (returns . "The source datum stored in DIFF, or #f when absent.")
+        (returns (type (or symbol string pair boolean))
+         (description "The source datum stored in DIFF, or #f when absent."))
         (effects pure))
       (diff-field-value diff 'source #f))
 

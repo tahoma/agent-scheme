@@ -398,7 +398,8 @@
     (define (make-vcs-capability-request id operation authority arguments)
       "Return a host-adapter request datum for a VCS operation."
       #((parameters
-         (id . "Stable request id.")
+         (id (type (or symbol string))
+          (description "Stable request id."))
          (operation (type symbol)
           (description "VCS operation symbol."))
          (authority (type symbol)
@@ -437,7 +438,8 @@
       #((parameters
          (request (type vcs-capability-request)
           (description "VCS capability request datum.")))
-        (returns . "The request id, or #f when absent.")
+        (returns (type (or symbol string boolean))
+         (description "The request id, or #f when absent."))
         (effects pure))
       (vcs-field-value request 'id #f))
 
@@ -454,7 +456,8 @@
     (define (make-vcs-capability-result id status value)
       "Return a host-adapter result datum for a VCS operation."
       #((parameters
-         (id . "Request id associated with the result.")
+         (id (type (or symbol string))
+          (description "Request id associated with the result."))
          (status (type symbol)
           (description "Result status symbol."))
          (value . "Result payload, often a VCS record or outcome datum."))
@@ -469,8 +472,10 @@
     (define (make-vcs-capability-grant id authority operations repository remote)
       "Return a scoped VCS authority grant record."
       #((parameters
-         (id . "Stable grant id.")
-         (authority . "Authority family granted, or all.")
+         (id (type (or symbol string))
+          (description "Stable grant id."))
+         (authority (type symbol)
+          (description "Authority family granted, or all."))
          (operations (type (or symbol list))
           (description
            ("Allowed operation symbol, `all`, or list of operation"
@@ -492,8 +497,10 @@
     (define (make-vcs-approval-decision id request-id status reason)
       "Return an explicit approval decision for one VCS request."
       #((parameters
-         (id . "Stable approval decision id.")
-         (request-id . "Id of the request this decision answers.")
+         (id (type (or symbol string))
+          (description "Stable approval decision id."))
+         (request-id (type (or symbol string))
+          (description "Id of the request this decision answers."))
          (status (type symbol)
           (description "Approval status symbol, usually approved or denied."))
          (reason (type string)

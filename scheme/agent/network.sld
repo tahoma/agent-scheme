@@ -136,7 +136,8 @@
       #((parameters
          (request (type network-capability-request)
           (description "Network capability request datum.")))
-        (returns . "The request id, or #f when absent.")
+        (returns (type (or symbol string boolean))
+         (description "The request id, or #f when absent."))
         (effects pure))
       (network-field-value request 'id #f))
 
@@ -153,7 +154,8 @@
     (define (make-network-grant id operations scope)
       "Return a scoped network authority grant record."
       #((parameters
-         (id . "Stable grant id.")
+         (id (type (or symbol string))
+          (description "Stable grant id."))
          (operations (type (or symbol list))
           (description
            ("Allowed operation symbol, `all`, or list of operation"
@@ -173,8 +175,10 @@
     (define (make-network-approval-decision id request-id status reason)
       "Return an explicit approval decision for one network request."
       #((parameters
-         (id . "Stable approval decision id.")
-         (request-id . "Id of the request this decision answers.")
+         (id (type (or symbol string))
+          (description "Stable approval decision id."))
+         (request-id (type (or symbol string))
+          (description "Id of the request this decision answers."))
          (status (type symbol)
           (description "Approval status symbol, usually approved or denied."))
          (reason (type string)
@@ -252,7 +256,8 @@
     (define (make-network-response id status fields)
       "Return a host-adapter response datum for a network operation."
       #((parameters
-         (id . "Request id associated with the response.")
+         (id (type (or symbol string))
+          (description "Request id associated with the response."))
          (status (type symbol)
           (description "Response status symbol."))
          (fields (type list)
@@ -271,12 +276,14 @@
     (define (make-network-stream-handle id request url grant status)
       "Return a Scheme-readable network stream handle datum."
       #((parameters
-         (id . "Stable handle id.")
+         (id (type (or symbol string))
+          (description "Stable handle id."))
          (request (type network-capability-request)
           (description "Network request datum that opened the stream."))
          (url (type (or string list))
           (description "Redacted or public URL metadata for display."))
-         (grant . "Grant id or grant datum associated with the stream.")
+         (grant (type (or symbol string network-capability-grant))
+          (description "Grant id or grant datum associated with the stream."))
          (status (type symbol)
           (description "Current stream status symbol.")))
         (returns (type network-stream-handle)
