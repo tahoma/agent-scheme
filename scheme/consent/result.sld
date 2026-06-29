@@ -272,6 +272,8 @@
           '(implementation-procedure string))
          ((equal? origins '(primitive-manifest-string))
           '(primitive-manifest string))
+         ((equal? origins '(primitive-manifest-metadata))
+          '(primitive-manifest metadata))
          (else (cons 'body-literal origins)))))
 
     (define (debugger-documentation-fields documentation)
