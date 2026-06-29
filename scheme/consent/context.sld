@@ -18,12 +18,10 @@
     (define (context-field name value)
       "Return a Scheme-readable context field named NAME with VALUE."
       #((parameters
-         (name
-          (type symbol)
+         (name (type symbol)
           (description "Symbol naming the context field."))
          (value . "Scheme-readable field value."))
-        (returns
-         (type list)
+        (returns (type list)
          (description "A two-element context field list."))
         (effects pure))
       (list name value))
@@ -32,8 +30,7 @@
       "Return #t when VALUE is present in a context bundle."
       #((parameters
          (value . "Optional context value to check."))
-        (returns
-         (type boolean)
+        (returns (type boolean)
          (description "#t when VALUE is not #f; otherwise #f."))
         (effects pure))
       (not (eq? value #f)))
@@ -51,12 +48,10 @@
       "Return a request-context record, or #f when no request fields exist."
       #((parameters
          (request-id . "Optional request id.")
-         (session-id
-          (type (or symbol boolean))
+         (session-id (type (or symbol boolean))
           (description "Optional session id."))
          (request . "Optional request payload datum."))
-        (returns
-         (type (or request-context boolean))
+        (returns (type (or request-context boolean))
          (description
           ("A `request-context` datum containing present fields, or"
             "#f.")))
@@ -78,14 +73,11 @@
     (define (make-conversation-summary session-id summary)
       "Return a conversation-summary record, or #f when SUMMARY is absent."
       #((parameters
-         (session-id
-          (type (or symbol boolean))
+         (session-id (type (or symbol boolean))
           (description "Optional session id associated with the summary."))
-         (summary
-          (type (or string pair))
+         (summary (type (or string pair))
           (description "Conversation summary text or datum.")))
-        (returns
-         (type (or conversation-summary boolean))
+        (returns (type (or conversation-summary boolean))
          (description "A `conversation-summary` datum, or #f when SUMMARY is #f."))
         (effects pure))
       (if summary
@@ -100,11 +92,9 @@
     (define (make-focus-context records)
       "Return a focus-context from RECORDS, or #f when all records are absent."
       #((parameters
-         (records
-          (type list)
+         (records (type list)
           (description "List of optional context records.")))
-        (returns
-         (type (or focus-context boolean))
+        (returns (type (or focus-context boolean))
          (description "A `focus-context` datum containing present records, or #f."))
         (effects pure))
       (let ((present (context-present-records records)))
@@ -115,11 +105,9 @@
     (define (make-context-bundle records)
       "Return a context bundle from RECORDS."
       #((parameters
-         (records
-          (type list)
+         (records (type list)
           (description "List of optional context records.")))
-        (returns
-         (type list)
+        (returns (type list)
          (description "A `context` datum containing only present records."))
         (effects pure))
       (cons 'context (context-present-records records)))))

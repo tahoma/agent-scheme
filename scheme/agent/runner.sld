@@ -104,8 +104,7 @@
       "Run the minimal control loop for GOAL and return a task-run record."
       #((parameters
          (goal . "The user goal datum the task pursues.")
-         (options
-          (type list)
+         (options (type list)
           (description
            ("Association list of injected, deterministic inputs:"
              "`session', `scope', `observation' (the read-only"
@@ -123,8 +122,7 @@
              "directives such as `cancel'), `operations' (the `(agent"
              "proposal)' host-operation table),"
              "`max-steps'/`max-pure-cost' budgets, and `id-prefix')."))))
-        (returns
-         (type task-run)
+        (returns (type task-run)
          (description
           ("A `task-run' record bundling the final `agent-task', the"
             "final state, the `task-stop'/`task-pause' receipt, an"
@@ -434,8 +432,7 @@
       "Return #t when DATUM is a task-run record."
       #((parameters
          (datum . "Value to inspect."))
-        (returns
-         (type boolean)
+        (returns (type boolean)
          (description ("#t when DATUM is tagged as a `task-run'; otherwise #f.")))
         (effects pure))
       (and (pair? datum) (eq? (car datum) 'task-run)))
@@ -443,11 +440,9 @@
     (define (task-run-field-value record name . maybe-default)
       "Return RECORD field NAME, or DEFAULT when the field is absent."
       #((parameters
-         (record
-          (type task-run)
+         (record (type task-run)
           (description "A `task-run' record."))
-         (name
-          (type symbol)
+         (name (type symbol)
           (description "Symbol naming the field to read."))
          (maybe-default . "Optional fallback value; defaults to #f."))
         (returns . "The field value, or DEFAULT when NAME is absent.")
@@ -458,11 +453,9 @@
     (define (task-run-task run)
       "Return the final agent-task datum from a task-run record."
       #((parameters
-         (run
-          (type task-run)
+         (run (type task-run)
           (description "A `task-run' record.")))
-        (returns
-         (type agent-task)
+        (returns (type agent-task)
          (description "The final `agent-task' datum."))
         (effects pure))
       (record-field-value run 'task 'none))
@@ -470,11 +463,9 @@
     (define (task-run-state run)
       "Return the final lifecycle state from a task-run record."
       #((parameters
-         (run
-          (type task-run)
+         (run (type task-run)
           (description "A `task-run' record.")))
-        (returns
-         (type symbol)
+        (returns (type symbol)
          (description "The final task state symbol."))
         (effects pure))
       (record-field-value run 'state 'none))
@@ -482,11 +473,9 @@
     (define (task-run-receipt run)
       "Return the terminal task-stop or task-pause receipt from a task-run."
       #((parameters
-         (run
-          (type task-run)
+         (run (type task-run)
           (description "A `task-run' record.")))
-        (returns
-         (type (or task-stop task-pause))
+        (returns (type (or task-stop task-pause))
          (description "The `task-stop' or `task-pause' receipt datum."))
         (effects pure))
       (record-field-value run 'receipt 'none))
@@ -494,11 +483,9 @@
     (define (task-run-completion run)
       "Return the agent-completion datum, or `none', from a task-run record."
       #((parameters
-         (run
-          (type task-run)
+         (run (type task-run)
           (description "A `task-run' record.")))
-        (returns
-         (type (or agent-completion symbol))
+        (returns (type (or agent-completion symbol))
          (description
           ("The `agent-completion' datum when the task completed;"
             "otherwise `none'.")))
@@ -508,11 +495,9 @@
     (define (task-run-steps run)
       "Return the recorded agent-step list from a task-run record."
       #((parameters
-         (run
-          (type task-run)
+         (run (type task-run)
           (description "A `task-run' record.")))
-        (returns
-         (type (list-of agent-step))
+        (returns (type (list-of agent-step))
          (description "A list of `agent-step' datums in execution order."))
         (effects pure))
       (record-field-value run 'steps '()))
@@ -520,11 +505,9 @@
     (define (task-run-observations run)
       "Return the recorded agent-observation list from a task-run record."
       #((parameters
-         (run
-          (type task-run)
+         (run (type task-run)
           (description "A `task-run' record.")))
-        (returns
-         (type (list-of agent-observation))
+        (returns (type (list-of agent-observation))
          (description ("A list of `agent-observation' datums in execution order.")))
         (effects pure))
       (record-field-value run 'observations '()))
@@ -532,11 +515,9 @@
     (define (task-run-transcript run)
       "Return the transcript event list from a task-run record."
       #((parameters
-         (run
-          (type task-run)
+         (run (type task-run)
           (description "A `task-run' record.")))
-        (returns
-         (type (list-of transcript-event))
+        (returns (type (list-of transcript-event))
          (description ("A list of `transcript-event' datums in emission order.")))
         (effects pure))
       (record-field-value run 'transcript '()))
@@ -544,11 +525,9 @@
     (define (task-run-budget run)
       "Return the budget ledger datum from a task-run record."
       #((parameters
-         (run
-          (type task-run)
+         (run (type task-run)
           (description "A `task-run' record.")))
-        (returns
-         (type task-budget)
+        (returns (type task-budget)
          (description
           ("The `task-budget' ledger datum recording step, host-call,"
             "and pure-cost usage.")))

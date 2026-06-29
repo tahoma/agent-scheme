@@ -270,8 +270,7 @@
       "Return #t when DATUM contains secret-prone source data."
       #((parameters
          (datum . "Scheme-readable value to inspect recursively."))
-        (returns
-         (type boolean)
+        (returns (type boolean)
          (description
           ("#t when DATUM appears to contain a secret or secret-prone"
             "source marker; otherwise #f.")))
@@ -329,11 +328,9 @@
          (datum
           . ("Context value that should not leave the local host"
              "boundary."))
-         (reason
-          (type string)
+         (reason (type string)
           (description "Human-readable reason for withholding DATUM.")))
-        (returns
-         (type local-only)
+        (returns (type local-only)
          (description "A `local-only` wrapper datum carrying REASON and DATUM."))
         (effects state-write))
       (remember! (make-local-only-record reason))
@@ -344,11 +341,9 @@
     (define (redaction-log . options)
       "Return recent redaction records as a Scheme-readable datum."
       #((parameters
-         (options
-          (type list)
+         (options (type list)
           (description ("Reserved option list for future filtering or pagination."))))
-        (returns
-         (type redaction-log)
+        (returns (type redaction-log)
          (description
           ("A `redaction-log` datum containing recent redaction"
             "records.")))
@@ -372,8 +367,7 @@
          (provider
           . ("Provider identifier or metadata reserved for"
              "provider-specific policy.")))
-        (returns
-         (type boolean)
+        (returns (type boolean)
          (description
           ("#t when DATUM has no detected secret or local-only"
             "content; otherwise #f.")))

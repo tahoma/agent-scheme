@@ -63,8 +63,7 @@
     (define (consent-make-job-store)
       "Construct an empty portable job store."
       #((parameters)
-        (returns
-         (type consent-job-store)
+        (returns (type consent-job-store)
          (description
           ("A mutable job store with no records and the next generated"
             "id set to zero.")))
@@ -194,11 +193,9 @@
     (define (job-datum-id job-datum)
       "Return the id field from a public JOB-DATUM."
       #((parameters
-         (job-datum
-          (type job)
+         (job-datum (type job)
           (description "Public job datum.")))
-        (returns
-         (type symbol)
+        (returns (type symbol)
          (description "The job id field."))
         (effects pure))
       (cadr (cadr job-datum)))
@@ -206,20 +203,16 @@
     (define (job-start! store session form options)
       "Create a queued eval job in STORE for SESSION and FORM."
       #((parameters
-         (store
-          (type consent-job-store)
+         (store (type consent-job-store)
           (description "Job store to mutate."))
-         (session
-          (type (or symbol list))
+         (session (type (or symbol list))
           (description ("Session id or session datum associated with the job.")))
          (form . "Scheme form or source datum to evaluate.")
-         (options
-          (type list)
+         (options (type list)
           (description
            ("Association list overriding id, budget, source, and other"
              "job fields."))))
-        (returns
-         (type job)
+        (returns (type job)
          (description "The queued public job datum."))
         (effects state-write))
       (let* ((id (option-ref options 'id (generated-id store)))
@@ -243,14 +236,11 @@
     (define (job-ref store id)
       "Return job ID datum from STORE, or #f."
       #((parameters
-         (store
-          (type consent-job-store)
+         (store (type consent-job-store)
           (description "Job store to search."))
-         (id
-          (type symbol)
+         (id (type symbol)
           (description "Job id symbol.")))
-        (returns
-         (type (or job boolean))
+        (returns (type (or job boolean))
          (description "The public job datum, or #f when ID is unknown."))
         (effects state-read))
       (let ((job (find-job store id)))
@@ -259,14 +249,11 @@
     (define (job-list store . maybe-session)
       "Return job datums from STORE, optionally filtered by SESSION."
       #((parameters
-         (store
-          (type consent-job-store)
+         (store (type consent-job-store)
           (description "Job store to inspect."))
-         (maybe-session
-          (type list)
+         (maybe-session (type list)
           (description "Optional session id values used to filter jobs.")))
-        (returns
-         (type (list-of job))
+        (returns (type (list-of job))
          (description "List of public job datums in creation order."))
         (effects state-read))
       (let ((session (if (null? maybe-session) #f (car maybe-session))))
@@ -282,14 +269,11 @@
     (define (job-status store id)
       "Return job ID status from STORE, or #f."
       #((parameters
-         (store
-          (type consent-job-store)
+         (store (type consent-job-store)
           (description "Job store to search."))
-         (id
-          (type symbol)
+         (id (type symbol)
           (description "Job id symbol.")))
-        (returns
-         (type (or symbol boolean))
+        (returns (type (or symbol boolean))
          (description "The job status symbol, or #f when ID is unknown."))
         (effects state-read))
       (let ((job (find-job store id)))
@@ -298,17 +282,13 @@
     (define (job-yields store id options)
       "Return job ID yields from STORE after any requested offset."
       #((parameters
-         (store
-          (type consent-job-store)
+         (store (type consent-job-store)
           (description "Job store to search."))
-         (id
-          (type symbol)
+         (id (type symbol)
           (description "Job id symbol."))
-         (options
-          (type list)
+         (options (type list)
           (description ("Association list; `after` skips events already seen."))))
-        (returns
-         (type list)
+        (returns (type list)
          (description ("List of yield events recorded after the requested offset.")))
         (effects state-read error))
       (let ((after (option-ref options 'after 0))
@@ -321,14 +301,11 @@
     (define (job-mark-running! store id)
       "Mark job ID as running."
       #((parameters
-         (store
-          (type consent-job-store)
+         (store (type consent-job-store)
           (description "Job store to mutate."))
-         (id
-          (type symbol)
+         (id (type symbol)
           (description "Job id symbol.")))
-        (returns
-         (type job)
+        (returns (type job)
          (description "The updated public job datum."))
         (effects state-write error))
       (let ((job (require-job store id)))
@@ -351,15 +328,12 @@
     (define (job-record-yield! store id event)
       "Append EVENT to job ID's stream and update its streaming status."
       #((parameters
-         (store
-          (type consent-job-store)
+         (store (type consent-job-store)
           (description "Job store to mutate."))
-         (id
-          (type symbol)
+         (id (type symbol)
           (description "Job id symbol."))
          (event . "Yield event datum to append."))
-        (returns
-         (type job)
+        (returns (type job)
          (description "The updated public job datum."))
         (effects state-write error))
       (let ((job (require-job store id)))
@@ -373,14 +347,11 @@
     (define (job-cancel! store id)
       "Request cooperative cancellation of job ID."
       #((parameters
-         (store
-          (type consent-job-store)
+         (store (type consent-job-store)
           (description "Job store to mutate."))
-         (id
-          (type symbol)
+         (id (type symbol)
           (description "Job id symbol.")))
-        (returns
-         (type job)
+        (returns (type job)
          (description "The updated public job datum."))
         (effects state-write error))
       (let ((job (require-job store id)))
@@ -393,15 +364,12 @@
     (define (job-interrupt! store id reason)
       "Request cooperative interrupt of job ID with REASON."
       #((parameters
-         (store
-          (type consent-job-store)
+         (store (type consent-job-store)
           (description "Job store to mutate."))
-         (id
-          (type symbol)
+         (id (type symbol)
           (description "Job id symbol."))
          (reason . "Interrupt reason datum."))
-        (returns
-         (type job)
+        (returns (type job)
          (description "The updated public job datum."))
         (effects state-write error))
       (let ((job (require-job store id)))
@@ -415,15 +383,12 @@
     (define (job-complete! store id result)
       "Complete job ID with RESULT."
       #((parameters
-         (store
-          (type consent-job-store)
+         (store (type consent-job-store)
           (description "Job store to mutate."))
-         (id
-          (type symbol)
+         (id (type symbol)
           (description "Job id symbol."))
          (result . "Evaluation or host result datum."))
-        (returns
-         (type job)
+        (returns (type job)
          (description "The completed public job datum."))
         (effects state-write error))
       (let ((job (require-job store id)))
@@ -436,17 +401,13 @@
     (define (job-fail! store id message)
       "Fail job ID with MESSAGE."
       #((parameters
-         (store
-          (type consent-job-store)
+         (store (type consent-job-store)
           (description "Job store to mutate."))
-         (id
-          (type symbol)
+         (id (type symbol)
           (description "Job id symbol."))
-         (message
-          (type (or string pair symbol))
+         (message (type (or string pair symbol))
           (description "Failure message string or datum.")))
-        (returns
-         (type job)
+        (returns (type job)
          (description "The failed public job datum."))
         (effects state-write error))
       (let ((job (require-job store id)))
@@ -459,17 +420,13 @@
     (define (job-finish-cancelled! store id message)
       "Finish job ID as cancelled with MESSAGE."
       #((parameters
-         (store
-          (type consent-job-store)
+         (store (type consent-job-store)
           (description "Job store to mutate."))
-         (id
-          (type symbol)
+         (id (type symbol)
           (description "Job id symbol."))
-         (message
-          (type (or string pair symbol))
+         (message (type (or string pair symbol))
           (description "Cancellation message string or datum.")))
-        (returns
-         (type job)
+        (returns (type job)
          (description "The cancelled public job datum."))
         (effects state-write error))
       (let ((job (require-job store id)))

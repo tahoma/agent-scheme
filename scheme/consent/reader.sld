@@ -163,11 +163,9 @@
       "so the public accessor accepts both forms with the same answer on"
       "every posture."
       #((parameters
-         (datum
-          (type (or consent-number number))
+         (datum (type (or consent-number number))
           (description ("Canonical number record or plain host number to unwrap."))))
-        (returns
-         (type number)
+        (returns (type number)
          (description
           ("The host payload of a canonical number record, or DATUM"
             "itself when it is already a plain host number.")))
@@ -255,14 +253,11 @@
       "Consent Scheme needs canonical integer text independent of host"
       "formatting."
       #((parameters
-         (integer
-          (type exact-integer)
+         (integer (type exact-integer)
           (description "Host integer to render as canonical digit text."))
-         (radix
-          (type exact-integer)
+         (radix (type exact-integer)
           (description ("Numeric base from 2 through 16 for the digit conversion."))))
-        (returns
-         (type string)
+        (returns (type string)
          (description
           ("A string of RADIX digits for INTEGER, with a leading minus"
             "sign for negative values and \"0\" for zero.")))
@@ -415,8 +410,7 @@
          (datum
           . ("Datum to associate source metadata with; ignored unless it"
              "has stable identity."))
-         (source
-          (type (or source-metadata boolean))
+         (source (type (or source-metadata boolean))
           (description ("Source metadata to attach, or #f to attach nothing."))))
         (returns
          . ("DATUM, after attaching SOURCE when DATUM is"
@@ -441,8 +435,7 @@
       "Return source metadata attached to DATUM, or #f when absent."
       #((parameters
          (datum . "Datum to look up source metadata for."))
-        (returns
-         (type (or source-metadata boolean))
+        (returns (type (or source-metadata boolean))
          (description
           ("A source-metadata record built from DATUM's attached"
             "metadata, or #f when none is attached.")))
@@ -461,8 +454,7 @@
       #((parameters
          (target . "Datum to receive copied source metadata.")
          (source . "Datum whose attached source metadata is copied.")
-         (maybe-overwrite
-          (type list)
+         (maybe-overwrite (type list)
           (description
            ("Optional flag; when truthy, overwrite TARGET's existing"
              "metadata."))))
@@ -782,18 +774,15 @@
       "canonical record gets the same answer it would on a reference host"
       "with a host literal."
       #((parameters
-         (value
-          (type exact-integer)
+         (value (type exact-integer)
           (description
            ("Host integer, or an already-canonical number returned"
              "unchanged.")))
-         (rest
-          (type exact-integer)
+         (rest (type exact-integer)
           (description
            ("Optional exactness symbol (default `exact') followed by an"
              "optional radix integer (default 10)."))))
-        (returns
-         (type exact-integer)
+        (returns (type exact-integer)
          (description
           ("A canonical integer number record wrapping VALUE with the"
             "requested exactness and radix.")))
@@ -833,18 +822,15 @@
       "An already-canonical number is returned unchanged (see"
       "consent-make-canonical-integer)."
       #((parameters
-         (value
-          (type (or number consent-number))
+         (value (type (or number consent-number))
           (description
            ("Host inexact number, or an already-canonical number"
              "returned unchanged.")))
-         (maybe-lexeme
-          (type string)
+         (maybe-lexeme (type string)
           (description
            ("Optional source lexeme string overriding the"
              "host-formatted spelling."))))
-        (returns
-         (type consent-number)
+        (returns (type consent-number)
          (description
           ("A canonical inexact decimal number record, delegating to"
             "the infnan constructor when VALUE is a host infinity or"
@@ -869,19 +855,15 @@
       "Public constructor for normalized rational number records."
       "Canonical-record components are unwrapped to their host payloads."
       #((parameters
-         (raw-numerator
-          (type (or exact-integer consent-number))
+         (raw-numerator (type (or exact-integer consent-number))
           (description ("Numerator as a host integer or canonical number record.")))
-         (raw-denominator
-          (type (or exact-integer consent-number))
+         (raw-denominator (type (or exact-integer consent-number))
           (description ("Denominator as a host integer or canonical number record.")))
-         (rest
-          (type list)
+         (rest (type list)
           (description
            ("Optional exactness symbol followed by an optional radix"
              "integer."))))
-        (returns
-         (type consent-number)
+        (returns (type consent-number)
          (description
           ("A normalized canonical rational record, collapsing to a"
             "canonical integer when the reduced denominator is one.")))
@@ -916,8 +898,7 @@
          (kind
           . ("Special-value spelling, one of \"+inf.0\", \"-inf.0\", or"
              "\"+nan.0\".")))
-        (returns
-         (type consent-number)
+        (returns (type consent-number)
          (description "A canonical inexact infnan number record for KIND."))
         (effects error))
       (make-consent-number
@@ -934,14 +915,11 @@
     (define (consent-make-canonical-complex real imaginary)
       "Public constructor for canonical rectangular complex number records."
       #((parameters
-         (real
-          (type consent-number)
+         (real (type consent-number)
           (description "Canonical number record for the real component."))
-         (imaginary
-          (type consent-number)
+         (imaginary (type consent-number)
           (description ("Canonical number record for the imaginary component."))))
-        (returns
-         (type consent-number)
+        (returns (type consent-number)
          (description
           ("A canonical complex number record pairing REAL and"
             "IMAGINARY, exact only when both components are exact.")))
@@ -963,11 +941,9 @@
       "Numeric predicates and helpers inspect the agent-owned representation"
       "instead of asking the host whether wrapped numbers are ordinary numbers."
       #((parameters
-         (number
-          (type consent-number)
+         (number (type consent-number)
           (description ("Value to test; only a canonical number record can be zero."))))
-        (returns
-         (type boolean)
+        (returns (type boolean)
          (description
           ("#t when NUMBER is a canonical integer, rational, decimal,"
             "or complex record equal to zero; #f otherwise.")))
@@ -990,11 +966,9 @@
     (define (consent-number-negative? number)
       "Public predicate for negative real Consent Scheme number records."
       #((parameters
-         (number
-          (type consent-number)
+         (number (type consent-number)
           (description ("Canonical Consent Scheme number record to test for sign."))))
-        (returns
-         (type boolean)
+        (returns (type boolean)
          (description
           ("#t when NUMBER is a negative integer, rational, decimal,"
             "or negative infinity; #f otherwise.")))
@@ -1013,13 +987,11 @@
     (define (consent-number-abs number)
       "Public helper that returns the absolute value of an Consent Scheme number record."
       #((parameters
-         (number
-          (type consent-number)
+         (number (type consent-number)
           (description
            ("Canonical Consent Scheme number record to take the"
              "magnitude of."))))
-        (returns
-         (type consent-number)
+        (returns (type consent-number)
          (description
           ("A canonical number record holding the absolute value of"
             "NUMBER, preserving its exactness and radix.")))
@@ -1072,11 +1044,9 @@
     (define (consent-number->external number)
       "Public renderer for Consent Scheme number records."
       #((parameters
-         (number
-          (type consent-number)
+         (number (type consent-number)
           (description "Canonical Consent Scheme number record to render.")))
-        (returns
-         (type string)
+        (returns (type string)
          (description
           ("A string with the number's canonical external spelling for"
             "integer, rational, decimal, infnan, and complex kinds.")))
@@ -2018,12 +1988,10 @@
       "Read one datum from SOURCE, enforce complete input consumption, and"
       "validate the resulting host data against Consent Scheme resource limits."
       #((parameters
-         (source
-          (type (or string port))
+         (source (type (or string port))
           (description
            ("Source string or port body to read a single datum from.")))
-         (maybe-options
-          (type list)
+         (maybe-options (type list)
           (description
            ("Optional reader options alist supplying budget overrides."))))
         (returns
@@ -2045,16 +2013,13 @@
       "Read a source body into datums for program/library evaluation.  Datum"
       "labels are scoped per datum, matching R7RS external representations."
       #((parameters
-         (source
-          (type (or string port))
+         (source (type (or string port))
           (description
            ("Source string or port body to read fully into datums.")))
-         (maybe-options
-          (type list)
+         (maybe-options (type list)
           (description
            ("Optional reader options alist supplying budget overrides."))))
-        (returns
-         (type list)
+        (returns (type list)
          (description
           ("A list of every datum read from SOURCE, in source order,"
             "each validated against the resource budgets.")))
@@ -2082,17 +2047,14 @@
       "Incremental read entry point for ports and REPL-like callers; the cdr of"
       "the result is the next source offset no matter which datum was returned."
       #((parameters
-         (source
-          (type string)
+         (source (type string)
           (description "Source string to read one datum from."))
          (position
           . ("Nonnegative offset within SOURCE at which to begin"
              "reading."))
-         (maybe-options
-          (type list)
+         (maybe-options (type list)
           (description ("Optional reader options alist supplying budget overrides."))))
-        (returns
-         (type pair)
+        (returns (type pair)
          (description
           ("A pair whose car is the read datum (or the end-of-file"
             "object) and whose cdr is the next source offset.")))
@@ -2134,14 +2096,11 @@
       "example a lexer-level or editor-grade strategy) through the `resync`"
       "option."
       #((parameters
-         (source
-          (type string)
+         (source (type string)
           (description ("Source string being scanned for the next top-level form.")))
-         (position
-          (type exact-integer)
+         (position (type exact-integer)
           (description ("Offset after which to search for the next top-level form."))))
-        (returns
-         (type exact-integer)
+        (returns (type exact-integer)
          (description
           ("The offset of the next line-anchored top-level form"
             "strictly after POSITION, or the length of SOURCE when none"
@@ -2323,11 +2282,9 @@
       "`complete`.  The resync point is caller-selectable through the `resync`"
       "option (defaulting to `consent-resync-to-next-form`)."
       #((parameters
-         (source
-          (type string)
+         (source (type string)
           (description "Source string to read fully in recovery mode."))
-         (maybe-options
-          (type list)
+         (maybe-options (type list)
           (description
            ("Optional reader options alist supplying `resync',"
              "`source-id', and budget overrides."))))
@@ -2377,14 +2334,12 @@
       "status so auto-indent and continuation prompts never confuse a valid"
       "prefix with a syntax error."
       #((parameters
-         (source
-          (type string)
+         (source (type string)
           (description "Source string to read one recovery step from."))
          (position
           . ("Nonnegative offset within SOURCE at which to begin"
              "reading."))
-         (maybe-options
-          (type list)
+         (maybe-options (type list)
           (description
            ("Optional reader options alist supplying `resync',"
              "`source-id', and budget overrides."))))
@@ -2520,8 +2475,7 @@
       "in read/evaluate pipelines while still enforcing depth and size budgets."
       #((parameters
          (datum . "Datum to validate against the resource budgets.")
-         (maybe-options
-          (type list)
+         (maybe-options (type list)
           (description
            ("Optional reader options alist supplying `max-depth',"
              "`max-total-nodes', `max-string-size', and"
@@ -2622,14 +2576,12 @@
       "shared and circular structure labels for write/shared mode."
       #((parameters
          (datum . "Consent Scheme datum to render as external text.")
-         (maybe-options
-          (type list)
+         (maybe-options (type list)
           (description
            ("Optional `mode' symbol (`write', `shared', or `display')"
              "followed by an optional display flag controlling string"
              "and character quoting."))))
-        (returns
-         (type string)
+        (returns (type string)
          (description
           ("A string holding the datum's external representation,"
             "emitting `#N=`/`#N#` datum labels for shared and circular"
@@ -2847,8 +2799,7 @@
       "marker instead of wedging an interactive loop or flooding output (#508)."
       #((parameters
          (datum . "Datum to render for an interactive display surface.")
-         (limits
-          (type list)
+         (limits (type list)
           (description
            ("Alist `((depth . D) (length . L) (size . S))' of"
              "nonnegative integer ceilings, each #f or absent for no"
@@ -2859,11 +2810,9 @@
              "characters emitted (a hard backstop that stops the walk"
              "once reached, so rendering is bounded in time as well as"
              "space).")))
-         (maybe-mode+display
-          (type list)
+         (maybe-mode+display (type list)
           (description ("Optional `consent-datum->external' mode and display flag."))))
-        (returns
-         (type string)
+        (returns (type string)
          (description
           ("Bounded external text: each elided depth/length/size point"
             "and each shared or circular back-edge renders as the"

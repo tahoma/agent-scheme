@@ -184,15 +184,13 @@
     (define (make-prompt-authority options)
       "Return a Scheme-readable prompt authority bundle."
       #((parameters
-         (options
-          (type list)
+         (options (type list)
           (description
            ("Association list with optional `origin', `source',"
              "`grants', `approvals', `policy', and `authorized' fields."
              "Non-empty grants, approvals, or policy authorize the"
              "bundle unless `authorized' is explicitly #f."))))
-        (returns
-         (type prompt-authority)
+        (returns (type prompt-authority)
          (description
           ("A `prompt-authority' datum that a prompt harness can"
             "inspect.")))
@@ -216,8 +214,7 @@
       "Return #t when DATUM is a prompt-authority bundle."
       #((parameters
          (datum . "Value to inspect."))
-        (returns
-         (type boolean)
+        (returns (type boolean)
          (description
           ("#t when DATUM is tagged as a `prompt-authority'; otherwise"
             "#f.")))
@@ -227,11 +224,9 @@
     (define (prompt-authority-field-value authority field . maybe-default)
       "Return AUTHORITY's FIELD value, or DEFAULT (or #f) when absent."
       #((parameters
-         (authority
-          (type prompt-authority)
+         (authority (type prompt-authority)
           (description "A `prompt-authority' datum."))
-         (field
-          (type symbol)
+         (field (type symbol)
           (description "Symbol naming the authority field to read."))
          (maybe-default . "Optional fallback value; defaults to #f."))
         (returns . ("The field value, or the fallback when FIELD is absent."))
@@ -242,11 +237,9 @@
     (define (prompt-authority-authorized? authority)
       "Return #t when AUTHORITY carries explicit prompt authority."
       #((parameters
-         (authority
-          (type prompt-authority)
+         (authority (type prompt-authority)
           (description "A `prompt-authority' datum.")))
-        (returns
-         (type boolean)
+        (returns (type boolean)
          (description
           ("#t when the bundle authorizes prompt dispatch; otherwise"
             "#f.")))
@@ -278,8 +271,7 @@
     (define (make-prompt-harness . maybe-options)
       "Return a prompt harness over a registry, default session, and authority."
       #((parameters
-         (maybe-options
-          (type list)
+         (maybe-options (type list)
           (description
            ("Optional association list overriding `registry' (an agent"
              "registry; defaults to a fresh `make-agent-registry'),"
@@ -289,8 +281,7 @@
              "defaults (`provider', `policy', `effects', `verifier',"
              "`operations', `control', `max-steps', `max-pure-cost',"
              "`scope') merged beneath per-call options."))))
-        (returns
-         (type prompt-harness)
+        (returns (type prompt-harness)
          (description "A `prompt-harness' the REPL verbs dispatch through."))
         (effects allocation)
         (see-also prompt current-prompt-harness make-agent-registry))
@@ -306,11 +297,9 @@
     (define (prompt-harness-registry harness)
       "Return HARNESS's agent registry."
       #((parameters
-         (harness
-          (type prompt-harness)
+         (harness (type prompt-harness)
           (description "A `prompt-harness'.")))
-        (returns
-         (type agent-registry)
+        (returns (type agent-registry)
          (description "The agent registry the harness selects agents from."))
         (effects state-read))
       (harness-registry harness))
@@ -318,11 +307,9 @@
     (define (prompt-harness-session harness)
       "Return HARNESS's current default session id."
       #((parameters
-         (harness
-          (type prompt-harness)
+         (harness (type prompt-harness)
           (description "A `prompt-harness'.")))
-        (returns
-         (type (or symbol boolean))
+        (returns (type (or symbol boolean))
          (description
           ("The current default session id symbol, or #f when none is"
             "set.")))
@@ -332,11 +319,9 @@
     (define (prompt-harness-authority? harness)
       "Return #t when HARNESS's current session carries granted authority."
       #((parameters
-         (harness
-          (type prompt-harness)
+         (harness (type prompt-harness)
           (description "A `prompt-harness'.")))
-        (returns
-         (type boolean)
+        (returns (type boolean)
          (description
           ("#t when the harness session is authorized to dispatch;"
             "otherwise #f.")))
@@ -349,11 +334,9 @@
     (define (prompt-harness-defaults harness)
       "Return HARNESS's runner defaults alist."
       #((parameters
-         (harness
-          (type prompt-harness)
+         (harness (type prompt-harness)
           (description "A `prompt-harness'.")))
-        (returns
-         (type list)
+        (returns (type list)
          (description
           ("The association list of runner defaults merged beneath"
             "per-call options.")))
@@ -363,19 +346,15 @@
     (define (prompt-harness-set-session! harness session . maybe-authority)
       "Set HARNESS's current session, optionally updating its authority flag."
       #((parameters
-         (harness
-          (type prompt-harness)
+         (harness (type prompt-harness)
           (description "A `prompt-harness' to mutate."))
-         (session
-          (type (or symbol boolean))
+         (session (type (or symbol boolean))
           (description "The session id symbol to make current, or #f."))
-         (maybe-authority
-          (type boolean)
+         (maybe-authority (type boolean)
           (description
            ("Optional new authority boolean for the session; left"
              "unchanged when omitted."))))
-        (returns
-         (type (or symbol boolean))
+        (returns (type (or symbol boolean))
          (description "The updated session id."))
         (effects state-write))
       (set-harness-session! harness session)
@@ -387,14 +366,11 @@
     (define (prompt-harness-set-authority! harness authority)
       "Set whether HARNESS's current session carries granted authority."
       #((parameters
-         (harness
-          (type prompt-harness)
+         (harness (type prompt-harness)
           (description "A `prompt-harness' to mutate."))
-         (authority
-          (type boolean)
+         (authority (type boolean)
           (description "Authority boolean for the current session.")))
-        (returns
-         (type boolean)
+        (returns (type boolean)
          (description "The stored authority boolean."))
         (effects state-write))
       (let ((value (normalize-authority authority)))
@@ -409,8 +385,7 @@
     (define (current-prompt-harness)
       "Return the process-local current harness, creating a default one lazily."
       #((parameters)
-        (returns
-         (type prompt-harness)
+        (returns (type prompt-harness)
          (description
           ("The ambient `prompt-harness' bare verb forms dispatch"
             "through.")))
@@ -423,11 +398,9 @@
     (define (set-current-prompt-harness! harness)
       "Install HARNESS as the process-local current harness."
       #((parameters
-         (harness
-          (type prompt-harness)
+         (harness (type prompt-harness)
           (description "A `prompt-harness' to make ambient.")))
-        (returns
-         (type prompt-harness)
+        (returns (type prompt-harness)
          (description "The installed harness."))
         (effects state-write))
       (set! ambient-harness harness)
@@ -655,16 +628,14 @@
     (define (prompt . args)
       "Prompt the automatically chosen agent at a goal in the current session."
       #((parameters
-         (args
-          (type list)
+         (args (type list)
           (description
            ("Either `(goal)' / `(goal options)' using the ambient"
              "harness, or `(harness goal)' / `(harness goal options)'"
              "against an explicit harness. GOAL is the goal string or"
              "datum; OPTIONS is an association list overriding the"
              "harness session and runner defaults."))))
-        (returns
-         (type prompt-result)
+        (returns (type prompt-result)
          (description
           ("A `prompt-result' record bundling the selection, the"
             "underlying `task-run', its terminal"
@@ -681,16 +652,14 @@
     (define (prompt-role . args)
       "Prompt an agent of a named role at a goal in the current session."
       #((parameters
-         (args
-          (type list)
+         (args (type list)
           (description
            ("Either `(role goal)' / `(role goal options)' using the"
              "ambient harness, or `(harness role goal)' / `(harness role"
              "goal options)' against an explicit harness. ROLE is the"
              "forced agent role symbol; GOAL and OPTIONS are as for"
              "`prompt'."))))
-        (returns
-         (type prompt-result)
+        (returns (type prompt-result)
          (description
           ("A `prompt-result' record for the role-selected agent, or a"
             "fail-closed `prompt-result' when the session lacks"
@@ -709,16 +678,14 @@
     (define (prompt-model . args)
       "Prompt an agent of a named model at a goal in the current session."
       #((parameters
-         (args
-          (type list)
+         (args (type list)
           (description
            ("Either `(model goal)' / `(model goal options)' using the"
              "ambient harness, or `(harness model goal)' / `(harness"
              "model goal options)' against an explicit harness. MODEL is"
              "the forced model id symbol; GOAL and OPTIONS are as for"
              "`prompt'."))))
-        (returns
-         (type prompt-result)
+        (returns (type prompt-result)
          (description
           ("A `prompt-result' record for the model-routed agent, or a"
             "fail-closed `prompt-result' when the session lacks"
@@ -750,8 +717,7 @@
          (maybe-harness
           . ("Optional explicit `prompt-harness'; defaults to the"
              "ambient harness.")))
-        (returns
-         (type list)
+        (returns (type list)
          (description "A list of agent datums in registration order."))
         (effects state-read)
         (see-also roles models prompt))
@@ -763,8 +729,7 @@
          (maybe-harness
           . ("Optional explicit `prompt-harness'; defaults to the"
              "ambient harness.")))
-        (returns
-         (type list)
+        (returns (type list)
          (description ("A list of distinct role symbols in registration order.")))
         (effects state-read)
         (see-also agents models prompt-role))
@@ -776,8 +741,7 @@
          (maybe-harness
           . ("Optional explicit `prompt-harness'; defaults to the"
              "ambient harness.")))
-        (returns
-         (type list)
+        (returns (type list)
          (description
           ("A list of distinct model specifications in registration"
             "order.")))
@@ -789,8 +753,7 @@
       "Return #t when DATUM is a prompt-result record."
       #((parameters
          (datum . "Value to inspect."))
-        (returns
-         (type boolean)
+        (returns (type boolean)
          (description
           ("#t when DATUM is tagged as a `prompt-result'; otherwise"
             "#f.")))
@@ -800,11 +763,9 @@
     (define (prompt-result-field-value result field . maybe-default)
       "Return RESULT's FIELD value, or DEFAULT (or #f) when absent."
       #((parameters
-         (result
-          (type prompt-result)
+         (result (type prompt-result)
           (description "A `prompt-result' record."))
-         (field
-          (type symbol)
+         (field (type symbol)
           (description "Symbol naming the field to read."))
          (maybe-default . "Optional fallback value; defaults to #f."))
         (returns . ("The field value, or the fallback when FIELD is absent."))
@@ -815,11 +776,9 @@
     (define (prompt-result-status result)
       "Return RESULT's dispatch status."
       #((parameters
-         (result
-          (type prompt-result)
+         (result (type prompt-result)
           (description "A `prompt-result' record.")))
-        (returns
-         (type symbol)
+        (returns (type symbol)
          (description
           ("The status symbol: `selected', `authority-missing',"
             "`no-session', or `no-agent'.")))
@@ -829,11 +788,9 @@
     (define (prompt-result-ok? result)
       "Return #t when RESULT selected an agent and dispatched it."
       #((parameters
-         (result
-          (type prompt-result)
+         (result (type prompt-result)
           (description "A `prompt-result' record.")))
-        (returns
-         (type boolean)
+        (returns (type boolean)
          (description
           ("#t when the status is `selected'; otherwise #f (a"
             "fail-closed result).")))
@@ -843,11 +800,9 @@
     (define (prompt-result-agent result)
       "Return RESULT's dispatched agent datum, or the symbol none."
       #((parameters
-         (result
-          (type prompt-result)
+         (result (type prompt-result)
           (description "A `prompt-result' record.")))
-        (returns
-         (type (or agent symbol))
+        (returns (type (or agent symbol))
          (description
           ("The agent datum, or the symbol none when nothing was"
             "dispatched.")))
@@ -857,11 +812,9 @@
     (define (prompt-result-agent-id result)
       "Return RESULT's dispatched agent id, or the symbol none."
       #((parameters
-         (result
-          (type prompt-result)
+         (result (type prompt-result)
           (description "A `prompt-result' record.")))
-        (returns
-         (type symbol)
+        (returns (type symbol)
          (description "The agent id symbol, or the symbol none."))
         (effects pure))
       (record-field-value result 'agent-id 'none))
@@ -869,11 +822,9 @@
     (define (prompt-result-role result)
       "Return the role of RESULT's dispatched agent."
       #((parameters
-         (result
-          (type prompt-result)
+         (result (type prompt-result)
           (description "A `prompt-result' record.")))
-        (returns
-         (type symbol)
+        (returns (type symbol)
          (description "The agent role symbol, or the symbol none."))
         (effects pure))
       (record-field-value result 'role 'none))
@@ -881,11 +832,9 @@
     (define (prompt-result-model result)
       "Return the model of RESULT's dispatched agent."
       #((parameters
-         (result
-          (type prompt-result)
+         (result (type prompt-result)
           (description "A `prompt-result' record.")))
-        (returns
-         (type symbol)
+        (returns (type symbol)
          (description "The agent model specification, or the symbol none."))
         (effects pure))
       (record-field-value result 'model 'none))
@@ -893,11 +842,9 @@
     (define (prompt-result-session result)
       "Return the session id RESULT dispatched into."
       #((parameters
-         (result
-          (type prompt-result)
+         (result (type prompt-result)
           (description "A `prompt-result' record.")))
-        (returns
-         (type (or symbol boolean))
+        (returns (type (or symbol boolean))
          (description "The session id symbol, or #f."))
         (effects pure))
       (record-field-value result 'session #f))
@@ -905,11 +852,9 @@
     (define (prompt-result-selection result)
       "Return RESULT's `agent-selection' decision record."
       #((parameters
-         (result
-          (type prompt-result)
+         (result (type prompt-result)
           (description "A `prompt-result' record.")))
-        (returns
-         (type agent-selection)
+        (returns (type agent-selection)
          (description
           ("The `agent-selection' decision record that chose the"
             "agent.")))
@@ -919,11 +864,9 @@
     (define (prompt-result-run result)
       "Return RESULT's underlying `task-run', or the symbol none."
       #((parameters
-         (result
-          (type prompt-result)
+         (result (type prompt-result)
           (description "A `prompt-result' record.")))
-        (returns
-         (type (or task-run symbol))
+        (returns (type (or task-run symbol))
          (description
           ("The `task-run' record, or the symbol none for a"
             "fail-closed result.")))
@@ -933,11 +876,9 @@
     (define (prompt-result-receipt result)
       "Return RESULT's terminal receipt."
       #((parameters
-         (result
-          (type prompt-result)
+         (result (type prompt-result)
           (description "A `prompt-result' record.")))
-        (returns
-         (type pair)
+        (returns (type pair)
          (description
           ("The `task-stop'/`task-pause' receipt, or a `prompt-error'"
             "for a fail-closed result.")))
@@ -947,11 +888,9 @@
     (define (prompt-result-state result)
       "Return the final task lifecycle state RESULT reached."
       #((parameters
-         (result
-          (type prompt-result)
+         (result (type prompt-result)
           (description "A `prompt-result' record.")))
-        (returns
-         (type symbol)
+        (returns (type symbol)
          (description
           ("The final task state symbol, or `failed-closed' for a"
             "fail-closed result.")))
@@ -961,11 +900,9 @@
     (define (prompt-result-completion result)
       "Return RESULT's `agent-completion' datum, or the symbol none."
       #((parameters
-         (result
-          (type prompt-result)
+         (result (type prompt-result)
           (description "A `prompt-result' record.")))
-        (returns
-         (type (or agent-completion symbol))
+        (returns (type (or agent-completion symbol))
          (description
           ("The `agent-completion' datum when the task completed;"
             "otherwise the symbol none.")))
@@ -975,11 +912,9 @@
     (define (prompt-result-transcript result)
       "Return the transcript events RESULT emitted."
       #((parameters
-         (result
-          (type prompt-result)
+         (result (type prompt-result)
           (description "A `prompt-result' record.")))
-        (returns
-         (type list)
+        (returns (type list)
          (description
           ("A list of `transcript-event' datums"
             "(yield/progress/request/audit/provider events), in"
@@ -990,11 +925,9 @@
     (define (prompt-result-observations result)
       "Return the observations RESULT recorded."
       #((parameters
-         (result
-          (type prompt-result)
+         (result (type prompt-result)
           (description "A `prompt-result' record.")))
-        (returns
-         (type list)
+        (returns (type list)
          (description ("A list of `agent-observation' datums in execution order.")))
         (effects pure))
       (record-field-value result 'observations '()))
@@ -1002,11 +935,9 @@
     (define (prompt-result-budget result)
       "Return RESULT's budget ledger datum, or the symbol none."
       #((parameters
-         (result
-          (type prompt-result)
+         (result (type prompt-result)
           (description "A `prompt-result' record.")))
-        (returns
-         (type (or task-budget symbol))
+        (returns (type (or task-budget symbol))
          (description
           ("The `task-budget' ledger datum, or the symbol none for a"
             "fail-closed result.")))
@@ -1016,11 +947,9 @@
     (define (prompt-result-audit result)
       "Return RESULT's Scheme-readable audit trail."
       #((parameters
-         (result
-          (type prompt-result)
+         (result (type prompt-result)
           (description "A `prompt-result' record.")))
-        (returns
-         (type list)
+        (returns (type list)
          (description
           ("A list of `prompt-audit' records describing selection,"
             "routing, and any authority denial.")))

@@ -601,22 +601,17 @@
       "output to WRITE-OUTPUT on separate streams, returning the"
       "close-status exit code."
       #((parameters
-         (read-chunk
-          (type string)
+         (read-chunk (type string)
           (description
            ("Chunk source thunk yielding the next newline-kept"
              "interaction-input string or EOF.")))
-         (write-record
-          (type procedure)
+         (write-record (type procedure)
           (description ("Procedure receiving each emitted contract record datum.")))
-         (write-output
-          (type procedure)
+         (write-output (type procedure)
           (description ("Procedure receiving each drained program-output string.")))
-         (session
-          (type symbol)
+         (session (type symbol)
           (description ("Session identifier symbol or string for the record stream.")))
-         (maybe-options
-          (type list)
+         (maybe-options (type list)
           (description
            ("Optional single-element list holding the REPL option"
              "alist."))))
@@ -631,21 +626,17 @@
       "Drive a REPL session over READ-CHUNK and return the ordered contract"
       "records, discarding program output."
       #((parameters
-         (read-chunk
-          (type procedure)
+         (read-chunk (type procedure)
           (description
            ("Chunk source thunk yielding the next interaction-input"
              "string or EOF.")))
-         (session
-          (type (or symbol string))
+         (session (type (or symbol string))
           (description ("Session identifier symbol or string for the record stream.")))
-         (maybe-options
-          (type list)
+         (maybe-options (type list)
           (description
            ("Optional single-element list holding the REPL option"
              "alist."))))
-        (returns
-         (type list)
+        (returns (type list)
          (description "The ordered list of emitted contract record datums."))
         (effects host-eval allocation error))
       (let ((records '()))
@@ -660,21 +651,17 @@
       "Drive a REPL session over INPUT split into newline chunks and return"
       "the ordered contract records."
       #((parameters
-         (input
-          (type string)
+         (input (type string)
           (description
            ("Interaction-input text to split into newline-kept chunks"
              "and drive.")))
-         (session
-          (type (or symbol string))
+         (session (type (or symbol string))
           (description ("Session identifier symbol or string for the record stream.")))
-         (maybe-options
-          (type list)
+         (maybe-options (type list)
           (description
            ("Optional single-element list holding the REPL option"
              "alist."))))
-        (returns
-         (type list)
+        (returns (type list)
          (description "The ordered list of emitted contract record datums."))
         (effects host-eval allocation error))
       (apply cli-repl-drive
@@ -694,13 +681,11 @@
       "contract records, reading with the standard reader the capture format"
       "is written for."
       #((parameters
-         (text
-          (type string)
+         (text (type string)
           (description
            ("Captured `datum'-chrome stream text, one record datum per"
              "line."))))
-        (returns
-         (type list)
+        (returns (type list)
          (description
           ("The ordered list of contract record datums reloaded from"
             "the stream.")))
@@ -719,13 +704,11 @@
       "conditions, and the exit record contribute nothing, so the result is"
       "exactly the forms a replay can re-feed."
       #((parameters
-         (records
-          (type list)
+         (records (type list)
           (description
            ("List of contract record datums to scan for complete"
              "submissions."))))
-        (returns
-         (type string)
+        (returns (type string)
          (description
           ("The ordered list of source strings for each complete"
             "submission.")))
@@ -745,13 +728,11 @@
       "complete submission's source followed by a newline, so a fresh loop"
       "reads the same forms."
       #((parameters
-         (records
-          (type list)
+         (records (type list)
           (description
            ("List of contract record datums whose complete submissions"
              "are replayed."))))
-        (returns
-         (type string)
+        (returns (type string)
          (description
           ("The interaction-input string: each submission source plus"
             "a trailing newline.")))
@@ -770,23 +751,19 @@
       "than reproducing the recorded value (compare with"
       "`cli-repl-replay-report')."
       #((parameters
-         (records
-          (type list)
+         (records (type list)
           (description
            ("Captured contract record datums whose complete submissions"
              "are re-fed.")))
-         (session
-          (type (or symbol string))
+         (session (type (or symbol string))
           (description
            ("Session identifier symbol or string for the fresh replay"
              "session.")))
-         (maybe-options
-          (type list)
+         (maybe-options (type list)
           (description
            ("Optional single-element list holding the REPL option"
              "alist."))))
-        (returns
-         (type list)
+        (returns (type list)
          (description
           ("The new contract record stream produced by replaying the"
             "submissions.")))
@@ -927,13 +904,11 @@
       "arguments are ignored, and the caller validates chrome and color"
       "against the registry and the known modes."
       #((parameters
-         (arguments
-          (type string)
+         (arguments (type string)
           (description
            ("List of command-line argument strings to parse for REPL"
              "flags."))))
-        (returns
-         (type list)
+        (returns (type list)
          (description
           ("The option alist with session, chrome, color, and replay"
             "entries.")))
@@ -1011,27 +986,21 @@
       "flag (default #f) models a host that already echoes interaction"
       "input."
       #((parameters
-         (input
-          (type string)
+         (input (type string)
           (description "Interaction-input text driven through the REPL."))
-         (session
-          (type (or symbol string))
+         (session (type (or symbol string))
           (description ("Session identifier symbol or string for the record stream.")))
-         (chrome-name
-          (type symbol)
+         (chrome-name (type symbol)
           (description
            ("Chrome name symbol selecting the control-channel"
              "rendering.")))
-         (color?
-          (type boolean)
+         (color? (type boolean)
           (description "True to paint the control channel with ANSI color."))
-         (maybe-input-echoed?
-          (type list)
+         (maybe-input-echoed? (type list)
           (description
            ("Optional flag list; #t models a host already echoing"
              "input."))))
-        (returns
-         (type pair)
+        (returns (type pair)
          (description
           ("A pair (CONTROL . PROGRAM-OUTPUT) of painted control text"
             "and raw stdout text.")))
@@ -1065,27 +1034,21 @@
       "interactive TTY -- so the comment chrome suppresses its own"
       "submission echo just as the live terminal entry does."
       #((parameters
-         (input
-          (type string)
+         (input (type string)
           (description "Interaction-input text driven through the REPL."))
-         (session
-          (type (or symbol string))
+         (session (type (or symbol string))
           (description ("Session identifier symbol or string for the record stream.")))
-         (chrome-name
-          (type symbol)
+         (chrome-name (type symbol)
           (description
            ("Chrome name symbol selecting the control-channel"
              "rendering.")))
-         (color?
-          (type boolean)
+         (color? (type boolean)
           (description "True to paint the control channel with ANSI color."))
-         (maybe-input-echoed?
-          (type list)
+         (maybe-input-echoed? (type list)
           (description
            ("Optional flag list; #t models a host already echoing"
              "input."))))
-        (returns
-         (type string)
+        (returns (type string)
          (description
           ("The CHROME-NAME chrome's control-channel text, painted"
             "when COLOR? is true.")))
@@ -1115,31 +1078,25 @@
       "`repl-condition' -- a divergence the report records rather than"
       "silently reproducing the recorded value."
       #((parameters
-         (path
-          (type string)
+         (path (type string)
           (description
            ("Filesystem path of the captured `datum'-chrome transcript"
              "to reload.")))
-         (session
-          (type (or symbol string))
+         (session (type (or symbol string))
           (description
            ("Session identifier symbol or string for the fresh replay"
              "session.")))
-         (chrome
-          (type procedure)
+         (chrome (type procedure)
           (description
            ("Chrome procedure painting each replayed record for"
              "RECORD-PORT.")))
-         (color?
-          (type boolean)
+         (color? (type boolean)
           (description "True to paint the replayed record stream with ANSI color."))
-         (record-port
-          (type port)
+         (record-port (type port)
           (description
            ("Output port receiving the painted replay stream and report"
              "datum."))))
-        (returns
-         (type exact-integer)
+        (returns (type exact-integer)
          (description
           ("0 when the replay reproduced the captured outcomes, 1 when"
             "it diverged.")))

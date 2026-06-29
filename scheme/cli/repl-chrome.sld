@@ -276,18 +276,15 @@
       "program output raw on stdout.  The #f is the switch between the two"
       "streams."
       #((parameters
-         (name
-          (type symbol)
+         (name (type symbol)
           (description
            ("Chrome name as a symbol or string, looked up against the"
              "registry.")))
-         (session
-          (type symbol)
+         (session (type symbol)
           (description
            ("Session id as a symbol or string, used to align the output"
              "gutter."))))
-        (returns
-         (type procedure)
+        (returns (type procedure)
          (description
           ("A one-argument procedure mapping a program-output chunk to"
             "control-channel painter input for the `comment' chrome, or"
@@ -402,13 +399,11 @@
     (define (cli-repl-chrome-lookup name)
       "Return the chrome procedure registered under NAME (a symbol or string), or #f."
       #((parameters
-         (name
-          (type symbol)
+         (name (type symbol)
           (description
            ("Chrome name as a symbol or string to resolve against the"
              "registry."))))
-        (returns
-         (type (or procedure boolean))
+        (returns (type (or procedure boolean))
          (description
           ("The render procedure registered under NAME, or #f when no"
             "chrome matches.")))
@@ -420,8 +415,7 @@
     (define (cli-repl-chrome-names)
       "Return the list of registered chrome name symbols, in declaration order."
       #((parameters)
-        (returns
-         (type symbol)
+        (returns (type symbol)
          (description
           ("A freshly allocated list of the registered chrome name"
             "symbols, in declaration order.")))
@@ -431,8 +425,7 @@
     (define (cli-repl-chrome-default-name)
       "Return the default chrome name."
       #((parameters)
-        (returns
-         (type symbol)
+        (returns (type symbol)
          (description ("The symbol `comment', the name of the default chrome.")))
         (effects pure))
       'comment)
@@ -476,18 +469,15 @@
       "to a string or #f, applying ANSI SGR per role when COLOR? is true; a"
       "plain string is returned verbatim and never colored."
       #((parameters
-         (result
-          (type (or string list boolean))
+         (result (type (or string list boolean))
           (description
            ("A chrome result: #f, a verbatim string, or a list of"
              "`(role . text)' segments.")))
-         (color?
-          (type boolean)
+         (color? (type boolean)
           (description
            ("When #t, wrap colorable segments in ANSI SGR escapes by"
              "their role."))))
-        (returns
-         (type (or string boolean))
+        (returns (type (or string boolean))
          (description
           ("#f when RESULT is #f, the string unchanged when RESULT is"
             "a string, otherwise the concatenated segment text with"
@@ -514,16 +504,13 @@
       "when piped or redirected: NO-COLOR? is #t when the NO_COLOR environment"
       "variable is set, and TTY? is #t when the control channel is a terminal."
       #((parameters
-         (mode
-          (type symbol)
+         (mode (type symbol)
           (description "Color mode symbol: `auto', `always', or `never'."))
-         (no-color?
-          (type boolean)
+         (no-color? (type boolean)
           (description
            ("#t when the NO_COLOR environment variable is set, forcing"
              "plain output under `auto'.")))
-         (tty?
-          (type boolean)
+         (tty? (type boolean)
           (description
            ("#t when the control channel is a terminal, enabling color"
              "under `auto'."))))

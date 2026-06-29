@@ -49,11 +49,9 @@
       "`#!' as the first two characters followed by `/' or whitespace,"
       "narrow enough to leave `#!fold-case' and other `#!'-tokens alone."
       #((parameters
-         (source
-          (type string)
+         (source (type string)
           (description ("Script source text to inspect for a leading shebang."))))
-        (returns
-         (type boolean)
+        (returns (type boolean)
          (description
           ("#t when SOURCE opens with a `#!' followed by `/' or"
             "whitespace, else #f.")))
@@ -78,13 +76,11 @@
       "line and later datums keep their line numbers; SOURCE without a"
       "shebang is returned unchanged for the reader."
       #((parameters
-         (source
-          (type string)
+         (source (type string)
           (description
            ("Script source text whose leading shebang line, if any, is"
              "removed."))))
-        (returns
-         (type string)
+        (returns (type string)
          (description
           ("SOURCE with the shebang stripped up to its newline, or"
             "SOURCE unchanged when none is present.")))
@@ -109,11 +105,9 @@
       "Return PATH's contents with any leading executable-script shebang"
       "removed, ready for the reader."
       #((parameters
-         (path
-          (type string)
+         (path (type string)
           (description "Filesystem path of the script file to read.")))
-        (returns
-         (type string)
+        (returns (type string)
          (description
           ("The file's contents as a string with any leading shebang"
             "line stripped.")))
@@ -174,13 +168,11 @@
       "`consent-program-input-from-string'. This is the host-neutral peer"
       "of the Emacs `consent-script-run-file'."
       #((parameters
-         (path
-          (type string)
+         (path (type string)
           (description
            ("Filesystem path of the executable Consent Scheme script to"
              "run.")))
-         (rest
-          (type list)
+         (rest (type list)
           (description
            ("Optional evaluation arguments forwarded to"
              "`consent-eval-source' (environment, options)."))))
@@ -222,13 +214,11 @@
       "its CI configuration from the host environment; that capability remains"
       "denied to ordinary scripts."
       #((parameters
-         (root
-          (type string)
+         (root (type string)
           (description
            ("Absolute directory the host run is scoped to; becomes the"
              "include directory and sole file-access root."))))
-        (returns
-         (type list)
+        (returns (type list)
          (description
           ("An options alist of include-directory, capability grants,"
             "and raised per-run budgets for the host runner.")))
@@ -278,23 +268,19 @@
       "`evaluation-result' datum at the first error -- so a CLI caller exits"
       "non-zero exactly when a captured test assertion raised."
       #((parameters
-         (path
-          (type string)
+         (path (type string)
           (description
            ("Filesystem path of the host-runner test file to evaluate"
              "form by form.")))
-         (root
-          (type string)
+         (root (type string)
           (description
            ("Absolute working directory the run is scoped to for file"
              "access and include resolution.")))
-         (emit
-          (type procedure)
+         (emit (type procedure)
           (description
            ("Procedure called with each form's captured program output"
              "so the host can stream it to real stdout."))))
-        (returns
-         (type (or boolean evaluation-result))
+        (returns (type (or boolean evaluation-result))
          (description
           ("#t when every form completes, or the failing"
             "`evaluation-result' datum at the first error.")))

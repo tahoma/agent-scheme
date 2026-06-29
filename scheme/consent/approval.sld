@@ -31,8 +31,7 @@
     (define (consent-make-approval-store)
       "Construct an empty approval store."
       #((parameters)
-        (returns
-         (type consent-approval-store)
+        (returns (type consent-approval-store)
          (description
           ("A mutable approval store with no records and the next"
             "generated id set to zero.")))
@@ -121,14 +120,11 @@
     (define (approval-ref store id)
       "Return approval record ID from STORE, or #f."
       #((parameters
-         (store
-          (type consent-approval-store)
+         (store (type consent-approval-store)
           (description "Approval store to search."))
-         (id
-          (type symbol)
+         (id (type symbol)
           (description "Approval request id symbol.")))
-        (returns
-         (type (or approval-request boolean))
+        (returns (type (or approval-request boolean))
          (description
           ("The matching approval request datum, or #f when ID is"
             "unknown.")))
@@ -142,14 +138,12 @@
     (define (approval-request! store datum)
       "Create an approval request from DATUM in STORE and return its id."
       #((parameters
-         (store
-          (type consent-approval-store)
+         (store (type consent-approval-store)
           (description "Approval store to mutate."))
          (datum
           . ("Requested effect or approval payload as Scheme-readable"
              "data.")))
-        (returns
-         (type symbol)
+        (returns (type symbol)
          (description "The generated approval id symbol."))
         (effects state-write))
       (let ((record (make-approval-record store datum)))
@@ -159,14 +153,11 @@
     (define (approval-status store id)
       "Return approval ID status from STORE, or #f."
       #((parameters
-         (store
-          (type consent-approval-store)
+         (store (type consent-approval-store)
           (description "Approval store to search."))
-         (id
-          (type symbol)
+         (id (type symbol)
           (description "Approval request id symbol.")))
-        (returns
-         (type (or symbol boolean))
+        (returns (type (or symbol boolean))
          (description ("The approval status symbol, or #f when ID is unknown.")))
         (effects state-read))
       (let ((record (approval-ref store id)))
@@ -188,17 +179,13 @@
     (define (approval-resolve! store id decision)
       "Resolve approval ID in STORE with DECISION and return the record."
       #((parameters
-         (store
-          (type consent-approval-store)
+         (store (type consent-approval-store)
           (description "Approval store to mutate."))
-         (id
-          (type symbol)
+         (id (type symbol)
           (description "Approval request id symbol."))
-         (decision
-          (type symbol)
+         (decision (type symbol)
           (description "Resolution status, either approved or denied.")))
-        (returns
-         (type approval-request)
+        (returns (type approval-request)
          (description "The resolved approval request datum."))
         (effects state-write error))
       (let ((status (normalize-status decision))
@@ -212,14 +199,11 @@
     (define (approval-cancel! store id)
       "Cancel approval ID in STORE and return the record."
       #((parameters
-         (store
-          (type consent-approval-store)
+         (store (type consent-approval-store)
           (description "Approval store to mutate."))
-         (id
-          (type symbol)
+         (id (type symbol)
           (description "Approval request id symbol.")))
-        (returns
-         (type approval-request)
+        (returns (type approval-request)
          (description "The canceled approval request datum."))
         (effects state-write error))
       (let ((record (approval-ref store id)))
@@ -232,11 +216,9 @@
     (define (approval-pending store)
       "Return pending approval records in creation order."
       #((parameters
-         (store
-          (type consent-approval-store)
+         (store (type consent-approval-store)
           (description "Approval store to inspect.")))
-        (returns
-         (type (list-of approval-request))
+        (returns (type (list-of approval-request))
          (description ("List of approval request datums whose status is pending.")))
         (effects state-read))
       (let loop ((records (store-records store)) (result '()))
