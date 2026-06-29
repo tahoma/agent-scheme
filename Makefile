@@ -89,8 +89,8 @@ CONSENT_EMACS_INTEGRATION_TEST_SELECTOR ?= (or "consent-native-cli-daemon.*" "co
 # install-without-binary-fails) stay in `test-emacs-tools' since they are fast.
 CONSENT_EMACS_NATIVE_BUILD_TEST_SELECTOR ?= "^consent-compile-portable-test-\\(racket\\|gambit\\)-\\(builds-runner\\|install-and-dist\\)$$"
 CONSENT_PARITY_TEST_SELECTOR ?= "^consent-parity-test-.*"
-CONSENT_LIVE_MODEL_CI_SELECTOR ?= consent-models-test-live-local-openai-compatible-completion
-CONSENT_LIVE_MODEL_SELECTOR ?= "consent-models-test-live-local-.*"
+CONSENT_LIVE_MODEL_CI_SELECTOR ?= (or "consent-models-test-live-local-openai-compatible-completion" "consent-models-test-live-local-openai-compatible-tool-call" "consent-models-test-live-portable-racket-local-openai-compatible-tool-call" "consent-models-test-live-portable-compiled-local-openai-compatible-tool-call")
+CONSENT_LIVE_MODEL_SELECTOR ?= (or "consent-models-test-live-local-.*" "consent-models-test-live-portable-.*")
 CONSENT_PORTABLE_TEST_SHARD_TARGETS ?= test-portable-gambit test-portable-gambit-native test-portable-racket test-portable-compiled test-portable-guile test-portable-gauche
 CONSENT_EMACS_TEST_SHARD_TARGETS ?= test-emacs-core test-emacs-library test-emacs-capabilities test-emacs-tools test-emacs-integration
 # Representative portable host kept in the trimmed default make test shard set.
@@ -467,10 +467,20 @@ test-parity:
 	CONSENT_TEST_SELECTOR='$(CONSENT_PARITY_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
 
 test-live-model-ci:
-	CONSENT_LIVE_MODEL_TEST=1 CONSENT_TEST_SELECTOR='$(CONSENT_LIVE_MODEL_CI_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
+	@if command -v '$(CONSENT_RACKET)' >/dev/null 2>&1 && command -v '$(CONSENT_RACO)' >/dev/null 2>&1; then \
+		CONSENT_COMPILE_HOST=racket $(CONSENT_PARALLEL_MAKE) compile; \
+	else \
+		printf '%s\n' 'Racket compile prerequisites are not available; compiled live model shard will skip if no runner exists.'; \
+	fi
+	CONSENT_LIVE_MODEL_TEST=1 CONSENT_COMPILED='$(abspath $(CONSENT_COMPILE_BUILD_DIR)/racket/bin/consent)' CONSENT_TEST_SELECTOR='$(CONSENT_LIVE_MODEL_CI_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
 
 test-live-model:
-	CONSENT_LIVE_MODEL_TEST=1 CONSENT_LIVE_MODEL_MATRIX=1 CONSENT_TEST_SELECTOR='$(CONSENT_LIVE_MODEL_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
+	@if command -v '$(CONSENT_RACKET)' >/dev/null 2>&1 && command -v '$(CONSENT_RACO)' >/dev/null 2>&1; then \
+		CONSENT_COMPILE_HOST=racket $(CONSENT_PARALLEL_MAKE) compile; \
+	else \
+		printf '%s\n' 'Racket compile prerequisites are not available; compiled live model shard will skip if no runner exists.'; \
+	fi
+	CONSENT_LIVE_MODEL_TEST=1 CONSENT_LIVE_MODEL_MATRIX=1 CONSENT_COMPILED='$(abspath $(CONSENT_COMPILE_BUILD_DIR)/racket/bin/consent)' CONSENT_TEST_SELECTOR='$(CONSENT_LIVE_MODEL_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
 
 conformance-oracle:
 	$(EMACS) -Q --batch -L lisp --eval "(require 'consent-oracle)" --eval "(consent-oracle-batch-main)"

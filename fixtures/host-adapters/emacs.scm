@@ -55,6 +55,7 @@
      (library (agent memory))
      (library (agent plan))
      (library (agent models))
+     (library (agent models primitive))
      (library (agent context))
      (library (agent reflect))
      (library (agent redaction))

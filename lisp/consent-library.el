@@ -123,6 +123,7 @@
     "(agent memory)"
     "(agent plan)"
     "(agent models)"
+    "(agent models primitive)"
     "(agent context)"
     "(agent reflect)"
     "(agent redaction)"
@@ -153,6 +154,8 @@ core rather than the agent domain it governs.")
      . "../scheme/agent/vcs.sld")
     ("(agent network)"
      . "../scheme/agent/network.sld")
+    ("(agent models)"
+     . "../scheme/agent/models.sld")
     ("(agent registry)"
      . "../scheme/agent/registry.sld")
     ("(agent proposal)"
@@ -515,6 +518,10 @@ core rather than the agent domain it governs.")
       (consent-plan-primitive-specs)
       context))
     ("(agent models)"
+     (unless (gethash key (consent--eval-context-libraries context))
+       (consent--register-source-library
+        (consent--agent-source-library-source key) context environment)))
+    ("(agent models primitive)"
      (consent--register-primitive-library
       key
       (consent-models-primitive-specs)

@@ -17,6 +17,7 @@
 (require 'consent-models)
 (require 'consent-policy)
 (require 'consent-result)
+(require 'consent-scheme-host)
 
 (defvar consent-models-test--requests nil
   "Requests received by the fake model transport.")
@@ -70,7 +71,7 @@
 (defun consent-models-test--live-model ()
   "Return the live local model id for integration tests."
   (or (getenv "CONSENT_LIVE_MODEL_ID")
-      "qwen2.5-coder:0.5b"))
+      "qwen3:0.6b"))
 
 (defun consent-models-test--live-matrix-enabled-p ()
   "Return non-nil when the full live local model matrix is enabled."
@@ -122,6 +123,49 @@
   (and (stringp external)
        (> (length external) 2)
        (not (string-match-p "\\`\"[[:space:]]*\"\\'" external))))
+
+(defun consent-models-test--live-tool-call-external ()
+  "Return a live forced tool-call output as external text."
+  (consent-models-test--external
+   (format
+    "(import (scheme base) (agent models))
+     (define (local-echo text)
+       \"Echo TEXT through a pure local helper.\"
+       #((parameters
+          (text (type string)
+           (description \"Text to echo.\")))
+         (returns (type string)
+          (description \"The echoed text.\"))
+         (effects pure))
+       text)
+     (model-provider-register!
+      '(model-provider
+        (id local-live-tools)
+        (kind local)
+        (transport openai-compatible-http)
+        (endpoint %S)
+        (models
+         (((id %S)
+           (roles (scheme-scripter code))
+           (privacy local))))))
+     (let ((tool (model-tool-spec 'local-echo)))
+       (model-complete
+        'scheme-scripter
+        \"Call the local-echo tool with text exactly portable-ci-tool-call.\"
+        (list (list 'tools (list tool))
+              (list 'tool-choice tool))))"
+    (consent-models-test--live-endpoint)
+    (consent-models-test--live-model))))
+
+(defconst consent-models-test--live-portable-test-files
+  '("tests/scheme/consent-models-live-test.scm")
+  "Portable live model files run by the model-specific ERT bridge tests.")
+
+(defun consent-models-test--run-live-portable-host (host display-name)
+  "Run live model portable tests on HOST named DISPLAY-NAME."
+  (let ((consent--scheme-host-test-files
+         consent-models-test--live-portable-test-files))
+    (consent--scheme-host-run-suite host display-name)))
 
 (ert-deftest consent-models-test-local-complete-through-transport ()
   "Expose `(agent models)' and complete through a selected local provider."
@@ -396,6 +440,30 @@
             endpoint
             model))))
     (should (string-match-p "5" external))))
+
+(ert-deftest consent-models-test-live-local-openai-compatible-tool-call ()
+  "Opt-in live proof that the Emacs host receives model tool calls."
+  (skip-unless (consent-models-test--live-enabled-p))
+  (consent-models-test--reset)
+  (let ((external (consent-models-test--live-tool-call-external)))
+    (should (string-match-p "(model-message" external))
+    (should (string-match-p "(tool-calls" external))
+    (should (string-match-p "(name local-echo)" external))
+    (should (string-match-p "(arguments ((text \"" external))))
+
+(ert-deftest consent-models-test-live-portable-racket-local-openai-compatible-tool-call ()
+  "Opt-in live proof that the portable Racket host receives model tool calls."
+  (skip-unless (consent-models-test--live-enabled-p))
+  (consent-models-test--run-live-portable-host
+   'racket
+   "Racket live model tool-call"))
+
+(ert-deftest consent-models-test-live-portable-compiled-local-openai-compatible-tool-call ()
+  "Opt-in live proof that the compiled Consent host receives model tool calls."
+  (skip-unless (consent-models-test--live-enabled-p))
+  (consent-models-test--run-live-portable-host
+   'compiled
+   "Racket-compiled Consent Scheme live model tool-call"))
 
 (ert-deftest consent-models-test-live-local-suggested-model-matrix ()
   "Opt-in live proof across the documented local role/model matrix."

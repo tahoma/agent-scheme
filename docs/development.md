@@ -858,8 +858,10 @@ record is JSON Lines tagged with a `schema_version`, uploaded as the
 `ci-run-record` artifact. See [CI run record](ci-run-record.md) for the schema,
 the field set, the schema-version discipline, and the durable-sink plan.
 
-Live local model tests require an OpenAI-compatible local model endpoint. Run
-the CI smoke selector with:
+Live local model tests require an OpenAI-compatible local model endpoint. The
+CI smoke target exercises ordinary completion plus forced tool-calling through
+the Emacs host, the portable Racket host, and the Racket-compiled Consent
+Scheme host. Run the CI smoke selector with:
 
 ```sh
 make test-live-model-ci

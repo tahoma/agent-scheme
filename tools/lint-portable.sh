@@ -45,10 +45,12 @@ esac
 # gate loudly (forcing either a host-loadable design or a documented entry here)
 # rather than being silently skipped.
 #   (agent diagnostics) (agent diff) (agent test) -> import (agent io)
+#   (agent models)                                -> imports (agent reflect)
+#                                                    and (agent models primitive)
 #   (consent capability)                          -> imports (consent capability primitive)
 is_excluded() {
   case "$1" in
-    "(agent diagnostics)"|"(agent diff)"|"(agent test)"|"(consent capability)")
+    "(agent diagnostics)"|"(agent diff)"|"(agent test)"|"(agent models)"|"(consent capability)")
       return 0 ;;
     *) return 1 ;;
   esac
