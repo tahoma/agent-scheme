@@ -2049,9 +2049,10 @@
       #((parameters
          (source (type string)
           (description "Source string to read one datum from."))
-         (position
-          . ("Nonnegative offset within SOURCE at which to begin"
-             "reading."))
+         (position (type exact-non-negative-integer)
+          (description
+           ("Nonnegative offset within SOURCE at which to begin"
+             "reading.")))
          (maybe-options (type list)
           (description ("Optional reader options alist supplying budget overrides."))))
         (returns (type pair)
@@ -2288,10 +2289,11 @@
           (description
            ("Optional reader options alist supplying `resync',"
              "`source-id', and budget overrides."))))
-        (returns
-         . ("A `<consent-recovery-result>' bundling the readable"
+        (returns (type consent-recovery-result)
+         (description
+          ("A `<consent-recovery-result>' bundling the readable"
             "datums, the ordered diagnostics, the recovery spans, and a"
-            "STATUS of `complete' or `incomplete'."))
+            "STATUS of `complete' or `incomplete'.")))
         (effects error))
       (if (not (string? source))
           (error "consent reader source must be a string" source))
@@ -2336,17 +2338,19 @@
       #((parameters
          (source (type string)
           (description "Source string to read one recovery step from."))
-         (position
-          . ("Nonnegative offset within SOURCE at which to begin"
-             "reading."))
+         (position (type exact-non-negative-integer)
+          (description
+           ("Nonnegative offset within SOURCE at which to begin"
+             "reading.")))
          (maybe-options (type list)
           (description
            ("Optional reader options alist supplying `resync',"
              "`source-id', and budget overrides."))))
-        (returns
-         . ("A `<consent-recovery-step>' describing the next form:"
+        (returns (type consent-recovery-step)
+         (description
+          ("A `<consent-recovery-step>' describing the next form:"
             "STATUS is `datum', `invalid', `incomplete', or `eof', and"
-            "NEXT is the offset to resume from."))
+            "NEXT is the offset to resume from.")))
         (effects error))
       (set! position (canonical-component position))
       (if (not (string? source))

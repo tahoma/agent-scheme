@@ -8963,9 +8963,10 @@ cursor across sessions."
           (description
            ("Optional environment then options alist; both default when"
              "absent."))))
-        (returns
-         . ("An `evaluation-result' datum capturing the value or the"
-            "raised condition."))
+        (returns (type evaluation-result)
+         (description
+          ("An `evaluation-result' datum capturing the value or the"
+            "raised condition.")))
         (effects host-eval state-read state-write))
       (let ((context (new-eval-context (rest-options rest)))
             (environment (rest-environment rest)))
@@ -8989,9 +8990,10 @@ cursor across sessions."
           (description
            ("Optional environment then options alist; both default when"
              "absent."))))
-        (returns
-         . ("An `evaluation-result' datum capturing the value or the"
-            "raised condition."))
+        (returns (type evaluation-result)
+         (description
+          ("An `evaluation-result' datum capturing the value or the"
+            "raised condition.")))
         (effects host-eval state-read state-write))
       (let ((context (new-eval-context (rest-options rest)))
             (environment (rest-environment rest)))
@@ -9235,9 +9237,10 @@ cursor across sessions."
            ("Durable interaction context supplying persistent"
              "environments and ports.")))
          (form . "Already-read top-level datum to evaluate."))
-        (returns
-         . ("An `evaluation-result' datum capturing the value or the"
-            "raised condition."))
+        (returns (type evaluation-result)
+         (description
+          ("An `evaluation-result' datum capturing the value or the"
+            "raised condition.")))
         (effects host-eval state-read state-write))
       (let* ((options (interaction-context-options interaction))
              (environment (interaction-context-environment interaction))

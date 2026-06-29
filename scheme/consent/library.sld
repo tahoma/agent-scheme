@@ -1787,9 +1787,10 @@
       #((parameters
          (name (type (list-of (or symbol exact-integer)))
           (description "Library name to resolve to a registered library."))
-         (context
-          . ("Evaluation context whose registry receives lazily"
-             "registered libraries."))
+         (context (type eval-context)
+          (description
+           ("Evaluation context whose registry receives lazily"
+             "registered libraries.")))
          (environment (type environment)
           (description ("Environment used when building or registering the library."))))
         (returns (type library)
@@ -2281,10 +2282,13 @@
     (define (with-include-directory context directory thunk)
       "Run THUNK with CONTEXT's include directory temporarily set."
       #((parameters
-         (context . ("Evaluation context whose include directory is swapped."))
-         (directory
-          . ("Directory to install as the include directory during"
-             "THUNK."))
+         (context (type eval-context)
+          (description
+           ("Evaluation context whose include directory is swapped.")))
+         (directory (type string)
+          (description
+           ("Directory to install as the include directory during"
+             "THUNK.")))
          (thunk (type procedure)
           (description
            ("Zero-argument procedure run with the temporary include"
