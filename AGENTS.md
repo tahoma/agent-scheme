@@ -53,12 +53,21 @@ Repository conventions override generic workflow defaults. In particular:
   missed chunk edge is caught on the next issue instead of deferred. Do not
   split a chunk mid-flight: a chunk with any still-open issue keeps all of its
   issues in #53.
+- The portable R7RS layer is the default home for host-neutral behavior. Keep
+  the dual-core surface to the smallest subset that must be implemented
+  separately by each bootstrap or host, such as irreducible reader, evaluator,
+  macro, runtime primitive, and host-effect adapter code. Before adding or
+  retaining parallel Emacs Lisp and Scheme implementations, ask whether the
+  behavior can instead be single-sourced as portable Scheme loaded by both
+  bootstraps.
 - The portable R7RS implementation is a first-class peer, not a secondary
   mirror of the Emacs Lisp bootstrap. For semantic changes, evaluator pass
   boundaries, public runtime behavior, standard libraries, fixtures, or tests,
-  update the Emacs Lisp and portable Scheme implementations in parallel when
-  practical. If one side must lead, document the remaining parity work in the
-  issue, commit, or pull request instead of treating the refactor as complete.
+  prefer portable source libraries when the behavior is host-neutral. Maintain
+  twin Emacs Lisp and portable Scheme implementations only when a host boundary
+  or bootstrap constraint requires it; document that constraint and the path to
+  collapse the code back into portable Scheme instead of treating duplication as
+  complete architecture.
 - Public Consent Scheme identifiers must use `consent-`; private Emacs Lisp
   internals must use `consent--`.
 - For Scheme-specific language questions, consult the local R7RS-small report
