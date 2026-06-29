@@ -14,13 +14,111 @@
 ;;; Code:
 
 (require 'ert)
+(require 'seq)
 (require 'consent-eval)
+(require 'consent-reader)
 (require 'consent-result)
+
+(defconst consent-agent-runner-test--fixture-path
+  "fixtures/agent/task-lifecycle.scm"
+  "Repository-relative path to shared task lifecycle fixture records.")
 
 (defun consent-agent-runner-test--external (source)
   "Evaluate SOURCE and return its stable external value representation."
   (consent-value->external
    (consent-eval-source source)))
+
+(defun consent-agent-runner-test--fixture ()
+  "Return the parsed shared task lifecycle fixture datum."
+  (let* ((path (expand-file-name
+                consent-agent-runner-test--fixture-path
+                consent--test-root))
+         (forms (consent-read-all
+                 (with-temp-buffer
+                   (insert-file-contents path)
+                   (buffer-string)))))
+    (should (= (length forms) 1))
+    (car forms)))
+
+(defun consent-agent-runner-test--symbol-name (value)
+  "Return VALUE as a stable symbol name."
+  (cond
+   ((consent-symbol-p value)
+    (consent-symbol-name value))
+   ((symbolp value)
+    (symbol-name value))
+   (t nil)))
+
+(defun consent-agent-runner-test--named-p (datum name)
+  "Return non-nil when DATUM is a field or record named NAME."
+  (and (consp datum)
+       (equal (consent-agent-runner-test--symbol-name (car datum))
+              name)))
+
+(defun consent-agent-runner-test--field (datum name &optional default)
+  "Return field NAME from DATUM, or DEFAULT when absent."
+  (let* ((fields (if (consp (car-safe datum)) datum (cdr-safe datum)))
+         (field
+          (seq-find
+           (lambda (candidate)
+             (consent-agent-runner-test--named-p candidate name))
+           fields)))
+    (if field (cadr field) default)))
+
+(defun consent-agent-runner-test--fixture-section (fixture name)
+  "Return section NAME's list payload from FIXTURE."
+  (cdr
+   (seq-find
+    (lambda (section)
+      (consent-agent-runner-test--named-p section name))
+    (cdr-safe fixture))))
+
+(defun consent-agent-runner-test--scenario (id)
+  "Return shared control-loop fixture scenario ID."
+  (let* ((fixture (consent-agent-runner-test--fixture))
+         (scenarios
+          (consent-agent-runner-test--fixture-section
+           fixture
+           "control-loop-scenarios")))
+    (or (seq-find
+         (lambda (scenario)
+           (equal (consent-agent-runner-test--symbol-name
+                   (consent-agent-runner-test--field scenario "id"))
+                  (symbol-name id)))
+         scenarios)
+        (ert-fail (format "Missing control-loop fixture %S" id)))))
+
+(ert-deftest consent-agent-runner-test-consumes-control-loop-fixture ()
+  "The minimal runner consumes a shared #287 control-loop fixture."
+  (let* ((scenario
+          (consent-agent-runner-test--scenario 'successful-completion))
+         (runner (consent-agent-runner-test--field scenario "runner"))
+         (expect (consent-agent-runner-test--field scenario "expect"))
+         (budget (consent-agent-runner-test--field expect "budget"))
+         (goal (consent-agent-runner-test--field runner "goal"))
+         (options (consent-agent-runner-test--field runner "options"))
+         (expected
+          (consent-datum->external
+           (list (consent-agent-runner-test--field expect "state")
+                 (consent-agent-runner-test--field expect "receipt")
+                 (consent-agent-runner-test--field expect "reason")
+                 (consent-agent-runner-test--field budget "used-host-calls")))))
+    (should
+     (equal
+      (consent-agent-runner-test--external
+       (format
+        "(import (scheme base) (agent runner) (agent task))
+         (define run
+           (run-task (quote %s) (quote %s)))
+         (define receipt (task-run-receipt run))
+         (list (task-run-state run)
+               (if (task-stop? receipt) 'task-stop 'task-pause)
+               (or (task-field-value receipt 'stop-reason)
+                   (task-field-value receipt 'pause-reason))
+               (task-field-value (task-run-budget run) 'used-host-calls))"
+        (consent-datum->external goal)
+        (consent-datum->external options)))
+      expected))))
 
 (ert-deftest consent-agent-runner-test-successful-completion ()
   "A gated action then a verifier-stamped finish completes the task."

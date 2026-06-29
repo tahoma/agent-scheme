@@ -66,9 +66,154 @@
   "Return the first value from RECORD section NAME."
   (cadr (consent-task-test--section record name)))
 
+(defun consent-task-test--datum-field (datum name &optional default)
+  "Return field NAME from tagged DATUM, or DEFAULT when absent."
+  (let* ((fields (if (consp (car-safe datum)) datum (cdr-safe datum)))
+         (field
+          (seq-find
+           (lambda (candidate)
+             (consent-task-test--named-p candidate name))
+           fields)))
+    (if field (cadr field) default)))
+
 (defun consent-task-test--scenario-field (scenario name)
   "Return SCENARIO field NAME."
   (consent-task-test--section-value scenario name))
+
+(defun consent-task-test--fixture-section (fixture name)
+  "Return the list payload for FIXTURE section NAME."
+  (cdr (consent-task-test--section fixture name)))
+
+(defun consent-task-test--scenario-by-id (scenarios id)
+  "Return scenario ID from SCENARIOS."
+  (or (seq-find
+       (lambda (scenario)
+         (equal (consent-task-test--symbol-name
+                 (consent-task-test--scenario-field scenario "id"))
+                (symbol-name id)))
+       scenarios)
+      (ert-fail (format "Missing scenario %S" id))))
+
+(defun consent-task-test--signal (kind &optional fields)
+  "Signal a structured task fixture validation error KIND with FIELDS."
+  (signal 'consent-task-error
+          (list (consent-task-condition kind fields))))
+
+(defun consent-task-test--symbol-in-p (value symbols)
+  "Return non-nil when VALUE names a member of SYMBOLS."
+  (member (consent-task-test--symbol-name value)
+          (mapcar #'symbol-name symbols)))
+
+(defun consent-task-test--event-before-p (events before after)
+  "Return non-nil when BEFORE appears in EVENTS before AFTER."
+  (let ((before-index (seq-position events before))
+        (after-index (seq-position events after)))
+    (and before-index after-index (< before-index after-index))))
+
+(defun consent-task-test--validate-event-order (events)
+  "Validate control-loop transcript event order EVENTS."
+  (when (and events (not (eq (car events) 'agent-yield)))
+    (consent-task-test--signal
+     'inconsistent-event-order
+     `((first-event . ,(car events)))))
+  (when (consent-task-test--event-before-p events
+                                           'capability-call
+                                           'model-route)
+    (consent-task-test--signal
+     'inconsistent-event-order
+     '((capability-call . before-model-route))))
+  t)
+
+(defun consent-task-test--validate-control-loop-scenario (scenario)
+  "Validate one shared control-loop fixture SCENARIO."
+  (let* ((id (consent-task-test--scenario-field scenario "id"))
+         (status (consent-task-test--scenario-field scenario "status"))
+         (runner (consent-task-test--scenario-field scenario "runner"))
+         (expect (consent-task-test--scenario-field scenario "expect"))
+         (records (consent-task-test--scenario-field scenario "records"))
+         (receipt (consent-task-test--datum-field expect "receipt"))
+         (state (consent-task-test--datum-field expect "state"))
+         (reason (consent-task-test--datum-field expect "reason"))
+         (event-order (consent-task-test--datum-field expect "event-order"))
+         (budget (consent-task-test--datum-field expect "budget"))
+         (policy-bypass
+          (consent-task-test--datum-field expect "policy-bypass")))
+    (should id)
+    (should (consent-task-test--symbol-in-p
+             status
+             '(implemented pending policy-gated unavailable)))
+    (should runner)
+    (should expect)
+    (should records)
+    (should (consent-task-test--symbol-in-p state consent-task-states))
+    (pcase (consent-task-test--symbol-name receipt)
+      ("task-pause"
+       (should (consent-task-test--symbol-in-p
+                state consent-task-pause-states))
+       (should (consent-task-test--symbol-in-p
+                reason consent-task-pause-reasons)))
+      ("task-stop"
+       (should (consent-task-test--symbol-in-p
+                state consent-task-terminal-states))
+       (should (consent-task-test--symbol-in-p
+                reason consent-task-stop-reasons)))
+      (_
+       (consent-task-test--signal
+        'malformed-receipt-expectation
+        `((scenario . ,(consent-task-test--symbol-name id))))))
+    (when (equal (consent-task-test--symbol-name reason) "budget-exhausted")
+      (unless budget
+        (consent-task-test--signal
+         'missing-budget-ledger
+         `((scenario . ,(consent-task-test--symbol-name id))))))
+    (when (equal (consent-task-test--symbol-name id) "user-input-wait")
+      (should (equal (consent-task-test--symbol-name state) "blocked"))
+      (should (equal (consent-task-test--symbol-name reason)
+                     "waiting-for-user-input")))
+    (when policy-bypass
+      (unless (equal (consent-task-test--symbol-name policy-bypass) "denied")
+        (consent-task-test--signal
+         'policy-bypass-not-denied
+         `((scenario . ,(consent-task-test--symbol-name id))))))
+    (when event-order
+      (consent-task-test--validate-event-order
+       (mapcar (lambda (event)
+                 (intern (consent-task-test--symbol-name event)))
+               event-order)))
+    (dolist (record records)
+      (consent-task-validate-record record))
+    t))
+
+(defun consent-task-test--validate-invalid-control-loop-scenario (scenario)
+  "Validate that malformed control-loop SCENARIO is rejected."
+  (let ((kind (consent-task-test--scenario-field scenario "kind")))
+    (pcase (consent-task-test--symbol-name kind)
+      ("malformed-task-record"
+       (consent-task-validate-record
+        (consent-task-test--scenario-field scenario "datum")))
+      ("invalid-state-transition"
+       (let ((transition
+              (consent-task-test--scenario-field scenario "transition")))
+         (consent-task-validate-transition (car transition) (cadr transition))))
+      ("malformed-pause-receipt"
+       (consent-task-validate-record
+        (consent-task-test--scenario-field scenario "datum")))
+      ("malformed-stop-receipt"
+       (consent-task-validate-record
+        (consent-task-test--scenario-field scenario "datum")))
+      ("inconsistent-event-order"
+       (consent-task-test--validate-event-order
+        (mapcar (lambda (event)
+                  (intern (consent-task-test--symbol-name event)))
+                (consent-task-test--scenario-field scenario "event-order"))))
+      ("missing-budget-stop-receipt"
+       (consent-task-test--validate-control-loop-scenario
+        (consent-task-test--scenario-field scenario "scenario")))
+      ("policy-bypass"
+       (consent-task-test--validate-control-loop-scenario
+        (consent-task-test--scenario-field scenario "scenario")))
+      (_
+       (ert-fail (format "Unknown invalid scenario kind %S" kind))))))
 
 (ert-deftest consent-task-test-state-vocabulary-and-transitions ()
   "The public state vocabulary and transition table match the control loop."
@@ -277,5 +422,37 @@
         (should (consent-task-validate-record task))
         (dolist (record records)
           (should (consent-task-validate-record record)))))))
+
+(ert-deftest consent-task-test-control-loop-fixtures-cover-issue-287 ()
+  "Control-loop fixtures cover runner outcomes and reusable expected records."
+  (let* ((fixture (consent-task-test--fixture))
+         (scenarios
+          (consent-task-test--fixture-section fixture "control-loop-scenarios")))
+    (dolist (required '(successful-completion user-input-wait approval-wait
+                                              approval-denial
+                                              authority-unavailable stale-handle
+                                              provider-unavailable host-timeout
+                                              budget-exhaustion
+                                              repeated-action-failure
+                                              cancellation
+                                              resumed-task-completion
+                                              policy-bypass-quarantine
+                                              mid-code-action-budget-exhaustion))
+      (consent-task-test--scenario-by-id scenarios required))
+    (dolist (scenario scenarios)
+      (consent-task-test--validate-control-loop-scenario scenario))))
+
+(ert-deftest consent-task-test-control-loop-invalid-fixtures-are-rejected ()
+  "Fixture validation rejects malformed records, ordering, budgets, and policy bypasses."
+  (let* ((fixture (consent-task-test--fixture))
+         (invalid-scenarios
+          (consent-task-test--fixture-section
+           fixture
+           "invalid-control-loop-scenarios")))
+    (should invalid-scenarios)
+    (dolist (scenario invalid-scenarios)
+      (should-error
+       (consent-task-test--validate-invalid-control-loop-scenario scenario)
+       :type 'consent-task-error))))
 
 ;;; consent-task-test.el ends here
