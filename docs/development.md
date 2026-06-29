@@ -86,11 +86,15 @@ with dependency-free or explicitly unblocked issues.
 - Treat the portable R7RS implementation as a first-class peer of the Emacs
   Lisp bootstrap, and as the long-term path toward self-hosted or native
   reader, evaluator, emitter, and REPL work.
-- Prefer portable R7RS Scheme for core logic where practical.
-- Preserve architectural parity between Emacs Lisp and portable Scheme modules
-  for semantic behavior, evaluator pass boundaries, standard libraries,
-  fixtures, and tests. If a slice lands on only one side, record the remaining
-  parity work before calling the issue complete.
+- Treat portable R7RS Scheme as the default home for host-neutral behavior:
+  semantic helpers, protocol datums, codecs, deterministic parsers, library
+  surfaces, fixtures, and tests.
+- Keep the dual-core implementation surface as small as possible. Preserve
+  architectural parity between Emacs Lisp and portable Scheme modules only for
+  the irreducible reader, evaluator, macro, primitive, and host-effect adapter
+  slices that cannot yet be single-sourced. If a slice lands on only one side,
+  record the remaining parity work and why it is not yet portable Scheme before
+  calling the issue complete.
 - Keep Emacs-specific behavior behind host adapter modules.
 - Avoid project history or personal machine details in public docs, tests, and
   examples.

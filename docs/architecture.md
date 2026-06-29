@@ -67,13 +67,25 @@ manifests, and agent workflows. Emacs Lisp should serve as a host adapter for
 Emacs-specific capabilities, UI buffers, process integration, policy prompts,
 and persistence plumbing.
 
+This is a first-principles ownership rule, not a preference to revisit feature
+by feature. A behavior that can be expressed as deterministic Scheme data,
+library code, parser/encoder logic, protocol shaping, fixture data, or
+host-neutral control flow belongs in portable Scheme. The dual-core surface is
+the smallest irreducible subset that each bootstrap must implement separately:
+reader and evaluator kernels, macro and library bootstrap machinery, primitive
+dispatch, and host-effect adapters. Parallel Emacs Lisp and portable Scheme
+implementations are a temporary constraint to justify, not an architecture to
+grow.
+
 The initial implementation may be hosted in Emacs Lisp while the project is
 bootstrapping, but modules should keep the following boundary clear:
 
 - portable core: reader, datums, evaluator, macro expander, libraries, writer,
-  conformance fixtures, and portable agent libraries
+  conformance fixtures, portable agent libraries, protocol datums, and
+  host-neutral codecs
 - host adapter: Emacs handles, buffers, windows, commands, policies, UI,
-  process launch, local files, persistence, and MCP registration
+  process launch, local files, network calls, persistence, effectful streaming,
+  and MCP registration
 
 Future hosts should be able to reuse the core data model and libraries without
 pretending to be Emacs.
@@ -99,11 +111,15 @@ reference.
 
 Changes to reader, evaluator, macro, library, runtime, result, primitive
 manifest, standard-library, conformance fixture, or public test behavior should
-preserve architectural parity between `lisp/consent-*.el` and
-`scheme/consent/*.sld`. If a slice must land on one side first, the issue,
-commit, or pull request should name the remaining parity work, and the work
-should not be presented as architecturally complete until both sides are
-handled.
+first ask whether the behavior can be single-sourced from portable Scheme. When
+it can, the portable `.sld` is the canonical implementation and both bootstraps
+load it. When it cannot, preserve architectural parity between
+`lisp/consent-*.el` and `scheme/consent/*.sld` for the irreducible dual-core
+slice. If a slice must land on one side first, the issue, commit, or pull
+request should name the remaining parity work, explain why it cannot yet be
+single-sourced, and the work should not be presented as architecturally complete
+until both sides are handled or the duplication is collapsed into portable
+Scheme.
 
 This parity rule is no longer enforced by prose and reviewer diligence alone.
 The `test-parity` gate (`make test-parity`, the `test-parity` CI job; #374) runs
