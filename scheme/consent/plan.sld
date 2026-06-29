@@ -52,10 +52,10 @@
       "Construct an empty plan store."
       #((parameters)
         (returns
-         (type any)
+         (type consent-plan-store)
          (description
           ("A mutable plan store with no records and the next"
-           "generated id set to zero.")))
+            "generated id set to zero.")))
         (effects allocation))
       (make-plan-store '() 0))
 
@@ -133,10 +133,10 @@
       "Return canonical id field from a plan RECORD."
       #((parameters
          (record
-          (type any)
+          (type plan)
           (description "Plan record datum.")))
         (returns
-         (type any)
+         (type symbol)
          (description "The plan id field."))
         (effects pure))
       (field-value record 'id))
@@ -145,10 +145,10 @@
       "Return RECORD's scope field."
       #((parameters
          (record
-          (type any)
+          (type plan)
           (description "Plan record datum.")))
         (returns
-         (type any)
+         (type symbol)
          (description "The plan scope field."))
         (effects pure))
       (field-value record 'scope))
@@ -157,10 +157,10 @@
       "Return RECORD's step list."
       #((parameters
          (record
-          (type any)
+          (type plan)
           (description "Plan record datum.")))
         (returns
-         (type any)
+         (type (list-of plan-step))
          (description "The list of plan step datums, or the empty list."))
         (effects pure))
       (let ((steps (field-value record 'steps)))
@@ -170,10 +170,10 @@
       "Return STEP's id field."
       #((parameters
          (step
-          (type any)
+          (type plan-step)
           (description "Plan step datum.")))
         (returns
-         (type any)
+         (type symbol)
          (description "The step id field."))
         (effects pure))
       (field-value step 'id))
@@ -182,10 +182,10 @@
       "Return STEP's status field."
       #((parameters
          (step
-          (type any)
+          (type plan-step)
           (description "Plan step datum.")))
         (returns
-         (type any)
+         (type symbol)
          (description "The step status field."))
         (effects pure))
       (field-value step 'status))
@@ -194,13 +194,13 @@
       "Return #t when DATUM requests memory summarization."
       #((parameters
          (datum
-          (type any)
+          (type list)
           (description "Plan payload or field list to inspect.")))
         (returns
-         (type any)
+         (type boolean)
          (description
           ("#t when DATUM marks memory as important, persist, or"
-           "summary; otherwise #f.")))
+            "summary; otherwise #f.")))
         (effects pure))
       (let ((memory (field-value (payload-fields datum) 'memory)))
         (or (eq? memory 'important)
@@ -221,13 +221,13 @@
       "Return a plan record from STORE by ID, or #f."
       #((parameters
          (store
-          (type any)
+          (type consent-plan-store)
           (description "Plan store to search."))
          (id
-          (type any)
+          (type symbol)
           (description "Plan id symbol.")))
         (returns
-         (type any)
+         (type (or plan boolean))
          (description "The matching plan record datum, or #f."))
         (effects state-read))
       (let loop ((records (store-records store)))
@@ -240,13 +240,13 @@
       "Return all plans in SCOPE."
       #((parameters
          (store
-          (type any)
+          (type consent-plan-store)
           (description "Plan store to inspect."))
          (scope
-          (type any)
+          (type symbol)
           (description "Plan scope symbol.")))
         (returns
-         (type any)
+         (type (list-of plan))
          (description "Plan record datums in SCOPE, newest first."))
         (effects state-read error))
       (scope-records store scope))
@@ -348,14 +348,13 @@
       "Create or replace a plan from DATUM and return its canonical record."
       #((parameters
          (store
-          (type any)
+          (type consent-plan-store)
           (description "Plan store to mutate."))
          (datum
-          (type any)
-          (description
-           ("Plan payload or field list as Scheme-readable data."))))
+          (type list)
+          (description ("Plan payload or field list as Scheme-readable data."))))
         (returns
-         (type any)
+         (type plan)
          (description "The created or replaced plan record datum."))
         (effects state-write error))
       (let* ((id (field-value (payload-fields datum) 'id))
@@ -370,17 +369,16 @@
       "Add STEP-DATUM to plan ID and return the updated plan."
       #((parameters
          (store
-          (type any)
+          (type consent-plan-store)
           (description "Plan store to mutate."))
          (id
-          (type any)
+          (type symbol)
           (description "Plan id symbol."))
          (step-datum
-          (type any)
-          (description
-           ("Step payload or field list as Scheme-readable data."))))
+          (type list)
+          (description ("Step payload or field list as Scheme-readable data."))))
         (returns
-         (type any)
+         (type plan)
          (description "The updated plan record datum."))
         (effects state-write error))
       (let ((record (plan-ref store id)))
@@ -405,19 +403,19 @@
       "Set plan ID step STEP-ID to STATUS and return the updated plan."
       #((parameters
          (store
-          (type any)
+          (type consent-plan-store)
           (description "Plan store to mutate."))
          (id
-          (type any)
+          (type symbol)
           (description "Plan id symbol."))
          (step-id
-          (type any)
+          (type symbol)
           (description "Step id symbol."))
          (status
-          (type any)
+          (type symbol)
           (description "Step status symbol.")))
         (returns
-         (type any)
+         (type plan)
          (description "The updated plan record datum."))
         (effects state-write error))
       (let ((record (plan-ref store id))
@@ -452,16 +450,16 @@
       "Set plan ID to STATUS and return the updated plan."
       #((parameters
          (store
-          (type any)
+          (type consent-plan-store)
           (description "Plan store to mutate."))
          (id
-          (type any)
+          (type symbol)
           (description "Plan id symbol."))
          (status
-          (type any)
+          (type symbol)
           (description "Plan status symbol.")))
         (returns
-         (type any)
+         (type plan)
          (description "The updated plan record datum."))
         (effects state-write error))
       (let ((record (plan-ref store id))

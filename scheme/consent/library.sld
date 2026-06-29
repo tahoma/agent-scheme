@@ -66,37 +66,32 @@
       "Install interpreter and macro callbacks used by library resolution."
       #((parameters
          (primitive-resolver
-          (type any)
-          (description
-           ("Callback mapping a primitive identifier to its"
-            "implementation.")))
+          . ("Callback mapping a primitive identifier to its"
+             "implementation."))
          (policy-denied
-          (type any)
+          (type procedure)
           (description
            ("Factory building a policy-denied primitive from a"
-            "description.")))
+             "description.")))
          (trampoline
-          (type any)
+          (type procedure)
           (description
            ("Callback evaluating a library body sequence in an"
-            "environment and context.")))
+             "environment and context.")))
          (make-empty-syntax-environment
-          (type any)
+          (type procedure)
           (description
            ("Callback constructing a fresh syntax environment under a"
-            "parent.")))
+             "parent.")))
          (syntax-environment-ref
-          (type any)
+          (type procedure)
           (description "Callback looking up a name in a syntax environment."))
          (with-syntax-environment
-          (type any)
+          (type procedure)
           (description
            ("Callback running a thunk with a syntax environment"
-            "installed in a context."))))
-        (returns
-         (type any)
-         (description
-          ("The unspecified value after storing every backend hook.")))
+             "installed in a context."))))
+        (returns . ("The unspecified value after storing every backend hook."))
         (effects state-write))
       (set! library-primitive-resolver primitive-resolver)
       (set! library-policy-denied-primitive policy-denied)
@@ -267,10 +262,10 @@
       "Validate and return NAME as a library registry key."
       #((parameters
          (name
-          (type any)
+          (type (list-of (or symbol exact-integer)))
           (description "Candidate R7RS library name to validate.")))
         (returns
-         (type any)
+         (type (list-of (or symbol exact-integer)))
          (description "NAME unchanged when it is a proper library name."))
         (effects error))
       (if (proper-library-name? name)
@@ -308,10 +303,10 @@
       "hand-maintains a parallel list."
       #((parameters)
         (returns
-         (type any)
+         (type list)
          (description
           ("A list of canonical relative source-file paths the runtime"
-           "loads as data.")))
+            "loads as data.")))
         (effects pure))
       (append
        (list (source-library-relative-path consent-base-prelude-load-paths)
@@ -421,10 +416,10 @@
       "Public metadata accessor for standard libraries backed by source files."
       #((parameters)
         (returns
-         (type any)
+         (type list)
          (description
           ("A list of name, exports, and source-file metadata entries"
-           "for each source-backed standard library.")))
+            "for each source-backed standard library.")))
         (effects state-read state-write))
       (map
        (lambda (entry)
@@ -442,16 +437,14 @@
       "Return the registered library for KEY in CONTEXT, or #f."
       #((parameters
          (context
-          (type any)
-          (description
-           ("Evaluation context whose library registry is searched.")))
+          (type eval-context)
+          (description ("Evaluation context whose library registry is searched.")))
          (key
-          (type any)
+          (type list)
           (description "Library registry key to look up.")))
         (returns
-         (type any)
-         (description
-          ("The library registered under KEY, or #f when it is absent.")))
+         (type (or library boolean))
+         (description "The library registered under KEY, or #f when it is absent."))
         (effects state-read))
       (let ((cell (assoc/equal key (context-libraries context))))
         (if cell (cdr cell) #f)))
@@ -460,19 +453,15 @@
       "Store LIBRARY under KEY in CONTEXT's registry."
       #((parameters
          (context
-          (type any)
-          (description
-           ("Evaluation context whose library registry is updated.")))
+          (type eval-context)
+          (description ("Evaluation context whose library registry is updated.")))
          (key
-          (type any)
+          (type list)
           (description "Library registry key to associate with LIBRARY."))
          (library
-          (type any)
+          (type library)
           (description "Library object to store under KEY.")))
-        (returns
-         (type any)
-         (description
-          ("An unspecified value after registering LIBRARY under KEY.")))
+        (returns . ("An unspecified value after registering LIBRARY under KEY."))
         (effects state-write))
       (let replace ((rest (context-libraries context)) (prefix '()))
         (cond
@@ -496,45 +485,37 @@
     (define (form-named? form name)
       "Report whether FORM is headed by identifier NAME."
       #((parameters
-         (form
-          (type any)
-          (description "Datum to test for a heading identifier."))
+         (form . "Datum to test for a heading identifier.")
          (name
-          (type any)
+          (type symbol)
           (description "Symbol the form's head identifier must match.")))
         (returns
-         (type any)
+         (type boolean)
          (description
           ("#t when FORM is a pair whose head identifier is NAME, else"
-           "#f.")))
+            "#f.")))
         (effects pure))
       (and (pair? form) (identifier-named? (car form) name)))
 
     (define (import-form? form)
       "Report whether FORM is an import declaration."
       #((parameters
-         (form
-          (type any)
-          (description "Datum to test for an import declaration heading.")))
+         (form . "Datum to test for an import declaration heading."))
         (returns
-         (type any)
-         (description
-          ("#t when FORM is headed by the import identifier, else #f.")))
+         (type boolean)
+         (description ("#t when FORM is headed by the import identifier, else #f.")))
         (effects pure))
       (form-named? form 'import))
 
     (define (define-library-form? form)
       "Report whether FORM is a define-library declaration."
       #((parameters
-         (form
-          (type any)
-          (description
-           ("Datum to test for a define-library declaration heading."))))
+         (form . ("Datum to test for a define-library declaration heading.")))
         (returns
-         (type any)
+         (type boolean)
          (description
           ("#t when FORM is headed by the define-library identifier,"
-           "else #f.")))
+            "else #f.")))
         (effects pure))
       (form-named? form 'define-library))
 
@@ -751,14 +732,12 @@
       "with the shim's argument and result conversions."
       #((parameters
          (value
-          (type any)
+          (type procedure)
           (description "Host procedure or interpreted callable to apply."))
          (arguments
-          (type any)
+          (type list)
           (description "List of arguments to pass to the callable.")))
-        (returns
-         (type any)
-         (description "The value produced by applying VALUE to ARGUMENTS."))
+        (returns . "The value produced by applying VALUE to ARGUMENTS.")
         (effects host-eval))
       (if (procedure? value)
           (apply value arguments)
@@ -1803,22 +1782,21 @@
       "Report whether NAME is a known or already registered library."
       #((parameters
          (name
-          (type any)
+          (type list)
           (description "Library name to test for availability."))
          (context
-          (type any)
+          (type eval-context)
           (description
            ("Evaluation context whose registry and host grant are"
-            "consulted.")))
+             "consulted.")))
          (environment
-          (type any)
-          (description
-           ("Environment available for resolving the library name."))))
+          (type environment)
+          (description ("Environment available for resolving the library name."))))
         (returns
-         (type any)
+         (type boolean)
          (description
           ("#t when NAME names a known, registered, or host-loadable"
-           "library, else #f.")))
+            "library, else #f.")))
         (effects state-read error))
       (let ((key (library-name-key name)))
         (or (equal? key scheme-base-library-key)
@@ -1833,19 +1811,16 @@
       "Resolve NAME to a library, registering lazy standard libraries as needed."
       #((parameters
          (name
-          (type any)
+          (type list)
           (description "Library name to resolve to a registered library."))
          (context
-          (type any)
-          (description
-           ("Evaluation context whose registry receives lazily"
-            "registered libraries.")))
+          . ("Evaluation context whose registry receives lazily"
+             "registered libraries."))
          (environment
-          (type any)
-          (description
-           ("Environment used when building or registering the library."))))
+          (type environment)
+          (description ("Environment used when building or registering the library."))))
         (returns
-         (type any)
+         (type library)
          (description "The resolved library object for NAME."))
         (effects state-read state-write error))
       (let ((key (library-name-key name)))
@@ -1894,13 +1869,11 @@
       "Merge duplicate compatible imports and reject conflicting imports."
       #((parameters
          (bindings
-          (type any)
-          (description
-           ("List of import library bindings to deduplicate and check."))))
+          (type list)
+          (description ("List of import library bindings to deduplicate and check."))))
         (returns
-         (type any)
-         (description
-          ("A list of bindings with compatible duplicates merged.")))
+         (type list)
+         (description ("A list of bindings with compatible duplicates merged.")))
         (effects error))
       (let loop ((rest bindings) (seen '()) (result '()))
         (if (null? rest)
@@ -2086,22 +2059,17 @@
       "Evaluate an import declaration into the active value and syntax frames."
       #((parameters
          (form
-          (type any)
-          (description
-           ("Import declaration form whose import sets are installed.")))
+          (type pair)
+          (description ("Import declaration form whose import sets are installed.")))
          (environment
-          (type any)
-          (description
-           ("Value environment receiving the imported value bindings.")))
+          (type environment)
+          (description ("Value environment receiving the imported value bindings.")))
          (context
-          (type any)
+          (type eval-context)
           (description
            ("Evaluation context whose syntax environment and registry"
-            "are used."))))
-        (returns
-         (type any)
-         (description
-          ("The unspecified value after installing every import set.")))
+             "are used."))))
+        (returns . ("The unspecified value after installing every import set."))
         (effects state-read state-write error))
       (let ((parts (proper-list-elements form "import declaration")))
         (if (< (length parts) 2)
@@ -2120,14 +2088,13 @@
       "Parse export clauses into internal-name/external-name pairs."
       #((parameters
          (forms
-          (type any)
-          (description
-           ("List of export clause forms (identifiers or rename forms)."))))
+          (type list)
+          (description ("List of export clause forms (identifiers or rename forms)."))))
         (returns
-         (type any)
+         (type pair)
          (description
           ("A list of internal-name/external-name pairs in declaration"
-           "order.")))
+            "order.")))
         (effects error))
       (let loop ((rest forms) (specs '()))
         (if (null? rest)
@@ -2271,16 +2238,16 @@
       "Report whether PATH is exactly allowed or inside an allowed directory."
       #((parameters
          (path
-          (type any)
+          (type list)
           (description "File path to test against the allow-list."))
          (allowed-paths
-          (type any)
+          (type string)
           (description "List of allowed file or directory path strings.")))
         (returns
-         (type any)
+         (type boolean)
          (description
           ("#t when PATH equals or sits under an allowed path, else"
-           "#f.")))
+            "#f.")))
         (effects pure))
       (let loop ((rest allowed-paths))
         (and (not (null? rest))
@@ -2319,13 +2286,13 @@
       "Return PATH's directory component without the trailing slash."
       #((parameters
          (path
-          (type any)
+          (type string)
           (description "File path whose directory component is extracted.")))
         (returns
-         (type any)
+         (type string)
          (description
           ("The directory portion of PATH without a trailing slash, or"
-           "the empty string.")))
+            "the empty string.")))
         (effects pure))
       (let loop ((index (- (string-length path) 1)))
         (cond
@@ -2338,12 +2305,11 @@
       "Read PATH into a string using the Scheme file API."
       #((parameters
          (path
-          (type any)
+          (type string)
           (description "Filesystem path of the file to read.")))
         (returns
-         (type any)
-         (description
-          ("A string holding the entire contents of the file at PATH.")))
+         (type string)
+         (description ("A string holding the entire contents of the file at PATH.")))
         (effects state-read))
       (call-with-input-file
        path
@@ -2357,23 +2323,16 @@
     (define (with-include-directory context directory thunk)
       "Run THUNK with CONTEXT's include directory temporarily set."
       #((parameters
-         (context
-          (type any)
-          (description
-           ("Evaluation context whose include directory is swapped.")))
+         (context . ("Evaluation context whose include directory is swapped."))
          (directory
-          (type any)
-          (description
-           ("Directory to install as the include directory during"
-            "THUNK.")))
+          . ("Directory to install as the include directory during"
+             "THUNK."))
          (thunk
-          (type any)
+          (type procedure)
           (description
            ("Zero-argument procedure run with the temporary include"
-            "directory."))))
-        (returns
-         (type any)
-         (description "The value produced by THUNK."))
+             "directory."))))
+        (returns . "The value produced by THUNK.")
         (effects state-write host-eval))
       (let ((previous-directory (context-include-directory context)))
         (dynamic-wind
@@ -2498,23 +2457,21 @@
       "Evaluate a define-library form and register its exported bindings."
       #((parameters
          (form
-          (type any)
+          (type pair)
           (description "define-library form to evaluate and register."))
          (environment
-          (type any)
+          (type environment)
           (description
            ("Environment used while expanding the library's"
-            "declarations.")))
+             "declarations.")))
          (context
-          (type any)
+          (type eval-context)
           (description
            ("Evaluation context whose registry receives the new"
-            "library."))))
+             "library."))))
         (returns
-         (type any)
-         (description
-          ("The unspecified value after registering the defined"
-           "library.")))
+         . ("The unspecified value after registering the defined"
+            "library."))
         (effects state-read state-write host-eval error))
       (let ((parts (proper-list-elements form "define-library form")))
         (if (< (length parts) 2)

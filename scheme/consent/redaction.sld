@@ -269,14 +269,12 @@
     (define (secret-source? datum)
       "Return #t when DATUM contains secret-prone source data."
       #((parameters
-         (datum
-          (type any)
-          (description "Scheme-readable value to inspect recursively.")))
+         (datum . "Scheme-readable value to inspect recursively."))
         (returns
-         (type any)
+         (type boolean)
          (description
           ("#t when DATUM appears to contain a secret or secret-prone"
-           "source marker; otherwise #f.")))
+            "source marker; otherwise #f.")))
         (effects pure))
       (cond
        ((redaction-record? datum) #f)
@@ -296,19 +294,13 @@
     (define (redact datum policy)
       "Return DATUM with secret and local-only content redacted."
       #((parameters
-         (datum
-          (type any)
-          (description "Scheme-readable value to sanitize recursively."))
+         (datum . "Scheme-readable value to sanitize recursively.")
          (policy
-          (type any)
-          (description
-           ("Redaction policy datum reserved for host-specific policy"
-            "choices."))))
+          . ("Redaction policy datum reserved for host-specific policy"
+             "choices.")))
         (returns
-         (type any)
-         (description
-          ("DATUM with secret-like values and local-only context"
-           "replaced by safe public records.")))
+         . ("DATUM with secret-like values and local-only context"
+            "replaced by safe public records."))
         (effects state-write))
       (cond
        ((redaction-record? datum) datum)
@@ -335,17 +327,14 @@
       "Wrap DATUM as local-only context."
       #((parameters
          (datum
-          (type any)
-          (description
-           ("Context value that should not leave the local host"
-            "boundary.")))
+          . ("Context value that should not leave the local host"
+             "boundary."))
          (reason
-          (type any)
+          (type string)
           (description "Human-readable reason for withholding DATUM.")))
         (returns
-         (type any)
-         (description
-          ("A `local-only` wrapper datum carrying REASON and DATUM.")))
+         (type local-only)
+         (description "A `local-only` wrapper datum carrying REASON and DATUM."))
         (effects state-write))
       (remember! (make-local-only-record reason))
       (list 'local-only
@@ -356,14 +345,13 @@
       "Return recent redaction records as a Scheme-readable datum."
       #((parameters
          (options
-          (type any)
-          (description
-           ("Reserved option list for future filtering or pagination."))))
+          (type list)
+          (description ("Reserved option list for future filtering or pagination."))))
         (returns
-         (type any)
+         (type redaction-log)
          (description
           ("A `redaction-log` datum containing recent redaction"
-           "records.")))
+            "records.")))
         (effects state-read))
       (list 'redaction-log
             (list 'records redaction-records)))
@@ -372,29 +360,23 @@
       "Clear the process-local redaction log."
       #((parameters)
         (returns
-         (type any)
-         (description
-          ("An unspecified value after clearing the process-local"
-           "redaction records.")))
+         . ("An unspecified value after clearing the process-local"
+            "redaction records."))
         (effects state-write))
       (set! redaction-records '()))
 
     (define (safe-for-provider? datum provider)
       "Return #t when DATUM can be sent to PROVIDER without redaction."
       #((parameters
-         (datum
-          (type any)
-          (description "Scheme-readable value to inspect recursively."))
+         (datum . "Scheme-readable value to inspect recursively.")
          (provider
-          (type any)
-          (description
-           ("Provider identifier or metadata reserved for"
-            "provider-specific policy."))))
+          . ("Provider identifier or metadata reserved for"
+             "provider-specific policy.")))
         (returns
-         (type any)
+         (type boolean)
          (description
           ("#t when DATUM has no detected secret or local-only"
-           "content; otherwise #f.")))
+            "content; otherwise #f.")))
         (effects pure))
       (and (not (secret-source? datum))
            (not (local-only? datum))))))

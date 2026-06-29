@@ -50,14 +50,13 @@
       "narrow enough to leave `#!fold-case' and other `#!'-tokens alone."
       #((parameters
          (source
-          (type any)
-          (description
-           ("Script source text to inspect for a leading shebang."))))
+          (type string)
+          (description ("Script source text to inspect for a leading shebang."))))
         (returns
-         (type any)
+         (type boolean)
          (description
           ("#t when SOURCE opens with a `#!' followed by `/' or"
-           "whitespace, else #f.")))
+            "whitespace, else #f.")))
         (effects pure))
       (and (>= (string-length source) 3)
            (char=? (string-ref source 0) #\#)
@@ -80,15 +79,15 @@
       "shebang is returned unchanged for the reader."
       #((parameters
          (source
-          (type any)
+          (type string)
           (description
            ("Script source text whose leading shebang line, if any, is"
-            "removed."))))
+             "removed."))))
         (returns
-         (type any)
+         (type string)
          (description
           ("SOURCE with the shebang stripped up to its newline, or"
-           "SOURCE unchanged when none is present.")))
+            "SOURCE unchanged when none is present.")))
         (effects allocation))
       (if (cli-script-shebang-line? source)
           (substring source
@@ -111,13 +110,13 @@
       "removed, ready for the reader."
       #((parameters
          (path
-          (type any)
+          (type string)
           (description "Filesystem path of the script file to read.")))
         (returns
-         (type any)
+         (type string)
          (description
           ("The file's contents as a string with any leading shebang"
-           "line stripped.")))
+            "line stripped.")))
         (effects state-read allocation error))
       (cli-script-strip-shebang (script--read-file-string path)))
 
@@ -176,19 +175,16 @@
       "of the Emacs `consent-script-run-file'."
       #((parameters
          (path
-          (type any)
+          (type string)
           (description
            ("Filesystem path of the executable Consent Scheme script to"
-            "run.")))
+             "run.")))
          (rest
-          (type any)
+          (type list)
           (description
            ("Optional evaluation arguments forwarded to"
-            "`consent-eval-source' (environment, options)."))))
-        (returns
-         (type any)
-         (description
-          ("The last value produced by evaluating the script's source.")))
+             "`consent-eval-source' (environment, options)."))))
+        (returns . ("The last value produced by evaluating the script's source."))
         (effects state-read host-eval error))
       (consent-eval-source
        (cli-script-source-from-file path)
@@ -227,15 +223,15 @@
       "denied to ordinary scripts."
       #((parameters
          (root
-          (type any)
+          (type string)
           (description
            ("Absolute directory the host run is scoped to; becomes the"
-            "include directory and sole file-access root."))))
+             "include directory and sole file-access root."))))
         (returns
-         (type any)
+         (type list)
          (description
           ("An options alist of include-directory, capability grants,"
-           "and raised per-run budgets for the host runner.")))
+            "and raised per-run budgets for the host runner.")))
         (effects allocation))
       (cons (cons 'include-directory root)
             (cons (list 'capability-grants
@@ -283,25 +279,25 @@
       "non-zero exactly when a captured test assertion raised."
       #((parameters
          (path
-          (type any)
+          (type string)
           (description
            ("Filesystem path of the host-runner test file to evaluate"
-            "form by form.")))
+             "form by form.")))
          (root
-          (type any)
+          (type string)
           (description
            ("Absolute working directory the run is scoped to for file"
-            "access and include resolution.")))
+             "access and include resolution.")))
          (emit
-          (type any)
+          (type procedure)
           (description
            ("Procedure called with each form's captured program output"
-            "so the host can stream it to real stdout."))))
+             "so the host can stream it to real stdout."))))
         (returns
-         (type any)
+         (type (or boolean evaluation-result))
          (description
           ("#t when every form completes, or the failing"
-           "`evaluation-result' datum at the first error.")))
+            "`evaluation-result' datum at the first error.")))
         (effects state-read host-eval state-write error))
       (let ((source (cli-script-source-from-file path))
             (interaction

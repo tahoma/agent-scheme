@@ -377,6 +377,29 @@ docs/docstring-metadata.md.")
   (and (consent-symbol-p value)
        (string= (consent-symbol-name value) name)))
 
+(defun consent--scheme-documentation-string-fragments (value)
+  "Return string fragments represented by VALUE, or nil."
+  (cond
+   ((stringp value) (list value))
+   ((and (consp value)
+         (consent--scheme-documentation-proper-list-p value)
+         (cl-every #'stringp value))
+    value)
+   (t nil)))
+
+(defun consent--scheme-documentation-obvious-type-prose-p (strings)
+  "Return non-nil when STRINGS name a primitive non-any type."
+  (let ((case-fold-search t)
+        (text (mapconcat #'identity strings " ")))
+    (string-match-p
+     (rx word-start
+         (or "boolean" "symbol" "string" "number" "integer"
+             "pair" "list" "vector" "bytevector" "procedure"
+             "port" "character")
+         (? "s")
+         word-end)
+     text)))
+
 (defun consent--scheme-documentation-rich-vectors (definition-text)
   "Return rich metadata vectors parsed from DEFINITION-TEXT."
   (let (vectors)
@@ -398,6 +421,30 @@ docs/docstring-metadata.md.")
              (goto-char (1+ start)))))))
     (nreverse vectors)))
 
+(defun consent--scheme-documentation-description-fragments (descriptor)
+  "Return DESCRIPTION string fragments from DESCRIPTOR, or nil."
+  (when (consent--scheme-documentation-proper-list-p descriptor)
+    (catch 'found
+      (dolist (entry descriptor)
+        (when (and (consp entry)
+                   (consent--scheme-documentation-symbol-named-p
+                    (car entry)
+                    "description")
+                   (consp (cdr entry))
+                   (null (cddr entry)))
+          (throw
+           'found
+           (consent--scheme-documentation-string-fragments (cadr entry)))))
+      nil)))
+
+(defun consent--scheme-documentation-type-any-entry-p (entry)
+  "Return non-nil when ENTRY is exactly `(type any)'."
+  (and (consp entry)
+       (consent--scheme-documentation-symbol-named-p (car entry) "type")
+       (consp (cdr entry))
+       (null (cddr entry))
+       (consent--scheme-documentation-symbol-named-p (cadr entry) "any")))
+
 (defun consent--scheme-documentation-vector-field (vector name)
   "Return `(present . value)' for VECTOR field NAME, or nil when absent."
   (catch 'found
@@ -412,16 +459,33 @@ docs/docstring-metadata.md.")
 
 (defun consent--scheme-documentation-descriptor-has-type-p (descriptor)
   "Return non-nil when DESCRIPTOR explicitly includes a type entry."
-  (and (consent--scheme-documentation-proper-list-p descriptor)
-       (cl-some
-        (lambda (entry)
-          (and (consp entry)
-               (consent--scheme-documentation-symbol-named-p
-                (car entry)
-                "type")
-               (consp (cdr entry))
-               (null (cddr entry))))
-        descriptor)))
+  (let ((shorthand
+         (consent--scheme-documentation-string-fragments descriptor)))
+    (if shorthand
+        (not (consent--scheme-documentation-obvious-type-prose-p
+              shorthand))
+      (and (consent--scheme-documentation-proper-list-p descriptor)
+           (let ((type-entry
+                  (cl-find-if
+                   (lambda (entry)
+                     (and (consp entry)
+                          (consent--scheme-documentation-symbol-named-p
+                           (car entry)
+                           "type")
+                          (consp (cdr entry))
+                          (null (cddr entry))))
+                   descriptor))
+                 (description
+                  (consent--scheme-documentation-description-fragments
+                   descriptor)))
+             (and type-entry
+                  (not
+                   (and
+                    (consent--scheme-documentation-type-any-entry-p
+                     type-entry)
+                    description
+                    (consent--scheme-documentation-obvious-type-prose-p
+                     description)))))))))
 
 (defun consent--scheme-documentation-typed-parameters-p (parameters)
   "Return non-nil when PARAMETERS carries explicit descriptor types."
@@ -482,6 +546,57 @@ docs/docstring-metadata.md.")
                                name)
                        errors))))
     (nreverse errors)))
+
+(ert-deftest consent-scheme-documentation-test-rich-type-shorthand ()
+  "Treat dotted descriptor shorthand as intentional `any' metadata."
+  (let ((shorthand
+         "(define (example name values)
+            \"Return a diagnostic field pair.\"
+            #((parameters
+               . ((name . \"Opaque field key supplied by the caller.\")
+                  (values . \"Opaque field payloads.\")))
+              (returns . \"Opaque field representation.\")
+              (effects . (pure)))
+            (cons name values))")
+        (expanded-missing
+         "(define (example name values)
+            \"Return a diagnostic field pair.\"
+            #((parameters
+               . ((name
+                   (description \"Symbol naming the diagnostic field.\"))
+                  (values
+                   (description \"Zero or more field values.\"))))
+              (returns . ((description \"A field pair.\")))
+              (effects . (pure)))
+            (cons name values))"))
+    (should (consent--scheme-documentation-rich-vector-p shorthand))
+    (should-not
+     (consent--scheme-documentation-rich-vector-p expanded-missing))))
+
+(ert-deftest consent-scheme-documentation-test-obvious-types-need-expansion ()
+  "Reject shorthand when descriptor prose names an obvious non-any type."
+  (let ((obvious-shorthand
+         "(define (example field)
+            \"Return FIELD.\"
+            #((parameters . ((field . \"Symbol naming the field.\")))
+              (returns . \"The field symbol.\")
+              (effects . (pure)))
+            field)")
+        (explicit-type
+         "(define (example field)
+            \"Return FIELD.\"
+            #((parameters
+               . ((field
+                   (type symbol)
+                   (description \"Symbol naming the field.\"))))
+              (returns
+               . ((type symbol)
+                  (description \"The field symbol.\")))
+              (effects . (pure)))
+            field)"))
+    (should-not
+     (consent--scheme-documentation-rich-vector-p obvious-shorthand))
+    (should (consent--scheme-documentation-rich-vector-p explicit-type))))
 
 (ert-deftest consent-scheme-documentation-test-runtime-docstrings ()
   "Ensure representative public Scheme bindings carry runtime docstrings."

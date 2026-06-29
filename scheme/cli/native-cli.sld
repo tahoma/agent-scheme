@@ -401,16 +401,16 @@
       "after the request is approved."
       #((parameters
          (options
-          (type any)
+          (type list)
           (description
            ("Parsed options alist naming the subcommand, mode, session,"
-            "resource, and gate inputs for the request."))))
+             "resource, and gate inputs for the request."))))
         (returns
-         (type any)
+         (type list)
          (description
           ("A `(EXIT RECORDS PROMPTS)' list whose RECORDS are"
-           "Scheme-readable boundary records and PROMPTS are"
-           "diagnostic-stream approval summaries.")))
+            "Scheme-readable boundary records and PROMPTS are"
+            "diagnostic-stream approval summaries.")))
         (effects state-read host-eval allocation error))
       (let ((subcommand (cli-native-cli--opt options 'subcommand #f)))
         (unless subcommand
@@ -446,15 +446,15 @@
       "host can pass a clean argument vector after its own option processing."
       #((parameters
          (arguments
-          (type any)
+          (type string)
           (description
            ("List of command-line argument strings: a leading"
-            "subcommand followed by recognized flags and their values."))))
+             "subcommand followed by recognized flags and their values."))))
         (returns
-         (type any)
+         (type list)
          (description
           ("An options alist consumed by `cli-native-cli-execute',"
-           "defaults seeded and flag overrides consed to the front.")))
+            "defaults seeded and flag overrides consed to the front.")))
         (effects allocation error))
       (let ((cleaned (let drop ((items arguments))
                        (if (and (pair? items) (string=? (car items) "--"))
@@ -522,10 +522,8 @@
       "stream, then exit with the adapter's exit code."
       #((parameters)
         (returns
-         (type any)
-         (description
-          ("Does not return normally; terminates the process with the"
-           "adapter's exit code via `exit'.")))
+         . ("Does not return normally; terminates the process with the"
+            "adapter's exit code via `exit'."))
         (effects state-read state-write host-eval allocation error))
       (let* ((options (cli-native-cli-parse-arguments (cdr (command-line))))
              (outcome (cli-native-cli-execute options))
