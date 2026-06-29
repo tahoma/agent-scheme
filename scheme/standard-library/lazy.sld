@@ -17,14 +17,12 @@
     (define (promise? obj)
       "Return #t when OBJ is an Consent Scheme promise record."
       #((parameters
-         (obj
-          (type any)
-          (description "Value to inspect.")))
+         (obj . "Value to inspect."))
         (returns
-         (type any)
+         (type boolean)
          (description
           ("#t when OBJ has the portable promise record shape;"
-           "otherwise #f.")))
+            "otherwise #f.")))
         (effects pure))
       (and (pair? obj)
            (eq? (car obj) 'consent-promise)))
@@ -32,14 +30,10 @@
     (define (make-promise obj)
       "Return OBJ as a promise, preserving existing promises."
       #((parameters
-         (obj
-          (type any)
-          (description "Value or existing promise to wrap.")))
+         (obj . "Value or existing promise to wrap."))
         (returns
-         (type any)
-         (description
-          ("A promise record whose forced value is OBJ, or OBJ itself"
-           "when it is already a promise.")))
+         . ("A promise record whose forced value is OBJ, or OBJ itself"
+            "when it is already a promise."))
         (effects allocation))
       (if (promise? obj)
           obj
@@ -48,14 +42,10 @@
     (define (force promise)
       "Return PROMISE's value, evaluating and memoizing delayed thunks once."
       #((parameters
-         (promise
-          (type any)
-          (description "Promise record or ordinary value to force.")))
+         (promise . "Promise record or ordinary value to force."))
         (returns
-         (type any)
-         (description
-          ("PROMISE's memoized value, or PROMISE unchanged when it is"
-           "not a promise.")))
+         . ("PROMISE's memoized value, or PROMISE unchanged when it is"
+            "not a promise."))
         (effects promise-evaluation mutation))
       (if (promise? promise)
           (if (cadr promise)

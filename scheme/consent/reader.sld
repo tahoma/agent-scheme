@@ -164,14 +164,13 @@
       "every posture."
       #((parameters
          (datum
-          (type any)
-          (description
-           ("Canonical number record or plain host number to unwrap."))))
+          (type (or consent-number number))
+          (description ("Canonical number record or plain host number to unwrap."))))
         (returns
-         (type any)
+         (type number)
          (description
           ("The host payload of a canonical number record, or DATUM"
-           "itself when it is already a plain host number.")))
+            "itself when it is already a plain host number.")))
         (effects error))
       (cond
        ((consent-number? datum) (consent-number-value-field datum))
@@ -257,17 +256,16 @@
       "formatting."
       #((parameters
          (integer
-          (type any)
+          (type exact-integer)
           (description "Host integer to render as canonical digit text."))
          (radix
-          (type any)
-          (description
-           ("Numeric base from 2 through 16 for the digit conversion."))))
+          (type exact-integer)
+          (description ("Numeric base from 2 through 16 for the digit conversion."))))
         (returns
-         (type any)
+         (type string)
          (description
           ("A string of RADIX digits for INTEGER, with a leading minus"
-           "sign for negative values and \"0\" for zero.")))
+            "sign for negative values and \"0\" for zero.")))
         (effects allocation))
       (let ((digits "0123456789abcdef")
             (negative? (< integer 0))
@@ -415,20 +413,15 @@
       "Attach SOURCE metadata to DATUM when DATUM has stable identity."
       #((parameters
          (datum
-          (type any)
-          (description
-           ("Datum to associate source metadata with; ignored unless it"
-            "has stable identity.")))
+          . ("Datum to associate source metadata with; ignored unless it"
+             "has stable identity."))
          (source
-          (type any)
-          (description
-           ("Source metadata to attach, or #f to attach nothing."))))
+          (type (or source-metadata boolean))
+          (description ("Source metadata to attach, or #f to attach nothing."))))
         (returns
-         (type any)
-         (description
-          ("DATUM, after attaching SOURCE when DATUM is"
-           "identity-attachable, evicting the metadata table when it"
-           "overflows its limit.")))
+         . ("DATUM, after attaching SOURCE when DATUM is"
+            "identity-attachable, evicting the metadata table when it"
+            "overflows its limit."))
         (effects state-write))
       (if (and source (source-attachable? datum))
           (begin
@@ -447,14 +440,12 @@
     (define (consent-datum-source datum)
       "Return source metadata attached to DATUM, or #f when absent."
       #((parameters
-         (datum
-          (type any)
-          (description "Datum to look up source metadata for.")))
+         (datum . "Datum to look up source metadata for."))
         (returns
-         (type any)
+         (type (or source-metadata boolean))
          (description
           ("A source-metadata record built from DATUM's attached"
-           "metadata, or #f when none is attached.")))
+            "metadata, or #f when none is attached.")))
         (effects state-read))
       (let ((cell (assq datum consent-source-metadata)))
         (if cell (source-metadata->record (cdr cell)) #f)))
@@ -468,22 +459,16 @@
       "Copy source metadata from SOURCE to TARGET, preserving existing metadata"
       "by default."
       #((parameters
-         (target
-          (type any)
-          (description "Datum to receive copied source metadata."))
-         (source
-          (type any)
-          (description "Datum whose attached source metadata is copied."))
+         (target . "Datum to receive copied source metadata.")
+         (source . "Datum whose attached source metadata is copied.")
          (maybe-overwrite
-          (type any)
+          (type list)
           (description
            ("Optional flag; when truthy, overwrite TARGET's existing"
-            "metadata."))))
+             "metadata."))))
         (returns
-         (type any)
-         (description
-          ("TARGET, with SOURCE's metadata attached when SOURCE has"
-           "metadata and overwrite is requested or TARGET had none.")))
+         . ("TARGET, with SOURCE's metadata attached when SOURCE has"
+            "metadata and overwrite is requested or TARGET had none."))
         (effects state-write))
       (let ((metadata (datum-source-metadata source))
             (overwrite? (and (not (null? maybe-overwrite))
@@ -798,20 +783,20 @@
       "with a host literal."
       #((parameters
          (value
-          (type any)
+          (type exact-integer)
           (description
            ("Host integer, or an already-canonical number returned"
-            "unchanged.")))
+             "unchanged.")))
          (rest
-          (type any)
+          (type exact-integer)
           (description
            ("Optional exactness symbol (default `exact') followed by an"
-            "optional radix integer (default 10)."))))
+             "optional radix integer (default 10)."))))
         (returns
-         (type any)
+         (type exact-integer)
          (description
           ("A canonical integer number record wrapping VALUE with the"
-           "requested exactness and radix.")))
+            "requested exactness and radix.")))
         (effects allocation))
       (if (consent-number? value)
           value
@@ -849,21 +834,21 @@
       "consent-make-canonical-integer)."
       #((parameters
          (value
-          (type any)
+          (type (or number consent-number))
           (description
            ("Host inexact number, or an already-canonical number"
-            "returned unchanged.")))
+             "returned unchanged.")))
          (maybe-lexeme
-          (type any)
+          (type string)
           (description
            ("Optional source lexeme string overriding the"
-            "host-formatted spelling."))))
+             "host-formatted spelling."))))
         (returns
-         (type any)
+         (type consent-number)
          (description
           ("A canonical inexact decimal number record, delegating to"
-           "the infnan constructor when VALUE is a host infinity or"
-           "NaN.")))
+            "the infnan constructor when VALUE is a host infinity or"
+            "NaN.")))
         (effects allocation))
       (if (consent-number? value)
           value
@@ -885,23 +870,21 @@
       "Canonical-record components are unwrapped to their host payloads."
       #((parameters
          (raw-numerator
-          (type any)
-          (description
-           ("Numerator as a host integer or canonical number record.")))
+          (type (or exact-integer consent-number))
+          (description ("Numerator as a host integer or canonical number record.")))
          (raw-denominator
-          (type any)
-          (description
-           ("Denominator as a host integer or canonical number record.")))
+          (type (or exact-integer consent-number))
+          (description ("Denominator as a host integer or canonical number record.")))
          (rest
-          (type any)
+          (type list)
           (description
            ("Optional exactness symbol followed by an optional radix"
-            "integer."))))
+             "integer."))))
         (returns
-         (type any)
+         (type consent-number)
          (description
           ("A normalized canonical rational record, collapsing to a"
-           "canonical integer when the reduced denominator is one.")))
+            "canonical integer when the reduced denominator is one.")))
         (effects allocation))
       (let* ((numerator (canonical-component raw-numerator))
              (denominator (canonical-component raw-denominator))
@@ -931,12 +914,10 @@
       "Public constructor for canonical infinity and NaN number records."
       #((parameters
          (kind
-          (type any)
-          (description
-           ("Special-value spelling, one of \"+inf.0\", \"-inf.0\", or"
-            "\"+nan.0\"."))))
+          . ("Special-value spelling, one of \"+inf.0\", \"-inf.0\", or"
+             "\"+nan.0\".")))
         (returns
-         (type any)
+         (type consent-number)
          (description "A canonical inexact infnan number record for KIND."))
         (effects error))
       (make-consent-number
@@ -954,17 +935,16 @@
       "Public constructor for canonical rectangular complex number records."
       #((parameters
          (real
-          (type any)
+          (type consent-number)
           (description "Canonical number record for the real component."))
          (imaginary
-          (type any)
-          (description
-           ("Canonical number record for the imaginary component."))))
+          (type consent-number)
+          (description ("Canonical number record for the imaginary component."))))
         (returns
-         (type any)
+         (type consent-number)
          (description
           ("A canonical complex number record pairing REAL and"
-           "IMAGINARY, exact only when both components are exact.")))
+            "IMAGINARY, exact only when both components are exact.")))
         (effects allocation))
       (let ((exactness
              (if (and (eq? (consent-number-exactness real) 'exact)
@@ -984,14 +964,13 @@
       "instead of asking the host whether wrapped numbers are ordinary numbers."
       #((parameters
          (number
-          (type any)
-          (description
-           ("Value to test; only a canonical number record can be zero."))))
+          (type consent-number)
+          (description ("Value to test; only a canonical number record can be zero."))))
         (returns
-         (type any)
+         (type boolean)
          (description
           ("#t when NUMBER is a canonical integer, rational, decimal,"
-           "or complex record equal to zero; #f otherwise.")))
+            "or complex record equal to zero; #f otherwise.")))
         (effects pure))
       (and (consent-number? number)
            (cond
@@ -1012,14 +991,13 @@
       "Public predicate for negative real Consent Scheme number records."
       #((parameters
          (number
-          (type any)
-          (description
-           ("Canonical Consent Scheme number record to test for sign."))))
+          (type consent-number)
+          (description ("Canonical Consent Scheme number record to test for sign."))))
         (returns
-         (type any)
+         (type boolean)
          (description
           ("#t when NUMBER is a negative integer, rational, decimal,"
-           "or negative infinity; #f otherwise.")))
+            "or negative infinity; #f otherwise.")))
         (effects pure))
       (cond
        ((eq? (consent-number-kind number) 'integer)
@@ -1036,15 +1014,15 @@
       "Public helper that returns the absolute value of an Consent Scheme number record."
       #((parameters
          (number
-          (type any)
+          (type consent-number)
           (description
            ("Canonical Consent Scheme number record to take the"
-            "magnitude of."))))
+             "magnitude of."))))
         (returns
-         (type any)
+         (type consent-number)
          (description
           ("A canonical number record holding the absolute value of"
-           "NUMBER, preserving its exactness and radix.")))
+            "NUMBER, preserving its exactness and radix.")))
         (effects allocation))
       (cond
        ((eq? (consent-number-kind number) 'integer)
@@ -1095,13 +1073,13 @@
       "Public renderer for Consent Scheme number records."
       #((parameters
          (number
-          (type any)
+          (type consent-number)
           (description "Canonical Consent Scheme number record to render.")))
         (returns
-         (type any)
+         (type string)
          (description
           ("A string with the number's canonical external spelling for"
-           "integer, rational, decimal, infnan, and complex kinds.")))
+            "integer, rational, decimal, infnan, and complex kinds.")))
         (effects error))
       (cond
        ((eq? (consent-number-kind number) 'integer)
@@ -2041,18 +2019,16 @@
       "validate the resulting host data against Consent Scheme resource limits."
       #((parameters
          (source
-          (type any)
+          (type (or string port))
           (description
            ("Source string or port body to read a single datum from.")))
          (maybe-options
-          (type any)
+          (type list)
           (description
            ("Optional reader options alist supplying budget overrides."))))
         (returns
-         (type any)
-         (description
-          ("The single datum read from SOURCE after confirming no"
-           "trailing input remains.")))
+         . ("The single datum read from SOURCE after confirming no"
+            "trailing input remains."))
         (effects error))
       (let* ((options (options-from-rest maybe-options))
              (reader (reader-from-source source options)))
@@ -2070,18 +2046,18 @@
       "labels are scoped per datum, matching R7RS external representations."
       #((parameters
          (source
-          (type any)
+          (type (or string port))
           (description
            ("Source string or port body to read fully into datums.")))
          (maybe-options
-          (type any)
+          (type list)
           (description
            ("Optional reader options alist supplying budget overrides."))))
         (returns
-         (type any)
+         (type list)
          (description
           ("A list of every datum read from SOURCE, in source order,"
-           "each validated against the resource budgets.")))
+            "each validated against the resource budgets.")))
         (effects error))
       (let* ((options (options-from-rest maybe-options))
              (reader (reader-from-source source options)))
@@ -2107,22 +2083,19 @@
       "the result is the next source offset no matter which datum was returned."
       #((parameters
          (source
-          (type any)
+          (type string)
           (description "Source string to read one datum from."))
          (position
-          (type any)
-          (description
-           ("Nonnegative offset within SOURCE at which to begin"
-            "reading.")))
+          . ("Nonnegative offset within SOURCE at which to begin"
+             "reading."))
          (maybe-options
-          (type any)
-          (description
-           ("Optional reader options alist supplying budget overrides."))))
+          (type list)
+          (description ("Optional reader options alist supplying budget overrides."))))
         (returns
-         (type any)
+         (type pair)
          (description
           ("A pair whose car is the read datum (or the end-of-file"
-           "object) and whose cdr is the next source offset.")))
+            "object) and whose cdr is the next source offset.")))
         (effects error))
       (set! position (canonical-component position))
       (if (not (string? source))
@@ -2162,19 +2135,17 @@
       "option."
       #((parameters
          (source
-          (type any)
-          (description
-           ("Source string being scanned for the next top-level form.")))
+          (type string)
+          (description ("Source string being scanned for the next top-level form.")))
          (position
-          (type any)
-          (description
-           ("Offset after which to search for the next top-level form."))))
+          (type exact-integer)
+          (description ("Offset after which to search for the next top-level form."))))
         (returns
-         (type any)
+         (type exact-integer)
          (description
           ("The offset of the next line-anchored top-level form"
-           "strictly after POSITION, or the length of SOURCE when none"
-           "remains.")))
+            "strictly after POSITION, or the length of SOURCE when none"
+            "remains.")))
         (effects pure))
       (set! position (canonical-component position))
       (let ((length (string-length source)))
@@ -2353,19 +2324,17 @@
       "option (defaulting to `consent-resync-to-next-form`)."
       #((parameters
          (source
-          (type any)
+          (type string)
           (description "Source string to read fully in recovery mode."))
          (maybe-options
-          (type any)
+          (type list)
           (description
            ("Optional reader options alist supplying `resync',"
-            "`source-id', and budget overrides."))))
+             "`source-id', and budget overrides."))))
         (returns
-         (type any)
-         (description
-          ("A `<consent-recovery-result>' bundling the readable"
-           "datums, the ordered diagnostics, the recovery spans, and a"
-           "STATUS of `complete' or `incomplete'.")))
+         . ("A `<consent-recovery-result>' bundling the readable"
+            "datums, the ordered diagnostics, the recovery spans, and a"
+            "STATUS of `complete' or `incomplete'."))
         (effects error))
       (if (not (string? source))
           (error "consent reader source must be a string" source))
@@ -2409,24 +2378,20 @@
       "prefix with a syntax error."
       #((parameters
          (source
-          (type any)
+          (type string)
           (description "Source string to read one recovery step from."))
          (position
-          (type any)
-          (description
-           ("Nonnegative offset within SOURCE at which to begin"
-            "reading.")))
+          . ("Nonnegative offset within SOURCE at which to begin"
+             "reading."))
          (maybe-options
-          (type any)
+          (type list)
           (description
            ("Optional reader options alist supplying `resync',"
-            "`source-id', and budget overrides."))))
+             "`source-id', and budget overrides."))))
         (returns
-         (type any)
-         (description
-          ("A `<consent-recovery-step>' describing the next form:"
-           "STATUS is `datum', `invalid', `incomplete', or `eof', and"
-           "NEXT is the offset to resume from.")))
+         . ("A `<consent-recovery-step>' describing the next form:"
+            "STATUS is `datum', `invalid', `incomplete', or `eof', and"
+            "NEXT is the offset to resume from."))
         (effects error))
       (set! position (canonical-component position))
       (if (not (string? source))
@@ -2554,18 +2519,14 @@
       "Public validation returns DATUM unchanged so callers can place it inline"
       "in read/evaluate pipelines while still enforcing depth and size budgets."
       #((parameters
-         (datum
-          (type any)
-          (description "Datum to validate against the resource budgets."))
+         (datum . "Datum to validate against the resource budgets.")
          (maybe-options
-          (type any)
+          (type list)
           (description
            ("Optional reader options alist supplying `max-depth',"
-            "`max-total-nodes', `max-string-size', and"
-            "`max-bytevector-length' overrides."))))
-        (returns
-         (type any)
-         (description "DATUM unchanged when it stays within every budget."))
+             "`max-total-nodes', `max-string-size', and"
+             "`max-bytevector-length' overrides."))))
+        (returns . "DATUM unchanged when it stays within every budget.")
         (effects error))
       (let* ((options (options-from-rest maybe-options))
              (validation
@@ -2660,21 +2621,19 @@
       "Render Consent Scheme datums with stable external syntax, including"
       "shared and circular structure labels for write/shared mode."
       #((parameters
-         (datum
-          (type any)
-          (description "Consent Scheme datum to render as external text."))
+         (datum . "Consent Scheme datum to render as external text.")
          (maybe-options
-          (type any)
+          (type list)
           (description
            ("Optional `mode' symbol (`write', `shared', or `display')"
-            "followed by an optional display flag controlling string"
-            "and character quoting."))))
+             "followed by an optional display flag controlling string"
+             "and character quoting."))))
         (returns
-         (type any)
+         (type string)
          (description
           ("A string holding the datum's external representation,"
-           "emitting `#N=`/`#N#` datum labels for shared and circular"
-           "structure in write/shared mode.")))
+            "emitting `#N=`/`#N#` datum labels for shared and circular"
+            "structure in write/shared mode.")))
         (effects allocation))
       (let ((mode (if (null? maybe-options) 'write (car maybe-options)))
             (display? (if (or (null? maybe-options)
@@ -2887,35 +2846,32 @@
       "cyclic value renders in bounded time and space with the `...' truncation"
       "marker instead of wedging an interactive loop or flooding output (#508)."
       #((parameters
-         (datum
-          (type any)
-          (description "Datum to render for an interactive display surface."))
+         (datum . "Datum to render for an interactive display surface.")
          (limits
-          (type any)
+          (type list)
           (description
            ("Alist `((depth . D) (length . L) (size . S))' of"
-            "nonnegative integer ceilings, each #f or absent for no"
-            "ceiling: DEPTH bounds nesting (a compound at the ceiling"
-            "renders as the marker), LENGTH bounds the elements"
-            "rendered per list/vector/bytevector (the overflow renders"
-            "as a trailing marker), and SIZE bounds the total"
-            "characters emitted (a hard backstop that stops the walk"
-            "once reached, so rendering is bounded in time as well as"
-            "space).")))
+             "nonnegative integer ceilings, each #f or absent for no"
+             "ceiling: DEPTH bounds nesting (a compound at the ceiling"
+             "renders as the marker), LENGTH bounds the elements"
+             "rendered per list/vector/bytevector (the overflow renders"
+             "as a trailing marker), and SIZE bounds the total"
+             "characters emitted (a hard backstop that stops the walk"
+             "once reached, so rendering is bounded in time as well as"
+             "space).")))
          (maybe-mode+display
-          (type any)
-          (description
-           ("Optional `consent-datum->external' mode and display flag."))))
+          (type list)
+          (description ("Optional `consent-datum->external' mode and display flag."))))
         (returns
-         (type any)
+         (type string)
          (description
           ("Bounded external text: each elided depth/length/size point"
-           "and each shared or circular back-edge renders as the"
-           "parseable `...' marker, so rendering always terminates"
-           "regardless of LIMITS. Atoms delegate to the unbounded"
-           "`consent-datum->external', so numbers, strings, symbols,"
-           "characters, and records render identically to the"
-           "canonical writer.")))
+            "and each shared or circular back-edge renders as the"
+            "parseable `...' marker, so rendering always terminates"
+            "regardless of LIMITS. Atoms delegate to the unbounded"
+            "`consent-datum->external', so numbers, strings, symbols,"
+            "characters, and records render identically to the"
+            "canonical writer.")))
         (effects pure))
       ;; The canonical writer stays unbounded for the capture/round-trip surface;
       ;; this bound is the interactive display path only.

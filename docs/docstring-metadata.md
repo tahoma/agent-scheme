@@ -315,8 +315,8 @@ Implementations may preserve unknown fields as Scheme-readable data for tools
 that understand them, but public documentation should prefer the field names
 above until a later issue extends the convention.
 
-Parameter and return descriptors are proper lists of descriptor entries. The
-initial descriptor fields are:
+Parameter and return descriptors normally use proper lists of descriptor
+entries. The initial descriptor fields are:
 
 - `type`: Scheme-readable type form; omitted type metadata defaults to
   `(type any)` so metadata-free and partially documented definitions keep their
@@ -327,9 +327,15 @@ initial descriptor fields are:
 
 For convenience, a parameter value or `returns` value may be just a string or a
 non-empty list of strings; that shorthand is normalized to a descriptor with
-`(type any)` and a `description`. Project library files should not rely on that
-shorthand for public exports: the project lint requires explicit `(type ...)`
-metadata for every public parameter and return value.
+`(type any)` and a `description`. Use that shorthand when the value is
+intentionally opaque, generic, or polymorphic at this library edge. When a
+narrower contract-shaped type is known, prefer the expanded descriptor and spell
+the type explicitly. Project library lint treats string and string-list
+shorthand as intentional `any`, but still rejects expanded public parameter and
+return descriptors that omit `(type ...)`. The lint also rejects shorthand or
+expanded `(type any)` descriptors whose prose names an obvious primitive type
+such as string, symbol, list, vector, procedure, port, or boolean; spell the
+narrower type in those cases.
 
 The first type vocabulary is intentionally contract-shaped:
 
@@ -344,6 +350,15 @@ The first type vocabulary is intentionally contract-shaped:
 - custom type names are preserved as symbols for documentation, static tools,
   and future contract lowering; implementations may treat names they do not
   recognize as opaque extension points
+
+Prefer custom type names that align with predicates: remove the trailing `?`
+from the predicate name, so `eval-context?` implies `(type eval-context)` and
+`consent-session-manager?` implies `(type consent-session-manager)`. When a
+value is only a Scheme-readable tagged datum and the library does not define a
+matching predicate, prefer the structural type that the current vocabulary can
+honestly state, such as `(type list)`. For example, R7RS library names are
+documented as `(type (list-of (or symbol exact-integer)))`; the current
+vocabulary does not yet express the nonnegative integer refinement.
 
 The form `(forall ...)` is reserved for future polymorphic metadata, but the
 first pass does not implement relationship-aware checking.

@@ -38,10 +38,10 @@
       "Construct an empty memory store."
       #((parameters)
         (returns
-         (type any)
+         (type consent-memory-store)
          (description
           ("A mutable memory store with no records and the next"
-           "generated id set to zero.")))
+            "generated id set to zero.")))
         (effects allocation))
       (make-memory-store '() 0))
 
@@ -100,10 +100,10 @@
       "Return canonical id field from a memory RECORD."
       #((parameters
          (record
-          (type any)
+          (type list)
           (description "Memory record datum.")))
         (returns
-         (type any)
+         (type symbol)
          (description "The record id field."))
         (effects pure))
       (field-value record 'id))
@@ -149,16 +149,14 @@
       "Return a memory record from STORE by SCOPE and KEY, or #f."
       #((parameters
          (store
-          (type any)
+          (type consent-memory-store)
           (description "Memory store to search."))
          (scope
-          (type any)
+          (type symbol)
           (description "Memory scope symbol."))
-         (key
-          (type any)
-          (description "Memory key datum.")))
+         (key . "Memory key datum."))
         (returns
-         (type any)
+         (type (or list boolean))
          (description "The matching memory record datum, or #f."))
         (effects state-read error))
       (let loop ((records (scope-records store scope)))
@@ -209,20 +207,17 @@
       "Store DATUM under KEY in SCOPE and return its memory record."
       #((parameters
          (store
-          (type any)
+          (type consent-memory-store)
           (description "Memory store to mutate."))
          (scope
-          (type any)
+          (type symbol)
           (description "Memory scope symbol."))
-         (key
-          (type any)
-          (description "Memory key datum."))
+         (key . "Memory key datum.")
          (datum
-          (type any)
-          (description
-           ("Memory payload or field list as Scheme-readable data."))))
+          (type list)
+          (description ("Memory payload or field list as Scheme-readable data."))))
         (returns
-         (type any)
+         (type list)
          (description "The stored memory record datum."))
         (effects state-write error))
       (let* ((normalized-scope (normalize-scope scope))
@@ -242,19 +237,17 @@
       "Delete memory KEY in SCOPE and return the deleted record, or #f."
       #((parameters
          (store
-          (type any)
+          (type consent-memory-store)
           (description "Memory store to mutate."))
          (scope
-          (type any)
+          (type symbol)
           (description "Memory scope symbol."))
-         (key
-          (type any)
-          (description "Memory key datum.")))
+         (key . "Memory key datum."))
         (returns
-         (type any)
+         (type (or list boolean))
          (description
           ("The deleted memory record datum, or #f when no record"
-           "matched.")))
+            "matched.")))
         (effects state-write error))
       (let* ((normalized-scope (normalize-scope scope))
              (record (memory-ref store normalized-scope key)))
@@ -268,20 +261,19 @@
       "Add DATUM as generated KIND memory in SCOPE and return the record."
       #((parameters
          (store
-          (type any)
+          (type consent-memory-store)
           (description "Memory store to mutate."))
          (scope
-          (type any)
+          (type symbol)
           (description "Memory scope symbol."))
          (kind
-          (type any)
+          (type symbol)
           (description "Memory kind symbol."))
          (datum
-          (type any)
-          (description
-           ("Memory payload or field list as Scheme-readable data."))))
+          (type list)
+          (description ("Memory payload or field list as Scheme-readable data."))))
         (returns
-         (type any)
+         (type list)
          (description "The generated memory record datum."))
         (effects state-write error))
       (let* ((normalized-scope (normalize-scope scope))
@@ -313,17 +305,14 @@
       "Return SCOPE records matching QUERY."
       #((parameters
          (store
-          (type any)
+          (type consent-memory-store)
           (description "Memory store to inspect."))
          (scope
-          (type any)
+          (type symbol)
           (description "Memory scope symbol."))
-         (query
-          (type any)
-          (description
-           ("String, symbol, or datum query matched against records."))))
+         (query . "Query datum matched against records."))
         (returns
-         (type any)
+         (type (list-of list))
          (description "List of matching memory record datums in SCOPE."))
         (effects state-read error))
       (let loop ((records (scope-records store scope)) (result '()))
@@ -337,16 +326,14 @@
       "Return SCOPE records tagged with TAG."
       #((parameters
          (store
-          (type any)
+          (type consent-memory-store)
           (description "Memory store to inspect."))
          (scope
-          (type any)
+          (type symbol)
           (description "Memory scope symbol."))
-         (tag
-          (type any)
-          (description "Tag symbol or datum to match.")))
+         (tag . "Tag datum to match."))
         (returns
-         (type any)
+         (type (list-of list))
          (description "List of memory record datums whose tags include TAG."))
         (effects state-read error))
       (let loop ((records (scope-records store scope)) (result '()))
@@ -366,18 +353,18 @@
       "Return COUNT newest memory records in SCOPE."
       #((parameters
          (store
-          (type any)
+          (type consent-memory-store)
           (description "Memory store to inspect."))
          (scope
-          (type any)
+          (type symbol)
           (description "Memory scope symbol."))
          (count
-          (type any)
+          (type exact-integer)
           (description
            ("Exact nonnegative integer or Consent Scheme integer datum"
-            "limiting result size."))))
+             "limiting result size."))))
         (returns
-         (type any)
+         (type (list-of list))
          (description "At most COUNT newest memory record datums in SCOPE."))
         (effects state-read error))
       (take (scope-records store scope) (integer-value count)))))

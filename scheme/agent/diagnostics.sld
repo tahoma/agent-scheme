@@ -44,15 +44,14 @@
       "Return a Scheme-readable record field named NAME with VALUES."
       #((parameters
          (name
-          (type any)
+          (type symbol)
           (description "Symbol naming the diagnostic field."))
          (values
-          (type any)
+          (type list)
           (description "Zero or more Scheme-readable field values.")))
         (returns
-         (type any)
-         (description
-          ("A field pair whose car is NAME and whose cdr is VALUES.")))
+         (type pair)
+         (description ("A field pair whose car is NAME and whose cdr is VALUES.")))
         (effects pure))
       (cons name values))
 
@@ -60,18 +59,14 @@
       "Return FIELD's first value from RECORD, or DEFAULT when absent."
       #((parameters
          (record
-          (type any)
+          (type pair)
           (description "Diagnostic record represented as a tagged list."))
          (field
-          (type any)
+          (type symbol)
           (description "Symbol naming the field to read."))
          (default
-          (type any)
-          (description
-           ("Fallback value returned when FIELD is absent or empty."))))
-        (returns
-         (type any)
-         (description "The first stored value for FIELD, or DEFAULT."))
+          . ("Fallback value returned when FIELD is absent or empty.")))
+        (returns . "The first stored value for FIELD, or DEFAULT.")
         (effects pure))
       (let ((entry (and (pair? record) (assq field (cdr record)))))
         (if entry
@@ -86,27 +81,25 @@
       "Return a source range with absolute and line/column positions."
       #((parameters
          (start
-          (type any)
+          (type exact-integer)
           (description "Absolute start offset."))
          (end
-          (type any)
+          (type exact-integer)
           (description "Absolute end offset."))
          (line
-          (type any)
+          (type exact-integer)
           (description "One-based start line, or host-provided line datum."))
          (column
-          (type any)
-          (description
-           ("One-based start column, or host-provided column datum.")))
+          (type exact-integer)
+          (description ("One-based start column, or host-provided column datum.")))
          (end-line
-          (type any)
+          (type exact-integer)
           (description "One-based end line, or host-provided line datum."))
          (end-column
-          (type any)
-          (description
-           ("One-based end column, or host-provided column datum."))))
+          (type exact-integer)
+          (description ("One-based end column, or host-provided column datum."))))
         (returns
-         (type any)
+         (type diagnostic-range)
          (description "A `diagnostic-range` datum."))
         (effects pure))
       (list 'diagnostic-range
@@ -120,14 +113,12 @@
     (define (diagnostic-range? datum)
       "Return #t when DATUM is a diagnostic range record."
       #((parameters
-         (datum
-          (type any)
-          (description "Value to inspect.")))
+         (datum . "Value to inspect."))
         (returns
-         (type any)
+         (type boolean)
          (description
           ("#t when DATUM is tagged as a diagnostic range; otherwise"
-           "#f.")))
+            "#f.")))
         (effects pure))
       (diagnostics-record? datum 'diagnostic-range))
 
@@ -135,11 +126,9 @@
       "Return RANGE's absolute start position."
       #((parameters
          (range
-          (type any)
+          (type diagnostic-range)
           (description "Diagnostic range datum.")))
-        (returns
-         (type any)
-         (description "The absolute start offset, or #f when absent."))
+        (returns . "The absolute start offset, or #f when absent.")
         (effects pure))
       (diagnostics-field-value range 'start #f))
 
@@ -147,11 +136,9 @@
       "Return RANGE's absolute end position."
       #((parameters
          (range
-          (type any)
+          (type diagnostic-range)
           (description "Diagnostic range datum.")))
-        (returns
-         (type any)
-         (description "The absolute end offset, or #f when absent."))
+        (returns . "The absolute end offset, or #f when absent.")
         (effects pure))
       (diagnostics-field-value range 'end #f))
 
@@ -159,30 +146,24 @@
       "Return one diagnostic record in the shared adapter-neutral shape."
       #((parameters
          (severity
-          (type any)
-          (description
-           ("Severity symbol from the shared diagnostic vocabulary.")))
+          (type symbol)
+          (description ("Severity symbol from the shared diagnostic vocabulary.")))
          (message
-          (type any)
+          (type string)
           (description "Human-readable diagnostic message."))
-         (source
-          (type any)
-          (description "Backend, tool, or protocol source datum."))
+         (source . "Backend, tool, or protocol source datum.")
          (file
-          (type any)
+          (type (or string boolean))
           (description "File path datum, or #f for buffer-only diagnostics."))
-         (buffer
-          (type any)
-          (description "Buffer name or handle metadata, or #f."))
+         (buffer . "Buffer name or handle metadata, or #f.")
          (range
-          (type any)
+          (type (or diagnostic-range boolean))
           (description "Diagnostic range datum, or #f."))
          (metadata
-          (type any)
-          (description
-           ("Additional backend metadata as Scheme-readable data."))))
+          (type list)
+          (description "Additional backend metadata as Scheme-readable data.")))
         (returns
-         (type any)
+         (type diagnostic)
          (description "A `diagnostic` datum."))
         (effects pure))
       (list 'diagnostic
@@ -197,14 +178,12 @@
     (define (diagnostic? datum)
       "Return #t when DATUM is a diagnostic record."
       #((parameters
-         (datum
-          (type any)
-          (description "Value to inspect.")))
+         (datum . "Value to inspect."))
         (returns
-         (type any)
+         (type boolean)
          (description
           ("#t when DATUM is tagged as a diagnostic record; otherwise"
-           "#f.")))
+            "#f.")))
         (effects pure))
       (diagnostics-record? datum 'diagnostic))
 
@@ -212,10 +191,10 @@
       "Return DIAGNOSTIC's severity symbol."
       #((parameters
          (diagnostic
-          (type any)
+          (type diagnostic)
           (description "Diagnostic datum.")))
         (returns
-         (type any)
+         (type (or symbol boolean))
          (description "The diagnostic severity symbol, or #f when absent."))
         (effects pure))
       (diagnostics-field-value diagnostic 'severity #f))
@@ -224,10 +203,10 @@
       "Return DIAGNOSTIC's human-readable message."
       #((parameters
          (diagnostic
-          (type any)
+          (type diagnostic)
           (description "Diagnostic datum.")))
         (returns
-         (type any)
+         (type (or string boolean))
          (description "The diagnostic message string, or #f when absent."))
         (effects pure))
       (diagnostics-field-value diagnostic 'message #f))
@@ -236,11 +215,9 @@
       "Return DIAGNOSTIC's originating backend or protocol source."
       #((parameters
          (diagnostic
-          (type any)
+          (type diagnostic)
           (description "Diagnostic datum.")))
-        (returns
-         (type any)
-         (description "The source datum, or #f when absent."))
+        (returns . "The source datum, or #f when absent.")
         (effects pure))
       (diagnostics-field-value diagnostic 'source #f))
 
@@ -248,11 +225,9 @@
       "Return DIAGNOSTIC's file path, or #f when it is buffer-only."
       #((parameters
          (diagnostic
-          (type any)
+          (type diagnostic)
           (description "Diagnostic datum.")))
-        (returns
-         (type any)
-         (description "The file path datum, or #f."))
+        (returns . "The file path datum, or #f.")
         (effects pure))
       (diagnostics-field-value diagnostic 'file #f))
 
@@ -260,12 +235,9 @@
       "Return DIAGNOSTIC's buffer name or handle metadata."
       #((parameters
          (diagnostic
-          (type any)
+          (type diagnostic)
           (description "Diagnostic datum.")))
-        (returns
-         (type any)
-         (description
-          ("The buffer name or handle metadata, or #f when absent.")))
+        (returns . ("The buffer name or handle metadata, or #f when absent."))
         (effects pure))
       (diagnostics-field-value diagnostic 'buffer #f))
 
@@ -273,10 +245,10 @@
       "Return DIAGNOSTIC's source range record."
       #((parameters
          (diagnostic
-          (type any)
+          (type diagnostic)
           (description "Diagnostic datum.")))
         (returns
-         (type any)
+         (type (or diagnostic-range boolean))
          (description "The diagnostic range datum, or #f when absent."))
         (effects pure))
       (diagnostics-field-value diagnostic 'range #f))
@@ -285,10 +257,10 @@
       "Return DIAGNOSTIC's backend metadata fields."
       #((parameters
          (diagnostic
-          (type any)
+          (type diagnostic)
           (description "Diagnostic datum.")))
         (returns
-         (type any)
+         (type list)
          (description "Backend metadata fields, or the empty list."))
         (effects pure))
       (diagnostics-field-value diagnostic 'metadata '()))
@@ -297,25 +269,23 @@
       "Return a stable diagnostic snapshot for one adapter observation."
       #((parameters
          (status
-          (type any)
+          (type symbol)
           (description "Snapshot status symbol."))
          (scope
-          (type any)
+          (type symbol)
           (description "Observation scope, such as buffer or project."))
-         (buffer
-          (type any)
-          (description "Buffer name or handle metadata, or #f."))
+         (buffer . "Buffer name or handle metadata, or #f.")
          (file
-          (type any)
+          (type (or string boolean))
           (description "File path datum, or #f."))
          (diagnostics
-          (type any)
+          (type (list-of diagnostic))
           (description "List of diagnostic records."))
          (metadata
-          (type any)
+          (type list)
           (description "Additional adapter metadata.")))
         (returns
-         (type any)
+         (type diagnostics-snapshot)
          (description "A `diagnostics-snapshot` datum."))
         (effects pure))
       (list 'diagnostics-snapshot
@@ -329,14 +299,12 @@
     (define (diagnostics-snapshot? datum)
       "Return #t when DATUM is a diagnostics snapshot record."
       #((parameters
-         (datum
-          (type any)
-          (description "Value to inspect.")))
+         (datum . "Value to inspect."))
         (returns
-         (type any)
+         (type boolean)
          (description
           ("#t when DATUM is tagged as a diagnostics snapshot;"
-           "otherwise #f.")))
+            "otherwise #f.")))
         (effects pure))
       (diagnostics-record? datum 'diagnostics-snapshot))
 
@@ -344,10 +312,10 @@
       "Return SNAPSHOT's status symbol."
       #((parameters
          (snapshot
-          (type any)
+          (type diagnostics-snapshot)
           (description "Diagnostics snapshot datum.")))
         (returns
-         (type any)
+         (type (or symbol boolean))
          (description "The snapshot status symbol, or #f when absent."))
         (effects pure))
       (diagnostics-field-value snapshot 'status #f))
@@ -356,10 +324,10 @@
       "Return SNAPSHOT's diagnostic record list."
       #((parameters
          (snapshot
-          (type any)
+          (type diagnostics-snapshot)
           (description "Diagnostics snapshot datum.")))
         (returns
-         (type any)
+         (type list)
          (description "The diagnostic record list, or the empty list."))
         (effects pure))
       (diagnostics-field-value snapshot 'diagnostics '()))
@@ -367,20 +335,18 @@
     (define (make-diagnostics-capability-request id operation authority arguments)
       "Return a host-adapter request datum for a diagnostics operation."
       #((parameters
-         (id
-          (type any)
-          (description "Stable request id."))
+         (id . "Stable request id.")
          (operation
-          (type any)
+          (type symbol)
           (description "Diagnostics operation symbol."))
          (authority
-          (type any)
+          (type symbol)
           (description "Requested authority family."))
          (arguments
-          (type any)
+          (type list)
           (description "Operation arguments as Scheme-readable data.")))
         (returns
-         (type any)
+         (type diagnostics-capability-request)
          (description "A `diagnostics-capability-request` datum."))
         (effects pure))
       (list 'diagnostics-capability-request
@@ -397,14 +363,12 @@
     (define (diagnostics-capability-request? datum)
       "Return #t when DATUM is a diagnostics capability request record."
       #((parameters
-         (datum
-          (type any)
-          (description "Value to inspect.")))
+         (datum . "Value to inspect."))
         (returns
-         (type any)
+         (type boolean)
          (description
           ("#t when DATUM is tagged as a diagnostics capability"
-           "request; otherwise #f.")))
+            "request; otherwise #f.")))
         (effects pure))
       (diagnostics-record? datum 'diagnostics-capability-request))
 
@@ -412,10 +376,10 @@
       "Return REQUEST's operation symbol."
       #((parameters
          (request
-          (type any)
+          (type diagnostics-capability-request)
           (description "Diagnostics capability request datum.")))
         (returns
-         (type any)
+         (type (or symbol boolean))
          (description "The operation symbol, or #f when absent."))
         (effects pure))
       (diagnostics-field-value request 'operation #f))
@@ -423,18 +387,15 @@
     (define (make-diagnostics-capability-result id status value)
       "Return a host-adapter result datum for a diagnostics operation."
       #((parameters
-         (id
-          (type any)
-          (description "Request id associated with the result."))
+         (id . "Request id associated with the result.")
          (status
-          (type any)
+          (type symbol)
           (description "Result status symbol."))
          (value
-          (type any)
-          (description
-           ("Result payload, usually a snapshot or outcome datum."))))
+          (type (or diagnostics-snapshot diagnostics-outcome))
+          (description ("Result payload, usually a snapshot or outcome datum."))))
         (returns
-         (type any)
+         (type diagnostics-capability-result)
          (description "A `diagnostics-capability-result` datum."))
         (effects pure))
       (list 'diagnostics-capability-result
@@ -446,13 +407,13 @@
       "Return an explicit diagnostics outcome record for adapter availability."
       #((parameters
          (status
-          (type any)
+          (type symbol)
           (description "Outcome status symbol."))
          (message
-          (type any)
+          (type string)
           (description "Human-readable outcome message.")))
         (returns
-         (type any)
+         (type diagnostics-outcome)
          (description "A `diagnostics-outcome` datum."))
         (effects pure))
       (list 'diagnostics-outcome
@@ -462,14 +423,12 @@
     (define (diagnostics-outcome? datum)
       "Return #t when DATUM is a diagnostics outcome record."
       #((parameters
-         (datum
-          (type any)
-          (description "Value to inspect.")))
+         (datum . "Value to inspect."))
         (returns
-         (type any)
+         (type boolean)
          (description
           ("#t when DATUM is tagged as a diagnostics outcome;"
-           "otherwise #f.")))
+            "otherwise #f.")))
         (effects pure))
       (diagnostics-record? datum 'diagnostics-outcome))
 
@@ -477,10 +436,10 @@
       "Return OUTCOME's status symbol."
       #((parameters
          (outcome
-          (type any)
+          (type diagnostics-outcome)
           (description "Diagnostics outcome datum.")))
         (returns
-         (type any)
+         (type (or symbol boolean))
          (description "The outcome status symbol, or #f when absent."))
         (effects pure))
       (diagnostics-field-value outcome 'status #f))
@@ -493,13 +452,13 @@
       "Return #t when SEVERITY is in the shared diagnostic vocabulary."
       #((parameters
          (severity
-          (type any)
+          (type symbol)
           (description "Severity symbol to check.")))
         (returns
-         (type any)
+         (type boolean)
          (description
           ("#t when SEVERITY is one of the portable diagnostic"
-           "severities; otherwise #f.")))
+            "severities; otherwise #f.")))
         (effects pure))
       (if (memq severity diagnostic-known-severities) #t #f))
 
@@ -511,10 +470,10 @@
       "Return #t when OPERATION is a read-only diagnostics observation."
       #((parameters
          (operation
-          (type any)
+          (type symbol)
           (description "Diagnostics operation symbol to classify.")))
         (returns
-         (type any)
+         (type boolean)
          (description "#t when OPERATION is read-only; otherwise #f."))
         (effects pure))
       (if (memq operation diagnostics-read-only-operations) #t #f))
@@ -523,12 +482,10 @@
       "Yield DIAGNOSTICS through the portable Consent Scheme event channel."
       #((parameters
          (diagnostics
-          (type any)
+          (type list)
           (description
            ("Diagnostic snapshot, diagnostic list, or related"
-            "diagnostic datum to publish."))))
-        (returns
-         (type any)
-         (description "The host-specific result of `agent-yield`."))
+             "diagnostic datum to publish."))))
+        (returns . "The host-specific result of `agent-yield`.")
         (effects agent-yield))
       (agent-yield diagnostics))))
