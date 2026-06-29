@@ -34,9 +34,12 @@ and current/default ports, are importable where appropriate but default to
 policy-gated behavior.
 
 SRFI support is not part of the R7RS-small compliance contract. Optional SRFI
-libraries belong to a future `stdlib-plus` layer tracked separately in
-[tahoma/consent#54](https://github.com/tahoma/consent/issues/54), so
-SRFI import failures should not be read as R7RS-small conformance failures.
+libraries belong to the `stdlib-plus` layer tracked separately in
+[tahoma/consent#54](https://github.com/tahoma/consent/issues/54). Consent
+Scheme currently ships an owned portable `(consent json)` translator for
+protocol/document boundaries, with `(srfi 180)` and `(srfi srfi-180)`
+compatibility imports. SRFI import failures outside implemented `stdlib-plus`
+libraries should not be read as R7RS-small conformance failures.
 
 The multi-host bootstrap strategy lives in
 [docs/multi-host-bootstrap.md](docs/multi-host-bootstrap.md). It records how
