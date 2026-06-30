@@ -24,6 +24,7 @@
     "tests/scheme/consent-agent-registry-test.scm"
     "tests/scheme/consent-agent-proposal-test.scm"
     "tests/scheme/consent-agent-runner-test.scm"
+    "tests/scheme/consent-agent-reliability-test.scm"
     "tests/scheme/consent-agent-prompt-test.scm"
     "tests/scheme/consent-models-openai-test.scm"
     "tests/scheme/consent-script-test.scm"
