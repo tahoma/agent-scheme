@@ -26,8 +26,8 @@
   "Evaluate SOURCE and return its stable external value representation."
   (consent-value->external
    (consent-eval-source source nil
-                        '(:max-steps 5000000
-                          :max-host-callbacks 1000000))))
+                        '(:max-steps 1000000
+                          :max-host-callbacks 100000))))
 
 (defun consent-agent-reliability-test--fixture ()
   "Return the parsed shared agent reliability fixture datum."
@@ -82,19 +82,27 @@
      (format
       "(import (scheme base) (agent reliability))
        (define fixture '%s)
-       (define advisory
-         (measure-reliability fixture 2 '((advisory-policy disabled))))
-       (define gate
-         (measure-reliability fixture 2 '((gate-enforced-policy disabled))))
        (define ablation (measure-policy-ablation fixture))
+       (define advisory
+         (reliability-field-value ablation 'advisory-disabled))
+       (define gate
+         (reliability-field-value ablation 'gate-disabled))
+       (define (slice-count report reason)
+         (let loop ((slices (reliability-field-value report 'slices)))
+           (cond
+            ((null? slices) #f)
+            ((eq? (reliability-field-value (car slices) 'reason) reason)
+             (reliability-field-value (car slices) 'count))
+            (else (loop (cdr slices))))))
        (list (reliability-field-value advisory 'pass^1)
-             (reliability-field-value advisory 'pass^k)
+             (reliability-field-value advisory 'passed)
              (reliability-field-value gate 'pass^1)
+             (slice-count gate 'policy-denied)
              (reliability-field-value ablation 'advisory-pass^1-delta)
              (reliability-field-value ablation 'gate-pass^1-delta)
              (reliability-field-value ablation 'gate-enforced-unablatable))"
       (consent-agent-reliability-test--fixture-external)))
-    "(1/2 1/6 1/4 1/4 0 #t)")))
+    "(1/2 2 1/4 1 1/4 0 #t)")))
 
 (ert-deftest consent-agent-reliability-test-reward-uses-serialized-datums ()
   "Final-state reward compares external serialization, not raw identity."
