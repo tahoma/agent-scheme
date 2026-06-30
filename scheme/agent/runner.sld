@@ -120,7 +120,8 @@
              "completion verdict), `effects' (alist of `(operation"
              "ok\|failed)' performed-effect outcomes), `control' (list of"
              "directives such as `cancel'), `operations' (the `(agent"
-             "proposal)' host-operation table),"
+             "proposal)' host-operation table), `capability-signatures'"
+             "(model-tool capability signatures),"
              "`max-steps'/`max-pure-cost' budgets, and `id-prefix')."))))
         (returns (type task-run)
          (description
@@ -144,6 +145,9 @@
              (effects (option-ref options 'effects '()))
              (control (option-ref options 'control '()))
              (operations (option-ref options 'operations '()))
+             (capability-signatures
+              (option-ref options 'capability-signatures
+                          (option-ref options 'signatures '())))
              (verifier-verdict (option-ref options 'verifier 'insufficient))
              (max-steps (option-ref options 'max-steps 8))
              (max-pure-cost (option-ref options 'max-pure-cost 100000)))
@@ -221,6 +225,14 @@
                   (if (eq? status 'approved)
                       (loop (cdr rest))
                       (cons status (car rest))))))))
+          (define (policy-denial-decision request)
+            "Return a denied capability-decision for unauthorized REQUEST."
+            (list 'capability-decision
+                  (list 'id (make-id id-prefix "policy-denial" 1))
+                  (list 'request request)
+                  (list 'status 'denied)
+                  (list 'operation (request-operation request))
+                  (list 'reason 'unauthorized-tool)))
           (define (finish-stop final-state reason receipt-options)
             "Advance to terminal FINAL-STATE and build a task-stop receipt."
             (advance! final-state)
@@ -294,10 +306,14 @@
                               (list (list 'capability-gate request)
                                     (list 'observed-state status))))
                ((eq? status 'denied)
-                (finish-stop 'cancelled 'approval-denied
-                             (list (list 'capability-gate request)
+                (let ((decision (policy-denial-decision request)))
+                  (finish-stop 'cancelled 'approval-denied
+                               (list (list 'capability-gate decision)
+                                     (list 'observed-state 'denied)
+                                     (list 'intended-next-action
+                                           (request-operation request))
                                    (list 'approval-status
-                                         '(approval (status denied))))))
+                                         '(approval (status denied)))))))
                (else (perform-effects requests rest)))))
           (define (act-code-action form rest)
             "Analyze FORM at the proposal boundary and act on the verdict."
@@ -305,6 +321,7 @@
                    (analyze-code-action
                     form
                     (list (list 'operations operations)
+                          (list 'capability-signatures capability-signatures)
                           (list 'max-pure-cost max-pure-cost)
                           (list 'id-prefix id-prefix)))))
               (set! used-pure-cost
@@ -320,6 +337,21 @@
                 (finish-stop 'failed 'budget-exhausted
                              (list (list 'observed-state
                                          'proposal-budget-exhausted))))
+               ((eq? (analysis-status analysis) 'rejected)
+                (let ((failures (analysis-failure-decisions analysis)))
+                  (finish-stop 'failed 'condition-failed
+                               (list (list 'observed-state
+                                           (list 'admission-failure failures))
+                                     (list 'capability-gate
+                                           (if (null? failures)
+                                               'none
+                                               (car failures)))
+                                     (list 'intended-next-action
+                                           (if (null? failures)
+                                               'none
+                                               (proposal-field-value
+                                                (car failures)
+                                                'operation)))))))
                (else
                 (resolve-requests (analysis-capability-requests analysis)
                                   rest)))))

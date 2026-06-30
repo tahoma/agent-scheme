@@ -45,6 +45,17 @@
   '((file-write host-mutation file-system)
     (read-file host-observation file-system)))
 
+;; Canonical model-tool signatures generated from typed docstring metadata.
+(define capability-signatures
+  '((model-tool
+     (name file-write)
+     (parameters
+      ((path (type string) (description "Destination path."))
+       (content (type string) (description "Text to write."))))
+     (effects (file-write))
+     (gate (tool-gate (decision capability-request)
+                      (effects (file-write)))))))
+
 ;; Read the stop reason carried by a run's receipt.
 (define (stop-reason run)
   (task-field-value (task-run-receipt run) 'stop-reason))
@@ -191,6 +202,53 @@
   (check 'quarantine-observed-tag
          (car (task-field-value (task-run-receipt run) 'observed-state))
          'quarantine))
+
+;;;; Signature admission failures produce typed capability-decision receipts
+
+(define (capability-gate-reason run)
+  (task-field-value
+   (task-field-value (task-run-receipt run) 'capability-gate)
+   'reason))
+
+(let ((run (run-task 'call-tool
+                     (list (list 'provider
+                                 '((code-action
+                                    (imaginary-tool "notes.txt"))))
+                           (list 'capability-signatures
+                                 capability-signatures)))))
+  (check 'hallucinated-tool-state (task-run-state run) 'failed)
+  (check 'hallucinated-tool-reason
+         (capability-gate-reason run)
+         'hallucinated-tool)
+  (check 'hallucinated-tool-no-effect
+         (used run 'used-host-calls) 0))
+
+(let ((run (run-task 'call-tool
+                     (list (list 'provider
+                                 '((code-action
+                                    (file-write 42 "payload"))))
+                           (list 'capability-signatures
+                                 capability-signatures)))))
+  (check 'misapplied-tool-state (task-run-state run) 'failed)
+  (check 'misapplied-tool-reason
+         (capability-gate-reason run)
+         'misapplied-tool)
+  (check 'misapplied-tool-no-effect
+         (used run 'used-host-calls) 0))
+
+(let ((run (run-task 'call-tool
+                     (list (list 'provider
+                                 '((code-action
+                                    (file-write "notes.txt" "payload"))))
+                           (list 'capability-signatures
+                                 capability-signatures)
+                           (list 'policy '((file-write denied)))))))
+  (check 'unauthorized-tool-state (task-run-state run) 'cancelled)
+  (check 'unauthorized-tool-reason
+         (capability-gate-reason run)
+         'unauthorized-tool)
+  (check 'unauthorized-tool-no-effect
+         (used run 'used-host-calls) 0))
 
 ;;;; Runs are deterministic and replayable
 
