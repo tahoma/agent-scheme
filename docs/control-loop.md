@@ -809,6 +809,11 @@ A proposal is carried inside a `code-action` agent-action:
 - **Pure sub-forms** are accounted against a bounded `pure-cost` budget; a walk
   that exceeds the budget stops with a `budget-exhausted` status rather than an
   unbounded traversal.
+- **Tool/capability call subtrees** are admitted only when they structurally
+  match a registered capability signature generated from typed docstring
+  metadata. Required arguments must be present, defaulted optional arguments may
+  be omitted, and clear literal type-shape mismatches are rejected before policy
+  resolution.
 - **Host calls** become `capability-request` datums that the loop routes through
   policy, so the model reaches a host effect only through the gate.
 - **Control-plane sub-forms** — minting or attenuating a grant, revoking or
@@ -826,6 +831,13 @@ A proposal is carried inside a `code-action` agent-action:
 The analysis status is `quarantined` whenever any control-plane sub-form is
 present, even alongside otherwise-routable host calls, so a single escalation
 attempt fails the whole proposed action closed.
+
+Signature admission has three fail-closed receipt reasons. A nonexistent binding
+or invalid call shape produces `hallucinated-tool`; a real binding with arity or
+advisory type-shape mismatch produces `misapplied-tool`; and a real,
+well-formed call that policy denies produces `unauthorized-tool`. The first two
+are pre-policy admission failures carried in denied `capability-decision`
+datums; the last is the policy-denial arm for an otherwise admitted request.
 
 > **Design decision (resolves tension D2).** Model-proposed code is a proposal
 > the loop reads and runs under policy, gated at capability-request granularity.
