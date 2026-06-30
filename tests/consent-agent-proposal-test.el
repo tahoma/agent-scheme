@@ -109,5 +109,63 @@
                                    (list (list 'operations ops))))")
     "#t")))
 
+(ert-deftest consent-agent-proposal-test-signature-admission-failures ()
+  "Signature matching rejects hallucinated and misapplied tool calls."
+  (should
+   (equal
+    (consent-agent-proposal-test--external
+     "(import (scheme base) (agent proposal))
+      (define signatures
+        '((model-tool
+           (name file-write)
+           (parameters
+            ((path (type string) (description \"Destination path.\"))
+             (content (type string) (description \"Text to write.\"))))
+           (effects (file-write))
+           (gate (tool-gate (decision capability-request)
+                            (effects (file-write)))))
+          (model-tool
+           (name file-append)
+           (parameters
+            ((path (type string) (description \"Destination path.\"))
+             (content (type string)
+              (description \"Text to append.\")
+              (default \"\"))))
+           (effects (file-write))
+           (gate (tool-gate (decision capability-request)
+                            (effects (file-write)))))))
+      (define hallucinated
+        (analyze-code-action
+         '(imaginary-tool \"notes.txt\")
+         (list (list 'capability-signatures signatures))))
+      (define misapplied
+        (analyze-code-action
+         '(file-write 42 \"payload\")
+         (list (list 'capability-signatures signatures))))
+      (define defaulted
+        (analyze-code-action
+         '(file-append \"notes.txt\")
+         (list (list 'capability-signatures signatures))))
+      (define admitted
+        (analyze-code-action
+         '(file-write \"notes.txt\" \"payload\")
+         (list (list 'capability-signatures signatures))))
+      (define h (car (analysis-failure-decisions hallucinated)))
+      (define m (car (analysis-failure-decisions misapplied)))
+      (define d (car (analysis-capability-requests defaulted)))
+      (define a (car (analysis-capability-requests admitted)))
+      (list (analysis-status hallucinated)
+            (proposal-field-value h 'reason)
+            (proposal-field-value h 'operation)
+            (analysis-status misapplied)
+            (proposal-field-value m 'reason)
+            (proposal-field-value m 'operation)
+            (analysis-status defaulted)
+            (proposal-field-value d 'operation)
+            (analysis-status admitted)
+            (proposal-field-value a 'operation)
+            (analysis-failure-decisions admitted))")
+    "(rejected hallucinated-tool imaginary-tool rejected misapplied-tool file-write gated file-append gated file-write ())")))
+
 (provide 'consent-agent-proposal-test)
 ;;; consent-agent-proposal-test.el ends here

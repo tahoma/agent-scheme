@@ -254,6 +254,52 @@ stays within the interpreter's host-callback budget."
             (car (task-field-value (task-run-receipt run) 'observed-state)))")
     "(failed #t condition-failed 0 quarantine)")))
 
+(defun consent-agent-runner-test--signature-outcome (form &optional policy)
+  "Run FORM through the signature gate with optional POLICY."
+  (consent-agent-runner-test--external
+   (format
+    "(import (scheme base) (agent runner) (agent task))
+     (define signatures
+       '((model-tool
+          (name file-write)
+          (parameters
+           ((path (type string) (description \"Destination path.\"))
+            (content (type string) (description \"Text to write.\"))))
+          (effects (file-write))
+          (gate (tool-gate (decision capability-request)
+                           (effects (file-write)))))))
+     (define run
+       (run-task 'call-tool
+                 (list (list 'provider (list (list 'code-action '%s)))
+                       (list 'capability-signatures signatures)
+                       (list 'policy '%s))))
+     (define gate
+       (task-field-value (task-run-receipt run) 'capability-gate))
+     (list (task-run-state run)
+           (task-field-value gate 'reason)
+           (task-field-value (task-run-budget run) 'used-host-calls))"
+    form
+    (or policy '()))))
+
+(ert-deftest consent-agent-runner-test-signature-admission-receipts ()
+  "Hallucinated, misapplied, and unauthorized tool calls get typed receipts."
+  (should
+   (equal
+    (consent-agent-runner-test--signature-outcome
+     "(imaginary-tool \"notes.txt\")")
+    "(failed hallucinated-tool 0)"))
+  (should
+   (equal
+    (consent-agent-runner-test--signature-outcome
+     "(file-write 42 \"payload\")")
+    "(failed misapplied-tool 0)"))
+  (should
+   (equal
+    (consent-agent-runner-test--signature-outcome
+     "(file-write \"notes.txt\" \"payload\")"
+     '((file-write denied)))
+    "(cancelled unauthorized-tool 0)")))
+
 (ert-deftest consent-agent-runner-test-runs-are-deterministic ()
   "Identical inputs produce equal, replayable task-run records."
   (should

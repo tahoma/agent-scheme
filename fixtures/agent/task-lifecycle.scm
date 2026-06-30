@@ -596,6 +596,132 @@
       (approval-status (approval (status denied)))
       (verifier-result not-run)
       (stop-reason approval-denied)))))
+  ((id hallucinated-tool)
+   (status implemented)
+   (description "An unregistered tool call is denied before any effect runs.")
+   (runner
+    ((goal call-tool)
+     (options
+      ((id-prefix fixture-hallucinated)
+       (provider ((code-action (imaginary-tool "notes.txt"))))
+       (capability-signatures
+        ((model-tool
+          (name file-write)
+          (parameters
+           ((path (type string) (description "Destination path."))
+            (content (type string) (description "Text to write."))))
+          (effects (file-write))
+          (gate (tool-gate (decision capability-request)
+                           (effects (file-write)))))))))))
+   (expect
+    ((state failed)
+     (receipt task-stop)
+     (reason condition-failed)
+     (failure-reason hallucinated-tool)
+     (budget ((max-steps 8) (used-host-calls 0)))
+     (audit-summary ((denials 1) (capability-calls 0)))
+     (final-result none)))
+   (records
+    ((task-stop
+      (task fixture-hallucinated-task-1)
+      (state failed)
+      (observed-state (admission-failure
+                       ((capability-decision
+                         (status denied)
+                         (operation imaginary-tool)
+                         (reason hallucinated-tool)))))
+      (intended-next-action imaginary-tool)
+      (capability-gate (capability-decision
+                        (status denied)
+                        (operation imaginary-tool)
+                        (reason hallucinated-tool)))
+      (model-route none)
+      (approval-status none)
+      (verifier-result not-run)
+      (stop-reason condition-failed)))))
+  ((id misapplied-tool)
+   (status implemented)
+   (description "A real tool with malformed arguments is denied before effects.")
+   (runner
+    ((goal call-tool)
+     (options
+      ((id-prefix fixture-misapplied)
+       (provider ((code-action (file-write 42 "payload"))))
+       (capability-signatures
+        ((model-tool
+          (name file-write)
+          (parameters
+           ((path (type string) (description "Destination path."))
+            (content (type string) (description "Text to write."))))
+          (effects (file-write))
+          (gate (tool-gate (decision capability-request)
+                           (effects (file-write)))))))))))
+   (expect
+    ((state failed)
+     (receipt task-stop)
+     (reason condition-failed)
+     (failure-reason misapplied-tool)
+     (budget ((max-steps 8) (used-host-calls 0)))
+     (audit-summary ((denials 1) (capability-calls 0)))
+     (final-result none)))
+   (records
+    ((task-stop
+      (task fixture-misapplied-task-1)
+      (state failed)
+      (observed-state (admission-failure
+                       ((capability-decision
+                         (status denied)
+                         (operation file-write)
+                         (reason misapplied-tool)))))
+      (intended-next-action file-write)
+      (capability-gate (capability-decision
+                        (status denied)
+                        (operation file-write)
+                        (reason misapplied-tool)))
+      (model-route none)
+      (approval-status none)
+      (verifier-result not-run)
+      (stop-reason condition-failed)))))
+  ((id unauthorized-tool)
+   (status implemented)
+   (description "A well-formed tool call is denied by policy before effects.")
+   (runner
+    ((goal call-tool)
+     (options
+      ((id-prefix fixture-unauthorized)
+       (provider ((code-action (file-write "notes.txt" "payload"))))
+       (capability-signatures
+        ((model-tool
+          (name file-write)
+          (parameters
+           ((path (type string) (description "Destination path."))
+            (content (type string) (description "Text to write."))))
+          (effects (file-write))
+          (gate (tool-gate (decision capability-request)
+                           (effects (file-write)))))))
+        (policy ((file-write denied)))))))
+   (expect
+    ((state cancelled)
+     (receipt task-stop)
+     (reason approval-denied)
+     (failure-reason unauthorized-tool)
+     (budget ((max-steps 8) (used-host-calls 0)))
+     (audit-summary ((denials 1) (capability-calls 0)))
+     (final-result none)))
+   (records
+    ((task-stop
+      (task fixture-unauthorized-task-1)
+      (state cancelled)
+      (observed-state denied)
+      (intended-next-action file-write)
+      (capability-gate (capability-decision
+                        (status denied)
+                        (operation file-write)
+                        (reason unauthorized-tool)))
+      (model-route none)
+      (approval-status (approval (status denied)))
+      (verifier-result not-run)
+      (stop-reason approval-denied)))))
   ((id authority-unavailable)
    (status implemented)
    (description "Missing authority blocks without performing the proposed effect.")
