@@ -203,6 +203,7 @@
         (agent registry)
         (agent proposal)
         (agent runner)
+        (agent reliability)
         (agent prompt)
         (agent transcript)))
 
@@ -241,6 +242,9 @@
         ((agent runner)
          "scheme/agent/runner.sld"
          "agent/runner.sld")
+        ((agent reliability)
+         "scheme/agent/reliability.sld"
+         "agent/reliability.sld")
         ((agent prompt)
          "scheme/agent/prompt.sld"
          "agent/prompt.sld")
@@ -1608,6 +1612,12 @@
              context
              environment)))
        ((equal? key '(agent runner))
+        (if (not (library-registry-ref context key))
+            (register-source-library!
+             (agent-source-library-source key)
+             context
+             environment)))
+       ((equal? key '(agent reliability))
         (if (not (library-registry-ref context key))
             (register-source-library!
              (agent-source-library-source key)

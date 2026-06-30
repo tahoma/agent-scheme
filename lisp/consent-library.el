@@ -131,6 +131,7 @@
     "(agent registry)"
     "(agent proposal)"
     "(agent runner)"
+    "(agent reliability)"
     "(agent prompt)"
     "(agent transcript)")
   "Agent interaction library keys with focused bootstrap support.")
@@ -162,6 +163,8 @@ core rather than the agent domain it governs.")
      . "../scheme/agent/proposal.sld")
     ("(agent runner)"
      . "../scheme/agent/runner.sld")
+    ("(agent reliability)"
+     . "../scheme/agent/reliability.sld")
     ("(agent prompt)"
      . "../scheme/agent/prompt.sld")
     ("(agent task)"
@@ -491,6 +494,10 @@ core rather than the agent domain it governs.")
        (consent--register-source-library
         (consent--agent-source-library-source key) context environment)))
     ("(agent runner)"
+     (unless (gethash key (consent--eval-context-libraries context))
+       (consent--register-source-library
+        (consent--agent-source-library-source key) context environment)))
+    ("(agent reliability)"
      (unless (gethash key (consent--eval-context-libraries context))
        (consent--register-source-library
         (consent--agent-source-library-source key) context environment)))
