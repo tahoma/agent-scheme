@@ -89,6 +89,8 @@
      (:target . "(consent json)"))
     ((:alias . "(srfi 128)")
      (:target . "(scheme comparator)"))
+    ((:alias . "(srfi srfi-128)")
+     (:target . "(scheme comparator)"))
     ((:alias . "(consent json read)")
      (:target . "(consent json)")
      (:exports . ("json-number-of-character-limit"
