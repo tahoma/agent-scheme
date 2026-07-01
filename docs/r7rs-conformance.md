@@ -6,6 +6,10 @@ language text. This matrix tracks the language features, standard libraries, and
 representative fixture cases that should move from `pending` to `implemented`
 or `policy-gated` as the runtime lands.
 
+Optional SRFI and R7RS-large libraries are tracked separately in
+[Stdlib-Plus Libraries](stdlib-plus.md), even when their canonical import names
+begin with `scheme`.
+
 Fixture cases live in the shared `consent-fixture-suite` at
 `fixtures/r7rs/conformance-cases.scm`. The initial external implementation
 mining report lives in [R7RS Implementation Test Mining](r7rs-implementation-mining.md).

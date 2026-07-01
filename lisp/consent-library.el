@@ -78,6 +78,7 @@
 
 (defconst consent--srfi-source-library-keys
   '("(srfi manifest)"
+    "(scheme comparator)"
     "(consent json)")
   "Optional SRFI / stdlib-plus library keys backed by source files.")
 
@@ -86,6 +87,8 @@
      (:target . "(consent json)"))
     ((:alias . "(srfi srfi-180)")
      (:target . "(consent json)"))
+    ((:alias . "(srfi 128)")
+     (:target . "(scheme comparator)"))
     ((:alias . "(consent json read)")
      (:target . "(consent json)")
      (:exports . ("json-number-of-character-limit"
@@ -190,6 +193,8 @@ core rather than the agent domain it governs.")
 (defconst consent--srfi-source-library-files
   '(("(srfi manifest)"
      . "../scheme/srfi/manifest.sld")
+    ("(scheme comparator)"
+     . "../scheme/srfi/128.sld")
     ("(consent json)"
      . "../scheme/consent/json.sld"))
   "Checked-in optional SRFI libraries loaded as Scheme source.")

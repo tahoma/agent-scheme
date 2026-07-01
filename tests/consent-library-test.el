@@ -476,6 +476,83 @@
       (should (eq (aref (alist-get 'scores parsed) 2) :json-null))
       (should (eq (alist-get 'ok (alist-get 'nested parsed)) :json-false)))))
 
+(ert-deftest consent-library-test-srfi-128-comparator-behavior ()
+  "Import `(scheme comparator)' and exercise representative SRFI 128 behavior."
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (scheme comparator))
+      (let* ((number-comparator (make-comparator real? = < number-hash))
+             (list-comparator
+              (make-list-comparator number-comparator list? null? car cdr))
+             (vector-comparator
+              (make-vector-comparator
+               number-comparator vector? vector-length vector-ref)))
+        (list (comparator? number-comparator)
+              (comparator-ordered? number-comparator)
+              (comparator-hashable? number-comparator)
+              (comparator-test-type number-comparator 3)
+              (=? number-comparator 3 3 3)
+              (<? number-comparator 1 2 3)
+              (>? number-comparator 3 2 1)
+              (<=? number-comparator 1 1 2)
+              (>=? number-comparator 3 3 2)
+              (comparator-if<=> number-comparator 1 2 'less 'same 'greater)
+              (=? list-comparator '(1 2) '(1 2))
+              (<? list-comparator '(1 2) '(1 3))
+              (=? vector-comparator '#(1 2) '#(1 2))
+              (<? vector-comparator '#(1 2) '#(1 2 0))
+              (exact-integer? (comparator-hash number-comparator 42))
+              (< (hash-salt) (hash-bound))))")
+    "(#t #t #t #t #t #t #t #t #t less #t #t #t #t #t #t)")))
+
+(ert-deftest consent-library-test-srfi-128-alias-import ()
+  "Import SRFI 128 through its secondary `(srfi 128)' alias."
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (srfi 128))
+      (let ((string-comparator
+             (make-comparator string? string=? string<? string-hash)))
+        (list (<? string-comparator \"ant\" \"bee\")
+              (=? string-comparator \"same\" \"same\")))")
+    "(#t #t)")))
+
+(ert-deftest consent-library-test-srfi-128-missing-export-diagnostic ()
+  "Report missing SRFI 128 imports through the ordinary resolver diagnostic."
+  (let ((error
+         (should-error
+          (consent-library-test--external
+           "(import (scheme base)
+                    (only (scheme comparator) missing-comparator))
+            missing-comparator")
+          :type 'consent-eval-error)))
+    (should
+     (string-match-p
+      (regexp-quote "only import name not found")
+      (error-message-string error)))
+    (should
+     (string-match-p
+      (regexp-quote "missing-comparator")
+      (error-message-string error)))))
+
+(ert-deftest consent-library-test-srfi-manifest-documents-128 ()
+  "Expose SRFI 128 support status through a Scheme-readable manifest."
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (srfi manifest))
+      (let ((entry (srfi-manifest-ref '(scheme comparator)))
+            (alias (srfi-manifest-ref '(srfi 128))))
+        (list (cdr (assq 'status entry))
+              (cdr (assq 'implementation-library entry))
+              (cdr (assq 'upstream-license entry))
+              (cdr (assq 'local-license entry))
+              (cdr (assq 'import-aliases entry))
+              (cdr (assq 'dependencies entry))
+              (cdr (assq 'target alias))))")
+    "(vendored-adapted-implementation (scheme comparator) \"MIT\" \"MIT\" ((scheme comparator) (srfi 128)) ((scheme base) (scheme case-lambda) (scheme char) (scheme inexact) (scheme complex)) (scheme comparator))")))
+
 (ert-deftest consent-library-test-standard-char-and-cxr-imports ()
   "Import `(scheme char)' and `(scheme cxr)' bindings."
   (should
