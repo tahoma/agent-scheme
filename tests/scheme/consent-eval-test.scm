@@ -4076,6 +4076,16 @@
                         '((internal-libraries-allowed . #t))
                         "4")
 
+;; Agent model libraries with public primitive counterparts still need to
+;; self-host under the internal-libraries grant so runtime internals can import
+;; their portable store helpers.
+(check-external/options 'internal-agent-model-library-self-hosts-from-source
+                        "(import (agent approval))
+                         (consent-approval-store?
+                          (consent-make-approval-store))"
+                        '((internal-libraries-allowed . #t))
+                        "#t")
+
 ;; The grant only exposes libraries that actually exist as runtime source; it
 ;; does not turn every (consent ...) name into a phantom library.
 (check 'internal-library-grant-unknown-still-denied

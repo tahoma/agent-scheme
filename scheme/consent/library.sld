@@ -281,6 +281,35 @@
          "scheme/agent/transcript.sld"
          "agent/transcript.sld")))
 
+    ;; Agent model libraries used by runtime internals. Ordinary user imports
+    ;; of the same public names resolve to primitive libraries; the source
+    ;; model is exposed only under the internal-libraries host posture.
+    (define agent-internal-source-library-load-paths
+      '(((agent approval)
+         "scheme/agent/approval.sld"
+         "agent/approval.sld")
+        ((agent context)
+         "scheme/agent/context.sld"
+         "agent/context.sld")
+        ((agent helper)
+         "scheme/agent/helper.sld"
+         "agent/helper.sld")
+        ((agent job)
+         "scheme/agent/job.sld"
+         "agent/job.sld")
+        ((agent memory)
+         "scheme/agent/memory.sld"
+         "agent/memory.sld")
+        ((agent plan)
+         "scheme/agent/plan.sld"
+         "agent/plan.sld")
+        ((agent redaction)
+         "scheme/agent/redaction.sld"
+         "agent/redaction.sld")
+        ((agent session)
+         "scheme/agent/session.sld"
+         "agent/session.sld")))
+
     ;; Checked-in consent core source libraries loaded as portable Scheme
     ;; source files.
     (define consent-source-library-load-paths
@@ -415,6 +444,8 @@
             standard-source-library-load-paths)
        (map (lambda (entry) (source-library-relative-path (cdr entry)))
             stdlib-source-library-load-paths)
+       (map (lambda (entry) (source-library-relative-path (cdr entry)))
+            agent-internal-source-library-load-paths)
        (map (lambda (entry) (source-library-relative-path (cdr entry)))
             agent-source-library-load-paths)
        (map (lambda (entry) (source-library-relative-path (cdr entry)))
@@ -755,17 +786,18 @@
     ;; library can be loaded as a source library so a trusted program can
     ;; import the runtime's own implementation. This is the capability that
     ;; lets the compiled runtime act as a full Scheme host for the portable
-    ;; white-box tests (self-hosting). Public agent libraries keep their
-    ;; ordinary grant-independent resolution paths; only internal agent
-    ;; libraries (for example (agent task)) resolve through this gate.
+    ;; white-box tests (self-hosting). Public agent primitive libraries keep
+    ;; their ordinary grant-independent resolution paths, while the source
+    ;; model libraries used by runtime internals resolve through this gate.
     (define (host-library-key? key)
       "Report whether KEY names a runtime-internal source library exposable"
       "under the host posture."
       (and (pair? key)
            (or (memq (car key) '(consent cli))
                (and (eq? (car key) 'agent)
-                    (not (member key agent-library-keys))
-                    (not (assoc key agent-source-library-load-paths))))
+                    (or (assoc/equal key agent-internal-source-library-load-paths)
+                        (and (not (member key agent-library-keys))
+                             (not (assoc/equal key agent-source-library-load-paths))))))
            (not (member key consent-library-keys))
            (not (equal? key scheme-base-library-key))))
 
@@ -2060,12 +2092,6 @@
           (register-standard-library! key context environment))
          ((member key stdlib-library-keys)
           (register-stdlib-library! key context environment))
-         ((member key agent-library-keys)
-          (register-agent-library! key context environment))
-         ((member key consent-library-keys)
-          (register-consent-library! key context environment))
-         ((member key empty-emacs-capability-library-keys)
-          (register-empty-emacs-capability-library! key context))
          ((and (not (library-registry-ref context key))
                (host-library-available? key context))
           ;; Prefer the compiled-in native bindings (the product serving as its
@@ -2075,7 +2101,13 @@
           (let ((bindings (consent-native-library-ref key)))
             (if bindings
                 (register-native-library! key bindings context)
-                (register-host-source-library! key context environment)))))
+                (register-host-source-library! key context environment))))
+         ((member key agent-library-keys)
+          (register-agent-library! key context environment))
+         ((member key consent-library-keys)
+          (register-consent-library! key context environment))
+         ((member key empty-emacs-capability-library-keys)
+          (register-empty-emacs-capability-library! key context)))
         (or (library-registry-ref context key)
             (eval-error "unknown library" key))))
 
