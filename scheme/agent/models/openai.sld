@@ -14,7 +14,7 @@
           model-openai-compatible-http-complete)
   (import (scheme base)
           (prefix (cli process-host) cli-host:)
-          (prefix (consent json) json-model:))
+          (prefix (stdlib json) json-model:))
   (begin
     ;; Default request timeout for local OpenAI-compatible HTTP transports.
     (define model-openai-default-timeout-seconds 30)
@@ -169,7 +169,7 @@
               (else #f)))))
 
     (define (model-openai-json-value datum)
-      "Project canonical Scheme datums into `(consent json)' values."
+      "Project canonical Scheme datums into `(stdlib json)' values."
       (cond
        ((boolean? datum) datum)
        ((number? datum) datum)

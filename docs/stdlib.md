@@ -1,0 +1,23 @@
+# Stdlib Libraries
+
+Consent Scheme treats SRFI and R7RS-large libraries as optional `stdlib`
+support above the R7RS-small conformance contract. The R7RS-small status remains
+tracked in [R7RS-Small Conformance Matrix](r7rs-conformance.md); this page
+tracks optional library support that is useful to programs and later runtime
+features without making it part of that baseline. Source-backed stdlib
+libraries live under `scheme/stdlib/`; SRFI, R7RS-large, and historical Consent
+names are public import aliases and provenance metadata, not separate
+source-tree layers.
+
+## Implemented Libraries
+
+| Library | Status | Source | Imports | Notes |
+| --- | --- | --- | --- | --- |
+| `(stdlib json)` | implemented | Local portable implementation, recorded in `(stdlib manifest)` | `(stdlib json)`, `(consent json)`, `(srfi 180)`, `(srfi srfi-180)` | JSON boundary codec used by tool-calling and protocol edges; historical Consent and SRFI spellings are compatibility aliases. |
+| `(stdlib comparator)` | implemented | Vendored adapted SRFI 128 sample implementation, recorded in `(stdlib manifest)` | `(stdlib comparator)`, `(scheme comparator)`, `(srfi 128)`, `(srfi srfi-128)` | Primary stdlib spelling owns the source; R7RS-large and SRFI spellings are compatibility aliases. |
+
+The Scheme-readable `(stdlib manifest)` library records source URLs, upstream
+revisions, licenses, local patches, import aliases, dependencies, and test
+status for stdlib libraries. The historical `(srfi manifest)` name remains an
+alias. Vendored source keeps its upstream license and local adaptations are
+listed in the manifest entry.

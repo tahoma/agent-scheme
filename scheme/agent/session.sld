@@ -7,7 +7,7 @@
 ;;; jobs, and persistence over these records while preserving the same state
 ;;; names and snapshot rules.
 
-(define-library (consent session)
+(define-library (agent session)
   (export consent-session-scopes
           consent-session-states
           consent-session-restored-fields
@@ -15,14 +15,14 @@
           consent-session-never-restored-fields
           consent-make-session-store
           consent-session-store?
-          session-create!
-          session-ref
-          session-list
-          session-suspend!
-          session-resume!
-          session-snapshot!
-          session-fork!
-          session-retire!
+          session-store-create!
+          session-store-ref
+          session-store-list
+          session-store-suspend!
+          session-store-resume!
+          session-store-snapshot!
+          session-store-fork!
+          session-store-retire!
           session-handles
           session-datum-id
           consent-make-session-manager
@@ -230,7 +230,7 @@
       (let ((field (session-datum-field session-datum 'handles)))
         (if field (cadr field) '())))
 
-    (define (session-create! store scope options)
+    (define (session-store-create! store scope options)
       "Create a session in STORE for SCOPE using OPTIONS."
       #((parameters
          (store (type consent-session-store)
@@ -268,7 +268,7 @@
         (store-session! store session)
         (session->datum session)))
 
-    (define (session-ref store id)
+    (define (session-store-ref store id)
       "Return a session datum by ID from STORE, or #f."
       #((parameters
          (store (type consent-session-store)
@@ -281,7 +281,7 @@
       (let ((session (find-session store id)))
         (if session (session->datum session) #f)))
 
-    (define (session-list store . maybe-scope)
+    (define (session-store-list store . maybe-scope)
       "Return session datums from STORE, optionally filtered by SCOPE."
       #((parameters
          (store (type consent-session-store)
@@ -317,7 +317,7 @@
       (set-session-status! session status)
       (session->datum session))
 
-    (define (session-suspend! store id)
+    (define (session-store-suspend! store id)
       "Suspend session ID in STORE."
       #((parameters
          (store (type consent-session-store)
@@ -329,7 +329,7 @@
         (effects state-write error))
       (transition! (require-session store id) 'suspended))
 
-    (define (session-resume! store id)
+    (define (session-store-resume! store id)
       "Resume session ID in STORE."
       #((parameters
          (store (type consent-session-store)
@@ -360,7 +360,7 @@
             (list 'revalidates consent-session-revalidated-fields)
             (list 'never-restore consent-session-never-restored-fields)))
 
-    (define (session-snapshot! store id options)
+    (define (session-store-snapshot! store id options)
       "Snapshot session ID in STORE using OPTIONS."
       #((parameters
          (store (type consent-session-store)
@@ -381,7 +381,7 @@
          (cons snapshot (session-snapshots session)))
         snapshot))
 
-    (define (session-fork! store id options)
+    (define (session-store-fork! store id options)
       "Fork session ID in STORE using OPTIONS and return the fork datum."
       #((parameters
          (store (type consent-session-store)
@@ -416,7 +416,7 @@
         (store-session! store fork)
         (session->datum fork)))
 
-    (define (session-retire! store id)
+    (define (session-store-retire! store id)
       "Retire session ID in STORE and return its datum."
       #((parameters
          (store (type consent-session-store)
@@ -553,7 +553,7 @@
           ("The created public session datum. Does not change the"
             "default session.")))
         (effects state-write error))
-      (let* ((datum (session-create! (manager-store manager) scope options))
+      (let* ((datum (session-store-create! (manager-store manager) scope options))
              (id (session-datum-id datum)))
         (manager-register-context!
          manager id (manager-build-context manager id scope options))
@@ -573,7 +573,7 @@
          (description
           ("The seeded public session datum, now the default session.")))
         (effects state-write error))
-      (let ((datum (session-create! (manager-store manager)
+      (let ((datum (session-store-create! (manager-store manager)
                                     scope
                                     (list (list 'id id)))))
         (manager-register-context! manager id context)
@@ -590,7 +590,7 @@
         (returns (type (or list boolean))
          (description "ID's public session datum, or #f when ID is unknown."))
         (effects state-write))
-      (let ((datum (session-ref (manager-store manager) id)))
+      (let ((datum (session-store-ref (manager-store manager) id)))
         (if datum
             (begin
               (if (not (session-manager-context-ref manager id))
@@ -609,7 +609,7 @@
          (description "The default session's public datum, or #f."))
         (effects state-read))
       (let ((id (manager-default-id manager)))
-        (if id (session-ref (manager-store manager) id) #f)))
+        (if id (session-store-ref (manager-store manager) id) #f)))
 
     (define (session-manager-list manager . maybe-scope)
       "Return MANAGER's session datums, optionally filtered by SCOPE."
@@ -621,7 +621,7 @@
         (returns (type (list-of list))
          (description "List of public session datums in creation order."))
         (effects state-read error))
-      (apply session-list (manager-store manager) maybe-scope))
+      (apply session-store-list (manager-store manager) maybe-scope))
 
     (define (session-manager-close! manager id)
       "Retire session ID in MANAGER and drop its live context."
@@ -633,7 +633,7 @@
         (returns (type list)
          (description "The retired public session datum."))
         (effects state-write error))
-      (let ((datum (session-retire! (manager-store manager) id)))
+      (let ((datum (session-store-retire! (manager-store manager) id)))
         (set-manager-contexts!
          manager
          (let loop ((cells (manager-contexts manager)) (kept '()))

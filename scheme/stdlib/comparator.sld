@@ -1,16 +1,17 @@
-;;; R7RS-large comparator library, adapted from SRFI 128 for stdlib-plus.
+;;; R7RS-large comparator library, adapted from SRFI 128 for stdlib.
 ;; SPDX-License-Identifier: MIT
 ;; SPDX-FileCopyrightText: 2015 John Cowan <cowan@ccil.org>
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 ;;;
-;;; Implements `(scheme comparator)` using the official SRFI 128 sample at
+;;; Implements `(stdlib comparator)` using the official SRFI 128 sample at
 ;;; https://github.com/scheme-requests-for-implementation/srfi-128.
 ;;; Local patches inline the upstream body files for Consent Scheme's
 ;;; source-library loader, document the exported procedures with Consent Scheme
-;;; metadata, use a local portable `default-hash`, and keep `(srfi 128)` and
-;;; `(srfi srfi-128)` as registry aliases.
+;;; metadata, use a local portable `default-hash`, and keep
+;;; `(scheme comparator)', `(srfi 128)', and `(srfi srfi-128)' as registry
+;;; aliases.
 
-(define-library (scheme comparator)
+(define-library (stdlib comparator)
   (export comparator? comparator-ordered? comparator-hashable?
           make-comparator
           make-pair-comparator make-list-comparator make-vector-comparator

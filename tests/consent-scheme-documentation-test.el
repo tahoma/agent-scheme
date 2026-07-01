@@ -244,7 +244,7 @@ AND has no docstring, i.e. the comment is standing in for the docstring."
   '(("scheme/consent/base-prelude.scm"
      "length"
      "Return the number of pairs in LIST.")
-    ("scheme/standard-library/lazy.sld"
+    ("scheme/consent/lazy.sld"
      "force"
      "Return PROMISE's value, evaluating and memoizing delayed thunks once.")
     ("scheme/agent/diff.sld"
@@ -259,19 +259,19 @@ AND has no docstring, i.e. the comment is standing in for the docstring."
     ("scheme/agent/transcript.sld"
      "transcript-event->fixture-case"
      "Generate a shared fixture case from EVENT when replay permits it.")
-    ("scheme/consent/memory.sld"
-     "memory-put!"
+    ("scheme/agent/memory.sld"
+     "memory-store-put!"
      "Store DATUM under KEY in SCOPE and return its memory record.")
-    ("scheme/consent/plan.sld"
-     "plan-create!"
+    ("scheme/agent/plan.sld"
+     "plan-store-create!"
      "Create or replace a plan from DATUM and return its canonical record.")
-    ("scheme/consent/session.sld"
-     "session-create!"
+    ("scheme/agent/session.sld"
+     "session-store-create!"
      "Create a session in STORE for SCOPE using OPTIONS.")
-    ("scheme/consent/job.sld"
-     "job-start!"
+    ("scheme/agent/job.sld"
+     "job-store-start!"
      "Create a queued eval job in STORE for SESSION and FORM.")
-    ("scheme/consent/redaction.sld"
+    ("scheme/agent/redaction.sld"
      "redact"
      "Return DATUM with secret and local-only content redacted.")
     ("scheme/consent/result.sld"

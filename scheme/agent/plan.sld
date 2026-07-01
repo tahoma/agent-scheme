@@ -6,18 +6,18 @@
 ;;; Event channels, memory persistence, buffers, and host UX are adapter
 ;;; concerns that can be rebuilt from these canonical plan records.
 
-(define-library (consent plan)
+(define-library (agent plan)
   (export consent-plan-scopes
           consent-plan-statuses
           consent-plan-step-statuses
           consent-make-plan-store
           consent-plan-store?
-          plan-create!
-          plan-ref
-          plan-list
-          plan-step-add!
-          plan-step-status!
-          plan-status!
+          plan-store-create!
+          plan-store-ref
+          plan-store-list
+          plan-store-step-add!
+          plan-store-step-status!
+          plan-store-status!
           plan-record-id
           plan-record-scope
           plan-record-steps
@@ -204,7 +204,7 @@
             (loop (cdr records) (cons (car records) result)))
            (else (loop (cdr records) result))))))
 
-    (define (plan-ref store id)
+    (define (plan-store-ref store id)
       "Return a plan record from STORE by ID, or #f."
       #((parameters
          (store (type consent-plan-store)
@@ -220,7 +220,7 @@
          ((equal? (plan-record-id (car records)) id) (car records))
          (else (loop (cdr records))))))
 
-    (define (plan-list store scope)
+    (define (plan-store-list store scope)
       "Return all plans in SCOPE."
       #((parameters
          (store (type consent-plan-store)
@@ -325,7 +325,7 @@
               (plan-field 'created-at created-at)
               (plan-field 'updated-at (integer-datum sequence)))))
 
-    (define (plan-create! store datum)
+    (define (plan-store-create! store datum)
       "Create or replace a plan from DATUM and return its canonical record."
       #((parameters
          (store (type consent-plan-store)
@@ -336,14 +336,14 @@
          (description "The created or replaced plan record datum."))
         (effects state-write error))
       (let* ((id (field-value (payload-fields datum) 'id))
-             (existing (and id (plan-ref store id)))
+             (existing (and id (plan-store-ref store id)))
              (record (make-plan-record store datum existing)))
         (set-store-records!
          store
          (cons record (without-plan store (plan-record-id record))))
         record))
 
-    (define (plan-step-add! store id step-datum)
+    (define (plan-store-step-add! store id step-datum)
       "Add STEP-DATUM to plan ID and return the updated plan."
       #((parameters
          (store (type consent-plan-store)
@@ -355,7 +355,7 @@
         (returns (type plan)
          (description "The updated plan record datum."))
         (effects state-write error))
-      (let ((record (plan-ref store id)))
+      (let ((record (plan-store-ref store id)))
         (if (not record)
             (error "unknown plan" id))
         (let* ((step (normalize-step
@@ -373,7 +373,7 @@
            (cons updated (without-plan store id)))
           updated)))
 
-    (define (plan-step-status! store id step-id status)
+    (define (plan-store-step-status! store id step-id status)
       "Set plan ID step STEP-ID to STATUS and return the updated plan."
       #((parameters
          (store (type consent-plan-store)
@@ -387,7 +387,7 @@
         (returns (type plan)
          (description "The updated plan record datum."))
         (effects state-write error))
-      (let ((record (plan-ref store id))
+      (let ((record (plan-store-ref store id))
             (normalized-status
              (normalize-status status
                                consent-plan-step-statuses
@@ -415,7 +415,7 @@
            (cons updated (without-plan store id)))
           updated)))
 
-    (define (plan-status! store id status)
+    (define (plan-store-status! store id status)
       "Set plan ID to STATUS and return the updated plan."
       #((parameters
          (store (type consent-plan-store)
@@ -427,7 +427,7 @@
         (returns (type plan)
          (description "The updated plan record datum."))
         (effects state-write error))
-      (let ((record (plan-ref store id))
+      (let ((record (plan-store-ref store id))
             (normalized-status
              (normalize-status status
                                consent-plan-statuses

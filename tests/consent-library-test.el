@@ -297,11 +297,11 @@
   (let ((specs (consent-standard-source-library-specs)))
     (dolist (case '(("(scheme case-lambda)"
                      ("case-lambda")
-                     "scheme/standard-library/case-lambda.sld")
+                     "scheme/consent/case-lambda.sld")
                    ("(scheme lazy)"
                     ("delay" "delay-force" "force" "make-promise"
                      "promise?")
-                     "scheme/standard-library/lazy.sld")))
+                    "scheme/consent/lazy.sld")))
       (let* ((name (car case))
              (expected-exports (cadr case))
              (expected-source-suffix (caddr case))
@@ -368,6 +368,12 @@
   (should
    (equal
     (consent-library-test--external
+     "(import (scheme base) (stdlib json))
+      (json-null? (json-read (open-input-string \"null\")))")
+    "#t"))
+  (should
+   (equal
+    (consent-library-test--external
      "(import (scheme base) (consent json))
       (json-null? (json-read (open-input-string \"null\")))")
     "#t")))
@@ -377,13 +383,13 @@
   (should
    (equal
     (consent-library-test--external
-     "(import (scheme base) (consent json read))
+     "(import (scheme base) (stdlib json read))
       (json-null? (json-read (open-input-string \"null\")))")
     "#t"))
   (should-error
    (consent-library-test--external
     "(import (scheme base)
-             (only (consent json read) json-write))
+             (only (stdlib json read) json-write))
      json-write")
    :type 'consent-eval-error))
 
@@ -419,13 +425,13 @@
   (should
    (equal
     (consent-library-test--external
-     "(import (scheme base) (srfi manifest))
-      (let ((entry (srfi-manifest-ref '(srfi 180))))
+     "(import (scheme base) (stdlib manifest))
+      (let ((entry (srfi-manifest-ref '(stdlib json))))
         (list (cdr (assq 'status entry))
               (cdr (assq 'implementation-library entry))
               (cdr (assq 'upstream-license entry))
               (cdr (assq 'import-aliases entry))))")
-    "(direct-portable-implementation (consent json) \"MIT\" ((srfi 180) (srfi srfi-180)))")))
+    "(direct-portable-implementation (stdlib json) \"MIT\" ((stdlib json) (consent json) (srfi 180) (srfi srfi-180)))")))
 
 (ert-deftest consent-library-test-srfi-180-emacs-json-oracle ()
   "Cross-check portable SRFI 180 behavior against Emacs json.el."
@@ -477,11 +483,11 @@
       (should (eq (alist-get 'ok (alist-get 'nested parsed)) :json-false)))))
 
 (ert-deftest consent-library-test-srfi-128-comparator-behavior ()
-  "Import `(scheme comparator)' and exercise representative SRFI 128 behavior."
+  "Import primary `(stdlib comparator)' and exercise SRFI 128 behavior."
   (should
    (equal
     (consent-library-test--external
-     "(import (scheme base) (scheme comparator))
+     "(import (scheme base) (stdlib comparator))
       (let* ((number-comparator (make-comparator real? = < number-hash))
              (list-comparator
               (make-list-comparator number-comparator list? null? car cdr))
@@ -553,8 +559,9 @@
   (should
    (equal
     (consent-library-test--external
-     "(import (scheme base) (srfi manifest))
-      (let ((entry (srfi-manifest-ref '(scheme comparator)))
+     "(import (scheme base) (stdlib manifest))
+      (let ((entry (srfi-manifest-ref '(stdlib comparator)))
+            (scheme-alias (srfi-manifest-ref '(scheme comparator)))
             (alias (srfi-manifest-ref '(srfi 128)))
             (portable-alias (srfi-manifest-ref '(srfi srfi-128))))
         (list (cdr (assq 'status entry))
@@ -563,9 +570,10 @@
               (cdr (assq 'local-license entry))
               (cdr (assq 'import-aliases entry))
               (cdr (assq 'dependencies entry))
+              (cdr (assq 'target scheme-alias))
               (cdr (assq 'target alias))
               (cdr (assq 'target portable-alias))))")
-    "(vendored-adapted-implementation (scheme comparator) \"MIT\" \"MIT\" ((scheme comparator) (srfi 128) (srfi srfi-128)) ((scheme base) (scheme case-lambda) (scheme char) (scheme inexact) (scheme complex)) (scheme comparator) (scheme comparator))")))
+    "(vendored-adapted-implementation (stdlib comparator) \"MIT\" \"MIT\" ((stdlib comparator) (scheme comparator) (srfi 128) (srfi srfi-128)) ((scheme base) (scheme case-lambda) (scheme char) (scheme inexact) (scheme complex)) (stdlib comparator) (stdlib comparator) (stdlib comparator))")))
 
 (ert-deftest consent-library-test-standard-char-and-cxr-imports ()
   "Import `(scheme char)' and `(scheme cxr)' bindings."

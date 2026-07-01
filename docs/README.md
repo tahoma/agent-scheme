@@ -26,7 +26,7 @@ project pitch and examples, see the top-level [README](../README.md).
 
 - [R7RS-Small Report Reference](r7rs-small-report.md) — a local Markdown rendering of the Revised⁷ Report on the Algorithmic Language Scheme.
 - [R7RS-Small Conformance Matrix](r7rs-conformance.md) — the source of truth for Consent Scheme's R7RS-small surface and its status.
-- [Stdlib-Plus Libraries](stdlib-plus.md) — optional SRFI and R7RS-large library support outside the R7RS-small conformance contract.
+- [Stdlib Libraries](stdlib.md) — optional SRFI and R7RS-large library support outside the R7RS-small conformance contract.
 - [R7RS Implementation Test Mining](r7rs-implementation-mining.md) — a survey of external R7RS and near-R7RS test suites mined for fixtures.
 - [Docstring Metadata Convention](docstring-metadata.md) — carrying documentation metadata as ordinary R7RS data in source.
 - [Macro Expansion Introspection](macro-introspection.md) — exposing macro expansion as Scheme-readable data.

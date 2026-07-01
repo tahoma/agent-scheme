@@ -83,10 +83,10 @@ their library names:
 - `scheme/consent/macro.sld` defines `(consent macro)`
 - `scheme/consent/interpreter.sld` defines `(consent interpreter)`
 - `scheme/consent/eval.sld` defines `(consent eval)`
-- `scheme/consent/approval.sld` defines `(consent approval)`
-- `scheme/consent/job.sld` defines `(consent job)`
-- `scheme/consent/context.sld` defines `(consent context)`
-- `scheme/consent/redaction.sld` defines `(consent redaction)`
+- `scheme/agent/approval.sld` defines `(agent approval)`
+- `scheme/agent/job.sld` defines `(agent job)`
+- `scheme/agent/context.sld` defines `(agent context)`
+- `scheme/agent/redaction.sld` defines `(agent redaction)`
 
 Here "mirror" means naming and pass-ownership parity, not subordination. Core
 semantic changes should update the corresponding Emacs Lisp and portable R7RS

@@ -6,7 +6,7 @@
 ;;; may add live observations, but Scheme-visible context remains ordinary
 ;;; printable datums.
 
-(define-library (consent context)
+(define-library (agent context)
   (export context-field
           context-present?
           make-request-context
