@@ -4,9 +4,11 @@ Consent Scheme treats SRFI and R7RS-large libraries as optional `stdlib-plus`
 support above the R7RS-small conformance contract. The R7RS-small status remains
 tracked in [R7RS-Small Conformance Matrix](r7rs-conformance.md); this page
 tracks optional library support that is useful to programs and later runtime
-features without making it part of that baseline.
+features without making it part of that baseline. Source-backed stdlib-plus
+libraries live under `scheme/stdlib-plus/`; SRFI names are public import aliases
+and provenance metadata, not a separate source-tree layer.
 
-## SRFI Support
+## Implemented Libraries
 
 | Library | Status | Source | Imports | Notes |
 | --- | --- | --- | --- | --- |

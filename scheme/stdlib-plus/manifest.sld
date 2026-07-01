@@ -1,10 +1,11 @@
-;;; Portable SRFI support manifest.
+;;; Portable stdlib-plus support manifest.
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 ;;;
-;;; This library records optional stdlib-plus SRFI support as Scheme-readable
-;;; data.  It is source-loaded by each bootstrap so vendored, shimmed, or owned
-;;; implementations stay visible to tools without querying host state.
+;;; This library records optional stdlib-plus support as Scheme-readable data.
+;;; It is source-loaded by each bootstrap so vendored, shimmed, or owned
+;;; SRFI/R7RS-large implementations stay visible to tools without querying host
+;;; state.
 
 (define-library (srfi manifest)
   (export srfi-manifest srfi-manifest-ref)
@@ -65,7 +66,7 @@
       "Return manifest metadata for LIBRARY, or #f when absent."
       #((parameters
          (library (type list)
-          (description "SRFI library name to look up.")))
+          (description "Stdlib-plus library name to look up.")))
         (returns (type (or list boolean))
          (description "Manifest entry for LIBRARY, or #f."))
         (effects pure))

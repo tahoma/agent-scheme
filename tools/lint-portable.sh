@@ -67,6 +67,19 @@ mkdir -p "$build_dir/consent-lint" "$build_dir/cache"
 driver="$build_dir/consent-lint/driver.sld"
 setup="$build_dir/setup.scm"
 
+# stdlib-plus source is organized by repository layer rather than by every
+# public import spelling.  Bare R7RS hosts still derive lookup paths from
+# library names, so mirror those public paths into the throwaway build tree for
+# this lint run.
+find "$scheme_dir/stdlib-plus" -name '*.sld' | sort | while IFS= read -r sld; do
+  name=$(sed -n 's/.*(define-library \(([^)]*)\).*/\1/p' "$sld" | head -n 1)
+  [ -n "$name" ] || continue
+  relative_name=$(printf '%s\n' "$name" | sed 's/^(\(.*\))$/\1/' | tr ' ' '/')
+  alias="$build_dir/$relative_name.sld"
+  mkdir -p "$(dirname "$alias")"
+  ln -s "$sld" "$alias"
+done
+
 # Generate the driver: import every host-loadable project library with a unique
 # prefix (prefixing avoids export-name collisions between libraries while still
 # forcing each one to be compiled). Libraries Guile provides natively -- the
