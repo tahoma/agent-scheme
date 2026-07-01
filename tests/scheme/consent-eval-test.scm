@@ -1055,6 +1055,26 @@
               (cadr (assq 'source-file lazy-spec)))
          "scheme/standard-library/lazy.sld"))
 
+(let* ((source-specs (consent-stdlib-plus-source-library-specs))
+       (manifest-spec
+        (find-source-library-spec '(srfi manifest) source-specs))
+       (comparator-spec
+        (find-source-library-spec '(scheme comparator) source-specs)))
+  (check 'stdlib-plus-source-library-files
+         (and manifest-spec
+              comparator-spec
+              (string? (cadr (assq 'source-file manifest-spec)))
+              (string? (cadr (assq 'source-file comparator-spec))))
+         #t)
+  (check 'stdlib-plus-source-library-manifest-file
+         (and manifest-spec
+              (cadr (assq 'source-file manifest-spec)))
+         "scheme/stdlib-plus/manifest.sld")
+  (check 'stdlib-plus-source-library-comparator-file
+         (and comparator-spec
+              (cadr (assq 'source-file comparator-spec)))
+         "scheme/stdlib-plus/comparator.sld"))
+
 (check-external 'srfi-180-json-read
                 "(import (scheme base) (srfi 180))
                  (let* ((datum

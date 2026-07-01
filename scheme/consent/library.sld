@@ -7,7 +7,7 @@
 
 (define-library (consent library)
   (export consent-standard-source-library-specs
-          consent-srfi-source-library-specs
+          consent-stdlib-plus-source-library-specs
           consent-runtime-source-files
           consent-install-library-backend!
           consent-apply-callable
@@ -142,14 +142,14 @@
         (scheme time)
         (scheme write)))
 
-    ;; SRFI / stdlib-plus library keys recognized by the portable registry.
-    (define srfi-source-library-keys
+    ;; stdlib-plus library keys recognized by the portable registry.
+    (define stdlib-plus-source-library-keys
       '((srfi manifest)
         (scheme comparator)
         (consent json)))
 
     ;; Registry aliases can expose a target library directly or as a subset.
-    (define srfi-library-aliases
+    (define stdlib-plus-library-aliases
       '(((alias . (srfi 180))
          (target . (consent json)))
         ((alias . (srfi srfi-180))
@@ -175,11 +175,11 @@
       (let ((entry (assq field spec)))
         (if entry (cdr entry) #f)))
 
-    ;; Recognized SRFI names include concrete source libraries and aliases.
-    (define srfi-library-keys
-      (append srfi-source-library-keys
+    ;; Recognized stdlib-plus names include concrete source libraries and aliases.
+    (define stdlib-plus-library-keys
+      (append stdlib-plus-source-library-keys
               (map (lambda (alias) (library-alias-field alias 'alias))
-                   srfi-library-aliases)))
+                   stdlib-plus-library-aliases)))
 
     ;; Agent interaction library keys recognized by the portable registry.
     (define agent-library-keys
@@ -277,12 +277,12 @@
          "scheme/standard-library/lazy.sld"
          "standard-library/lazy.sld")))
 
-    ;; Checked-in optional SRFI / stdlib-plus libraries loaded as portable
+    ;; Checked-in optional stdlib-plus libraries loaded as portable
     ;; Scheme source files.
-    (define srfi-source-library-load-paths
+    (define stdlib-plus-source-library-load-paths
       '(((srfi manifest)
-         "scheme/srfi/manifest.sld"
-         "srfi/manifest.sld")
+         "scheme/stdlib-plus/manifest.sld"
+         "stdlib-plus/manifest.sld")
         ((scheme comparator)
          "scheme/stdlib-plus/comparator.sld"
          "stdlib-plus/comparator.sld")
@@ -293,8 +293,8 @@
     ;; Cache selected source path and contents by standard library key.
     (define standard-source-library-source-cache '())
 
-    ;; Cache selected source path and contents by SRFI library key.
-    (define srfi-source-library-source-cache '())
+    ;; Cache selected source path and contents by stdlib-plus library key.
+    (define stdlib-plus-source-library-source-cache '())
 
     ;; Cache selected source path and contents by Agent library key.
     (define agent-source-library-source-cache '())
@@ -360,12 +360,12 @@
             (cdr entry)
             (eval-error "standard source library is not available" key))))
 
-    (define (srfi-source-library-paths key)
-      "Return the configured path candidates for source-backed SRFI library KEY."
-      (let ((entry (assoc/equal key srfi-source-library-load-paths)))
+    (define (stdlib-plus-source-library-paths key)
+      "Return configured path candidates for source-backed stdlib-plus library KEY."
+      (let ((entry (assoc/equal key stdlib-plus-source-library-load-paths)))
         (if entry
             (cdr entry)
-            (eval-error "SRFI source library is not available" key))))
+            (eval-error "stdlib-plus source library is not available" key))))
 
     (define (source-library-relative-path paths)
       "Return the canonical datadir/embedded-relative path for a source"
@@ -394,7 +394,7 @@
        (map (lambda (entry) (source-library-relative-path (cdr entry)))
             standard-source-library-load-paths)
        (map (lambda (entry) (source-library-relative-path (cdr entry)))
-            srfi-source-library-load-paths)
+            stdlib-plus-source-library-load-paths)
        (map (lambda (entry) (source-library-relative-path (cdr entry)))
             agent-source-library-load-paths)
        (map (lambda (entry) (source-library-relative-path (cdr entry)))
@@ -425,30 +425,30 @@
       "Return KEY's portable source text."
       (cdr (standard-source-library-source-entry key)))
 
-    (define (load-srfi-source-library-source key)
-      "Read SRFI library KEY's source through the host/core resolution"
+    (define (load-stdlib-plus-source-library-source key)
+      "Read stdlib-plus library KEY's source through the host/core resolution"
       "contract (search dirs, source tree, embedded)."
-      (let* ((paths (srfi-source-library-paths key))
+      (let* ((paths (stdlib-plus-source-library-paths key))
              (relative (source-library-relative-path paths))
              (entry (resolve-source-entry relative paths)))
         (if entry
             entry
-            (eval-error "unable to load SRFI source library" key))))
+            (eval-error "unable to load stdlib-plus source library" key))))
 
-    (define (srfi-source-library-source-entry key)
-      "Return cached source-file/source pair for SRFI library KEY."
-      (let ((cached (assoc/equal key srfi-source-library-source-cache)))
+    (define (stdlib-plus-source-library-source-entry key)
+      "Return cached source-file/source pair for stdlib-plus library KEY."
+      (let ((cached (assoc/equal key stdlib-plus-source-library-source-cache)))
         (if cached
             (cdr cached)
-            (let ((loaded (load-srfi-source-library-source key)))
-              (set! srfi-source-library-source-cache
+            (let ((loaded (load-stdlib-plus-source-library-source key)))
+              (set! stdlib-plus-source-library-source-cache
                     (cons (cons key loaded)
-                          srfi-source-library-source-cache))
+                          stdlib-plus-source-library-source-cache))
               loaded))))
 
-    (define (srfi-source-library-source key)
-      "Return KEY's SRFI library source text."
-      (cdr (srfi-source-library-source-entry key)))
+    (define (stdlib-plus-source-library-source key)
+      "Return KEY's stdlib-plus library source text."
+      (cdr (stdlib-plus-source-library-source-entry key)))
 
     (define (agent-source-library-paths key)
       "Return configured source path candidates for agent or consent KEY."
@@ -545,28 +545,28 @@
             (list 'source-file (car source-entry)))))
        standard-source-library-load-paths))
 
-    (define (consent-srfi-source-library-specs)
-      "Public metadata accessor for SRFI libraries backed by source files."
+    (define (consent-stdlib-plus-source-library-specs)
+      "Public metadata accessor for stdlib-plus libraries backed by source files."
       #((parameters)
         (returns (type list)
          (description
           ("A list of name, exports, and source-file metadata entries"
-            "for each source-backed SRFI library.")))
+            "for each source-backed stdlib-plus library.")))
         (effects state-read state-write))
       (map
        (lambda (entry)
          (let* ((key (car entry))
-                (source-entry (srfi-source-library-source-entry key)))
+                (source-entry (stdlib-plus-source-library-source-entry key)))
            (list
             (list 'name key)
             (list 'exports
                   (standard-source-library-export-names
                    (source-library-form
                     key
-                    (srfi-source-library-source key)
-                    "SRFI source library")))
+                    (stdlib-plus-source-library-source key)
+                    "stdlib-plus source library")))
             (list 'source-file (car source-entry)))))
-       srfi-source-library-load-paths))
+       stdlib-plus-source-library-load-paths))
 
     (define (library-registry-ref context key)
       "Return the registered library for KEY in CONTEXT, or #f."
@@ -1975,22 +1975,22 @@
        (else
         (eval-error "unknown consent library" key))))
 
-    (define (register-srfi-library! key context environment)
-      "Register a supported optional SRFI / stdlib-plus library by KEY."
-      (let ((alias-spec (library-alias-spec key srfi-library-aliases)))
+    (define (register-stdlib-plus-library! key context environment)
+      "Register a supported optional stdlib-plus library by KEY."
+      (let ((alias-spec (library-alias-spec key stdlib-plus-library-aliases)))
         (cond
          (alias-spec
           (register-library-alias! alias-spec context environment))
-         ((assoc/equal key srfi-source-library-load-paths)
+         ((assoc/equal key stdlib-plus-source-library-load-paths)
           (if (not (library-registry-ref context key))
               (register-source-library!
-               (srfi-source-library-source key)
+               (stdlib-plus-source-library-source key)
                context
                environment)))
-         ((member key srfi-library-keys)
-          (eval-error "SRFI library has no registration strategy" key))
+         ((member key stdlib-plus-library-keys)
+          (eval-error "stdlib-plus library has no registration strategy" key))
          (else
-          (eval-error "unknown SRFI library" key)))))
+          (eval-error "unknown stdlib-plus library" key)))))
 
     (define (library-available? name context environment)
       "Report whether NAME is a known or already registered library."
@@ -2011,7 +2011,7 @@
       (let ((key (library-name-key name)))
         (or (equal? key scheme-base-library-key)
             (member key standard-library-keys)
-            (member key srfi-library-keys)
+            (member key stdlib-plus-library-keys)
             (member key agent-library-keys)
             (member key consent-library-keys)
             (member key empty-emacs-capability-library-keys)
@@ -2038,8 +2038,8 @@
           (register-scheme-base-library! context environment))
          ((member key standard-library-keys)
           (register-standard-library! key context environment))
-         ((member key srfi-library-keys)
-          (register-srfi-library! key context environment))
+         ((member key stdlib-plus-library-keys)
+          (register-stdlib-plus-library! key context environment))
          ((member key agent-library-keys)
           (register-agent-library! key context environment))
          ((member key consent-library-keys)
