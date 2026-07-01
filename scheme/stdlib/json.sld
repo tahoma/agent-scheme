@@ -1,13 +1,14 @@
-;;; Portable Consent JSON support.
+;;; Portable stdlib JSON support.
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 ;;;
-;;; Consent Scheme owns this translator because JSON is an agent/protocol edge
-;;; format.  Canonical runtime state remains Scheme-readable data; this library
-;;; converts at explicit boundaries only.  The public `(srfi 180)' and
-;;; `(srfi srfi-180)' imports are registry aliases over this implementation.
+;;; Consent Scheme owns this stdlib translator because JSON is an
+;;; agent/protocol edge format. Canonical runtime state remains
+;;; Scheme-readable data; this library converts at explicit boundaries only.
+;;; The public `(consent json)', `(srfi 180)', and `(srfi srfi-180)' imports
+;;; are registry aliases over this implementation.
 
-(define-library (consent json)
+(define-library (stdlib json)
   (export json-number-of-character-limit
           json-nesting-depth-limit
           json-null?

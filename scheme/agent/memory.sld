@@ -6,17 +6,17 @@
 ;;; datums.  Persistence, indexes, and UI buffers are adapter concerns that can
 ;;; be rebuilt from these canonical records.
 
-(define-library (consent memory)
+(define-library (agent memory)
   (export consent-memory-scopes
           consent-make-memory-store
           consent-memory-store?
-          memory-put!
-          memory-ref
-          memory-delete!
-          memory-add!
-          memory-find
-          memory-by-tag
-          memory-recent
+          memory-store-put!
+          memory-store-ref
+          memory-store-delete!
+          memory-store-add!
+          memory-store-find
+          memory-store-by-tag
+          memory-store-recent
           memory-record-id)
   (import (scheme base)
           (consent reader)
@@ -142,7 +142,7 @@
             (loop (cdr records) (cons (car records) result)))
            (else (loop (cdr records) result))))))
 
-    (define (memory-ref store scope key)
+    (define (memory-store-ref store scope key)
       "Return a memory record from STORE by SCOPE and KEY, or #f."
       #((parameters
          (store (type consent-memory-store)
@@ -197,7 +197,7 @@
               (list 'created-at created-at)
               (list 'updated-at (integer-datum sequence)))))
 
-    (define (memory-put! store scope key datum)
+    (define (memory-store-put! store scope key datum)
       "Store DATUM under KEY in SCOPE and return its memory record."
       #((parameters
          (store (type consent-memory-store)
@@ -211,7 +211,7 @@
          (description "The stored memory record datum."))
         (effects state-write error))
       (let* ((normalized-scope (normalize-scope scope))
-             (existing (memory-ref store normalized-scope key))
+             (existing (memory-store-ref store normalized-scope key))
              (record (make-memory-record store
                                          normalized-scope
                                          key
@@ -223,7 +223,7 @@
          (cons record (without-record store normalized-scope key)))
         record))
 
-    (define (memory-delete! store scope key)
+    (define (memory-store-delete! store scope key)
       "Delete memory KEY in SCOPE and return the deleted record, or #f."
       #((parameters
          (store (type consent-memory-store)
@@ -237,14 +237,14 @@
             "matched.")))
         (effects state-write error))
       (let* ((normalized-scope (normalize-scope scope))
-             (record (memory-ref store normalized-scope key)))
+             (record (memory-store-ref store normalized-scope key)))
         (if record
             (set-store-records!
              store
              (without-record store normalized-scope key)))
         record))
 
-    (define (memory-add! store scope kind datum)
+    (define (memory-store-add! store scope kind datum)
       "Add DATUM as generated KIND memory in SCOPE and return the record."
       #((parameters
          (store (type consent-memory-store)
@@ -283,7 +283,7 @@
                               (symbol->string query))))
        (else (equal? query record))))
 
-    (define (memory-find store scope query)
+    (define (memory-store-find store scope query)
       "Return SCOPE records matching QUERY."
       #((parameters
          (store (type consent-memory-store)
@@ -301,7 +301,7 @@
           (loop (cdr records) (cons (car records) result)))
          (else (loop (cdr records) result)))))
 
-    (define (memory-by-tag store scope tag)
+    (define (memory-store-by-tag store scope tag)
       "Return SCOPE records tagged with TAG."
       #((parameters
          (store (type consent-memory-store)
@@ -325,7 +325,7 @@
           '()
           (cons (car records) (take (cdr records) (- count 1)))))
 
-    (define (memory-recent store scope count)
+    (define (memory-store-recent store scope count)
       "Return COUNT newest memory records in SCOPE."
       #((parameters
          (store (type consent-memory-store)

@@ -6,7 +6,7 @@
 ;;; apply the same model at audit, transcript, memory, provider, and resource
 ;;; disclosure boundaries.
 
-(define-library (consent redaction)
+(define-library (agent redaction)
   (export secret-source?
           redact
           context-local-only!

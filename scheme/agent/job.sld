@@ -7,22 +7,22 @@
 ;;; forceful stop mechanics while preserving these public state names and
 ;;; record fields.
 
-(define-library (consent job)
+(define-library (agent job)
   (export consent-job-states
           consent-make-job-store
           consent-job-store?
-          job-start!
-          job-ref
-          job-list
-          job-cancel!
-          job-interrupt!
-          job-yields
-          job-status
-          job-mark-running!
-          job-record-yield!
-          job-complete!
-          job-fail!
-          job-finish-cancelled!
+          job-store-start!
+          job-store-ref
+          job-store-list
+          job-store-cancel!
+          job-store-interrupt!
+          job-store-yields
+          job-store-status
+          job-store-mark-running!
+          job-store-record-yield!
+          job-store-complete!
+          job-store-fail!
+          job-store-finish-cancelled!
           job-datum-id)
   (import (scheme base))
   (begin
@@ -200,7 +200,7 @@
         (effects pure))
       (cadr (cadr job-datum)))
 
-    (define (job-start! store session form options)
+    (define (job-store-start! store session form options)
       "Create a queued eval job in STORE for SESSION and FORM."
       #((parameters
          (store (type consent-job-store)
@@ -233,7 +233,7 @@
         (store-record! store job)
         (job->datum job)))
 
-    (define (job-ref store id)
+    (define (job-store-ref store id)
       "Return job ID datum from STORE, or #f."
       #((parameters
          (store (type consent-job-store)
@@ -246,7 +246,7 @@
       (let ((job (find-job store id)))
         (if job (job->datum job) #f)))
 
-    (define (job-list store . maybe-session)
+    (define (job-store-list store . maybe-session)
       "Return job datums from STORE, optionally filtered by SESSION."
       #((parameters
          (store (type consent-job-store)
@@ -266,7 +266,7 @@
            (else
             (loop (cdr records) result))))))
 
-    (define (job-status store id)
+    (define (job-store-status store id)
       "Return job ID status from STORE, or #f."
       #((parameters
          (store (type consent-job-store)
@@ -279,7 +279,7 @@
       (let ((job (find-job store id)))
         (if job (job-record-status job) #f)))
 
-    (define (job-yields store id options)
+    (define (job-store-yields store id options)
       "Return job ID yields from STORE after any requested offset."
       #((parameters
          (store (type consent-job-store)
@@ -298,7 +298,7 @@
               rest
               (loop (cdr rest) (- index 1))))))
 
-    (define (job-mark-running! store id)
+    (define (job-store-mark-running! store id)
       "Mark job ID as running."
       #((parameters
          (store (type consent-job-store)
@@ -325,7 +325,7 @@
         'yielding)
        (else 'running)))
 
-    (define (job-record-yield! store id event)
+    (define (job-store-record-yield! store id event)
       "Append EVENT to job ID's stream and update its streaming status."
       #((parameters
          (store (type consent-job-store)
@@ -344,7 +344,7 @@
             (set-job-status! job (event-status event)))
         (job->datum job)))
 
-    (define (job-cancel! store id)
+    (define (job-store-cancel! store id)
       "Request cooperative cancellation of job ID."
       #((parameters
          (store (type consent-job-store)
@@ -361,7 +361,7 @@
               (set-job-status! job 'cancel-requested)))
         (job->datum job)))
 
-    (define (job-interrupt! store id reason)
+    (define (job-store-interrupt! store id reason)
       "Request cooperative interrupt of job ID with REASON."
       #((parameters
          (store (type consent-job-store)
@@ -380,7 +380,7 @@
               (set-job-status! job 'cancel-requested)))
         (job->datum job)))
 
-    (define (job-complete! store id result)
+    (define (job-store-complete! store id result)
       "Complete job ID with RESULT."
       #((parameters
          (store (type consent-job-store)
@@ -398,7 +398,7 @@
         (set-job-status! job 'completed)
         (job->datum job)))
 
-    (define (job-fail! store id message)
+    (define (job-store-fail! store id message)
       "Fail job ID with MESSAGE."
       #((parameters
          (store (type consent-job-store)
@@ -417,7 +417,7 @@
         (set-job-status! job 'failed)
         (job->datum job)))
 
-    (define (job-finish-cancelled! store id message)
+    (define (job-store-finish-cancelled! store id message)
       "Finish job ID as cancelled with MESSAGE."
       #((parameters
          (store (type consent-job-store)

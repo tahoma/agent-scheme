@@ -6,7 +6,7 @@
 ;;; REPL into an agent harness.  It composes the already-shipped substrate --
 ;;; the agent abstraction and deterministic automatic selection from
 ;;; `(agent registry)', the minimal task-runner control loop from
-;;; `(agent runner)', and the session lifecycle stance from `(consent session)'
+;;; `(agent runner)', and the session lifecycle stance from `(agent session)'
 ;;; -- into one-line verbs a user runs at the prompt:
 ;;;
 ;;;   `prompt'        dispatch the automatically chosen agent at a goal;

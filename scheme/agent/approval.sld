@@ -5,16 +5,16 @@
 ;;; This library owns host-neutral approval request datums.  Host adapters own
 ;;; display, persistence, and authority to resolve gated effects.
 
-(define-library (consent approval)
+(define-library (agent approval)
   (export consent-approval-statuses
           consent-make-approval-store
           consent-approval-store?
-          approval-request!
-          approval-status
-          approval-ref
-          approval-resolve!
-          approval-cancel!
-          approval-pending)
+          approval-store-request!
+          approval-store-status
+          approval-store-ref
+          approval-store-resolve!
+          approval-store-cancel!
+          approval-store-pending)
   (import (scheme base))
   (begin
     ;; Public approval statuses are Scheme data visible to agents and hosts.
@@ -117,7 +117,7 @@
                (list record)))
       record)
 
-    (define (approval-ref store id)
+    (define (approval-store-ref store id)
       "Return approval record ID from STORE, or #f."
       #((parameters
          (store (type consent-approval-store)
@@ -135,7 +135,7 @@
          ((eq? (record-id (car records)) id) (car records))
          (else (loop (cdr records))))))
 
-    (define (approval-request! store datum)
+    (define (approval-store-request! store datum)
       "Create an approval request from DATUM in STORE and return its id."
       #((parameters
          (store (type consent-approval-store)
@@ -150,7 +150,7 @@
         (store-record! store record)
         (record-id record)))
 
-    (define (approval-status store id)
+    (define (approval-store-status store id)
       "Return approval ID status from STORE, or #f."
       #((parameters
          (store (type consent-approval-store)
@@ -160,7 +160,7 @@
         (returns (type (or symbol boolean))
          (description ("The approval status symbol, or #f when ID is unknown.")))
         (effects state-read))
-      (let ((record (approval-ref store id)))
+      (let ((record (approval-store-ref store id)))
         (if record (record-status record) #f)))
 
     (define (record-with-status record status)
@@ -176,7 +176,7 @@
          (else
           (loop (cdr fields) (cons (car fields) result))))))
 
-    (define (approval-resolve! store id decision)
+    (define (approval-store-resolve! store id decision)
       "Resolve approval ID in STORE with DECISION and return the record."
       #((parameters
          (store (type consent-approval-store)
@@ -189,14 +189,14 @@
          (description "The resolved approval request datum."))
         (effects state-write error))
       (let ((status (normalize-status decision))
-            (record (approval-ref store id)))
+            (record (approval-store-ref store id)))
         (if (not (or (eq? status 'approved) (eq? status 'denied)))
             (error "approval decisions must be approved or denied" decision))
         (if (not record)
             (error "unknown approval id" id))
         (store-record! store (record-with-status record status))))
 
-    (define (approval-cancel! store id)
+    (define (approval-store-cancel! store id)
       "Cancel approval ID in STORE and return the record."
       #((parameters
          (store (type consent-approval-store)
@@ -206,14 +206,14 @@
         (returns (type approval-request)
          (description "The canceled approval request datum."))
         (effects state-write error))
-      (let ((record (approval-ref store id)))
+      (let ((record (approval-store-ref store id)))
         (if (not record)
             (error "unknown approval id" id))
         (if (not (eq? (record-status record) 'pending))
             (error "only pending approvals can be canceled" id))
         (store-record! store (record-with-status record 'canceled))))
 
-    (define (approval-pending store)
+    (define (approval-store-pending store)
       "Return pending approval records in creation order."
       #((parameters
          (store (type consent-approval-store)

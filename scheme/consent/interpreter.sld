@@ -35,7 +35,7 @@
           consent-base-prelude-binding-specs
           consent-base-binding-specs
           consent-standard-source-library-specs
-          consent-stdlib-plus-source-library-specs
+          consent-stdlib-source-library-specs
           consent-primitive-manifest-binding-specs
           consent-result->external
           consent-value->external
@@ -61,15 +61,15 @@
           (consent result)
           (consent base)
           (consent library)
-          (prefix (consent approval) approval-model:)
-          (prefix (consent context) context-model:)
-          (prefix (consent helper) helper-model:)
-          (prefix (consent job) job-model:)
-          (prefix (consent memory) memory-model:)
-          (prefix (consent plan) plan-model:)
+          (prefix (agent approval) approval-model:)
+          (prefix (agent context) context-model:)
+          (prefix (agent helper) helper-model:)
+          (prefix (agent job) job-model:)
+          (prefix (agent memory) memory-model:)
+          (prefix (agent plan) plan-model:)
           (prefix (agent models openai) model-openai:)
-          (prefix (consent redaction) redaction-model:)
-          (prefix (consent session) session-model:)
+          (prefix (agent redaction) redaction-model:)
+          (prefix (agent session) session-model:)
           (consent macro))
   (begin
     ;; Process-local portable approvals used by `(agent approval)' primitives.
@@ -5283,23 +5283,23 @@ cursor across sessions."
 
     (define (primitive-approval-request! arguments context)
       "Create a portable approval request and return its id."
-      (approval-model:approval-request! interpreter-approval-store
+      (approval-model:approval-store-request! interpreter-approval-store
                                         (car arguments)))
 
     (define (primitive-approval-status arguments context)
       "Return a portable approval request status, or #f when unknown."
-      (approval-model:approval-status interpreter-approval-store
+      (approval-model:approval-store-status interpreter-approval-store
                                       (car arguments)))
 
     (define (primitive-approval-cancel! arguments context)
       "Cancel a portable approval request."
-      (approval-model:approval-cancel! interpreter-approval-store
+      (approval-model:approval-store-cancel! interpreter-approval-store
                                        (car arguments)))
 
     (define (primitive-approval-yield-pending arguments context)
       "Yield all pending portable approval requests."
       (let ((records
-             (approval-model:approval-pending interpreter-approval-store)))
+             (approval-model:approval-store-pending interpreter-approval-store)))
         (for-each
          (lambda (record)
            (record-agent-event! context (list 'yield record)))
@@ -5316,40 +5316,40 @@ cursor across sessions."
       "Resolve a portable approval only when policy explicitly allows it."
       (if (not (approval-resolution-allowed? context))
           (eval-error "approval resolution is host-side only"))
-      (approval-model:approval-resolve! interpreter-approval-store
+      (approval-model:approval-store-resolve! interpreter-approval-store
                                         (car arguments)
                                         (second arguments)))
 
     (define (primitive-job-start! arguments context)
       "Create a portable queued job record and return its job datum."
-      (job-model:job-start! interpreter-job-store
+      (job-model:job-store-start! interpreter-job-store
                             (car arguments)
                             (second arguments)
                             (third arguments)))
 
     (define (primitive-job-ref arguments context)
       "Return a portable job record, or #f when unknown."
-      (job-model:job-ref interpreter-job-store (car arguments)))
+      (job-model:job-store-ref interpreter-job-store (car arguments)))
 
     (define (primitive-job-list arguments context)
       "Return portable job records, optionally scoped to one session."
       (if (null? arguments)
-          (job-model:job-list interpreter-job-store)
-          (job-model:job-list interpreter-job-store (car arguments))))
+          (job-model:job-store-list interpreter-job-store)
+          (job-model:job-store-list interpreter-job-store (car arguments))))
 
     (define (primitive-job-cancel! arguments context)
       "Request cooperative cancellation of a portable job record."
-      (job-model:job-cancel! interpreter-job-store (car arguments)))
+      (job-model:job-store-cancel! interpreter-job-store (car arguments)))
 
     (define (primitive-job-interrupt! arguments context)
       "Request cooperative interrupt of a portable job record."
-      (job-model:job-interrupt! interpreter-job-store
+      (job-model:job-store-interrupt! interpreter-job-store
                                 (car arguments)
                                 (second arguments)))
 
     (define (primitive-job-yields arguments context)
       "Return portable job stream events, optionally after an offset."
-      (job-model:job-yields interpreter-job-store
+      (job-model:job-store-yields interpreter-job-store
                             (car arguments)
                             (if (null? (cdr arguments))
                                 '()
@@ -5357,7 +5357,7 @@ cursor across sessions."
 
     (define (primitive-job-status arguments context)
       "Return a portable job status, or #f when unknown."
-      (job-model:job-status interpreter-job-store (car arguments)))
+      (job-model:job-store-status interpreter-job-store (car arguments)))
 
     (define (capability-grant-field datum field)
       "Return FIELD from Scheme-readable grant DATUM, or #f when absent."
@@ -5699,52 +5699,52 @@ cursor across sessions."
 
     (define (primitive-memory-put! arguments context)
       "Store a keyed memory record in the portable interpreter memory store."
-      (memory-model:memory-put! interpreter-memory-store
+      (memory-model:memory-store-put! interpreter-memory-store
                                 (car arguments)
                                 (second arguments)
                                 (third arguments)))
 
     (define (primitive-memory-ref arguments context)
       "Return a keyed memory record or #f from the portable memory store."
-      (memory-model:memory-ref interpreter-memory-store
+      (memory-model:memory-store-ref interpreter-memory-store
                                (car arguments)
                                (second arguments)))
 
     (define (primitive-memory-delete! arguments context)
       "Delete a keyed memory record from the portable memory store."
-      (memory-model:memory-delete! interpreter-memory-store
+      (memory-model:memory-store-delete! interpreter-memory-store
                                    (car arguments)
                                    (second arguments)))
 
     (define (primitive-memory-add! arguments context)
       "Add a generated memory record to the portable memory store."
-      (memory-model:memory-add! interpreter-memory-store
+      (memory-model:memory-store-add! interpreter-memory-store
                                 (car arguments)
                                 (second arguments)
                                 (third arguments)))
 
     (define (primitive-memory-find arguments context)
       "Find matching memory records in the portable memory store."
-      (memory-model:memory-find interpreter-memory-store
+      (memory-model:memory-store-find interpreter-memory-store
                                 (car arguments)
                                 (second arguments)))
 
     (define (primitive-memory-by-tag arguments context)
       "Find tagged memory records in the portable memory store."
-      (memory-model:memory-by-tag interpreter-memory-store
+      (memory-model:memory-store-by-tag interpreter-memory-store
                                   (car arguments)
                                   (second arguments)))
 
     (define (primitive-memory-recent arguments context)
       "Return recent memory records from the portable memory store."
-      (memory-model:memory-recent interpreter-memory-store
+      (memory-model:memory-store-recent interpreter-memory-store
                                   (car arguments)
                                   (second arguments)))
 
     (define (primitive-memory-yield arguments context)
       "Yield matching memory records through the event channel."
       (let ((records
-             (memory-model:memory-find interpreter-memory-store
+             (memory-model:memory-store-find interpreter-memory-store
                                        (car arguments)
                                        (second arguments))))
         (for-each
@@ -5794,7 +5794,7 @@ cursor across sessions."
       "Save a structured helper artifact and yield it through the event channel."
       (let* ((scope (helper-default-scope context))
              (record
-              (helper-model:artifact-save!
+              (helper-model:helper-store-artifact-save!
                interpreter-helper-store
                scope
                (car arguments)
@@ -5808,7 +5808,7 @@ cursor across sessions."
       (let* ((options (helper-options arguments))
              (scope (helper-scope options context))
              (record
-              (helper-model:helper-save!
+              (helper-model:helper-store-save!
                interpreter-helper-store
                scope
                (car arguments)
@@ -5817,7 +5817,7 @@ cursor across sessions."
         (record-audit-event!
          context
          'agent-helper
-         (list (list 'operation "agent-helper-save!")
+         (list (list 'operation "agent-helper-store-save!")
                (list 'scope scope)
                (list 'library (helper-model:helper-record-name record))
                (list 'record record)))
@@ -5825,7 +5825,7 @@ cursor across sessions."
 
     (define (helper-record-ref library-name options context)
       "Return a helper record by library name and options, or #f."
-      (helper-model:helper-ref interpreter-helper-store
+      (helper-model:helper-store-ref interpreter-helper-store
                                (helper-scope options context)
                                library-name))
 
@@ -5846,7 +5846,7 @@ cursor across sessions."
 
     (define (primitive-agent-helper-list arguments context)
       "Return portable helper records in a scope."
-      (helper-model:helper-list interpreter-helper-store (car arguments)))
+      (helper-model:helper-store-list interpreter-helper-store (car arguments)))
 
     (define (primitive-agent-helper-ref arguments context)
       "Return one portable helper record or #f."
@@ -5926,9 +5926,9 @@ cursor across sessions."
       "Create or replace a portable plan record."
       (let* ((datum (car arguments))
              (record
-              (plan-model:plan-create! interpreter-plan-store datum)))
+              (plan-model:plan-store-create! interpreter-plan-store datum)))
         (if (plan-model:plan-memory-important? datum)
-            (memory-model:memory-put!
+            (memory-model:memory-store-put!
              interpreter-memory-store
              (plan-memory-scope (plan-model:plan-record-scope record))
              (plan-model:plan-record-id record)
@@ -5940,7 +5940,7 @@ cursor across sessions."
         (record-audit-event!
          context
          'agent-plan
-         (list (list 'operation "plan-create!")
+         (list (list 'operation "plan-store-create!")
                (list 'plan (plan-model:plan-record-id record))
                (list 'scope (plan-model:plan-record-scope record))
                (list 'record record)))
@@ -5948,23 +5948,23 @@ cursor across sessions."
 
     (define (primitive-plan-ref arguments context)
       "Return a portable plan record by id, or #f."
-      (plan-model:plan-ref interpreter-plan-store (car arguments)))
+      (plan-model:plan-store-ref interpreter-plan-store (car arguments)))
 
     (define (primitive-plan-list arguments context)
       "Return portable plans in a scope."
-      (plan-model:plan-list interpreter-plan-store (car arguments)))
+      (plan-model:plan-store-list interpreter-plan-store (car arguments)))
 
     (define (primitive-plan-step-add! arguments context)
       "Add a step to a portable plan."
       (let ((record
-             (plan-model:plan-step-add!
+             (plan-model:plan-store-step-add!
               interpreter-plan-store
               (car arguments)
               (second arguments))))
         (record-audit-event!
          context
          'agent-plan
-         (list (list 'operation "plan-step-add!")
+         (list (list 'operation "plan-store-step-add!")
                (list 'plan (plan-model:plan-record-id record))
                (list 'record record)))
         record))
@@ -5972,7 +5972,7 @@ cursor across sessions."
     (define (primitive-plan-step-status! arguments context)
       "Update a portable plan step status."
       (let ((record
-             (plan-model:plan-step-status!
+             (plan-model:plan-store-step-status!
               interpreter-plan-store
               (car arguments)
               (second arguments)
@@ -5980,7 +5980,7 @@ cursor across sessions."
         (record-audit-event!
          context
          'agent-plan
-         (list (list 'operation "plan-step-status!")
+         (list (list 'operation "plan-store-step-status!")
                (list 'plan (plan-model:plan-record-id record))
                (list 'step (second arguments))
                (list 'status (third arguments))
@@ -5990,14 +5990,14 @@ cursor across sessions."
     (define (primitive-plan-status! arguments context)
       "Update a portable plan status."
       (let ((record
-             (plan-model:plan-status!
+             (plan-model:plan-store-status!
               interpreter-plan-store
               (car arguments)
               (second arguments))))
         (record-audit-event!
          context
          'agent-plan
-         (list (list 'operation "plan-status!")
+         (list (list 'operation "plan-store-status!")
                (list 'plan (plan-model:plan-record-id record))
                (list 'status (second arguments))
                (list 'record record)))
@@ -6006,7 +6006,7 @@ cursor across sessions."
     (define (primitive-plan-yield arguments context)
       "Yield a portable plan through the event channel."
       (let ((record
-             (plan-model:plan-ref interpreter-plan-store (car arguments))))
+             (plan-model:plan-store-ref interpreter-plan-store (car arguments))))
         (if (not record)
             (eval-error "unknown plan"))
         (record-agent-event! context (list 'yield record))

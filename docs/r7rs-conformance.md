@@ -7,8 +7,8 @@ representative fixture cases that should move from `pending` to `implemented`
 or `policy-gated` as the runtime lands.
 
 Optional SRFI and R7RS-large libraries are tracked separately in
-[Stdlib-Plus Libraries](stdlib-plus.md), even when their canonical import names
-begin with `scheme`.
+[Stdlib Libraries](stdlib.md), even when they have compatibility import names
+outside the `stdlib` namespace.
 
 Fixture cases live in the shared `consent-fixture-suite` at
 `fixtures/r7rs/conformance-cases.scm`. The initial external implementation

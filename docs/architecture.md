@@ -832,21 +832,22 @@ prelude-defined bindings are both discoverable, but their metadata identifies
 which source installed each binding so later conformance work can reduce the
 host surface without losing visibility into the supported base environment.
 
-Portable source for pure, non-base standard libraries belongs under
-`scheme/standard-library/`, using one `.sld` file per R7RS library.  For
-example, `(scheme case-lambda)` lives in
-`scheme/standard-library/case-lambda.sld`.  Both the Emacs Lisp bootstrap
+Portable source for pure, non-base R7RS-small standard libraries lives beside
+the rest of the R7RS-small implementation under `scheme/consent/`, using one
+`.sld` file per library. For example, `(scheme case-lambda)` lives in
+`scheme/consent/case-lambda.sld`. Both the Emacs Lisp bootstrap
 evaluator and the portable Scheme evaluator load those checked-in source files
 directly as implementation bootstrap data; this is separate from user-level
 `include` and `load`, which remain policy-gated host file access.
 Host-effecting standard libraries continue to be registered through explicit
 adapter or primitive policy surfaces instead of portable source files.
 
-Optional SRFI and R7RS-large libraries belong under `scheme/stdlib-plus/`,
-not under a separate provenance-based source tree.  The Scheme-readable
-`(srfi manifest)` library records SRFI source URLs, upstream revisions,
-licenses, aliases, and local patches for this optional layer; SRFI names are
-public import compatibility and metadata, not filesystem ownership.
+Optional SRFI and R7RS-large libraries belong under `scheme/stdlib/`,
+with primary names in the `(stdlib *)` namespace. The Scheme-readable
+`(stdlib manifest)` library records SRFI source URLs, upstream revisions,
+licenses, aliases, and local patches for this optional layer; SRFI, R7RS-large,
+and historical Consent names are public import compatibility and metadata, not
+filesystem ownership.
 
 ## Agent Skills Interop
 

@@ -214,7 +214,7 @@ A file grant is path-scoped and operation-scoped:
   (domain file)
   (operations (read metadata include include-ci load))
   (scope (project-root "/repo/")
-         (paths ("fixtures/r7rs" "scheme/standard-library"))
+         (paths ("fixtures/r7rs" "scheme/consent" "scheme/stdlib"))
          (remote denied)
          (symlinks resolve-within-root))
   (expires session)

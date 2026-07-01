@@ -1049,31 +1049,39 @@
   (check 'standard-source-library-case-lambda-file
          (and case-lambda-spec
               (cadr (assq 'source-file case-lambda-spec)))
-         "scheme/standard-library/case-lambda.sld")
+         "scheme/consent/case-lambda.sld")
   (check 'standard-source-library-lazy-file
          (and lazy-spec
               (cadr (assq 'source-file lazy-spec)))
-         "scheme/standard-library/lazy.sld"))
+         "scheme/consent/lazy.sld"))
 
-(let* ((source-specs (consent-stdlib-plus-source-library-specs))
+(let* ((source-specs (consent-stdlib-source-library-specs))
        (manifest-spec
-        (find-source-library-spec '(srfi manifest) source-specs))
+        (find-source-library-spec '(stdlib manifest) source-specs))
        (comparator-spec
-        (find-source-library-spec '(scheme comparator) source-specs)))
-  (check 'stdlib-plus-source-library-files
+        (find-source-library-spec '(stdlib comparator) source-specs))
+       (json-spec
+        (find-source-library-spec '(stdlib json) source-specs)))
+  (check 'stdlib-source-library-files
          (and manifest-spec
               comparator-spec
+              json-spec
               (string? (cadr (assq 'source-file manifest-spec)))
-              (string? (cadr (assq 'source-file comparator-spec))))
+              (string? (cadr (assq 'source-file comparator-spec)))
+              (string? (cadr (assq 'source-file json-spec))))
          #t)
-  (check 'stdlib-plus-source-library-manifest-file
+  (check 'stdlib-source-library-manifest-file
          (and manifest-spec
               (cadr (assq 'source-file manifest-spec)))
-         "scheme/stdlib-plus/manifest.sld")
-  (check 'stdlib-plus-source-library-comparator-file
+         "scheme/stdlib/manifest.sld")
+  (check 'stdlib-source-library-comparator-file
          (and comparator-spec
               (cadr (assq 'source-file comparator-spec)))
-         "scheme/stdlib-plus/comparator.sld"))
+         "scheme/stdlib/comparator.sld")
+  (check 'stdlib-source-library-json-file
+         (and json-spec
+              (cadr (assq 'source-file json-spec)))
+         "scheme/stdlib/json.sld"))
 
 (check-external 'srfi-180-json-read
                 "(import (scheme base) (srfi 180))
@@ -1176,22 +1184,27 @@
                  (json-null? (json-read (open-input-string \"null\")))"
                 "#t")
 
-(check-external 'consent-json-read-subset-import
-                "(import (scheme base) (consent json read))
+(check-external 'stdlib-json-import
+                "(import (scheme base) (stdlib json))
+                 (json-null? (json-read (open-input-string \"null\")))"
+                "#t")
+
+(check-external 'stdlib-json-read-subset-import
+                "(import (scheme base) (stdlib json read))
                  (json-null? (json-read (open-input-string \"null\")))"
                 "#t")
 
 (check-external 'srfi-180-manifest
-                "(import (scheme base) (srfi manifest))
-                 (let ((entry (srfi-manifest-ref '(srfi 180))))
+                "(import (scheme base) (stdlib manifest))
+                 (let ((entry (srfi-manifest-ref '(stdlib json))))
                    (list (cdr (assq 'status entry))
                          (cdr (assq 'implementation-library entry))
                          (cdr (assq 'upstream-license entry))
                          (cdr (assq 'import-aliases entry))))"
-                "(direct-portable-implementation (consent json) \"MIT\" ((srfi 180) (srfi srfi-180)))")
+                "(direct-portable-implementation (stdlib json) \"MIT\" ((stdlib json) (consent json) (srfi 180) (srfi srfi-180)))")
 
 (check-external 'srfi-128-comparator-behavior
-                "(import (scheme base) (scheme comparator))
+                "(import (scheme base) (stdlib comparator))
                  (let* ((number-comparator (make-comparator real? = < number-hash))
                         (list-comparator
                          (make-list-comparator
@@ -1236,8 +1249,10 @@
                 "(#t #t)")
 
 (check-external 'srfi-128-manifest
-                "(import (scheme base) (srfi manifest))
-                 (let ((entry (srfi-manifest-ref '(scheme comparator)))
+                "(import (scheme base) (stdlib manifest))
+                 (let ((entry (srfi-manifest-ref '(stdlib comparator)))
+                       (scheme-alias
+                        (srfi-manifest-ref '(scheme comparator)))
                        (alias (srfi-manifest-ref '(srfi 128)))
                        (portable-alias
                         (srfi-manifest-ref '(srfi srfi-128))))
@@ -1247,9 +1262,10 @@
                          (cdr (assq 'local-license entry))
                          (cdr (assq 'import-aliases entry))
                          (cdr (assq 'dependencies entry))
+                         (cdr (assq 'target scheme-alias))
                          (cdr (assq 'target alias))
                          (cdr (assq 'target portable-alias))))"
-                "(vendored-adapted-implementation (scheme comparator) \"MIT\" \"MIT\" ((scheme comparator) (srfi 128) (srfi srfi-128)) ((scheme base) (scheme case-lambda) (scheme char) (scheme inexact) (scheme complex)) (scheme comparator) (scheme comparator))")
+                "(vendored-adapted-implementation (stdlib comparator) \"MIT\" \"MIT\" ((stdlib comparator) (scheme comparator) (srfi 128) (srfi srfi-128)) ((scheme base) (scheme case-lambda) (scheme char) (scheme inexact) (scheme complex)) (stdlib comparator) (stdlib comparator) (stdlib comparator))")
 
 (check-external 'base-list-helpers
                 "(list (length (append '(1 2) '(3 4)))
