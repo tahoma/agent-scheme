@@ -518,6 +518,18 @@
               (=? string-comparator \"same\" \"same\")))")
     "(#t #t)")))
 
+(ert-deftest consent-library-test-srfi-128-portable-alias-import ()
+  "Import SRFI 128 through its portable `(srfi srfi-128)' alias."
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (srfi srfi-128))
+      (let ((string-comparator
+             (make-comparator string? string=? string<? string-hash)))
+        (list (<? string-comparator \"ant\" \"bee\")
+              (=? string-comparator \"same\" \"same\")))")
+    "(#t #t)")))
+
 (ert-deftest consent-library-test-srfi-128-missing-export-diagnostic ()
   "Report missing SRFI 128 imports through the ordinary resolver diagnostic."
   (let ((error
@@ -543,15 +555,17 @@
     (consent-library-test--external
      "(import (scheme base) (srfi manifest))
       (let ((entry (srfi-manifest-ref '(scheme comparator)))
-            (alias (srfi-manifest-ref '(srfi 128))))
+            (alias (srfi-manifest-ref '(srfi 128)))
+            (portable-alias (srfi-manifest-ref '(srfi srfi-128))))
         (list (cdr (assq 'status entry))
               (cdr (assq 'implementation-library entry))
               (cdr (assq 'upstream-license entry))
               (cdr (assq 'local-license entry))
               (cdr (assq 'import-aliases entry))
               (cdr (assq 'dependencies entry))
-              (cdr (assq 'target alias))))")
-    "(vendored-adapted-implementation (scheme comparator) \"MIT\" \"MIT\" ((scheme comparator) (srfi 128)) ((scheme base) (scheme case-lambda) (scheme char) (scheme inexact) (scheme complex)) (scheme comparator))")))
+              (cdr (assq 'target alias))
+              (cdr (assq 'target portable-alias))))")
+    "(vendored-adapted-implementation (scheme comparator) \"MIT\" \"MIT\" ((scheme comparator) (srfi 128) (srfi srfi-128)) ((scheme base) (scheme case-lambda) (scheme char) (scheme inexact) (scheme complex)) (scheme comparator) (scheme comparator))")))
 
 (ert-deftest consent-library-test-standard-char-and-cxr-imports ()
   "Import `(scheme char)' and `(scheme cxr)' bindings."
