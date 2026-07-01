@@ -284,8 +284,8 @@
          "scheme/srfi/manifest.sld"
          "srfi/manifest.sld")
         ((scheme comparator)
-         "scheme/srfi/128.sld"
-         "srfi/128.sld")
+         "scheme/stdlib-plus/comparator.sld"
+         "stdlib-plus/comparator.sld")
         ((consent json)
          "scheme/consent/json.sld"
          "consent/json.sld")))
