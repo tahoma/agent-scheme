@@ -145,6 +145,7 @@
     ;; SRFI / stdlib-plus library keys recognized by the portable registry.
     (define srfi-source-library-keys
       '((srfi manifest)
+        (scheme comparator)
         (consent json)))
 
     ;; Registry aliases can expose a target library directly or as a subset.
@@ -153,6 +154,8 @@
          (target . (consent json)))
         ((alias . (srfi srfi-180))
          (target . (consent json)))
+        ((alias . (srfi 128))
+         (target . (scheme comparator)))
         ((alias . (consent json read))
          (target . (consent json))
          (exports json-number-of-character-limit
@@ -280,6 +283,9 @@
       '(((srfi manifest)
          "scheme/srfi/manifest.sld"
          "srfi/manifest.sld")
+        ((scheme comparator)
+         "scheme/srfi/128.sld"
+         "srfi/128.sld")
         ((consent json)
          "scheme/consent/json.sld"
          "consent/json.sld")))
