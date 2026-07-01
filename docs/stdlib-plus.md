@@ -12,7 +12,7 @@ and provenance metadata, not a separate source-tree layer.
 
 | Library | Status | Source | Imports | Notes |
 | --- | --- | --- | --- | --- |
-| `(srfi 180)` | implemented | Local portable implementation, recorded in `(srfi manifest)` | `(srfi 180)`, `(srfi srfi-180)`, `(consent json)` | JSON boundary codec used by tool-calling and protocol edges. |
+| `(consent json)` | implemented | Local portable implementation, recorded in `(srfi manifest)` | `(consent json)`, `(srfi 180)`, `(srfi srfi-180)` | JSON boundary codec used by tool-calling and protocol edges; SRFI spellings are compatibility aliases. |
 | `(scheme comparator)` | implemented | Vendored adapted SRFI 128 sample implementation, recorded in `(srfi manifest)` | `(scheme comparator)`, `(srfi 128)`, `(srfi srfi-128)` | Canonical spelling follows R7RS-large; SRFI spellings are secondary compatibility aliases. |
 
 The Scheme-readable `(srfi manifest)` library records source URLs, upstream
