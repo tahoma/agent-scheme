@@ -76,13 +76,13 @@
     "(scheme write)")
   "Standard R7RS library keys with focused bootstrap support.")
 
-(defconst consent--srfi-source-library-keys
+(defconst consent--stdlib-plus-source-library-keys
   '("(srfi manifest)"
     "(scheme comparator)"
     "(consent json)")
-  "Optional SRFI / stdlib-plus library keys backed by source files.")
+  "Optional stdlib-plus library keys backed by source files.")
 
-(defconst consent--srfi-library-aliases
+(defconst consent--stdlib-plus-library-aliases
   '(((:alias . "(srfi 180)")
      (:target . "(consent json)"))
     ((:alias . "(srfi srfi-180)")
@@ -101,14 +101,14 @@
                   "json-read"
                   "json-lines-read"
                   "json-sequence-read"))))
-  "Optional SRFI / stdlib-plus import aliases.")
+  "Optional stdlib-plus import aliases.")
 
-(defconst consent--srfi-library-keys
-  (append consent--srfi-source-library-keys
+(defconst consent--stdlib-plus-library-keys
+  (append consent--stdlib-plus-source-library-keys
           (mapcar (lambda (alias)
                     (cdr (assq :alias alias)))
-                  consent--srfi-library-aliases))
-  "Optional SRFI / stdlib-plus library keys with focused support.")
+                  consent--stdlib-plus-library-aliases))
+  "Optional stdlib-plus library keys with focused support.")
 
 (defconst consent--agent-library-keys
   '("(agent io)"
@@ -190,14 +190,14 @@ core rather than the agent domain it governs.")
      . "../scheme/standard-library/lazy.sld"))
   "Checked-in portable standard libraries loaded as Scheme source.")
 
-(defconst consent--srfi-source-library-files
+(defconst consent--stdlib-plus-source-library-files
   '(("(srfi manifest)"
-     . "../scheme/srfi/manifest.sld")
+     . "../scheme/stdlib-plus/manifest.sld")
     ("(scheme comparator)"
      . "../scheme/stdlib-plus/comparator.sld")
     ("(consent json)"
      . "../scheme/consent/json.sld"))
-  "Checked-in optional SRFI libraries loaded as Scheme source.")
+  "Checked-in optional stdlib-plus libraries loaded as Scheme source.")
 
 (defun consent--standard-source-library-file (key)
   "Return the bundled source file path for standard library KEY."
@@ -218,21 +218,21 @@ core rather than the agent domain it governs.")
       (insert-file-contents source-file)
       (buffer-string))))
 
-(defun consent--srfi-source-library-file (key)
-  "Return the bundled source file path for SRFI library KEY."
+(defun consent--stdlib-plus-source-library-file (key)
+  "Return the bundled source file path for stdlib-plus library KEY."
   (let ((relative-file
-         (cdr (assoc key consent--srfi-source-library-files))))
+         (cdr (assoc key consent--stdlib-plus-source-library-files))))
     (unless relative-file
       (consent--eval-error
-       "SRFI source library is not available: %s" key))
+       "stdlib-plus source library is not available: %s" key))
     (expand-file-name relative-file consent--library-source-directory)))
 
-(defun consent--srfi-source-library-source (key)
-  "Return the checked-in source for SRFI library KEY."
-  (let ((source-file (consent--srfi-source-library-file key)))
+(defun consent--stdlib-plus-source-library-source (key)
+  "Return the checked-in source for stdlib-plus library KEY."
+  (let ((source-file (consent--stdlib-plus-source-library-file key)))
     (unless (file-readable-p source-file)
       (consent--eval-error
-       "SRFI source library file is not readable: %s" source-file))
+       "stdlib-plus source library file is not readable: %s" source-file))
     (with-temp-buffer
       (insert-file-contents source-file)
       (buffer-string))))
@@ -872,24 +872,24 @@ Each spec has (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY)."
     (_
      (consent--eval-error "unknown standard library: %s" key))))
 
-(defun consent--register-srfi-library (key context environment)
-  "Register optional SRFI / stdlib-plus library KEY in CONTEXT."
+(defun consent--register-stdlib-plus-library (key context environment)
+  "Register optional stdlib-plus library KEY in CONTEXT."
   (let ((alias-spec
-         (consent--library-alias-spec key consent--srfi-library-aliases)))
+         (consent--library-alias-spec key consent--stdlib-plus-library-aliases)))
     (cond
      (alias-spec
       (consent--register-library-alias alias-spec context environment))
-     ((assoc key consent--srfi-source-library-files)
+     ((assoc key consent--stdlib-plus-source-library-files)
       (unless (gethash key (consent--eval-context-libraries context))
         (consent--register-source-library
-         (consent--srfi-source-library-source key)
+         (consent--stdlib-plus-source-library-source key)
          context
          environment)))
-     ((member key consent--srfi-library-keys)
+     ((member key consent--stdlib-plus-library-keys)
       (consent--eval-error
-       "SRFI library has no registration strategy: %s" key))
+       "stdlib-plus library has no registration strategy: %s" key))
      (t
-      (consent--eval-error "unknown SRFI library: %s" key)))))
+      (consent--eval-error "unknown stdlib-plus library: %s" key)))))
 
 (defun consent--filter-library-exports (exports export-names key)
   "Return EXPORTS narrowed to EXPORT-NAMES for alias library KEY."
@@ -948,7 +948,7 @@ Each spec has (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY)."
       t)
      ((member key consent--standard-library-keys)
       t)
-     ((member key consent--srfi-library-keys)
+     ((member key consent--stdlib-plus-library-keys)
       t)
      ((member key consent--agent-library-keys)
       t)
@@ -968,8 +968,8 @@ Each spec has (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY)."
       (consent--register-scheme-base-library context environment))
      ((member key consent--standard-library-keys)
       (consent--register-standard-library key context environment))
-     ((member key consent--srfi-library-keys)
-      (consent--register-srfi-library key context environment))
+     ((member key consent--stdlib-plus-library-keys)
+      (consent--register-stdlib-plus-library key context environment))
      ((member key consent--agent-library-keys)
       (consent--register-agent-library key context environment))
      ((member key consent--consent-library-keys)

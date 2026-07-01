@@ -842,6 +842,12 @@ directly as implementation bootstrap data; this is separate from user-level
 Host-effecting standard libraries continue to be registered through explicit
 adapter or primitive policy surfaces instead of portable source files.
 
+Optional SRFI and R7RS-large libraries belong under `scheme/stdlib-plus/`,
+not under a separate provenance-based source tree.  The Scheme-readable
+`(srfi manifest)` library records SRFI source URLs, upstream revisions,
+licenses, aliases, and local patches for this optional layer; SRFI names are
+public import compatibility and metadata, not filesystem ownership.
+
 ## Agent Skills Interop
 
 The ecosystem Agent Skills directory format is the public interchange format.

@@ -33,13 +33,14 @@ Libraries that observe or mutate host state, such as `(scheme file)`,
 and current/default ports, are importable where appropriate but default to
 policy-gated behavior.
 
-SRFI support is not part of the R7RS-small compliance contract. Optional SRFI
-libraries belong to the `stdlib-plus` layer tracked separately in
+SRFI and R7RS-large support is not part of the R7RS-small compliance contract.
+Optional libraries belong to the `stdlib-plus` layer tracked separately in
 [tahoma/consent#54](https://github.com/tahoma/consent/issues/54). Consent
 Scheme currently ships an owned portable `(consent json)` translator for
 protocol/document boundaries, with `(srfi 180)` and `(srfi srfi-180)`
-compatibility imports. SRFI import failures outside implemented `stdlib-plus`
-libraries should not be read as R7RS-small conformance failures.
+compatibility imports, plus R7RS-large `(scheme comparator)` with `(srfi 128)`
+compatibility. Import failures outside implemented `stdlib-plus` libraries
+should not be read as R7RS-small conformance failures.
 
 The multi-host bootstrap strategy lives in
 [docs/multi-host-bootstrap.md](docs/multi-host-bootstrap.md). It records how
@@ -111,11 +112,11 @@ R7RS-small library imports and ordinary macros:
      (string-append label ": " (describe value)))))
 ```
 
-Optional SRFI imports should be guarded so portable R7RS-small code still runs
-when the `stdlib-plus` layer is unavailable:
+Optional `stdlib-plus` imports should be guarded so portable R7RS-small code
+still runs when the layer is unavailable:
 
 ```scheme
-(define-library (consent examples optional-srfi)
+(define-library (consent examples optional-stdlib-plus)
   (export sample)
   (import (scheme base))
   (cond-expand

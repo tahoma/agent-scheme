@@ -35,6 +35,7 @@
           consent-base-prelude-binding-specs
           consent-base-binding-specs
           consent-standard-source-library-specs
+          consent-stdlib-plus-source-library-specs
           consent-primitive-manifest-binding-specs
           consent-result->external
           consent-value->external
