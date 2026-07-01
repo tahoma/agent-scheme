@@ -339,7 +339,7 @@
           (scheme char)
           (consent version)
           (consent reader)
-          (consent redaction))
+          (agent redaction))
   (begin
     ;; Default evaluator step budget for one expansion or evaluation run.
     (define consent-default-maximum-steps 100000)

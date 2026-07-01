@@ -6,16 +6,16 @@
 ;;; candidate datums.  Host adapters own persistence, approval prompts, and
 ;;; tracked project file writes.
 
-(define-library (consent helper)
+(define-library (agent helper)
   (export consent-helper-scopes
           consent-make-helper-store
           consent-helper-store?
-          helper-save!
-          helper-ref
-          helper-list
+          helper-store-save!
+          helper-store-ref
+          helper-store-list
           helper-record-name
           helper-record-forms
-          artifact-save!
+          helper-store-artifact-save!
           helper-promote-to-skill)
   (import (scheme base)
           (consent reader))
@@ -147,7 +147,7 @@
             (loop (cdr records) result))
            (else (loop (cdr records) (cons (car records) result)))))))
 
-    (define (helper-ref store scope library-name)
+    (define (helper-store-ref store scope library-name)
       "Return a helper record from STORE by SCOPE and LIBRARY-NAME, or #f."
       #((parameters
          (store (type consent-helper-store)
@@ -166,7 +166,7 @@
            ((equal? (helper-record-name (car records)) name) (car records))
            (else (loop (cdr records)))))))
 
-    (define (helper-list store scope)
+    (define (helper-store-list store scope)
       "Return helper records in SCOPE."
       #((parameters
          (store (type consent-helper-store)
@@ -192,7 +192,7 @@
               (list 'created-at created-at)
               (list 'updated-at (integer-datum sequence)))))
 
-    (define (helper-save! store scope library-name forms source)
+    (define (helper-store-save! store scope library-name forms source)
       "Store FORMS as helper LIBRARY-NAME in SCOPE and return its record."
       #((parameters
          (store (type consent-helper-store)
@@ -208,7 +208,7 @@
         (effects state-write error))
       (let* ((normalized-scope (normalize-scope scope))
              (name (normalize-library-name library-name))
-             (existing (helper-ref store normalized-scope name))
+             (existing (helper-store-ref store normalized-scope name))
              (record (make-helper-record store
                                          normalized-scope
                                          name
@@ -245,7 +245,7 @@
               (list 'created-at created-at)
               (list 'updated-at (integer-datum sequence)))))
 
-    (define (artifact-save! store scope name datum source)
+    (define (helper-store-artifact-save! store scope name datum source)
       "Store artifact NAME with DATUM in SCOPE and return its record."
       #((parameters
          (store (type consent-helper-store)
@@ -323,7 +323,7 @@
           ("An `agent-skill-candidate` datum derived from"
             "HELPER-RECORD.")))
         (effects pure)
-        (see-also helper-save! helper-record-name helper-record-forms))
+        (see-also helper-store-save! helper-record-name helper-record-forms))
       (let ((name (candidate-name helper-record options))
             (library-name (helper-record-name helper-record)))
         (append

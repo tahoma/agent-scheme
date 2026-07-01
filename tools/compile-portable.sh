@@ -148,22 +148,13 @@ native_library_table() {
 (agent proposal)|agent/proposal.sld|consent-main:agent-proposal:
 (agent runner)|agent/runner.sld|consent-main:agent-runner:
 (agent prompt)|agent/prompt.sld|consent-main:agent-prompt:
-(consent approval)|consent/approval.sld|consent-main:approval:
 (consent base)|consent/base.sld|consent-main:base:
-(consent context)|consent/context.sld|consent-main:context:
 (consent eval)|consent/eval.sld|consent-main:eval:
-(consent helper)|consent/helper.sld|consent-main:helper:
 (consent interpreter)|consent/interpreter.sld|consent-main:interpreter:
-(consent job)|consent/job.sld|consent-main:job:
-(consent json)|consent/json.sld|consent-main:json:
 (consent library)|consent/library.sld|consent-main:library:
 (consent macro)|consent/macro.sld|consent-main:macro:
-(consent memory)|consent/memory.sld|consent-main:memory:
-(consent plan)|consent/plan.sld|consent-main:plan:
 (consent reader)|consent/reader.sld|consent-main:reader:
-(consent redaction)|consent/redaction.sld|consent-main:redaction:
 (consent runtime)|consent/runtime.sld|consent-main:runtime:
-(consent session)|consent/session.sld|consent-main:session:
 (consent version)|consent/version.sld|consent-main:version:
 (cli native-cli)|cli/native-cli.sld|consent-main:cli-native-cli:
 (cli process-host)|cli/process-host.sld|consent-main:cli-process-host:
@@ -312,23 +303,23 @@ write_racket_main_common() {
         (prefix (agent proposal) consent-main:agent-proposal:)
         (prefix (agent runner) consent-main:agent-runner:)
         (prefix (agent prompt) consent-main:agent-prompt:)
-        (prefix (consent approval) consent-main:approval:)
+        (prefix (agent approval) consent-main:agent-approval:)
+        (prefix (agent context) consent-main:agent-context:)
+        (prefix (agent helper) consent-main:agent-helper:)
+        (prefix (agent job) consent-main:agent-job:)
+        (prefix (agent memory) consent-main:agent-memory:)
+        (prefix (agent plan) consent-main:agent-plan:)
+        (prefix (agent redaction) consent-main:agent-redaction:)
+        (prefix (agent session) consent-main:agent-session:)
+        (prefix (stdlib json) consent-main:stdlib-json:)
         (prefix (consent base) consent-main:base:)
-        (prefix (consent context) consent-main:context:)
         (prefix (consent eval) consent-main:eval:)
-        (prefix (consent helper) consent-main:helper:)
         (prefix (consent interpreter) consent-main:interpreter:)
-        (prefix (consent job) consent-main:job:)
-        (prefix (consent json) consent-main:json:)
         (prefix (consent library) consent-main:library:)
         (prefix (consent macro) consent-main:macro:)
-        (prefix (consent memory) consent-main:memory:)
-        (prefix (consent plan) consent-main:plan:)
         (prefix (consent reader) consent-main:reader:)
-        (prefix (consent redaction) consent-main:redaction:)
         (prefix (consent result) consent-main:result:)
         (prefix (consent runtime) consent-main:runtime:)
-        (prefix (consent session) consent-main:session:)
         (prefix (consent version) consent-main:version:)
         (prefix (cli process-host) consent-main:cli-process-host:)
         (prefix (cli native-cli) consent-main:cli-native-cli:)
@@ -603,23 +594,23 @@ write_gambit_main_common() {
         (prefix (agent proposal) consent-main:agent-proposal:)
         (prefix (agent runner) consent-main:agent-runner:)
         (prefix (agent prompt) consent-main:agent-prompt:)
-        (prefix (consent approval) consent-main:approval:)
+        (prefix (agent approval) consent-main:agent-approval:)
+        (prefix (agent context) consent-main:agent-context:)
+        (prefix (agent helper) consent-main:agent-helper:)
+        (prefix (agent job) consent-main:agent-job:)
+        (prefix (agent memory) consent-main:agent-memory:)
+        (prefix (agent plan) consent-main:agent-plan:)
+        (prefix (agent redaction) consent-main:agent-redaction:)
+        (prefix (agent session) consent-main:agent-session:)
+        (prefix (stdlib json) consent-main:stdlib-json:)
         (prefix (consent base) consent-main:base:)
-        (prefix (consent context) consent-main:context:)
         (prefix (consent eval) consent-main:eval:)
-        (prefix (consent helper) consent-main:helper:)
         (prefix (consent interpreter) consent-main:interpreter:)
-        (prefix (consent job) consent-main:job:)
-        (prefix (consent json) consent-main:json:)
         (prefix (consent library) consent-main:library:)
         (prefix (consent macro) consent-main:macro:)
-        (prefix (consent memory) consent-main:memory:)
-        (prefix (consent plan) consent-main:plan:)
         (prefix (consent reader) consent-main:reader:)
-        (prefix (consent redaction) consent-main:redaction:)
         (prefix (consent result) consent-main:result:)
         (prefix (consent runtime) consent-main:runtime:)
-        (prefix (consent session) consent-main:session:)
         (prefix (consent version) consent-main:version:)
         (prefix (cli process-host) consent-main:cli-process-host:)
         (prefix (cli native-cli) consent-main:cli-native-cli:)
@@ -1408,32 +1399,32 @@ compile_gambit() {
     "$scheme_dir/consent/macro.sld" \
     "$src_dir/consent/macro.sld"
   copy_gambit_source \
-    "$scheme_dir/consent/approval.sld" \
-    "$src_dir/consent/approval.sld"
+    "$scheme_dir/agent/approval.sld" \
+    "$src_dir/agent/approval.sld"
   copy_gambit_source \
-    "$scheme_dir/consent/context.sld" \
-    "$src_dir/consent/context.sld"
+    "$scheme_dir/agent/context.sld" \
+    "$src_dir/agent/context.sld"
   copy_gambit_source \
-    "$scheme_dir/consent/helper.sld" \
-    "$src_dir/consent/helper.sld"
+    "$scheme_dir/agent/helper.sld" \
+    "$src_dir/agent/helper.sld"
   copy_gambit_source \
-    "$scheme_dir/consent/job.sld" \
-    "$src_dir/consent/job.sld"
+    "$scheme_dir/agent/job.sld" \
+    "$src_dir/agent/job.sld"
   copy_gambit_source \
-    "$scheme_dir/consent/json.sld" \
-    "$src_dir/consent/json.sld"
+    "$scheme_dir/stdlib/json.sld" \
+    "$src_dir/stdlib/json.sld"
   copy_gambit_source \
-    "$scheme_dir/consent/memory.sld" \
-    "$src_dir/consent/memory.sld"
+    "$scheme_dir/agent/memory.sld" \
+    "$src_dir/agent/memory.sld"
   copy_gambit_source \
-    "$scheme_dir/consent/plan.sld" \
-    "$src_dir/consent/plan.sld"
+    "$scheme_dir/agent/plan.sld" \
+    "$src_dir/agent/plan.sld"
   copy_gambit_source \
-    "$scheme_dir/consent/redaction.sld" \
-    "$src_dir/consent/redaction.sld"
+    "$scheme_dir/agent/redaction.sld" \
+    "$src_dir/agent/redaction.sld"
   copy_gambit_source \
-    "$scheme_dir/consent/session.sld" \
-    "$src_dir/consent/session.sld"
+    "$scheme_dir/agent/session.sld" \
+    "$src_dir/agent/session.sld"
   copy_gambit_source \
     "$scheme_dir/consent/interpreter.sld" \
     "$src_dir/consent/interpreter.sld"
@@ -1499,7 +1490,7 @@ compile_gambit() {
   # the per-module compiled artifacts are $src_dir/<ref>.c and $src_dir/<ref>.o.
   # (consent embedded-source) is generated into $src_dir; every other module's
   # source lives under $scheme_dir.
-  gambit_module_order='consent/version consent/reader consent/runtime consent/base consent/library consent/result consent/macro consent/approval consent/context consent/helper consent/job consent/json consent/memory consent/plan consent/redaction consent/session cli/process-host agent/models/openai agent/task agent/transcript agent/registry agent/proposal agent/runner agent/prompt consent/interpreter consent/eval cli/native-cli cli/repl-chrome cli/repl-shell cli/script consent/embedded-source'
+  gambit_module_order='consent/version consent/reader consent/runtime consent/base consent/library consent/result consent/macro agent/approval agent/context agent/helper agent/job stdlib/json agent/memory agent/plan agent/redaction agent/session cli/process-host agent/models/openai agent/task agent/transcript agent/registry agent/proposal agent/runner agent/prompt consent/interpreter consent/eval cli/native-cli cli/repl-chrome cli/repl-shell cli/script consent/embedded-source'
 
   gambit_module_source() {
     case "$1" in

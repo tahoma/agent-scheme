@@ -961,8 +961,8 @@ warns about them.
   `test-portable-compiled`) fail only on
   `standard-source-library-case-lambda-file` /
   `standard-source-library-lazy-file` -- expecting a relative
-  `scheme/standard-library/*.sld` but getting an absolute
-  `/usr/local/share/consent/<version>/standard-library/*.sld` -- it is almost
+  `scheme/consent/*.sld` but getting an absolute
+  `/usr/local/share/consent/<version>/consent/*.sld` -- it is almost
   always a stale local install, not a regression. The compiled binary is built
   with `CONSENT_INSTALL_DATADIR=/usr/local/share/consent/<version>` and searches
   that datadir before the cwd-relative source tree. Tell-tale signs: the failing

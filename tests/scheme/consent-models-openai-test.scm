@@ -12,7 +12,7 @@
         (only (agent models openai)
               model-openai-request-json
               model-openai-parse-response)
-        (only (consent json)
+        (only (stdlib json)
               json-null?
               json-read
               json-write))

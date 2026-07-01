@@ -76,23 +76,41 @@
     "(scheme write)")
   "Standard R7RS library keys with focused bootstrap support.")
 
-(defconst consent--stdlib-plus-source-library-keys
-  '("(srfi manifest)"
-    "(scheme comparator)"
-    "(consent json)")
-  "Optional stdlib-plus library keys backed by source files.")
+(defconst consent--stdlib-source-library-keys
+  '("(stdlib manifest)"
+    "(stdlib comparator)"
+    "(stdlib json)")
+  "Optional stdlib library keys backed by source files.")
 
-(defconst consent--stdlib-plus-library-aliases
-  '(((:alias . "(srfi 180)")
-     (:target . "(consent json)"))
+(defconst consent--stdlib-library-aliases
+  '(((:alias . "(srfi manifest)")
+     (:target . "(stdlib manifest)"))
+    ((:alias . "(consent json)")
+     (:target . "(stdlib json)"))
+    ((:alias . "(srfi 180)")
+     (:target . "(stdlib json)"))
     ((:alias . "(srfi srfi-180)")
-     (:target . "(consent json)"))
+     (:target . "(stdlib json)"))
+    ((:alias . "(scheme comparator)")
+     (:target . "(stdlib comparator)"))
     ((:alias . "(srfi 128)")
-     (:target . "(scheme comparator)"))
+     (:target . "(stdlib comparator)"))
     ((:alias . "(srfi srfi-128)")
-     (:target . "(scheme comparator)"))
+     (:target . "(stdlib comparator)"))
+    ((:alias . "(stdlib json read)")
+     (:target . "(stdlib json)")
+     (:exports . ("json-number-of-character-limit"
+                  "json-nesting-depth-limit"
+                  "json-null?"
+                  "json-error?"
+                  "json-error-reason"
+                  "json-fold"
+                  "json-generator"
+                  "json-read"
+                  "json-lines-read"
+                  "json-sequence-read")))
     ((:alias . "(consent json read)")
-     (:target . "(consent json)")
+     (:target . "(stdlib json)")
      (:exports . ("json-number-of-character-limit"
                   "json-nesting-depth-limit"
                   "json-null?"
@@ -103,14 +121,14 @@
                   "json-read"
                   "json-lines-read"
                   "json-sequence-read"))))
-  "Optional stdlib-plus import aliases.")
+  "Optional stdlib import aliases.")
 
-(defconst consent--stdlib-plus-library-keys
-  (append consent--stdlib-plus-source-library-keys
+(defconst consent--stdlib-library-keys
+  (append consent--stdlib-source-library-keys
           (mapcar (lambda (alias)
                     (cdr (assq :alias alias)))
-                  consent--stdlib-plus-library-aliases))
-  "Optional stdlib-plus library keys with focused support.")
+                  consent--stdlib-library-aliases))
+  "Optional stdlib library keys with focused support.")
 
 (defconst consent--agent-library-keys
   '("(agent io)"
@@ -187,19 +205,19 @@ core rather than the agent domain it governs.")
 
 (defconst consent--standard-source-library-files
   '(("(scheme case-lambda)"
-     . "../scheme/standard-library/case-lambda.sld")
+     . "../scheme/consent/case-lambda.sld")
     ("(scheme lazy)"
-     . "../scheme/standard-library/lazy.sld"))
+     . "../scheme/consent/lazy.sld"))
   "Checked-in portable standard libraries loaded as Scheme source.")
 
-(defconst consent--stdlib-plus-source-library-files
-  '(("(srfi manifest)"
-     . "../scheme/stdlib-plus/manifest.sld")
-    ("(scheme comparator)"
-     . "../scheme/stdlib-plus/comparator.sld")
-    ("(consent json)"
-     . "../scheme/consent/json.sld"))
-  "Checked-in optional stdlib-plus libraries loaded as Scheme source.")
+(defconst consent--stdlib-source-library-files
+  '(("(stdlib manifest)"
+     . "../scheme/stdlib/manifest.sld")
+    ("(stdlib comparator)"
+     . "../scheme/stdlib/comparator.sld")
+    ("(stdlib json)"
+     . "../scheme/stdlib/json.sld"))
+  "Checked-in optional stdlib libraries loaded as Scheme source.")
 
 (defun consent--standard-source-library-file (key)
   "Return the bundled source file path for standard library KEY."
@@ -220,21 +238,21 @@ core rather than the agent domain it governs.")
       (insert-file-contents source-file)
       (buffer-string))))
 
-(defun consent--stdlib-plus-source-library-file (key)
-  "Return the bundled source file path for stdlib-plus library KEY."
+(defun consent--stdlib-source-library-file (key)
+  "Return the bundled source file path for stdlib library KEY."
   (let ((relative-file
-         (cdr (assoc key consent--stdlib-plus-source-library-files))))
+         (cdr (assoc key consent--stdlib-source-library-files))))
     (unless relative-file
       (consent--eval-error
-       "stdlib-plus source library is not available: %s" key))
+       "stdlib source library is not available: %s" key))
     (expand-file-name relative-file consent--library-source-directory)))
 
-(defun consent--stdlib-plus-source-library-source (key)
-  "Return the checked-in source for stdlib-plus library KEY."
-  (let ((source-file (consent--stdlib-plus-source-library-file key)))
+(defun consent--stdlib-source-library-source (key)
+  "Return the checked-in source for stdlib library KEY."
+  (let ((source-file (consent--stdlib-source-library-file key)))
     (unless (file-readable-p source-file)
       (consent--eval-error
-       "stdlib-plus source library file is not readable: %s" source-file))
+       "stdlib source library file is not readable: %s" source-file))
     (with-temp-buffer
       (insert-file-contents source-file)
       (buffer-string))))
@@ -874,24 +892,24 @@ Each spec has (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY)."
     (_
      (consent--eval-error "unknown standard library: %s" key))))
 
-(defun consent--register-stdlib-plus-library (key context environment)
-  "Register optional stdlib-plus library KEY in CONTEXT."
+(defun consent--register-stdlib-library (key context environment)
+  "Register optional stdlib library KEY in CONTEXT."
   (let ((alias-spec
-         (consent--library-alias-spec key consent--stdlib-plus-library-aliases)))
+         (consent--library-alias-spec key consent--stdlib-library-aliases)))
     (cond
      (alias-spec
       (consent--register-library-alias alias-spec context environment))
-     ((assoc key consent--stdlib-plus-source-library-files)
+     ((assoc key consent--stdlib-source-library-files)
       (unless (gethash key (consent--eval-context-libraries context))
         (consent--register-source-library
-         (consent--stdlib-plus-source-library-source key)
+         (consent--stdlib-source-library-source key)
          context
          environment)))
-     ((member key consent--stdlib-plus-library-keys)
+     ((member key consent--stdlib-library-keys)
       (consent--eval-error
-       "stdlib-plus library has no registration strategy: %s" key))
+       "stdlib library has no registration strategy: %s" key))
      (t
-      (consent--eval-error "unknown stdlib-plus library: %s" key)))))
+      (consent--eval-error "unknown stdlib library: %s" key)))))
 
 (defun consent--filter-library-exports (exports export-names key)
   "Return EXPORTS narrowed to EXPORT-NAMES for alias library KEY."
@@ -950,7 +968,7 @@ Each spec has (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY)."
       t)
      ((member key consent--standard-library-keys)
       t)
-     ((member key consent--stdlib-plus-library-keys)
+     ((member key consent--stdlib-library-keys)
       t)
      ((member key consent--agent-library-keys)
       t)
@@ -970,8 +988,8 @@ Each spec has (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY)."
       (consent--register-scheme-base-library context environment))
      ((member key consent--standard-library-keys)
       (consent--register-standard-library key context environment))
-     ((member key consent--stdlib-plus-library-keys)
-      (consent--register-stdlib-plus-library key context environment))
+     ((member key consent--stdlib-library-keys)
+      (consent--register-stdlib-library key context environment))
      ((member key consent--agent-library-keys)
       (consent--register-agent-library key context environment))
      ((member key consent--consent-library-keys)

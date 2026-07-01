@@ -67,11 +67,11 @@ mkdir -p "$build_dir/consent-lint" "$build_dir/cache"
 driver="$build_dir/consent-lint/driver.sld"
 setup="$build_dir/setup.scm"
 
-# stdlib-plus source is organized by repository layer rather than by every
+# stdlib source is organized by repository layer rather than by every
 # public import spelling.  Bare R7RS hosts still derive lookup paths from
 # library names, so mirror those public paths into the throwaway build tree for
 # this lint run.
-find "$scheme_dir/stdlib-plus" -name '*.sld' | sort | while IFS= read -r sld; do
+find "$scheme_dir/stdlib" -name '*.sld' | sort | while IFS= read -r sld; do
   name=$(sed -n 's/.*(define-library \(([^)]*)\).*/\1/p' "$sld" | head -n 1)
   [ -n "$name" ] || continue
   relative_name=$(printf '%s\n' "$name" | sed 's/^(\(.*\))$/\1/' | tr ' ' '/')

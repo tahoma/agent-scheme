@@ -55,7 +55,7 @@
                                   (member \"case-lambda\"
                                           (plist-get spec :exports))
                                   (string-match-p
-                                   \"scheme/standard-library/case-lambda.sld\"
+                                   \"scheme/consent/case-lambda.sld\"
                                    (plist-get spec :source-file)))
                        (kill-emacs 4))))")))
           (unless (equal status 0)
