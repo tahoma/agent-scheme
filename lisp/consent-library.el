@@ -194,7 +194,7 @@ core rather than the agent domain it governs.")
   '(("(srfi manifest)"
      . "../scheme/srfi/manifest.sld")
     ("(scheme comparator)"
-     . "../scheme/srfi/128.sld")
+     . "../scheme/stdlib-plus/comparator.sld")
     ("(consent json)"
      . "../scheme/consent/json.sld"))
   "Checked-in optional SRFI libraries loaded as Scheme source.")
