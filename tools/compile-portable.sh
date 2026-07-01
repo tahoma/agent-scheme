@@ -148,6 +148,14 @@ native_library_table() {
 (agent proposal)|agent/proposal.sld|consent-main:agent-proposal:
 (agent runner)|agent/runner.sld|consent-main:agent-runner:
 (agent prompt)|agent/prompt.sld|consent-main:agent-prompt:
+(agent approval)|agent/approval.sld|consent-main:agent-approval:
+(agent context)|agent/context.sld|consent-main:agent-context:
+(agent helper)|agent/helper.sld|consent-main:agent-helper:
+(agent job)|agent/job.sld|consent-main:agent-job:
+(agent memory)|agent/memory.sld|consent-main:agent-memory:
+(agent plan)|agent/plan.sld|consent-main:agent-plan:
+(agent redaction)|agent/redaction.sld|consent-main:agent-redaction:
+(agent session)|agent/session.sld|consent-main:agent-session:
 (consent base)|consent/base.sld|consent-main:base:
 (consent eval)|consent/eval.sld|consent-main:eval:
 (consent interpreter)|consent/interpreter.sld|consent-main:interpreter:
