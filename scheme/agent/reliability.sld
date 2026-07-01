@@ -70,9 +70,9 @@
                    (list (list 'finish final-state))))
 
     (define (trial-policy trial)
-      "Return the effective policy alist for TRIAL.
-Gate-enforced policy is intentionally always included; callers may request a
-gate ablation, but authority-denying rules are not removed."
+      "Return the effective policy alist for TRIAL.  Gate-enforced policy is"
+      "intentionally always included; callers may request a gate ablation, but"
+      "authority-denying rules are not removed."
       (append (field-value trial 'gate-policy '())
               (field-value trial 'policy '())))
 
