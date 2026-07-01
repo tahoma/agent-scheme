@@ -7,8 +7,8 @@
 ;;; https://github.com/scheme-requests-for-implementation/srfi-128.
 ;;; Local patches inline the upstream body files for Consent Scheme's
 ;;; source-library loader, document the exported procedures with Consent Scheme
-;;; metadata, use a local portable `default-hash`, and keep `(srfi 128)` as a
-;;; registry alias.
+;;; metadata, use a local portable `default-hash`, and keep `(srfi 128)` and
+;;; `(srfi srfi-128)` as registry aliases.
 
 (define-library (scheme comparator)
   (export comparator? comparator-ordered? comparator-hashable?

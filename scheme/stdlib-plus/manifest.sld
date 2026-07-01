@@ -49,7 +49,7 @@
                            (default-hash
                             (source local-portable-implementation))))
          (implementation-library . (scheme comparator))
-         (import-aliases . ((scheme comparator) (srfi 128)))
+         (import-aliases . ((scheme comparator) (srfi 128) (srfi srfi-128)))
          (dependencies . ((scheme base) (scheme case-lambda) (scheme char)
                           (scheme inexact) (scheme complex)))
          (test-status . (import-resolution representative-comparator-behavior
@@ -59,6 +59,12 @@
          (status . alias)
          (target . (scheme comparator))
          (import-aliases . ((srfi 128)))
+         (dependencies . ((scheme comparator)))
+         (test-status . (import-resolution)))
+        ((library . (srfi srfi-128))
+         (status . alias)
+         (target . (scheme comparator))
+         (import-aliases . ((srfi srfi-128)))
          (dependencies . ((scheme comparator)))
          (test-status . (import-resolution)))))
 

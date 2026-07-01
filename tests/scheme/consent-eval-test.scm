@@ -1227,18 +1227,29 @@
                          (=? string-comparator \"same\" \"same\")))"
                 "(#t #t)")
 
+(check-external 'srfi-128-portable-alias-import
+                "(import (scheme base) (srfi srfi-128))
+                 (let ((string-comparator
+                        (make-comparator string? string=? string<? string-hash)))
+                   (list (<? string-comparator \"ant\" \"bee\")
+                         (=? string-comparator \"same\" \"same\")))"
+                "(#t #t)")
+
 (check-external 'srfi-128-manifest
                 "(import (scheme base) (srfi manifest))
                  (let ((entry (srfi-manifest-ref '(scheme comparator)))
-                       (alias (srfi-manifest-ref '(srfi 128))))
+                       (alias (srfi-manifest-ref '(srfi 128)))
+                       (portable-alias
+                        (srfi-manifest-ref '(srfi srfi-128))))
                    (list (cdr (assq 'status entry))
                          (cdr (assq 'implementation-library entry))
                          (cdr (assq 'upstream-license entry))
                          (cdr (assq 'local-license entry))
                          (cdr (assq 'import-aliases entry))
                          (cdr (assq 'dependencies entry))
-                         (cdr (assq 'target alias))))"
-                "(vendored-adapted-implementation (scheme comparator) \"MIT\" \"MIT\" ((scheme comparator) (srfi 128)) ((scheme base) (scheme case-lambda) (scheme char) (scheme inexact) (scheme complex)) (scheme comparator))")
+                         (cdr (assq 'target alias))
+                         (cdr (assq 'target portable-alias))))"
+                "(vendored-adapted-implementation (scheme comparator) \"MIT\" \"MIT\" ((scheme comparator) (srfi 128) (srfi srfi-128)) ((scheme base) (scheme case-lambda) (scheme char) (scheme inexact) (scheme complex)) (scheme comparator) (scheme comparator))")
 
 (check-external 'base-list-helpers
                 "(list (length (append '(1 2) '(3 4)))
