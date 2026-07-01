@@ -30,6 +30,35 @@
          (target . (srfi 180))
          (import-aliases . ((srfi srfi-180)))
          (dependencies . ((srfi 180)))
+         (test-status . (import-resolution)))
+        ((library . (scheme comparator))
+         (status . vendored-adapted-implementation)
+         (source-url . "https://github.com/scheme-requests-for-implementation/srfi-128")
+         (upstream-revision . "3ec333638e787d75a16de83fcf9645c998e4d976")
+         (upstream-license . "MIT")
+         (local-license . "MIT")
+         (vendored? . #t)
+         (local-patches . ((library-name
+                            (from . (srfi 128))
+                            (to . (scheme comparator)))
+                           (inlined-includes
+                            (files "srfi/128.body1.scm" "srfi/128.body2.scm"))
+                           (documentation-metadata
+                            (scope exported-procedures))
+                           (default-hash
+                            (source local-portable-implementation))))
+         (implementation-library . (scheme comparator))
+         (import-aliases . ((scheme comparator) (srfi 128)))
+         (dependencies . ((scheme base) (scheme case-lambda) (scheme char)
+                          (scheme inexact) (scheme complex)))
+         (test-status . (import-resolution representative-comparator-behavior
+                         alias-import missing-export-diagnostic
+                         portable-host-suite)))
+        ((library . (srfi 128))
+         (status . alias)
+         (target . (scheme comparator))
+         (import-aliases . ((srfi 128)))
+         (dependencies . ((scheme comparator)))
          (test-status . (import-resolution)))))
 
     (define (srfi-manifest-ref library)
