@@ -346,15 +346,17 @@ nesting depth."
   (string-empty-p (string-trim string)))
 
 (defun consent-repl-stream--horizontal-whitespace-p (char)
-  "Return non-nil when CHAR is space or tab (horizontal whitespace, not a break)."
+  "Return non-nil when CHAR is space or tab.
+That is horizontal whitespace, not a break."
   (or (eq char ?\s) (eq char ?\t)))
 
 (defun consent-repl-stream--submission-boundary (buffer next)
-  "Return the index in BUFFER where program input begins after a form ending at NEXT.
-Skip horizontal whitespace after the form; if a newline follows, consume exactly
-that newline as the submission terminator (the Enter that submits a line is not
-program data), so program input begins on the next line.  Otherwise the boundary
-is NEXT and any same-line trailing text is program input for an evaluated read."
+  "Return where program input begins after a BUFFER form ending at NEXT.
+Skip horizontal whitespace after the form; if a newline follows, consume
+exactly that newline as the submission terminator (the Enter that submits a
+line is not program data), so program input begins on the next line.  Otherwise
+the boundary is NEXT and any same-line trailing text is program input for an
+evaluated read."
   (let ((length (length buffer))
         (index next)
         (result nil))
@@ -378,9 +380,10 @@ is NEXT and any same-line trailing text is program input for an evaluated read."
 
 (defun consent-repl-stream--interaction-options (session-id read-chunk options)
   "Augment REPL OPTIONS with the session id, a program-input reader over
-READ-CHUNK, and the consent-by-invocation stdin grant, so the interaction context
-shares one stdin cursor between the form reader and evaluated reads.  Grants
-already in OPTIONS are preserved by merging into the leading :capability-grants."
+READ-CHUNK, and the consent-by-invocation stdin grant, so the interaction
+context shares one stdin cursor between the form reader and evaluated reads.
+Grants already in OPTIONS are preserved by merging into the leading
+:capability-grants."
   (let ((reader (lambda ()
                   (let ((chunk (funcall read-chunk)))
                     (if (eq chunk consent-repl-stream--eof) nil chunk))))
@@ -640,10 +643,11 @@ written for."
 
 ;;;###autoload
 (defun consent-repl-stream-submissions-from-records (records)
-  "Return the external source text of each complete submission in RECORDS, in order.
-A `repl-submission' with `(complete #t)' contributes its `source'; an incomplete
-\(EOF-truncated) submission, prompts, results, conditions, and the exit record
-contribute nothing, so the result is exactly the forms a replay can re-feed."
+  "Return each complete submission's external source text from RECORDS.
+A `repl-submission' with `(complete #t)' contributes its `source'; an
+incomplete \(EOF-truncated) submission, prompts, results, conditions, and the
+exit record contribute nothing, so the result is exactly the forms a replay can
+re-feed."
   (let (sources)
     (dolist (record records (nreverse sources))
       (when (consent-repl-stream--complete-submission-p record)
@@ -660,7 +664,7 @@ reads the same forms."
 
 ;;;###autoload
 (defun consent-repl-stream-replay-records (records session &optional options)
-  "Replay captured RECORDS by re-feeding their complete submissions to a fresh SESSION.
+  "Replay captured RECORDS into a fresh SESSION.
 Return the new contract record stream.  Reproduces submissions, ordering, the
 close record, and deterministic results/conditions; a live host effect the
 replay posture does not grant fails closed as a `repl-condition' rather than
@@ -784,15 +788,17 @@ grant."
 ;;;###autoload
 (defun consent-repl-stream-capture-from-string
     (input session chrome-name &optional apply-faces options input-echoed)
-  "Drive a REPL over INPUT under SESSION and return the cons (CONTROL . PROGRAM-OUTPUT).
-CONTROL is the painted control-channel text (records, plus -- under the `comment'
-chrome -- its commented `;;   :: ' rendering of program output) and PROGRAM-OUTPUT
-is the raw program-output stream, the two halves the live binary keeps on stderr
-and stdout.  Under `comment' program output is in CONTROL (commented) and
+  "Drive a REPL over INPUT under SESSION.
+Return the cons (CONTROL . PROGRAM-OUTPUT).  CONTROL is the painted
+control-channel text (records, plus -- under the `comment' chrome -- its
+commented `;;   :: ' rendering of program output) and PROGRAM-OUTPUT is the
+raw program-output stream, the two halves the live binary keeps on stderr and
+stdout.  Under `comment' program output is in CONTROL (commented) and
 PROGRAM-OUTPUT is empty; under every other chrome program output is raw in
 PROGRAM-OUTPUT and CONTROL carries records only.  Faces are applied when
 APPLY-FACES is non-nil.  INPUT-ECHOED models a host that already echoes
-interaction input.  The Emacs twin of the portable `cli-repl-capture-from-string'."
+interaction input.  The Emacs twin of the portable
+`cli-repl-capture-from-string'."
   (let ((chrome (consent-repl-chrome-lookup chrome-name))
         (echo (consent-repl-chrome-output-formatter chrome-name session))
         (consent-repl-chrome-input-echoed input-echoed)
@@ -822,14 +828,14 @@ interaction input.  The Emacs twin of the portable `cli-repl-capture-from-string
     (input session chrome-name &optional apply-faces options input-echoed)
   "Drive a REPL over INPUT under SESSION and return the CHROME-NAME chrome's
 control-channel text -- the full replayable transcript: records, plus -- under
-the `comment' chrome -- its commented `;;   :: ' rendering of program output (which
-`comment' owns).  The raw program-output stream is the cdr of
-`consent-repl-stream-capture-from-string' and is dropped here.  Faces are applied
-when APPLY-FACES is non-nil, so omitting it recovers the plain text.  INPUT-ECHOED
-models a host that already echoes interaction input -- an interactive TTY -- so
-the comment chrome suppresses its own submission echo.  This is the host-neutral,
-buffer-free hook the chrome tests assert against, the Emacs twin of the portable
-`cli-repl-rendered-from-string'."
+the `comment' chrome -- its commented `;;   :: ' rendering of program output
+\(which `comment' owns).  The raw program-output stream is the cdr of
+`consent-repl-stream-capture-from-string' and is dropped here.  Faces are
+applied when APPLY-FACES is non-nil, so omitting it recovers the plain text.
+INPUT-ECHOED models a host that already echoes interaction input -- an
+interactive TTY -- so the comment chrome suppresses its own submission echo.
+This is the host-neutral, buffer-free hook the chrome tests assert against, the
+Emacs twin of the portable `cli-repl-rendered-from-string'."
   (car (consent-repl-stream-capture-from-string
         input session chrome-name apply-faces options input-echoed)))
 
@@ -863,14 +869,15 @@ run under `emacs -Q --batch -l consent-repl-stream -f consent-repl-stream-main'.
 
 ;;;###autoload
 (defun consent-repl-stream-replay-main ()
-  "Batch entry point: reload a captured transcript and replay it to a fresh session.
+  "Batch entry point: reload and replay a captured transcript.
 The transcript path is the first remaining command-line argument.  Replay its
-complete submissions to a fresh `consent-repl-stream-default-session', write the
-replayed contract record stream and the `repl-replay-report' to the error
-stream, and exit Emacs with 0 when the replay reproduced the captured outcomes
-or 1 when it diverged.  This is the Emacs parity twin of the portable shell's
-`--replay FILE' mode.  Intended to be run under
-`emacs -Q --batch -l consent-repl-stream -f consent-repl-stream-replay-main FILE'."
+complete submissions to a fresh `consent-repl-stream-default-session', write
+the replayed contract record stream and the `repl-replay-report' to the error
+stream, and exit Emacs with 0 when the replay reproduced the captured
+outcomes or 1 when it diverged.  This is the Emacs parity twin of the portable
+shell's `--replay FILE' mode.  Intended to be run under
+`emacs -Q --batch -l consent-repl-stream
+-f consent-repl-stream-replay-main FILE'."
   (let ((path (car command-line-args-left))
         (session consent-repl-stream-default-session))
     (unless path

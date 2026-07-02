@@ -3518,9 +3518,10 @@ DESCRIPTION names the primitive for errors."
 ;; effects gate separately.  Emacs parity twin of the portable
 ;; `(consent interpreter)' standard-stream connection.
 (defun consent--standard-stream-grant-p (grant backing operation)
-  "Report whether GRANT is an active `port' grant for OPERATION backed by BACKING.
-BACKING and OPERATION are Emacs symbols (e.g. `stdin'/`read'); grant fields carry
-interned Consent symbols, so the comparison is by symbol name."
+  "Report whether GRANT is an active `port' grant for OPERATION.
+The grant must be backed by BACKING.  BACKING and OPERATION are Emacs symbols
+\(e.g. `stdin'/`read'); grant fields carry interned Consent symbols, so the
+comparison is by symbol name."
   (and (consent--capability-grant-datum-p grant)
        (equal (consent--capability-grant-symbol-name
                (consent--capability-grant-field-value grant "domain"))
@@ -3556,10 +3557,11 @@ interned Consent symbols, so the comparison is by symbol name."
   "Synthetic primitive naming program-input refills for host-callback budgeting.")
 
 (defun consent--program-input-reader-from-options (options)
-  "Return the host input reader thunk from OPTIONS' `:program-input-reader', or nil.
-Program input is always a reader (a stream); a caller with finite in-memory input
-wraps it with `consent-program-input-from-string' rather than passing a raw
-string, so the finite case states its no-time-dimension nature explicitly."
+  "Return OPTIONS' `:program-input-reader' host input reader thunk.
+Return nil when OPTIONS do not supply a reader.  Program input is always a
+reader (a stream); a caller with finite in-memory input wraps it with
+`consent-program-input-from-string' rather than passing a raw string, so the
+finite case states its no-time-dimension nature explicitly."
   (let ((reader (consent--eval-option options :program-input-reader nil)))
     (and (functionp reader) reader)))
 
@@ -3584,9 +3586,10 @@ string, so the finite case states its no-time-dimension nature explicitly."
 
 (defun consent--program-input-refill! (port context)
   "Pull one more chunk from PORT's host reader onto its buffer.
-Return non-nil when characters were appended, nil at end of stream.  Each pull is
-charged against the host-callback budget and audited as a port read, so an
-unbounded stream stays budget-bounded and fail-closed like every host effect."
+Return non-nil when characters were appended, nil at end of stream.  Each
+pull is charged against the host-callback budget and audited as a port read,
+so an unbounded stream stays budget-bounded and fail-closed like every host
+effect."
   (unless (consent--program-input-eof-p port)
     (consent--note-host-callback context consent--program-input-refill-primitive)
     (let ((chunk (funcall (consent--program-input-reader-of port))))
@@ -3702,7 +3705,8 @@ holding a live host port."
   "Pull one more chunk from PORT's host byte reader onto its buffer.
 Return non-nil when bytes were appended, nil at end of stream.  Each pull is
 charged against the host-callback budget and audited as a port read, so an
-unbounded byte stream stays budget-bounded and fail-closed like every host effect."
+unbounded byte stream stays budget-bounded and fail-closed like every host
+effect."
   (unless (consent--program-binary-input-eof-p port)
     (consent--note-host-callback
      context consent--program-binary-input-refill-primitive)
@@ -3732,8 +3736,9 @@ unbounded byte stream stays budget-bounded and fail-closed like every host effec
 (defun consent--make-program-binary-input-port (grant reader)
   "Return a capability-gated, refill-on-demand binary input port for GRANT.
 The port is backed by the `stdio' domain so every read revalidates GRANT and
-audits the operation, and pulls bytes from READER on demand rather than holding a
-live host port.  Binary twin of `consent--make-program-input-port'."
+audits the operation, and pulls bytes from READER on demand rather than
+holding a live host port.  Binary twin of
+`consent--make-program-input-port'."
   (let* ((grant-id (consent--capability-grant-id grant))
          (limits (consent--port-capability-limits grant))
          (handle-id (consent--port-capability-handle-id))
@@ -3864,8 +3869,9 @@ flushes bytes through WRITER immediately.  Binary twin of
     (context device backing operation build install)
   "Connect one standard stream when DEVICE and a matching grant are present.
 DEVICE is the host reader/writer (or nil); BACKING/OPERATION select the grant;
-BUILD makes the port from GRANT; INSTALL stores it on CONTEXT.  Without the grant
-the connection is denied and recorded; without the device it is a no-op."
+BUILD makes the port from GRANT; INSTALL stores it on CONTEXT.  Without the
+grant the connection is denied and recorded; without the device it is a
+no-op."
   (when device
     (let ((grant (consent--find-standard-stream-grant context backing operation)))
       (consent-audit-record
@@ -3887,14 +3893,15 @@ the connection is denied and recorded; without the device it is a no-op."
 
 (defun consent--connect-standard-streams! (context options)
   "Connect CONTEXT's current input/output/error ports to the granted standard
-streams.  Each stream is wired only when OPTIONS supply its host device (a textual
-`:program-input-reader' thunk / `:program-output-writer' / `:program-error-writer',
-or the binary `:program-input-byte-reader' / `:program-output-byte-writer' /
-`:program-error-byte-writer' peers) AND CONTEXT holds a matching active `port'
-grant; absent the grant the stream fails closed, absent the device it is left
-untouched.  A stream is textual or binary, not both within a run: the binary
-device connects only when the textual device for the same stream is absent, so the
-established textual path takes precedence and the binary peer is purely additive.
+streams.  Each stream is wired only when OPTIONS supply its host device (a
+textual `:program-input-reader' thunk / `:program-output-writer' /
+`:program-error-writer', or the binary `:program-input-byte-reader' /
+`:program-output-byte-writer' / `:program-error-byte-writer' peers) AND CONTEXT
+holds a matching active `port' grant; absent the grant the stream fails closed,
+absent the device it is left untouched.  A stream is textual or binary, not
+both within a run: the binary device connects only when the textual device for
+the same stream is absent, so the established textual path takes precedence and
+the binary peer is purely additive.
 The standard streams are consented by invocation; ambient effects keep gating."
   (let ((reader (consent--program-input-reader-from-options options))
         (out-writer (consent--eval-option options :program-output-writer nil))

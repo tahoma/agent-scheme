@@ -157,10 +157,11 @@ echoes the typed form (`consent-repl-chrome-input-echoed' is bound on)."
         "")))
 
 (defun consent-repl-comint--render-output (text ordinal)
-  "Return program-output TEXT for the live buffer (the single-stream transcript).
-Under `comment' the chrome's output formatter yields the aligned `;;   :: ' echo
-for ORDINAL's turn; under every other chrome the formatter yields nil, so TEXT is
-inserted raw, exactly as a real REPL interleaves it."
+  "Return program-output TEXT for the live buffer.
+The live buffer is the single-stream transcript.
+Under `comment' the chrome's output formatter yields the aligned
+`;;   :: ' echo for ORDINAL's turn; under every other chrome the formatter
+yields nil, so TEXT is inserted raw, exactly as a real REPL interleaves it."
   (let ((consent-repl-chrome-output-ordinal ordinal))
     (or (consent-repl-chrome-paint
          (funcall (consent-repl-chrome-output-formatter
@@ -198,10 +199,11 @@ are shared with the session -- and emits a `repl-result' or `repl-condition'.
 An exit form emits a `repl-exit' and closes the session.  Program output written
 during evaluation is interleaved before the form's result -- formatted through
 the active chrome's output formatter, so `comment' renders it as the aligned
-`;;   :: ' gutter and every other chrome leaves it raw -- and the shared stdin
-cursor is seeded with the post-form program input so an evaluated read consumes
-it (#505).  An incomplete trailing form (reached only on a forced send) is
-reported as a recoverable unterminated-form read condition rather than swallowed.
+`;;   :: ' gutter and every other chrome leaves it raw -- and the shared
+stdin cursor is seeded with the post-form program input so an evaluated read
+consumes it (#505).  An incomplete trailing form (reached only on a forced
+send) is reported as a recoverable unterminated-form read condition rather
+than swallowed.
 Advances the ordinal/count as it goes."
   (let ((output "")
         (work buffer)
