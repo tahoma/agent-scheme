@@ -62,7 +62,9 @@
                            (default-hash
                             (source local-portable-implementation))
                            (stateful-hasher
-                            (source local-portable-optional-arguments))))
+                            (source local-portable-optional-arguments))
+                           (hash-helpers
+                            (source local-portable-procedures))))
          (implementation-library . (stdlib comparator))
          (import-aliases . ((stdlib comparator) (scheme comparator)
                             (srfi 128) (srfi srfi-128)))
