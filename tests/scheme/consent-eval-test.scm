@@ -1184,16 +1184,20 @@
         (find-source-library-spec '(stdlib and-let-star) source-specs))
        (comparator-spec
         (find-source-library-spec '(stdlib comparator) source-specs))
+       (receive-spec
+        (find-source-library-spec '(stdlib receive) source-specs))
        (json-spec
         (find-source-library-spec '(stdlib json) source-specs)))
   (check 'stdlib-source-library-files
          (and manifest-spec
               and-let-star-spec
               comparator-spec
+              receive-spec
               json-spec
               (string? (cadr (assq 'source-file manifest-spec)))
               (string? (cadr (assq 'source-file and-let-star-spec)))
               (string? (cadr (assq 'source-file comparator-spec)))
+              (string? (cadr (assq 'source-file receive-spec)))
               (string? (cadr (assq 'source-file json-spec))))
          #t)
   (check 'stdlib-source-library-manifest-file
@@ -1208,6 +1212,10 @@
          (and comparator-spec
               (cadr (assq 'source-file comparator-spec)))
          "scheme/stdlib/comparator.sld")
+  (check 'stdlib-source-library-receive-file
+         (and receive-spec
+              (cadr (assq 'source-file receive-spec)))
+         "scheme/stdlib/receive.sld")
   (check 'stdlib-source-library-json-file
          (and json-spec
               (cadr (assq 'source-file json-spec)))

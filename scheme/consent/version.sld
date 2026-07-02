@@ -13,4 +13,4 @@
   (begin
 	    ;; Define the canonical Consent Scheme version datum.
 	    (define consent-version-datum
-	      '(consent-version 0 17 23))))
+	      '(consent-version 0 17 24))))
