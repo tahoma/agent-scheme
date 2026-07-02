@@ -1265,7 +1265,7 @@
                          (cdr (assq 'target scheme-alias))
                          (cdr (assq 'target alias))
                          (cdr (assq 'target portable-alias))))"
-                "(vendored-adapted-implementation (stdlib comparator) \"MIT\" \"MIT\" ((stdlib comparator) (scheme comparator) (srfi 128) (srfi srfi-128)) ((scheme base) (scheme case-lambda) (scheme char) (scheme inexact) (scheme complex)) (stdlib comparator) (stdlib comparator) (stdlib comparator))")
+                "(vendored-adapted-implementation (stdlib comparator) \"MIT\" \"MIT\" ((stdlib comparator) (scheme comparator) (srfi 128) (srfi srfi-128)) ((scheme base) (scheme char) (scheme inexact) (scheme complex)) (stdlib comparator) (stdlib comparator) (stdlib comparator))")
 
 (check-external 'base-list-helpers
                 "(list (length (append '(1 2) '(3 4)))
