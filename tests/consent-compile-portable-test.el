@@ -257,7 +257,7 @@ failing closed on everything."
       (when (file-directory-p build-dir)
         (delete-directory build-dir t)))))
 
-(ert-deftest consent-compile-portable-test-gambit-links-stdlib-and-let-star ()
+(ert-deftest consent-compile-portable-test-gambit-links-stdlib-dependencies ()
   "Link source-backed stdlib dependencies into the Gambit runner."
   (let* ((script
           (consent-compile-portable-test--repo-file-string
@@ -278,11 +278,19 @@ failing closed on everything."
       gambit-main))
     (should
      (string-match-p
+      "(prefix (stdlib receive) consent-main:stdlib-receive:)"
+      gambit-main))
+    (should
+     (string-match-p
       "\"\\$scheme_dir/stdlib/and-let-star\\.sld\""
       script))
     (should
      (string-match-p
-      "gambit_module_order='[^']*stdlib/and-let-star[[:space:]]+stdlib/json"
+      "\"\\$scheme_dir/stdlib/receive\\.sld\""
+      script))
+    (should
+     (string-match-p
+      "gambit_module_order='[^']*stdlib/and-let-star[[:space:]]+stdlib/receive[[:space:]]+stdlib/json"
       script))))
 
 (ert-deftest consent-compile-portable-test-racket-builds-runner ()
