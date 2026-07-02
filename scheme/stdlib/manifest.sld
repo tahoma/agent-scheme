@@ -60,12 +60,14 @@
                            (documentation-metadata
                             (scope exported-procedures))
                            (default-hash
-                            (source local-portable-implementation))))
+                            (source local-portable-implementation))
+                           (stateful-hasher
+                            (source local-portable-optional-arguments))))
          (implementation-library . (stdlib comparator))
          (import-aliases . ((stdlib comparator) (scheme comparator)
                             (srfi 128) (srfi srfi-128)))
-         (dependencies . ((scheme base) (scheme case-lambda) (scheme char)
-                          (scheme inexact) (scheme complex)))
+         (dependencies . ((scheme base) (scheme char) (scheme inexact)
+                          (scheme complex)))
          (test-status . (import-resolution representative-comparator-behavior
                          alias-import missing-export-diagnostic
                          portable-host-suite)))

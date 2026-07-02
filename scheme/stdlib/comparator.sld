@@ -26,7 +26,6 @@
           =? <? >? <=? >=?
           comparator-if<=>)
   (import (scheme base)
-          (scheme case-lambda)
           (scheme char)
           (scheme inexact)
           (scheme complex))
@@ -391,11 +390,16 @@
     (define (make-hasher)
       "Return a stateful sequence hasher procedure."
       (let ((result (hash-salt)))
-        (case-lambda
-         (() result)
-         ((n)
-          (set! result (bounded-hash (+ (* result 33) n)))
-          result))))
+        ;; Upstream SRFI 128 uses case-lambda here. Keep ordinary optional
+        ;; arguments until #166 proves case-lambda in the compiled host path.
+        (lambda args
+          (cond
+           ((null? args) result)
+           ((null? (cdr args))
+            (set! result (bounded-hash (+ (* result 33) (car args))))
+            result)
+           (else
+            (error "hasher expects zero or one argument" args))))))
 
     (define (string-hash obj)
       "Return a hash value for string OBJ."
