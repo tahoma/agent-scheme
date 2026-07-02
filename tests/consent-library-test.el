@@ -366,6 +366,15 @@
        2 5)")
     "7")))
 
+(ert-deftest consent-library-test-srfi-16-case-lambda-no-matching-clause ()
+  "Report an error when an SRFI 16 case-lambda has no matching arity."
+  (should-error
+   (consent-library-test--external
+    "(import (scheme base) (srfi 16))
+     ((case-lambda
+        ((x) x)))")
+   :type 'consent-eval-error))
+
 (ert-deftest consent-library-test-srfi-16-missing-export-diagnostic ()
   "Report missing SRFI 16 imports through the resolver diagnostic."
   (let ((error
