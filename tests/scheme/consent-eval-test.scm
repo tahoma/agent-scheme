@@ -257,21 +257,23 @@
           (consent-eval-source source #f options))
          expected))
 
-;; Render a readable expected datum as canonical external text.
-(define (expected-external . fragments)
+;; Render a readable expected datum shape as canonical external text.
+;; Use this for value-shape assertions, not writer-format or literal-source
+;; oracles that must stay independent of the reader/writer pair.
+(define (expected-datum-external . fragments)
   (consent-datum->external
    (consent-read (apply string-append fragments)
                  '((source-metadata . #f)))))
 
-(check 'readable-external-expectation-normalizes-whitespace
-       (expected-external
+(check 'expected-datum-external-normalizes-whitespace
+       (expected-datum-external
         "(alpha
            (beta \"two words\")
            #(1 2 3))")
        "(alpha (beta \"two words\") #(1 2 3))")
 
-(check 'readable-external-expectation-joins-fragments
-       (expected-external "(alpha " "(beta gamma))")
+(check 'expected-datum-external-joins-fragments
+       (expected-datum-external "(alpha " "(beta gamma))")
        "(alpha (beta gamma))")
 
 ;; Return a procedure's stored body expressions as stable external strings.
@@ -398,7 +400,7 @@
                        (field (documentation 'current-second) 'source)
                        (field (documentation 'current-second) 'origin)
                        (metadata-field 'current-second 'documentation))"
-                (expected-external
+                (expected-datum-external
                  "((binding +)
                    (scheme base)
                    kernel
@@ -439,7 +441,7 @@
                        (parameter-type 'bytevector-u8-set! 'byte)
                        (return-type 'bytevector-u8-set!)
                        (metadata-field 'bytevector-u8-set! 'effects))"
-                (expected-external
+                (expected-datum-external
                  "((list-of number)
                    number
                    (pure)
@@ -581,7 +583,7 @@
                        (final-rich)
                        (metadata-fields 'final-rich))"
                 '((docstring-retention . full))
-                (expected-external
+                (expected-datum-external
                  "((session cfg)
                    \"Create an Consent Scheme session from CONFIG. "
                  "The session is represented as a datum.\"
@@ -674,7 +676,7 @@
                        (metadata-field 'multi-values 'parameters)
                        (metadata-field 'multi-values 'returns))"
                 '((docstring-retention . full))
-                (expected-external
+                (expected-datum-external
                  "(\"Create a session from CONFIG.\"
                    ((config
                      (type session-config)
@@ -795,7 +797,7 @@
                        (metadata-field 'make-network-request 'parameters)
                        (metadata-field 'make-network-request 'returns))"
                 '((docstring-retention . full))
-                (expected-external
+                (expected-datum-external
                  "(\"Return the number of pairs in LIST.\"
                    \"Return PROMISE's value, evaluating and memoizing "
                  "delayed thunks once.\"
@@ -1241,7 +1243,7 @@
                          (cdr (assq 'import-aliases entry))
                          (cdr (assq 'dependencies entry))
                          (cdr (assq 'target portable-alias))))"
-               (expected-external
+               (expected-datum-external
                 "(built-in-shim
                   built-in-shim
                   (scheme case-lambda)
@@ -1251,20 +1253,20 @@
                   (scheme case-lambda))"))
 
 (check-external 'srfi-180-json-read
-                "(import (scheme base) (srfi 180))
+                (string-append
+                 "(import (scheme base) (srfi 180))
                  (let* ((datum
                          (json-read
                           (open-input-string
-                           (string-append
-                            \"{\\\"name\\\":\\\"Ada\\\",\\\"scores\\\":[1,true,null],\"
-                            \"\\\"nested\\\":{\\\"ok\\\":false}}\"))))
+                           \"{\\\"name\\\":\\\"Ada\\\",\\\"scores\\\":[1,true,null],"
+                 "\\\"nested\\\":{\\\"ok\\\":false}}\")))
                         (scores (cdr (assq 'scores datum)))
                         (nested (cdr (assq 'nested datum))))
                    (list (cdr (assq 'name datum))
                          (vector-ref scores 0)
                          (vector-ref scores 1)
                          (json-null? (vector-ref scores 2))
-                         (cdr (assq 'ok nested))))"
+                         (cdr (assq 'ok nested))))")
                 "(\"Ada\" 1 #t #t #f)")
 
 (check-external 'srfi-180-json-write-round-trip
@@ -1370,7 +1372,7 @@
                          (cdr (assq 'implementation-library entry))
                          (cdr (assq 'upstream-license entry))
                          (cdr (assq 'import-aliases entry))))"
-               (expected-external
+               (expected-datum-external
                 "(direct-portable-implementation
                   (stdlib json)
                   \"MIT\"
@@ -1438,7 +1440,7 @@
                          (cdr (assq 'target scheme-alias))
                          (cdr (assq 'target alias))
                          (cdr (assq 'target portable-alias))))"
-               (expected-external
+               (expected-datum-external
                 "(vendored-adapted-implementation
                   (stdlib comparator)
                   \"MIT\"
@@ -1552,7 +1554,7 @@
 
 (check-result-external 'multiple-values-result
                        "(values 1 2)"
-                       (expected-external
+                       (expected-datum-external
                         "(evaluation-result
                           (status values)
                           (values (1 2))
@@ -1715,7 +1717,7 @@
                          (set! again #f)
                          (resume 'resumed))
                        (reverse path)))"
-               (expected-external
+               (expected-datum-external
                 "(before-outer
                   before-inner
                   during-inner
@@ -2128,7 +2130,7 @@
                        (syntax-source (list 'twice 21))
                        (equal? '(twice 21) (list 'twice 21)))"
                 '((source-metadata . #t))
-               (expected-external
+               (expected-datum-external
                 "((macro-binding
                    (identifier twice)
                    (status bound)
@@ -2969,7 +2971,7 @@
                        (handle-revalidate port-handle)
                        (handle-release! process-handle)
                        (handle-ref 'missing))"
-               (expected-external
+               (expected-datum-external
                 "(#t
                   process-job
                   (handle
@@ -3680,7 +3682,7 @@
                   (vcs-field-value audit 'decision #f)
                   (vcs-field-value audit 'result #f)
                   (vcs-field-value audit 'outcome #f))"
-               (expected-external
+               (expected-datum-external
                 "(#t
                   #f
                   repository-mutation
@@ -3856,7 +3858,7 @@
         (roles (scheme-scripter code))
         (privacy local))))))
   (model-route 'scheme-scripter '())"
- (expected-external
+ (expected-datum-external
   "(model-routing-decision
     (status selected)
     (role scheme-scripter)
@@ -3893,7 +3895,7 @@
           (field tool 'example)
           (field tool 'gate)))"
  '((docstring-retention . full))
- (expected-external
+ (expected-datum-external
   "(local-echo
     ((text (type string) (description \"Text to echo.\")))
     ((type string) (description \"The echoed text.\"))
@@ -3932,7 +3934,7 @@
     value)
   (field (model-tool-spec 'local-inspect) 'schema)"
  '((docstring-retention . full))
- (expected-external
+ (expected-datum-external
   "(openai-tool
     (type function)
     (function
