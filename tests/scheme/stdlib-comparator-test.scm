@@ -8,11 +8,11 @@
 ;;; The original tests use the Chicken test egg; this file keeps the same
 ;;; behavioral assertions in a small portable harness so the full Consent Scheme
 ;;; host matrix can exercise the adapted `(stdlib comparator)' library.
-;;; The local implementation substitutes ordinary optional arguments for the
-;;; upstream case-lambda hasher until #166 proves case-lambda in the compiled
-;;; host path; keep these hash checks as the restoration breadcrumb.
+;;; The restored upstream-style case-lambda hasher below proves SRFI 16 support
+;;; through this same host matrix, including the compiled portable host path.
 
 (import (scheme base)
+        (scheme case-lambda)
         (scheme write)
         (stdlib comparator))
 
@@ -68,6 +68,15 @@
         (vector-set! result (- n 1) (vector-ref vec n))
         (loop (+ n 1)))))))
 
+(define (make-upstream-case-lambda-hasher)
+  "Return the upstream SRFI 128 sequence hasher shape."
+  (let ((result (hash-salt)))
+    (case-lambda
+     (() result)
+     ((n)
+      (set! result (+ (modulo (* result 33) (hash-bound)) n))
+      result))))
+
 (define (finish-comparator-tests)
   "Report the adapted SRFI 128 test result."
   (if (= failures 0)
@@ -82,6 +91,17 @@
 
 (check 'vector-cdr-many (vector-cdr '#(1 2 3 4)) '#(2 3 4))
 (check 'vector-cdr-one (vector-cdr '#(1)) '#())
+
+(let* ((acc (make-upstream-case-lambda-hasher))
+       (initial (hash-salt))
+       (first (+ (modulo (* initial 33) (hash-bound)) 1))
+       (second (+ (modulo (* first 33) (hash-bound)) 2)))
+  (check 'upstream-case-lambda-hasher-initial (acc) initial)
+  (check 'upstream-case-lambda-hasher-first (acc 1) first)
+  (check 'upstream-case-lambda-hasher-after-first (acc) first)
+  (check 'upstream-case-lambda-hasher-second (acc 2) second)
+  (check-true 'upstream-case-lambda-hasher-wrong-arity
+              (raises? (lambda () (acc 1 2)))))
 
 (let* ((default-comparator (make-default-comparator))
        (real-comparator (make-comparator real? = < number-hash))
