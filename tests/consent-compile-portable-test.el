@@ -20,6 +20,12 @@
      (t
       (executable-find fallback)))))
 
+(defun consent-compile-portable-test--repo-file-string (relative-path)
+  "Return RELATIVE-PATH from the repository root as a string."
+  (with-temp-buffer
+    (insert-file-contents (consent--test-target-file relative-path))
+    (buffer-string)))
+
 ;; Process-global cache of host builds shared by the four full-native-build
 ;; tests (#556). Each call to `make compile' for the gambit or racket host takes
 ;; tens of seconds; the runner-smoke and install/dist tests for a given host
@@ -250,6 +256,34 @@ failing closed on everything."
             (consent-compile-portable-test--output result))))
       (when (file-directory-p build-dir)
         (delete-directory build-dir t)))))
+
+(ert-deftest consent-compile-portable-test-gambit-links-stdlib-and-let-star ()
+  "Link source-backed stdlib dependencies into the Gambit runner."
+  (let* ((script
+          (consent-compile-portable-test--repo-file-string
+           "tools/compile-portable.sh"))
+         (gambit-main-start
+          (string-match "write_gambit_main_common()" script))
+         (gambit-main-end
+          (and gambit-main-start
+               (string-match "write_gambit_main()" script gambit-main-start)))
+         (gambit-main
+          (and gambit-main-start
+               gambit-main-end
+               (substring script gambit-main-start gambit-main-end))))
+    (should gambit-main)
+    (should
+     (string-match-p
+      "(prefix (stdlib and-let-star) consent-main:stdlib-and-let-star:)"
+      gambit-main))
+    (should
+     (string-match-p
+      "\"\\$scheme_dir/stdlib/and-let-star\\.sld\""
+      script))
+    (should
+     (string-match-p
+      "gambit_module_order='[^']*stdlib/and-let-star[[:space:]]+stdlib/json"
+      script))))
 
 (ert-deftest consent-compile-portable-test-racket-builds-runner ()
   "Build a Racket-hosted portable executable and run smoke commands."

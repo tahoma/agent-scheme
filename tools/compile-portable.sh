@@ -319,6 +319,7 @@ write_racket_main_common() {
         (prefix (agent plan) consent-main:agent-plan:)
         (prefix (agent redaction) consent-main:agent-redaction:)
         (prefix (agent session) consent-main:agent-session:)
+        (prefix (stdlib and-let-star) consent-main:stdlib-and-let-star:)
         (prefix (stdlib json) consent-main:stdlib-json:)
         (prefix (consent base) consent-main:base:)
         (prefix (consent eval) consent-main:eval:)
@@ -610,6 +611,7 @@ write_gambit_main_common() {
         (prefix (agent plan) consent-main:agent-plan:)
         (prefix (agent redaction) consent-main:agent-redaction:)
         (prefix (agent session) consent-main:agent-session:)
+        (prefix (stdlib and-let-star) consent-main:stdlib-and-let-star:)
         (prefix (stdlib json) consent-main:stdlib-json:)
         (prefix (consent base) consent-main:base:)
         (prefix (consent eval) consent-main:eval:)
@@ -1419,6 +1421,9 @@ compile_gambit() {
     "$scheme_dir/agent/job.sld" \
     "$src_dir/agent/job.sld"
   copy_gambit_source \
+    "$scheme_dir/stdlib/and-let-star.sld" \
+    "$src_dir/stdlib/and-let-star.sld"
+  copy_gambit_source \
     "$scheme_dir/stdlib/json.sld" \
     "$src_dir/stdlib/json.sld"
   copy_gambit_source \
@@ -1498,7 +1503,7 @@ compile_gambit() {
   # the per-module compiled artifacts are $src_dir/<ref>.c and $src_dir/<ref>.o.
   # (consent embedded-source) is generated into $src_dir; every other module's
   # source lives under $scheme_dir.
-  gambit_module_order='consent/version consent/reader consent/runtime consent/base consent/library consent/result consent/macro agent/approval agent/context agent/helper agent/job stdlib/json agent/memory agent/plan agent/redaction agent/session cli/process-host agent/models/openai agent/task agent/transcript agent/registry agent/proposal agent/runner agent/prompt consent/interpreter consent/eval cli/native-cli cli/repl-chrome cli/repl-shell cli/script consent/embedded-source'
+  gambit_module_order='consent/version consent/reader consent/runtime consent/base consent/library consent/result consent/macro agent/approval agent/context agent/helper agent/job stdlib/and-let-star stdlib/json agent/memory agent/plan agent/redaction agent/session cli/process-host agent/models/openai agent/task agent/transcript agent/registry agent/proposal agent/runner agent/prompt consent/interpreter consent/eval cli/native-cli cli/repl-chrome cli/repl-shell cli/script consent/embedded-source'
 
   gambit_module_source() {
     case "$1" in
