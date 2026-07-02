@@ -2243,6 +2243,28 @@
                    (choose))"
                 "library")
 
+(check-external 'library-procedure-keeps-private-imported-syntax
+                "(define-library (consent fixture private-syntax)
+                   (export choose-private)
+                   (import (scheme base))
+                   (begin
+                     (define-syntax choose-private
+                       (syntax-rules ()
+                         ((choose-private value fallback)
+                          (let ((candidate value))
+                            (if candidate candidate fallback)))))))
+                 (define-library (consent fixture private-use)
+                   (export use-private)
+                   (import (scheme base)
+                           (consent fixture private-syntax))
+                   (begin
+                     (define (use-private value)
+                       (choose-private value 'fallback))))
+                 (import (scheme base)
+                         (consent fixture private-use))
+                 (list (use-private 'ok) (use-private #f))"
+                "(ok fallback)")
+
 (check-external 'library-cond-expand-declaration
                 "(define-library (consent fixture conditional)
                    (cond-expand

@@ -838,23 +838,39 @@ cursor across sessions."
           (finish
            (apply-parameter/k procedure arguments context continuation)))
          ((consent-procedure? procedure)
-          (let* ((call-environment
-                  (bind-formals
-                   (procedure-formals procedure)
-                   arguments
-                   (procedure-environment procedure)
-                   context))
-                 (body-state
-                  (prepare-body-environment
-                   (procedure-body procedure)
-                   call-environment
-                   context))
-                 (body-expression (make-sequence (cdr body-state) #f)))
+          (let ((closure-syntax-environment
+                 (procedure-syntax-environment procedure))
+                (caller-syntax-environment
+                 (context-syntax-environment context)))
             (finish
-             (make-bounce body-expression
-                          (car body-state)
-                          (context-syntax-environment context)
-                          continuation))))
+             (with-syntax-environment
+              context
+              closure-syntax-environment
+              (lambda ()
+                (let* ((call-environment
+                        (bind-formals
+                         (procedure-formals procedure)
+                         arguments
+                         (procedure-environment procedure)
+                         context))
+                       (body-state
+                        (prepare-body-environment
+                         (procedure-body procedure)
+                         call-environment
+                         context))
+                       (body-expression
+                        (make-sequence (cdr body-state) #f)))
+                  (make-bounce body-expression
+                               (car body-state)
+                               closure-syntax-environment
+                               (if tail?
+                                   continuation
+                                   (lambda (value)
+                                     (with-syntax-environment
+                                      context
+                                      caller-syntax-environment
+                                      (lambda ()
+                                        (continue continuation value))))))))))))
          ((continuation? procedure)
           (finish
            (invoke-continuation procedure arguments context)))
@@ -1219,7 +1235,8 @@ cursor across sessions."
                  (make-procedure parsed-formals
                                  (cdr documentation-result)
                                  environment
-                                 (car documentation-result))))))
+                                 (car documentation-result)
+                                 (context-syntax-environment context))))))
            ((and (identifier-named? operator 'if)
                  (special-operator-active? operator environment))
             (eval-if parts environment context tail? continuation))
