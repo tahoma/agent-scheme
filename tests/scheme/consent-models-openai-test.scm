@@ -141,7 +141,11 @@
 
 (let* ((response
         (model-openai-parse-response
-         "{\"choices\":[{\"message\":{\"content\":\"Use a tool.\",\"tool_calls\":[{\"id\":\"call-1\",\"type\":\"function\",\"function\":{\"name\":\"local-echo\",\"arguments\":\"{\\\"text\\\":\\\"hello\\\",\\\"count\\\":2}\"}}]}}]}"))
+         (string-append
+          "{\"choices\":[{\"message\":{\"content\":\"Use a tool.\","
+          "\"tool_calls\":[{\"id\":\"call-1\",\"type\":\"function\","
+          "\"function\":{\"name\":\"local-echo\",\"arguments\":"
+          "\"{\\\"text\\\":\\\"hello\\\",\\\"count\\\":2}\"}}]}}]}")))
        (tool-calls (field-value response 'tool-calls))
        (call (car tool-calls))
        (arguments (field-value call 'arguments)))

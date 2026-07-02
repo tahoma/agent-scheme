@@ -642,6 +642,19 @@ than being skipped silently. Like the portable host shards, the gate *skips*
 (rather than fails) when Guile is unavailable, so it is a no-op on a Guile-free
 machine; CI installs Guile so it always runs there.
 
+The default set also runs `lint-line-length`, the Scheme source and portable
+Scheme test line-length gate. It fails checked-in `.sld` and `.scm` files under
+`scheme/` and `tests/scheme/` when a line exceeds
+`CONSENT_LINE_LENGTH_LIMIT` (default 120), keeping generated-looking expected
+datums and source snippets readable in review. Fixture corpora under
+`fixtures/` are intentionally outside this first pass because their dense
+Scheme-readable records need a separate format-aware cleanup. Run it on its own
+with:
+
+```sh
+make lint-line-length
+```
+
 The default set also runs `lint-branding`, the assistant/tool/vendor branding
 gate. It enforces the AGENTS.md rule that no assistant, tool, vendor, or
 workflow branding appears in branch names, pull request titles or bodies, commit

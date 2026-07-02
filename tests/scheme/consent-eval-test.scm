@@ -257,6 +257,23 @@
           (consent-eval-source source #f options))
          expected))
 
+;; Render a readable expected datum as canonical external text.
+(define (expected-external . fragments)
+  (consent-datum->external
+   (consent-read (apply string-append fragments)
+                 '((source-metadata . #f)))))
+
+(check 'readable-external-expectation-normalizes-whitespace
+       (expected-external
+        "(alpha
+           (beta \"two words\")
+           #(1 2 3))")
+       "(alpha (beta \"two words\") #(1 2 3))")
+
+(check 'readable-external-expectation-joins-fragments
+       (expected-external "(alpha " "(beta gamma))")
+       "(alpha (beta gamma))")
+
 ;; Return a procedure's stored body expressions as stable external strings.
 (define (procedure-body-external procedure)
   (if (consent-procedure? procedure)
@@ -381,7 +398,19 @@
                        (field (documentation 'current-second) 'source)
                        (field (documentation 'current-second) 'origin)
                        (metadata-field 'current-second 'documentation))"
-                "((binding +) (scheme base) kernel (primitive-manifest metadata) \"Return the sum of all numeric arguments, or 0 when called with no arguments.\" (procedure) \"Return the sum of all numeric arguments, or 0 when called with no arguments.\" (scheme time) host-capability (primitive-manifest string) \"Return the current time as a real number of seconds since the Unix epoch, subject to the clock capability policy.\")")
+                (expected-external
+                 "((binding +)
+                   (scheme base)
+                   kernel
+                   (primitive-manifest metadata)
+                   \"Return the sum of all numeric arguments, or 0 when called with no arguments.\"
+                   (procedure)
+                   \"Return the sum of all numeric arguments, or 0 when called with no arguments.\"
+                   (scheme time)
+                   host-capability
+                   (primitive-manifest string)
+                   \"Return the current time as a real number of seconds since the "
+                 "Unix epoch, subject to the clock capability policy.\")"))
 
 (check-external 'primitive-manifest-rich-metadata-reflection
                 "(import (scheme base) (agent reflect))
@@ -410,7 +439,17 @@
                        (parameter-type 'bytevector-u8-set! 'byte)
                        (return-type 'bytevector-u8-set!)
                        (metadata-field 'bytevector-u8-set! 'effects))"
-                "((list-of number) number (pure) exact-non-negative-integer (values integer integer) textual-input-port (or char eof-object) byte unspecified (mutation))")
+                (expected-external
+                 "((list-of number)
+                   number
+                   (pure)
+                   exact-non-negative-integer
+                   (values integer integer)
+                   textual-input-port
+                   (or char eof-object)
+                   byte
+                   unspecified
+                   (mutation))"))
 
 (check-external/options 'docstring-edge-cases
                 "(import (scheme base) (agent reflect))
@@ -542,7 +581,38 @@
                        (final-rich)
                        (metadata-fields 'final-rich))"
                 '((docstring-retention . full))
-                "((session cfg) \"Create an Consent Scheme session from CONFIG. The session is represented as a datum.\" (config) \"Open an Consent Scheme session.\" ((config (type any) (description \"Session configuration datum.\"))) ((type any) (description \"A session record.\")) (pure) (((source . \"(rich cfg)\") (result session cfg))) (current-context session-snapshot) (consent-version 0 15 4) #f experimental \"local only\" \"Line one. Line two. Line three.\" (x) (((source . \"first\")) ((source . \"second\"))) (alpha beta) ((tag . kept)) \"Valid documentation.\" ((type any) (description \"First result.\")) #f ((arguments (x))) ((arguments (x))) ((arguments (x))) ((head (type any) (description \"Required argument.\")) (tail (type any) (description \"Rest arguments.\"))) #((returns . \"ordinary result\")) ((arguments ())))")
+                (expected-external
+                 "((session cfg)
+                   \"Create an Consent Scheme session from CONFIG. "
+                 "The session is represented as a datum.\"
+                   (config)
+                   \"Open an Consent Scheme session.\"
+                   ((config
+                     (type any)
+                     (description \"Session configuration datum.\")))
+                   ((type any) (description \"A session record.\"))
+                   (pure)
+                   (((source . \"(rich cfg)\") (result session cfg)))
+                   (current-context session-snapshot)
+                   (consent-version 0 15 4)
+                   #f
+                   experimental
+                   \"local only\"
+                   \"Line one. Line two. Line three.\"
+                   (x)
+                   (((source . \"first\")) ((source . \"second\")))
+                   (alpha beta)
+                   ((tag . kept))
+                   \"Valid documentation.\"
+                   ((type any) (description \"First result.\"))
+                   #f
+                   ((arguments (x)))
+                   ((arguments (x)))
+                   ((arguments (x)))
+                   ((head (type any) (description \"Required argument.\"))
+                    (tail (type any) (description \"Rest arguments.\")))
+                   #((returns . \"ordinary result\"))
+                   ((arguments ())))"))
 
 (check-external/options 'typed-rich-documentation-metadata
                 "(import (scheme base) (agent reflect))
@@ -604,7 +674,22 @@
                        (metadata-field 'multi-values 'parameters)
                        (metadata-field 'multi-values 'returns))"
                 '((docstring-retention . full))
-                "(\"Create a session from CONFIG.\" ((config (type session-config) (description \"Session configuration datum.\"))) ((type session-record) (description \"A session record.\")) (pure) ((x (type any) (description \"Input value.\"))) ((type any) (description \"Output value.\")) ((y (type any) (description \"Fragment input.\"))) ((type any) (description \"Fragment output.\")) ((x (type any) (description \"Wrapped input.\"))) ((type any) (description \"Wrapped output.\")) () ((type (values string any)) (description \"String result and opaque payload.\")))")
+                (expected-external
+                 "(\"Create a session from CONFIG.\"
+                   ((config
+                     (type session-config)
+                     (description \"Session configuration datum.\")))
+                   ((type session-record) (description \"A session record.\"))
+                   (pure)
+                   ((x (type any) (description \"Input value.\")))
+                   ((type any) (description \"Output value.\"))
+                   ((y (type any) (description \"Fragment input.\")))
+                   ((type any) (description \"Fragment output.\"))
+                   ((x (type any) (description \"Wrapped input.\")))
+                   ((type any) (description \"Wrapped output.\"))
+                   ()
+                   ((type (values string any))
+                    (description \"String result and opaque payload.\")))"))
 
 (check-external/options 'docstring-retention-simple
                 "(import (scheme base) (agent reflect))
@@ -710,7 +795,42 @@
                        (metadata-field 'make-network-request 'parameters)
                        (metadata-field 'make-network-request 'returns))"
                 '((docstring-retention . full))
-                "(\"Return the number of pairs in LIST.\" \"Return PROMISE's value, evaluating and memoizing delayed thunks once.\" \"Render DIFF to deterministic unified-diff text for humans.\" \"Return a host-adapter request datum for one network operation.\" \"Return a fail-closed authorization decision for REQUEST.\" \"Generate a shared fixture case from EVENT when replay permits it.\" ((promise (type any) (description \"Promise record or ordinary value to force.\"))) ((type any) (description \"PROMISE's memoized value, or PROMISE unchanged when it is not a promise.\")) ((diff (type diff) (description \"Canonical diff datum.\"))) ((type string) (description \"Unified-diff text, or the empty string when DIFF has no changes.\")) ((id (type (or symbol string)) (description \"Stable request id assigned by the caller or host adapter.\")) (operation (type symbol) (description \"Network operation symbol such as request or stream.\")) (resource (type list) (description \"Association list describing scheme, host, port, method, headers, payload, response, redirect, timeout, and stream limits.\"))) ((type network-capability-request) (description \"A `network-capability-request` datum ready for policy evaluation.\")))")
+                (expected-external
+                 "(\"Return the number of pairs in LIST.\"
+                   \"Return PROMISE's value, evaluating and memoizing "
+                 "delayed thunks once.\"
+                   \"Render DIFF to deterministic unified-diff text for humans.\"
+                   \"Return a host-adapter request datum for one network operation.\"
+                   \"Return a fail-closed authorization decision for REQUEST.\"
+                   \"Generate a shared fixture case from EVENT when replay permits it.\"
+                   ((promise
+                     (type any)
+                     (description \"Promise record or ordinary value to force.\")))
+                   ((type any)
+                    (description \"PROMISE's memoized value, or PROMISE unchanged "
+                 "when it is not a promise.\"))
+                   ((diff
+                     (type diff)
+                     (description \"Canonical diff datum.\")))
+                   ((type string)
+                    (description \"Unified-diff text, or the empty string "
+                 "when DIFF has no changes.\"))
+                   ((id
+                     (type (or symbol string))
+                     (description \"Stable request id assigned by the "
+                 "caller or host adapter.\"))
+                    (operation
+                     (type symbol)
+                     (description
+                      \"Network operation symbol such as request or stream.\"))
+                    (resource
+                     (type list)
+                     (description \"Association list describing scheme, host, "
+                 "port, method, headers, payload, response, redirect, timeout, "
+                 "and stream limits.\")))
+                   ((type network-capability-request)
+                    (description \"A `network-capability-request` datum ready "
+                 "for policy evaluation.\")))"))
 
 ;; Report whether TEXT starts with PREFIX.
 (define (string-prefix? prefix text)
@@ -1121,14 +1241,23 @@
                          (cdr (assq 'import-aliases entry))
                          (cdr (assq 'dependencies entry))
                          (cdr (assq 'target portable-alias))))"
-                "(built-in-shim built-in-shim (scheme case-lambda) (scheme case-lambda) ((srfi 16) (srfi srfi-16)) ((scheme case-lambda)) (scheme case-lambda))")
+               (expected-external
+                "(built-in-shim
+                  built-in-shim
+                  (scheme case-lambda)
+                  (scheme case-lambda)
+                  ((srfi 16) (srfi srfi-16))
+                  ((scheme case-lambda))
+                  (scheme case-lambda))"))
 
 (check-external 'srfi-180-json-read
                 "(import (scheme base) (srfi 180))
                  (let* ((datum
                          (json-read
                           (open-input-string
-                           \"{\\\"name\\\":\\\"Ada\\\",\\\"scores\\\":[1,true,null],\\\"nested\\\":{\\\"ok\\\":false}}\")))
+                           (string-append
+                            \"{\\\"name\\\":\\\"Ada\\\",\\\"scores\\\":[1,true,null],\"
+                            \"\\\"nested\\\":{\\\"ok\\\":false}}\"))))
                         (scores (cdr (assq 'scores datum)))
                         (nested (cdr (assq 'nested datum))))
                    (list (cdr (assq 'name datum))
@@ -1241,7 +1370,11 @@
                          (cdr (assq 'implementation-library entry))
                          (cdr (assq 'upstream-license entry))
                          (cdr (assq 'import-aliases entry))))"
-                "(direct-portable-implementation (stdlib json) \"MIT\" ((stdlib json) (consent json) (srfi 180) (srfi srfi-180)))")
+               (expected-external
+                "(direct-portable-implementation
+                  (stdlib json)
+                  \"MIT\"
+                  ((stdlib json) (consent json) (srfi 180) (srfi srfi-180)))"))
 
 (check-external 'srfi-128-comparator-behavior
                 "(import (scheme base) (stdlib comparator))
@@ -1305,7 +1438,23 @@
                          (cdr (assq 'target scheme-alias))
                          (cdr (assq 'target alias))
                          (cdr (assq 'target portable-alias))))"
-                "(vendored-adapted-implementation (stdlib comparator) \"MIT\" \"MIT\" ((stdlib comparator) (scheme comparator) (srfi 128) (srfi srfi-128)) ((scheme base) (scheme case-lambda) (scheme char) (scheme inexact) (scheme complex)) (stdlib comparator) (stdlib comparator) (stdlib comparator))")
+               (expected-external
+                "(vendored-adapted-implementation
+                  (stdlib comparator)
+                  \"MIT\"
+                  \"MIT\"
+                  ((stdlib comparator)
+                   (scheme comparator)
+                   (srfi 128)
+                   (srfi srfi-128))
+                  ((scheme base)
+                   (scheme case-lambda)
+                   (scheme char)
+                   (scheme inexact)
+                   (scheme complex))
+                  (stdlib comparator)
+                  (stdlib comparator)
+                  (stdlib comparator))"))
 
 (check-external 'base-list-helpers
                 "(list (length (append '(1 2) '(3 4)))
@@ -1403,7 +1552,12 @@
 
 (check-result-external 'multiple-values-result
                        "(values 1 2)"
-                       "(evaluation-result (status values) (values (1 2)) (events ()) (budget (steps-used 5) (host-calls 1)))")
+                       (expected-external
+                        "(evaluation-result
+                          (status values)
+                          (values (1 2))
+                          (events ())
+                          (budget (steps-used 5) (host-calls 1)))"))
 
 (check-result-contains 'debugger-unbound-variable-result
                        "missing"
@@ -1561,7 +1715,17 @@
                          (set! again #f)
                          (resume 'resumed))
                        (reverse path)))"
-                "(before-outer before-inner during-inner after-inner after-outer before-outer before-inner during-inner after-inner after-outer)")
+               (expected-external
+                "(before-outer
+                  before-inner
+                  during-inner
+                  after-inner
+                  after-outer
+                  before-outer
+                  before-inner
+                  during-inner
+                  after-inner
+                  after-outer)"))
 
 (check-external 'call/cc-multiple-values
                 "(let ((again #f))
@@ -1964,7 +2128,16 @@
                        (syntax-source (list 'twice 21))
                        (equal? '(twice 21) (list 'twice 21)))"
                 '((source-metadata . #t))
-                "((macro-binding (identifier twice) (status bound) (kind syntax-rules) (library #f)) #f (source read) #f #t)")
+               (expected-external
+                "((macro-binding
+                   (identifier twice)
+                   (status bound)
+                   (kind syntax-rules)
+                   (library #f))
+                  #f
+                  (source read)
+                  #f
+                  #t)"))
 
 (check-external/options 'macro-binding-info-and-syntax-source-opt-out
                 "(import (scheme base) (agent reflect))
@@ -2796,7 +2969,29 @@
                        (handle-revalidate port-handle)
                        (handle-release! process-handle)
                        (handle-ref 'missing))"
-                "(#t process-job (handle (id h-portable-1) (kind process-job) (domain process) (status live)) (port-capability (id p-portable-1) (kind textual-input) (backing process) (operations read close) (grant portable-process-grant) (limits) (path h-portable-1) (status open)) (handle (id h-portable-1) (kind process-job) (domain process) (status released)) #f)")
+               (expected-external
+                "(#t
+                  process-job
+                  (handle
+                   (id h-portable-1)
+                   (kind process-job)
+                   (domain process)
+                   (status live))
+                  (port-capability
+                   (id p-portable-1)
+                   (kind textual-input)
+                   (backing process)
+                   (operations read close)
+                   (grant portable-process-grant)
+                   (limits)
+                   (path h-portable-1)
+                   (status open))
+                  (handle
+                   (id h-portable-1)
+                   (kind process-job)
+                   (domain process)
+                   (status released))
+                  #f)"))
 
 (check 'portable-process-capability-handle-datums
        (list
@@ -3485,7 +3680,20 @@
                   (vcs-field-value audit 'decision #f)
                   (vcs-field-value audit 'result #f)
                   (vcs-field-value audit 'outcome #f))"
-                "(#t #f repository-mutation #t repository-mutation denied \"missing VCS mutation grant or approval\" approved grant-local vcs-capability-audit approved ok ok)")
+               (expected-external
+                "(#t
+                  #f
+                  repository-mutation
+                  #t
+                  repository-mutation
+                  denied
+                  \"missing VCS mutation grant or approval\"
+                  approved
+                  grant-local
+                  vcs-capability-audit
+                  approved
+                  ok
+                  ok)"))
 
 (check-external 'agent-vcs-remote-mutation-authorization
                 "(import (scheme base) (agent vcs))
@@ -3648,7 +3856,15 @@
         (roles (scheme-scripter code))
         (privacy local))))))
   (model-route 'scheme-scripter '())"
- "(model-routing-decision (status selected) (role scheme-scripter) (provider portable-local) (model portable-coder) (kind local) (transport openai-compatible-http) (endpoint \"http://127.0.0.1:11434/v1\"))")
+ (expected-external
+  "(model-routing-decision
+    (status selected)
+    (role scheme-scripter)
+    (provider portable-local)
+    (model portable-coder)
+    (kind local)
+    (transport openai-compatible-http)
+    (endpoint \"http://127.0.0.1:11434/v1\"))"))
 
 (check-external/options
  'agent-models-tool-spec-from-docstring-metadata
@@ -3677,7 +3893,27 @@
           (field tool 'example)
           (field tool 'gate)))"
  '((docstring-retention . full))
- "(local-echo ((text (type string) (description \"Text to echo.\"))) ((type string) (description \"The echoed text.\")) (pure) (openai-tool (type function) (function (name \"local-echo\") (description \"Echo TEXT through a pure local helper.\") (parameters ((type \"object\") (properties ((text ((type \"string\") (description \"Text to echo.\"))))) (required (\"text\")))))) (tool-call (name local-echo) (arguments ((text \"<string>\")))) (tool-gate (decision pure-under-budget) (effects (pure))))")
+ (expected-external
+  "(local-echo
+    ((text (type string) (description \"Text to echo.\")))
+    ((type string) (description \"The echoed text.\"))
+    (pure)
+    (openai-tool
+     (type function)
+     (function
+      (name \"local-echo\")
+      (description \"Echo TEXT through a pure local helper.\")
+      (parameters
+       ((type \"object\")
+        (properties
+         ((text ((type \"string\") (description \"Text to echo.\")))))
+        (required (\"text\"))))))
+    (tool-call
+     (name local-echo)
+     (arguments ((text \"<string>\"))))
+    (tool-gate
+     (decision pure-under-budget)
+     (effects (pure))))"))
 
 (check-external/options
  'agent-models-tool-spec-any-schema-default
@@ -3696,7 +3932,17 @@
     value)
   (field (model-tool-spec 'local-inspect) 'schema)"
  '((docstring-retention . full))
- "(openai-tool (type function) (function (name \"local-inspect\") (description \"Inspect VALUE locally.\") (parameters ((type \"object\") (properties ((value ((description \"Any Scheme-readable value.\"))))) (required (\"value\"))))))")
+ (expected-external
+  "(openai-tool
+    (type function)
+    (function
+     (name \"local-inspect\")
+     (description \"Inspect VALUE locally.\")
+     (parameters
+      ((type \"object\")
+       (properties
+        ((value ((description \"Any Scheme-readable value.\")))))
+       (required (\"value\"))))))"))
 
 (let* ((result
         (consent-eval-source-result

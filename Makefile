@@ -42,6 +42,7 @@ CONSENT_DIST_DIR ?= $(CONSENT_COMPILE_BUILD_DIR)/dist
 CONSENT_DIST_NAME = consent-$(CONSENT_VERSION)-$(CONSENT_COMPILE_HOST)
 CONSENT_LINT_BUILD_DIR ?= build/lint
 CONSENT_PORTABLE_LINT_BUILD_DIR ?= build/lint-portable
+CONSENT_LINE_LENGTH_LIMIT ?= 120
 CONSENT_GUILE ?= guile
 CONSENT_RACKET ?= racket
 CONSENT_RACO ?= raco
@@ -104,11 +105,11 @@ CONSENT_DEFAULT_PORTABLE_TEST_SHARD_TARGETS ?= test-portable-racket
 # deliberately not here -- the four full host-compile + install/dist tests
 # dominated the old single-shard tools target's wall time, so #556 stranded them
 # in an opt-in shard that only runs in the exhaustive `make test-full' loop.
-CONSENT_TEST_SHARD_TARGETS ?= lint-elisp lint-portable lint-branding $(CONSENT_DEFAULT_PORTABLE_TEST_SHARD_TARGETS) $(CONSENT_EMACS_TEST_SHARD_TARGETS) test-parity
+CONSENT_TEST_SHARD_TARGETS ?= lint-elisp lint-portable lint-branding lint-line-length $(CONSENT_DEFAULT_PORTABLE_TEST_SHARD_TARGETS) $(CONSENT_EMACS_TEST_SHARD_TARGETS) test-parity
 # Exhaustive opt-in set: the Emacs byte-compile lint gate, the portable-host
 # compiler warnings gate, every portable host shard, every Emacs shard, the
 # native-build install/dist shard isolated by #556, and the parity gate.
-CONSENT_FULL_TEST_SHARD_TARGETS ?= lint-elisp lint-portable lint-branding $(CONSENT_PORTABLE_TEST_SHARD_TARGETS) $(CONSENT_EMACS_TEST_SHARD_TARGETS) test-emacs-native-build test-parity
+CONSENT_FULL_TEST_SHARD_TARGETS ?= lint-elisp lint-portable lint-branding lint-line-length $(CONSENT_PORTABLE_TEST_SHARD_TARGETS) $(CONSENT_EMACS_TEST_SHARD_TARGETS) test-emacs-native-build test-parity
 CONSENT_PORTABLE_TEST_JOBS ?= $(words $(CONSENT_PORTABLE_TEST_SHARD_TARGETS))
 CONSENT_EMACS_TEST_JOBS ?= $(words $(CONSENT_EMACS_TEST_SHARD_TARGETS))
 # Default `make test' parallelism (#556): raised from the shard-count fallback
@@ -120,7 +121,7 @@ CONSENT_FULL_TEST_JOBS ?= 16
 
 .DEFAULT_GOAL := help
 
-.PHONY: help print-version clean clean-compile compile install uninstall dist compile-elisp lint-elisp lint-portable lint-branding repl test test-full test-portable test-portable-chibi test-portable-gambit test-portable-gambit-native test-portable-racket test-portable-compiled test-portable-guile test-portable-gauche test-emacs-hosted test-emacs-core test-emacs-library test-emacs-capabilities test-emacs-tools test-emacs-integration test-emacs-native-build test-parity test-live-model-ci test-live-model conformance-oracle
+.PHONY: help print-version clean clean-compile compile install uninstall dist compile-elisp lint-elisp lint-portable lint-branding lint-line-length repl test test-full test-portable test-portable-chibi test-portable-gambit test-portable-gambit-native test-portable-racket test-portable-compiled test-portable-guile test-portable-gauche test-emacs-hosted test-emacs-core test-emacs-library test-emacs-capabilities test-emacs-tools test-emacs-integration test-emacs-native-build test-parity test-live-model-ci test-live-model conformance-oracle
 
 help:
 	@printf '%s\n' 'Consent Scheme top-level actions:'
@@ -136,6 +137,7 @@ help:
 	@printf '  %-26s %s\n' 'lint-elisp' 'Byte-compile Elisp sources with warnings-as-errors.'
 	@printf '  %-26s %s\n' 'lint-portable' 'Compile portable libraries under Guile with warnings-as-errors.'
 	@printf '  %-26s %s\n' 'lint-branding' 'Fail on assistant/tool/vendor branding in commits, PR, branch, files.'
+	@printf '  %-26s %s\n' 'lint-line-length' 'Fail on long lines in Scheme source and Scheme tests.'
 	@printf '  %-26s %s\n' 'repl' 'Start the portable terminal REPL shell (ARGS=... passes flags).'
 	@printf '  %-26s %s\n' 'test' 'Run the trimmed default local shard set.'
 	@printf '  %-26s %s\n' 'test-full' 'Run the exhaustive local shard set across every host and Emacs shard.'
@@ -173,6 +175,7 @@ help:
 	@printf '  %-50s %s\n' 'CONSENT_TEST_TARGET_ROOT=DIR' 'Optional portable Scheme implementation root for the current harness.'
 	@printf '  %-50s %s\n' 'CONSENT_TEST_SOURCE_METADATA=on|off' 'Default source metadata mode injected by CI matrix shards.'
 	@printf '  %-50s %s\n' 'CONSENT_TEST_DOCSTRING_RETENTION=full|simple|none' 'Default docstring retention mode injected by CI matrix shards.'
+	@printf '  %-50s %s\n' 'CONSENT_LINE_LENGTH_LIMIT=120' 'Column limit enforced by lint-line-length.'
 	@printf '  %-50s %s\n' 'CONSENT_TEST_JOBS=N' 'Parallel jobs used by make test.'
 	@printf '  %-50s %s\n' 'CONSENT_TEST_SHARD_TARGETS=a b' 'Trimmed default shard targets run by make test.'
 	@printf '  %-50s %s\n' 'CONSENT_FULL_TEST_SHARD_TARGETS=a b' 'Exhaustive shard targets run by make test-full.'
@@ -365,6 +368,10 @@ lint-portable:
 # current branch, and the origin/main..HEAD commit range.
 lint-branding:
 	tools/lint-branding.sh
+
+lint-line-length:
+	CONSENT_LINE_LENGTH_LIMIT='$(CONSENT_LINE_LENGTH_LIMIT)' \
+	tools/lint-line-length.sh
 
 # Start the portable terminal REPL shell outside Emacs (docs/portable-repl.md).
 # Reads Consent Scheme forms from stdin, writes interaction-contract records to
