@@ -420,13 +420,13 @@
         'no-error)")
     "#t")))
 
-(ert-deftest consent-library-test-srfi-manifest-documents-180 ()
-  "Expose SRFI 180 support status through a Scheme-readable manifest."
+(ert-deftest consent-library-test-stdlib-manifest-documents-json ()
+  "Expose stdlib JSON support status through a Scheme-readable manifest."
   (should
    (equal
     (consent-library-test--external
      "(import (scheme base) (stdlib manifest))
-      (let ((entry (srfi-manifest-ref '(stdlib json))))
+      (let ((entry (stdlib-manifest-ref '(stdlib json))))
         (list (cdr (assq 'status entry))
               (cdr (assq 'implementation-library entry))
               (cdr (assq 'upstream-license entry))
@@ -554,16 +554,16 @@
       (regexp-quote "missing-comparator")
       (error-message-string error)))))
 
-(ert-deftest consent-library-test-srfi-manifest-documents-128 ()
-  "Expose SRFI 128 support status through a Scheme-readable manifest."
+(ert-deftest consent-library-test-stdlib-manifest-documents-comparator ()
+  "Expose stdlib comparator support status through a Scheme-readable manifest."
   (should
    (equal
     (consent-library-test--external
      "(import (scheme base) (stdlib manifest))
-      (let ((entry (srfi-manifest-ref '(stdlib comparator)))
-            (scheme-alias (srfi-manifest-ref '(scheme comparator)))
-            (alias (srfi-manifest-ref '(srfi 128)))
-            (portable-alias (srfi-manifest-ref '(srfi srfi-128))))
+      (let ((entry (stdlib-manifest-ref '(stdlib comparator)))
+            (scheme-alias (stdlib-manifest-ref '(scheme comparator)))
+            (alias (stdlib-manifest-ref '(srfi 128)))
+            (portable-alias (stdlib-manifest-ref '(srfi srfi-128))))
         (list (cdr (assq 'status entry))
               (cdr (assq 'implementation-library entry))
               (cdr (assq 'upstream-license entry))
