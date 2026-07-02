@@ -1194,9 +1194,9 @@
                  (json-null? (json-read (open-input-string \"null\")))"
                 "#t")
 
-(check-external 'srfi-180-manifest
+(check-external 'stdlib-json-manifest
                 "(import (scheme base) (stdlib manifest))
-                 (let ((entry (srfi-manifest-ref '(stdlib json))))
+                 (let ((entry (stdlib-manifest-ref '(stdlib json))))
                    (list (cdr (assq 'status entry))
                          (cdr (assq 'implementation-library entry))
                          (cdr (assq 'upstream-license entry))
@@ -1248,14 +1248,14 @@
                          (=? string-comparator \"same\" \"same\")))"
                 "(#t #t)")
 
-(check-external 'srfi-128-manifest
+(check-external 'stdlib-comparator-manifest
                 "(import (scheme base) (stdlib manifest))
-                 (let ((entry (srfi-manifest-ref '(stdlib comparator)))
+                 (let ((entry (stdlib-manifest-ref '(stdlib comparator)))
                        (scheme-alias
-                        (srfi-manifest-ref '(scheme comparator)))
-                       (alias (srfi-manifest-ref '(srfi 128)))
+                        (stdlib-manifest-ref '(scheme comparator)))
+                       (alias (stdlib-manifest-ref '(srfi 128)))
                        (portable-alias
-                        (srfi-manifest-ref '(srfi srfi-128))))
+                        (stdlib-manifest-ref '(srfi srfi-128))))
                    (list (cdr (assq 'status entry))
                          (cdr (assq 'implementation-library entry))
                          (cdr (assq 'upstream-license entry))
