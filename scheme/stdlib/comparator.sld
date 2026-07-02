@@ -26,6 +26,7 @@
           =? <? >? <=? >=?
           comparator-if<=>)
   (import (scheme base)
+          (scheme case-lambda)
           (scheme char)
           (scheme inexact)
           (scheme complex))
@@ -393,19 +394,22 @@
           (< (imag-part a) (imag-part b))
           (< (real-part a) (real-part b))))
 
+    ;; Stateful hasher dispatch shaped like the upstream SRFI 128 case-lambda,
+    ;; with mutable state threaded explicitly so the macro expands at library
+    ;; registration time instead of inside a later procedure call.
+    (define hasher-dispatch
+      (case-lambda
+       ((state) (vector-ref state 0))
+       ((state n)
+        (let ((result (bounded-hash (+ (* (vector-ref state 0) 33) n))))
+          (vector-set! state 0 result)
+          result))))
+
     (define (make-hasher)
       "Return a stateful sequence hasher procedure."
-      (let ((result (hash-salt)))
-        ;; Upstream SRFI 128 uses case-lambda here. Keep ordinary optional
-        ;; arguments until #166 proves case-lambda in the compiled host path.
+      (let ((state (vector (hash-salt))))
         (lambda args
-          (cond
-           ((null? args) result)
-           ((null? (cdr args))
-            (set! result (bounded-hash (+ (* result 33) (car args))))
-            result)
-           (else
-            (error "hasher expects zero or one argument" args))))))
+          (apply hasher-dispatch state args))))
 
     (define (string-hash obj)
       "Return a hash value for string OBJ."

@@ -112,6 +112,7 @@
           prompt-result-budget
           prompt-result-audit)
   (import (scheme base)
+          (scheme case-lambda)
           (agent runner)
           ;; The registry exports `agents', which this library re-purposes as a
           ;; harness-taking discovery verb; rename the registry primitive so both
@@ -625,6 +626,21 @@
                             (task-run-budget run)
                             audit)))
 
+    ;; Optional-arity dispatcher for the public prompt verb.
+    (define prompt-dispatch
+      (case-lambda
+       ((goal)
+        (run-prompt (current-prompt-harness) goal '() '()))
+       ((first second)
+        (if (prompt-harness? first)
+            (run-prompt first second '() '())
+            (run-prompt (current-prompt-harness) first '() second)))
+       ((harness goal options)
+        (if (prompt-harness? harness)
+            (run-prompt harness goal '() options)
+            (error "prompt expects goal/options or harness/goal/options"
+                   harness goal options)))))
+
     (define (prompt . args)
       "Prompt the automatically chosen agent at a goal in the current session."
       #((parameters
@@ -644,10 +660,31 @@
             "authority.")))
         (effects state-read allocation)
         (see-also prompt-role prompt-model make-prompt-harness))
-      (if (prompt-harness? (car args))
-          (run-prompt (car args) (cadr args) '() (tail-option (cddr args)))
-          (run-prompt (current-prompt-harness) (car args) '()
-                      (tail-option (cdr args)))))
+      (apply prompt-dispatch args))
+
+    ;; Optional-arity dispatcher for role-forced prompts.
+    (define prompt-role-dispatch
+      (case-lambda
+       ((role goal)
+        (run-prompt (current-prompt-harness) goal
+                    (list (list 'role role))
+                    '()))
+       ((first second third)
+        (if (prompt-harness? first)
+            (run-prompt first third
+                        (list (list 'role second))
+                        '())
+            (run-prompt (current-prompt-harness) second
+                        (list (list 'role first))
+                        third)))
+       ((harness role goal options)
+        (if (prompt-harness? harness)
+            (run-prompt harness goal
+                        (list (list 'role role))
+                        options)
+            (error
+             "prompt-role expects role/goal/options or harness/role/goal/options"
+             harness role goal options)))))
 
     (define (prompt-role . args)
       "Prompt an agent of a named role at a goal in the current session."
@@ -666,14 +703,31 @@
             "authority.")))
         (effects state-read allocation)
         (see-also prompt prompt-model))
-      (if (prompt-harness? (car args))
-          (let ((more (cddr args)))
-            (run-prompt (car args) (car more)
-                        (list (list 'role (cadr args)))
-                        (tail-option (cdr more))))
-          (run-prompt (current-prompt-harness) (cadr args)
-                      (list (list 'role (car args)))
-                      (tail-option (cddr args)))))
+      (apply prompt-role-dispatch args))
+
+    ;; Optional-arity dispatcher for model-forced prompts.
+    (define prompt-model-dispatch
+      (case-lambda
+       ((model goal)
+        (run-prompt (current-prompt-harness) goal
+                    (list (list 'model model))
+                    '()))
+       ((first second third)
+        (if (prompt-harness? first)
+            (run-prompt first third
+                        (list (list 'model second))
+                        '())
+            (run-prompt (current-prompt-harness) second
+                        (list (list 'model first))
+                        third)))
+       ((harness model goal options)
+        (if (prompt-harness? harness)
+            (run-prompt harness goal
+                        (list (list 'model model))
+                        options)
+            (error
+             "prompt-model expects model/goal/options or harness/model/goal/options"
+             harness model goal options)))))
 
     (define (prompt-model . args)
       "Prompt an agent of a named model at a goal in the current session."
@@ -692,14 +746,7 @@
             "authority.")))
         (effects state-read allocation)
         (see-also prompt prompt-role))
-      (if (prompt-harness? (car args))
-          (let ((more (cddr args)))
-            (run-prompt (car args) (car more)
-                        (list (list 'model (cadr args)))
-                        (tail-option (cdr more))))
-          (run-prompt (current-prompt-harness) (cadr args)
-                      (list (list 'model (car args)))
-                      (tail-option (cddr args)))))
+      (apply prompt-model-dispatch args))
 
     (define (dedup values)
       "Return VALUES with later equal? duplicates removed, order preserved."
@@ -710,6 +757,16 @@
          (else (loop (cdr rest)
                      (cons (car rest) seen)
                      (cons (car rest) kept))))))
+
+    ;; Optional-arity dispatcher for agent discovery.
+    (define agents-dispatch
+      (case-lambda
+       (()
+        (registry-agents
+         (harness-registry (current-prompt-harness))))
+       ((harness)
+        (registry-agents
+         (harness-registry (harness-or-current (list harness)))))))
 
     (define (agents . maybe-harness)
       "Return the registered agents discoverable through a harness."
@@ -722,7 +779,13 @@
          (description "A list of agent datums in registration order."))
         (effects state-read)
         (see-also roles models prompt))
-      (registry-agents (harness-registry (harness-or-current maybe-harness))))
+      (apply agents-dispatch maybe-harness))
+
+    ;; Optional-arity dispatcher for role discovery.
+    (define roles-dispatch
+      (case-lambda
+       (() (dedup (map agent-role (agents))))
+       ((harness) (dedup (map agent-role (agents harness))))))
 
     (define (roles . maybe-harness)
       "Return the distinct agent roles discoverable through a harness."
@@ -735,7 +798,13 @@
          (description ("A list of distinct role symbols in registration order.")))
         (effects state-read)
         (see-also agents models prompt-role))
-      (dedup (map agent-role (apply agents maybe-harness))))
+      (apply roles-dispatch maybe-harness))
+
+    ;; Optional-arity dispatcher for model discovery.
+    (define models-dispatch
+      (case-lambda
+       (() (dedup (map agent-model (agents))))
+       ((harness) (dedup (map agent-model (agents harness))))))
 
     (define (models . maybe-harness)
       "Return the distinct agent models discoverable through a harness."
@@ -750,7 +819,7 @@
             "order.")))
         (effects state-read)
         (see-also agents roles prompt-model))
-      (dedup (map agent-model (apply agents maybe-harness))))
+      (apply models-dispatch maybe-harness))
 
     (define (prompt-result? datum)
       "Return #t when DATUM is a prompt-result record."

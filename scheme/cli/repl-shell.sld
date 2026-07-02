@@ -76,6 +76,7 @@
           cli-repl-replay-main
           cli-repl-main)
   (import (scheme base)
+          (scheme case-lambda)
           (scheme write)
           (scheme read)
           (scheme file)
@@ -595,6 +596,14 @@
                              (+ ordinal 1) (+ count 1))))))))))))
         exit-code))
 
+    ;; Optional-arity dispatcher for the public streaming REPL runner.
+    (define repl--run-dispatch
+      (case-lambda
+       ((read-chunk write-record write-output session)
+        (repl--engine read-chunk write-record write-output session '()))
+       ((read-chunk write-record write-output session options)
+        (repl--engine read-chunk write-record write-output session options))))
+
     (define (cli-repl-run read-chunk write-record write-output session
                           . maybe-options)
       "Run a REPL session, streaming records to WRITE-RECORD and program"
@@ -619,8 +628,24 @@
          . ("The close-status exit code: 0 on clean close, 1 on error"
             "close."))
         (effects host-eval state-write error allocation))
-      (repl--engine read-chunk write-record write-output session
-                    (if (null? maybe-options) '() (car maybe-options))))
+      (apply repl--run-dispatch
+             read-chunk
+             write-record
+             write-output
+             session
+             maybe-options))
+
+    ;; Optional-arity dispatcher for the record-collecting REPL driver.
+    (define repl--drive-dispatch
+      (case-lambda
+       ((read-chunk session write-record)
+        (cli-repl-run read-chunk write-record (lambda (output) output) session))
+       ((read-chunk session write-record options)
+        (cli-repl-run read-chunk
+                      write-record
+                      (lambda (output) output)
+                      session
+                      options))))
 
     (define (cli-repl-drive read-chunk session . maybe-options)
       "Drive a REPL session over READ-CHUNK and return the ordered contract"
@@ -640,12 +665,26 @@
          (description "The ordered list of emitted contract record datums."))
         (effects host-eval allocation error))
       (let ((records '()))
-        (repl--engine read-chunk
-                      (lambda (record) (set! records (cons record records)))
-                      (lambda (output) output)
-                      session
-                      (if (null? maybe-options) '() (car maybe-options)))
+        (apply repl--drive-dispatch
+               read-chunk
+               session
+               (lambda (record)
+                 (set! records (cons record records)))
+               maybe-options)
         (reverse records)))
+
+    ;; Optional-arity dispatcher for string-backed REPL runs.
+    (define repl--records-from-string-dispatch
+      (case-lambda
+       ((input session)
+        (cli-repl-drive
+         (repl--list-chunk-source (repl--split-lines input))
+         session))
+       ((input session options)
+        (cli-repl-drive
+         (repl--list-chunk-source (repl--split-lines input))
+         session
+         options))))
 
     (define (cli-repl-records-from-string input session . maybe-options)
       "Drive a REPL session over INPUT split into newline chunks and return"
@@ -664,10 +703,7 @@
         (returns (type list)
          (description "The ordered list of emitted contract record datums."))
         (effects host-eval allocation error))
-      (apply cli-repl-drive
-             (repl--list-chunk-source (repl--split-lines input))
-             session
-             maybe-options))
+      (apply repl--records-from-string-dispatch input session maybe-options))
 
     ;;;; Transcript capture and replay
 
@@ -742,6 +778,19 @@
             (apply string-append (reverse parts))
             (loop (cdr sources) (cons "\n" (cons (car sources) parts))))))
 
+    ;; Optional-arity dispatcher for transcript replay runs.
+    (define repl--replay-records-dispatch
+      (case-lambda
+       ((records session)
+        (cli-repl-records-from-string
+         (cli-repl-replay-input records)
+         session))
+       ((records session options)
+        (cli-repl-records-from-string
+         (cli-repl-replay-input records)
+         session
+         options))))
+
     (define (cli-repl-replay-records records session . maybe-options)
       "Replay the captured RECORDS by re-feeding their complete submissions"
       "to a fresh SESSION, returning the new contract record stream."
@@ -768,10 +817,7 @@
           ("The new contract record stream produced by replaying the"
             "submissions.")))
         (effects host-eval allocation error))
-      (apply cli-repl-records-from-string
-             (cli-repl-replay-input records)
-             session
-             maybe-options))
+      (apply repl--replay-records-dispatch records session maybe-options))
 
     ;; A submission outcome is the triple (SOURCE KIND DISPLAY), where KIND is
     ;; `result', `condition', or `none' (an exit form has no outcome) and
