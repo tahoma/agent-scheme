@@ -1083,6 +1083,37 @@
               (cadr (assq 'source-file json-spec)))
          "scheme/stdlib/json.sld"))
 
+(check-external 'srfi-16-case-lambda-alias-import
+                "(import (scheme base) (srfi 16))
+                 (define describe
+                   (case-lambda
+                     (() 'zero)
+                     ((x) (list 'one x))
+                     ((x . rest) (list 'many x rest))))
+                 (list (describe) (describe 'a) (describe 'a 'b 'c))"
+                "(zero (one a) (many a (b c)))")
+
+(check-external 'srfi-16-portable-alias-import
+                "(import (scheme base) (srfi srfi-16))
+                 ((case-lambda
+                    ((x y) (+ x y)))
+                  2 5)"
+                "7")
+
+(check-external 'stdlib-srfi-16-manifest
+                "(import (scheme base) (stdlib manifest))
+                 (let ((entry (stdlib-manifest-ref '(srfi 16)))
+                       (portable-alias
+                        (stdlib-manifest-ref '(srfi srfi-16))))
+                   (list (cdr (assq 'status entry))
+                         (cdr (assq 'source entry))
+                         (cdr (assq 'target entry))
+                         (cdr (assq 'implementation-library entry))
+                         (cdr (assq 'import-aliases entry))
+                         (cdr (assq 'dependencies entry))
+                         (cdr (assq 'target portable-alias))))"
+                "(built-in-shim built-in-shim (scheme case-lambda) (scheme case-lambda) ((srfi 16) (srfi srfi-16)) ((scheme case-lambda)) (scheme case-lambda))")
+
 (check-external 'srfi-180-json-read
                 "(import (scheme base) (srfi 180))
                  (let* ((datum
