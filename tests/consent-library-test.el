@@ -474,6 +474,71 @@
       (regexp-quote "missing-and-let-star")
       (error-message-string error)))))
 
+(ert-deftest consent-library-test-srfi-8-receive-behavior ()
+  "Import SRFI 8 aliases and exercise `receive' behavior."
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (srfi 8))
+      (list
+       (receive (x y) (values 2 5) (+ x y))
+       (receive all (values 'a 'b 'c) all)
+       (receive (head . tail) (values 'first 'second 'third)
+         (list head tail)))")
+    "(7 (a b c) (first (second third)))"))
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (srfi srfi-8))
+      (receive (x y) (values 4 6) (* x y))")
+    "24"))
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (stdlib receive))
+      (receive (x y) (values 'left 'right)
+        (list y x))")
+    "(right left)")))
+
+(ert-deftest consent-library-test-srfi-8-missing-export-diagnostic ()
+  "Report missing SRFI 8 imports through the ordinary resolver diagnostic."
+  (let ((error
+         (should-error
+          (consent-library-test--external
+           "(import (scheme base)
+                    (only (srfi 8) missing-receive))
+            missing-receive")
+          :type 'consent-eval-error)))
+    (should
+     (string-match-p
+      (regexp-quote "only import name not found")
+      (error-message-string error)))
+    (should
+     (string-match-p
+      (regexp-quote "missing-receive")
+      (error-message-string error)))))
+
+(ert-deftest consent-library-test-stdlib-manifest-documents-srfi-8 ()
+  "Expose SRFI 8 support status through the stdlib manifest."
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (stdlib manifest))
+      (let ((entry (stdlib-manifest-ref '(stdlib receive)))
+            (alias (stdlib-manifest-ref '(srfi 8)))
+            (portable-alias (stdlib-manifest-ref '(srfi srfi-8))))
+        (list (cdr (assq 'status entry))
+              (cdr (assq 'source entry))
+              (cdr (assq 'implementation-library entry))
+              (cdr (assq 'upstream-license entry))
+              (cdr (assq 'local-license entry))
+              (cdr (assq 'vendored? entry))
+              (cdr (assq 'import-aliases entry))
+              (cdr (assq 'dependencies entry))
+              (cdr (assq 'target alias))
+              (cdr (assq 'target portable-alias))))")
+    "(built-in-shim built-in-shim (stdlib receive) \"MIT\" \"Apache-2.0\" #f ((stdlib receive) (srfi 8) (srfi srfi-8)) ((scheme base)) (stdlib receive) (stdlib receive))")))
+
 (ert-deftest consent-library-test-stdlib-manifest-documents-srfi-2 ()
   "Expose SRFI 2 support status through the stdlib manifest."
   (should
