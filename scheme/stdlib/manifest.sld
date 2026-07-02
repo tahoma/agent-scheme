@@ -81,14 +81,14 @@
                            (default-hash
                             (source local-portable-implementation))
                            (stateful-hasher
-                            (source local-portable-optional-arguments))
+                            (source upstream-style-case-lambda))
                            (hash-helpers
                             (source local-portable-procedures))))
          (implementation-library . (stdlib comparator))
          (import-aliases . ((stdlib comparator) (scheme comparator)
                             (srfi 128) (srfi srfi-128)))
-         (dependencies . ((scheme base) (scheme char) (scheme inexact)
-                          (scheme complex)))
+         (dependencies . ((scheme base) (scheme case-lambda) (scheme char)
+                          (scheme inexact) (scheme complex)))
          (test-status . (import-resolution representative-comparator-behavior
                          alias-import missing-export-diagnostic
                          portable-host-suite)))

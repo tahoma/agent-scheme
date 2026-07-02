@@ -21,7 +21,8 @@
           json-sequence-read
           json-accumulator
           json-write)
-  (import (scheme base))
+  (import (scheme base)
+          (scheme case-lambda))
   (begin
     ;; Limit the number of characters read from one JSON value when non-#f.
     (define json-number-of-character-limit (make-parameter #f))
@@ -410,6 +411,12 @@
       (json-character-count 0)
       (read-value 0))
 
+    ;; Optional-arity dispatcher for the public JSON reader.
+    (define json-read-dispatch
+      (case-lambda
+       (() (json-read-from-port (current-input-port)))
+       ((port) (json-read-from-port port))))
+
     (define (json-read . maybe-port)
       "Read one JSON value from a textual input port."
       #((parameters
@@ -419,8 +426,18 @@
              "used when omitted."))))
         (returns . "The decoded JSON value as Scheme data.")
         (effects port-io error))
-      (let ((port (if (null? maybe-port) (current-input-port) (car maybe-port))))
-        (json-read-from-port port)))
+      (apply json-read-dispatch maybe-port))
+
+    ;; Optional-arity dispatcher for JSON value generators.
+    (define json-generator-dispatch
+      (case-lambda
+       (()
+        (let ((port (current-input-port)))
+          (lambda ()
+            (json-read port))))
+       ((port)
+        (lambda ()
+          (json-read port)))))
 
     (define (json-generator . maybe-port)
       "Return a generator that reads one JSON value at a time."
@@ -432,9 +449,13 @@
         (returns (type procedure)
          (description "Thunk returning the next decoded JSON value."))
         (effects port-io error))
-      (let ((port (if (null? maybe-port) (current-input-port) (car maybe-port))))
-        (lambda ()
-          (json-read port))))
+      (apply json-generator-dispatch maybe-port))
+
+    ;; Optional-arity dispatcher for JSON lines readers.
+    (define json-lines-read-dispatch
+      (case-lambda
+       (() (json-generator))
+       ((port) (json-generator port))))
 
     (define (json-lines-read . maybe-port)
       "Return a generator that reads consecutive JSON values."
@@ -446,7 +467,13 @@
         (returns (type procedure)
          (description "Thunk returning the next decoded JSON value."))
         (effects port-io error))
-      (apply json-generator maybe-port))
+      (apply json-lines-read-dispatch maybe-port))
+
+    ;; Optional-arity dispatcher for JSON sequence readers.
+    (define json-sequence-read-dispatch
+      (case-lambda
+       (() (json-generator))
+       ((port) (json-generator port))))
 
     (define (json-sequence-read . maybe-port)
       "Return a generator that reads consecutive JSON sequence values."
@@ -458,7 +485,7 @@
         (returns (type procedure)
          (description "Thunk returning the next decoded JSON sequence value."))
         (effects port-io error))
-      (apply json-generator maybe-port))
+      (apply json-sequence-read-dispatch maybe-port))
 
     ;; Fold a vector left-to-right without depending on a non-base library.
     (define (json-vector-fold proc seed vector)
@@ -606,6 +633,18 @@
        (else
         (json-fail "Value cannot be encoded as JSON."))))
 
+    (define (json-write-target datum target)
+      "Write DATUM as JSON to TARGET, a port or accumulator procedure."
+      (let ((emit (if (procedure? target) target (json-emit-port target))))
+        (json-write-value datum emit)
+        (json-unspecified)))
+
+    ;; Optional-arity dispatcher for the public JSON writer.
+    (define json-write-dispatch
+      (case-lambda
+       ((datum) (json-write-target datum (current-output-port)))
+       ((datum target) (json-write-target datum target))))
+
     (define (json-write datum . maybe-port-or-accumulator)
       "Write DATUM as JSON to a port or accumulator procedure."
       #((parameters
@@ -616,13 +655,7 @@
              "The current output port is used when omitted."))))
         (returns . "The unspecified value.")
         (effects port-io error))
-      (let* ((target
-              (if (null? maybe-port-or-accumulator)
-                  (current-output-port)
-                  (car maybe-port-or-accumulator)))
-             (emit (if (procedure? target) target (json-emit-port target))))
-        (json-write-value datum emit)
-        (json-unspecified)))
+      (apply json-write-dispatch datum maybe-port-or-accumulator))
 
     (define (json-accumulator accumulator)
       "Return a small SRFI 180 event accumulator over ACCUMULATOR."

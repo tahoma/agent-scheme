@@ -30,6 +30,7 @@
           cli-script-host-run-options
           cli-script-host-run-file)
   (import (scheme base)
+          (scheme case-lambda)
           (scheme file)
           (consent eval)
           (only (consent reader) consent-read-all))
@@ -114,16 +115,6 @@
         (effects state-read allocation error))
       (cli-script-strip-shebang (script--read-file-string path)))
 
-    (define (script--rest-environment rest)
-      "Return the optional evaluation environment from REST."
-      (if (null? rest) #f (car rest)))
-
-    (define (script--rest-options rest)
-      "Return the optional evaluation options from REST."
-      (if (or (null? rest) (null? (cdr rest)))
-          '()
-          (cadr rest)))
-
     (define (script--option-ref options key default)
       "Return KEY from OPTIONS, or DEFAULT when KEY is absent."
       (let ((cell (assq key options)))
@@ -142,6 +133,21 @@
                                             'script-arguments
                                             '())))
             options))
+
+    (define (script--run-file path environment options)
+      "Run PATH with ENVIRONMENT and OPTIONS after script option normalization."
+      (consent-eval-source
+       (cli-script-source-from-file path)
+       environment
+       (script--options-with-command-line path options)))
+
+    ;; Optional-arity dispatcher for executable script evaluation.
+    (define script--run-file-dispatch
+      (case-lambda
+       ((path) (script--run-file path #f '()))
+       ((path environment) (script--run-file path environment '()))
+       ((path environment options)
+        (script--run-file path environment options))))
 
     (define (cli-script-run-file path . rest)
       "Run executable Consent Scheme script PATH through the Consent"
@@ -178,11 +184,7 @@
              "`consent-eval-source' (environment, options)."))))
         (returns . ("The last value produced by evaluating the script's source."))
         (effects state-read host-eval error))
-      (consent-eval-source
-       (cli-script-source-from-file path)
-       (script--rest-environment rest)
-       (script--options-with-command-line path
-                                         (script--rest-options rest))))
+      (apply script--run-file-dispatch path rest))
 
     ;; Host-runner posture: the deliberate capability bundle that lets the
     ;; compiled runtime act as a Consent-Scheme host runner for portable test
