@@ -38,10 +38,11 @@ Optional libraries belong to the `stdlib` layer tracked separately in
 [tahoma/consent#54](https://github.com/tahoma/consent/issues/54). Consent
 Scheme currently ships an owned portable `(stdlib json)` translator for
 protocol/document boundaries, with `(consent json)`, `(srfi 180)`, and
-`(srfi srfi-180)` compatibility imports, plus `(stdlib comparator)` with
-R7RS-large `(scheme comparator)`, `(srfi 128)`, and `(srfi srfi-128)`
-compatibility. Import failures outside implemented `stdlib` libraries should
-not be read as R7RS-small conformance failures.
+`(srfi srfi-180)` compatibility imports, SRFI 16 compatibility imports
+`(srfi 16)` and `(srfi srfi-16)` over the R7RS `(scheme case-lambda)` library,
+plus `(stdlib comparator)` with R7RS-large `(scheme comparator)`, `(srfi 128)`,
+and `(srfi srfi-128)` compatibility. Import failures outside implemented
+`stdlib` libraries should not be read as R7RS-small conformance failures.
 
 The multi-host bootstrap strategy lives in
 [docs/multi-host-bootstrap.md](docs/multi-host-bootstrap.md). It records how

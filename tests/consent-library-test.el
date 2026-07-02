@@ -344,6 +344,46 @@
         'a 'b))")
     "((1 2 (3 4)) (a b))")))
 
+(ert-deftest consent-library-test-srfi-16-case-lambda-alias-import ()
+  "Import SRFI 16 aliases over the R7RS case-lambda library."
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (srfi 16))
+      (define describe
+        (case-lambda
+          (() 'zero)
+          ((x) (list 'one x))
+          ((x . rest) (list 'many x rest))))
+      (list (describe) (describe 'a) (describe 'a 'b 'c))")
+    "(zero (one a) (many a (b c)))"))
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (srfi srfi-16))
+      ((case-lambda
+         ((x y) (+ x y)))
+       2 5)")
+    "7")))
+
+(ert-deftest consent-library-test-srfi-16-missing-export-diagnostic ()
+  "Report missing SRFI 16 imports through the resolver diagnostic."
+  (let ((error
+         (should-error
+          (consent-library-test--external
+           "(import (scheme base)
+                    (only (srfi 16) missing-case-lambda))
+            missing-case-lambda")
+          :type 'consent-eval-error)))
+    (should
+     (string-match-p
+      (regexp-quote "only import name not found")
+      (error-message-string error)))
+    (should
+     (string-match-p
+      (regexp-quote "missing-case-lambda")
+      (error-message-string error)))))
+
 (ert-deftest consent-library-test-srfi-180-imports-and-round-trips-json ()
   "Import `(srfi 180)' through the library registry and use JSON."
   (should
@@ -574,6 +614,23 @@
               (cdr (assq 'target alias))
               (cdr (assq 'target portable-alias))))")
     "(vendored-adapted-implementation (stdlib comparator) \"MIT\" \"MIT\" ((stdlib comparator) (scheme comparator) (srfi 128) (srfi srfi-128)) ((scheme base) (scheme char) (scheme inexact) (scheme complex)) (stdlib comparator) (stdlib comparator) (stdlib comparator))")))
+
+(ert-deftest consent-library-test-stdlib-manifest-documents-srfi-16-shim ()
+  "Expose SRFI 16 shim status through the stdlib manifest."
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (stdlib manifest))
+      (let ((entry (stdlib-manifest-ref '(srfi 16)))
+            (portable-alias (stdlib-manifest-ref '(srfi srfi-16))))
+        (list (cdr (assq 'status entry))
+              (cdr (assq 'source entry))
+              (cdr (assq 'target entry))
+              (cdr (assq 'implementation-library entry))
+              (cdr (assq 'import-aliases entry))
+              (cdr (assq 'dependencies entry))
+              (cdr (assq 'target portable-alias))))")
+    "(built-in-shim built-in-shim (scheme case-lambda) (scheme case-lambda) ((srfi 16) (srfi srfi-16)) ((scheme case-lambda)) (scheme case-lambda))")))
 
 (ert-deftest consent-library-test-standard-char-and-cxr-imports ()
   "Import `(scheme char)' and `(scheme cxr)' bindings."

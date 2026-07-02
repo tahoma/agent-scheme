@@ -152,6 +152,10 @@
     (define stdlib-library-aliases
       '(((alias . (srfi manifest))
          (target . (stdlib manifest)))
+        ((alias . (srfi 16))
+         (target . (scheme case-lambda)))
+        ((alias . (srfi srfi-16))
+         (target . (scheme case-lambda)))
         ((alias . (consent json))
          (target . (stdlib json)))
         ((alias . (srfi 180))
