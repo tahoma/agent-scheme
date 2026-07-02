@@ -844,10 +844,10 @@ adapter or primitive policy surfaces instead of portable source files.
 
 Optional SRFI and R7RS-large libraries belong under `scheme/stdlib/`,
 with primary names in the `(stdlib *)` namespace. The Scheme-readable
-`(stdlib manifest)` library records SRFI source URLs, upstream revisions,
-licenses, aliases, and local patches for this optional layer; SRFI, R7RS-large,
-and historical Consent names are public import compatibility and metadata, not
-filesystem ownership.
+`(stdlib manifest)` library records source URLs, upstream revisions, licenses,
+aliases, dependencies, test status, and local patches for this optional layer;
+SRFI, R7RS-large, and historical Consent names are public import compatibility
+and metadata, not filesystem ownership.
 
 ## Agent Skills Interop
 

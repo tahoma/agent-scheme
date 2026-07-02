@@ -8,11 +8,11 @@
 ;;; state.
 
 (define-library (stdlib manifest)
-  (export srfi-manifest srfi-manifest-ref)
+  (export stdlib-manifest stdlib-manifest-ref)
   (import (scheme base))
   (begin
     ;; Manifest entries describe optional libraries owned or surfaced locally.
-    (define srfi-manifest
+    (define stdlib-manifest
       '(((library . (stdlib json))
          (status . direct-portable-implementation)
          (source-url . "https://github.com/scheme-requests-for-implementation/srfi-180")
@@ -92,7 +92,7 @@
          (dependencies . ((stdlib comparator)))
          (test-status . (import-resolution)))))
 
-    (define (srfi-manifest-ref library)
+    (define (stdlib-manifest-ref library)
       "Return manifest metadata for LIBRARY, or #f when absent."
       #((parameters
          (library (type list)
@@ -100,7 +100,7 @@
         (returns (type (or list boolean))
          (description "Manifest entry for LIBRARY, or #f."))
         (effects pure))
-      (let loop ((rest srfi-manifest))
+      (let loop ((rest stdlib-manifest))
         (cond
          ((null? rest) #f)
          ((equal? (cdr (assq 'library (car rest))) library) (car rest))
