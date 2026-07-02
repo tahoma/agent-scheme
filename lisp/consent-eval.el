@@ -132,10 +132,11 @@ explicitly; it has the same calling convention as
 ;;;###autoload
 (defun consent-program-input-from-string (content)
   "Return a one-shot program-input reader that yields CONTENT once, then ends.
-This is the honest finite-input constructor -- a stream whose whole contents are
-available immediately and which then reaches end of stream.  Use it for fixtures,
-captured-transcript replay, and other genuinely in-memory input; it is never a
-way to model a live stdin, which has a time dimension a buffer cannot represent.
+This is the honest finite-input constructor -- a stream whose whole contents
+are available immediately and which then reaches end of stream.  Use it for
+fixtures, captured-transcript replay, and other genuinely in-memory input; it
+is never a way to model a live stdin, which has a time dimension a buffer
+cannot represent.
 Mirrors the portable `(consent eval)' `consent-program-input-from-string'."
   (let ((pending content))
     (lambda ()
