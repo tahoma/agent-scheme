@@ -15,6 +15,7 @@ source-tree layers.
 | --- | --- | --- | --- | --- |
 | `(stdlib json)` | implemented | Local portable implementation, recorded in `(stdlib manifest)` | `(stdlib json)`, `(consent json)`, `(srfi 180)`, `(srfi srfi-180)` | JSON boundary codec used by tool-calling and protocol edges; historical Consent and SRFI spellings are compatibility aliases. |
 | `(srfi 16)` | shimmed | Built-in shim over R7RS `(scheme case-lambda)`, recorded in `(stdlib manifest)` | `(srfi 16)`, `(srfi srfi-16)` | Optional SRFI compatibility for `case-lambda`; the implementation remains the R7RS-small library and is not vendored stdlib source. |
+| `(stdlib and-let-star)` | implemented | Vendored adapted SRFI 2 sample macro, recorded in `(stdlib manifest)` | `(stdlib and-let-star)`, `(srfi 2)`, `(srfi srfi-2)` | Optional SRFI 2 `and-let*` syntax for guarded sequential bindings; not part of the R7RS-small baseline. |
 | `(stdlib comparator)` | implemented | Vendored adapted SRFI 128 sample implementation, recorded in `(stdlib manifest)` | `(stdlib comparator)`, `(scheme comparator)`, `(srfi 128)`, `(srfi srfi-128)` | Primary stdlib spelling owns the source; R7RS-large and SRFI spellings are compatibility aliases. |
 
 The Scheme-readable `(stdlib manifest)` library records source URLs, upstream

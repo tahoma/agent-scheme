@@ -145,6 +145,7 @@
     ;; stdlib library keys recognized by the portable registry.
     (define stdlib-source-library-keys
       '((stdlib manifest)
+        (stdlib and-let-star)
         (stdlib comparator)
         (stdlib json)))
 
@@ -156,6 +157,10 @@
          (target . (scheme case-lambda)))
         ((alias . (srfi srfi-16))
          (target . (scheme case-lambda)))
+        ((alias . (srfi 2))
+         (target . (stdlib and-let-star)))
+        ((alias . (srfi srfi-2))
+         (target . (stdlib and-let-star)))
         ((alias . (consent json))
          (target . (stdlib json)))
         ((alias . (srfi 180))
@@ -336,6 +341,9 @@
       '(((stdlib manifest)
          "scheme/stdlib/manifest.sld"
          "stdlib/manifest.sld")
+        ((stdlib and-let-star)
+         "scheme/stdlib/and-let-star.sld"
+         "stdlib/and-let-star.sld")
         ((stdlib comparator)
          "scheme/stdlib/comparator.sld"
          "stdlib/comparator.sld")

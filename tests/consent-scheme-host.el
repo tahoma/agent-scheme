@@ -29,6 +29,7 @@
     "tests/scheme/consent-models-openai-test.scm"
     "tests/scheme/consent-script-test.scm"
     "tests/scheme/stdlib-comparator-test.scm"
+    "tests/scheme/stdlib-and-let-star-test.scm"
     "tests/scheme/consent-eval-test.scm")
   "Portable Scheme test files exercised by full-suite host shards.")
 
