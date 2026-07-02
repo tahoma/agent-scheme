@@ -22,7 +22,8 @@
           json-accumulator
           json-write)
   (import (scheme base)
-          (scheme case-lambda))
+          (scheme case-lambda)
+          (stdlib and-let-star))
   (begin
     ;; Limit the number of characters read from one JSON value when non-#f.
     (define json-number-of-character-limit (make-parameter #f))
@@ -286,14 +287,11 @@
               index))
         (if (= length 0)
             #f
-            (let* ((start (if (char=? (at 0) #\-) 1 0))
-                   (integer-end (parse-integer start)))
-              (and integer-end
-                   (let ((fraction-end (parse-fraction integer-end)))
-                     (and fraction-end
-                          (let ((exponent-end (parse-exponent fraction-end)))
-                            (and exponent-end
-                                 (= exponent-end length))))))))))
+            (let ((start (if (char=? (at 0) #\-) 1 0)))
+              (and-let* ((integer-end (parse-integer start))
+                         (fraction-end (parse-fraction integer-end))
+                         (exponent-end (parse-exponent fraction-end)))
+                (= exponent-end length))))))
 
     ;; Read and parse a JSON number whose first character has been consumed.
     (define (json-read-number port first)

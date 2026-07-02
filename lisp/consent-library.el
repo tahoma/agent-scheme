@@ -78,6 +78,7 @@
 
 (defconst consent--stdlib-source-library-keys
   '("(stdlib manifest)"
+    "(stdlib and-let-star)"
     "(stdlib comparator)"
     "(stdlib json)")
   "Optional stdlib library keys backed by source files.")
@@ -89,6 +90,10 @@
      (:target . "(scheme case-lambda)"))
     ((:alias . "(srfi srfi-16)")
      (:target . "(scheme case-lambda)"))
+    ((:alias . "(srfi 2)")
+     (:target . "(stdlib and-let-star)"))
+    ((:alias . "(srfi srfi-2)")
+     (:target . "(stdlib and-let-star)"))
     ((:alias . "(consent json)")
      (:target . "(stdlib json)"))
     ((:alias . "(srfi 180)")
@@ -217,6 +222,8 @@ core rather than the agent domain it governs.")
 (defconst consent--stdlib-source-library-files
   '(("(stdlib manifest)"
      . "../scheme/stdlib/manifest.sld")
+    ("(stdlib and-let-star)"
+     . "../scheme/stdlib/and-let-star.sld")
     ("(stdlib comparator)"
      . "../scheme/stdlib/comparator.sld")
     ("(stdlib json)"

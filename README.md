@@ -40,8 +40,10 @@ Scheme currently ships an owned portable `(stdlib json)` translator for
 protocol/document boundaries, with `(consent json)`, `(srfi 180)`, and
 `(srfi srfi-180)` compatibility imports, SRFI 16 compatibility imports
 `(srfi 16)` and `(srfi srfi-16)` over the R7RS `(scheme case-lambda)` library,
-plus `(stdlib comparator)` with R7RS-large `(scheme comparator)`, `(srfi 128)`,
-and `(srfi srfi-128)` compatibility. Import failures outside implemented
+SRFI 2 `and-let*` through `(stdlib and-let-star)`, `(srfi 2)`, and
+`(srfi srfi-2)`, plus `(stdlib comparator)` with R7RS-large
+`(scheme comparator)`, `(srfi 128)`, and `(srfi srfi-128)` compatibility.
+Import failures outside implemented
 `stdlib` libraries should not be read as R7RS-small conformance failures.
 
 The multi-host bootstrap strategy lives in
