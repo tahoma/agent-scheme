@@ -43,21 +43,27 @@
           ((<? comparator a b) less)
           (else greater)))))
 
-    ;; SRFI 128 hash functions in this implementation share one fixed bound.
-    (define-syntax hash-bound
-      (syntax-rules ()
-        ((hash-bound) comparator-hash-bound)))
-
-    ;; SRFI 128 exposes the current hash salt as syntax.
-    (define-syntax hash-salt
-      (syntax-rules ()
-        ((hash-salt) (comparator-hash-salt))))
-
     ;; Upper bound used by portable hash helpers.
     (define comparator-hash-bound 33554432)
 
     ;; Parameter holding the deterministic portable hash salt.
     (define comparator-hash-salt (make-parameter 16064047))
+
+    (define (hash-bound)
+      "Return the exclusive upper bound for SRFI 128 hash values."
+      #((parameters)
+        (returns (type exact-positive-integer)
+         (description "Exclusive upper bound for comparator hash values."))
+        (effects pure))
+      comparator-hash-bound)
+
+    (define (hash-salt)
+      "Return the deterministic SRFI 128 hash salt."
+      #((parameters)
+        (returns (type exact-non-negative-integer)
+         (description "Salt value mixed into portable comparator hashes."))
+        (effects pure))
+      (comparator-hash-salt))
 
     ;; Internal comparator record. Public predicates and accessors are
     ;; documented wrappers so exported procedures carry runtime metadata.
