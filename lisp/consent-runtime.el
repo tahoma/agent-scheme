@@ -249,10 +249,11 @@ template resolve there instead of at the macro use site."
 
 (cl-defstruct (consent-procedure
                (:constructor consent--make-procedure
-                             (formals body environment documentation))
+                             (formals body environment documentation
+                                      syntax-environment))
                (:copier nil))
   "Scheme procedure value."
-  formals body environment documentation)
+  formals body environment documentation syntax-environment)
 
 (cl-defstruct (consent-primitive-procedure
                (:constructor consent--make-primitive-procedure

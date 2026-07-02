@@ -223,6 +223,32 @@
         (choose))")
     "library")))
 
+(ert-deftest consent-library-test-procedures-keep-private-imported-syntax ()
+  "Evaluate library procedures with their defining syntax environment."
+  (should
+   (equal
+    (consent-library-test--external
+     "(define-library (consent fixture private-syntax)
+        (export choose-private)
+        (import (scheme base))
+        (begin
+          (define-syntax choose-private
+            (syntax-rules ()
+              ((choose-private value fallback)
+               (let ((candidate value))
+                 (if candidate candidate fallback)))))))
+      (define-library (consent fixture private-use)
+        (export use-private)
+        (import (scheme base)
+                (consent fixture private-syntax))
+        (begin
+          (define (use-private value)
+            (choose-private value 'fallback))))
+      (import (scheme base)
+              (consent fixture private-use))
+      (list (use-private 'ok) (use-private #f))")
+    "(ok fallback)")))
+
 (ert-deftest consent-library-test-cond-expand-library-declaration ()
   "Expand library-level cond-expand clauses into declarations."
   (should

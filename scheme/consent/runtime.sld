@@ -68,6 +68,7 @@
           procedure-formals
           procedure-body
           procedure-environment
+          procedure-syntax-environment
           procedure-documentation
           make-primitive-procedure
           consent-primitive-procedure?
@@ -615,14 +616,15 @@
       (origins documentation-metadata-origins))
 
     ;; Record type for compound Scheme procedures and their closure
-    ;; environment.
+    ;; environments.
     (define-record-type <procedure>
-      (make-procedure formals body environment documentation)
+      (make-procedure formals body environment documentation syntax-environment)
       consent-procedure?
       (formals procedure-formals)
       (body procedure-body)
       (environment procedure-environment)
-      (documentation procedure-documentation))
+      (documentation procedure-documentation)
+      (syntax-environment procedure-syntax-environment))
 
     ;; Primitive procedures are the kernel boundary: each call is budgeted as a
     ;; host callback even when the primitive implements pure R7RS behavior.

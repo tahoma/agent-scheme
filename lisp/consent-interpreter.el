@@ -657,7 +657,7 @@ unchanged, preserving top-level diagnostics."
       (consent--continue continuation (cdr outcome)))))
 
 (defun consent--apply-procedure
-    (procedure arguments context _tailp &optional continuation)
+    (procedure arguments context tailp &optional continuation)
   "Apply PROCEDURE to ARGUMENTS.
 When CONTINUATION is non-nil, deliver the result to it.  When it is nil, run
 any resulting bounce to preserve existing direct-call helper behavior."
@@ -741,25 +741,40 @@ any resulting bounce to preserve existing direct-call helper behavior."
         (finish
          (consent--apply-parameter/k procedure arguments context next)))
        ((consent-procedure-p procedure)
-        (let* ((call-environment
-                (consent--bind-formals
-                 (consent-procedure-formals procedure)
-                 arguments
-                 (consent-procedure-environment procedure)
-                 context))
-               (body-state
-                (consent--prepare-body-environment
-                 (consent-procedure-body procedure)
-                 call-environment
-                 context))
-               (body-expression
-                (consent--make-sequence (cdr body-state) nil)))
+        (let ((closure-syntax-environment
+               (consent-procedure-syntax-environment procedure))
+              (caller-syntax-environment
+               (consent--eval-context-syntax-environment context)))
           (finish
-           (consent--make-bounce
-            body-expression
-            (car body-state)
-            (consent--eval-context-syntax-environment context)
-            next))))
+           (consent--with-syntax-environment
+            context
+            closure-syntax-environment
+            (lambda ()
+              (let* ((call-environment
+                      (consent--bind-formals
+                       (consent-procedure-formals procedure)
+                       arguments
+                       (consent-procedure-environment procedure)
+                       context))
+                     (body-state
+                      (consent--prepare-body-environment
+                       (consent-procedure-body procedure)
+                       call-environment
+                       context))
+                     (body-expression
+                      (consent--make-sequence (cdr body-state) nil)))
+                (consent--make-bounce
+                 body-expression
+                 (car body-state)
+                 closure-syntax-environment
+                 (if tailp
+                     next
+                   (lambda (value)
+                     (consent--with-syntax-environment
+                      context
+                      caller-syntax-environment
+                      (lambda ()
+                        (consent--continue next value))))))))))))
        ((consent--continuation-p procedure)
         (finish
          (consent--invoke-continuation procedure arguments context)))
@@ -1108,17 +1123,18 @@ each initializer."
 	          (consent--eval-error "lambda requires formals and a body"))
 	        (let ((formals (cadr parts))
 	              (body (cddr parts)))
-                  (let* ((parsed-formals (consent--parse-formals formals))
-                         (documentation-result
-                          (consent--body-documentation-result
-                           body context parsed-formals)))
+	          (let* ((parsed-formals (consent--parse-formals formals))
+	                 (documentation-result
+	                  (consent--body-documentation-result
+	                   body context parsed-formals)))
 	            (consent--continue
-                     continuation
-                     (consent--make-procedure
+	             continuation
+	             (consent--make-procedure
 	              parsed-formals
 	              (plist-get documentation-result :body)
 	              environment
-                      (plist-get documentation-result :metadata))))))
+	              (plist-get documentation-result :metadata)
+	              (consent--eval-context-syntax-environment context))))))
 	       ((and (consent--symbol-named-p operator "if")
 	             (consent--special-operator-active-p operator environment))
 	        (consent--eval-if parts environment context tailp continuation))
