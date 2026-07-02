@@ -43,6 +43,7 @@ CONSENT_DIST_NAME = consent-$(CONSENT_VERSION)-$(CONSENT_COMPILE_HOST)
 CONSENT_LINT_BUILD_DIR ?= build/lint
 CONSENT_PORTABLE_LINT_BUILD_DIR ?= build/lint-portable
 CONSENT_LINE_LENGTH_LIMIT ?= 120
+CONSENT_ELISP_DOCSTRING_MAX_COLUMN ?= 80
 CONSENT_GUILE ?= guile
 CONSENT_RACKET ?= racket
 CONSENT_RACO ?= raco
@@ -121,7 +122,7 @@ CONSENT_FULL_TEST_JOBS ?= 16
 
 .DEFAULT_GOAL := help
 
-.PHONY: help print-version clean clean-compile compile install uninstall dist compile-elisp lint-elisp lint-portable lint-branding lint-line-length repl test test-full test-portable test-portable-chibi test-portable-gambit test-portable-gambit-native test-portable-racket test-portable-compiled test-portable-guile test-portable-gauche test-emacs-hosted test-emacs-core test-emacs-library test-emacs-capabilities test-emacs-tools test-emacs-integration test-emacs-native-build test-parity test-live-model-ci test-live-model conformance-oracle
+.PHONY: help print-version clean clean-compile compile install uninstall dist compile-elisp lint-elisp lint-elisp-docstrings lint-portable lint-branding lint-line-length repl test test-full test-portable test-portable-chibi test-portable-gambit test-portable-gambit-native test-portable-racket test-portable-compiled test-portable-guile test-portable-gauche test-emacs-hosted test-emacs-core test-emacs-library test-emacs-capabilities test-emacs-tools test-emacs-integration test-emacs-native-build test-parity test-live-model-ci test-live-model conformance-oracle
 
 help:
 	@printf '%s\n' 'Consent Scheme top-level actions:'
@@ -135,6 +136,7 @@ help:
 	@printf '  %-26s %s\n' 'print-version' 'Print the canonical runtime version from version.sld.'
 	@printf '  %-26s %s\n' 'compile-elisp' 'Byte-compile checked-in Elisp sources.'
 	@printf '  %-26s %s\n' 'lint-elisp' 'Byte-compile Elisp sources with warnings-as-errors.'
+	@printf '  %-26s %s\n' 'lint-elisp-docstrings' 'Check checked-in Elisp docstring width.'
 	@printf '  %-26s %s\n' 'lint-portable' 'Compile portable libraries under Guile with warnings-as-errors.'
 	@printf '  %-26s %s\n' 'lint-branding' 'Fail on assistant/tool/vendor branding in commits, PR, branch, files.'
 	@printf '  %-26s %s\n' 'lint-line-length' 'Fail on long lines in Scheme source and Scheme tests.'
@@ -176,6 +178,7 @@ help:
 	@printf '  %-50s %s\n' 'CONSENT_TEST_SOURCE_METADATA=on|off' 'Default source metadata mode injected by CI matrix shards.'
 	@printf '  %-50s %s\n' 'CONSENT_TEST_DOCSTRING_RETENTION=full|simple|none' 'Default docstring retention mode injected by CI matrix shards.'
 	@printf '  %-50s %s\n' 'CONSENT_LINE_LENGTH_LIMIT=120' 'Column limit enforced by lint-line-length.'
+	@printf '  %-50s %s\n' 'CONSENT_ELISP_DOCSTRING_MAX_COLUMN=80' 'Column limit enforced by lint-elisp-docstrings.'
 	@printf '  %-50s %s\n' 'CONSENT_TEST_JOBS=N' 'Parallel jobs used by make test.'
 	@printf '  %-50s %s\n' 'CONSENT_TEST_SHARD_TARGETS=a b' 'Trimmed default shard targets run by make test.'
 	@printf '  %-50s %s\n' 'CONSENT_FULL_TEST_SHARD_TARGETS=a b' 'Exhaustive shard targets run by make test-full.'
@@ -321,22 +324,26 @@ compile-elisp:
 # `.elc' beside the sources and never races the parallel test shards that load
 # the `.el' files directly.
 #
-# The docstring-width sub-check is disabled (`byte-compile-docstring-max-column'
-# unbounded) so the gate is deterministic across Emacs versions. `cl-defstruct'
-# auto-generates a constructor docstring with a `(fn &key SLOT...)' line whose
-# width scales with the slot count; Emacs 30 excludes that machine-generated
-# line from the width check while Emacs 29 does not, so a wide struct (notably
-# the `consent--eval-context' god-object tracked by #371) would fail the gate on
-# one Emacs but not another. Docstring style and width are owned by the separate
-# checkdoc slice, not this gate; this target enforces the semantic warning
-# classes the issue motivates.
+# The byte-compiler docstring-width sub-check remains disabled
+# (`byte-compile-docstring-max-column' unbounded) so this bytecode gate is
+# deterministic across Emacs versions. `cl-defstruct' auto-generates a
+# constructor docstring with a `(fn &key SLOT...)' line whose width scales with
+# the slot count; Emacs 30 excludes that machine-generated line from the width
+# check while Emacs 29 does not, so a wide struct would fail this bytecode gate
+# on one Emacs but not another. Checked-in source docstring width is enforced by
+# the separate `lint-elisp-docstrings' prerequisite below.
 # `lint-branding' is a prerequisite so the always-run `lint-elisp' CI job (which
 # invokes `make lint-elisp') also runs the branding gate, wiring it into CI
 # through normal build code rather than a workflow-scoped change. In a CI run
 # the gate reads GITHUB_HEAD_REF for the branch name and scans tracked files;
 # the dedicated Branding workflow injects the PR title/body and full commit
 # range, while this prerequisite remains a fallback for ordinary test runs.
-lint-elisp: lint-branding
+lint-elisp-docstrings:
+	CONSENT_ELISP_DOCSTRING_MAX_COLUMN='$(CONSENT_ELISP_DOCSTRING_MAX_COLUMN)' \
+		$(EMACS) -Q --batch --load tools/lint-elisp-docstrings.el \
+		-f consent-lint-elisp-docstrings-batch-main
+
+lint-elisp: lint-branding lint-elisp-docstrings
 	@rm -rf '$(CONSENT_LINT_BUILD_DIR)'
 	@mkdir -p '$(CONSENT_LINT_BUILD_DIR)'
 	$(EMACS) -Q --batch -L lisp \

@@ -352,10 +352,11 @@ TEXT yields no segments."
 (defun consent-repl-chrome-output-formatter (name session)
   "Return chrome NAME's program-output formatter bound to SESSION.
 The replayable `comment' chrome OWNS program output: this returns a procedure
-mapping each chunk to its `;;   :: ' control-channel rendering -- segments aligned
-to SESSION and the per-turn `consent-repl-chrome-output-ordinal' -- so a captured
-transcript replays the output and stdout stays clean.  Every other chrome returns
-a procedure yielding nil, so the host leaves program output raw on its own stream.
+mapping each chunk to its `;;   :: ' control-channel rendering -- segments
+aligned to SESSION and the per-turn `consent-repl-chrome-output-ordinal' -- so
+a captured transcript replays the output and stdout stays clean.  Every other
+chrome returns a procedure yielding nil, so the host leaves program output raw
+on its own stream.
 The Emacs twin of the portable `cli-repl-chrome-output-formatter'."
   (let ((symbol (if (stringp name) (intern name) name))
         (session-name (cond ((consent-symbol-p session)
