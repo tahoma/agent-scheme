@@ -1180,15 +1180,19 @@
 (let* ((source-specs (consent-stdlib-source-library-specs))
        (manifest-spec
         (find-source-library-spec '(stdlib manifest) source-specs))
+       (and-let-star-spec
+        (find-source-library-spec '(stdlib and-let-star) source-specs))
        (comparator-spec
         (find-source-library-spec '(stdlib comparator) source-specs))
        (json-spec
         (find-source-library-spec '(stdlib json) source-specs)))
   (check 'stdlib-source-library-files
          (and manifest-spec
+              and-let-star-spec
               comparator-spec
               json-spec
               (string? (cadr (assq 'source-file manifest-spec)))
+              (string? (cadr (assq 'source-file and-let-star-spec)))
               (string? (cadr (assq 'source-file comparator-spec)))
               (string? (cadr (assq 'source-file json-spec))))
          #t)
@@ -1196,6 +1200,10 @@
          (and manifest-spec
               (cadr (assq 'source-file manifest-spec)))
          "scheme/stdlib/manifest.sld")
+  (check 'stdlib-source-library-and-let-star-file
+         (and and-let-star-spec
+              (cadr (assq 'source-file and-let-star-spec)))
+         "scheme/stdlib/and-let-star.sld")
   (check 'stdlib-source-library-comparator-file
          (and comparator-spec
               (cadr (assq 'source-file comparator-spec)))
@@ -1251,6 +1259,61 @@
                   ((srfi 16) (srfi srfi-16))
                   ((scheme case-lambda))
                   (scheme case-lambda))"))
+
+(check-external 'srfi-2-and-let-star-behavior
+                "(import (scheme base) (srfi 2))
+                 (let ((events '()))
+                   (define (record tag value)
+                     (set! events (cons tag events))
+                     value)
+                   (list
+                    (and-let* () 'empty)
+                    (and-let* () 1 2)
+                    (and-let* ((x (record 'x '(a b)))
+                               ((pair? x))
+                               (tail (cdr x))
+                               tail)
+                      (list (car x) tail (reverse events)))
+                    (and-let* ((flag #f)
+                               (never (record 'never #t)))
+                      'unreached)
+                    (and-let* ((x 1) (x (+ x 1)) (x (+ x 1)))
+                      x)))"
+                "(empty 2 (a (b) (x)) #f 3)")
+
+(check-external 'srfi-2-portable-alias-import
+                "(import (scheme base) (srfi srfi-2))
+                 (and-let* (((positive? 3)) (x 4)) x)"
+                "4")
+
+(check-external 'stdlib-and-let-star-import
+                "(import (scheme base) (stdlib and-let-star))
+                 (and-let* ((x 'primary)) x)"
+                "primary")
+
+(check-external 'stdlib-srfi-2-manifest
+                "(import (scheme base) (stdlib manifest))
+                 (let ((entry (stdlib-manifest-ref '(stdlib and-let-star)))
+                       (alias (stdlib-manifest-ref '(srfi 2)))
+                       (portable-alias
+                        (stdlib-manifest-ref '(srfi srfi-2))))
+                   (list (cdr (assq 'status entry))
+                         (cdr (assq 'implementation-library entry))
+                         (cdr (assq 'upstream-license entry))
+                         (cdr (assq 'local-license entry))
+                         (cdr (assq 'import-aliases entry))
+                         (cdr (assq 'dependencies entry))
+                         (cdr (assq 'target alias))
+                         (cdr (assq 'target portable-alias))))"
+               (expected-datum-external
+                "(vendored-adapted-implementation
+                  (stdlib and-let-star)
+                  \"MIT\"
+                  \"MIT\"
+                  ((stdlib and-let-star) (srfi 2) (srfi srfi-2))
+                  ((scheme base))
+                  (stdlib and-let-star)
+                  (stdlib and-let-star))"))
 
 (check-external 'srfi-180-json-read
                 (string-append
@@ -1371,12 +1434,14 @@
                    (list (cdr (assq 'status entry))
                          (cdr (assq 'implementation-library entry))
                          (cdr (assq 'upstream-license entry))
-                         (cdr (assq 'import-aliases entry))))"
+                         (cdr (assq 'import-aliases entry))
+                         (cdr (assq 'dependencies entry))))"
                (expected-datum-external
                 "(direct-portable-implementation
                   (stdlib json)
                   \"MIT\"
-                  ((stdlib json) (consent json) (srfi 180) (srfi srfi-180)))"))
+                  ((stdlib json) (consent json) (srfi 180) (srfi srfi-180))
+                  ((stdlib and-let-star)))"))
 
 (check-external 'srfi-128-comparator-behavior
                 "(import (scheme base) (stdlib comparator))

@@ -419,6 +419,80 @@
       (regexp-quote "missing-case-lambda")
       (error-message-string error)))))
 
+(ert-deftest consent-library-test-srfi-2-and-let-star-behavior ()
+  "Import SRFI 2 aliases and exercise `and-let*' behavior."
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (srfi 2))
+      (let ((events '()))
+        (define (record tag value)
+          (set! events (cons tag events))
+          value)
+        (list
+         (and-let* () 'empty)
+         (and-let* () 1 2)
+         (and-let* ((x (record 'x '(a b)))
+                    ((pair? x))
+                    (tail (cdr x))
+                    tail)
+           (list (car x) tail (reverse events)))
+         (and-let* ((flag #f)
+                    (never (record 'never #t)))
+           'unreached)
+         (and-let* ((x 1) (x (+ x 1)) (x (+ x 1)))
+           x)))")
+    "(empty 2 (a (b) (x)) #f 3)"))
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (srfi srfi-2))
+      (and-let* (((positive? 3)) (x 4)) x)")
+    "4"))
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (stdlib and-let-star))
+      (and-let* ((x 'primary)) x)")
+    "primary")))
+
+(ert-deftest consent-library-test-srfi-2-missing-export-diagnostic ()
+  "Report missing SRFI 2 imports through the ordinary resolver diagnostic."
+  (let ((error
+         (should-error
+          (consent-library-test--external
+           "(import (scheme base)
+                    (only (srfi 2) missing-and-let-star))
+            missing-and-let-star")
+          :type 'consent-eval-error)))
+    (should
+     (string-match-p
+      (regexp-quote "only import name not found")
+      (error-message-string error)))
+    (should
+     (string-match-p
+      (regexp-quote "missing-and-let-star")
+      (error-message-string error)))))
+
+(ert-deftest consent-library-test-stdlib-manifest-documents-srfi-2 ()
+  "Expose SRFI 2 support status through the stdlib manifest."
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (stdlib manifest))
+      (let ((entry (stdlib-manifest-ref '(stdlib and-let-star)))
+            (alias (stdlib-manifest-ref '(srfi 2)))
+            (portable-alias (stdlib-manifest-ref '(srfi srfi-2))))
+        (list (cdr (assq 'status entry))
+              (cdr (assq 'implementation-library entry))
+              (cdr (assq 'upstream-license entry))
+              (cdr (assq 'local-license entry))
+              (cdr (assq 'import-aliases entry))
+              (cdr (assq 'dependencies entry))
+              (cdr (assq 'target alias))
+              (cdr (assq 'target portable-alias))))")
+    "(vendored-adapted-implementation (stdlib and-let-star) \"MIT\" \"MIT\" ((stdlib and-let-star) (srfi 2) (srfi srfi-2)) ((scheme base)) (stdlib and-let-star) (stdlib and-let-star))")))
+
 (ert-deftest consent-library-test-srfi-180-imports-and-round-trips-json ()
   "Import `(srfi 180)' through the library registry and use JSON."
   (should
@@ -505,8 +579,9 @@
         (list (cdr (assq 'status entry))
               (cdr (assq 'implementation-library entry))
               (cdr (assq 'upstream-license entry))
-              (cdr (assq 'import-aliases entry))))")
-    "(direct-portable-implementation (stdlib json) \"MIT\" ((stdlib json) (consent json) (srfi 180) (srfi srfi-180)))")))
+              (cdr (assq 'import-aliases entry))
+              (cdr (assq 'dependencies entry))))")
+    "(direct-portable-implementation (stdlib json) \"MIT\" ((stdlib json) (consent json) (srfi 180) (srfi srfi-180)) ((stdlib and-let-star)))")))
 
 (ert-deftest consent-library-test-srfi-180-emacs-json-oracle ()
   "Cross-check portable SRFI 180 behavior against Emacs json.el."
