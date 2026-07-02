@@ -1100,6 +1100,15 @@
                   2 5)"
                 "7")
 
+(check 'srfi-16-case-lambda-no-matching-clause
+       (raises?
+        (lambda ()
+          (consent-eval-source
+           "(import (scheme base) (srfi 16))
+            ((case-lambda
+               ((x) x)))")))
+       #t)
+
 (check-external 'stdlib-srfi-16-manifest
                 "(import (scheme base) (stdlib manifest))
                  (let ((entry (stdlib-manifest-ref '(srfi 16)))
