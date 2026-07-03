@@ -958,7 +958,8 @@
       (assume (comparator? comparator))
       (assume (mapping? mapping1))
       (assume (mapping? mapping2))
-      (not (%mapping<=? comparator mapping1 mapping2)))
+      (and (%mapping<=? comparator mapping2 mapping1)
+           (not (%mapping<=? comparator mapping1 mapping2))))
 
     (define (mapping<? comparator mapping . mappings)
       "Return #t when each mapping is a proper submapping of the next."
@@ -984,7 +985,8 @@
       (assume (comparator? comparator))
       (assume (mapping? mapping1))
       (assume (mapping? mapping2))
-      (%mapping>? comparator mapping2 mapping1))
+      (and (%mapping<=? comparator mapping1 mapping2)
+           (not (%mapping<=? comparator mapping2 mapping1))))
 
     (define (mapping>=? comparator mapping . mappings)
       "Return #t when each mapping is a supermapping of the next."
@@ -1010,7 +1012,7 @@
       (assume (comparator? comparator))
       (assume (mapping? mapping1))
       (assume (mapping? mapping2))
-      (not (%mapping<? comparator mapping1 mapping2)))
+      (%mapping<=? comparator mapping2 mapping1))
 
     (define (%mapping-union mapping1 mapping2)
       "Return the union of MAPPING1 and MAPPING2."
