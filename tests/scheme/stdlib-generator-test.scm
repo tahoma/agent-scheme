@@ -389,6 +389,12 @@
        (generator-fold cons 'z (generator 'a 'b 'c 'd 'e))
        '(e d c b a . z))
 
+(check 'generator-fold/large-range
+       (generator-fold + 0
+                       (gmap (lambda (value) (* value 2))
+                             (make-range-generator 0 10000)))
+       99990000)
+
 (check 'generator-fold/stops-before-pulling-later-generator
        (let ((short (generator 'a))
              (long (generator 'b 'c)))
