@@ -51,7 +51,8 @@
           vcs-operation-required-authority
           parse-git-status-porcelain-v2-z
           parse-git-raw-diff-z)
-  (import (scheme base))
+  (import (scheme base)
+          (prefix (stdlib generator) gen:))
   (begin
     (define (vcs-field name . values)
       "Return a Scheme-readable record field named NAME with VALUES."
@@ -870,32 +871,40 @@
            ((char=? (string-ref text index) char) index)
            (else (loop (+ index 1)))))))
 
+    (define (vcs-delimited-token-generator text char)
+      "Return a generator over TEXT tokens split on CHAR, dropping empty tokens."
+      (let ((characters (gen:string->generator text)))
+        (gen:make-coroutine-generator
+         (lambda (yield)
+           (let loop ((current '()))
+             (let ((next (characters)))
+               (cond
+                ((eof-object? next)
+                 (if (not (null? current))
+                     (yield (list->string (reverse current)))))
+                ((char=? next char)
+                 (if (not (null? current))
+                     (yield (list->string (reverse current))))
+                 (loop '()))
+                (else
+                 (loop (cons next current))))))))))
+
     (define (vcs-split-on-char text char)
       "Split TEXT on CHAR, dropping empty fields used as final terminators."
-      (let ((length (string-length text)))
-        (let loop ((start 0) (index 0) (parts '()))
-          (cond
-           ((> index length)
-            (reverse parts))
-           ((= index length)
-            (let ((part (substring text start index)))
-              (reverse
-               (if (= (string-length part) 0)
-                   parts
-                   (cons part parts)))))
-           ((char=? (string-ref text index) char)
-            (let ((part (substring text start index)))
-              (loop (+ index 1)
-                    (+ index 1)
-                    (if (= (string-length part) 0)
-                        parts
-                        (cons part parts)))))
-           (else
-            (loop start (+ index 1) parts))))))
+      (gen:generator->list (vcs-delimited-token-generator text char)))
 
     (define (vcs-split-nul text)
       "Split a NUL-delimited Git machine-format string."
       (vcs-split-on-char text #\null))
+
+    (define (vcs-nul-token-generator text)
+      "Return a generator over NUL-delimited Git machine-format tokens."
+      (vcs-delimited-token-generator text #\null))
+
+    (define (vcs-next-token/default tokens default)
+      "Return the next value from TOKENS, or DEFAULT at EOF."
+      (let ((token (tokens)))
+        (if (eof-object? token) default token)))
 
     (define (vcs-split-spaces text)
       "Split TEXT into space-separated metadata fields."
@@ -1111,28 +1120,27 @@
             "state, and parse outcome.")))
         (effects pure)
         (see-also make-vcs-status make-vcs-status-entry parse-git-raw-diff-z))
-      (let loop ((tokens (vcs-split-nul text))
-                 (oid #f)
-                 (head #f)
-                 (detached? #f)
-                 (upstream #f)
-                 (ahead 0)
-                 (behind 0)
-                 (entries '()))
-        (if (null? tokens)
-            (make-vcs-status
-             'git
-             (make-vcs-repository 'git #f #f)
-             (make-vcs-branch head oid upstream ahead behind detached?)
-             (reverse entries)
-             (make-vcs-operation-state #f #f #f #f)
-             (make-vcs-outcome 'ok "parsed git status porcelain v2"))
-            (let ((token (car tokens))
-                  (rest (cdr tokens)))
+      (let ((tokens (vcs-nul-token-generator text)))
+        (let loop ((token (tokens))
+                   (oid #f)
+                   (head #f)
+                   (detached? #f)
+                   (upstream #f)
+                   (ahead 0)
+                   (behind 0)
+                   (entries '()))
+          (if (eof-object? token)
+              (make-vcs-status
+               'git
+               (make-vcs-repository 'git #f #f)
+               (make-vcs-branch head oid upstream ahead behind detached?)
+               (reverse entries)
+               (make-vcs-operation-state #f #f #f #f)
+               (make-vcs-outcome 'ok "parsed git status porcelain v2"))
               (cond
                ((vcs-string-prefix? "# branch.oid " token)
                 (let ((value (vcs-drop-prefix "# branch.oid " token)))
-                  (loop rest
+                  (loop (tokens)
                         (if (string=? value "(initial)") #f value)
                         head
                         detached?
@@ -1142,7 +1150,7 @@
                         entries)))
                ((vcs-string-prefix? "# branch.head " token)
                 (let ((value (vcs-drop-prefix "# branch.head " token)))
-                  (loop rest
+                  (loop (tokens)
                         oid
                         (if (string=? value "(detached)") #f value)
                         (string=? value "(detached)")
@@ -1151,7 +1159,7 @@
                         behind
                         entries)))
                ((vcs-string-prefix? "# branch.upstream " token)
-                (loop rest
+                (loop (tokens)
                       oid
                       head
                       detached?
@@ -1163,7 +1171,7 @@
                 (let ((counts
                        (vcs-split-spaces
                         (vcs-drop-prefix "# branch.ab " token))))
-                  (loop rest
+                  (loop (tokens)
                         oid
                         head
                         detached?
@@ -1172,7 +1180,7 @@
                         (vcs-parse-count (vcs-list-ref/default counts 1 "-0"))
                         entries)))
                ((vcs-string-prefix? "1 " token)
-                (loop rest
+                (loop (tokens)
                       oid
                       head
                       detached?
@@ -1181,18 +1189,21 @@
                       behind
                       (cons (vcs-parse-status-ordinary token) entries)))
                ((vcs-string-prefix? "2 " token)
-                (let ((orig-path (if (null? rest) "" (car rest))))
-                  (loop (if (null? rest) rest (cdr rest))
+                (let ((orig-path (tokens)))
+                  (loop (if (eof-object? orig-path) orig-path (tokens))
                         oid
                         head
                         detached?
                         upstream
                         ahead
                         behind
-                        (cons (vcs-parse-status-rename token orig-path)
-                              entries))))
+                        (cons
+                         (vcs-parse-status-rename
+                          token
+                          (if (eof-object? orig-path) "" orig-path))
+                         entries))))
                ((vcs-string-prefix? "u " token)
-                (loop rest
+                (loop (tokens)
                       oid
                       head
                       detached?
@@ -1201,7 +1212,7 @@
                       behind
                       (cons (vcs-parse-status-unmerged token) entries)))
                ((vcs-string-prefix? "? " token)
-                (loop rest
+                (loop (tokens)
                       oid
                       head
                       detached?
@@ -1211,7 +1222,7 @@
                       (cons (vcs-parse-status-other token 'untracked)
                             entries)))
                ((vcs-string-prefix? "! " token)
-                (loop rest
+                (loop (tokens)
                       oid
                       head
                       detached?
@@ -1221,7 +1232,8 @@
                       (cons (vcs-parse-status-other token 'ignored)
                             entries)))
                (else
-                (loop rest oid head detached? upstream ahead behind entries)))))))
+                (loop (tokens)
+                      oid head detached? upstream ahead behind entries)))))))
 
     (define (vcs-raw-status-kind status-token)
       "Convert a Git raw diff status token to a normalized status symbol."
@@ -1237,7 +1249,7 @@
               (if score score #f))
             #f)))
 
-    (define (vcs-parse-raw-diff-record metadata rest)
+    (define (vcs-parse-raw-diff-record metadata tokens)
       "Parse one raw diff metadata token and following path tokens."
       (let ((fields (vcs-split-spaces metadata)))
         (let ((old-mode-token (vcs-list-ref/default fields 0 ":000000"))
@@ -1254,33 +1266,27 @@
                 (status (vcs-raw-status-kind status-token))
                 (score (vcs-raw-status-score status-token)))
             (if (or (eq? status 'renamed) (eq? status 'copied))
-                (let ((orig-path (vcs-list-ref/default rest 0 ""))
-                      (path (vcs-list-ref/default rest 1 "")))
-                  (cons
-                   (make-vcs-diff-file
-                    status
-                    path
-                    orig-path
-                    old-mode
-                    new-mode
-                    old-object
-                    new-object
-                    score)
-                   (if (null? rest)
-                       rest
-                       (if (null? (cdr rest)) '() (cddr rest)))))
-                (let ((path (vcs-list-ref/default rest 0 "")))
-                  (cons
-                   (make-vcs-diff-file
-                    status
-                    path
-                    #f
-                    old-mode
-                    new-mode
-                    old-object
-                    new-object
-                    score)
-                   (if (null? rest) rest (cdr rest)))))))))
+                (let ((orig-path (vcs-next-token/default tokens ""))
+                      (path (vcs-next-token/default tokens "")))
+                  (make-vcs-diff-file
+                   status
+                   path
+                   orig-path
+                   old-mode
+                   new-mode
+                   old-object
+                   new-object
+                   score))
+                (let ((path (vcs-next-token/default tokens "")))
+                  (make-vcs-diff-file
+                   status
+                   path
+                   #f
+                   old-mode
+                   new-mode
+                   old-object
+                   new-object
+                   score)))))))
 
     (define (parse-git-raw-diff-z text)
       "Parse Git diff --raw -z output into a file-level summary datum."
@@ -1295,13 +1301,13 @@
             "records.")))
         (effects pure)
         (see-also make-vcs-diff-summary make-vcs-diff-file parse-git-status-porcelain-v2-z))
-      (let loop ((tokens (vcs-split-nul text))
-                 (files '()))
-        (cond
-         ((null? tokens)
-          (make-vcs-diff-summary 'git (reverse files)))
-         ((vcs-string-prefix? ":" (car tokens))
-          (let ((parsed (vcs-parse-raw-diff-record (car tokens) (cdr tokens))))
-            (loop (cdr parsed) (cons (car parsed) files))))
-         (else
-          (loop (cdr tokens) files)))))))
+      (let ((tokens (vcs-nul-token-generator text)))
+        (let loop ((token (tokens)) (files '()))
+          (cond
+           ((eof-object? token)
+            (make-vcs-diff-summary 'git (reverse files)))
+           ((vcs-string-prefix? ":" token)
+            (let ((file (vcs-parse-raw-diff-record token tokens)))
+              (loop (tokens) (cons file files))))
+           (else
+            (loop (tokens) files))))))))
