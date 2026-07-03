@@ -55,15 +55,19 @@
         (newline)
         (error "ordered mapping smoke tests failed" failures))))
 
+;; Comparator used for integer-keyed fixtures and numeric value comparisons.
 (define integer-comparator
   (make-comparator integer? = < number-hash))
 
+;; Comparator used for symbolic-key fixtures.
 (define default-comparator
   (make-default-comparator))
 
+;; Empty symbolic-key mapping fixture.
 (define empty-symbols
   (mapping default-comparator))
 
+;; Ordered symbolic-key mapping fixture built from shuffled constructor input.
 (define symbols
   (mapping default-comparator 'b 2 'a 1 'c 3))
 
@@ -78,9 +82,11 @@
        (mapping-ref/default symbols 'missing 42)
        42)
 
+;; Mapping fixture that exercises repeated keys in `mapping-set'.
 (define set-duplicates
   (mapping-set symbols 'b 20 'b 21 'd 4))
 
+;; Mapping fixture that exercises repeated keys in `mapping-adjoin'.
 (define adjoin-duplicates
   (mapping-adjoin symbols 'b 20 'd 4 'd 5))
 
@@ -91,6 +97,7 @@
        (mapping->alist adjoin-duplicates)
        '((a . 1) (b . 2) (c . 3) (d . 4)))
 
+;; Integer-keyed mapping fixture used for set and range operations.
 (define numbers
   (mapping integer-comparator
            3 'three
@@ -123,6 +130,7 @@
           (mapping-values-list mappings)))
        '((one two) (one two three) (three) (three four) (four)))
 
+;; Mapping produced by a finite unfold over ascending integer keys.
 (define unfolded
   (mapping-unfold (lambda (seed) (> seed 3))
                   (lambda (seed) (values seed (* seed seed)))
@@ -134,15 +142,19 @@
        (mapping->alist unfolded)
        '((1 . 1) (2 . 4) (3 . 9)))
 
+;; Proper subset mapping for ordered comparison checks.
 (define subset-left
   (mapping integer-comparator 1 10 2 20))
 
+;; Proper superset mapping for ordered comparison checks.
 (define subset-right
   (mapping integer-comparator 1 10 2 20 3 30))
 
+;; Mapping that overlaps but is not a subset of `overlap-right'.
 (define overlap-left
   (mapping integer-comparator 1 10 2 20))
 
+;; Mapping that overlaps but is not a superset of `overlap-left'.
 (define overlap-right
   (mapping integer-comparator 2 20 3 30))
 
