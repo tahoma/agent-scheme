@@ -65,6 +65,13 @@ CONSENT_PORTABLE_CHIBI_TEST_SELECTOR ?= "^consent-scheme-chibi-host-test-r7rs-su
 CONSENT_EMACS_HOSTED_TEST_SELECTOR ?= (not "consent-scheme-.*")
 CONSENT_EMACS_CORE_TEST_SELECTOR ?= (or "consent-base.*" "consent-budget.*" "consent-eval.*" "consent-interpreter-module.*" "consent-macro.*" "consent-reader.*" "consent-result.*" "consent-runtime.*")
 CONSENT_EMACS_LIBRARY_TEST_SELECTOR ?= (or "consent-conformance.*" "consent-fixture.*" "consent-host-adapter-fixture.*" "consent-library.*" "consent-oracle.*")
+CONSENT_EMACS_AGENT_CONTROL_TEST_SELECTOR ?= (or "consent-agent-prompt.*" "consent-agent-proposal.*" "consent-agent-registry.*" "consent-task.*")
+CONSENT_EMACS_AGENT_RELIABILITY_TEST_SELECTOR ?= (or "consent-agent-reliability.*" "consent-agent-runner.*")
+CONSENT_EMACS_CAPABILITY_BOUNDARY_TEST_SELECTOR ?= (or "consent-approval.*" "consent-capability.*" "consent-network.*" "consent-policy.*")
+CONSENT_EMACS_AGENT_STATE_TEST_SELECTOR ?= (or "consent-agent-io.*" "consent-context.*" "consent-helper.*" "consent-memory.*" "consent-models.*" "consent-plan.*" "consent-redaction.*" "consent-session.*" "consent-test.*" "consent-transcript.*")
+# Compatibility aggregate for ad hoc local runs. The default and CI shard sets
+# use the four narrower targets below so the long-running agent/capability
+# surface can parallelize instead of stretching one shard's wall time.
 CONSENT_EMACS_CAPABILITY_TEST_SELECTOR ?= (or "consent-agent-io.*" "consent-agent-prompt.*" "consent-agent-proposal.*" "consent-agent-registry.*" "consent-agent-reliability.*" "consent-agent-runner.*" "consent-approval.*" "consent-capability.*" "consent-context.*" "consent-helper.*" "consent-memory.*" "consent-models.*" "consent-network.*" "consent-plan.*" "consent-policy.*" "consent-redaction.*" "consent-session.*" "consent-task.*" "consent-test.*" "consent-transcript.*")
 # The tools shard keeps the lighter Emacs-hosted tools/docs surface (CI, compile,
 # diagnostics, doc-pass tests, ...) after #556 split the heavier integration
@@ -94,7 +101,7 @@ CONSENT_PARITY_TEST_SELECTOR ?= "^consent-parity-test-.*"
 CONSENT_LIVE_MODEL_CI_SELECTOR ?= (or "consent-models-test-live-local-openai-compatible-completion" "consent-models-test-live-local-openai-compatible-tool-call" "consent-models-test-live-portable-racket-local-openai-compatible-tool-call" "consent-models-test-live-portable-compiled-local-openai-compatible-tool-call")
 CONSENT_LIVE_MODEL_SELECTOR ?= (or "consent-models-test-live-local-.*" "consent-models-test-live-portable-.*")
 CONSENT_PORTABLE_TEST_SHARD_TARGETS ?= test-portable-gambit test-portable-gambit-native test-portable-racket test-portable-compiled test-portable-guile test-portable-gauche
-CONSENT_EMACS_TEST_SHARD_TARGETS ?= test-emacs-core test-emacs-library test-emacs-capabilities test-emacs-tools test-emacs-integration
+CONSENT_EMACS_TEST_SHARD_TARGETS ?= test-emacs-core test-emacs-library test-emacs-agent-control test-emacs-agent-reliability test-emacs-capability-boundary test-emacs-agent-state test-emacs-tools test-emacs-integration
 # Representative portable host kept in the trimmed default make test shard set.
 # The reader/writer/docstring machinery exercised by the portable shards is
 # host-independent, so one host is enough for the fast local loop; the full host
@@ -122,7 +129,7 @@ CONSENT_FULL_TEST_JOBS ?= 16
 
 .DEFAULT_GOAL := help
 
-.PHONY: help print-version clean clean-compile compile install uninstall dist compile-elisp lint-elisp lint-elisp-docstrings lint-portable lint-branding lint-line-length repl test test-full test-portable test-portable-chibi test-portable-gambit test-portable-gambit-native test-portable-racket test-portable-compiled test-portable-guile test-portable-gauche test-emacs-hosted test-emacs-core test-emacs-library test-emacs-capabilities test-emacs-tools test-emacs-integration test-emacs-native-build test-parity test-live-model-ci test-live-model conformance-oracle
+.PHONY: help print-version clean clean-compile compile install uninstall dist compile-elisp lint-elisp lint-elisp-docstrings lint-portable lint-branding lint-line-length repl test test-full test-portable test-portable-chibi test-portable-gambit test-portable-gambit-native test-portable-racket test-portable-compiled test-portable-guile test-portable-gauche test-emacs-hosted test-emacs-core test-emacs-library test-emacs-agent-control test-emacs-agent-reliability test-emacs-capability-boundary test-emacs-agent-state test-emacs-capabilities test-emacs-tools test-emacs-integration test-emacs-native-build test-parity test-live-model-ci test-live-model conformance-oracle
 
 help:
 	@printf '%s\n' 'Consent Scheme top-level actions:'
@@ -154,7 +161,11 @@ help:
 	@printf '  %-26s %s\n' 'test-emacs-hosted' 'Run all non-portable Emacs-hosted ERT tests.'
 	@printf '  %-26s %s\n' 'test-emacs-core' 'Run the Emacs-hosted core language/runtime shard.'
 	@printf '  %-26s %s\n' 'test-emacs-library' 'Run the Emacs-hosted library/conformance shard.'
-	@printf '  %-26s %s\n' 'test-emacs-capabilities' 'Run the Emacs-hosted capability and policy shard.'
+	@printf '  %-26s %s\n' 'test-emacs-agent-control' 'Run the Emacs-hosted agent control shard.'
+	@printf '  %-26s %s\n' 'test-emacs-agent-reliability' 'Run the Emacs-hosted agent reliability shard.'
+	@printf '  %-26s %s\n' 'test-emacs-capability-boundary' 'Run the Emacs-hosted capability boundary shard.'
+	@printf '  %-26s %s\n' 'test-emacs-agent-state' 'Run the Emacs-hosted agent state shard.'
+	@printf '  %-26s %s\n' 'test-emacs-capabilities' 'Run all Emacs-hosted agent/capability tests.'
 	@printf '  %-26s %s\n' 'test-emacs-tools' 'Run the Emacs-hosted tools and docs shard.'
 	@printf '  %-26s %s\n' 'test-emacs-integration' 'Run the Emacs-hosted REPL/VCS/reflect/native-CLI integration shard.'
 	@printf '  %-26s %s\n' 'test-emacs-native-build' 'Run the Emacs-hosted full host-compile + install/dist shard (opt-in).'
@@ -195,6 +206,10 @@ help:
 	@printf '  %-50s %s\n' 'CONSENT_EMACS_HOSTED_TEST_SELECTOR=SEL' 'ERT selector used by make test-emacs-hosted.'
 	@printf '  %-50s %s\n' 'CONSENT_EMACS_CORE_TEST_SELECTOR=SEL' 'ERT selector used by make test-emacs-core.'
 	@printf '  %-50s %s\n' 'CONSENT_EMACS_LIBRARY_TEST_SELECTOR=SEL' 'ERT selector used by make test-emacs-library.'
+	@printf '  %-50s %s\n' 'CONSENT_EMACS_AGENT_CONTROL_TEST_SELECTOR=SEL' 'ERT selector used by make test-emacs-agent-control.'
+	@printf '  %-50s %s\n' 'CONSENT_EMACS_AGENT_RELIABILITY_TEST_SELECTOR=SEL' 'ERT selector used by make test-emacs-agent-reliability.'
+	@printf '  %-50s %s\n' 'CONSENT_EMACS_CAPABILITY_BOUNDARY_TEST_SELECTOR=SEL' 'ERT selector used by make test-emacs-capability-boundary.'
+	@printf '  %-50s %s\n' 'CONSENT_EMACS_AGENT_STATE_TEST_SELECTOR=SEL' 'ERT selector used by make test-emacs-agent-state.'
 	@printf '  %-50s %s\n' 'CONSENT_EMACS_CAPABILITY_TEST_SELECTOR=SEL' 'ERT selector used by make test-emacs-capabilities.'
 	@printf '  %-50s %s\n' 'CONSENT_EMACS_TOOLS_TEST_SELECTOR=SEL' 'ERT selector used by make test-emacs-tools.'
 	@printf '  %-50s %s\n' 'CONSENT_EMACS_INTEGRATION_TEST_SELECTOR=SEL' 'ERT selector used by make test-emacs-integration.'
@@ -456,6 +471,18 @@ test-emacs-core:
 
 test-emacs-library:
 	CONSENT_TEST_SELECTOR='$(CONSENT_EMACS_LIBRARY_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
+
+test-emacs-agent-control:
+	CONSENT_TEST_SELECTOR='$(CONSENT_EMACS_AGENT_CONTROL_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
+
+test-emacs-agent-reliability:
+	CONSENT_TEST_SELECTOR='$(CONSENT_EMACS_AGENT_RELIABILITY_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
+
+test-emacs-capability-boundary:
+	CONSENT_TEST_SELECTOR='$(CONSENT_EMACS_CAPABILITY_BOUNDARY_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
+
+test-emacs-agent-state:
+	CONSENT_TEST_SELECTOR='$(CONSENT_EMACS_AGENT_STATE_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
 
 test-emacs-capabilities:
 	CONSENT_TEST_SELECTOR='$(CONSENT_EMACS_CAPABILITY_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)

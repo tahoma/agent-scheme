@@ -433,6 +433,34 @@
              "emacs-\\${{ matrix.shard.shard }}-\\${{ matrix.source_metadata }}-docstrings-\\${{ matrix.docstring_retention }}\\.log"
              workflow))))
 
+(ert-deftest consent-ci-test-workflow-splits-capabilities-policy-shard ()
+  "Split the heavyweight Emacs capabilities/policy CI surface into shards."
+  (let ((workflow (consent-ci-test--repo-file-string
+                   ".github/workflows/test.yml")))
+    (dolist (needle '("shard: emacs-agent-control"
+                      "label: agent control"
+                      "make_target: test-emacs-agent-control"
+                      "summary_name: Emacs agent control"
+                      "selector: '(or \"consent-agent-prompt.*\""
+                      "shard: emacs-agent-reliability"
+                      "label: agent reliability"
+                      "make_target: test-emacs-agent-reliability"
+                      "summary_name: Emacs agent reliability"
+                      "selector: '(or \"consent-agent-reliability.*\" \"consent-agent-runner.*\")'"
+                      "shard: emacs-capability-boundary"
+                      "label: capability boundary"
+                      "make_target: test-emacs-capability-boundary"
+                      "summary_name: Emacs capability boundary"
+                      "selector: '(or \"consent-approval.*\" \"consent-capability.*\""
+                      "shard: emacs-agent-state"
+                      "label: agent state"
+                      "make_target: test-emacs-agent-state"
+                      "summary_name: Emacs agent state"
+                      "selector: '(or \"consent-agent-io.*\" \"consent-context.*\""))
+      (should (string-match-p (regexp-quote needle) workflow)))
+    (should-not (string-match-p "make_target: test-emacs-capabilities"
+                                workflow))))
+
 (ert-deftest consent-ci-test-trims-per-push-matrix-and-keeps-full-lane ()
   "Trim the per-push CI matrix while keeping a scheduled exhaustive lane."
   (let ((workflow (consent-ci-test--repo-file-string
@@ -508,9 +536,64 @@
              makefile))
     (should (string-match-p "^test-full:" makefile))))
 
+(ert-deftest consent-ci-test-make-splits-capability-default-shards ()
+  "Run capability and agent tests as parallel default Emacs shards."
+  (let ((makefile (consent-ci-test--repo-file-string "Makefile")))
+    (should (string-match-p
+             "CONSENT_EMACS_TEST_SHARD_TARGETS \\?=.*test-emacs-agent-control.*test-emacs-agent-reliability.*test-emacs-capability-boundary.*test-emacs-agent-state"
+             makefile))
+    (should-not (string-match-p
+                 "CONSENT_EMACS_TEST_SHARD_TARGETS \\?=.*test-emacs-capabilities"
+                 makefile))
+    (dolist (needle '("CONSENT_EMACS_AGENT_CONTROL_TEST_SELECTOR ?="
+                      "CONSENT_EMACS_AGENT_RELIABILITY_TEST_SELECTOR ?="
+                      "CONSENT_EMACS_CAPABILITY_BOUNDARY_TEST_SELECTOR ?="
+                      "CONSENT_EMACS_AGENT_STATE_TEST_SELECTOR ?="
+                      "^test-emacs-agent-control:"
+                      "^test-emacs-agent-reliability:"
+                      "^test-emacs-capability-boundary:"
+                      "^test-emacs-agent-state:"))
+      (should (string-match-p needle makefile)))))
+
 (ert-deftest consent-ci-test-pr-summary-uses-stable-shard-order ()
   "Render pull request timing rows in the intended shard display order."
-  (let* ((tools-shard '(:name "Emacs tools/docs/integration"
+  (let* ((agent-control-shard '(:name "Emacs agent control"
+                                      :selector "agent-control"
+                                      :ran 1
+                                      :expected 1
+                                      :unexpected 0
+                                      :skipped 0
+                                      :ert-seconds 1.0
+                                      :wall-seconds 1.0
+                                      :tests nil))
+         (agent-reliability-shard '(:name "Emacs agent reliability"
+                                          :selector "agent-reliability"
+                                          :ran 1
+                                          :expected 1
+                                          :unexpected 0
+                                          :skipped 0
+                                          :ert-seconds 1.0
+                                          :wall-seconds 1.0
+                                          :tests nil))
+         (capability-boundary-shard '(:name "Emacs capability boundary"
+                                            :selector "capability-boundary"
+                                            :ran 1
+                                            :expected 1
+                                            :unexpected 0
+                                            :skipped 0
+                                            :ert-seconds 1.0
+                                            :wall-seconds 1.0
+                                            :tests nil))
+         (agent-state-shard '(:name "Emacs agent state"
+                                    :selector "agent-state"
+                                    :ran 1
+                                    :expected 1
+                                    :unexpected 0
+                                    :skipped 0
+                                    :ert-seconds 1.0
+                                    :wall-seconds 1.0
+                                    :tests nil))
+         (tools-shard '(:name "Emacs tools/docs/integration"
                               :selector "tools"
                               :ran 1
                               :expected 1
@@ -595,6 +678,10 @@
          (markdown
           (consent-ci-render-pr-markdown-summary
            (list tools-shard
+                 agent-state-shard
+                 capability-boundary-shard
+                 agent-reliability-shard
+                 agent-control-shard
                  portable-gauche-shard
                  portable-guile-shard
                  portable-compiled-shard
@@ -605,7 +692,7 @@
                  portable-eval-shard))))
     (should
      (string-match-p
-      "| Portable R7RS Chibi evaluator subset |.*\n| Portable R7RS Chibi non-evaluator subset |.*\n| Portable R7RS Gambit full suite |.*\n| Portable R7RS Gambit-compiled Consent Scheme full suite |.*\n| Portable R7RS Racket full suite |.*\n| Portable R7RS Racket-compiled Consent Scheme full suite |.*\n| Portable R7RS Guile full suite |.*\n| Portable R7RS Gauche full suite |.*\n| Emacs tools/docs/integration |"
+      "| Portable R7RS Chibi evaluator subset |.*\n| Portable R7RS Chibi non-evaluator subset |.*\n| Portable R7RS Gambit full suite |.*\n| Portable R7RS Gambit-compiled Consent Scheme full suite |.*\n| Portable R7RS Racket full suite |.*\n| Portable R7RS Racket-compiled Consent Scheme full suite |.*\n| Portable R7RS Guile full suite |.*\n| Portable R7RS Gauche full suite |.*\n| Emacs agent control |.*\n| Emacs agent reliability |.*\n| Emacs capability boundary |.*\n| Emacs agent state |.*\n| Emacs tools/docs/integration |"
       markdown))))
 
 ;;; Structured per-run record (#465)

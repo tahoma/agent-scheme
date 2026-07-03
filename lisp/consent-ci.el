@@ -64,8 +64,14 @@
     ("Portable Gambit-backed suite" . 12)
     ("Emacs core language/runtime" . 20)
     ("Emacs library/conformance" . 21)
-    ("Emacs capabilities/policy" . 22)
-    ("Emacs tools/docs/integration" . 23))
+    ("Emacs agent control" . 22)
+    ("Emacs agent reliability" . 23)
+    ("Emacs capability boundary" . 24)
+    ("Emacs agent state" . 25)
+    ("Emacs capabilities/policy" . 26)
+    ("Emacs tools/docs/integration" . 27)
+    ("Emacs native-build/install-dist" . 28)
+    ("Emacs integration/REPL" . 29))
   "Preferred display order for CI shard summaries.")
 
 (defconst consent-ci--portable-host-order
