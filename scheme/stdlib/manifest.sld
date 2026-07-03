@@ -313,6 +313,72 @@
          (test-status . (import-resolution representative-tree-behavior
                          mutation-sequences missing-export-diagnostic
                          helper-smoke portable-host-suite)))
+        ((library . (stdlib mapping))
+         (status . vendored-adapted-implementation)
+         (source-url . "https://github.com/scheme-requests-for-implementation/srfi-146")
+         (source-files . ("srfi/146.sld" "srfi/146.scm"))
+         (source-test-file . "srfi/146/test.sld")
+         (upstream-revision . "28bd72ed4d8445d8a91f84d919630d0f3a7564fb")
+         (upstream-source-blobs
+          . (("srfi/146.sld" . "dbeb605b19232b8fbccb6fb8c94bd5ec1538a85e")
+             ("srfi/146.scm" . "3e37da6667e55e14b7d7e93db8353530072819c9")
+             ("srfi/146/test.sld" . "e1804c30ee1e3c5a1cfbf0fa60ed382f2326dfdf")))
+         (upstream-license . "MIT")
+         (local-license . "MIT")
+         (vendored? . #t)
+         (local-patches . ((library-name
+                            (from . (srfi 146))
+                            (to . (stdlib mapping)))
+                           (inlined-include
+                            (file . "srfi/146.scm"))
+                           (adapted-imports
+                            (from (srfi 1) (srfi 8) (srfi 128)
+                                  (srfi 145) (nieper rbtree))
+                            (to (stdlib list)
+                                (stdlib receive)
+                                (stdlib comparator)
+                                (stdlib assume)
+                                (stdlib rbtree)))
+                           (registry-aliases
+                            (aliases (scheme mapping)
+                                     (srfi 146)
+                                     (srfi srfi-146)))
+                           (documentation-metadata
+                            (scope exported-procedures))
+                           (linear-update
+                            (strategy pure-functional))
+                           (hash-variant-out-of-scope
+                            (issue . 624))
+                           (adapted-tests
+                            (file . "tests/scheme/stdlib-mapping-test.scm"))))
+         (implementation-library . (stdlib mapping))
+         (import-aliases . ((stdlib mapping) (scheme mapping)
+                            (srfi 146) (srfi srfi-146)))
+         (dependencies . ((scheme base) (scheme case-lambda)
+                          (stdlib list) (stdlib receive)
+                          (stdlib comparator) (stdlib assume)
+                          (stdlib rbtree)))
+         (test-status . (import-resolution representative-mapping-behavior
+                         alias-import missing-export-diagnostic
+                         adapted-upstream-tests portable-host-suite)))
+        ((library . (scheme mapping))
+         (status . alias)
+         (target . (stdlib mapping))
+         (import-aliases . ((scheme mapping)))
+         (dependencies . ((stdlib mapping)))
+         (test-status . (import-resolution)))
+        ((library . (srfi 146))
+         (status . alias)
+         (target . (stdlib mapping))
+         (import-aliases . ((srfi 146)))
+         (dependencies . ((stdlib mapping)))
+         (test-status . (import-resolution)))
+        ((library . (srfi srfi-146))
+         (status . alias)
+         (target . (stdlib mapping))
+         (import-aliases . ((srfi srfi-146)))
+         (dependencies . ((stdlib mapping)))
+         (test-status . (import-resolution)))
         ((library . (scheme comparator))
          (status . alias)
          (target . (stdlib comparator))
