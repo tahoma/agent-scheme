@@ -138,10 +138,38 @@
     ;; table, so long-lived sessions trade older source lookups for bounded
     ;; metadata scans.  Keep this above ordinary form size so one read does not
     ;; evict its own active source metadata.
-    (define consent-source-metadata-limit 10000)
+    (define consent-source-metadata-limit 1000)
+
+    ;; Low-water mark after source metadata overflow.  Retaining the newest
+    ;; entries keeps active evaluation metadata available without letting the
+    ;; portable identity scan grow for the whole lifetime of the process.
+    (define consent-source-metadata-retained-limit 900)
 
     ;; Current number of retained source metadata entries in the portable table.
     (define consent-source-metadata-count 0)
+
+    (define (consent-source-metadata-retain-newest entries keep-count)
+      "Return a pair of newest ENTRIES and their count, capped at KEEP-COUNT."
+      (let loop ((cursor entries)
+                 (remaining keep-count)
+                 (retained '())
+                 (count 0))
+        (if (or (null? cursor)
+                (<= remaining 0))
+            (cons (reverse retained) count)
+            (loop (cdr cursor)
+                  (- remaining 1)
+                  (cons (car cursor) retained)
+                  (+ count 1)))))
+
+    (define (consent-source-metadata-trim!)
+      "Trim the portable source metadata table to its newest retained entries."
+      (let ((retained
+             (consent-source-metadata-retain-newest
+              consent-source-metadata
+              consent-source-metadata-retained-limit)))
+        (set! consent-source-metadata (car retained))
+        (set! consent-source-metadata-count (cdr retained))))
 
     ;; Agent-owned numbers preserve lexical exactness, radix, and special
     ;; values instead of trusting the host Scheme's numeric tower to round-trip.
@@ -421,9 +449,7 @@
           (begin
             (if (> consent-source-metadata-count
                    consent-source-metadata-limit)
-                (begin
-                  (set! consent-source-metadata '())
-                  (set! consent-source-metadata-count 0)))
+                (consent-source-metadata-trim!))
             (set! consent-source-metadata
                   (cons (cons datum source)
                         consent-source-metadata))
