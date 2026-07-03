@@ -1186,6 +1186,8 @@
         (find-source-library-spec '(stdlib comparator) source-specs))
        (receive-spec
         (find-source-library-spec '(stdlib receive) source-specs))
+       (assume-spec
+        (find-source-library-spec '(stdlib assume) source-specs))
        (json-spec
         (find-source-library-spec '(stdlib json) source-specs)))
   (check 'stdlib-source-library-files
@@ -1193,11 +1195,13 @@
               and-let-star-spec
               comparator-spec
               receive-spec
+              assume-spec
               json-spec
               (string? (cadr (assq 'source-file manifest-spec)))
               (string? (cadr (assq 'source-file and-let-star-spec)))
               (string? (cadr (assq 'source-file comparator-spec)))
               (string? (cadr (assq 'source-file receive-spec)))
+              (string? (cadr (assq 'source-file assume-spec)))
               (string? (cadr (assq 'source-file json-spec))))
          #t)
   (check 'stdlib-source-library-manifest-file
@@ -1216,6 +1220,10 @@
          (and receive-spec
               (cadr (assq 'source-file receive-spec)))
          "scheme/stdlib/receive.sld")
+  (check 'stdlib-source-library-assume-file
+         (and assume-spec
+              (cadr (assq 'source-file assume-spec)))
+         "scheme/stdlib/assume.sld")
   (check 'stdlib-source-library-json-file
          (and json-spec
               (cadr (assq 'source-file json-spec)))
@@ -1322,6 +1330,74 @@
                   ((scheme base))
                   (stdlib and-let-star)
                   (stdlib and-let-star))"))
+
+(check-external 'srfi-145-assume-behavior
+                "(import (scheme base) (srfi 145))
+                 (let ((events '()))
+                   (define (record tag value)
+                     (set! events (cons tag events))
+                     value)
+                   (list
+                    (assume (record 'truth '(a b))
+                            (record 'message 'unreached))
+                    (assume 0 \"zero is true\")
+                    events))"
+                "((a b) 0 (truth))")
+
+(check-external 'srfi-145-portable-alias-import
+                "(import (scheme base) (srfi srfi-145))
+                 (assume 'portable-alias)"
+                "portable-alias")
+
+(check-external 'stdlib-assume-import
+                "(import (scheme base) (stdlib assume))
+                 (assume '(stdlib primary) \"primary import\")"
+                "(stdlib primary)")
+
+(check 'srfi-145-false-assumption-raises
+       (raises?
+        (lambda ()
+          (consent-eval-source
+           "(import (scheme base) (srfi 145))
+            (assume #f \"expected true\" 'payload)")))
+       #t)
+
+(check 'srfi-145-missing-export-diagnostic
+       (raises?
+        (lambda ()
+          (consent-eval-source
+           "(import (scheme base)
+                    (only (srfi 145) missing-assume))
+            missing-assume")))
+       #t)
+
+(check-external 'stdlib-srfi-145-manifest
+                "(import (scheme base) (stdlib manifest))
+                 (let ((entry (stdlib-manifest-ref '(stdlib assume)))
+                       (alias (stdlib-manifest-ref '(srfi 145)))
+                       (portable-alias
+                        (stdlib-manifest-ref '(srfi srfi-145))))
+                   (list (cdr (assq 'status entry))
+                         (cdr (assq 'source entry))
+                         (cdr (assq 'implementation-library entry))
+                         (cdr (assq 'upstream-license entry))
+                         (cdr (assq 'local-license entry))
+                         (cdr (assq 'vendored? entry))
+                         (cdr (assq 'import-aliases entry))
+                         (cdr (assq 'dependencies entry))
+                         (cdr (assq 'target alias))
+                         (cdr (assq 'target portable-alias))))"
+               (expected-datum-external
+                "(built-in-shim
+                  built-in-shim
+                  (stdlib assume)
+                  \"MIT\"
+                  \"Apache-2.0\"
+                  #f
+                  ((stdlib assume) (srfi 145) (srfi srfi-145))
+                  ((scheme base))
+                  (stdlib assume)
+                  (stdlib assume))"))
 
 (check-external 'srfi-180-json-read
                 (string-append

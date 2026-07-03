@@ -518,6 +518,66 @@
       (regexp-quote "missing-receive")
       (error-message-string error)))))
 
+(ert-deftest consent-library-test-srfi-145-assume-behavior ()
+  "Import SRFI 145 aliases and exercise `assume' behavior."
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (srfi 145))
+      (let ((events '()))
+        (define (record tag value)
+          (set! events (cons tag events))
+          value)
+        (list
+         (assume (record 'truth '(a b))
+                 (record 'message 'unreached))
+         (assume 0 \"zero is true\")
+         events))")
+    "((a b) 0 (truth))"))
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (srfi srfi-145))
+      (assume 'portable-alias)")
+    "portable-alias"))
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (stdlib assume))
+      (assume '(stdlib primary) \"primary import\")")
+    "(stdlib primary)")))
+
+(ert-deftest consent-library-test-srfi-145-false-assumption-errors ()
+  "Report a false SRFI 145 assumption as an invalid path error."
+  (let ((error
+         (should-error
+          (consent-library-test--external
+           "(import (scheme base) (srfi 145))
+            (assume #f \"expected true\" 'payload)")
+          :type 'consent-eval-error)))
+    (should
+     (string-match-p
+      (regexp-quote "invalid assumption")
+      (error-message-string error)))))
+
+(ert-deftest consent-library-test-srfi-145-missing-export-diagnostic ()
+  "Report missing SRFI 145 imports through the ordinary resolver diagnostic."
+  (let ((error
+         (should-error
+          (consent-library-test--external
+           "(import (scheme base)
+                    (only (srfi 145) missing-assume))
+            missing-assume")
+          :type 'consent-eval-error)))
+    (should
+     (string-match-p
+      (regexp-quote "only import name not found")
+      (error-message-string error)))
+    (should
+     (string-match-p
+      (regexp-quote "missing-assume")
+      (error-message-string error)))))
+
 (ert-deftest consent-library-test-stdlib-manifest-documents-srfi-8 ()
   "Expose SRFI 8 support status through the stdlib manifest."
   (should
