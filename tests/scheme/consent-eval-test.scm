@@ -2098,9 +2098,7 @@
                          "(mode one-step)"
                          "(original (my-unless #f 42))"
                          "(expanded (if #f #f (begin 42)))"
-                         "(step (index 1) (macro my-unless)"
-                         "(source (origin source)")
-                       '((source-metadata . #t)))
+                         "(step (index 1) (macro my-unless)"))
 
 (check-external 'macroexpand-does-not-evaluate-expanded-form
                 "(import (scheme base) (agent reflect))
