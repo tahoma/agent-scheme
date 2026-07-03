@@ -294,6 +294,9 @@
                                 (stdlib receive)
                                 (stdlib generator)
                                 (stdlib comparator)))
+                           (matcher-hygiene
+                            (source local-portability-patch)
+                            (scope nested-tree-patterns black-height))
                            (documentation-metadata
                             (scope exported-procedures))
                            (removed-unused-accessors
@@ -308,8 +311,8 @@
                           (stdlib and-let-star) (stdlib receive)
                           (stdlib generator) (stdlib comparator)))
          (test-status . (import-resolution representative-tree-behavior
-                         missing-export-diagnostic helper-smoke
-                         portable-host-suite)))
+                         mutation-sequences missing-export-diagnostic
+                         helper-smoke portable-host-suite)))
         ((library . (scheme comparator))
          (status . alias)
          (target . (stdlib comparator))
