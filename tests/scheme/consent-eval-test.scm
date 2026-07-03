@@ -943,32 +943,41 @@
    "(description \"Accumulator returning a list at EOF.\")")
  '((docstring-retention . full)))
 
+(check-result-contains
+ 'library-bindings-reflection
+ "(import (scheme base)
+          (agent reflect))
+  (define (field datum name)
+    (cadr (assq name (cdr datum))))
+  (let ((bindings (library-bindings '(scheme generator))))
+    (list (field (car bindings) 'name)
+          (field (car bindings) 'kind)
+          (field (car bindings) 'library)
+          (field (car (reverse bindings)) 'name)))"
+ '("(generator value (stdlib generator) product-accumulator)"))
+
 (check-external/options
  'srfi-158-generator-docstring-metadata-coverage
  "(import (scheme base)
           (scheme generator)
           (agent reflect))
-  (define exported-bindings
-    '(generator circular-generator make-iota-generator make-range-generator
-      make-coroutine-generator list->generator vector->generator
-      reverse-vector->generator string->generator bytevector->generator
-      make-for-each-generator make-unfold-generator
-      gcons* gappend gcombine gfilter gremove
-      gtake gdrop gtake-while gdrop-while
-      gflatten ggroup gmerge gmap gstate-filter
-      gdelete gdelete-neighbor-dups gindex gselect
-      generator->list generator->reverse-list
-      generator->vector generator->vector! generator->string
-      generator-fold generator-map->list generator-for-each generator-find
-      generator-count generator-any generator-every generator-unfold
-      make-accumulator count-accumulator list-accumulator
-      reverse-list-accumulator vector-accumulator
-      reverse-vector-accumulator vector-accumulator!
-      string-accumulator bytevector-accumulator bytevector-accumulator!
-      sum-accumulator product-accumulator))
   (define (field datum name)
     (let ((entry (assq name (cdr datum))))
       (and entry (cadr entry))))
+  (define (binding-name binding)
+    (field binding 'name))
+  (define (binding-kind binding)
+    (field binding 'kind))
+  (define exported-bindings
+    (let loop ((bindings (library-bindings '(scheme generator)))
+               (names '()))
+      (cond
+       ((null? bindings) (reverse names))
+       ((eq? (binding-kind (car bindings)) 'value)
+        (loop (cdr bindings)
+              (cons (binding-name (car bindings)) names)))
+       (else
+        (loop (cdr bindings) names)))))
   (define (metadata-entry fields field-name)
     (assq field-name fields))
   (define (documented? name)

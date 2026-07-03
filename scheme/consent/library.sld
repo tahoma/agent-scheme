@@ -1902,6 +1902,10 @@
                                   'primitive-current-imports
                                   0
                                   0)
+          (library-primitive-spec 'library-bindings
+                                  'primitive-library-bindings
+                                  1
+                                  1)
           (library-primitive-spec 'current-session-info
                                   'primitive-current-session-info
                                   0

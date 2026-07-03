@@ -4986,6 +4986,23 @@ cursor across sessions."
       "Return registered library names for CONTEXT."
       (map car (context-libraries context)))
 
+    (define (reflect-library-binding-record binding)
+      "Return BINDING as a Scheme-readable library-binding record."
+      (list 'library-binding
+            (result-field 'name (library-binding-name binding))
+            (result-field 'kind (library-binding-kind binding))
+            (result-field 'library
+                          (library-binding-library-key binding))))
+
+    (define (reflect-library-bindings library-name context)
+      "Return exported binding records for LIBRARY-NAME in CONTEXT."
+      (map reflect-library-binding-record
+           (library-exports
+            (resolve-library
+             library-name
+             context
+             (context-interaction-environment context)))))
+
     (define (reflect-current-session-info context)
       "Return public session and event identity for CONTEXT."
       ;; Report the session id this evaluation runs under (matching the Emacs
@@ -5080,6 +5097,12 @@ cursor across sessions."
       "Return the current import snapshot."
       (redaction-model:redact (reflect-current-imports context)
                               'runtime-reflection))
+
+    (define (primitive-library-bindings arguments context)
+      "Return exported bindings for a library name."
+      (redaction-model:redact
+       (reflect-library-bindings (car arguments) context)
+       'runtime-reflection))
 
     (define (primitive-current-session-info arguments context)
       "Return current session metadata."
@@ -8063,6 +8086,7 @@ cursor across sessions."
        (cons 'primitive-budget-exhausted? primitive-budget-exhausted?)
        (cons 'primitive-budget-yield primitive-budget-yield)
        (cons 'primitive-current-imports primitive-current-imports)
+       (cons 'primitive-library-bindings primitive-library-bindings)
        (cons 'primitive-current-session-info primitive-current-session-info)
        (cons 'primitive-create-session primitive-create-session)
        (cons 'primitive-switch-session primitive-switch-session)

@@ -534,6 +534,22 @@
     (should (string-match-p (regexp-quote "(agent reflect)") external))
     (should (string-match-p (regexp-quote "(id reflect-run)") external))))
 
+(ert-deftest consent-reflect-test-library-bindings ()
+  "Reflect the actual exported binding surface for a library."
+  (consent-reflect-test--reset)
+  (should
+   (equal
+    (consent-reflect-test--eval-value-string
+     "(import (scheme base) (agent reflect))
+      (define (field datum name)
+        (cadr (assq name (cdr datum))))
+      (let ((bindings (library-bindings '(scheme generator))))
+        (list (field (car bindings) 'name)
+              (field (car bindings) 'kind)
+              (field (car bindings) 'library)
+              (field (car (reverse bindings)) 'name)))")
+    "(generator value (stdlib generator) product-accumulator)")))
+
 (ert-deftest consent-reflect-test-current-capabilities-lists-host-capabilities ()
   "List importable host capabilities as Scheme-readable metadata records."
   (consent-reflect-test--reset)
