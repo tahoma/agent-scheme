@@ -100,11 +100,11 @@
       (syntax-rules ()
         ((compile-patterns (expression* ...) tree (clauses ...) ())
          (call-with-current-continuation
-          (lambda (return)
+          (lambda (rbtree-match-return)
             (or (and-let* clauses
                   (call-with-values
                    (lambda () . expression*)
-                   return))
+                   rbtree-match-return))
                 ...
                 (error "tree does not match any pattern" tree)))))
         ((compile-patterns e tree clauses* (pattern . pattern*))
@@ -131,50 +131,36 @@
         ((compile-pattern tree (white) (k ...))
          (k ... (((white? tree)) ((not (item tree))))))
         ((compile-pattern tree (and pt ...) k*)
-         (compile-subpatterns () ((t pt) ...)
-                              (compile-and-pattern tree t k*)))
+         (compile-subpatterns () ((tree pt) ...) k*))
         ((compile-pattern tree (node pc pa px pb) k*)
-         (compile-subpatterns () ((c pc) (a pa) (x px) (b pb))
-                              (compile-node-pattern tree c a x b k*)))
+         (compile-subpatterns (((item tree)))
+                              (((color tree) pc)
+                               ((left tree) pa)
+                               ((item tree) px)
+                               ((right tree) pb))
+                              k*))
         ((compile-pattern tree (red pa px pb) k*)
-         (compile-subpatterns () ((a pa) (x px) (b pb))
-                              (compile-color-pattern red? tree a x b k*)))
+         (compile-subpatterns (((item tree)) ((red? tree)))
+                              (((left tree) pa)
+                               ((item tree) px)
+                               ((right tree) pb))
+                              k*))
         ((compile-pattern tree (black pa px pb) k*)
-         (compile-subpatterns () ((a pa) (x px) (b pb))
-                              (compile-color-pattern black? tree a x b k*)))
+         (compile-subpatterns (((item tree)) ((black? tree)))
+                              (((left tree) pa)
+                               ((item tree) px)
+                               ((right tree) pb))
+                              k*))
         ((compile-pattern tree (white pa px pb) k*)
-         (compile-subpatterns () ((a pa) (x px) (b pb))
-                              (compile-color-pattern white? tree a x b k*)))
+         (compile-subpatterns (((item tree)) ((white? tree)))
+                              (((left tree) pa)
+                               ((item tree) px)
+                               ((right tree) pb))
+                              k*))
         ((compile-pattern tree _ (k ...))
          (k ... ()))
         ((compile-pattern tree x (k ...))
          (k ... ((x tree))))))
-
-    ;; Add a binding that exposes the whole tree to an `and` subpattern.
-    (define-syntax compile-and-pattern
-      (syntax-rules ()
-        ((compile-and-pattern tree t (k ...) clauses)
-         (k ... ((t tree) . clauses)))))
-
-    ;; Compile a node subpattern after proving the tree is populated.
-    (define-syntax compile-node-pattern
-      (syntax-rules ()
-        ((compile-node-pattern tree c a x b (k ...) clauses)
-         (k ... (((item tree))
-                 (c (color tree))
-                 (a (left tree))
-                 (x (item tree))
-                 (b (right tree)) . clauses)))))
-
-    ;; Compile a color-specific node subpattern.
-    (define-syntax compile-color-pattern
-      (syntax-rules ()
-        ((compile-color-pattern pred? tree a x b (k ...) clauses)
-         (k ... (((item tree))
-                 ((pred? tree))
-                 (a (left tree))
-                 (x (item tree))
-                 (b (right tree)) . clauses)))))
 
     ;; Compile nested tree subpatterns left to right.
     (define-syntax compile-subpatterns
@@ -540,14 +526,13 @@
     ;; Black height is measured on the right spine, as in the upstream helper.
     (define (black-height tree)
       "Return TREE's black height."
-      (let loop ((tree tree))
-        (tree-match tree
-          ((black)
-           0)
-          ((node red a x b)
-           (loop b))
-          ((node black a x b)
-           (+ 1 (loop b))))))
+      (let loop ((tree tree) (height 0))
+        (if (not (item tree))
+            height
+            (loop (right tree)
+                  (if (black? tree)
+                      (+ height 1)
+                      height)))))
 
     ;; Return the left descendant at DEPTH plus its parent.
     (define (left-tree tree depth)
