@@ -30,6 +30,10 @@
   (if (not (equal? actual expected))
       (record-failure name expected actual)))
 
+(define (check-generator-list name gen expected)
+  "Compare the values yielded by GEN to EXPECTED."
+  (check name (generator->list gen) expected))
+
 (define (finish-generator-tests)
   "Report the adapted SRFI 158 test result."
   (if (= failures 0)
@@ -42,251 +46,363 @@
         (newline)
         (error "adapted SRFI 158 generator tests failed" failures))))
 
-(check 'constructors
-       (let ((coroutine
-              (make-coroutine-generator
-               (lambda (yield)
-                 (let loop ((i 0))
-                   (when (< i 3)
-                     (yield i)
-                     (loop (+ i 1))))))))
-         (list (generator->list (generator))
-               (generator->list (generator 1 2 3))
-               (generator->list (circular-generator 1 2 3) 5)
-               (generator->list (make-iota-generator 3 8))
-               (generator->list (make-iota-generator 3 8 2))
-               (generator->list (make-range-generator 3) 4)
-               (generator->list (make-range-generator 3 8))
-               (generator->list (make-range-generator 3 8 2))
-               (generator->list coroutine)
-               (generator->list (list->generator '(1 2 3 4 5)))
-               (generator->list (vector->generator '#(1 2 3 4 5)))
-               (generator->list (reverse-vector->generator '#(1 2 3 4 5)))
-               (generator->list (string->generator "abcde"))
-               (generator->list (bytevector->generator (bytevector 10 20 30)))
-               (generator->list
-                (make-unfold-generator
-                 (lambda (seed) (> seed 5))
-                 (lambda (seed) (* seed 2))
-                 (lambda (seed) (+ seed 1))
-                 0))))
-       '(() (1 2 3) (1 2 3 1 2) (8 9 10) (8 10 12)
-         (3 4 5 6) (3 4 5 6 7) (3 5 7) (0 1 2)
-         (1 2 3 4 5) (1 2 3 4 5) (5 4 3 2 1)
-         (#\a #\b #\c #\d #\e) (10 20 30) (0 2 4 6 8 10)))
-
-(check 'operators
-       (list (generator->list
-              (gcons* 'a 'b (make-range-generator 0 2)))
-             (generator->list
-              (gappend (make-range-generator 0 3)
-                       (make-range-generator 0 2)))
-             (generator->list
-              (gcombine
-               (lambda args (values (apply + args) (apply + args)))
-               10
-               (generator 1 2 3)
-               (generator 4 5 6 7)))
-             (generator->list
-              (gfilter odd? (make-range-generator 1 11)))
-             (generator->list
-              (gremove odd? (make-range-generator 1 11)))
-             (let ((source (make-range-generator 1 5)))
-               (list (generator->list (gtake source 3))
-                     (generator->list source)))
-             (generator->list
-              (gtake (make-range-generator 1 3) 3 0))
-             (generator->list
-              (gdrop (make-range-generator 1 5) 2))
-             (generator->list
-              (gtake-while (lambda (value) (< value 3))
-                           (make-range-generator 1 5)))
-             (generator->list
-              (gdrop-while (lambda (value) (< value 3))
-                           (make-range-generator 1 5)))
-             (generator->list
-              (gdelete 1 (generator 0.0 1.0 0 1 2) =))
-             (generator->list
-              (gdelete-neighbor-dups (generator 1 1 2 3 3 3) =))
-             (generator->list
-              (gflatten (generator '(1 2 3) '(a b c))))
-             (generator->list
-              (ggroup (generator 1 2 3 4 5 6 7 8) 3))
-             (generator->list
-              (ggroup (generator 1 2 3 4 5 6 7 8) 3 0))
-             (generator->list
-              (gmerge < (generator 1 2 4 6)
+(check-generator-list 'generator/empty
                       (generator)
-                      (generator 3 4 5)))
-             (generator->list
-              (gmap * (generator 1 2 3)
-                    (generator 6 7 8)
-                    (generator 9 10 11 12)))
-             (generator->list
-              (gstate-filter
-               (lambda (item state) (values (even? state) (+ 1 state)))
-               0
-               (generator 'a 'b 'c 'd 'e)))
-             (generator->list
-              (gindex (list->generator '(a b c d e f))
-                      (list->generator '(0 2 4))))
-             (generator->list
-              (gselect (list->generator '(a b c d e f))
-                       (list->generator '(#t #f #f #t #t #f)))))
-       '((a b 0 1)
-         (0 1 2 0 1)
-         (15 22 31)
-         (1 3 5 7 9)
-         (2 4 6 8 10)
-         ((1 2 3) (4))
-         (1 2 0)
-         (3 4)
-         (1 2)
-         (3 4)
-         (0.0 0 2)
-         (1 2 3)
-         (1 2 3 a b c)
-         ((1 2 3) (4 5 6) (7 8))
-         ((1 2 3) (4 5 6) (7 8 0))
-         (1 2 3 4 4 5 6)
-         (54 140 264)
-         (a c e)
-         (a c e)
-         (a d e)))
+                      '())
 
-(check 'consumers
-       (let ((vector-target (make-vector 5 0)))
-         (list (generator->list (generator 1 2 3 4 5) 3)
-               (generator->reverse-list (generator 1 2 3 4 5))
-               (generator->vector (generator 1 2 3 4 5))
-               (generator->vector (generator 1 2 3 4 5) 3)
-               (generator->vector! vector-target 2 (generator 1 2 4))
-               vector-target
-               (generator->string (generator #\a #\b #\c))
-               (generator-fold cons 'z (generator 'a 'b 'c 'd 'e))
-               (let ((n 0))
-                 (generator-for-each
-                  (lambda values (set! n (apply + values)))
-                  (generator 1)
-                  (generator 2)
-                  (generator 3))
-                 n)
-               (generator-map->list
-                (lambda values (apply + values))
-                (generator 1 4)
-                (generator 2 5)
-                (generator 3 6))
-               (generator-find (lambda (x) (> x 2))
-                               (make-range-generator 1 5))
-               (generator-find (lambda (x) (> x 10))
-                               (make-range-generator 1 5))
-               (generator-count odd? (make-range-generator 1 5))
-               (let ((source (make-range-generator 2 5)))
-                 (list (generator-any odd? source)
-                       (generator->list source)))
-               (let ((source (make-range-generator 2 5)))
-                 (list (generator-every odd? source)
-                       (generator->list source)))
-               (let ((source (make-range-generator 2 5)))
-                 (list (generator-every
-                        (lambda (x) (and (> x 1) x))
-                        source)
-                       (generator->list source)))
-               (generator-unfold
-                (make-for-each-generator string-for-each "abc")
-                unfold)))
-       '((1 2 3)
-         (5 4 3 2 1)
-         #(1 2 3 4 5)
-         #(1 2 3)
-         3
-         #(0 0 1 2 4)
-         "abc"
-         (e d c b a . z)
-         6
-         (6 15)
-         3
-         #f
-         2
-         (#t (4))
-         (#f (3 4))
-         (4 ())
-         (#\a #\b #\c)))
+(check-generator-list 'generator/finite
+                      (generator 1 2 3)
+                      '(1 2 3))
 
-(check 'accumulators
-       (list (let ((acc (make-accumulator * 1 -)))
-               (acc 1)
-               (acc 2)
-               (acc 4)
-               (acc (eof-object)))
-             (let ((acc (count-accumulator)))
-               (acc 1)
-               (acc 2)
-               (acc 4)
-               (acc (eof-object)))
-             (let ((acc (list-accumulator)))
-               (acc 1)
-               (acc 2)
-               (acc 4)
-               (acc (eof-object)))
-             (let ((acc (reverse-list-accumulator)))
-               (acc 1)
-               (acc 2)
-               (acc 4)
-               (acc (eof-object)))
-             (let ((acc (vector-accumulator)))
-               (acc 1)
-               (acc 2)
-               (acc 4)
-               (acc (eof-object)))
-             (let ((acc (reverse-vector-accumulator)))
-               (acc 1)
-               (acc 2)
-               (acc 4)
-               (acc (eof-object)))
-             (let* ((target (vector 0 0 0 0 0))
-                    (acc (vector-accumulator! target 2)))
-               (acc 1)
-               (acc 2)
-               (acc 4)
-               (acc (eof-object)))
-             (let ((acc (string-accumulator)))
-               (acc #\a)
-               (acc #\b)
-               (acc #\c)
-               (acc (eof-object)))
-             (let ((acc (bytevector-accumulator)))
-               (acc 1)
-               (acc 2)
-               (acc 4)
-               (acc (eof-object)))
-             (let* ((target (bytevector 0 0 0 0 0))
-                    (acc (bytevector-accumulator! target 2)))
-               (acc 1)
-               (acc 2)
-               (acc 4)
-               (acc (eof-object)))
-             (let ((acc (sum-accumulator)))
-               (acc 1)
-               (acc 2)
-               (acc 4)
-               (acc (eof-object)))
-	             (let ((acc (product-accumulator)))
-	               (acc 1)
-	               (acc 2)
-	               (acc 4)
-	               (acc (eof-object))))
-       (list -8
-             3
-             '(1 2 4)
-             '(4 2 1)
-             (vector 1 2 4)
-             (vector 4 2 1)
-             (vector 0 0 1 2 4)
-             "abc"
-             (bytevector 1 2 4)
-             (bytevector 0 0 1 2 4)
-             7
-             8))
+(check 'circular-generator/prefix
+       (generator->list (circular-generator 1 2 3) 5)
+       '(1 2 3 1 2))
+
+(check-generator-list 'make-iota-generator/count-start
+                      (make-iota-generator 3 8)
+                      '(8 9 10))
+
+(check-generator-list 'make-iota-generator/count-start-step
+                      (make-iota-generator 3 8 2)
+                      '(8 10 12))
+
+(check 'make-range-generator/unbounded-prefix
+       (generator->list (make-range-generator 3) 4)
+       '(3 4 5 6))
+
+(check-generator-list 'make-range-generator/bounded
+                      (make-range-generator 3 8)
+                      '(3 4 5 6 7))
+
+(check-generator-list 'make-range-generator/bounded-step
+                      (make-range-generator 3 8 2)
+                      '(3 5 7))
+
+(check-generator-list
+ 'make-coroutine-generator/simple-yields
+ (make-coroutine-generator
+  (lambda (yield)
+    (let loop ((i 0))
+      (when (< i 3)
+        (yield i)
+        (loop (+ i 1))))))
+ '(0 1 2))
+
+(check-generator-list 'list->generator
+                      (list->generator '(1 2 3 4 5))
+                      '(1 2 3 4 5))
+
+(check-generator-list 'vector->generator
+                      (vector->generator '#(1 2 3 4 5))
+                      '(1 2 3 4 5))
+
+(check-generator-list 'reverse-vector->generator
+                      (reverse-vector->generator '#(1 2 3 4 5))
+                      '(5 4 3 2 1))
+
+(check-generator-list 'string->generator
+                      (string->generator "abcde")
+                      '(#\a #\b #\c #\d #\e))
+
+(check-generator-list 'bytevector->generator
+                      (bytevector->generator (bytevector 10 20 30))
+                      '(10 20 30))
+
+(check-generator-list
+ 'make-unfold-generator
+ (make-unfold-generator
+  (lambda (seed) (> seed 5))
+  (lambda (seed) (* seed 2))
+  (lambda (seed) (+ seed 1))
+  0)
+ '(0 2 4 6 8 10))
+
+(check-generator-list 'gcons*
+                      (gcons* 'a 'b (make-range-generator 0 2))
+                      '(a b 0 1))
+
+(check-generator-list 'gappend
+                      (gappend (make-range-generator 0 3)
+                               (make-range-generator 0 2))
+                      '(0 1 2 0 1))
+
+(check-generator-list
+ 'gcombine
+ (gcombine
+  (lambda args (values (apply + args) (apply + args)))
+  10
+  (generator 1 2 3)
+  (generator 4 5 6 7))
+ '(15 22 31))
+
+(check-generator-list 'gfilter
+                      (gfilter odd? (make-range-generator 1 11))
+                      '(1 3 5 7 9))
+
+(check-generator-list 'gremove
+                      (gremove odd? (make-range-generator 1 11))
+                      '(2 4 6 8 10))
+
+(check 'gtake/source-remainder
+       (let ((source (make-range-generator 1 5)))
+         (list (generator->list (gtake source 3))
+               (generator->list source)))
+       '((1 2 3) (4)))
+
+(check-generator-list 'gtake/padded
+                      (gtake (make-range-generator 1 3) 3 0)
+                      '(1 2 0))
+
+(check-generator-list 'gdrop
+                      (gdrop (make-range-generator 1 5) 2)
+                      '(3 4))
+
+(check-generator-list 'gtake-while
+                      (gtake-while (lambda (value) (< value 3))
+                                   (make-range-generator 1 5))
+                      '(1 2))
+
+(check-generator-list 'gdrop-while
+                      (gdrop-while (lambda (value) (< value 3))
+                                   (make-range-generator 1 5))
+                      '(3 4))
+
+(check-generator-list 'gdelete/custom-equal
+                      (gdelete 1 (generator 0.0 1.0 0 1 2) =)
+                      '(0.0 0 2))
+
+(check-generator-list 'gdelete-neighbor-dups/custom-equal
+                      (gdelete-neighbor-dups (generator 1 1 2 3 3 3) =)
+                      '(1 2 3))
+
+(check-generator-list 'gflatten
+                      (gflatten (generator '(1 2 3) '(a b c)))
+                      '(1 2 3 a b c))
+
+(check-generator-list 'ggroup
+                      (ggroup (generator 1 2 3 4 5 6 7 8) 3)
+                      '((1 2 3) (4 5 6) (7 8)))
+
+(check-generator-list 'ggroup/padded
+                      (ggroup (generator 1 2 3 4 5 6 7 8) 3 0)
+                      '((1 2 3) (4 5 6) (7 8 0)))
+
+(check-generator-list 'gmerge
+                      (gmerge < (generator 1 2 4 6)
+                              (generator)
+                              (generator 3 4 5))
+                      '(1 2 3 4 4 5 6))
+
+(check-generator-list 'gmap
+                      (gmap * (generator 1 2 3)
+                            (generator 6 7 8)
+                            (generator 9 10 11 12))
+                      '(54 140 264))
+
+(check-generator-list
+ 'gstate-filter
+ (gstate-filter
+  (lambda (item state) (values (even? state) (+ 1 state)))
+  0
+  (generator 'a 'b 'c 'd 'e))
+ '(a c e))
+
+(check-generator-list 'gindex
+                      (gindex (list->generator '(a b c d e f))
+                              (list->generator '(0 2 4)))
+                      '(a c e))
+
+(check-generator-list 'gselect
+                      (gselect (list->generator '(a b c d e f))
+                               (list->generator '(#t #f #f #t #t #f)))
+                      '(a d e))
+
+(check 'generator->list/bounded
+       (generator->list (generator 1 2 3 4 5) 3)
+       '(1 2 3))
+
+(check 'generator->reverse-list
+       (generator->reverse-list (generator 1 2 3 4 5))
+       '(5 4 3 2 1))
+
+(check 'generator->vector
+       (generator->vector (generator 1 2 3 4 5))
+       #(1 2 3 4 5))
+
+(check 'generator->vector/bounded
+       (generator->vector (generator 1 2 3 4 5) 3)
+       #(1 2 3))
+
+(let ((vector-target (make-vector 5 0)))
+  (check 'generator->vector!/count
+         (generator->vector! vector-target 2 (generator 1 2 4))
+         3)
+  (check 'generator->vector!/target
+         vector-target
+         #(0 0 1 2 4)))
+
+(check 'generator->string
+       (generator->string (generator #\a #\b #\c))
+       "abc")
+
+(check 'generator-fold
+       (generator-fold cons 'z (generator 'a 'b 'c 'd 'e))
+       '(e d c b a . z))
+
+(check 'generator-for-each
+       (let ((n 0))
+         (generator-for-each
+          (lambda values (set! n (apply + values)))
+          (generator 1)
+          (generator 2)
+          (generator 3))
+         n)
+       6)
+
+(check 'generator-map->list
+       (generator-map->list
+        (lambda values (apply + values))
+        (generator 1 4)
+        (generator 2 5)
+        (generator 3 6))
+       '(6 15))
+
+(check 'generator-find/match
+       (generator-find (lambda (x) (> x 2))
+                       (make-range-generator 1 5))
+       3)
+
+(check 'generator-find/no-match
+       (generator-find (lambda (x) (> x 10))
+                       (make-range-generator 1 5))
+       #f)
+
+(check 'generator-count
+       (generator-count odd? (make-range-generator 1 5))
+       2)
+
+(check 'generator-any/source-remainder
+       (let ((source (make-range-generator 2 5)))
+         (list (generator-any odd? source)
+               (generator->list source)))
+       '(#t (4)))
+
+(check 'generator-every/false-source-remainder
+       (let ((source (make-range-generator 2 5)))
+         (list (generator-every odd? source)
+               (generator->list source)))
+       '(#f (3 4)))
+
+(check 'generator-every/last-true
+       (let ((source (make-range-generator 2 5)))
+         (list (generator-every
+                (lambda (x) (and (> x 1) x))
+                source)
+               (generator->list source)))
+       '(4 ()))
+
+(check 'generator-unfold
+       (generator-unfold
+        (make-for-each-generator string-for-each "abc")
+        unfold)
+       '(#\a #\b #\c))
+
+(check 'make-accumulator
+       (let ((acc (make-accumulator * 1 -)))
+         (acc 1)
+         (acc 2)
+         (acc 4)
+         (acc (eof-object)))
+       -8)
+
+(check 'count-accumulator
+       (let ((acc (count-accumulator)))
+         (acc 1)
+         (acc 2)
+         (acc 4)
+         (acc (eof-object)))
+       3)
+
+(check 'list-accumulator
+       (let ((acc (list-accumulator)))
+         (acc 1)
+         (acc 2)
+         (acc 4)
+         (acc (eof-object)))
+       '(1 2 4))
+
+(check 'reverse-list-accumulator
+       (let ((acc (reverse-list-accumulator)))
+         (acc 1)
+         (acc 2)
+         (acc 4)
+         (acc (eof-object)))
+       '(4 2 1))
+
+(check 'vector-accumulator
+       (let ((acc (vector-accumulator)))
+         (acc 1)
+         (acc 2)
+         (acc 4)
+         (acc (eof-object)))
+       #(1 2 4))
+
+(check 'reverse-vector-accumulator
+       (let ((acc (reverse-vector-accumulator)))
+         (acc 1)
+         (acc 2)
+         (acc 4)
+         (acc (eof-object)))
+       #(4 2 1))
+
+(check 'vector-accumulator!
+       (let* ((target (vector 0 0 0 0 0))
+              (acc (vector-accumulator! target 2)))
+         (acc 1)
+         (acc 2)
+         (acc 4)
+         (acc (eof-object)))
+       #(0 0 1 2 4))
+
+(check 'string-accumulator
+       (let ((acc (string-accumulator)))
+         (acc #\a)
+         (acc #\b)
+         (acc #\c)
+         (acc (eof-object)))
+       "abc")
+
+(check 'bytevector-accumulator
+       (let ((acc (bytevector-accumulator)))
+         (acc 1)
+         (acc 2)
+         (acc 4)
+         (acc (eof-object)))
+       (bytevector 1 2 4))
+
+(check 'bytevector-accumulator!
+       (let* ((target (bytevector 0 0 0 0 0))
+              (acc (bytevector-accumulator! target 2)))
+         (acc 1)
+         (acc 2)
+         (acc 4)
+         (acc (eof-object)))
+       (bytevector 0 0 1 2 4))
+
+(check 'sum-accumulator
+       (let ((acc (sum-accumulator)))
+         (acc 1)
+         (acc 2)
+         (acc 4)
+         (acc (eof-object)))
+       7)
+
+(check 'product-accumulator
+       (let ((acc (product-accumulator)))
+         (acc 1)
+         (acc 2)
+         (acc 4)
+         (acc (eof-object)))
+       8)
 
 (finish-generator-tests)
