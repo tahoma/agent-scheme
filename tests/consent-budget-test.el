@@ -15,6 +15,14 @@
 
 (require 'ert)
 (require 'consent-eval)
+(require 'consent-test-options)
+
+(defun consent-budget-test--expected-max-source-metadata ()
+  "Return the max source metadata ceiling expected for this test run."
+  (or (plist-get
+       (consent-test-options-default-plist)
+       :max-source-metadata)
+      consent-eval-maximum-source-metadata))
 
 (defun consent-budget-test--result (source &optional options)
   "Evaluate SOURCE under OPTIONS and return its rendered result record."
@@ -30,17 +38,18 @@
   "`current-budget' reports every enforced and reserved dimension and reason."
   (let ((text (consent-budget-test--result
                "(import (scheme base) (agent reflect)) (current-budget)")))
-    (dolist (needle '("(steps-used " "(max-steps 100000)"
-                      "(host-calls " "(max-host-calls 10000)"
-                      "(events-used " "(max-events 1000)"
-                      "(max-event-nodes 100000)"
-                      "(value-nodes-used " "(max-value-nodes 10000000)"
-                      "(source-metadata-used "
-                      "(max-source-metadata 10000000)"
-                      "(interned-symbols-used "
-                      "(max-interned-symbols 1000000)"
-                      "(output-bytes-used " "(max-output-bytes 10485760)"
-                      "(max-wall-time-ms #f)" "(reason #f)"))
+    (dolist (needle (list "(steps-used " "(max-steps 100000)"
+                          "(host-calls " "(max-host-calls 10000)"
+                          "(events-used " "(max-events 1000)"
+                          "(max-event-nodes 100000)"
+                          "(value-nodes-used " "(max-value-nodes 10000000)"
+                          "(source-metadata-used "
+                          (format "(max-source-metadata %s)"
+                                  (consent-budget-test--expected-max-source-metadata))
+                          "(interned-symbols-used "
+                          "(max-interned-symbols 1000000)"
+                          "(output-bytes-used " "(max-output-bytes 10485760)"
+                          "(max-wall-time-ms #f)" "(reason #f)"))
       (should (string-match-p (regexp-quote needle) text)))))
 
 (ert-deftest consent-budget-test-step-exhaustion-names-dimension ()
