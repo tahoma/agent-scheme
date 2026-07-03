@@ -567,34 +567,55 @@ When COUNT is non-nil, return at most COUNT element slices."
             "")
         name)))
 
-(defun consent--scheme-documentation-define-procedure-name-from-slice
+(defun consent--scheme-documentation-formal-symbol-names (formals)
+  "Return formal parameter names from FORMALS, including dotted rest names."
+  (cond
+   ((null formals) nil)
+   ((consent-symbol-p formals)
+    (list (consent-symbol-name formals)))
+   ((consp formals)
+    (let ((cursor formals)
+          names)
+      (while (consp cursor)
+        (when (consent-symbol-p (car cursor))
+          (push (consent-symbol-name (car cursor)) names))
+        (setq cursor (cdr cursor)))
+      (when (consent-symbol-p cursor)
+        (push (consent-symbol-name cursor) names))
+      (nreverse names)))
+   (t nil)))
+
+(defun consent--scheme-documentation-define-procedure-signature-from-slice
     (source slice)
-  "Return the procedure name defined by DEFINE SLICE in SOURCE, or nil."
-  (let ((elements
-         (consent--scheme-documentation-list-elements
-          source
-          (car slice)
-          (cdr slice)
-          3)))
-    (when (and (>= (length elements) 2)
-               (string=
-                (or (consent--scheme-documentation-slice-token
-                     source (car elements))
-                    "")
-                "define"))
-      (let ((target (nth 1 elements))
-            (value (nth 2 elements)))
-        (cond
-         ((consent--scheme-documentation-slice-list-p source target)
-          (consent--scheme-documentation-list-head-name
-           source (car target) (cdr target)))
-         ((and value
-               (or (consent--scheme-documentation-slice-head-named-p
-                    source value "lambda")
-                   (consent--scheme-documentation-slice-head-named-p
-                    source value "case-lambda")))
-          (consent--scheme-documentation-slice-token source target))
-         (t nil))))))
+  "Return `(NAME FORMAL-NAMES)' for DEFINE SLICE in SOURCE, or nil."
+  (condition-case nil
+      (let* ((form (consent-read (substring source (car slice) (cdr slice))))
+             (target (and (consp (cdr form)) (cadr form)))
+             (value (and (consp (cddr form)) (caddr form))))
+        (when (consent--scheme-documentation-form-head-named-p form "define")
+          (cond
+           ((and (consp target)
+                 (consent-symbol-p (car target)))
+            (list
+             (consent-symbol-name (car target))
+             (consent--scheme-documentation-formal-symbol-names
+              (cdr target))))
+           ((and (consent-symbol-p target)
+                 (consent--scheme-documentation-form-head-named-p
+                  value
+                  "lambda")
+                 (consp (cdr value)))
+            (list
+             (consent-symbol-name target)
+             (consent--scheme-documentation-formal-symbol-names
+              (cadr value))))
+           ((and (consent-symbol-p target)
+                 (consent--scheme-documentation-form-head-named-p
+                  value
+                  "case-lambda"))
+            (list (consent-symbol-name target) nil))
+           (t nil))))
+    (error nil)))
 
 (defun consent--scheme-documentation-top-level-list-slices (source)
   "Return top-level list slices from SOURCE."
@@ -632,7 +653,7 @@ When COUNT is non-nil, return at most COUNT element slices."
 
 (defun consent--scheme-documentation-public-procedure-slices (source)
   "Return exported procedure definition slices from Scheme library SOURCE.
-Each result has the form (NAME START END)."
+Each result has the form (NAME START END FORMAL-NAMES)."
   (let (procedures)
     (dolist (library (consent--scheme-documentation-top-level-list-slices
                       source))
@@ -663,15 +684,18 @@ Each result has the form (NAME START END)."
                          source (car declaration) (cdr declaration))))
                 (when (consent--scheme-documentation-slice-head-named-p
                        source body-form "define")
-                  (let ((name
-                         (consent--scheme-documentation-define-procedure-name-from-slice
-                          source body-form)))
+                  (let* ((signature
+                          (consent--scheme-documentation-define-procedure-signature-from-slice
+                           source body-form))
+                         (name (car signature))
+                         (formal-names (cadr signature)))
                     (when (and name (gethash name exports))
                       (push
                        (list
                         name
                         (car body-form)
-                        (cdr body-form))
+                        (cdr body-form)
+                        formal-names)
                        procedures))))))))))
     (nreverse procedures)))
 
@@ -808,9 +832,27 @@ Each result has the form (NAME START END)."
                 (cdr entry))))
         parameters)))
 
-(defun consent--scheme-documentation-rich-vector-p (definition-text)
-  "Return non-nil when DEFINITION-TEXT has typed rich procedure metadata."
-  (cl-some
+(defun consent--scheme-documentation-parameter-names (parameters)
+  "Return parameter names documented by PARAMETERS metadata."
+  (and (consent--scheme-documentation-proper-list-p parameters)
+       (cl-loop for entry in parameters
+                when (and (consp entry)
+                          (consent-symbol-p (car entry)))
+                collect (consent-symbol-name (car entry)))))
+
+(defun consent--scheme-documentation-missing-parameter-names
+    (parameters formal-names)
+  "Return FORMAL-NAMES not covered by PARAMETERS metadata."
+  (let ((parameter-names
+         (consent--scheme-documentation-parameter-names parameters)))
+    (cl-remove-if
+     (lambda (name)
+       (member name parameter-names))
+     formal-names)))
+
+(defun consent--scheme-documentation-typed-rich-vector (definition-text)
+  "Return a typed rich metadata vector from DEFINITION-TEXT, or nil."
+  (cl-find-if
    (lambda (vector)
      (let ((parameters
             (consent--scheme-documentation-vector-field vector "parameters"))
@@ -824,6 +866,10 @@ Each result has the form (NAME START END)."
              (cdr returns)))))
    (consent--scheme-documentation-rich-vectors definition-text)))
 
+(defun consent--scheme-documentation-rich-vector-p (definition-text)
+  "Return non-nil when DEFINITION-TEXT has typed rich procedure metadata."
+  (and (consent--scheme-documentation-typed-rich-vector definition-text) t))
+
 (defun consent--scheme-documentation-public-rich-errors (file)
   "Return rich-docstring errors for exported procedures in FILE."
   (let* ((text (with-temp-buffer
@@ -835,15 +881,35 @@ Each result has the form (NAME START END)."
              (consent--scheme-documentation-public-procedure-slices text))
       (let ((name (nth 0 procedure))
             (start (nth 1 procedure))
-            (end (nth 2 procedure)))
-        (unless (consent--scheme-documentation-rich-vector-p
-                 (substring text start end))
-          (push
-           (format "%s:%d exported procedure %s missing rich metadata vector with typed parameters and returns"
-                   relative-file
-                   (consent--scheme-documentation-source-line text start)
-                   name)
-           errors))))
+            (end (nth 2 procedure))
+            (formal-names (nth 3 procedure)))
+        (let* ((definition-text (substring text start end))
+               (vector
+                (consent--scheme-documentation-typed-rich-vector
+                 definition-text)))
+          (if (not vector)
+              (push
+               (format "%s:%d exported procedure %s missing rich metadata vector with typed parameters and returns"
+                       relative-file
+                       (consent--scheme-documentation-source-line text start)
+                       name)
+               errors)
+            (let* ((parameters
+                    (consent--scheme-documentation-vector-field
+                     vector
+                     "parameters"))
+                   (missing
+                    (consent--scheme-documentation-missing-parameter-names
+                     (cdr parameters)
+                     formal-names)))
+              (when missing
+                (push
+                 (format "%s:%d exported procedure %s parameters metadata missing formals: %s"
+                         relative-file
+                         (consent--scheme-documentation-source-line text start)
+                         name
+                         (mapconcat #'identity missing ", "))
+                 errors)))))))
     (nreverse errors)))
 
 (defun consent--scheme-documentation-repository-text-files ()
@@ -1075,6 +1141,70 @@ Each result has the form (NAME START END)."
               (string-match-p
                "value-case-lambda missing rich metadata"
                error))
+            errors)))
+      (delete-file file))))
+
+(ert-deftest consent-scheme-documentation-test-public-rich-covers-rest-formals ()
+  "Require public metadata to cover dotted and rest-only formals."
+  (let ((file
+         (make-temp-file
+          "consent-doc-rest-formals" nil ".sld"
+          (concat
+           ";;; scratch.sld --- documentation fixture\n"
+           "(define-library\n"
+           "  (scratch docs)\n"
+           "  (export\n"
+           "    missing-dotted\n"
+           "    missing-rest-only\n"
+           "    documented-dotted)\n"
+           "  (import (scheme base))\n"
+           "  (begin\n"
+           "    (define (missing-dotted head . tail)\n"
+           "      \"Return TAIL without documenting it.\"\n"
+           "      #((parameters\n"
+           "         (head (type any)\n"
+           "          (description \"First value.\")))\n"
+           "        (returns (type list)\n"
+           "         (description \"Remaining values.\"))\n"
+           "        (effects pure))\n"
+           "      tail)\n"
+           "    (define (missing-rest-only . args)\n"
+           "      \"Return ARGS without documenting them.\"\n"
+           "      #((parameters)\n"
+           "        (returns (type list)\n"
+           "         (description \"All values.\"))\n"
+           "        (effects pure))\n"
+           "      args)\n"
+           "    (define (documented-dotted head . tail)\n"
+           "      \"Return TAIL with complete metadata.\"\n"
+           "      #((parameters\n"
+           "         (head (type any)\n"
+           "          (description \"First value.\"))\n"
+           "         (tail (type list)\n"
+           "          (description \"Remaining values.\")))\n"
+           "        (returns (type list)\n"
+           "         (description \"Remaining values.\"))\n"
+           "        (effects pure))\n"
+           "      tail)))"))))
+    (unwind-protect
+        (let ((errors
+               (consent--scheme-documentation-public-rich-errors file)))
+          (should
+           (cl-some
+            (lambda (error)
+              (and (string-match-p "missing-dotted" error)
+                   (string-match-p "tail" error)))
+            errors))
+          (should
+           (cl-some
+            (lambda (error)
+              (and (string-match-p "missing-rest-only" error)
+                   (string-match-p "args" error)))
+            errors))
+          (should-not
+           (cl-some
+            (lambda (error)
+              (string-match-p "documented-dotted" error))
             errors)))
       (delete-file file))))
 
