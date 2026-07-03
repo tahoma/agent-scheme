@@ -111,6 +111,7 @@ jobs:
       CONSENT_GAMBIT_SHA256: "0da7c9772a2186dab1fba6bf6c777afe7424f40beacadf1b117d5cc825fe2db3"
       CONSENT_TEST_SOURCE_METADATA: ${{ matrix.combo.source_metadata }}
       CONSENT_TEST_DOCSTRING_RETENTION: ${{ matrix.combo.docstring_retention }}
+      CONSENT_TEST_MAX_SOURCE_METADATA: ${{ matrix.combo.source_metadata == 'on' && '250000' || '' }}
       CONSENT_CI_LOG_FILE: portable-gambit-${{ matrix.combo.source_metadata }}-docstrings-${{ matrix.combo.docstring_retention }}.log
       CONSENT_CI_NATIVE_LOG_FILE: portable-gambit-native-${{ matrix.combo.source_metadata }}-docstrings-${{ matrix.combo.docstring_retention }}.log
       CONSENT_CI_SHARD_SUMMARY_NAME: Portable R7RS Gambit full suite / source metadata ${{ matrix.combo.source_metadata }} / docstrings ${{ matrix.combo.docstring_retention }}
@@ -258,6 +259,7 @@ jobs:
       DEBIAN_FRONTEND: noninteractive
       CONSENT_TEST_SOURCE_METADATA: ${{ matrix.source_metadata }}
       CONSENT_TEST_DOCSTRING_RETENTION: ${{ matrix.docstring_retention }}
+      CONSENT_TEST_MAX_SOURCE_METADATA: ${{ matrix.source_metadata == 'on' && '250000' || '' }}
       CONSENT_CI_LOG_FILE: portable-${{ matrix.host.host }}-${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}.log
       CONSENT_CI_SHARD_SUMMARY_NAME: ${{ matrix.host.summary_name }} / source metadata ${{ matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention }}
     strategy:
@@ -399,6 +401,7 @@ jobs:
     env:
       CONSENT_TEST_SOURCE_METADATA: ${{ matrix.source_metadata }}
       CONSENT_TEST_DOCSTRING_RETENTION: ${{ matrix.docstring_retention }}
+      CONSENT_TEST_MAX_SOURCE_METADATA: ${{ matrix.source_metadata == 'on' && '250000' || '' }}
       CONSENT_CI_LOG_FILE: emacs-${{ matrix.shard.shard }}-${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}.log
       CONSENT_CI_SHARD_SUMMARY_NAME: ${{ matrix.shard.summary_name }} / source metadata ${{ matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention }}
     strategy:
@@ -507,6 +510,7 @@ jobs:
     env:
       CONSENT_TEST_SOURCE_METADATA: ${{ matrix.combo.source_metadata }}
       CONSENT_TEST_DOCSTRING_RETENTION: ${{ matrix.combo.docstring_retention }}
+      CONSENT_TEST_MAX_SOURCE_METADATA: ${{ matrix.combo.source_metadata == 'on' && '250000' || '' }}
       CONSENT_CI_LOG_FILE: emacs-${{ matrix.shard.shard }}-${{ matrix.combo.source_metadata }}-docstrings-${{ matrix.combo.docstring_retention }}.log
       CONSENT_CI_SHARD_SUMMARY_NAME: ${{ matrix.shard.summary_name }} / source metadata ${{ matrix.combo.source_metadata }} / docstrings ${{ matrix.combo.docstring_retention }}
     strategy:
@@ -580,6 +584,7 @@ jobs:
       CONSENT_PARITY_HOST: guile
       CONSENT_TEST_SOURCE_METADATA: ${{ matrix.source_metadata }}
       CONSENT_TEST_DOCSTRING_RETENTION: ${{ matrix.docstring_retention }}
+      CONSENT_TEST_MAX_SOURCE_METADATA: ${{ matrix.source_metadata == 'on' && '250000' || '' }}
       CONSENT_CI_LOG_FILE: parity-guile-${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}.log
       CONSENT_CI_SHARD_SUMMARY_NAME: Emacs/portable parity gate / source metadata ${{ matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention }}
     strategy:

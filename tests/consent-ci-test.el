@@ -391,6 +391,9 @@
     (should (string-match-p
              "CONSENT_TEST_DOCSTRING_RETENTION: \\${{ matrix.docstring_retention }}"
              workflow))
+    (should (string-match-p
+             "CONSENT_TEST_MAX_SOURCE_METADATA: \\${{ matrix.source_metadata == 'on' && '250000' || '' }}"
+             workflow))
     ;; The canonical Gambit and Emacs-core jobs carry a per-combo `native`/
     ;; metadata object instead of two literal axes (#481), so their env and
     ;; artifact names index through `matrix.combo`.
@@ -399,6 +402,9 @@
              workflow))
     (should (string-match-p
              "CONSENT_TEST_DOCSTRING_RETENTION: \\${{ matrix.combo.docstring_retention }}"
+             workflow))
+    (should (string-match-p
+             "CONSENT_TEST_MAX_SOURCE_METADATA: \\${{ matrix.combo.source_metadata == 'on' && '250000' || '' }}"
              workflow))
     (should (string-match-p
              "portable-gambit-\\${{ matrix.combo.source_metadata }}-docstrings-\\${{ matrix.combo.docstring_retention }}\\.log"
@@ -449,8 +455,9 @@
     ;; syntax/docstring cross on the exhaustive lane in their own jobs.
     (should (string-match-p "^  test-portable-gambit:" workflow))
     (should (string-match-p "^  test-emacs-core:" workflow))
-    ;; The trimmed jobs must not statically pin the full axis.
-    (should-not (string-match-p "matrix.source_metadata == 'on'" workflow))
+    ;; The trimmed jobs must not use job-level matrix predicates for the axis;
+    ;; the trim belongs in the matrix expression itself.
+    (should-not (string-match-p "if: \\${{ matrix.source_metadata" workflow))
     ;; #481: the de-feature cross on Gambit and Emacs-core is no longer run in
     ;; full on every push. Per push they run only the canonical on/full combo
     ;; plus a single fully-stripped off/none smoke leg; the exhaustive lane

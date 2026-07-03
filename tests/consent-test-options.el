@@ -18,6 +18,10 @@
   "CONSENT_TEST_DOCSTRING_RETENTION"
   "Environment variable selecting the CI test docstring retention default.")
 
+(defconst consent-test-options-max-source-metadata-variable
+  "CONSENT_TEST_MAX_SOURCE_METADATA"
+  "Environment variable selecting the CI test source metadata budget default.")
+
 (defun consent-test-options--present-string (value)
   "Return non-nil when VALUE is a nonempty string."
   (and (stringp value)
@@ -58,6 +62,17 @@
             consent-test-options-docstring-retention-variable
             other))))
 
+(defun consent-test-options--non-negative-integer-value (name raw)
+  "Normalize RAW as an optional non-negative integer named NAME."
+  (let ((value (consent-test-options--downcase raw)))
+    (cond
+     ((or (null value) (= (length value) 0))
+      :unset)
+     ((string-match-p "\\`[0-9]+\\'" value)
+      (string-to-number value))
+     (t
+      (error "%s must be a non-negative integer, got %S" name raw)))))
+
 (defun consent-test-options-default-plist ()
   "Return CI matrix evaluator option defaults as a plist."
   (let ((source-metadata
@@ -66,12 +81,19 @@
         (docstring-retention
          (consent-test-options--docstring-retention-value
           (getenv consent-test-options-docstring-retention-variable)))
+        (max-source-metadata
+         (consent-test-options--non-negative-integer-value
+          consent-test-options-max-source-metadata-variable
+          (getenv consent-test-options-max-source-metadata-variable)))
         options)
     (unless (eq source-metadata :unset)
       (setq options (plist-put options :source-metadata source-metadata)))
     (unless (eq docstring-retention :unset)
       (setq options
             (plist-put options :docstring-retention docstring-retention)))
+    (unless (eq max-source-metadata :unset)
+      (setq options
+            (plist-put options :max-source-metadata max-source-metadata)))
     options))
 
 (defun consent-test-options-merge-defaults (options)
