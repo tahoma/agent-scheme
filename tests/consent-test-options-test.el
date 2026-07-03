@@ -16,26 +16,31 @@
   (let ((process-environment
          (append
           '("CONSENT_TEST_SOURCE_METADATA=off"
-            "CONSENT_TEST_DOCSTRING_RETENTION=simple")
+            "CONSENT_TEST_DOCSTRING_RETENTION=simple"
+            "CONSENT_TEST_MAX_SOURCE_METADATA=250000")
           process-environment)))
     (should
      (equal
       (consent-test-options-default-plist)
-      '(:source-metadata nil :docstring-retention simple)))))
+      '(:source-metadata nil
+        :docstring-retention simple
+        :max-source-metadata 250000)))))
 
 (ert-deftest consent-test-options-test-merge-preserves-explicit-values ()
   "Keep explicit test options stronger than CI matrix defaults."
   (let ((process-environment
          (append
           '("CONSENT_TEST_SOURCE_METADATA=off"
-            "CONSENT_TEST_DOCSTRING_RETENTION=none")
+            "CONSENT_TEST_DOCSTRING_RETENTION=none"
+            "CONSENT_TEST_MAX_SOURCE_METADATA=250000")
           process-environment)))
     (should
      (equal
       (consent-test-options-merge-defaults
-       '(:source-metadata t :max-steps 10))
+       '(:source-metadata t :max-steps 10 :max-source-metadata 12))
       '(:source-metadata t
         :max-steps 10
+        :max-source-metadata 12
         :docstring-retention nil)))))
 
 (ert-deftest consent-test-options-test-eval-argument-filter-adds-options ()
@@ -43,7 +48,8 @@
   (let ((process-environment
          (append
           '("CONSENT_TEST_SOURCE_METADATA=off"
-            "CONSENT_TEST_DOCSTRING_RETENTION=full")
+            "CONSENT_TEST_DOCSTRING_RETENTION=full"
+            "CONSENT_TEST_MAX_SOURCE_METADATA=")
           process-environment)))
     (should
      (equal
@@ -61,7 +67,8 @@
   (let ((process-environment
          (append
           '("CONSENT_TEST_SOURCE_METADATA=on"
-            "CONSENT_TEST_DOCSTRING_RETENTION=none")
+            "CONSENT_TEST_DOCSTRING_RETENTION=none"
+            "CONSENT_TEST_MAX_SOURCE_METADATA=")
           process-environment)))
     (should
      (equal

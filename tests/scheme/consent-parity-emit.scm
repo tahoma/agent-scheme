@@ -78,6 +78,22 @@
       (error "CONSENT_TEST_DOCSTRING_RETENTION must be full, simple, or none"
              value)))))
 
+;; Parse NAME's environment value as the CI source metadata budget default.
+(define (consent-test-max-source-metadata-default name)
+  (let ((value (get-environment-variable name)))
+    (cond
+     ((or (not value) (= (string-length value) 0))
+      consent-test-option-unset)
+     ((let ((parsed (string->number value)))
+        (and parsed
+             (exact? parsed)
+             (integer? parsed)
+             (>= parsed 0)))
+      (string->number value))
+     (else
+      (error "CONSENT_TEST_MAX_SOURCE_METADATA must be a non-negative integer"
+             value)))))
+
 ;; Return CI matrix defaults as evaluator options.
 (define (consent-test-default-options)
   (let ((source-metadata
@@ -85,14 +101,20 @@
           "CONSENT_TEST_SOURCE_METADATA"))
         (docstring-retention
          (consent-test-docstring-retention-default
-          "CONSENT_TEST_DOCSTRING_RETENTION")))
+          "CONSENT_TEST_DOCSTRING_RETENTION"))
+        (max-source-metadata
+         (consent-test-max-source-metadata-default
+          "CONSENT_TEST_MAX_SOURCE_METADATA")))
     (append
      (if (consent-test-option-unset? source-metadata)
          '()
          (list (cons 'source-metadata source-metadata)))
      (if (consent-test-option-unset? docstring-retention)
          '()
-         (list (cons 'docstring-retention docstring-retention))))))
+         (list (cons 'docstring-retention docstring-retention)))
+     (if (consent-test-option-unset? max-source-metadata)
+         '()
+         (list (cons 'max-source-metadata max-source-metadata))))))
 
 ;; Return OPTIONS with missing CI matrix defaults appended.
 (define (consent-test-merge-options options)

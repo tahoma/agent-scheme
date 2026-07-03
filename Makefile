@@ -177,6 +177,7 @@ help:
 	@printf '  %-50s %s\n' 'CONSENT_TEST_TARGET_ROOT=DIR' 'Optional portable Scheme implementation root for the current harness.'
 	@printf '  %-50s %s\n' 'CONSENT_TEST_SOURCE_METADATA=on|off' 'Default source metadata mode injected by CI matrix shards.'
 	@printf '  %-50s %s\n' 'CONSENT_TEST_DOCSTRING_RETENTION=full|simple|none' 'Default docstring retention mode injected by CI matrix shards.'
+	@printf '  %-50s %s\n' 'CONSENT_TEST_MAX_SOURCE_METADATA=N' 'Default test source metadata budget grant.'
 	@printf '  %-50s %s\n' 'CONSENT_LINE_LENGTH_LIMIT=120' 'Column limit enforced by lint-line-length.'
 	@printf '  %-50s %s\n' 'CONSENT_ELISP_DOCSTRING_MAX_COLUMN=80' 'Column limit enforced by lint-elisp-docstrings.'
 	@printf '  %-50s %s\n' 'CONSENT_TEST_JOBS=N' 'Parallel jobs used by make test.'

@@ -34,6 +34,7 @@
               authorize-network-capability
               consent-version
               consent-version-components
+              consent-default-maximum-source-metadata
               consent-procedure?
               context-audit-events
               documentation-metadata?
@@ -102,6 +103,22 @@
       (error "CONSENT_TEST_DOCSTRING_RETENTION must be full, simple, or none"
              value)))))
 
+;; Parse NAME's environment value as the CI source metadata budget default.
+(define (consent-test-max-source-metadata-default name)
+  (let ((value (get-environment-variable name)))
+    (cond
+     ((or (not value) (= (string-length value) 0))
+      consent-test-option-unset)
+     ((let ((parsed (string->number value)))
+        (and parsed
+             (exact? parsed)
+             (integer? parsed)
+             (>= parsed 0)))
+      (string->number value))
+     (else
+      (error "CONSENT_TEST_MAX_SOURCE_METADATA must be a non-negative integer"
+             value)))))
+
 ;; Return CI matrix defaults as evaluator options.
 (define (consent-test-default-options)
   (let ((source-metadata
@@ -109,14 +126,27 @@
           "CONSENT_TEST_SOURCE_METADATA"))
         (docstring-retention
          (consent-test-docstring-retention-default
-          "CONSENT_TEST_DOCSTRING_RETENTION")))
+          "CONSENT_TEST_DOCSTRING_RETENTION"))
+        (max-source-metadata
+         (consent-test-max-source-metadata-default
+          "CONSENT_TEST_MAX_SOURCE_METADATA")))
     (append
      (if (consent-test-option-unset? source-metadata)
          '()
          (list (cons 'source-metadata source-metadata)))
      (if (consent-test-option-unset? docstring-retention)
          '()
-         (list (cons 'docstring-retention docstring-retention))))))
+         (list (cons 'docstring-retention docstring-retention)))
+     (if (consent-test-option-unset? max-source-metadata)
+         '()
+         (list (cons 'max-source-metadata max-source-metadata))))))
+
+;; Return the max source metadata ceiling expected for this test run.
+(define (consent-test-expected-max-source-metadata)
+  (let ((entry (assq 'max-source-metadata (consent-test-default-options))))
+    (if entry
+        (cdr entry)
+        consent-default-maximum-source-metadata)))
 
 ;; Return OPTIONS with missing CI matrix defaults appended.
 (define (consent-test-merge-options options)
@@ -2458,17 +2488,21 @@
 ;; The ledger reports every enforced and reserved dimension plus the reason.
 (check-result-contains 'budget-ledger-shape
                        "(import (scheme base) (agent reflect)) (current-budget)"
-                       '("(steps-used " "(max-steps 100000)"
-                         "(host-calls " "(max-host-calls 10000)"
-                         "(events-used " "(max-events 1000)"
-                         "(max-event-nodes 100000)"
-                         "(value-nodes-used " "(max-value-nodes 10000000)"
-                         "(source-metadata-used "
-                         "(max-source-metadata 10000000)"
-                         "(interned-symbols-used "
-                         "(max-interned-symbols 1000000)"
-                         "(output-bytes-used " "(max-output-bytes 10485760)"
-                         "(max-wall-time-ms #f)" "(reason #f)"))
+                       (list "(steps-used " "(max-steps 100000)"
+                             "(host-calls " "(max-host-calls 10000)"
+                             "(events-used " "(max-events 1000)"
+                             "(max-event-nodes 100000)"
+                             "(value-nodes-used " "(max-value-nodes 10000000)"
+                             "(source-metadata-used "
+                             (string-append
+                              "(max-source-metadata "
+                              (number->string
+                               (consent-test-expected-max-source-metadata))
+                              ")")
+                             "(interned-symbols-used "
+                             "(max-interned-symbols 1000000)"
+                             "(output-bytes-used " "(max-output-bytes 10485760)"
+                             "(max-wall-time-ms #f)" "(reason #f)"))
 
 ;; A string->symbol flood halts on the interned-symbols dimension rather than
 ;; growing the intern table without limit; with a generous step budget the
