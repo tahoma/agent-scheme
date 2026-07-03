@@ -47,6 +47,17 @@
         (let ((value (pred (car list))))
           (if value value (any pred (cdr list)))))))
 
+    ;; Pull GENERATORS from left to right, stopping as soon as EOF appears.
+    (define (generator-values-or-eof generators)
+      "Return generated values from GENERATORS, or EOF if any is exhausted."
+      (let loop ((rest generators) (values '()))
+        (if (null? rest)
+            (reverse values)
+            (let ((value ((car rest))))
+              (if (eof-object? value)
+                  value
+                  (loop (cdr rest) (cons value values)))))))
+
     ;; Validate VALUE as a non-negative integer for NAME.
     (define (check-non-negative-integer name value)
       "Validate VALUE as a non-negative integer for NAME."
@@ -516,8 +527,8 @@
              (if (eof-object? item) item (proc item)))))
         ((proc . generators)
          (lambda ()
-           (let ((items (map (lambda (gen) (gen)) generators)))
-             (if (any eof-object? items)
+           (let ((items (generator-values-or-eof generators)))
+             (if (eof-object? items)
                  (eof-object)
                  (apply proc items))))))
        proc
@@ -537,8 +548,8 @@
          (description "A generator yielding combined values."))
         (effects allocation state-write procedure-call))
       (lambda ()
-        (let ((items (map (lambda (gen) (gen)) generators)))
-          (if (any eof-object? items)
+        (let ((items (generator-values-or-eof generators)))
+          (if (eof-object? items)
               (eof-object)
               (call-with-values
                (lambda () (apply proc (append items (list seed))))
@@ -945,8 +956,8 @@
          (description "Final fold state."))
         (effects procedure-call))
       (let loop ((state seed))
-        (let ((values (map (lambda (gen) (gen)) generators)))
-          (if (any eof-object? values)
+        (let ((values (generator-values-or-eof generators)))
+          (if (eof-object? values)
               state
               (loop (apply proc (append values (list state))))))))
 
@@ -962,8 +973,8 @@
          (description "Unspecified value."))
         (effects procedure-call))
       (let loop ()
-        (let ((values (map (lambda (gen) (gen)) generators)))
-          (if (any eof-object? values)
+        (let ((values (generator-values-or-eof generators)))
+          (if (eof-object? values)
               (unspecified)
               (begin
                 (apply proc values)
@@ -981,8 +992,8 @@
          (description "Mapped values in order."))
         (effects allocation procedure-call))
       (let loop ((result '()))
-        (let ((values (map (lambda (gen) (gen)) generators)))
-          (if (any eof-object? values)
+        (let ((values (generator-values-or-eof generators)))
+          (if (eof-object? values)
               (reverse result)
               (loop (cons (apply proc values) result))))))
 

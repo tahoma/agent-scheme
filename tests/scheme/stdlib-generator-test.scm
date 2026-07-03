@@ -177,6 +177,25 @@
                                (make-range-generator 0 2))
                       '(0 1 2 0 1))
 
+(check 'parallel-generators/pull-left-to-right
+       (let ((log '()))
+         (define (note item)
+           (set! log (cons item log)))
+         (define (logging-generator name values)
+           (let ((rest values))
+             (lambda ()
+               (note name)
+               (if (null? rest)
+                   (eof-object)
+                   (let ((next (car rest)))
+                     (set! rest (cdr rest))
+                     next)))))
+         (let ((mapped (gmap list
+                             (logging-generator 'left '(1 2))
+                             (logging-generator 'right '(3 4)))))
+           (list (mapped) (mapped) (reverse log))))
+       '((1 3) (2 4) (left right left right)))
+
 (check-generator-list
  'gcombine
  (gcombine
@@ -185,6 +204,19 @@
   (generator 1 2 3)
   (generator 4 5 6 7))
  '(15 22 31))
+
+(check 'gcombine/stops-before-pulling-later-generator
+       (let ((short (generator 1))
+             (long (generator 10 20)))
+         (list (generator->list
+                (gcombine
+                 (lambda (left right state)
+                   (values (list left right state) state))
+                 'seed
+                 short
+                 long))
+               (generator->list long)))
+       '(((1 10 seed)) (20)))
 
 (check-generator-list 'gfilter
                       (gfilter odd? (make-range-generator 1 11))
@@ -275,6 +307,13 @@
                             (generator 9 10 11 12))
                       '(54 140 264))
 
+(check 'gmap/stops-before-pulling-later-generator
+       (let ((short (generator 'a))
+             (long (generator 'b 'c)))
+         (list (generator->list (gmap list short long))
+               (generator->list long)))
+       '(((a b)) (c)))
+
 (check-generator-list
  'gstate-filter
  (gstate-filter
@@ -350,6 +389,18 @@
        (generator-fold cons 'z (generator 'a 'b 'c 'd 'e))
        '(e d c b a . z))
 
+(check 'generator-fold/stops-before-pulling-later-generator
+       (let ((short (generator 'a))
+             (long (generator 'b 'c)))
+         (list (generator-fold
+                (lambda (left right state)
+                  (cons (list left right) state))
+                '()
+                short
+                long)
+               (generator->list long)))
+       '(((a b)) (c)))
+
 (check 'generator-for-each
        (let ((n 0))
          (generator-for-each
@@ -360,6 +411,18 @@
          n)
        6)
 
+(check 'generator-for-each/stops-before-pulling-later-generator
+       (let ((short (generator 'a))
+             (long (generator 'b 'c))
+             (seen '()))
+         (generator-for-each
+          (lambda (left right)
+            (set! seen (cons (list left right) seen)))
+          short
+          long)
+         (list (reverse seen) (generator->list long)))
+       '(((a b)) (c)))
+
 (check 'generator-map->list
        (generator-map->list
         (lambda values (apply + values))
@@ -367,6 +430,13 @@
         (generator 2 5)
         (generator 3 6))
        '(6 15))
+
+(check 'generator-map->list/stops-before-pulling-later-generator
+       (let ((short (generator 'a))
+             (long (generator 'b 'c)))
+         (list (generator-map->list list short long)
+               (generator->list long)))
+       '(((a b)) (c)))
 
 (check 'generator-find/match
        (generator-find (lambda (x) (> x 2))
