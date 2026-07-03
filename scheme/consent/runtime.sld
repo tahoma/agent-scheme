@@ -366,7 +366,7 @@
     ;; Default maximum retained portable source metadata entries admitted by a
     ;; run. This bounds the portable reader's process-global source side table
     ;; while leaving ordinary loaded runtime/library graphs introspectable.
-    (define consent-default-maximum-source-metadata 1000000)
+    (define consent-default-maximum-source-metadata 10000000)
     ;; Default maximum primitive callback count allowed during evaluation.
     (define consent-default-maximum-host-callbacks 10000)
     ;; Default maximum event-channel records allowed during evaluation.

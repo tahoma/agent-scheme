@@ -36,7 +36,7 @@
                       "(max-event-nodes 100000)"
                       "(value-nodes-used " "(max-value-nodes 10000000)"
                       "(source-metadata-used "
-                      "(max-source-metadata 1000000)"
+                      "(max-source-metadata 10000000)"
                       "(interned-symbols-used "
                       "(max-interned-symbols 1000000)"
                       "(output-bytes-used " "(max-output-bytes 10485760)"
