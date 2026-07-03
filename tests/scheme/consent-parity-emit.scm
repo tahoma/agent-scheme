@@ -255,12 +255,10 @@
   (newline))
 
 ;; Canonical fixture suite loaded once for case extraction.
-(define suite
-  (read-suite))
+(define suite (read-suite))
 
 ;; Shared fixture case list extracted from the canonical suite.
-(define cases
-  (suite-cases suite))
+(define cases (suite-cases suite))
 
 (for-each
  (lambda (case)

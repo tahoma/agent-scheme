@@ -26,14 +26,11 @@
           (stdlib and-let-star))
   (begin
     ;; Limit the number of characters read from one JSON value when non-#f.
-    (define json-number-of-character-limit
-      (make-parameter #f))
+    (define json-number-of-character-limit (make-parameter #f))
     ;; Limit recursive JSON array/object nesting when non-#f.
-    (define json-nesting-depth-limit
-      (make-parameter #f))
+    (define json-nesting-depth-limit (make-parameter #f))
     ;; Track characters consumed while reading one JSON value.
-    (define json-character-count
-      (make-parameter 0))
+    (define json-character-count (make-parameter 0))
 
     ;; JSON errors carry a portable reason string across hosts.
     (define-record-type <json-error>

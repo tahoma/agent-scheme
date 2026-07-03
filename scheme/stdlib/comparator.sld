@@ -48,8 +48,7 @@
     (define comparator-hash-bound 33554432)
 
     ;; Parameter holding the deterministic portable hash salt.
-    (define comparator-hash-salt
-      (make-parameter 16064047))
+    (define comparator-hash-salt (make-parameter 16064047))
 
     (define (hash-bound)
       "Return the exclusive upper bound for SRFI 128 hash values."
@@ -687,8 +686,7 @@
     (define first-comparator-index 9)
 
     ;; Default-comparator extension registry, newest comparator first.
-    (define default-comparator-registry
-      (list unknown-object-comparator))
+    (define default-comparator-registry (list unknown-object-comparator))
 
     (define (comparator-register-default! comparator)
       "Register COMPARATOR as an extension for default comparators."
