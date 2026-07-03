@@ -632,7 +632,7 @@ When COUNT is non-nil, return at most COUNT element slices."
 
 (defun consent--scheme-documentation-public-procedure-slices (source)
   "Return exported procedure definition slices from Scheme library SOURCE.
-Each result has the form (NAME START END LINE)."
+Each result has the form (NAME START END)."
   (let (procedures)
     (dolist (library (consent--scheme-documentation-top-level-list-slices
                       source))
@@ -646,15 +646,14 @@ Each result has the form (NAME START END LINE)."
                  2
                  (consent--scheme-documentation-list-elements
                   source (car library) (cdr library))))
-               exports)
+               (exports (make-hash-table :test #'equal)))
           (dolist (declaration declarations)
             (when (consent--scheme-documentation-slice-head-named-p
                    source declaration "export")
-              (setq exports
-                    (append
-                     (consent--scheme-documentation-exported-symbols-from-slice
-                      source declaration)
-                     exports))))
+              (dolist (name
+                       (consent--scheme-documentation-exported-symbols-from-slice
+                        source declaration))
+                (puthash name t exports))))
           (dolist (declaration declarations)
             (when (consent--scheme-documentation-slice-head-named-p
                    source declaration "begin")
@@ -667,15 +666,12 @@ Each result has the form (NAME START END LINE)."
                   (let ((name
                          (consent--scheme-documentation-define-procedure-name-from-slice
                           source body-form)))
-                    (when (and name (member name exports))
+                    (when (and name (gethash name exports))
                       (push
                        (list
                         name
                         (car body-form)
-                        (cdr body-form)
-                        (consent--scheme-documentation-source-line
-                         source
-                         (car body-form)))
+                        (cdr body-form))
                        procedures))))))))))
     (nreverse procedures)))
 
@@ -839,14 +835,13 @@ Each result has the form (NAME START END LINE)."
              (consent--scheme-documentation-public-procedure-slices text))
       (let ((name (nth 0 procedure))
             (start (nth 1 procedure))
-            (end (nth 2 procedure))
-            (line (nth 3 procedure)))
+            (end (nth 2 procedure)))
         (unless (consent--scheme-documentation-rich-vector-p
                  (substring text start end))
           (push
            (format "%s:%d exported procedure %s missing rich metadata vector with typed parameters and returns"
                    relative-file
-                   line
+                   (consent--scheme-documentation-source-line text start)
                    name)
            errors))))
     (nreverse errors)))
