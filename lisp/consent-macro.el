@@ -1192,6 +1192,11 @@ When RECURSIVE is non-nil, transformer specs see the new bindings."
                  (plist-put plist :max-value-nodes
                             (consent--macro-option-integer
                              value name))))
+          ("max-source-metadata"
+           (setq plist
+                 (plist-put plist :max-source-metadata
+                            (consent--macro-option-integer
+                             value name))))
           ("max-events"
            (setq plist
                  (plist-put plist :max-events

@@ -28,6 +28,7 @@
           consent-recovery-step-pending
           consent-read-eof
           consent-read-eof?
+          consent-source-metadata-count
           consent-datum-source
           consent-datum-source-set!
           consent-copy-datum-source!
@@ -83,8 +84,8 @@
       (make-reader source position length line-starts fold-case node-count datum-labels
                    maximum-depth maximum-list-length maximum-vector-length
                    maximum-bytevector-length maximum-string-size
-                   maximum-total-nodes source-id source-metadata recovery
-                   pending-stack)
+                   maximum-total-nodes maximum-source-metadata source-id
+                   source-metadata recovery pending-stack)
       reader?
       (source reader-source)
       (position reader-position set-reader-position!)
@@ -99,6 +100,7 @@
       (maximum-bytevector-length reader-maximum-bytevector-length)
       (maximum-string-size reader-maximum-string-size)
       (maximum-total-nodes reader-maximum-total-nodes)
+      (maximum-source-metadata reader-maximum-source-metadata)
       (source-id reader-source-id)
       (source-metadata reader-source-metadata)
       ;; RECOVERY toggles errors-as-data: when set, reader errors raise a
@@ -134,42 +136,23 @@
     ;; ordinary datum equality and external writing remain R7RS datums.
     (define consent-source-metadata '())
 
-    ;; Cap for the portable source side table.  Portable R7RS has no weak hash
-    ;; table, so long-lived sessions trade older source lookups for bounded
-    ;; metadata scans.  Keep this above ordinary form size so one read does not
-    ;; evict its own active source metadata.
-    (define consent-source-metadata-limit 1000)
-
-    ;; Low-water mark after source metadata overflow.  Retaining the newest
-    ;; entries keeps active evaluation metadata available without letting the
-    ;; portable identity scan grow for the whole lifetime of the process.
-    (define consent-source-metadata-retained-limit 900)
+    ;; Default cap for the portable source side table. Portable R7RS has no
+    ;; weak hash table, so the table remains explicit runtime state. Keep the
+    ;; cap option-backed so trusted callers can retry with a higher bound.
+    (define consent-default-maximum-source-metadata 1000000)
 
     ;; Current number of retained source metadata entries in the portable table.
-    (define consent-source-metadata-count 0)
+    (define consent-source-metadata-entry-count 0)
 
-    (define (consent-source-metadata-retain-newest entries keep-count)
-      "Return a pair of newest ENTRIES and their count, capped at KEEP-COUNT."
-      (let loop ((cursor entries)
-                 (remaining keep-count)
-                 (retained '())
-                 (count 0))
-        (if (or (null? cursor)
-                (<= remaining 0))
-            (cons (reverse retained) count)
-            (loop (cdr cursor)
-                  (- remaining 1)
-                  (cons (car cursor) retained)
-                  (+ count 1)))))
-
-    (define (consent-source-metadata-trim!)
-      "Trim the portable source metadata table to its newest retained entries."
-      (let ((retained
-             (consent-source-metadata-retain-newest
-              consent-source-metadata
-              consent-source-metadata-retained-limit)))
-        (set! consent-source-metadata (car retained))
-        (set! consent-source-metadata-count (cdr retained))))
+    (define (consent-source-metadata-count)
+      "Return the number of retained portable source metadata entries."
+      #((parameters)
+        (returns (type exact-non-negative-integer)
+         (description
+          ("The process-global count of retained portable source"
+            "metadata entries.")))
+        (effects state-read))
+      consent-source-metadata-entry-count)
 
     ;; Agent-owned numbers preserve lexical exactness, radix, and special
     ;; values instead of trusting the host Scheme's numeric tower to round-trip.
@@ -356,6 +339,8 @@
                                        consent-default-maximum-string-size)
                          (option-count options 'max-total-nodes
                                        consent-default-maximum-total-nodes)
+                         (option-count options 'max-source-metadata
+                                       consent-default-maximum-source-metadata)
                          (if source-metadata
                              (option-ref options 'source-id #f)
                              #f)
@@ -432,29 +417,37 @@
           (consent-record? datum)
           (consent-record-type? datum)))
 
-    (define (consent-datum-source-set! datum source)
+    (define (consent-datum-source-set! datum source . maybe-limit)
       "Attach SOURCE metadata to DATUM when DATUM has stable identity."
       #((parameters
          (datum
           . ("Datum to associate source metadata with; ignored unless it"
              "has stable identity."))
          (source (type (or source-metadata boolean))
-          (description ("Source metadata to attach, or #f to attach nothing."))))
+          (description ("Source metadata to attach, or #f to attach nothing.")))
+         (maybe-limit (type list)
+          (description
+           ("Optional maximum retained source metadata entries allowed"
+             "before this attachment fails closed."))))
         (returns
          . ("DATUM, after attaching SOURCE when DATUM is"
-            "identity-attachable, evicting the metadata table when it"
-            "overflows its limit."))
-        (effects state-write))
+            "identity-attachable, or an error when the metadata table"
+            "would exceed its resource limit."))
+        (effects state-read state-write error))
       (if (and source (source-attachable? datum))
-          (begin
-            (if (> consent-source-metadata-count
-                   consent-source-metadata-limit)
-                (consent-source-metadata-trim!))
+          (let ((limit
+                 (if (null? maybe-limit)
+                     consent-default-maximum-source-metadata
+                     (car maybe-limit))))
+            (if (>= consent-source-metadata-entry-count limit)
+                (error "consent datum limit error: source metadata count exceeds maximum source metadata"
+                       consent-source-metadata-entry-count
+                       limit))
             (set! consent-source-metadata
                   (cons (cons datum source)
                         consent-source-metadata))
-            (set! consent-source-metadata-count
-                  (+ consent-source-metadata-count 1))))
+            (set! consent-source-metadata-entry-count
+                  (+ consent-source-metadata-entry-count 1))))
       datum)
 
     (define (consent-datum-source datum)
@@ -2003,7 +1996,8 @@
           (if (reader-source-metadata reader)
               (consent-datum-source-set!
                datum
-               (source-note reader start (reader-position reader)))
+               (source-note reader start (reader-position reader))
+               (reader-maximum-source-metadata reader))
               datum))))
 
     (define (options-from-rest maybe-options)

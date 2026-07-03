@@ -35,6 +35,8 @@
                       "(events-used " "(max-events 1000)"
                       "(max-event-nodes 100000)"
                       "(value-nodes-used " "(max-value-nodes 10000000)"
+                      "(source-metadata-used "
+                      "(max-source-metadata 1000000)"
                       "(interned-symbols-used "
                       "(max-interned-symbols 1000000)"
                       "(output-bytes-used " "(max-output-bytes 10485760)"
@@ -132,6 +134,7 @@ The stub advances 100 milliseconds per reading."
                '(:max-steps 1000))))
     (should (string-match-p (regexp-quote "(budget-remaining ") text))
     (should (string-match-p (regexp-quote "(steps ") text))
+    (should (string-match-p (regexp-quote "(source-metadata ") text))
     (should (string-match-p (regexp-quote "(interned-symbols ") text))
     (should (string-match-p (regexp-quote "(output-bytes ") text))
     (should (string-match-p (regexp-quote "(reason #f)") text))))

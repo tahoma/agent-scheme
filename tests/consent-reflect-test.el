@@ -522,6 +522,7 @@
             :max-host-callbacks 77
             :max-events 9
             :max-event-nodes 88
+            :max-source-metadata 1234567
             :session-id "reflect-run"))))
     (should (string-match-p "(host-capability" external))
     (should (string-match-p (regexp-quote "(library (emacs buffer))") external))
@@ -531,6 +532,9 @@
     (should (string-match-p (regexp-quote "(max-host-calls 77)") external))
     (should (string-match-p (regexp-quote "(max-events 9)") external))
     (should (string-match-p (regexp-quote "(max-event-nodes 88)") external))
+    (should (string-match-p
+             (regexp-quote "(max-source-metadata 1234567)")
+             external))
     (should (string-match-p (regexp-quote "(agent reflect)") external))
     (should (string-match-p (regexp-quote "(id reflect-run)") external))))
 

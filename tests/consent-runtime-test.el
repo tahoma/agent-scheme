@@ -112,10 +112,12 @@
   (let ((context (consent--new-eval-context
                   '(:max-steps 3
                     :max-value-nodes 4
+                    :max-source-metadata 6
                     :max-host-callbacks 5))))
     (should (consent--eval-context-p context))
     (should (= (consent--eval-context-maximum-steps context) 3))
     (should (= (consent--eval-context-maximum-value-nodes context) 4))
+    (should (= (consent--eval-context-maximum-source-metadata context) 6))
     (should (= (consent--eval-context-maximum-host-callbacks context) 5))
     (should (hash-table-p (consent--eval-context-libraries context)))
     (should (consent--syntax-environment-p

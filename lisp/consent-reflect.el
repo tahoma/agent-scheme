@@ -377,6 +377,13 @@ that stopped the run (or #f while admissible)."
     (consent-reflect--datumize
      (consent--eval-context-maximum-value-nodes context)))
    (consent-reflect--field
+    "source-metadata-used"
+    (consent-reflect--integer 0))
+   (consent-reflect--field
+    "max-source-metadata"
+    (consent-reflect--datumize
+     (consent--eval-context-maximum-source-metadata context)))
+   (consent-reflect--field
     "interned-symbols-used"
     (consent-reflect--integer
      (consent--eval-context-interned-symbols context)))
@@ -441,6 +448,11 @@ callers can distinguish unbounded from exhausted."
     (consent-reflect--budget-headroom
      (consent--eval-context-maximum-value-nodes context)
      (consent--eval-context-value-nodes context)))
+   (consent-reflect--field
+    "source-metadata"
+    (consent-reflect--budget-headroom
+     (consent--eval-context-maximum-source-metadata context)
+     0))
    (consent-reflect--field
     "interned-symbols"
     (consent-reflect--budget-headroom
