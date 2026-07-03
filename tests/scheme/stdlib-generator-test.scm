@@ -34,6 +34,13 @@
   "Compare the values yielded by GEN to EXPECTED."
   (check name (generator->list gen) expected))
 
+(define (raises? thunk)
+  "Return #t when THUNK raises an exception."
+  (guard (condition
+          (else #t))
+    (thunk)
+    #f))
+
 (define (finish-generator-tests)
   "Report the adapted SRFI 158 test result."
   (if (= failures 0)
@@ -54,9 +61,18 @@
                       (generator 1 2 3)
                       '(1 2 3))
 
+(check 'generator/eof-idempotent
+       (let ((gen (generator 'x)))
+         (list (gen) (eof-object? (gen)) (eof-object? (gen))))
+       '(x #t #t))
+
 (check 'circular-generator/prefix
        (generator->list (circular-generator 1 2 3) 5)
        '(1 2 3 1 2))
+
+(check-generator-list 'make-iota-generator/zero
+                      (make-iota-generator 0)
+                      '())
 
 (check-generator-list 'make-iota-generator/count-start
                       (make-iota-generator 3 8)
@@ -74,6 +90,10 @@
                       (make-range-generator 3 8)
                       '(3 4 5 6 7))
 
+(check-generator-list 'make-range-generator/empty
+                      (make-range-generator 3 3)
+                      '())
+
 (check-generator-list 'make-range-generator/bounded-step
                       (make-range-generator 3 8 2)
                       '(3 5 7))
@@ -88,6 +108,21 @@
         (loop (+ i 1))))))
  '(0 1 2))
 
+(check 'make-coroutine-generator/eof-idempotent
+       (let ((gen (make-coroutine-generator
+                   (lambda (yield)
+                     (yield 'only)))))
+         (list (gen) (eof-object? (gen)) (eof-object? (gen))))
+       '(only #t #t))
+
+(check 'make-coroutine-generator/no-yields
+       (let ((gen (make-coroutine-generator
+                   (lambda (yield)
+                     yield
+                     #t))))
+         (list (eof-object? (gen)) (eof-object? (gen))))
+       '(#t #t))
+
 (check-generator-list 'list->generator
                       (list->generator '(1 2 3 4 5))
                       '(1 2 3 4 5))
@@ -96,16 +131,32 @@
                       (vector->generator '#(1 2 3 4 5))
                       '(1 2 3 4 5))
 
+(check-generator-list 'vector->generator/slice
+                      (vector->generator '#(0 1 2 3 4 5) 2 5)
+                      '(2 3 4))
+
 (check-generator-list 'reverse-vector->generator
                       (reverse-vector->generator '#(1 2 3 4 5))
                       '(5 4 3 2 1))
+
+(check-generator-list 'reverse-vector->generator/slice
+                      (reverse-vector->generator '#(0 1 2 3 4 5) 1 5)
+                      '(4 3 2 1))
 
 (check-generator-list 'string->generator
                       (string->generator "abcde")
                       '(#\a #\b #\c #\d #\e))
 
+(check-generator-list 'string->generator/slice
+                      (string->generator "abcdef" 2 5)
+                      '(#\c #\d #\e))
+
 (check-generator-list 'bytevector->generator
                       (bytevector->generator (bytevector 10 20 30))
+                      '(10 20 30))
+
+(check-generator-list 'bytevector->generator/slice
+                      (bytevector->generator (bytevector 0 10 20 30 40) 1 4)
                       '(10 20 30))
 
 (check-generator-list
@@ -149,6 +200,12 @@
                (generator->list source)))
        '((1 2 3) (4)))
 
+(check 'gtake/zero-does-not-consume
+       (let ((source (make-range-generator 1 4)))
+         (list (generator->list (gtake source 0))
+               (generator->list source)))
+       '(() (1 2 3)))
+
 (check-generator-list 'gtake/padded
                       (gtake (make-range-generator 1 3) 3 0)
                       '(1 2 0))
@@ -157,10 +214,21 @@
                       (gdrop (make-range-generator 1 5) 2)
                       '(3 4))
 
+(check-generator-list 'gdrop/past-end
+                      (gdrop (generator 'a 'b) 5)
+                      '())
+
 (check-generator-list 'gtake-while
                       (gtake-while (lambda (value) (< value 3))
                                    (make-range-generator 1 5))
                       '(1 2))
+
+(check 'gtake-while/consumes-failing-value
+       (let ((source (make-range-generator 1 5)))
+         (list (generator->list
+                (gtake-while (lambda (value) (< value 3)) source))
+               (generator->list source)))
+       '((1 2) (4)))
 
 (check-generator-list 'gdrop-while
                       (gdrop-while (lambda (value) (< value 3))
@@ -179,9 +247,17 @@
                       (gflatten (generator '(1 2 3) '(a b c)))
                       '(1 2 3 a b c))
 
+(check-generator-list 'gflatten/skips-empty-lists
+                      (gflatten (generator '() '(a b) '() '(c)))
+                      '(a b c))
+
 (check-generator-list 'ggroup
                       (ggroup (generator 1 2 3 4 5 6 7 8) 3)
                       '((1 2 3) (4 5 6) (7 8)))
+
+(check-generator-list 'ggroup/empty
+                      (ggroup (generator) 3)
+                      '())
 
 (check-generator-list 'ggroup/padded
                       (ggroup (generator 1 2 3 4 5 6 7 8) 3 0)
@@ -217,6 +293,23 @@
                                (list->generator '(#t #f #f #t #t #f)))
                       '(a d e))
 
+(check 'error-cases
+       (list (raises? (lambda () (gtake (generator) -1)))
+             (raises? (lambda () (gdrop (generator) -1)))
+             (raises? (lambda () (gmerge <)))
+             (raises? (lambda () (gmap values)))
+             (raises? (lambda ()
+                        ((gindex (generator 'a)
+                                 (generator 'not-an-index)))))
+             (raises? (lambda ()
+                        ((gindex (generator 'a)
+                                 (generator -1)))))
+             (raises? (lambda ()
+                        (generator->list
+                         (gindex (generator 'a 'b)
+                                 (generator 1 1))))))
+       '(#t #t #t #t #t #t #t))
+
 (check 'generator->list/bounded
        (generator->list (generator 1 2 3 4 5) 3)
        '(1 2 3))
@@ -240,6 +333,14 @@
   (check 'generator->vector!/target
          vector-target
          #(0 0 1 2 4)))
+
+(check 'generator->vector!/does-not-overconsume
+       (let ((source (generator 10 20 30))
+             (target (vector 0 0)))
+         (list (generator->vector! target 1 source)
+               target
+               (generator->list source)))
+       (list 1 #(0 10) '(20 30)))
 
 (check 'generator->string
        (generator->string (generator #\a #\b #\c))
@@ -323,6 +424,11 @@
          (acc (eof-object)))
        3)
 
+(check 'count-accumulator/empty
+       (let ((acc (count-accumulator)))
+         (acc (eof-object)))
+       0)
+
 (check 'list-accumulator
        (let ((acc (list-accumulator)))
          (acc 1)
@@ -330,6 +436,11 @@
          (acc 4)
          (acc (eof-object)))
        '(1 2 4))
+
+(check 'list-accumulator/empty
+       (let ((acc (list-accumulator)))
+         (acc (eof-object)))
+       '())
 
 (check 'reverse-list-accumulator
        (let ((acc (reverse-list-accumulator)))
@@ -346,6 +457,11 @@
          (acc 4)
          (acc (eof-object)))
        #(1 2 4))
+
+(check 'vector-accumulator/empty
+       (let ((acc (vector-accumulator)))
+         (acc (eof-object)))
+       #())
 
 (check 'reverse-vector-accumulator
        (let ((acc (reverse-vector-accumulator)))
@@ -372,6 +488,11 @@
          (acc (eof-object)))
        "abc")
 
+(check 'string-accumulator/empty
+       (let ((acc (string-accumulator)))
+         (acc (eof-object)))
+       "")
+
 (check 'bytevector-accumulator
        (let ((acc (bytevector-accumulator)))
          (acc 1)
@@ -379,6 +500,11 @@
          (acc 4)
          (acc (eof-object)))
        (bytevector 1 2 4))
+
+(check 'bytevector-accumulator/empty
+       (let ((acc (bytevector-accumulator)))
+         (acc (eof-object)))
+       (bytevector))
 
 (check 'bytevector-accumulator!
        (let* ((target (bytevector 0 0 0 0 0))
@@ -397,6 +523,11 @@
          (acc (eof-object)))
        7)
 
+(check 'sum-accumulator/empty
+       (let ((acc (sum-accumulator)))
+         (acc (eof-object)))
+       0)
+
 (check 'product-accumulator
        (let ((acc (product-accumulator)))
          (acc 1)
@@ -404,5 +535,31 @@
          (acc 4)
          (acc (eof-object)))
        8)
+
+(check 'product-accumulator/empty
+       (let ((acc (product-accumulator)))
+         (acc (eof-object)))
+       1)
+
+(check 'accumulators/reject-post-finalization-writes
+       (let ((generic (make-accumulator cons '() (lambda (state) state)))
+             (count (count-accumulator))
+             (list-acc (list-accumulator))
+             (vector-acc (vector-accumulator))
+             (vector-write (vector-accumulator! (vector 0) 0))
+             (string-acc (string-accumulator))
+             (bytevector-acc (bytevector-accumulator))
+             (bytevector-write (bytevector-accumulator! (bytevector 0) 0))
+             (sum (sum-accumulator))
+             (product (product-accumulator)))
+         (for-each
+          (lambda (acc) (acc (eof-object)))
+          (list generic count list-acc vector-acc vector-write string-acc
+                bytevector-acc bytevector-write sum product))
+         (map (lambda (acc)
+                (raises? (lambda () (acc 'after-eof))))
+              (list generic count list-acc vector-acc vector-write string-acc
+                    bytevector-acc bytevector-write sum product)))
+       '(#t #t #t #t #t #t #t #t #t #t))
 
 (finish-generator-tests)
