@@ -149,6 +149,7 @@
         (stdlib list)
         (stdlib generator)
         (stdlib comparator)
+        (stdlib rbtree)
         (stdlib receive)
         (stdlib assume)
         (stdlib json)))
@@ -377,6 +378,9 @@
         ((stdlib comparator)
          "scheme/stdlib/comparator.sld"
          "stdlib/comparator.sld")
+        ((stdlib rbtree)
+         "scheme/stdlib/rbtree.sld"
+         "stdlib/rbtree.sld")
         ((stdlib receive)
          "scheme/stdlib/receive.sld"
          "stdlib/receive.sld")

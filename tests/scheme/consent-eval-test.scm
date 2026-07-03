@@ -1383,6 +1383,8 @@
         (find-source-library-spec '(stdlib generator) source-specs))
        (comparator-spec
         (find-source-library-spec '(stdlib comparator) source-specs))
+       (rbtree-spec
+        (find-source-library-spec '(stdlib rbtree) source-specs))
        (receive-spec
         (find-source-library-spec '(stdlib receive) source-specs))
        (assume-spec
@@ -1395,6 +1397,7 @@
               list-spec
               generator-spec
               comparator-spec
+              rbtree-spec
               receive-spec
               assume-spec
               json-spec
@@ -1403,6 +1406,7 @@
               (string? (cadr (assq 'source-file list-spec)))
               (string? (cadr (assq 'source-file generator-spec)))
               (string? (cadr (assq 'source-file comparator-spec)))
+              (string? (cadr (assq 'source-file rbtree-spec)))
               (string? (cadr (assq 'source-file receive-spec)))
               (string? (cadr (assq 'source-file assume-spec)))
               (string? (cadr (assq 'source-file json-spec))))
@@ -1427,6 +1431,10 @@
          (and comparator-spec
               (cadr (assq 'source-file comparator-spec)))
          "scheme/stdlib/comparator.sld")
+  (check 'stdlib-source-library-rbtree-file
+         (and rbtree-spec
+              (cadr (assq 'source-file rbtree-spec)))
+         "scheme/stdlib/rbtree.sld")
   (check 'stdlib-source-library-receive-file
          (and receive-spec
               (cadr (assq 'source-file receive-spec)))
@@ -1962,6 +1970,66 @@
                   (stdlib comparator)
                   (stdlib comparator)
                   (stdlib comparator))"))
+
+(check-external 'stdlib-rbtree-helper
+                "(import (scheme base)
+                         (stdlib comparator)
+                         (stdlib rbtree))
+                 (define integer-comparator
+                   (make-comparator integer? = < number-hash))
+                 (define (tree-insert tree key value)
+                   (call-with-values
+                    (lambda ()
+                      (tree-search integer-comparator
+                                   tree
+                                   key
+                                   (lambda (insert ignore)
+                                     (insert key value 'inserted))
+                                   (lambda (old-key old-value update remove)
+                                     (update old-key value 'updated))))
+                    (lambda (next status) next)))
+                 (define tree
+                   (tree-insert
+                    (tree-insert
+                     (tree-insert (make-tree) 2 'two)
+                     1
+                     'one)
+                    3
+                    'three))
+                 (list
+                  (tree-fold/reverse
+                   (lambda (key value acc)
+                     (cons (cons key value) acc))
+                   '()
+                   tree)
+                  (tree-key-successor
+                   integer-comparator tree 1 (lambda () 'none))
+                  (tree-key-predecessor
+                   integer-comparator tree 3 (lambda () 'none)))"
+                (expected-datum-external
+                 "(((1 . one) (2 . two) (3 . three)) 2 2)"))
+
+(check-external 'stdlib-rbtree-manifest
+                "(import (scheme base) (stdlib manifest))
+                 (let ((entry (stdlib-manifest-ref '(stdlib rbtree))))
+                   (list (cdr (assq 'status entry))
+                         (cdr (assq 'implementation-library entry))
+                         (cdr (assq 'upstream-license entry))
+                         (cdr (assq 'local-license entry))
+                         (cdr (assq 'import-aliases entry))
+                         (cdr (assq 'dependencies entry))))"
+                (expected-datum-external
+                 "(vendored-adapted-implementation
+                   (stdlib rbtree)
+                   \"MIT\"
+                   \"MIT\"
+                   ((stdlib rbtree))
+                   ((scheme base)
+                    (scheme case-lambda)
+                    (stdlib and-let-star)
+                    (stdlib receive)
+                    (stdlib generator)
+                    (stdlib comparator)))"))
 
 (check-external 'base-list-helpers
                 "(list (length (append '(1 2) '(3 4)))
