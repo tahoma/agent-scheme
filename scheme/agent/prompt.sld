@@ -113,6 +113,7 @@
           prompt-result-audit)
   (import (scheme base)
           (scheme case-lambda)
+          (only (stdlib list) delete-duplicates)
           (agent runner)
           ;; The registry exports `agents', which this library re-purposes as a
           ;; harness-taking discovery verb; rename the registry primitive so both
@@ -748,16 +749,6 @@
         (see-also prompt prompt-role))
       (apply prompt-model-dispatch args))
 
-    (define (dedup values)
-      "Return VALUES with later equal? duplicates removed, order preserved."
-      (let loop ((rest values) (seen '()) (kept '()))
-        (cond
-         ((null? rest) (reverse kept))
-         ((member (car rest) seen) (loop (cdr rest) seen kept))
-         (else (loop (cdr rest)
-                     (cons (car rest) seen)
-                     (cons (car rest) kept))))))
-
     ;; Optional-arity dispatcher for agent discovery.
     (define agents-dispatch
       (case-lambda
@@ -784,8 +775,8 @@
     ;; Optional-arity dispatcher for role discovery.
     (define roles-dispatch
       (case-lambda
-       (() (dedup (map agent-role (agents))))
-       ((harness) (dedup (map agent-role (agents harness))))))
+       (() (delete-duplicates (map agent-role (agents))))
+       ((harness) (delete-duplicates (map agent-role (agents harness))))))
 
     (define (roles . maybe-harness)
       "Return the distinct agent roles discoverable through a harness."
@@ -803,8 +794,8 @@
     ;; Optional-arity dispatcher for model discovery.
     (define models-dispatch
       (case-lambda
-       (() (dedup (map agent-model (agents))))
-       ((harness) (dedup (map agent-model (agents harness))))))
+       (() (delete-duplicates (map agent-model (agents))))
+       ((harness) (delete-duplicates (map agent-model (agents harness))))))
 
     (define (models . maybe-harness)
       "Return the distinct agent models discoverable through a harness."
