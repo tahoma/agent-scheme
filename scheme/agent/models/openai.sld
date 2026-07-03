@@ -14,6 +14,7 @@
           model-openai-compatible-http-complete)
   (import (scheme base)
           (prefix (cli process-host) cli-host:)
+          (prefix (stdlib generator) gen:)
           (prefix (stdlib json) json-model:))
   (begin
     ;; Default request timeout for local OpenAI-compatible HTTP transports.
@@ -176,8 +177,8 @@
        ((string? datum) datum)
        ((symbol? datum) (symbol->string datum))
        ((vector? datum)
-        (list->vector
-         (map model-openai-json-value (vector->list datum))))
+        (gen:generator->vector
+         (gen:gmap model-openai-json-value (gen:vector->generator datum))))
        ((model-openai-schema-fields? datum)
         (map
          (lambda (field)
@@ -187,7 +188,8 @@
              (model-openai-schema-entry-value field))))
          datum))
        ((pair? datum)
-        (list->vector (map model-openai-json-value datum)))
+        (gen:generator->vector
+         (gen:gmap model-openai-json-value (gen:list->generator datum))))
        ((null? datum) '#())
        (else datum)))
 
@@ -246,8 +248,9 @@
                   (append payload
                           (list
                            (cons 'tools
-                                 (list->vector
-                                  (map model-openai-tool-json tools)))))
+                                 (gen:generator->vector
+                                  (gen:gmap model-openai-tool-json
+                                            (gen:list->generator tools))))))
                   payload))
              (tool-choice-json
               (model-openai-tool-choice-json tool-choice))
@@ -286,7 +289,9 @@
        ((string? value) value)
        ((number? value) value)
        ((vector? value)
-        (map model-openai-json->datum (vector->list value)))
+        (gen:generator-map->list
+         model-openai-json->datum
+         (gen:vector->generator value)))
        ((model-openai-json-object? value)
         (map
          (lambda (entry)
@@ -333,11 +338,7 @@
 
     (define (model-openai-vector-map procedure vector)
       "Return a list of PROCEDURE results for VECTOR's elements."
-      (let loop ((index 0) (result '()))
-        (if (= index (vector-length vector))
-            (reverse result)
-            (loop (+ index 1)
-                  (cons (procedure (vector-ref vector index)) result)))))
+      (gen:generator-map->list procedure (gen:vector->generator vector)))
 
     (define (model-openai-parse-response body)
       "Return completion data from OpenAI-compatible response BODY."

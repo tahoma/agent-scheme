@@ -18,7 +18,8 @@
 (define-library (cli process-host)
   (export cli-host-available? cli-host-run)
   (import (scheme base)
-          (scheme file))
+          (scheme file)
+          (prefix (stdlib generator) gen:))
 
   ;; Host-specific process module and stdout capture.  Each branch defines
   ;; `cli-host-available?' and `cli-host--capture', the only host-dependent
@@ -83,14 +84,15 @@
     ;; first occurrence delimits the boundary.
     (define cli-host--exit-marker "__CONSENT_CLI_EXIT__")
 
+    (define (cli-host--port-character-generator port)
+      "Return a generator that reads characters from PORT until EOF."
+      (lambda ()
+        (read-char port)))
+
     (define (cli-host--drain port)
       "Read every remaining character from PORT into a string.  Used by host"
       "branches whose process module yields an input port rather than a string."
-      (let loop ((characters '()))
-        (let ((character (read-char port)))
-          (if (eof-object? character)
-              (list->string (reverse characters))
-              (loop (cons character characters))))))
+      (gen:generator->string (cli-host--port-character-generator port)))
 
     (define (cli-host--escape string)
       "Return STRING with each single quote made shell-safe, for single-quoting."

@@ -14,7 +14,8 @@
           safe-for-provider?
           consent-redaction-clear!)
   (import (scheme base)
-          (scheme char))
+          (scheme char)
+          (prefix (stdlib generator) gen:))
   (begin
     ;; Text used in place of secret values.
     (define redaction-replacement "[redacted]")
@@ -259,11 +260,7 @@
             (local-only? (car datum))
             (local-only? (cdr datum))))
        ((vector? datum)
-        (let loop ((values (vector->list datum)))
-          (cond
-           ((null? values) #f)
-           ((local-only? (car values)) #t)
-           (else (loop (cdr values))))))
+        (gen:generator-any local-only? (gen:vector->generator datum)))
        (else #f)))
 
     (define (secret-source? datum)
@@ -283,11 +280,7 @@
             (secret-source? (car datum))
             (secret-source? (cdr datum))))
        ((vector? datum)
-        (let loop ((values (vector->list datum)))
-          (cond
-           ((null? values) #f)
-           ((secret-source? (car values)) #t)
-           (else (loop (cdr values))))))
+        (gen:generator-any secret-source? (gen:vector->generator datum)))
        (else #f)))
 
     (define (redact datum policy)
@@ -318,8 +311,10 @@
         (cons (redact (car datum) policy)
               (redact (cdr datum) policy)))
        ((vector? datum)
-        (list->vector (map (lambda (value) (redact value policy))
-                           (vector->list datum))))
+        (gen:generator->vector
+         (gen:gmap
+          (lambda (value) (redact value policy))
+          (gen:vector->generator datum))))
        (else datum)))
 
     (define (context-local-only! datum reason)

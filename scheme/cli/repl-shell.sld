@@ -84,6 +84,7 @@
           (consent eval)
           (consent reader)
           (consent result)
+          (prefix (stdlib generator) gen:)
           (stdlib receive)
           (only (consent library) consent-apply-callable)
           (cli repl-chrome))
@@ -679,14 +680,14 @@
         (returns (type list)
          (description "The ordered list of emitted contract record datums."))
         (effects host-eval allocation error))
-      (let ((records '()))
+      (let ((records (gen:list-accumulator)))
         (apply repl--drive-dispatch
                read-chunk
                session
                (lambda (record)
-                 (set! records (cons record records)))
+                 (records record))
                maybe-options)
-        (reverse records)))
+        (records (eof-object))))
 
     ;; Optional-arity dispatcher for string-backed REPL runs.
     (define (repl--records-from-string-dispatch input session . maybe-options)
@@ -747,11 +748,14 @@
             "the stream.")))
         (effects allocation))
       (let ((port (open-input-string text)))
-        (let loop ((records '()))
-          (let ((datum (read port)))
-            (if (eof-object? datum)
-                (reverse records)
-                (loop (cons datum records)))))))
+        (let ((records (gen:list-accumulator)))
+          (let loop ()
+            (let ((datum (read port)))
+              (if (eof-object? datum)
+                  (records (eof-object))
+                  (begin
+                    (records datum)
+                    (loop))))))))
 
     (define (cli-repl-submissions-from-records records)
       "Return the external source text of each complete submission in RECORDS,"
@@ -764,20 +768,21 @@
           (description
            ("List of contract record datums to scan for complete"
              "submissions."))))
-        (returns (type string)
+        (returns (type list)
          (description
           ("The ordered list of source strings for each complete"
             "submission.")))
         (effects allocation))
-      (let loop ((records records) (sources '()))
-        (cond
-         ((null? records) (reverse sources))
-         ((and (pair? (car records))
-               (eq? (car (car records)) 'repl-submission)
-               (eq? (repl--field (car records) 'complete) #t))
-          (loop (cdr records)
-                (cons (repl--field (car records) 'source) sources)))
-         (else (loop (cdr records) sources)))))
+      (let ((sources (gen:list-accumulator)))
+        (let loop ((records records))
+          (cond
+           ((null? records) (sources (eof-object)))
+           ((and (pair? (car records))
+                 (eq? (car (car records)) 'repl-submission)
+                 (eq? (repl--field (car records) 'complete) #t))
+            (sources (repl--field (car records) 'source))
+            (loop (cdr records)))
+           (else (loop (cdr records)))))))
 
     (define (cli-repl-replay-input records)
       "Reconstruct the interaction-input string that replays RECORDS: each"
@@ -793,10 +798,13 @@
           ("The interaction-input string: each submission source plus"
             "a trailing newline.")))
         (effects allocation))
-      (let loop ((sources (cli-repl-submissions-from-records records)) (parts '()))
-        (if (null? sources)
-            (apply string-append (reverse parts))
-            (loop (cdr sources) (cons "\n" (cons (car sources) parts))))))
+      (let ((parts (gen:list-accumulator)))
+        (gen:generator-for-each
+         (lambda (source)
+           (parts source)
+           (parts "\n"))
+         (gen:list->generator (cli-repl-submissions-from-records records)))
+        (apply string-append (parts (eof-object)))))
 
     ;; Optional-arity dispatcher for transcript replay runs.
     (define (repl--replay-records-dispatch records session . maybe-options)
@@ -867,19 +875,20 @@
       "Return the ordered list of (SOURCE KIND DISPLAY) outcome triples for"
       "each complete submission in RECORDS, correlating each to its"
       "result/condition by submission id."
-      (let loop ((rs records) (outcomes '()))
-        (cond
-         ((null? rs) (reverse outcomes))
-         ((and (pair? (car rs))
-               (eq? (car (car rs)) 'repl-submission)
-               (eq? (repl--field (car rs) 'complete) #t))
-          (let ((outcome (repl--outcome-for
-                          records (repl--field (car rs) 'id))))
-            (loop (cdr rs)
-                  (cons (list (repl--field (car rs) 'source)
-                              (car outcome) (cdr outcome))
-                        outcomes))))
-         (else (loop (cdr rs) outcomes)))))
+      (let ((outcomes (gen:list-accumulator)))
+        (let loop ((rs records))
+          (cond
+           ((null? rs) (outcomes (eof-object)))
+           ((and (pair? (car rs))
+                 (eq? (car (car rs)) 'repl-submission)
+                 (eq? (repl--field (car rs) 'complete) #t))
+            (let ((outcome (repl--outcome-for
+                            records (repl--field (car rs) 'id))))
+              (outcomes
+               (list (repl--field (car rs) 'source)
+                     (car outcome) (cdr outcome)))
+              (loop (cdr rs))))
+           (else (loop (cdr rs)))))))
 
     (define (repl--outcome-fields outcome)
       "Render an outcome triple OUTCOME as `(kind K) (display D)' fields, or"

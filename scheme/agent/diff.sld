@@ -20,6 +20,7 @@
           diff-yield)
   (import (scheme base)
           (scheme cxr)
+          (prefix (stdlib generator) gen:)
           (agent io))
   (begin
     (define (diff-field name . values)
@@ -33,36 +34,32 @@
             (if (null? (cdr entry)) default (cadr entry))
             default)))
 
+    (define (diff-string-line-generator text)
+      "Return a generator over TEXT's logical lines without newline characters."
+      (let ((characters (gen:string->generator text)))
+        (gen:make-coroutine-generator
+         (lambda (yield)
+           (let loop ((current '()))
+             (let ((char (characters)))
+               (cond
+                ((eof-object? char)
+                 (if (not (null? current))
+                     (yield (list->string (reverse current)))))
+                ((char=? char #\newline)
+                 (yield (list->string (reverse current)))
+                 (loop '()))
+                (else
+                 (loop (cons char current))))))))))
+
     (define (diff-string-lines text)
       "Return TEXT split into logical lines without keeping newline characters."
-      (let loop ((chars (string->list text))
-                 (current '())
-                 (lines '()))
-        (cond
-         ((null? chars)
-          (reverse
-           (if (null? current)
-               lines
-               (cons (list->string (reverse current)) lines))))
-         ((char=? (car chars) #\newline)
-          (loop (cdr chars)
-                '()
-                (cons (list->string (reverse current)) lines)))
-         (else
-          (loop (cdr chars)
-                (cons (car chars) current)
-                lines)))))
-
-    (define (diff-list-length lines)
-      "Return a guest numeric length for LINES without leaking host integers."
-      (let loop ((rest lines) (count 0))
-        (if (null? rest)
-            count
-            (loop (cdr rest) (+ count 1)))))
+      (gen:generator->list (diff-string-line-generator text)))
 
     (define (diff-string-line-count text)
       "Return the number of logical lines represented by TEXT."
-      (diff-list-length (diff-string-lines text)))
+      (gen:generator-count
+       (lambda (line) line #t)
+       (diff-string-line-generator text)))
 
     (define (diff-line kind text)
       "Return one line record for a hunk."

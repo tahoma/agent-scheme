@@ -33,7 +33,8 @@
           (scheme case-lambda)
           (scheme file)
           (consent eval)
-          (only (consent reader) consent-read-all))
+          (only (consent reader) consent-read-all)
+          (prefix (stdlib generator) gen:))
 
   (begin
 
@@ -92,15 +93,17 @@
                      (string-length source))
           source))
 
+    (define (script--port-character-generator port)
+      "Return a generator that reads characters from PORT until EOF."
+      (lambda ()
+        (read-char port)))
+
     (define (script--read-file-string path)
       "Return the contents of PATH as a string."
       (call-with-input-file path
         (lambda (port)
-          (let loop ((chars '()))
-            (let ((char (read-char port)))
-              (if (eof-object? char)
-                  (list->string (reverse chars))
-                  (loop (cons char chars))))))))
+          (gen:generator->string
+           (script--port-character-generator port)))))
 
     (define (cli-script-source-from-file path)
       "Return PATH's contents with any leading executable-script shebang"
