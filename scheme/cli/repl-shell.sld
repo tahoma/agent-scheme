@@ -84,6 +84,7 @@
           (consent eval)
           (consent reader)
           (consent result)
+          (stdlib receive)
           (only (consent library) consent-apply-callable)
           (cli repl-chrome))
 
@@ -521,10 +522,9 @@
          (repl--interaction-options session-id read-chunk options))
         (let loop ((buffer "") (ordinal 1) (count 0))
           (emit (repl--prompt-record session ordinal 'ready #f))
-          (call-with-values
-           (lambda () (acquire buffer ordinal))
-           (lambda (kind payload current)
-             (cond
+          (receive (kind payload current)
+              (acquire buffer ordinal)
+            (cond
               ((eq? kind 'eof)
                (emit (repl--exit-record session 'eof 'closed-ok count #f)))
               ((eq? kind 'eof-incomplete)
@@ -593,7 +593,7 @@
                        (loop (or (consent-interaction-program-input-remainder
                                   interaction)
                                  program-input)
-                             (+ ordinal 1) (+ count 1))))))))))))
+                             (+ ordinal 1) (+ count 1)))))))))))
         exit-code))
 
     ;; Optional-arity dispatcher for the public streaming REPL runner.
