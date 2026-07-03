@@ -55,6 +55,100 @@
         (newline)
         (error "ordered mapping smoke tests failed" failures))))
 
+(define (model-set-entry model key value)
+  "Return sorted alist MODEL with KEY associated to VALUE."
+  (cond
+   ((null? model)
+    (list (cons key value)))
+   ((= key (caar model))
+    (cons (cons key value) (cdr model)))
+   ((< key (caar model))
+    (cons (cons key value) model))
+   (else
+    (cons (car model) (model-set-entry (cdr model) key value)))))
+
+(define (model-set-pairs model pairs)
+  "Return sorted alist MODEL after setting every association in PAIRS."
+  (if (null? pairs)
+      model
+      (model-set-pairs
+       (model-set-entry model (caar pairs) (cdar pairs))
+       (cdr pairs))))
+
+(define (model-adjoin-entry model key value)
+  "Return sorted alist MODEL with missing KEY associated to VALUE."
+  (cond
+   ((null? model)
+    (list (cons key value)))
+   ((= key (caar model))
+    model)
+   ((< key (caar model))
+    (cons (cons key value) model))
+   (else
+    (cons (car model) (model-adjoin-entry (cdr model) key value)))))
+
+(define (model-adjoin-pairs model pairs)
+  "Return sorted alist MODEL after adjoining every association in PAIRS."
+  (if (null? pairs)
+      model
+      (model-adjoin-pairs
+       (model-adjoin-entry model (caar pairs) (cdar pairs))
+       (cdr pairs))))
+
+(define (model-delete-key model key)
+  "Return sorted alist MODEL without KEY."
+  (cond
+   ((null? model) '())
+   ((= key (caar model)) (cdr model))
+   (else (cons (car model) (model-delete-key (cdr model) key)))))
+
+(define (model-delete-keys model keys)
+  "Return sorted alist MODEL without every key in KEYS."
+  (if (null? keys)
+      model
+      (model-delete-keys (model-delete-key model (car keys)) (cdr keys))))
+
+(define (model-contains-key? model key)
+  "Return #t when sorted alist MODEL contains KEY."
+  (cond
+   ((null? model) #f)
+   ((= key (caar model)) #t)
+   ((< key (caar model)) #f)
+   (else (model-contains-key? (cdr model) key))))
+
+(define (model-union model1 model2)
+  "Return sorted alist union of MODEL1 and MODEL2, preferring MODEL1 values."
+  (if (null? model2)
+      model1
+      (model-union
+       (model-adjoin-entry model1 (caar model2) (cdar model2))
+       (cdr model2))))
+
+(define (model-intersection model1 model2)
+  "Return sorted alist entries from MODEL1 whose keys occur in MODEL2."
+  (cond
+   ((null? model1) '())
+   ((model-contains-key? model2 (caar model1))
+    (cons (car model1) (model-intersection (cdr model1) model2)))
+   (else
+    (model-intersection (cdr model1) model2))))
+
+(define (model-difference model1 model2)
+  "Return sorted alist entries from MODEL1 whose keys do not occur in MODEL2."
+  (cond
+   ((null? model1) '())
+   ((model-contains-key? model2 (caar model1))
+    (model-difference (cdr model1) model2))
+   (else
+    (cons (car model1) (model-difference (cdr model1) model2)))))
+
+(define (model-range>= model boundary)
+  "Return sorted alist entries from MODEL whose keys are at or above BOUNDARY."
+  (cond
+   ((null? model) '())
+   ((>= (caar model) boundary) model)
+   (else (model-range>= (cdr model) boundary))))
+
 ;; Comparator used for integer-keyed fixtures and numeric value comparisons.
 (define integer-comparator
   (make-comparator integer? = < number-hash))
@@ -172,5 +266,67 @@
              (mapping>? integer-comparator overlap-left overlap-right))
 (check-false 'mapping>=?-overlap-not-superset
              (mapping>=? integer-comparator overlap-left overlap-right))
+
+;; Model fixture for deterministic operation-sequence checks.
+(define model-base
+  '((1 . one) (2 . two) (3 . three)))
+
+;; Mapping fixture corresponding to `model-base'.
+(define mapping-base
+  (alist->mapping integer-comparator model-base))
+
+;; Expected model after a set operation with insertion, replacement, and front insertion.
+(define model-after-set
+  (model-set-pairs model-base '((4 . four) (2 . TWO) (0 . zero))))
+
+;; Mapping after the same set operation used for `model-after-set'.
+(define mapping-after-set
+  (mapping-set mapping-base 4 'four 2 'TWO 0 'zero))
+
+;; Expected model after deleting present, absent, and front keys.
+(define model-after-delete
+  (model-delete-keys model-after-set '(3 99 0)))
+
+;; Mapping after the same delete sequence used for `model-after-delete'.
+(define mapping-after-delete
+  (mapping-delete mapping-after-set 3 99 0))
+
+;; Expected model after adjoining an existing key and duplicate new key.
+(define model-after-adjoin
+  (model-adjoin-pairs model-after-delete '((2 . dos) (5 . five) (5 . FIVE))))
+
+;; Mapping after the same adjoin sequence used for `model-after-adjoin'.
+(define mapping-after-adjoin
+  (mapping-adjoin mapping-after-delete 2 'dos 5 'five 5 'FIVE))
+
+;; Secondary model fixture for set-algebra oracle checks.
+(define model-other
+  '((2 . dos) (4 . cuatro) (6 . six)))
+
+;; Secondary mapping fixture corresponding to `model-other'.
+(define mapping-other
+  (alist->mapping integer-comparator model-other))
+
+(check 'model-set-sequence
+       (mapping->alist mapping-after-set)
+       model-after-set)
+(check 'model-delete-sequence
+       (mapping->alist mapping-after-delete)
+       model-after-delete)
+(check 'model-adjoin-sequence
+       (mapping->alist mapping-after-adjoin)
+       model-after-adjoin)
+(check 'model-union-left-biased
+       (mapping->alist (mapping-union mapping-after-adjoin mapping-other))
+       (model-union model-after-adjoin model-other))
+(check 'model-intersection-left-values
+       (mapping->alist (mapping-intersection mapping-after-adjoin mapping-other))
+       (model-intersection model-after-adjoin model-other))
+(check 'model-difference
+       (mapping->alist (mapping-difference mapping-after-adjoin mapping-other))
+       (model-difference model-after-adjoin model-other))
+(check 'model-range>=
+       (mapping->alist (mapping-range>= mapping-after-adjoin 4))
+       (model-range>= model-after-adjoin 4))
 
 (finish-mapping-smoke-tests)
