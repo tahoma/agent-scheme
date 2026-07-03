@@ -308,29 +308,6 @@ AND has no docstring, i.e. the comment is standing in for the docstring."
         (goto-char start)
         (search-forward (prin1-to-string docstring) end t)))))
 
-(defun consent--scheme-documentation-exported-symbols (text)
-  "Return symbols exported by a Scheme library TEXT."
-  (consent--scheme-documentation-exported-symbols-from-forms
-   (consent-read-all text)))
-
-(defun consent--scheme-documentation-exported-symbols-from-forms (forms)
-  "Return symbols exported by Scheme library FORMS."
-  (let (symbols)
-    (dolist (form forms)
-      (when (consent--scheme-documentation-form-head-named-p
-             form
-             "define-library")
-        (dolist (declaration (cddr form))
-          (when (consent--scheme-documentation-form-head-named-p
-                 declaration
-                 "export")
-            (dolist (spec (cdr declaration))
-              (dolist (name
-                       (consent--scheme-documentation-export-spec-names
-                        spec))
-                (push name symbols)))))))
-    symbols))
-
 (defun consent--scheme-documentation-symbol-name (value)
   "Return VALUE's Consent Scheme symbol name, or nil."
   (and (consent-symbol-p value) (consent-symbol-name value)))
@@ -356,61 +333,351 @@ AND has no docstring, i.e. the comment is standing in for the docstring."
     (list (consent-symbol-name (cadr spec))))
    (t nil)))
 
-(defun consent--scheme-documentation-value-procedure-form-p (value)
-  "Return non-nil when VALUE is an obvious procedure expression."
-  (or (consent--scheme-documentation-form-head-named-p value "lambda")
-      (consent--scheme-documentation-form-head-named-p value "case-lambda")))
+(defun consent--scheme-documentation-source-line (source offset)
+  "Return the one-based line number for OFFSET in SOURCE."
+  (1+ (cl-count ?\n source :end offset)))
 
-(defun consent--scheme-documentation-define-procedure-name (form)
-  "Return procedure name defined by FORM, or nil."
-  (when (consent--scheme-documentation-form-head-named-p form "define")
-    (let ((target (cadr form))
-          (value (caddr form)))
+(defun consent--scheme-documentation-delimiter-p (char)
+  "Return non-nil when CHAR delimits a Scheme token."
+  (or (null char)
+      (memq char '(?\s ?\t ?\n ?\r ?\( ?\) ?\" ?\;))))
+
+(defun consent--scheme-documentation-skip-string (source index limit)
+  "Return the index after the string in SOURCE at INDEX before LIMIT."
+  (let ((cursor (1+ index)))
+    (while (and (< cursor limit)
+                (not (eq (aref source cursor) ?\")))
+      (setq cursor
+            (if (eq (aref source cursor) ?\\)
+                (min limit (+ cursor 2))
+              (1+ cursor))))
+    (if (< cursor limit) (1+ cursor) cursor)))
+
+(defun consent--scheme-documentation-skip-bar-symbol (source index limit)
+  "Return the index after the vertical-bar symbol at INDEX before LIMIT."
+  (let ((cursor (1+ index)))
+    (while (and (< cursor limit)
+                (not (eq (aref source cursor) ?|)))
+      (setq cursor
+            (if (eq (aref source cursor) ?\\)
+                (min limit (+ cursor 2))
+              (1+ cursor))))
+    (if (< cursor limit) (1+ cursor) cursor)))
+
+(defun consent--scheme-documentation-skip-block-comment (source index limit)
+  "Return the index after the block comment at INDEX before LIMIT."
+  (let ((cursor (+ index 2))
+        (depth 1))
+    (while (and (> depth 0) (< cursor (1- limit)))
       (cond
-       ((and (consp target) (consent-symbol-p (car target)))
-        (consent-symbol-name (car target)))
-       ((and (consent-symbol-p target)
-             (consent--scheme-documentation-value-procedure-form-p value))
-        (consent-symbol-name target))
-       (t nil)))))
+       ((and (eq (aref source cursor) ?#)
+             (eq (aref source (1+ cursor)) ?|))
+        (setq depth (1+ depth)
+              cursor (+ cursor 2)))
+       ((and (eq (aref source cursor) ?|)
+             (eq (aref source (1+ cursor)) ?#))
+        (setq depth (1- depth)
+              cursor (+ cursor 2)))
+       (t
+        (setq cursor (1+ cursor)))))
+    cursor))
 
-(defun consent--scheme-documentation-library-definition-forms (forms)
-  "Return definition forms from Scheme library FORMS."
-  (let (definitions)
-    (dolist (form forms)
-      (when (consent--scheme-documentation-form-head-named-p
-             form
+(defun consent--scheme-documentation-skip-line-comment (source index limit)
+  "Return the index after the line comment at INDEX before LIMIT."
+  (let ((newline (string-match "\n" source index)))
+    (if (and newline (< newline limit))
+        (1+ newline)
+      limit)))
+
+(defun consent--scheme-documentation-skip-space-comments
+    (source index limit)
+  "Return the next non-whitespace/comment index in SOURCE."
+  (let ((cursor index)
+        moved)
+    (while
+        (progn
+          (setq moved nil)
+          (while (and (< cursor limit)
+                      (memq (aref source cursor) '(?\s ?\t ?\n ?\r)))
+            (setq cursor (1+ cursor)
+                  moved t))
+          (cond
+           ((and (< cursor limit)
+                 (eq (aref source cursor) ?\;))
+            (setq cursor
+                  (consent--scheme-documentation-skip-line-comment
+                   source cursor limit)
+                  moved t))
+           ((and (< (1+ cursor) limit)
+                 (eq (aref source cursor) ?#)
+                 (eq (aref source (1+ cursor)) ?|))
+            (setq cursor
+                  (consent--scheme-documentation-skip-block-comment
+                   source cursor limit)
+                  moved t)))
+          moved))
+    cursor))
+
+(defun consent--scheme-documentation-skip-token (source index limit)
+  "Return the index after the token at INDEX before LIMIT."
+  (let ((cursor index))
+    (while (and (< cursor limit)
+                (not
+                 (consent--scheme-documentation-delimiter-p
+                  (aref source cursor))))
+      (setq cursor (1+ cursor)))
+    cursor))
+
+(defun consent--scheme-documentation-skip-list (source index limit)
+  "Return the index after the list in SOURCE at INDEX before LIMIT."
+  (let ((cursor (1+ index))
+        (end (1- limit)))
+    (while (progn
+             (setq cursor
+                   (consent--scheme-documentation-skip-space-comments
+                    source cursor limit))
+             (and (< cursor limit)
+                  (not (eq (aref source cursor) ?\)))))
+      (setq cursor
+            (consent--scheme-documentation-skip-datum
+             source cursor limit)))
+    (if (and (< cursor limit)
+             (eq (aref source cursor) ?\)))
+        (1+ cursor)
+      (max cursor end))))
+
+(defun consent--scheme-documentation-skip-datum (source index limit)
+  "Return the index after the datum in SOURCE at INDEX before LIMIT."
+  (let ((cursor
+         (consent--scheme-documentation-skip-space-comments
+          source index limit)))
+    (if (>= cursor limit)
+        cursor
+      (let ((char (aref source cursor)))
+        (cond
+         ((eq char ?\()
+          (consent--scheme-documentation-skip-list source cursor limit))
+         ((eq char ?\")
+          (consent--scheme-documentation-skip-string source cursor limit))
+         ((eq char ?|)
+          (consent--scheme-documentation-skip-bar-symbol source cursor limit))
+         ((and (< (1+ cursor) limit)
+               (eq char ?#)
+               (eq (aref source (1+ cursor)) ?\;))
+          (consent--scheme-documentation-skip-datum
+           source
+           (+ cursor 2)
+           limit))
+         ((and (< (1+ cursor) limit)
+               (eq char ?#)
+               (eq (aref source (1+ cursor)) ?|))
+          (consent--scheme-documentation-skip-datum
+           source
+           (consent--scheme-documentation-skip-block-comment
+            source cursor limit)
+           limit))
+         ((and (< (1+ cursor) limit)
+               (eq char ?#)
+               (eq (aref source (1+ cursor)) ?\())
+          (consent--scheme-documentation-skip-list
+           source (1+ cursor) limit))
+         ((and (< (+ cursor 3) limit)
+               (eq char ?#)
+               (eq (aref source (1+ cursor)) ?u)
+               (eq (aref source (+ cursor 2)) ?8)
+               (eq (aref source (+ cursor 3)) ?\())
+          (consent--scheme-documentation-skip-list
+           source (+ cursor 3) limit))
+         ((and (< (1+ cursor) limit)
+               (eq char ?#)
+               (eq (aref source (1+ cursor)) ?\\))
+          (consent--scheme-documentation-skip-token
+           source cursor limit))
+         ((memq char '(?' ?` ?,))
+          (consent--scheme-documentation-skip-datum
+           source
+           (if (and (eq char ?,)
+                    (< (1+ cursor) limit)
+                    (eq (aref source (1+ cursor)) ?@))
+               (+ cursor 2)
+             (1+ cursor))
+           limit))
+         (t
+          (consent--scheme-documentation-skip-token
+           source cursor limit)))))))
+
+(defun consent--scheme-documentation-list-elements
+    (source start end &optional count)
+  "Return top-level element slices for the list SOURCE[START, END).
+When COUNT is non-nil, return at most COUNT element slices."
+  (let ((cursor (1+ start))
+        (limit (1- end))
+        elements)
+    (while (progn
+             (setq cursor
+                   (consent--scheme-documentation-skip-space-comments
+                    source cursor limit))
+             (and (< cursor limit)
+                  (or (null count) (< (length elements) count))))
+      (let* ((element-start cursor)
+             (element-end
+              (consent--scheme-documentation-skip-datum
+               source cursor limit)))
+        (push (cons element-start element-end) elements)
+        (setq cursor (max element-end (1+ cursor)))))
+    (nreverse elements)))
+
+(defun consent--scheme-documentation-slice-token (source slice)
+  "Return the token represented by SLICE in SOURCE, or nil."
+  (let* ((start
+          (consent--scheme-documentation-skip-space-comments
+           source (car slice) (cdr slice)))
+         (end
+          (and (< start (cdr slice))
+               (not (eq (aref source start) ?\())
+               (not (eq (aref source start) ?\"))
+               (consent--scheme-documentation-skip-token
+                source start (cdr slice)))))
+    (and end (> end start) (substring source start end))))
+
+(defun consent--scheme-documentation-list-head-name (source start end)
+  "Return the head symbol name for the list SOURCE[START, END), or nil."
+  (let ((elements
+         (consent--scheme-documentation-list-elements source start end 1)))
+    (and elements
+         (consent--scheme-documentation-slice-token
+          source
+          (car elements)))))
+
+(defun consent--scheme-documentation-slice-list-p (source slice)
+  "Return non-nil when SLICE in SOURCE starts with a list."
+  (let ((start
+         (consent--scheme-documentation-skip-space-comments
+          source (car slice) (cdr slice))))
+    (and (< start (cdr slice))
+         (eq (aref source start) ?\())))
+
+(defun consent--scheme-documentation-slice-head-named-p
+    (source slice name)
+  "Return non-nil when SLICE is a list whose head is NAME."
+  (and (consent--scheme-documentation-slice-list-p source slice)
+       (string=
+        (or (consent--scheme-documentation-list-head-name
+             source (car slice) (cdr slice))
+            "")
+        name)))
+
+(defun consent--scheme-documentation-define-procedure-name-from-slice
+    (source slice)
+  "Return the procedure name defined by DEFINE SLICE in SOURCE, or nil."
+  (let ((elements
+         (consent--scheme-documentation-list-elements
+          source
+          (car slice)
+          (cdr slice)
+          3)))
+    (when (and (>= (length elements) 2)
+               (string=
+                (or (consent--scheme-documentation-slice-token
+                     source (car elements))
+                    "")
+                "define"))
+      (let ((target (nth 1 elements))
+            (value (nth 2 elements)))
+        (cond
+         ((consent--scheme-documentation-slice-list-p source target)
+          (consent--scheme-documentation-list-head-name
+           source (car target) (cdr target)))
+         ((and value
+               (or (consent--scheme-documentation-slice-head-named-p
+                    source value "lambda")
+                   (consent--scheme-documentation-slice-head-named-p
+                    source value "case-lambda")))
+          (consent--scheme-documentation-slice-token source target))
+         (t nil))))))
+
+(defun consent--scheme-documentation-top-level-list-slices (source)
+  "Return top-level list slices from SOURCE."
+  (let ((cursor 0)
+        (limit (length source))
+        slices)
+    (while (progn
+             (setq cursor
+                   (consent--scheme-documentation-skip-space-comments
+                    source cursor limit))
+             (< cursor limit))
+      (let* ((start cursor)
+             (end
+              (consent--scheme-documentation-skip-datum
+               source cursor limit)))
+        (when (and (< start limit)
+                   (eq (aref source start) ?\())
+          (push (cons start end) slices))
+        (setq cursor (max end (1+ cursor)))))
+    (nreverse slices)))
+
+(defun consent--scheme-documentation-exported-symbols-from-slice
+    (source slice)
+  "Return exported internal binding names from export SLICE in SOURCE."
+  (condition-case nil
+      (let ((form (consent-read (substring source (car slice) (cdr slice))))
+            names)
+        (when (consent--scheme-documentation-form-head-named-p form "export")
+          (dolist (spec (cdr form))
+            (dolist (name
+                     (consent--scheme-documentation-export-spec-names spec))
+              (push name names))))
+        names)
+    (error nil)))
+
+(defun consent--scheme-documentation-public-procedure-slices (source)
+  "Return exported procedure definition slices from Scheme library SOURCE.
+Each result has the form (NAME START END LINE)."
+  (let (procedures)
+    (dolist (library (consent--scheme-documentation-top-level-list-slices
+                      source))
+      (when (string=
+             (or (consent--scheme-documentation-list-head-name
+                  source (car library) (cdr library))
+                 "")
              "define-library")
-        (dolist (declaration (cddr form))
-          (when (consent--scheme-documentation-form-head-named-p
-                 declaration
-                 "begin")
-            (dolist (body-form (cdr declaration))
-              (when (consent--scheme-documentation-form-head-named-p
-                     body-form
-                     "define")
-                (push body-form definitions)))))))
-    (nreverse definitions)))
-
-(defun consent--scheme-documentation-form-source-line (form fallback)
-  "Return FORM's reader source line, or FALLBACK."
-  (let ((metadata (consent--datum-source-metadata form)))
-    (if (and (vectorp metadata)
-             (>= (length metadata) 3)
-             (eq (aref metadata 0) 'consent--source-note))
-        (aref metadata 2)
-      fallback)))
-
-(defun consent--scheme-documentation-form-source-text (source form)
-  "Return FORM's source slice from SOURCE."
-  (let ((metadata (consent--datum-source-metadata form)))
-    (if (and (vectorp metadata)
-             (= (length metadata) 6)
-             (eq (aref metadata 0) 'consent--source-note))
-        (let ((offset (aref metadata 4))
-              (span (aref metadata 5)))
-          (substring source offset (min (length source) (+ offset span))))
-      "")))
+        (let* ((declarations
+                (nthcdr
+                 2
+                 (consent--scheme-documentation-list-elements
+                  source (car library) (cdr library))))
+               exports)
+          (dolist (declaration declarations)
+            (when (consent--scheme-documentation-slice-head-named-p
+                   source declaration "export")
+              (setq exports
+                    (append
+                     (consent--scheme-documentation-exported-symbols-from-slice
+                      source declaration)
+                     exports))))
+          (dolist (declaration declarations)
+            (when (consent--scheme-documentation-slice-head-named-p
+                   source declaration "begin")
+              (dolist (body-form
+                       (cdr
+                        (consent--scheme-documentation-list-elements
+                         source (car declaration) (cdr declaration))))
+                (when (consent--scheme-documentation-slice-head-named-p
+                       source body-form "define")
+                  (let ((name
+                         (consent--scheme-documentation-define-procedure-name-from-slice
+                          source body-form)))
+                    (when (and name (member name exports))
+                      (push
+                       (list
+                        name
+                        (car body-form)
+                        (cdr body-form)
+                        (consent--scheme-documentation-source-line
+                         source
+                         (car body-form)))
+                       procedures))))))))))
+    (nreverse procedures)))
 
 (defun consent--scheme-documentation-proper-list-p (value)
   "Return non-nil when VALUE is a proper list."
@@ -566,33 +833,22 @@ AND has no docstring, i.e. the comment is standing in for the docstring."
   (let* ((text (with-temp-buffer
                  (insert-file-contents file)
                  (buffer-string)))
-         (max-lisp-eval-depth (max max-lisp-eval-depth 4096))
-         (forms (consent-read-all text))
-         (exports
-          (consent--scheme-documentation-exported-symbols-from-forms
-           forms))
-         (definitions
-           (consent--scheme-documentation-library-definition-forms forms))
          (relative-file (file-relative-name file consent--test-root))
          errors)
-    (dolist (definition definitions)
-      (let ((name
-             (consent--scheme-documentation-define-procedure-name definition)))
-        (when (and name (member name exports))
-          (let ((definition-text
-                 (consent--scheme-documentation-form-source-text
-                  text
-                  definition)))
-            (unless (consent--scheme-documentation-rich-vector-p
-                     definition-text)
-              (push
-               (format "%s:%d exported procedure %s missing rich metadata vector with typed parameters and returns"
-                       relative-file
-                       (consent--scheme-documentation-form-source-line
-                        definition
-                        1)
-                       name)
-               errors))))))
+    (dolist (procedure
+             (consent--scheme-documentation-public-procedure-slices text))
+      (let ((name (nth 0 procedure))
+            (start (nth 1 procedure))
+            (end (nth 2 procedure))
+            (line (nth 3 procedure)))
+        (unless (consent--scheme-documentation-rich-vector-p
+                 (substring text start end))
+          (push
+           (format "%s:%d exported procedure %s missing rich metadata vector with typed parameters and returns"
+                   relative-file
+                   line
+                   name)
+           errors))))
     (nreverse errors)))
 
 (defun consent--scheme-documentation-repository-text-files ()
