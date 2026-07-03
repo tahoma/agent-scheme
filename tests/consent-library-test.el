@@ -618,6 +618,79 @@
               (cdr (assq 'target portable-alias))))")
     "(vendored-adapted-implementation (stdlib and-let-star) \"MIT\" \"MIT\" ((stdlib and-let-star) (srfi 2) (srfi srfi-2)) ((scheme base)) (stdlib and-let-star) (stdlib and-let-star))")))
 
+(ert-deftest consent-library-test-srfi-158-imports-and-uses-generators ()
+  "Import SRFI 158 aliases and exercise representative generator behavior."
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (scheme generator))
+      (list (generator->list (gmap - (make-range-generator 0 3)))
+            (generator->list
+             (gappend (generator 'a 'b)
+                      (list->generator '(c d))))
+            (let ((acc (list-accumulator)))
+              (acc 'x)
+              (acc 'y)
+              (acc (eof-object))))")
+    "((0 -1 -2) (a b c d) (x y))"))
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (srfi 158))
+      (generator->list
+       (gselect (list->generator '(a b c d e))
+                (list->generator '(#t #f #t #f #t))))")
+    "(a c e)"))
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (srfi srfi-158))
+      (let ((acc (sum-accumulator)))
+        (acc 1)
+        (acc 2)
+        (acc (eof-object)))")
+    "3")))
+
+(ert-deftest consent-library-test-srfi-158-missing-export-diagnostic ()
+  "Report missing SRFI 158 imports through the resolver diagnostic."
+  (let ((error
+         (should-error
+          (consent-library-test--external
+           "(import (scheme base)
+                    (only (srfi 158) missing-generator))
+            missing-generator")
+          :type 'consent-eval-error)))
+    (should
+     (string-match-p
+      (regexp-quote "only import name not found")
+      (error-message-string error)))
+    (should
+     (string-match-p
+      (regexp-quote "missing-generator")
+      (error-message-string error)))))
+
+(ert-deftest consent-library-test-stdlib-manifest-documents-srfi-158 ()
+  "Expose SRFI 158 support status through the stdlib manifest."
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (stdlib manifest))
+      (let ((entry (stdlib-manifest-ref '(stdlib generator)))
+            (scheme-alias (stdlib-manifest-ref '(scheme generator)))
+            (alias (stdlib-manifest-ref '(srfi 158)))
+            (portable-alias (stdlib-manifest-ref '(srfi srfi-158))))
+        (list (cdr (assq 'status entry))
+              (cdr (assq 'implementation-library entry))
+              (cdr (assq 'upstream-license entry))
+              (cdr (assq 'local-license entry))
+              (cdr (assq 'vendored? entry))
+              (cdr (assq 'import-aliases entry))
+              (cdr (assq 'dependencies entry))
+              (cdr (assq 'target scheme-alias))
+              (cdr (assq 'target alias))
+              (cdr (assq 'target portable-alias))))")
+    "(vendored-adapted-implementation (stdlib generator) \"MIT\" \"MIT\" #t ((stdlib generator) (scheme generator) (srfi 158) (srfi srfi-158)) ((scheme base) (scheme case-lambda)) (stdlib generator) (stdlib generator) (stdlib generator))")))
+
 (ert-deftest consent-library-test-srfi-180-imports-and-round-trips-json ()
   "Import `(srfi 180)' through the library registry and use JSON."
   (should
