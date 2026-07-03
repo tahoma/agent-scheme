@@ -227,6 +227,11 @@ next line, metadata belongs to the procedure value and may also be associated
 with the binding name by the frontend or reference generator. If the same
 procedure value is stored in multiple bindings, binding-specific documentation
 remains a separate metadata subject from procedure-value documentation.
+This describes a supported metadata position, not the preferred project source
+style. Checked-in Scheme should follow
+[Scheme Style Guidelines](scheme-style.md), which prefer procedure definition
+syntax and keep unavoidable `lambda` or `case-lambda` initializers on the line
+after the binding name.
 
 Primitive bindings are not read as ordinary procedure bodies. Kernel
 primitives, standard host-effecting bindings, Agent primitive libraries, and

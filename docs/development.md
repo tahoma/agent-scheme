@@ -69,6 +69,7 @@ Before implementing a ticket, read:
 - [Multi-host adapter and bootstrap strategy](multi-host-bootstrap.md)
 - [Secrets, local-only context, and redaction](privacy.md)
 - [Naming convention](naming.md)
+- [Scheme style guidelines](scheme-style.md)
 - [Scheme references](references.md)
 - [R7RS-small report reference](r7rs-small-report.md)
 - [Roadmap note](roadmap.md)
@@ -98,6 +99,8 @@ with dependency-free or explicitly unblocked issues.
 - Keep Emacs-specific behavior behind host adapter modules.
 - Avoid project history or personal machine details in public docs, tests, and
   examples.
+- Follow [Scheme Style Guidelines](scheme-style.md) for portable Scheme
+  definition shape, docstrings, and rich metadata layout.
 - Follow the commit-message rules in [Contributing](contributing.md).
 
 ## Emacs Lisp Docstrings
@@ -122,7 +125,8 @@ documentation belongs to the body literal convention in
 [Docstring Metadata Convention](docstring-metadata.md) when a binding needs
 metadata that standard readers, reflection, reference tools, or compiled
 runtimes can preserve. Comments remain source-only and are not visible through
-ordinary R7RS reading.
+ordinary R7RS reading. Broader Scheme formatting and definition-shape rules live
+in [Scheme Style Guidelines](scheme-style.md).
 
 - Start each portable Scheme file with a `;;;` header that names the library or
   source file responsibility and the host/core boundary it belongs to.
