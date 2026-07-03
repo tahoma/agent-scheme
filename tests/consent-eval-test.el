@@ -372,7 +372,8 @@ the reader must read #\\( #\\| etc. literally; char->integer must yield a number
     (should
      (equal (consent-value->external
              (consent-eval-source
-              "(define + (lambda (x y) y))
+              "(define (+ x y)
+                 y)
                (+ 1 2)"
               child))
             "2"))
@@ -385,9 +386,8 @@ the reader must read #\\( #\\| etc. literally; char->integer must yield a number
   "Evaluate closures with lexical scope and internal definitions."
   (should
    (equal (consent-eval-test--external
-           "(define make-adder
-              (lambda (x)
-                (lambda (y) (+ x y))))
+           "(define (make-adder x)
+              (lambda (y) (+ x y)))
             ((make-adder 4) 6)")
           "10"))
   (should
@@ -407,7 +407,8 @@ the reader must read #\\( #\\| etc. literally; char->integer must yield a number
   (should
    (equal (consent-eval-test--external
            "((lambda ()
-               (define + (lambda (x y) x))
+               (define (+ x y)
+                 x)
                (+ 1 2)))")
           "1")))
 
@@ -422,12 +423,11 @@ the reader must read #\\( #\\| etc. literally; char->integer must yield a number
           "3"))
   (should
    (equal (consent-eval-test--external
-           "(define make-counter
+           "(define (make-counter)
+              (define x 0)
               (lambda ()
-                (define x 0)
-                (lambda ()
-                  (set! x (+ x 1))
-                  x)))
+                (set! x (+ x 1))
+                x))
             (define counter (make-counter))
             (counter)
             (counter)")

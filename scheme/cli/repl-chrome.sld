@@ -433,7 +433,8 @@
     ;;;; Terminal substrate: roles to ANSI SGR
 
     ;; ANSI SGR escape introducer, built without a literal escape in source.
-    (define chrome--escape (string (integer->char 27)))
+    (define chrome--escape
+      (string (integer->char 27)))
 
     (define (chrome--role-sgr role)
       "Return the SGR parameter string for ROLE, or #f for an uncolored role."

@@ -30,7 +30,8 @@
                 (consent-eval-source-result raw-consent-eval-source-result)))
 
 ;; Unique marker for unset CI matrix defaults.
-(define consent-test-option-unset (list 'unset))
+(define consent-test-option-unset
+  (list 'unset))
 
 ;; Return #t when VALUE is the unset marker.
 (define (consent-test-option-unset? value)
@@ -254,10 +255,12 @@
   (newline))
 
 ;; Canonical fixture suite loaded once for case extraction.
-(define suite (read-suite))
+(define suite
+  (read-suite))
 
 ;; Shared fixture case list extracted from the canonical suite.
-(define cases (suite-cases suite))
+(define cases
+  (suite-cases suite))
 
 (for-each
  (lambda (case)

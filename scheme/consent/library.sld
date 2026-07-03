@@ -36,29 +36,29 @@
   (begin
 
     ;; Backend hook resolving interpreter primitive implementations.
-    (define library-primitive-resolver
-      (lambda (name)
-        (eval-error "library primitive backend is not installed" name)))
+    (define (library-primitive-resolver name)
+      "Resolve primitive implementation NAME through the installed backend."
+      (eval-error "library primitive backend is not installed" name))
     ;; Backend hook for host-capability-denied primitive factories.
-    (define library-policy-denied-primitive
-      (lambda (description)
-        (eval-error "library policy backend is not installed" description)))
+    (define (library-policy-denied-primitive description)
+      "Return a denied primitive for DESCRIPTION through the backend."
+      (eval-error "library policy backend is not installed" description))
     ;; Backend hook for evaluating library body forms.
-    (define library-trampoline
-      (lambda (sequence environment context)
-        (eval-error "library trampoline backend is not installed")))
+    (define (library-trampoline sequence environment context)
+      "Evaluate library body SEQUENCE through the installed backend."
+      (eval-error "library trampoline backend is not installed"))
     ;; Backend hook for constructing syntax environments.
-    (define library-make-empty-syntax-environment
-      (lambda (parent)
-        (eval-error "library syntax environment backend is not installed")))
+    (define (library-make-empty-syntax-environment parent)
+      "Construct an empty syntax environment through the installed backend."
+      (eval-error "library syntax environment backend is not installed"))
     ;; Backend hook for syntax-environment lookup.
-    (define library-syntax-environment-ref
-      (lambda (syntax-environment name)
-        (eval-error "library syntax lookup backend is not installed" name)))
+    (define (library-syntax-environment-ref syntax-environment name)
+      "Look up NAME in SYNTAX-ENVIRONMENT through the installed backend."
+      (eval-error "library syntax lookup backend is not installed" name))
     ;; Backend hook for scoped syntax-environment evaluation.
-    (define library-with-syntax-environment
-      (lambda (context syntax-environment thunk)
-        (eval-error "library syntax scope backend is not installed")))
+    (define (library-with-syntax-environment context syntax-environment thunk)
+      "Call THUNK with SYNTAX-ENVIRONMENT installed in CONTEXT."
+      (eval-error "library syntax scope backend is not installed"))
 
     (define (consent-install-library-backend!
              primitive-resolver policy-denied trampoline

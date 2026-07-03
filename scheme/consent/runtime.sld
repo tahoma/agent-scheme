@@ -540,7 +540,8 @@
       (tag unspecified-tag))
 
     ;; Singleton value representing Scheme results whose value is unspecified.
-    (define consent-unspecified (make-unspecified))
+    (define consent-unspecified
+      (make-unspecified))
 
     ;; Record type for internal uninitialized bindings used during recursive
     ;; setup.
@@ -550,7 +551,8 @@
       (tag undefined-tag))
 
     ;; Singleton sentinel for internal bindings that must not be read yet.
-    (define undefined (make-undefined))
+    (define undefined
+      (make-undefined))
 
     ;; Record type for mutable lexical storage shared by closures and
     ;; environments.
@@ -682,7 +684,8 @@
       consent-eof-object?)
 
     ;; Singleton EOF object returned by Consent Scheme input primitives.
-    (define consent-eof-object (make-consent-eof-object))
+    (define consent-eof-object
+      (make-consent-eof-object))
 
     ;; Portable ports keep backing storage as Scheme data; host-file access is
     ;; still explicit policy surface even though this record is host-neutral.

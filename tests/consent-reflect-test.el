@@ -100,9 +100,8 @@
         (+ first second))
       (define (dotted head . tail)
         tail)
-      (define variadic
-        (lambda all
-          all))
+      (define (variadic . all)
+        all)
       (define (empty)
         0)
       (list (metadata-field 'proper 'arguments)

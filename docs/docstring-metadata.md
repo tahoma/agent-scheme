@@ -222,11 +222,11 @@ The body convention applies independently to every procedure body:
 - top-level or internal bindings whose initializer is a `lambda` or
   `case-lambda` expression
 
-For a binding such as `(define name (lambda (...) ...))`, metadata belongs to
-the procedure value and may also be associated with the binding name by the
-frontend or reference generator. If the same procedure value is stored in
-multiple bindings, binding-specific documentation remains a separate metadata
-subject from procedure-value documentation.
+For a binding such as `(define name` followed by `(lambda (...) ...)` on the
+next line, metadata belongs to the procedure value and may also be associated
+with the binding name by the frontend or reference generator. If the same
+procedure value is stored in multiple bindings, binding-specific documentation
+remains a separate metadata subject from procedure-value documentation.
 
 Primitive bindings are not read as ordinary procedure bodies. Kernel
 primitives, standard host-effecting bindings, Agent primitive libraries, and

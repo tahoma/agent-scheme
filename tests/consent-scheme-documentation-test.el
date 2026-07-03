@@ -587,6 +587,88 @@ AND has no docstring, i.e. the comment is standing in for the docstring."
                errors))))))
     (nreverse errors)))
 
+(defun consent--scheme-documentation-repository-text-files ()
+  "Return repository text files that can carry Scheme examples."
+  (cl-loop for directory in '("scheme" "tests" "fixtures" "docs")
+           append
+           (directory-files-recursively
+            (expand-file-name directory consent--test-root)
+            "\\.\\(?:el\\|s\\(?:cm\\|ld\\)\\|md\\)\\'")))
+
+(defun consent--scheme-documentation-scheme-style-files ()
+  "Return Scheme source and fixture files checked for define layout."
+  (cl-loop for directory in '("scheme" "tests/scheme" "fixtures/r7rs")
+           append
+           (directory-files-recursively
+            (expand-file-name directory consent--test-root)
+            "\\.s\\(?:cm\\|ld\\)\\'")))
+
+(defun consent--scheme-documentation-value-procedure-define-errors
+    (file)
+  "Return errors for value `lambda' or `case-lambda' definitions."
+  (let* ((text (with-temp-buffer
+                 (insert-file-contents file)
+                 (buffer-string)))
+         (relative-file (file-relative-name file consent--test-root))
+         errors)
+    (with-temp-buffer
+      (insert text)
+      (goto-char (point-min))
+      (while (re-search-forward
+              (rx line-start
+                  (* (any " \t"))
+                  "(define"
+                  (+ (any " \t\n"))
+                  (+ (not (any " \t\n(" ")")))
+                  (+ (any " \t\n"))
+                  "(" (or "lambda" "case-lambda")
+                  symbol-end)
+              nil
+              t)
+        (push (format "%s:%d use named procedure definition syntax instead of defining a lambda value"
+                      relative-file
+                      (line-number-at-pos (match-beginning 0)))
+              errors)))
+    (nreverse errors)))
+
+(defun consent--scheme-documentation-simple-datum-rhs-p (rhs)
+  "Return non-nil when RHS starts with a simple datum literal."
+  (string-match-p
+   (rx string-start
+       (* space)
+       (or "#t" "#f" "#\\" digit "\"" "'" "`" "#(" "#u8("
+           (: (? (or "+" "-")) digit)))
+   rhs))
+
+(defun consent--scheme-documentation-same-line-complex-define-errors
+    (file)
+  "Return errors for same-line non-datum value definitions in FILE."
+  (let* ((text (with-temp-buffer
+                 (insert-file-contents file)
+                 (buffer-string)))
+         (lines (split-string text "\n"))
+         (relative-file (file-relative-name file consent--test-root))
+         errors)
+    (cl-loop for line in lines
+             for index from 0
+             when (string-match
+                   (rx string-start
+                       (* space)
+                       "(define" (+ space)
+                       (+ (not (any space "(" ")")))
+                       (+ space)
+                       (group (+ not-newline)))
+                   line)
+             do
+             (let ((rhs (match-string 1 line)))
+               (unless (consent--scheme-documentation-simple-datum-rhs-p
+                        rhs)
+                 (push (format "%s:%d place non-datum define value on a following line after the definition name"
+                               relative-file
+                               (1+ index))
+                       errors))))
+    (nreverse errors)))
+
 (defun consent--scheme-documentation-compact-type-style-errors (file)
   "Return errors for expanded metadata types that should be compact."
   (let* ((text (with-temp-buffer
@@ -680,37 +762,97 @@ AND has no docstring, i.e. the comment is standing in for the docstring."
   (let ((file
          (make-temp-file
           "consent-doc-value-lambda" nil ".sld"
-          ";;; scratch.sld --- documentation fixture
-(define-library
-  (scratch docs)
-  (export
-    value-lambda
-    value-case-lambda)
-  (import (scheme base)
-          (scheme case-lambda))
-  (begin
-    (define
-      value-lambda
-      (lambda
-        (item)
-        item))
-    (define value-case-lambda
-      (case-lambda
-        (() #f)
-        ((item) item)))))")))
+          (concat
+           ";;; scratch.sld --- documentation fixture\n"
+           "(define-library\n"
+           "  (scratch docs)\n"
+           "  (export\n"
+           "    value-lambda\n"
+           "    value-case-lambda)\n"
+           "  (import (scheme base)\n"
+           "          (scheme case-lambda))\n"
+           "  (begin\n"
+           "    (define\n"
+           "      value-lambda\n"
+           "      (" "lambda\n"
+           "        (item)\n"
+           "        item))\n"
+           "    (define value-case-lambda\n"
+           "      (" "case-lambda\n"
+           "        (() #f)\n"
+           "        ((item) item)))))"))))
     (unwind-protect
         (let ((errors
                (consent--scheme-documentation-public-rich-errors file)))
           (should
            (cl-some
             (lambda (error)
-              (string-match-p "value-lambda missing rich metadata" error))
+              (string-match-p
+               "value-lambda missing rich metadata"
+               error))
             errors))
           (should
            (cl-some
             (lambda (error)
-              (string-match-p "value-case-lambda missing rich metadata" error))
+              (string-match-p
+               "value-case-lambda missing rich metadata"
+               error))
             errors)))
+      (delete-file file))))
+
+(ert-deftest consent-scheme-documentation-test-value-procedure-define-style ()
+  "Require procedure definitions to use named procedure syntax."
+  (let ((file
+         (make-temp-file
+          "consent-doc-define-style" nil ".scm"
+          (concat
+           ";;; scratch.scm --- documentation fixture\n"
+           "(define (good-lambda item) item)\n"
+           "(define (good-case-lambda . args)\n"
+           "  (apply (case-lambda ((item) item)) args))\n"
+           "(define good-datum 42)\n"
+           "(define bad-lambda " "(lambda (item) item))\n"
+           "(define bad-wrapped-lambda\n"
+           "  " "(lambda (item) item))\n"
+           "(define bad-case-lambda " "(case-lambda ((item) item)))\n"
+           "(define bad-wrapped-case-lambda\n"
+           "  " "(case-lambda ((item) item)))\n"))))
+    (unwind-protect
+        (let ((errors
+               (consent--scheme-documentation-value-procedure-define-errors
+                file)))
+          (should
+           (cl-some
+            (lambda (error)
+              (string-match-p
+               "named procedure definition syntax"
+               error))
+            errors))
+          (should (= (length errors) 4)))
+      (delete-file file))))
+
+(ert-deftest consent-scheme-documentation-test-value-define-style ()
+  "Allow same-line define values only for simple datum literals."
+  (let ((file
+         (make-temp-file
+          "consent-doc-value-define-style" nil ".scm"
+          (concat
+           ";;; scratch.scm --- documentation fixture\n"
+           "(define good-number 42)\n"
+           "(define good-string \"value\")\n"
+           "(define good-quoted '(a b))\n"
+           "(define bad-call " "(list 'a))\n"
+           "(define bad-alias " "other-name)\n"))))
+    (unwind-protect
+        (let ((errors
+               (consent--scheme-documentation-same-line-complex-define-errors
+                file)))
+          (should
+           (cl-some
+            (lambda (error)
+              (string-match-p "non-datum define value" error))
+            errors))
+          (should (= (length errors) 2)))
       (delete-file file))))
 
 (ert-deftest consent-scheme-documentation-test-compact-type-style ()
@@ -719,6 +861,26 @@ AND has no docstring, i.e. the comment is standing in for the docstring."
          (cl-loop for file in (consent--scheme-documentation-source-files)
                   append
                   (consent--scheme-documentation-compact-type-style-errors
+                   file))))
+    (when errors
+      (ert-fail (mapconcat #'identity errors "\n")))))
+
+(ert-deftest consent-scheme-documentation-test-value-procedure-define-style-corpus ()
+  "Reject value lambda and case-lambda definitions in Scheme source."
+  (let ((errors
+         (cl-loop for file in (consent--scheme-documentation-scheme-style-files)
+                  append
+                  (consent--scheme-documentation-value-procedure-define-errors
+                   file))))
+    (when errors
+      (ert-fail (mapconcat #'identity errors "\n")))))
+
+(ert-deftest consent-scheme-documentation-test-value-define-style-corpus ()
+  "Reject same-line non-datum value definitions in Scheme source."
+  (let ((errors
+         (cl-loop for file in (consent--scheme-documentation-scheme-style-files)
+                  append
+                  (consent--scheme-documentation-same-line-complex-define-errors
                    file))))
     (when errors
       (ert-fail (mapconcat #'identity errors "\n")))))
