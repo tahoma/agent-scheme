@@ -540,7 +540,7 @@
   (should
    (equal
     (consent-reflect-test--eval-value-string
-     "(import (scheme base) (agent reflect))
+     "(import (scheme base) (scheme generator) (agent reflect))
       (define (field datum name)
         (cadr (assq name (cdr datum))))
       (let ((bindings (library-bindings '(scheme generator))))

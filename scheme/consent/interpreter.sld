@@ -4992,16 +4992,17 @@ cursor across sessions."
             (result-field 'name (library-binding-name binding))
             (result-field 'kind (library-binding-kind binding))
             (result-field 'library
-                          (library-binding-library-key binding))))
+                          (map (lambda (part) part)
+                               (library-binding-library-key binding)))))
 
     (define (reflect-library-bindings library-name context)
-      "Return exported binding records for LIBRARY-NAME in CONTEXT."
-      (map reflect-library-binding-record
-           (library-exports
-            (resolve-library
-             library-name
-             context
-             (context-interaction-environment context)))))
+      "Return registered exported binding records for LIBRARY-NAME in CONTEXT."
+      (let* ((key (library-name-key library-name))
+             (library (library-registry-ref context key)))
+        (if library
+            (map reflect-library-binding-record
+                 (library-exports library))
+            (eval-error "unknown library" key))))
 
     (define (reflect-current-session-info context)
       "Return public session and event identity for CONTEXT."
