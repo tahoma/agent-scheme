@@ -306,7 +306,23 @@ failing closed on everything."
       script))
     (should
      (string-match-p
-      "gambit_module_order='[^']*stdlib/and-let-star[[:space:]]+stdlib/list[[:space:]]+stdlib/generator[[:space:]]+stdlib/receive[[:space:]]+stdlib/json"
+      "\"\\$scheme_dir/stdlib/comparator\\.sld\""
+      script))
+    (should
+     (string-match-p
+      "\"\\$scheme_dir/stdlib/assume\\.sld\""
+      script))
+    (should
+     (string-match-p
+      "\"\\$scheme_dir/stdlib/rbtree\\.sld\""
+      script))
+    (should
+     (string-match-p
+      "\"\\$scheme_dir/stdlib/mapping\\.sld\""
+      script))
+    (should
+     (string-match-p
+      "gambit_module_order='[^']*stdlib/and-let-star[[:space:]]+stdlib/list[[:space:]]+stdlib/generator[[:space:]]+stdlib/comparator[[:space:]]+stdlib/receive[[:space:]]+stdlib/assume[[:space:]]+stdlib/rbtree[[:space:]]+stdlib/mapping[[:space:]]+stdlib/json"
       script))))
 
 (ert-deftest consent-compile-portable-test-racket-builds-runner ()

@@ -21,6 +21,7 @@ source-tree layers.
 | `(stdlib receive)` | shimmed | Built-in portable shim over R7RS multiple values, recorded in `(stdlib manifest)` | `(stdlib receive)`, `(srfi 8)`, `(srfi srfi-8)` | Optional SRFI 8 `receive` syntax for binding multiple values; not part of the R7RS-small baseline. |
 | `(stdlib assume)` | shimmed | Built-in portable SRFI 145 shim, recorded in `(stdlib manifest)` | `(stdlib assume)`, `(srfi 145)`, `(srfi srfi-145)` | Optional SRFI 145 `assume` syntax for invalid code paths; not part of the R7RS-small baseline. |
 | `(stdlib comparator)` | implemented | Vendored adapted SRFI 128 sample implementation, recorded in `(stdlib manifest)` | `(stdlib comparator)`, `(scheme comparator)`, `(srfi 128)`, `(srfi srfi-128)` | Primary stdlib spelling owns the source; R7RS-large and SRFI spellings are compatibility aliases. |
+| `(stdlib mapping)` | implemented | Vendored adapted SRFI 146 ordered mapping implementation, recorded in `(stdlib manifest)` | `(stdlib mapping)`, `(scheme mapping)`, `(srfi 146)`, `(srfi srfi-146)` | Ordered finite mappings over SRFI 128 comparators; primary stdlib spelling owns the source and R7RS-large/SRFI spellings are compatibility aliases. Hash mappings are separate future work. |
 
 ## Internal Helpers
 
@@ -33,3 +34,8 @@ revisions, licenses, local patches, import aliases, dependencies, and test
 status for stdlib libraries. The historical `(srfi manifest)` name remains an
 alias. Vendored source keeps its upstream license and local adaptations are
 listed in the manifest entry.
+
+`(scheme mapping)` and the SRFI 146 aliases expose only the ordered mapping
+interface. `(scheme mapping hash)`, `(srfi 146 hash)`, and
+`(srfi srfi-146 hash)` are not registered; the hash mapping variant is tracked
+separately after the HAMT substrate lands.

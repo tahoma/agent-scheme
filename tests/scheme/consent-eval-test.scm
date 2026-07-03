@@ -1385,6 +1385,8 @@
         (find-source-library-spec '(stdlib comparator) source-specs))
        (rbtree-spec
         (find-source-library-spec '(stdlib rbtree) source-specs))
+       (mapping-spec
+        (find-source-library-spec '(stdlib mapping) source-specs))
        (receive-spec
         (find-source-library-spec '(stdlib receive) source-specs))
        (assume-spec
@@ -1398,6 +1400,7 @@
               generator-spec
               comparator-spec
               rbtree-spec
+              mapping-spec
               receive-spec
               assume-spec
               json-spec
@@ -1407,6 +1410,7 @@
               (string? (cadr (assq 'source-file generator-spec)))
               (string? (cadr (assq 'source-file comparator-spec)))
               (string? (cadr (assq 'source-file rbtree-spec)))
+              (string? (cadr (assq 'source-file mapping-spec)))
               (string? (cadr (assq 'source-file receive-spec)))
               (string? (cadr (assq 'source-file assume-spec)))
               (string? (cadr (assq 'source-file json-spec))))
@@ -1435,6 +1439,10 @@
          (and rbtree-spec
               (cadr (assq 'source-file rbtree-spec)))
          "scheme/stdlib/rbtree.sld")
+  (check 'stdlib-source-library-mapping-file
+         (and mapping-spec
+              (cadr (assq 'source-file mapping-spec)))
+         "scheme/stdlib/mapping.sld")
   (check 'stdlib-source-library-receive-file
          (and receive-spec
               (cadr (assq 'source-file receive-spec)))
@@ -2030,6 +2038,110 @@
                     (stdlib receive)
                     (stdlib generator)
                     (stdlib comparator)))"))
+
+(check-external 'srfi-146-mapping-behavior
+                "(import (scheme base)
+                         (scheme comparator)
+                         (scheme mapping)
+                         (prefix (srfi 146) srfi:)
+                         (prefix (srfi srfi-146) portable:))
+                 (define integer-comparator
+                   (make-comparator integer? = < number-hash))
+                 (define base
+                   (mapping integer-comparator
+                            3 'three
+                            1 'one
+                            2 'two
+                            2 'TWO))
+                 (define updated
+                   (mapping-set base 4 'four 2 'TWO))
+                 (define without-one
+                   (mapping-delete updated 1))
+                 (define srfi-mapping
+                   (srfi:mapping integer-comparator 10 'ten 20 'twenty))
+                 (define portable-mapping
+                   (portable:alist->mapping integer-comparator
+                                            '((2 . two) (1 . one))))
+                 (list (mapping? base)
+                       (mapping-size base)
+                       (mapping-ref base 2)
+                       (mapping->alist updated)
+                       (mapping-keys updated)
+                       (mapping-values updated)
+                       (mapping-min-key updated)
+                       (mapping-max-key updated)
+                       (mapping-key-predecessor updated 3 (lambda () 'none))
+                       (mapping-key-successor updated 3 (lambda () 'none))
+                       (mapping->alist (mapping-range>= updated 3))
+                       (mapping-ref/default without-one 1 'missing)
+                       (mapping-size
+                        (mapping-intersection
+                         updated
+                        (mapping integer-comparator
+                                 2 'TWO
+                                 4 'four
+                                  9 'nine)))
+                       (srfi:mapping-ref/default srfi-mapping 20 'missing)
+                       (srfi:mapping-ref/default srfi-mapping 30 'missing)
+                       (portable:mapping->alist portable-mapping))"
+                (expected-datum-external
+                 "(#t
+                   3
+                   two
+                   ((1 . one) (2 . TWO) (3 . three) (4 . four))
+                   (1 2 3 4)
+                   (one TWO three four)
+                   1
+                   4
+                   2
+                   4
+                   ((3 . three) (4 . four))
+                   missing
+                   2
+                   twenty
+                   missing
+                   ((1 . one) (2 . two)))"))
+
+(check-external 'stdlib-mapping-manifest
+                "(import (scheme base) (stdlib manifest))
+                 (let ((entry (stdlib-manifest-ref '(stdlib mapping)))
+                       (scheme-alias
+                        (stdlib-manifest-ref '(scheme mapping)))
+                       (alias (stdlib-manifest-ref '(srfi 146)))
+                       (portable-alias
+                        (stdlib-manifest-ref '(srfi srfi-146)))
+                       (hash-alias
+                        (stdlib-manifest-ref '(srfi 146 hash))))
+                   (list (cdr (assq 'status entry))
+                         (cdr (assq 'implementation-library entry))
+                         (cdr (assq 'upstream-license entry))
+                         (cdr (assq 'local-license entry))
+                         (cdr (assq 'import-aliases entry))
+                         (cdr (assq 'dependencies entry))
+                         (cdr (assq 'target scheme-alias))
+                         (cdr (assq 'target alias))
+                         (cdr (assq 'target portable-alias))
+                         hash-alias))"
+                (expected-datum-external
+                 "(vendored-adapted-implementation
+                   (stdlib mapping)
+                   \"MIT\"
+                   \"MIT\"
+                   ((stdlib mapping)
+                    (scheme mapping)
+                    (srfi 146)
+                    (srfi srfi-146))
+                   ((scheme base)
+                    (scheme case-lambda)
+                    (stdlib list)
+                    (stdlib receive)
+                    (stdlib comparator)
+                    (stdlib assume)
+                    (stdlib rbtree))
+                   (stdlib mapping)
+                   (stdlib mapping)
+                   (stdlib mapping)
+                   #f)"))
 
 (check-external 'base-list-helpers
                 "(list (length (append '(1 2) '(3 4)))

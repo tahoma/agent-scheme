@@ -150,6 +150,7 @@
         (stdlib generator)
         (stdlib comparator)
         (stdlib rbtree)
+        (stdlib mapping)
         (stdlib receive)
         (stdlib assume)
         (stdlib json)))
@@ -198,6 +199,12 @@
          (target . (stdlib comparator)))
         ((alias . (srfi srfi-128))
          (target . (stdlib comparator)))
+        ((alias . (scheme mapping))
+         (target . (stdlib mapping)))
+        ((alias . (srfi 146))
+         (target . (stdlib mapping)))
+        ((alias . (srfi srfi-146))
+         (target . (stdlib mapping)))
         ((alias . (stdlib json read))
          (target . (stdlib json))
          (exports json-number-of-character-limit
@@ -381,6 +388,9 @@
         ((stdlib rbtree)
          "scheme/stdlib/rbtree.sld"
          "stdlib/rbtree.sld")
+        ((stdlib mapping)
+         "scheme/stdlib/mapping.sld"
+         "stdlib/mapping.sld")
         ((stdlib receive)
          "scheme/stdlib/receive.sld"
          "stdlib/receive.sld")

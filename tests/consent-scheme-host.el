@@ -31,6 +31,7 @@
     "tests/scheme/stdlib-list-test.scm"
     "tests/scheme/stdlib-comparator-test.scm"
     "tests/scheme/stdlib-rbtree-test.scm"
+    "tests/scheme/stdlib-mapping-test.scm"
     "tests/scheme/stdlib-and-let-star-test.scm"
     "tests/scheme/stdlib-receive-test.scm"
     "tests/scheme/stdlib-assume-test.scm"

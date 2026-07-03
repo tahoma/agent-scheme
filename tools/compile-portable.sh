@@ -1436,8 +1436,20 @@ compile_gambit() {
     "$scheme_dir/stdlib/generator.sld" \
     "$src_dir/stdlib/generator.sld"
   copy_gambit_source \
+    "$scheme_dir/stdlib/comparator.sld" \
+    "$src_dir/stdlib/comparator.sld"
+  copy_gambit_source \
     "$scheme_dir/stdlib/receive.sld" \
     "$src_dir/stdlib/receive.sld"
+  copy_gambit_source \
+    "$scheme_dir/stdlib/assume.sld" \
+    "$src_dir/stdlib/assume.sld"
+  copy_gambit_source \
+    "$scheme_dir/stdlib/rbtree.sld" \
+    "$src_dir/stdlib/rbtree.sld"
+  copy_gambit_source \
+    "$scheme_dir/stdlib/mapping.sld" \
+    "$src_dir/stdlib/mapping.sld"
   copy_gambit_source \
     "$scheme_dir/stdlib/json.sld" \
     "$src_dir/stdlib/json.sld"
@@ -1518,7 +1530,7 @@ compile_gambit() {
   # the per-module compiled artifacts are $src_dir/<ref>.c and $src_dir/<ref>.o.
   # (consent embedded-source) is generated into $src_dir; every other module's
   # source lives under $scheme_dir.
-  gambit_module_order='consent/version consent/reader consent/runtime consent/base consent/library consent/result consent/macro agent/approval agent/context agent/helper agent/job stdlib/and-let-star stdlib/list stdlib/generator stdlib/receive stdlib/json agent/memory agent/plan agent/redaction agent/session cli/process-host agent/models/openai agent/task agent/transcript agent/registry agent/proposal agent/runner agent/prompt consent/interpreter consent/eval cli/native-cli cli/repl-chrome cli/repl-shell cli/script consent/embedded-source'
+  gambit_module_order='consent/version consent/reader consent/runtime consent/base consent/library consent/result consent/macro agent/approval agent/context agent/helper agent/job stdlib/and-let-star stdlib/list stdlib/generator stdlib/comparator stdlib/receive stdlib/assume stdlib/rbtree stdlib/mapping stdlib/json agent/memory agent/plan agent/redaction agent/session cli/process-host agent/models/openai agent/task agent/transcript agent/registry agent/proposal agent/runner agent/prompt consent/interpreter consent/eval cli/native-cli cli/repl-chrome cli/repl-shell cli/script consent/embedded-source'
 
   gambit_module_source() {
     case "$1" in
