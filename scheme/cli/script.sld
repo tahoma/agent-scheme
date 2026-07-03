@@ -207,6 +207,7 @@
         (max-events . 1000000000)
         (max-event-nodes . 1000000000)
         (max-value-nodes . 1000000000)
+        (max-source-metadata . 1000000000)
         (max-interned-symbols . 1000000000)))
 
     (define (cli-script-host-run-options root)

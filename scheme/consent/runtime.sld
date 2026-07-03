@@ -9,6 +9,7 @@
 (define-library (consent runtime)
   (export consent-default-maximum-steps
           consent-default-maximum-value-nodes
+          consent-default-maximum-source-metadata
           consent-default-maximum-host-callbacks
           consent-version-components
           consent-version
@@ -151,6 +152,7 @@
           set-context-steps!
           context-maximum-steps
           context-maximum-value-nodes
+          context-maximum-source-metadata
           context-value-nodes
           set-context-value-nodes!
           context-interned-symbols
@@ -166,6 +168,7 @@
           context-maximum-event-nodes
           set-context-maximum-steps!
           set-context-maximum-value-nodes!
+          set-context-maximum-source-metadata!
           set-context-maximum-host-callbacks!
           set-context-maximum-events!
           context-output-bytes
@@ -265,6 +268,7 @@
           path-join
           path-normalize
           normalize-include-paths
+          context-reader-options
           authorize-file-capability
           file-authorization-path
           audit-file-capability-result!
@@ -359,6 +363,10 @@
     ;; still tripping a runaway flood; reader-created identifiers are bounded by
     ;; the reader's node budgets rather than this dimension.
     (define consent-default-maximum-interned-symbols 1000000)
+    ;; Default maximum retained portable source metadata entries admitted by a
+    ;; run. This bounds the portable reader's process-global source side table
+    ;; while leaving ordinary loaded runtime/library graphs introspectable.
+    (define consent-default-maximum-source-metadata 1000000)
     ;; Default maximum primitive callback count allowed during evaluation.
     (define consent-default-maximum-host-callbacks 10000)
     ;; Default maximum event-channel records allowed during evaluation.
@@ -752,7 +760,8 @@
       ;; A context owns mutable run state: budgets, active syntax bindings,
       ;; lazy library registrations, include policy, and syntax-id allocation.
       (make-eval-context steps maximum-steps
-                         maximum-value-nodes value-nodes host-callbacks
+                         maximum-value-nodes maximum-source-metadata
+                         value-nodes host-callbacks
                          maximum-host-callbacks syntax-environment libraries
                          include-paths include-directory file-paths
                          docstring-retention
@@ -780,6 +789,8 @@
       (maximum-steps context-maximum-steps set-context-maximum-steps!)
       (maximum-value-nodes context-maximum-value-nodes
                            set-context-maximum-value-nodes!)
+      (maximum-source-metadata context-maximum-source-metadata
+                               set-context-maximum-source-metadata!)
       (value-nodes context-value-nodes set-context-value-nodes!)
       ;; Cumulative guest `string->symbol' interning operations and the run's
       ;; ceiling. Each call charges one unit, bounding how many symbols a run
@@ -2925,6 +2936,9 @@
        (option-count options
                      'max-value-nodes
                      consent-default-maximum-value-nodes)
+       (option-count options
+                     'max-source-metadata
+                     consent-default-maximum-source-metadata)
        0
        0
        (option-count options
@@ -2986,6 +3000,20 @@
        (option-count options
                      'max-interned-symbols
                      consent-default-maximum-interned-symbols))))
+
+    (define (context-reader-options context)
+      "Return reader options derived from CONTEXT's resource ceilings."
+      #((parameters
+         (context (type eval-context)
+          (description
+           ("Evaluation context whose reader-facing resource ceilings"
+             "are exported."))))
+        (returns (type list)
+         (description
+          ("Association list of reader options derived from CONTEXT.")))
+        (effects state-read))
+      (list (cons 'max-source-metadata
+                  (context-maximum-source-metadata context))))
 
     (define (record-audit-event! context event fields)
       "Record a Scheme-readable audit EVENT with FIELDS in CONTEXT."
@@ -3446,6 +3474,10 @@
        (list '(allocation-nodes allocation-bytes)
              context-maximum-value-nodes set-context-maximum-value-nodes!
              context-value-nodes)
+       (list '(source-metadata)
+             context-maximum-source-metadata
+             set-context-maximum-source-metadata!
+             (lambda (context) (consent-source-metadata-count)))
        (list '(interned-symbols)
              context-maximum-interned-symbols
              set-context-maximum-interned-symbols!

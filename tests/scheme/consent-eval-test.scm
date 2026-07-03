@@ -327,6 +327,44 @@
                             '((source-metadata . #t)))))
        "(source (origin source) (source-id #f) (line 2) (column 3) (offset 3) (span 10) (phase read))")
 
+(define (consent-test-source-metadata-graph count)
+  (let loop ((index 0) (parts '("(")))
+    (if (= index count)
+        (apply string-append (reverse (cons ")" parts)))
+        (loop (+ index 1)
+              (cons (if (= index 0)
+                        "\"first\""
+                        " \"node\"")
+                    parts)))))
+
+(check 'reader-source-metadata-retains-loaded-graph
+       (let* ((datum
+               (consent-read (consent-test-source-metadata-graph 1200)
+                             '((source-metadata . #t))))
+              (source (consent-syntax-source (car datum))))
+         (if source
+             (consent-datum->external source)
+             "#f"))
+       "(source (origin source) (source-id #f) (line 1) (column 2) (offset 1) (span 7) (phase read))")
+
+(check 'reader-source-metadata-limit-can-be-raised
+       (let ((source (consent-test-source-metadata-graph 3)))
+         (consent-datum->external
+          (list
+           (guard (condition
+                   (else 'limited))
+             (consent-read source
+                           '((source-metadata . #t)
+                             (max-source-metadata . 0)))
+             'not-limited)
+           (let* ((datum
+                   (consent-read source
+                                 '((source-metadata . #t)
+                                   (max-source-metadata . 1000000))))
+                  (source-note (consent-syntax-source (car datum))))
+             (if source-note source-note 'missing-source)))))
+       "(limited (source (origin source) (source-id #f) (line 1) (column 2) (offset 1) (span 7) (phase read)))")
+
 (check-external/options 'simple-string-docstring-reflection
                 "(import (scheme base) (agent reflect))
                  (define (field datum name)
@@ -2425,6 +2463,8 @@
                          "(events-used " "(max-events 1000)"
                          "(max-event-nodes 100000)"
                          "(value-nodes-used " "(max-value-nodes 10000000)"
+                         "(source-metadata-used "
+                         "(max-source-metadata 1000000)"
                          "(interned-symbols-used "
                          "(max-interned-symbols 1000000)"
                          "(output-bytes-used " "(max-output-bytes 10485760)"
@@ -2512,6 +2552,7 @@
                        "(import (scheme base) (agent reflect))
                         (budget-remaining)"
                        '("(budget-remaining " "(steps "
+                         "(source-metadata "
                          "(interned-symbols " "(output-bytes "
                          "(reason #f)")
                        '((max-steps . 1000)))
@@ -4001,7 +4042,8 @@
          '((max-steps . 777)
            (max-host-callbacks . 66)
            (max-events . 4)
-           (max-event-nodes . 44))))))
+           (max-event-nodes . 44)
+           (max-source-metadata . 1234567))))))
   (check 'agent-reflect-capability-budget-imports-and-yields
          (and (string-contains? external "(host-capability")
               (string-contains? external "(library (scheme file))")
@@ -4010,6 +4052,7 @@
               (string-contains? external "(max-host-calls 66)")
               (string-contains? external "(max-events 4)")
               (string-contains? external "(max-event-nodes 44)")
+              (string-contains? external "(max-source-metadata 1234567)")
               (string-contains? external "(agent reflect)")
               (string-contains? external "(yield (first 1))")
               #t)

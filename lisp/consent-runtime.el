@@ -28,6 +28,14 @@ bulk allocation."
   :type 'integer
   :group 'consent)
 
+(defcustom consent-eval-maximum-source-metadata 1000000
+  "Maximum retained source metadata entries admitted by one evaluation.
+Portable hosts keep source spans in a process-global side table so the loaded
+source graph remains introspectable up to this explicit resource ceiling.
+Trusted callers can retry with a higher `:max-source-metadata' grant."
+  :type 'integer
+  :group 'consent)
+
 (defcustom consent-eval-maximum-interned-symbols 1000000
   "Maximum guest `string->symbol' interning operations in one evaluation run.
 Each `string->symbol' call is charged one unit, and because a call interns at
@@ -363,6 +371,7 @@ base syntax prelude has already been installed."
   steps
   maximum-steps
   maximum-value-nodes
+  maximum-source-metadata
   (value-nodes 0)
   ;; Cumulative guest `string->symbol' interning operations and the run's
   ;; ceiling.  Each call charges one unit, bounding how many symbols a run can
@@ -503,6 +512,9 @@ unchanged and uncatchable."
      :maximum-value-nodes
      (consent--eval-option options :max-value-nodes
                                 consent-eval-maximum-value-nodes)
+     :maximum-source-metadata
+     (consent--eval-option options :max-source-metadata
+                                consent-eval-maximum-source-metadata)
      :interned-symbols 0
      :maximum-interned-symbols
      (consent--eval-option options :max-interned-symbols
@@ -1626,6 +1638,11 @@ field-name symbols that target the dimension."
          #'consent--eval-context-maximum-value-nodes
          (lambda (c v) (setf (consent--eval-context-maximum-value-nodes c) v))
          #'consent--eval-context-value-nodes)
+   (list '(source-metadata)
+         #'consent--eval-context-maximum-source-metadata
+         (lambda (c v)
+           (setf (consent--eval-context-maximum-source-metadata c) v))
+         (lambda (_c) 0))
    (list '(interned-symbols)
          #'consent--eval-context-maximum-interned-symbols
          (lambda (c v)

@@ -822,7 +822,7 @@
 
     (define (register-source-library! source context environment)
       "Read and evaluate a define-library form from SOURCE."
-      (let ((forms (consent-read-all source)))
+      (let ((forms (consent-read-all source (context-reader-options context))))
         (if (not (= (length forms) 1))
             (eval-error "source library must contain exactly one form"))
         (eval-define-library
@@ -2665,7 +2665,8 @@
          (consent-read-all
           (if fold-case?
               (string-append "#!fold-case\n" source)
-              source))
+              source)
+          (context-reader-options context))
          (path-directory path))))
 
     (define (library-include-body-forms declaration context fold-case?)
