@@ -23,6 +23,7 @@
           json-write)
   (import (scheme base)
           (scheme case-lambda)
+          (prefix (stdlib generator) gen:)
           (stdlib and-let-star))
   (begin
     ;; Limit the number of characters read from one JSON value when non-#f.
@@ -208,35 +209,53 @@
     ;; Read a JSON string after its opening quote has been consumed.
     (define (json-read-string-body port)
       "Read a JSON string body from PORT and return a Scheme string."
-      (let loop ((chars '()))
-        (let ((char (json-read-char port)))
-          (cond
-           ((eof-object? char)
-            (json-fail "Unexpected end of JSON string."))
-           ((char=? char #\")
-            (list->string (reverse chars)))
-           ((json-control-character? char)
-            (json-fail "Unescaped control character in JSON string."))
-           ((char=? char #\\)
-            (let ((escaped (json-read-char port)))
-              (cond
-               ((eof-object? escaped)
-                (json-fail "Unexpected end of JSON escape."))
-               ((char=? escaped #\") (loop (cons #\" chars)))
-               ((char=? escaped #\\) (loop (cons #\\ chars)))
-               ((char=? escaped #\/) (loop (cons #\/ chars)))
-               ((char=? escaped #\b)
-                (loop (cons (integer->char 8) chars)))
-               ((char=? escaped #\f)
-                (loop (cons (integer->char 12) chars)))
-               ((char=? escaped #\n) (loop (cons #\newline chars)))
-               ((char=? escaped #\r) (loop (cons #\return chars)))
-               ((char=? escaped #\t) (loop (cons #\tab chars)))
-               ((char=? escaped #\u)
-                (loop (cons (json-read-unicode-escape port) chars)))
-               (else
-                (json-fail "Invalid JSON escape sequence.")))))
-           (else (loop (cons char chars)))))))
+      (let ((chars (gen:string-accumulator)))
+        (let loop ()
+          (let ((char (json-read-char port)))
+            (cond
+             ((eof-object? char)
+              (json-fail "Unexpected end of JSON string."))
+             ((char=? char #\")
+              (chars (eof-object)))
+             ((json-control-character? char)
+              (json-fail "Unescaped control character in JSON string."))
+             ((char=? char #\\)
+              (let ((escaped (json-read-char port)))
+                (cond
+                 ((eof-object? escaped)
+                  (json-fail "Unexpected end of JSON escape."))
+                 ((char=? escaped #\")
+                  (chars #\")
+                  (loop))
+                 ((char=? escaped #\\)
+                  (chars #\\)
+                  (loop))
+                 ((char=? escaped #\/)
+                  (chars #\/)
+                  (loop))
+                 ((char=? escaped #\b)
+                  (chars (integer->char 8))
+                  (loop))
+                 ((char=? escaped #\f)
+                  (chars (integer->char 12))
+                  (loop))
+                 ((char=? escaped #\n)
+                  (chars #\newline)
+                  (loop))
+                 ((char=? escaped #\r)
+                  (chars #\return)
+                  (loop))
+                 ((char=? escaped #\t)
+                  (chars #\tab)
+                  (loop))
+                 ((char=? escaped #\u)
+                  (chars (json-read-unicode-escape port))
+                  (loop))
+                 (else
+                  (json-fail "Invalid JSON escape sequence.")))))
+             (else
+              (chars char)
+              (loop)))))))
 
     ;; Validate JSON number grammar before delegating numeric conversion.
     (define (json-valid-number? text)
@@ -296,21 +315,24 @@
     ;; Read and parse a JSON number whose first character has been consumed.
     (define (json-read-number port first)
       "Read a JSON number from PORT after FIRST has already been consumed."
-      (let loop ((chars (list first)))
-        (let ((char (peek-char port)))
-          (cond
-           ((json-number-char? char)
-            (json-read-char port)
-            (loop (cons char chars)))
-           ((json-delimiter? char)
-            (let* ((text (list->string (reverse chars)))
-                   (number (and (json-valid-number? text)
-                                (string->number text))))
-              (if number
-                  number
-                  (json-fail "Invalid JSON number."))))
-           (else
-            (json-fail "Invalid character after JSON number."))))))
+      (let ((chars (gen:string-accumulator)))
+        (chars first)
+        (let loop ()
+          (let ((char (peek-char port)))
+            (cond
+             ((json-number-char? char)
+              (json-read-char port)
+              (chars char)
+              (loop))
+             ((json-delimiter? char)
+              (let* ((text (chars (eof-object)))
+                     (number (and (json-valid-number? text)
+                                  (string->number text))))
+                (if number
+                    number
+                    (json-fail "Invalid JSON number."))))
+             (else
+              (json-fail "Invalid character after JSON number.")))))))
 
     ;; Enforce the configured recursive nesting limit.
     (define (json-check-depth depth)
@@ -328,22 +350,26 @@
           (begin
             (json-read-char port)
             '#())
-          (let loop ((values '()))
-            (let ((value (read-value (+ depth 1))))
-              (json-skip-whitespace port)
-              (let ((separator (json-read-char port)))
-                (cond
-                 ((eof-object? separator)
-                  (json-fail "Unexpected end of JSON array."))
-                 ((char=? separator #\,)
-                  (json-skip-whitespace port)
-                  (if (char=? (peek-char port) #\])
-                      (json-fail "Trailing comma in JSON array."))
-                  (loop (cons value values)))
-                 ((char=? separator #\])
-                  (list->vector (reverse (cons value values))))
-                 (else
-                  (json-fail "Expected comma or close bracket in JSON array."))))))))
+          (let ((values (gen:vector-accumulator)))
+            (let loop ()
+              (let ((value (read-value (+ depth 1))))
+                (json-skip-whitespace port)
+                (let ((separator (json-read-char port)))
+                  (cond
+                   ((eof-object? separator)
+                    (json-fail "Unexpected end of JSON array."))
+                   ((char=? separator #\,)
+                    (json-skip-whitespace port)
+                    (if (char=? (peek-char port) #\])
+                        (json-fail "Trailing comma in JSON array."))
+                    (values value)
+                    (loop))
+                   ((char=? separator #\])
+                    (values value)
+                    (values (eof-object)))
+                   (else
+                    (json-fail
+                     "Expected comma or close bracket in JSON array.")))))))))
 
     ;; Read a JSON object into an alist with symbol keys.
     (define (json-read-object port depth read-value)
@@ -354,34 +380,35 @@
           (begin
             (json-read-char port)
             '())
-          (let loop ((entries '()))
-            (json-skip-whitespace port)
-            (let ((quote (json-read-char port)))
-              (if (or (eof-object? quote) (not (char=? quote #\")))
-                  (json-fail "Expected JSON object key."))
-              (let ((key (json-read-string-body port)))
-                (json-skip-whitespace port)
-                (let ((colon (json-read-char port)))
-                  (if (or (eof-object? colon) (not (char=? colon #\:)))
-                      (json-fail "Expected colon after JSON object key."))
-                  (let ((value (read-value (+ depth 1))))
-                    (json-skip-whitespace port)
-                    (let ((separator (json-read-char port)))
-                      (cond
-                       ((eof-object? separator)
-                        (json-fail "Unexpected end of JSON object."))
-                       ((char=? separator #\,)
-                        (json-skip-whitespace port)
-                        (if (char=? (peek-char port) #\})
-                            (json-fail "Trailing comma in JSON object."))
-                        (loop
-                         (cons (cons (string->symbol key) value) entries)))
-                       ((char=? separator #\})
-                        (reverse
-                         (cons (cons (string->symbol key) value) entries)))
-                       (else
-                        (json-fail
-                         "Expected comma or close brace in JSON object.")))))))))))
+          (let ((entries (gen:list-accumulator)))
+            (let loop ()
+              (json-skip-whitespace port)
+              (let ((quote (json-read-char port)))
+                (if (or (eof-object? quote) (not (char=? quote #\")))
+                    (json-fail "Expected JSON object key."))
+                (let ((key (json-read-string-body port)))
+                  (json-skip-whitespace port)
+                  (let ((colon (json-read-char port)))
+                    (if (or (eof-object? colon) (not (char=? colon #\:)))
+                        (json-fail "Expected colon after JSON object key."))
+                    (let ((value (read-value (+ depth 1))))
+                      (json-skip-whitespace port)
+                      (let ((separator (json-read-char port)))
+                        (cond
+                         ((eof-object? separator)
+                          (json-fail "Unexpected end of JSON object."))
+                         ((char=? separator #\,)
+                          (json-skip-whitespace port)
+                          (if (char=? (peek-char port) #\})
+                              (json-fail "Trailing comma in JSON object."))
+                          (entries (cons (string->symbol key) value))
+                          (loop))
+                         ((char=? separator #\})
+                          (entries (cons (string->symbol key) value))
+                          (entries (eof-object)))
+                         (else
+                          (json-fail
+                           "Expected comma or close brace in JSON object."))))))))))))
 
     ;; Read one complete JSON value from PORT.
     (define (json-read-from-port port)
@@ -497,14 +524,6 @@
         (effects port-io error))
       (apply json-sequence-read-dispatch maybe-port))
 
-    ;; Fold a vector left-to-right without depending on a non-base library.
-    (define (json-vector-fold proc seed vector)
-      "Fold VECTOR left-to-right with PROC and SEED."
-      (let loop ((index 0) (state seed))
-        (if (= index (vector-length vector))
-            state
-            (loop (+ index 1) (proc (vector-ref vector index) state)))))
-
     (define (json-fold proc array-start array-end object-start object-end seed
                        . maybe-port)
       "Fold over a decoded JSON value using SRFI 180-style callbacks."
@@ -532,21 +551,18 @@
               (cond
                ((vector? datum)
                 (let ((array-state
-                       (json-vector-fold
+                       (gen:generator-fold
                         (lambda (item item-state) (walk item item-state))
                         (array-start state)
-                        datum)))
+                        (gen:vector->generator datum))))
                   (proc (array-end array-state) state)))
                ((pair? datum)
                 (let ((object-state
-                       (let loop ((entries datum)
-                                  (entry-state (object-start state)))
-                         (if (null? entries)
-                             entry-state
-                             (loop (cdr entries)
-                                   (walk (cdar entries)
-                                         (proc (caar entries)
-                                               entry-state)))))))
+                       (gen:generator-fold
+                        (lambda (entry entry-state)
+                          (walk (cdr entry) (proc (car entry) entry-state)))
+                        (object-start state)
+                        (gen:list->generator datum))))
                   (proc (object-end object-state) state)))
                (else (proc datum state))))))
         (let ((value (apply json-read maybe-port)))
@@ -616,29 +632,32 @@
        ((json-valid-number-value? datum) (emit (number->string datum)))
        ((vector? datum)
         (emit #\[)
-        (let ((length (vector-length datum)))
-          (let loop ((index 0))
-            (if (< index length)
-                (begin
-                  (if (> index 0) (emit #\,))
-                  (json-write-value (vector-ref datum index) emit)
-                  (loop (+ index 1))))))
+        (let ((first? #t))
+          (gen:generator-for-each
+           (lambda (value)
+             (if first?
+                 (set! first? #f)
+                 (emit #\,))
+             (json-write-value value emit))
+           (gen:vector->generator datum)))
         (emit #\]))
        ((null? datum)
         (emit #\{)
         (emit #\}))
        ((pair? datum)
         (emit #\{)
-        (let loop ((entries datum) (first? #t))
-          (if (not (null? entries))
-              (let ((entry (car entries)))
-                (if (not (and (pair? entry) (symbol? (car entry))))
-                    (json-fail "JSON object entries must be symbol pairs."))
-                (if (not first?) (emit #\,))
-                (json-write-string-value (symbol->string (car entry)) emit)
-                (emit #\:)
-                (json-write-value (cdr entry) emit)
-                (loop (cdr entries) #f))))
+        (let ((first? #t))
+          (gen:generator-for-each
+           (lambda (entry)
+             (if (not (and (pair? entry) (symbol? (car entry))))
+                 (json-fail "JSON object entries must be symbol pairs."))
+             (if first?
+                 (set! first? #f)
+                 (emit #\,))
+             (json-write-string-value (symbol->string (car entry)) emit)
+             (emit #\:)
+             (json-write-value (cdr entry) emit))
+           (gen:list->generator datum)))
         (emit #\}))
        (else
         (json-fail "Value cannot be encoded as JSON."))))
