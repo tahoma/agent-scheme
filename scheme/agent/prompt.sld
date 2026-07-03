@@ -628,8 +628,10 @@
                             audit)))
 
     ;; Optional-arity dispatcher for the public prompt verb.
-    (define prompt-dispatch
-      (case-lambda
+    (define (prompt-dispatch . args)
+      "Dispatch optional prompt arguments to RUN-PROMPT."
+      (apply
+       (case-lambda
        ((goal)
         (run-prompt (current-prompt-harness) goal '() '()))
        ((first second)
@@ -640,7 +642,8 @@
         (if (prompt-harness? harness)
             (run-prompt harness goal '() options)
             (error "prompt expects goal/options or harness/goal/options"
-                   harness goal options)))))
+                   harness goal options))))
+       args))
 
     (define (prompt . args)
       "Prompt the automatically chosen agent at a goal in the current session."
@@ -664,8 +667,10 @@
       (apply prompt-dispatch args))
 
     ;; Optional-arity dispatcher for role-forced prompts.
-    (define prompt-role-dispatch
-      (case-lambda
+    (define (prompt-role-dispatch . args)
+      "Dispatch optional role-forced prompt arguments to RUN-PROMPT."
+      (apply
+       (case-lambda
        ((role goal)
         (run-prompt (current-prompt-harness) goal
                     (list (list 'role role))
@@ -685,7 +690,8 @@
                         options)
             (error
              "prompt-role expects role/goal/options or harness/role/goal/options"
-             harness role goal options)))))
+             harness role goal options))))
+       args))
 
     (define (prompt-role . args)
       "Prompt an agent of a named role at a goal in the current session."
@@ -707,8 +713,10 @@
       (apply prompt-role-dispatch args))
 
     ;; Optional-arity dispatcher for model-forced prompts.
-    (define prompt-model-dispatch
-      (case-lambda
+    (define (prompt-model-dispatch . args)
+      "Dispatch optional model-forced prompt arguments to RUN-PROMPT."
+      (apply
+       (case-lambda
        ((model goal)
         (run-prompt (current-prompt-harness) goal
                     (list (list 'model model))
@@ -728,7 +736,8 @@
                         options)
             (error
              "prompt-model expects model/goal/options or harness/model/goal/options"
-             harness model goal options)))))
+             harness model goal options))))
+       args))
 
     (define (prompt-model . args)
       "Prompt an agent of a named model at a goal in the current session."
@@ -750,14 +759,17 @@
       (apply prompt-model-dispatch args))
 
     ;; Optional-arity dispatcher for agent discovery.
-    (define agents-dispatch
-      (case-lambda
+    (define (agents-dispatch . args)
+      "Dispatch optional harness arguments for agent discovery."
+      (apply
+       (case-lambda
        (()
         (registry-agents
          (harness-registry (current-prompt-harness))))
        ((harness)
         (registry-agents
-         (harness-registry (harness-or-current (list harness)))))))
+         (harness-registry (harness-or-current (list harness))))))
+       args))
 
     (define (agents . maybe-harness)
       "Return the registered agents discoverable through a harness."
@@ -773,10 +785,13 @@
       (apply agents-dispatch maybe-harness))
 
     ;; Optional-arity dispatcher for role discovery.
-    (define roles-dispatch
-      (case-lambda
+    (define (roles-dispatch . args)
+      "Dispatch optional harness arguments for role discovery."
+      (apply
+       (case-lambda
        (() (delete-duplicates (map agent-role (agents))))
-       ((harness) (delete-duplicates (map agent-role (agents harness))))))
+       ((harness) (delete-duplicates (map agent-role (agents harness)))))
+       args))
 
     (define (roles . maybe-harness)
       "Return the distinct agent roles discoverable through a harness."
@@ -792,10 +807,13 @@
       (apply roles-dispatch maybe-harness))
 
     ;; Optional-arity dispatcher for model discovery.
-    (define models-dispatch
-      (case-lambda
+    (define (models-dispatch . args)
+      "Dispatch optional harness arguments for model discovery."
+      (apply
+       (case-lambda
        (() (delete-duplicates (map agent-model (agents))))
-       ((harness) (delete-duplicates (map agent-model (agents harness))))))
+       ((harness) (delete-duplicates (map agent-model (agents harness)))))
+       args))
 
     (define (models . maybe-harness)
       "Return the distinct agent models discoverable through a harness."

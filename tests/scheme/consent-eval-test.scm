@@ -55,7 +55,8 @@
 (define consent-ci-check-minimum-milliseconds 10)
 
 ;; Unique marker for unset CI matrix defaults.
-(define consent-test-option-unset (list 'unset))
+(define consent-test-option-unset
+  (list 'unset))
 
 ;; Return #t when VALUE is the unset marker.
 (define (consent-test-option-unset? value)
@@ -155,7 +156,8 @@
    (consent-test-merge-options (consent-test-rest-options rest))))
 
 ;; Alias kept for tests that read by string name.
-(define consent-eval-string consent-eval-source)
+(define consent-eval-string
+  consent-eval-source)
 
 ;; Expand EXPRESSION under the CI matrix defaults.
 (define (consent-expand expression . rest)
@@ -365,9 +367,8 @@
                    (+ first second))
                  (define (dotted head . tail)
                    tail)
-                 (define variadic
-                   (lambda all
-                     all))
+                 (define (variadic . all)
+                   all)
                  (define (empty)
                    0)
                  (list (metadata-field 'proper 'arguments)
@@ -1319,11 +1320,13 @@
 
 (check-external 'srfi-16-case-lambda-alias-import
                 "(import (scheme base) (srfi 16))
-                 (define describe
-                   (case-lambda
+                 (define (describe . args)
+                   (apply
+                    (case-lambda
                      (() 'zero)
                      ((x) (list 'one x))
-                     ((x . rest) (list 'many x rest))))
+                     ((x . rest) (list 'many x rest)))
+                    args))
                  (list (describe) (describe 'a) (describe 'a 'b 'c))"
                 "(zero (one a) (many a (b c)))")
 
@@ -1893,7 +1896,8 @@
 (check-external 'base-vector-and-bytevector-helpers
                 "(define v (vector 'a 'b 'c))
                  (vector-set! v 1 'changed)
-                 (define b (bytevector 1 2 3))
+                 (define b
+                   (bytevector 1 2 3))
                  (bytevector-u8-set! b 1 9)
                  (list v b)"
                 "(#(a changed c) #u8(1 9 3))")
@@ -4005,7 +4009,8 @@
 
 (check-external 'agent-vcs-status-parser
                 "(import (scheme base) (agent vcs))
-                 (define nul (string #\\null))
+                 (define nul
+                   (string #\\null))
                  (define status
                    (parse-git-status-porcelain-v2-z
                     (string-append
@@ -4015,8 +4020,10 @@
                      \"# branch.ab +2 -1\" nul
                      \"1 M. N... 100644 100644 100644 aaaaaaa bbbbbbb src/main.scm\" nul
                      \"? scratch.scm\" nul)))
-                 (define branch (vcs-status-branch status))
-                 (define entries (vcs-status-entries status))
+                 (define branch
+                   (vcs-status-branch status))
+                 (define entries
+                   (vcs-status-entries status))
                  (list
                   (vcs-field-value branch 'head #f)
                   (vcs-field-value branch 'ahead 0)
@@ -4028,7 +4035,8 @@
 
 (check-external 'agent-vcs-raw-diff-parser
                 "(import (scheme base) (agent vcs))
-                 (define nul (string #\\null))
+                 (define nul
+                   (string #\\null))
                  (define diff
                    (parse-git-raw-diff-z
                     (string-append
@@ -4871,9 +4879,8 @@
        "(evaluation-result (status ok) (value 3) (events ()) (budget (steps-used 5) (host-calls 1)))")
 
 (check-external 'closure
-                "(define make-adder
-                   (lambda (x)
-                     (lambda (y) (+ x y))))
+                "(define (make-adder x)
+                   (lambda (y) (+ x y)))
                  ((make-adder 4) 6)"
                 "10")
 (check-external 'internal-variable-definition
@@ -4890,7 +4897,8 @@
                 "10")
 (check-external 'internal-definition-shadows-parent
                 "((lambda ()
-                    (define + (lambda (x y) x))
+                    (define (+ x y)
+                      x)
                     (+ 1 2)))"
                 "1")
 
@@ -4900,7 +4908,8 @@
   (check 'child-definition-shadows-parent
          (consent-value->external
           (consent-eval-source
-           "(define + (lambda (x y) y))
+           "(define (+ x y)
+              y)
             (+ 1 2)"
            child))
          "2")
@@ -4916,13 +4925,13 @@
                   2)"
                 "3")
 (check-external 'set-mutates-captured
-                "(define make-counter
+                "(define (make-counter)
+                   (define x 0)
                    (lambda ()
-                     (define x 0)
-                     (lambda ()
-                       (set! x (+ x 1))
-                       x)))
-                 (define counter (make-counter))
+                     (set! x (+ x 1))
+                     x))
+                 (define counter
+                   (make-counter))
                  (counter)
                  (counter)"
                 "2")

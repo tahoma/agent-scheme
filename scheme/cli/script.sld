@@ -142,12 +142,16 @@
        (script--options-with-command-line path options)))
 
     ;; Optional-arity dispatcher for executable script evaluation.
-    (define script--run-file-dispatch
-      (case-lambda
+    (define (script--run-file-dispatch path . rest)
+      "Dispatch optional executable script run arguments."
+      (apply
+       (case-lambda
        ((path) (script--run-file path #f '()))
        ((path environment) (script--run-file path environment '()))
        ((path environment options)
-        (script--run-file path environment options))))
+        (script--run-file path environment options)))
+       path
+       rest))
 
     (define (cli-script-run-file path . rest)
       "Run executable Consent Scheme script PATH through the Consent"

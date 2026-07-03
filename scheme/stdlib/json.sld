@@ -26,11 +26,14 @@
           (stdlib and-let-star))
   (begin
     ;; Limit the number of characters read from one JSON value when non-#f.
-    (define json-number-of-character-limit (make-parameter #f))
+    (define json-number-of-character-limit
+      (make-parameter #f))
     ;; Limit recursive JSON array/object nesting when non-#f.
-    (define json-nesting-depth-limit (make-parameter #f))
+    (define json-nesting-depth-limit
+      (make-parameter #f))
     ;; Track characters consumed while reading one JSON value.
-    (define json-character-count (make-parameter 0))
+    (define json-character-count
+      (make-parameter 0))
 
     ;; JSON errors carry a portable reason string across hosts.
     (define-record-type <json-error>
@@ -410,10 +413,13 @@
       (read-value 0))
 
     ;; Optional-arity dispatcher for the public JSON reader.
-    (define json-read-dispatch
-      (case-lambda
+    (define (json-read-dispatch . maybe-port)
+      "Dispatch optional JSON reader port arguments."
+      (apply
+       (case-lambda
        (() (json-read-from-port (current-input-port)))
-       ((port) (json-read-from-port port))))
+       ((port) (json-read-from-port port)))
+       maybe-port))
 
     (define (json-read . maybe-port)
       "Read one JSON value from a textual input port."
@@ -427,15 +433,18 @@
       (apply json-read-dispatch maybe-port))
 
     ;; Optional-arity dispatcher for JSON value generators.
-    (define json-generator-dispatch
-      (case-lambda
+    (define (json-generator-dispatch . maybe-port)
+      "Dispatch optional JSON generator port arguments."
+      (apply
+       (case-lambda
        (()
         (let ((port (current-input-port)))
           (lambda ()
             (json-read port))))
        ((port)
         (lambda ()
-          (json-read port)))))
+          (json-read port))))
+       maybe-port))
 
     (define (json-generator . maybe-port)
       "Return a generator that reads one JSON value at a time."
@@ -450,10 +459,13 @@
       (apply json-generator-dispatch maybe-port))
 
     ;; Optional-arity dispatcher for JSON lines readers.
-    (define json-lines-read-dispatch
-      (case-lambda
+    (define (json-lines-read-dispatch . maybe-port)
+      "Dispatch optional JSON lines reader port arguments."
+      (apply
+       (case-lambda
        (() (json-generator))
-       ((port) (json-generator port))))
+       ((port) (json-generator port)))
+       maybe-port))
 
     (define (json-lines-read . maybe-port)
       "Return a generator that reads consecutive JSON values."
@@ -468,10 +480,13 @@
       (apply json-lines-read-dispatch maybe-port))
 
     ;; Optional-arity dispatcher for JSON sequence readers.
-    (define json-sequence-read-dispatch
-      (case-lambda
+    (define (json-sequence-read-dispatch . maybe-port)
+      "Dispatch optional JSON sequence reader port arguments."
+      (apply
+       (case-lambda
        (() (json-generator))
-       ((port) (json-generator port))))
+       ((port) (json-generator port)))
+       maybe-port))
 
     (define (json-sequence-read . maybe-port)
       "Return a generator that reads consecutive JSON sequence values."
@@ -638,10 +653,14 @@
         (json-unspecified)))
 
     ;; Optional-arity dispatcher for the public JSON writer.
-    (define json-write-dispatch
-      (case-lambda
+    (define (json-write-dispatch datum . maybe-target)
+      "Dispatch optional JSON writer target arguments."
+      (apply
+       (case-lambda
        ((datum) (json-write-target datum (current-output-port)))
-       ((datum target) (json-write-target datum target))))
+       ((datum target) (json-write-target datum target)))
+       datum
+       maybe-target))
 
     (define (json-write datum . maybe-port-or-accumulator)
       "Write DATUM as JSON to a port or accumulator procedure."

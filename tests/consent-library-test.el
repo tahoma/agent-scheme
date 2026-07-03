@@ -376,11 +376,13 @@
    (equal
     (consent-library-test--external
      "(import (scheme base) (srfi 16))
-      (define describe
-        (case-lambda
+      (define (describe . args)
+        (apply
+         (case-lambda
           (() 'zero)
           ((x) (list 'one x))
-          ((x . rest) (list 'many x rest))))
+          ((x . rest) (list 'many x rest)))
+         args))
       (list (describe) (describe 'a) (describe 'a 'b 'c))")
     "(zero (one a) (many a (b c)))"))
   (should

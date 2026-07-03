@@ -1924,8 +1924,10 @@ Definitions can occur at the beginning of a ⟨body⟩ (that is, the body of a [
 ``` example
 
 (let ((x 5))
-  (define foo (lambda (y) (bar x y)))
-  (define bar (lambda (a b) (+ (* a b) a)))
+  (define foo
+    (lambda (y) (bar x y)))
+  (define bar
+    (lambda (a b) (+ (* a b) a)))
   (foo (+ x 3)))
 ;; ⟹ 45
 ```
@@ -3442,7 +3444,8 @@ These procedures are compositions of [car](#car) and [cdr](#cdr) as follows:
 These twenty-four procedures are further compositions of [car](#car) and [cdr](#cdr) on the same principles. For example, `caddr` could be defined by
 
 
-    (define caddr (lambda (x) (car (cdr (cdr x)))))
+    (define caddr
+      (lambda (x) (car (cdr (cdr x)))))
 
 Arbitrary compositions up to four deep are provided.
 

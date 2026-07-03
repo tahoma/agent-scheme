@@ -35,17 +35,17 @@
     (define scheme-base-library-key '(scheme base))
 
     ;; Backend hook resolving primitive implementation identifiers.
-    (define base-primitive-resolver
-      (lambda (name)
-        (eval-error "base primitive backend is not installed" name)))
+    (define (base-primitive-resolver name)
+      "Resolve primitive implementation NAME through the installed backend."
+      (eval-error "base primitive backend is not installed" name))
     ;; Backend hook for evaluating derived base prelude forms.
-    (define base-trampoline
-      (lambda (sequence environment context)
-        (eval-error "base trampoline backend is not installed")))
+    (define (base-trampoline sequence environment context)
+      "Evaluate SEQUENCE in ENVIRONMENT and CONTEXT through the backend."
+      (eval-error "base trampoline backend is not installed"))
     ;; Backend hook for installing derived base syntax forms.
-    (define base-define-syntax
-      (lambda (form environment context syntax-environment)
-        (eval-error "base syntax backend is not installed")))
+    (define (base-define-syntax form environment context syntax-environment)
+      "Install syntax FORM through the installed base backend."
+      (eval-error "base syntax backend is not installed"))
 
     (define (consent-install-base-backend!
              primitive-resolver trampoline define-syntax)

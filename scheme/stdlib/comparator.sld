@@ -48,7 +48,8 @@
     (define comparator-hash-bound 33554432)
 
     ;; Parameter holding the deterministic portable hash salt.
-    (define comparator-hash-salt (make-parameter 16064047))
+    (define comparator-hash-salt
+      (make-parameter 16064047))
 
     (define (hash-bound)
       "Return the exclusive upper bound for SRFI 128 hash values."
@@ -397,13 +398,17 @@
     ;; Stateful hasher dispatch shaped like the upstream SRFI 128 case-lambda,
     ;; with mutable state threaded explicitly so the macro expands at library
     ;; registration time instead of inside a later procedure call.
-    (define hasher-dispatch
-      (case-lambda
+    (define (hasher-dispatch state . maybe-n)
+      "Dispatch stateful hasher calls with optional hash contribution N."
+      (apply
+       (case-lambda
        ((state) (vector-ref state 0))
        ((state n)
         (let ((result (bounded-hash (+ (* (vector-ref state 0) 33) n))))
           (vector-set! state 0 result)
-          result))))
+          result)))
+       state
+       maybe-n))
 
     (define (make-hasher)
       "Return a stateful sequence hasher procedure."
@@ -682,7 +687,8 @@
     (define first-comparator-index 9)
 
     ;; Default-comparator extension registry, newest comparator first.
-    (define default-comparator-registry (list unknown-object-comparator))
+    (define default-comparator-registry
+      (list unknown-object-comparator))
 
     (define (comparator-register-default! comparator)
       "Register COMPARATOR as an extension for default comparators."

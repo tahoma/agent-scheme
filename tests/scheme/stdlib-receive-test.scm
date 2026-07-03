@@ -54,7 +54,8 @@
 
 (check 'body-sequence
        (receive (x y) (values 3 4)
-         (define sum (+ x y))
+         (define sum
+           (+ x y))
          (* sum y))
        28)
 

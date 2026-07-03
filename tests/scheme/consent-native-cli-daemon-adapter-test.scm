@@ -85,13 +85,16 @@
   (call-with-input-file "fixtures/host-adapters/native-cli-daemon.scm" read))
 
 ;; Canonical fixture datum validated by the rest of this program.
-(define fixture (read-fixture))
+(define fixture
+  (read-fixture))
 
 ;; Adapter declaration section of the fixture.
-(define adapter (field-value fixture 'adapter))
+(define adapter
+  (field-value fixture 'adapter))
 
 ;; Capability manifest section of the fixture.
-(define manifest (field-value fixture 'capability-manifest))
+(define manifest
+  (field-value fixture 'capability-manifest))
 
 ;; Library names the adapter declares it provides.
 (define provided-libraries
@@ -99,33 +102,40 @@
        (field-value adapter 'provides)))
 
 ;; Authority class entries declared by the adapter.
-(define authority-entries (field-value adapter 'authority))
+(define authority-entries
+  (field-value adapter 'authority))
 
 ;; Authority class symbols declared by the adapter.
 (define authority-classes
   (map (lambda (entry) (field-value entry 'class)) authority-entries))
 
 ;; Handle-kind entries declared by the adapter.
-(define handle-entries (field-value adapter 'handle-kinds))
+(define handle-entries
+  (field-value adapter 'handle-kinds))
 
 ;; Handle-kind symbols declared by the adapter.
 (define handle-kinds
   (map (lambda (entry) (field-value entry 'kind)) handle-entries))
 
 ;; Event-kind symbols declared by the adapter.
-(define event-kinds (field-value adapter 'event-kinds))
+(define event-kinds
+  (field-value adapter 'event-kinds))
 
 ;; Error-kind symbols declared by the adapter.
-(define error-kinds (field-value adapter 'error-kinds))
+(define error-kinds
+  (field-value adapter 'error-kinds))
 
 ;; Capability records declared by the manifest.
-(define capabilities (field-value manifest 'capabilities))
+(define capabilities
+  (field-value manifest 'capabilities))
 
 ;; Boundary record samples declared by the fixture.
-(define records (field-value fixture 'records))
+(define records
+  (field-value fixture 'records))
 
 ;; Mock denial scenarios declared by the fixture.
-(define scenarios (field-value fixture 'scenarios))
+(define scenarios
+  (field-value fixture 'scenarios))
 
 ;; Library names the contract requires the adapter to provide.
 (define expected-libraries
