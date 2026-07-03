@@ -872,6 +872,41 @@
                    (record-failure name (car rest) actual))
                (loop (cdr rest)))))))))
 
+(check-result-contains
+ 'srfi-1-list-docstring-reflection
+ "(import (scheme base)
+          (scheme list)
+          (agent reflect))
+  (define (field datum name)
+    (cadr (assq name (cdr datum))))
+  (define (doc-string name)
+    (let ((datum (documentation name)))
+      (if datum
+          (cadr (assq 'documentation (field datum 'fields)))
+        #f)))
+  (define (metadata-field name field-name)
+    (let ((datum (documentation name)))
+      (if datum
+          (let ((entry (assq field-name (field datum 'fields))))
+            (if entry (cadr entry) #f))
+        #f)))
+  (list (doc-string 'filter!)
+        (metadata-field 'filter! 'parameters)
+        (metadata-field 'filter! 'returns)
+        (doc-string 'lset-union!)
+        (metadata-field 'lset-union! 'parameters)
+        (metadata-field 'lset-union! 'returns))"
+ '("\"Destructively filter LIS when practical.\""
+   "(pred (type procedure)"
+   "(description \"Predicate applied to each element.\")"
+   "(lis (type list)"
+   "(description \"Elements for which PRED returns true.\")"
+   "\"Destructively compute the union of LISTS when practical.\""
+   "(equal (type procedure)"
+   "(lists (type list)"
+   "(description \"Set list containing elements from every input.\")")
+ '((docstring-retention . full)))
+
 ;; Replace PATH with CONTENTS using the host Scheme runtime.
 (define (write-host-test-file path contents)
   (if (file-exists? path)
@@ -1182,6 +1217,8 @@
         (find-source-library-spec '(stdlib manifest) source-specs))
        (and-let-star-spec
         (find-source-library-spec '(stdlib and-let-star) source-specs))
+       (list-spec
+        (find-source-library-spec '(stdlib list) source-specs))
        (comparator-spec
         (find-source-library-spec '(stdlib comparator) source-specs))
        (receive-spec
@@ -1193,12 +1230,14 @@
   (check 'stdlib-source-library-files
          (and manifest-spec
               and-let-star-spec
+              list-spec
               comparator-spec
               receive-spec
               assume-spec
               json-spec
               (string? (cadr (assq 'source-file manifest-spec)))
               (string? (cadr (assq 'source-file and-let-star-spec)))
+              (string? (cadr (assq 'source-file list-spec)))
               (string? (cadr (assq 'source-file comparator-spec)))
               (string? (cadr (assq 'source-file receive-spec)))
               (string? (cadr (assq 'source-file assume-spec)))
@@ -1212,6 +1251,10 @@
          (and and-let-star-spec
               (cadr (assq 'source-file and-let-star-spec)))
          "scheme/stdlib/and-let-star.sld")
+  (check 'stdlib-source-library-list-file
+         (and list-spec
+              (cadr (assq 'source-file list-spec)))
+         "scheme/stdlib/list.sld")
   (check 'stdlib-source-library-comparator-file
          (and comparator-spec
               (cadr (assq 'source-file comparator-spec)))
@@ -1395,9 +1438,83 @@
                   \"Apache-2.0\"
                   #f
                   ((stdlib assume) (srfi 145) (srfi srfi-145))
-                  ((scheme base))
+	                  ((scheme base))
                   (stdlib assume)
                   (stdlib assume))"))
+
+(check-external 'srfi-1-list-library-behavior
+                "(import (scheme base)
+                         (scheme list))
+                 (call-with-values
+                  (lambda ()
+                    (partition even? '(1 2 3 4 5)))
+                  (lambda (even odd)
+                    (list (iota 4)
+                          (list-tabulate 3 (lambda (n) (* n n)))
+                          (call-with-values
+                           (lambda () (split-at '(a b c d) 2))
+                           list)
+                          (filter even? '(1 2 3 4))
+                          (map + '(1 2 3) '(10 20 30))
+                          (fold + 0 '(1 2 3 4))
+                          (find-tail even? '(1 3 4 6))
+                          (any even? '(1 3 5 6))
+                          (every positive? '(1 2 3))
+                          (list-index even? '(1 3 4 6))
+                          (find-tail (lambda (name) (string=? name \"bee\"))
+                                     '(\"ant\" \"bee\"))
+                          even
+                          odd
+                          (lset-union = '(1 2) '(2 3 4)))))"
+                "((0 1 2 3) (0 1 4) ((a b) (c d)) (2 4) (11 22 33) 10 (4 6) #t #t 2 (\"bee\") (2 4) (1 3 5) (4 3 1 2))")
+
+(check-external 'srfi-1-alias-import
+                "(import (scheme base)
+                         (srfi 1))
+                 (append-map (lambda (x) (list x (- x))) '(1 2 3))"
+                "(1 -1 2 -2 3 -3)")
+
+(check-external 'srfi-1-portable-alias-import
+                "(import (scheme base) (srfi srfi-1))
+                 (drop-right '(a b c d) 2)"
+                "(a b)")
+
+(check 'srfi-1-missing-export-diagnostic
+       (raises?
+        (lambda ()
+          (consent-eval-source
+           "(import (scheme base)
+                    (only (srfi 1) missing-list-helper))
+            missing-list-helper")))
+       #t)
+
+(check-external 'stdlib-srfi-1-manifest
+                "(import (scheme base) (stdlib manifest))
+                 (let ((entry (stdlib-manifest-ref '(stdlib list)))
+                       (scheme-alias
+                        (stdlib-manifest-ref '(scheme list)))
+                       (alias (stdlib-manifest-ref '(srfi 1)))
+                       (portable-alias
+                        (stdlib-manifest-ref '(srfi srfi-1))))
+                   (list (cdr (assq 'status entry))
+                         (cdr (assq 'implementation-library entry))
+                         (cdr (assq 'upstream-license entry))
+                         (cdr (assq 'local-license entry))
+                         (cdr (assq 'import-aliases entry))
+                         (cdr (assq 'dependencies entry))
+                         (cdr (assq 'target scheme-alias))
+                         (cdr (assq 'target alias))
+                         (cdr (assq 'target portable-alias))))"
+               (expected-datum-external
+                "(vendored-adapted-implementation
+                  (stdlib list)
+                  \"MIT\"
+                  \"MIT\"
+                  ((stdlib list) (scheme list) (srfi 1) (srfi srfi-1))
+                  ((scheme base) (scheme cxr))
+                  (stdlib list)
+                  (stdlib list)
+                  (stdlib list))"))
 
 (check-external 'srfi-180-json-read
                 (string-append

@@ -757,6 +757,94 @@
       (should (eq (aref (alist-get 'scores parsed) 2) :json-null))
       (should (eq (alist-get 'ok (alist-get 'nested parsed)) :json-false)))))
 
+(ert-deftest consent-library-test-srfi-1-list-library-behavior ()
+  "Import primary `(scheme list)' and exercise representative SRFI 1 behavior."
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base)
+              (scheme list))
+      (call-with-values
+       (lambda ()
+         (partition even? '(1 2 3 4 5)))
+       (lambda (even odd)
+         (list (iota 4)
+               (list-tabulate 3 (lambda (n) (* n n)))
+               (call-with-values
+                (lambda () (split-at '(a b c d) 2))
+                list)
+               (filter even? '(1 2 3 4))
+               (map + '(1 2 3) '(10 20 30))
+               (fold + 0 '(1 2 3 4))
+               (find-tail even? '(1 3 4 6))
+               (any even? '(1 3 5 6))
+               (every positive? '(1 2 3))
+               (list-index even? '(1 3 4 6))
+               (find-tail (lambda (name) (string=? name \"bee\"))
+                          '(\"ant\" \"bee\"))
+               even
+               odd
+               (lset-union = '(1 2) '(2 3 4)))))")
+    "((0 1 2 3) (0 1 4) ((a b) (c d)) (2 4) (11 22 33) 10 (4 6) #t #t 2 (\"bee\") (2 4) (1 3 5) (4 3 1 2))")))
+
+(ert-deftest consent-library-test-srfi-1-alias-import ()
+  "Import SRFI 1 through its secondary `(srfi 1)' alias."
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base)
+              (srfi 1))
+      (append-map (lambda (x) (list x (- x))) '(1 2 3))")
+    "(1 -1 2 -2 3 -3)")))
+
+(ert-deftest consent-library-test-srfi-1-portable-alias-import ()
+  "Import SRFI 1 through its portable `(srfi srfi-1)' alias."
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (srfi srfi-1))
+      (drop-right '(a b c d) 2)")
+    "(a b)")))
+
+(ert-deftest consent-library-test-srfi-1-missing-export-diagnostic ()
+  "Report missing SRFI 1 imports through the ordinary resolver diagnostic."
+  (let ((error
+         (should-error
+          (consent-library-test--external
+           "(import (scheme base)
+                    (only (srfi 1) missing-list-helper))
+            missing-list-helper")
+          :type 'consent-eval-error)))
+    (should
+     (string-match-p
+      (regexp-quote "only import name not found")
+      (error-message-string error)))
+    (should
+     (string-match-p
+      (regexp-quote "missing-list-helper")
+      (error-message-string error)))))
+
+(ert-deftest consent-library-test-stdlib-manifest-documents-srfi-1 ()
+  "Expose SRFI 1 support status through the stdlib manifest."
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (stdlib manifest))
+      (let ((entry (stdlib-manifest-ref '(stdlib list)))
+            (scheme-alias (stdlib-manifest-ref '(scheme list)))
+            (alias (stdlib-manifest-ref '(srfi 1)))
+            (portable-alias (stdlib-manifest-ref '(srfi srfi-1))))
+        (list (cdr (assq 'status entry))
+              (cdr (assq 'implementation-library entry))
+              (cdr (assq 'upstream-license entry))
+              (cdr (assq 'local-license entry))
+              (cdr (assq 'import-aliases entry))
+              (cdr (assq 'dependencies entry))
+              (cdr (assq 'target scheme-alias))
+              (cdr (assq 'target alias))
+              (cdr (assq 'target portable-alias))))")
+    "(vendored-adapted-implementation (stdlib list) \"MIT\" \"MIT\" ((stdlib list) (scheme list) (srfi 1) (srfi srfi-1)) ((scheme base) (scheme cxr)) (stdlib list) (stdlib list) (stdlib list))")))
+
 (ert-deftest consent-library-test-srfi-128-comparator-behavior ()
   "Import primary `(stdlib comparator)' and exercise SRFI 128 behavior."
   (should
