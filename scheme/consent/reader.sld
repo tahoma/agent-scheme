@@ -139,7 +139,7 @@
     ;; Default cap for the portable source side table. Portable R7RS has no
     ;; weak hash table, so the table remains explicit runtime state. Keep the
     ;; cap option-backed so trusted callers can retry with a higher bound.
-    (define consent-default-maximum-source-metadata 1000000)
+    (define consent-default-maximum-source-metadata 10000000)
 
     ;; Current number of retained source metadata entries in the portable table.
     (define consent-source-metadata-entry-count 0)

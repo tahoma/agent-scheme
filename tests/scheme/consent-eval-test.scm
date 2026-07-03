@@ -360,7 +360,7 @@
            (let* ((datum
                    (consent-read source
                                  '((source-metadata . #t)
-                                   (max-source-metadata . 1000000))))
+                                   (max-source-metadata . 10000000))))
                   (source-note (consent-syntax-source (car datum))))
              (if source-note source-note 'missing-source)))))
        "(limited (source (origin source) (source-id #f) (line 1) (column 2) (offset 1) (span 7) (phase read)))")
@@ -2464,7 +2464,7 @@
                          "(max-event-nodes 100000)"
                          "(value-nodes-used " "(max-value-nodes 10000000)"
                          "(source-metadata-used "
-                         "(max-source-metadata 1000000)"
+                         "(max-source-metadata 10000000)"
                          "(interned-symbols-used "
                          "(max-interned-symbols 1000000)"
                          "(output-bytes-used " "(max-output-bytes 10485760)"

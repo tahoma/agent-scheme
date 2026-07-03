@@ -29,7 +29,7 @@ a ceiling, and a final `reason` field names the dimension that stopped the run
   (events-used 0)       (max-events 1000)
   (max-event-nodes 100000)
   (value-nodes-used 0)  (max-value-nodes 10000000)
-  (source-metadata-used 0) (max-source-metadata 1000000)
+  (source-metadata-used 0) (max-source-metadata 10000000)
   (interned-symbols-used 0) (max-interned-symbols 1000000)
   (output-bytes-used 0) (max-output-bytes 10485760)
   (max-wall-time-ms #f)
@@ -44,7 +44,7 @@ exhausted.
 ```scheme
 (budget-remaining)
 ;; => (budget-remaining (steps 99997) (host-calls 9999) (events 1000)
-;;                       (value-nodes 10000000) (source-metadata 1000000)
+;;                       (value-nodes 10000000) (source-metadata 10000000)
 ;;                       (interned-symbols 1000000)
 ;;                       (output-bytes 10485760) (reason #f))
 ```
@@ -58,7 +58,7 @@ exhausted.
 | Yielded events | `yields` | `max-events` | `1000` | yes |
 | Per-event node size | — | `max-event-nodes` | `100000` | yes |
 | Allocation (value nodes) | `allocation-nodes` | `max-value-nodes` | `10000000` | yes |
-| Source metadata entries | `source-metadata` | `max-source-metadata` | `1000000` | yes |
+| Source metadata entries | `source-metadata` | `max-source-metadata` | `10000000` | yes |
 | Interned symbols | `interned-symbols` | `max-interned-symbols` | `1000000` | yes |
 | Printed output bytes | `output-bytes` | `max-output-bytes` | `10485760` | yes |
 | Wall time (ms) | `wall-time-ms` | `max-wall-time-ms` | `#f` (unbounded) | opt-in |
@@ -82,9 +82,10 @@ are bounded by the reader's own node budgets rather than this dimension.
 side table.  The table is not evicted during ordinary loading, so the loaded
 source graph remains introspectable up to the configured ceiling; trusted
 callers can retry with a higher `max-source-metadata` grant for unusually large
-or intentionally adversarial inputs.  The `1000000` default is calibrated above
-the current all-loadable-library source graph, which resolves 95 library names
-and retains 133727 source metadata entries.
+or intentionally adversarial inputs.  The `10000000` default is calibrated
+above the current all-loadable-library source graph, which resolves 95 library
+names and retains 133727 source metadata entries, while leaving room for more
+than a tenfold growth in the ordinary runtime, library, and test surface.
 **Output bytes** are charged at each textual port write, before the bytes land,
 so an unbounded printing loop fails closed.
 
