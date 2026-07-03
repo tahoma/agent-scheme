@@ -406,10 +406,11 @@ jobs:
       CONSENT_CI_SHARD_SUMMARY_NAME: ${{ matrix.shard.summary_name }} / source metadata ${{ matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention }}
     strategy:
       fail-fast: false
-      # Per-push lane runs the library/capabilities/tools shards on the canonical
-      # on/full combo only; the scheduled / workflow_dispatch lane expands to the
-      # full 2×3 cross. The core language/runtime shard carries the full Emacs
-      # cross on every lane in its own job (test-emacs-core).
+      # Per-push lane runs the library, agent/capability, tools, integration,
+      # and native-build shards on the canonical on/full combo only; the
+      # scheduled / workflow_dispatch lane expands to the full 2×3 cross. The
+      # core language/runtime shard carries the full Emacs cross on every lane
+      # in its own job (test-emacs-core).
       matrix:
         source_metadata: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && fromJSON('["on", "off"]') || fromJSON('["on"]') }}
         docstring_retention: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && fromJSON('["full", "simple", "none"]') || fromJSON('["full"]') }}
@@ -419,11 +420,29 @@ jobs:
             make_target: test-emacs-library
             summary_name: Emacs library/conformance
             selector: '(or "consent-conformance.*" "consent-fixture.*" "consent-host-adapter-fixture.*" "consent-library.*" "consent-oracle.*")'
-          - shard: emacs-capabilities
-            label: capabilities/policy
-            make_target: test-emacs-capabilities
-            summary_name: Emacs capabilities/policy
-            selector: '(or "consent-agent-io.*" "consent-approval.*" "consent-capability.*" "consent-context.*" "consent-memory.*" "consent-models.*" "consent-network.*" "consent-policy.*" "consent-redaction.*" "consent-session.*")'
+          # The agent/capability surface used to run as one capabilities/policy
+          # shard. It dominated per-push wall time, so the default lane splits
+          # it into behavior-focused shards that can run in parallel.
+          - shard: emacs-agent-control
+            label: agent control
+            make_target: test-emacs-agent-control
+            summary_name: Emacs agent control
+            selector: '(or "consent-agent-prompt.*" "consent-agent-proposal.*" "consent-agent-registry.*" "consent-task.*")'
+          - shard: emacs-agent-reliability
+            label: agent reliability
+            make_target: test-emacs-agent-reliability
+            summary_name: Emacs agent reliability
+            selector: '(or "consent-agent-reliability.*" "consent-agent-runner.*")'
+          - shard: emacs-capability-boundary
+            label: capability boundary
+            make_target: test-emacs-capability-boundary
+            summary_name: Emacs capability boundary
+            selector: '(or "consent-approval.*" "consent-capability.*" "consent-network.*" "consent-policy.*")'
+          - shard: emacs-agent-state
+            label: agent state
+            make_target: test-emacs-agent-state
+            summary_name: Emacs agent state
+            selector: '(or "consent-agent-io.*" "consent-context.*" "consent-helper.*" "consent-memory.*" "consent-models.*" "consent-plan.*" "consent-redaction.*" "consent-session.*" "consent-test.*" "consent-transcript.*")'
           # #556 split the heavyweight Emacs-hosted integration surface (REPL,
           # VCS, reflect, native-CLI daemon) out of the tools shard into
           # test-emacs-integration, and stranded the four full host-compile +
@@ -505,7 +524,7 @@ jobs:
     # runs the canonical on/full combo plus a single fully-stripped off/none
     # de-feature smoke leg, so the Emacs reader/writer/docstring axis keeps a fast
     # per-push canary (#481). The scheduled / workflow_dispatch lane expands it back
-    # to the full 2×3 syntax/docstring cross-product. The remaining Emacs shards
+    # to the full 2×3 syntax/docstring cross-product. The non-core Emacs shards
     # trim to the canonical combo on the per-push lane (see test-emacs-hosted).
     env:
       CONSENT_TEST_SOURCE_METADATA: ${{ matrix.combo.source_metadata }}
