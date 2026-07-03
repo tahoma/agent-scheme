@@ -1146,6 +1146,30 @@
         (mapping->alist mapping))")
     "((1 . one) (2 . two))")))
 
+(ert-deftest consent-library-test-srfi-146-aliases-export-same-core-surface ()
+  "Keep `(scheme mapping)' and SRFI 146 aliases on the same ordered-map surface."
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base)
+              (scheme comparator)
+              (rename (scheme mapping)
+                      (mapping scheme-mapping)
+                      (mapping->alist scheme-mapping->alist))
+              (rename (srfi 146)
+                      (mapping srfi-mapping)
+                      (mapping->alist srfi-mapping->alist))
+              (rename (srfi srfi-146)
+                      (mapping portable-mapping)
+                      (mapping->alist portable-mapping->alist)))
+      (define comparator
+        (make-comparator integer? = < number-hash))
+      (list (scheme-mapping->alist (scheme-mapping comparator 2 'two 1 'one))
+            (srfi-mapping->alist (srfi-mapping comparator 2 'two 1 'one))
+            (portable-mapping->alist
+             (portable-mapping comparator 2 'two 1 'one)))")
+    "(((1 . one) (2 . two)) ((1 . one) (2 . two)) ((1 . one) (2 . two)))")))
+
 (ert-deftest consent-library-test-srfi-146-missing-export-diagnostic ()
   "Report missing SRFI 146 imports through the ordinary resolver diagnostic."
   (let ((error
@@ -1162,6 +1186,24 @@
     (should
      (string-match-p
       (regexp-quote "missing-mapping")
+      (error-message-string error)))))
+
+(ert-deftest consent-library-test-srfi-146-hash-alias-remains-unsupported ()
+  "Report the out-of-scope SRFI 146 hash alias as an unknown library."
+  (let ((error
+         (should-error
+          (consent-library-test--external
+           "(import (scheme base)
+                    (srfi 146 hash))
+            'unreachable")
+          :type 'consent-eval-error)))
+    (should
+     (string-match-p
+      (regexp-quote "unknown library")
+      (error-message-string error)))
+    (should
+     (string-match-p
+      (regexp-quote "(srfi 146 hash)")
       (error-message-string error)))))
 
 (ert-deftest consent-library-test-stdlib-manifest-documents-srfi-146 ()
