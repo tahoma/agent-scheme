@@ -39,6 +39,21 @@
     "tests/scheme/consent-eval-test.scm")
   "Portable Scheme test files exercised by full-suite host shards.")
 
+(defconst consent--scheme-host-direct-only-test-files
+  '("tests/scheme/stdlib-mapping-conformance-test.scm")
+  "Portable Scheme test files exercised only by direct R7RS hosts.")
+
+(defun consent--scheme-host-test-files-for-host (host)
+  "Return the portable Scheme test files that should run on HOST."
+  ;; Compiled runners execute through --host-run and enforce host callback
+  ;; budgets. Keep expensive conformance suites on direct hosts while compact
+  ;; smoke tests still exercise the feature on every full-suite shard.
+  (if (memq host '(compiled gambit-native))
+      consent--scheme-host-test-files
+    (append
+     consent--scheme-host-test-files
+     consent--scheme-host-direct-only-test-files)))
+
 (defun consent--scheme-host-normalize-command (command)
   "Return COMMAND with repository-relative executable paths expanded."
   (if (and (string-match-p "/" command)
@@ -242,7 +257,7 @@ RACKET-COLLECTION-ROOT is accepted for API symmetry with test arguments."
                 "%s does not support %s R7RS mode"
                 runner
                 display-name)))
-            (dolist (test-file consent--scheme-host-test-files)
+            (dolist (test-file (consent--scheme-host-test-files-for-host host))
               (let ((status
                      (apply
                       #'process-file
