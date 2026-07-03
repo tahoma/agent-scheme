@@ -26,6 +26,11 @@
 (declare-function consent-macroexpand-library "consent-macro")
 (declare-function consent-macro-binding-info "consent-macro")
 (declare-function consent-syntax-source "consent-macro")
+(declare-function consent--library-binding-kind "consent-library")
+(declare-function consent--library-binding-library-key "consent-library")
+(declare-function consent--library-binding-name "consent-library")
+(declare-function consent--library-exports "consent-library")
+(declare-function consent--resolve-library "consent-library")
 
 (defconst consent-reflect--omitted-manifest-fields
   '(:emacs-hook :portable-hook :emitter-hook :test-categories)
@@ -489,6 +494,33 @@ callers can distinguish unbounded from exhausted."
     (mapcar #'consent-reflect--library-datum
             (sort keys #'string<))))
 
+(defun consent-reflect--library-binding-datum (binding)
+  "Return BINDING as a Scheme-readable library-binding record."
+  (list
+   (consent-reflect--symbol "library-binding")
+   (consent-reflect--field
+    "name"
+    (consent-reflect--symbol
+     (consent--library-binding-name binding)))
+   (consent-reflect--field
+    "kind"
+    (consent-reflect--symbol
+     (consent--library-binding-kind binding)))
+   (consent-reflect--field
+    "library"
+    (consent-reflect--library-datum
+     (consent--library-binding-library-key binding)))))
+
+(defun consent-reflect-library-bindings (library-name context)
+  "Return exported binding records for LIBRARY-NAME in CONTEXT."
+  (mapcar
+   #'consent-reflect--library-binding-datum
+   (consent--library-exports
+    (consent--resolve-library
+     library-name
+     context
+     (consent--eval-context-interaction-environment context)))))
+
 (defun consent-reflect-current-session-info (context)
   "Return public session/job identity for CONTEXT."
   (list
@@ -645,6 +677,11 @@ can classify a recent error or a nested evaluation's outcome."
   (consent-reflect--redact
    (consent-reflect-current-imports context)))
 
+(defun consent-reflect--primitive-library-bindings (arguments context)
+  "Primitive `library-bindings'."
+  (consent-reflect--redact
+   (consent-reflect-library-bindings (car arguments) context)))
+
 (defun consent-reflect--primitive-current-session-info (_arguments context)
   "Primitive `current-session-info'."
   (consent-reflect--redact
@@ -745,6 +782,8 @@ can classify a recent error or a nested evaluation's outcome."
      ,#'consent-reflect--primitive-budget-yield 0 0)
     ("current-imports"
      ,#'consent-reflect--primitive-current-imports 0 0)
+    ("library-bindings"
+     ,#'consent-reflect--primitive-library-bindings 1 1)
     ("current-session-info"
      ,#'consent-reflect--primitive-current-session-info 0 0)
     ("recent-yields"
