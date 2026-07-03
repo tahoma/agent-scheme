@@ -79,6 +79,7 @@
 (defconst consent--stdlib-source-library-keys
   '("(stdlib manifest)"
     "(stdlib and-let-star)"
+    "(stdlib list)"
     "(stdlib comparator)"
     "(stdlib receive)"
     "(stdlib assume)"
@@ -96,6 +97,12 @@
      (:target . "(stdlib and-let-star)"))
     ((:alias . "(srfi srfi-2)")
      (:target . "(stdlib and-let-star)"))
+    ((:alias . "(scheme list)")
+     (:target . "(stdlib list)"))
+    ((:alias . "(srfi 1)")
+     (:target . "(stdlib list)"))
+    ((:alias . "(srfi srfi-1)")
+     (:target . "(stdlib list)"))
     ((:alias . "(srfi 8)")
      (:target . "(stdlib receive)"))
     ((:alias . "(srfi srfi-8)")
@@ -234,6 +241,8 @@ core rather than the agent domain it governs.")
      . "../scheme/stdlib/manifest.sld")
     ("(stdlib and-let-star)"
      . "../scheme/stdlib/and-let-star.sld")
+    ("(stdlib list)"
+     . "../scheme/stdlib/list.sld")
     ("(stdlib comparator)"
      . "../scheme/stdlib/comparator.sld")
     ("(stdlib receive)"

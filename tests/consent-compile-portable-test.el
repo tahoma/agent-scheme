@@ -278,6 +278,10 @@ failing closed on everything."
       gambit-main))
     (should
      (string-match-p
+      "(prefix (stdlib list) consent-main:stdlib-list:)"
+      gambit-main))
+    (should
+     (string-match-p
       "(prefix (stdlib receive) consent-main:stdlib-receive:)"
       gambit-main))
     (should
@@ -290,7 +294,11 @@ failing closed on everything."
       script))
     (should
      (string-match-p
-      "gambit_module_order='[^']*stdlib/and-let-star[[:space:]]+stdlib/receive[[:space:]]+stdlib/json"
+      "\"\\$scheme_dir/stdlib/list\\.sld\""
+      script))
+    (should
+     (string-match-p
+      "gambit_module_order='[^']*stdlib/and-let-star[[:space:]]+stdlib/list[[:space:]]+stdlib/receive[[:space:]]+stdlib/json"
       script))))
 
 (ert-deftest consent-compile-portable-test-racket-builds-runner ()

@@ -279,16 +279,6 @@ AND has no docstring, i.e. the comment is standing in for the docstring."
      "Build a successful evaluation-result datum for VALUE."))
   "Representative public Scheme bindings that should carry docstrings.")
 
-(defconst consent--scheme-documentation-rich-docstring-exclusions
-  '()
-  "Runtime Scheme files exempt from the rich-metadata gate.
-The gate in `consent-scheme-documentation-test-public-rich-docstrings' runs
-fail-closed over every runtime `scheme/' source file by default, so a new
-file is covered automatically.  This list is intentionally empty: a file
-with no exported procedures already produces no errors, so the only reason
-to add a path here would be a deliberate, recorded exemption.  See
-docs/docstring-metadata.md.")
-
 (defun consent--scheme-documentation-docstring-present-p
     (relative-file name docstring)
   "Return non-nil when NAME in RELATIVE-FILE starts with DOCSTRING."
@@ -663,16 +653,10 @@ docs/docstring-metadata.md.")
 
 (ert-deftest consent-scheme-documentation-test-public-rich-docstrings ()
   "Ensure every exported Scheme procedure carries rich parameter and return metadata.
-Runs fail-closed over every runtime `scheme/' source file; a file may be
-exempted only by listing it in
-`consent--scheme-documentation-rich-docstring-exclusions'."
+Runs fail-closed over every runtime `scheme/' source file, so a new file is
+covered automatically. A file with no exported procedures produces no errors."
   (let ((errors
          (cl-loop for file in (consent--scheme-documentation-source-files)
-                  for relative-file = (file-relative-name file
-                                                           consent--test-root)
-                  unless (member
-                          relative-file
-                          consent--scheme-documentation-rich-docstring-exclusions)
                   append
                   (consent--scheme-documentation-public-rich-errors file))))
     (when errors
