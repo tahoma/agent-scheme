@@ -114,7 +114,9 @@
       "Return a generator over COUNT arithmetic values."
       #((parameters
          (count (type exact-integer)
-          (description "Number of values to generate.")))
+          (description "Number of values to generate."))
+         (rest (type list)
+          (description "Optional start and step values.")))
         (returns (type procedure)
          (description "A finite arithmetic generator."))
         (effects allocation state-write))
@@ -140,7 +142,9 @@
       "Return a generator over an arithmetic range."
       #((parameters
          (start (type number)
-          (description "First generated value.")))
+          (description "First generated value."))
+         (rest (type list)
+          (description "Optional end and step values.")))
         (returns (type procedure)
          (description "An arithmetic range generator."))
         (effects allocation state-write))
@@ -215,7 +219,9 @@
       "Return a generator over VECTOR."
       #((parameters
          (vector (type vector)
-          (description "Vector to traverse from left to right.")))
+          (description "Vector to traverse from left to right."))
+         (rest (type list)
+          (description "Optional start and end bounds.")))
         (returns (type procedure)
          (description "A finite generator over VECTOR."))
         (effects allocation state-write))
@@ -240,7 +246,9 @@
       "Return a reverse generator over VECTOR."
       #((parameters
          (vector (type vector)
-          (description "Vector to traverse from right to left.")))
+          (description "Vector to traverse from right to left."))
+         (rest (type list)
+          (description "Optional start and end bounds.")))
         (returns (type procedure)
          (description "A finite reverse generator over VECTOR."))
         (effects allocation state-write))
@@ -265,7 +273,9 @@
       "Return a generator over STRING's characters."
       #((parameters
          (string (type string)
-          (description "String to traverse from left to right.")))
+          (description "String to traverse from left to right."))
+         (rest (type list)
+          (description "Optional start and end bounds.")))
         (returns (type procedure)
          (description "A finite character generator."))
         (effects allocation state-write))
@@ -290,7 +300,9 @@
       "Return a generator over BYTEVECTOR's bytes."
       #((parameters
          (bytevector (type bytevector)
-          (description "Bytevector to traverse from left to right.")))
+          (description "Bytevector to traverse from left to right."))
+         (rest (type list)
+          (description "Optional start and end bounds.")))
         (returns (type procedure)
          (description "A finite byte generator."))
         (effects allocation state-write))
@@ -417,7 +429,9 @@
          (gen (type procedure)
           (description "Generator supplying values to group."))
          (k (type exact-integer)
-          (description "Group size.")))
+          (description "Group size."))
+         (rest (type list)
+          (description "Optional padding value.")))
         (returns (type procedure)
          (description "A generator yielding lists of up to K values."))
         (effects allocation state-write procedure-call))
@@ -461,7 +475,9 @@
       "Return a generator merging sorted input generators."
       #((parameters
          (less-than (type procedure)
-          (description "Ordering predicate for generated values.")))
+          (description "Ordering predicate for generated values."))
+         (generators (type list)
+          (description "Sorted input generators to merge.")))
         (returns (type procedure)
          (description "A generator yielding merged values in order."))
         (effects allocation state-write procedure-call error))
@@ -513,7 +529,9 @@
       "Return a generator mapping PROC over generators."
       #((parameters
          (proc (type procedure)
-          (description "Mapping procedure applied to generated values.")))
+          (description "Mapping procedure applied to generated values."))
+         (generators (type list)
+          (description "Generators to consume in parallel.")))
         (returns (type procedure)
          (description "A generator yielding mapped values."))
         (effects allocation state-write procedure-call error))
@@ -619,7 +637,9 @@
          (gen (type procedure)
           (description "Input generator."))
          (k (type exact-integer)
-          (description "Maximum number of values to yield.")))
+          (description "Maximum number of values to yield."))
+         (rest (type list)
+          (description "Optional padding value.")))
         (returns (type procedure)
          (description "A bounded generator."))
         (effects allocation state-write procedure-call error))
@@ -731,7 +751,9 @@
          (item (type any)
           (description "Value to remove."))
          (gen (type procedure)
-          (description "Input generator.")))
+          (description "Input generator."))
+         (rest (type list)
+          (description "Optional equality predicate.")))
         (returns (type procedure)
          (description "A generator without matching values."))
         (effects allocation state-write procedure-call))
@@ -755,7 +777,9 @@
       "Return a generator deleting adjacent duplicates from GEN."
       #((parameters
          (gen (type procedure)
-          (description "Input generator.")))
+          (description "Input generator."))
+         (rest (type list)
+          (description "Optional equality predicate.")))
         (returns (type procedure)
          (description "A generator with adjacent duplicates collapsed."))
         (effects allocation state-write procedure-call))
@@ -851,7 +875,9 @@
       "Return a list containing all values from GEN."
       #((parameters
          (gen (type procedure)
-          (description "Generator to consume.")))
+          (description "Generator to consume."))
+         (rest (type list)
+          (description "Optional maximum count.")))
         (returns (type list)
          (description "Generated values in order."))
         (effects allocation procedure-call))
@@ -869,7 +895,9 @@
       "Return a reverse-order list containing all values from GEN."
       #((parameters
          (gen (type procedure)
-          (description "Generator to consume.")))
+          (description "Generator to consume."))
+         (rest (type list)
+          (description "Optional maximum count.")))
         (returns (type list)
          (description "Generated values in reverse order."))
         (effects allocation procedure-call))
@@ -887,7 +915,9 @@
       "Return a vector containing all values from GEN."
       #((parameters
          (gen (type procedure)
-          (description "Generator to consume.")))
+          (description "Generator to consume."))
+         (rest (type list)
+          (description "Optional maximum count.")))
         (returns (type vector)
          (description "Generated values in order."))
         (effects allocation procedure-call))
@@ -929,7 +959,9 @@
       "Return a string containing characters from GEN."
       #((parameters
          (gen (type procedure)
-          (description "Generator yielding characters.")))
+          (description "Generator yielding characters."))
+         (rest (type list)
+          (description "Optional maximum count.")))
         (returns (type string)
          (description "Generated characters in order."))
         (effects allocation procedure-call))
