@@ -328,8 +328,7 @@
 ;;;; Pluggable chrome layer (presentation over the canonical record stream)
 
 ;; The ANSI SGR escape, built without a literal escape character in source.
-(define escape
-  (string (integer->char 27)))
+(define escape (string (integer->char 27)))
 
 ;; Return #t when HAYSTACK contains NEEDLE as a substring.
 (define (string-contains? haystack needle)
