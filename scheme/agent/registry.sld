@@ -46,7 +46,8 @@
           agent-selection-basis
           agent-selection-reason
           agent-selection-considered)
-  (import (scheme base))
+  (import (scheme base)
+          (only (stdlib list) alist-delete))
   (begin
     (define (plist-ref alist key default)
       "Return KEY's value from ALIST, or DEFAULT when absent.  Cells may be"
@@ -242,14 +243,6 @@
         (set-registry-default-id! registry 'default)
         registry))
 
-    (define (remove-agent-cell cells id)
-      "Return CELLS without any (id . agent) cell whose car is ID."
-      (let loop ((rest cells) (kept '()))
-        (cond
-         ((null? rest) (reverse kept))
-         ((eq? (caar rest) id) (loop (cdr rest) kept))
-         (else (loop (cdr rest) (cons (car rest) kept))))))
-
     (define (register-agent registry agent)
       "Register AGENT in REGISTRY, replacing any agent with the same id."
       #((parameters
@@ -267,7 +260,7 @@
         (set-registry-agents!
          registry
          (cons (cons id agent)
-               (remove-agent-cell (registry-agents registry) id)))
+               (alist-delete id (registry-agents registry) eq?)))
         agent))
 
     (define (agents registry)

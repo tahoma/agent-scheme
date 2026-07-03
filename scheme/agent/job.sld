@@ -24,7 +24,8 @@
           job-store-fail!
           job-store-finish-cancelled!
           job-datum-id)
-  (import (scheme base))
+  (import (scheme base)
+          (only (stdlib list) filter-map find remove))
   (begin
     ;; Public job states are Scheme data shared by host adapters and portable
     ;; tests.
@@ -133,13 +134,10 @@
 
     (define (without-record store id)
       "Return STORE records without ID."
-      (let loop ((records (store-records store)) (result '()))
-        (cond
-         ((null? records) (reverse result))
-         ((eq? (record-id (car records)) id)
-          (loop (cdr records) result))
-         (else
-          (loop (cdr records) (cons (car records) result))))))
+      (remove
+       (lambda (record)
+         (eq? (record-id record) id))
+       (store-records store)))
 
     (define (store-record! store record)
       "Store RECORD, replacing any previous record with the same id."
@@ -151,11 +149,10 @@
 
     (define (find-job store id)
       "Return job ID record from STORE, or #f."
-      (let loop ((records (store-records store)))
-        (cond
-         ((null? records) #f)
-         ((eq? (record-id (car records)) id) (car records))
-         (else (loop (cdr records))))))
+      (find
+       (lambda (record)
+         (eq? (record-id record) id))
+       (store-records store)))
 
     (define (require-job store id)
       "Return job ID record from STORE or raise an error."
@@ -257,14 +254,11 @@
          (description "List of public job datums in creation order."))
         (effects state-read))
       (let ((session (if (null? maybe-session) #f (car maybe-session))))
-        (let loop ((records (store-records store)) (result '()))
-          (cond
-           ((null? records) (reverse result))
-           ((or (not session) (eq? (job-session (car records)) session))
-            (loop (cdr records)
-                  (cons (job->datum (car records)) result)))
-           (else
-            (loop (cdr records) result))))))
+        (filter-map
+         (lambda (record)
+           (and (or (not session) (eq? (job-session record) session))
+                (job->datum record)))
+         (store-records store))))
 
     (define (job-store-status store id)
       "Return job ID status from STORE, or #f."
