@@ -1219,6 +1219,8 @@
         (find-source-library-spec '(stdlib and-let-star) source-specs))
        (list-spec
         (find-source-library-spec '(stdlib list) source-specs))
+       (generator-spec
+        (find-source-library-spec '(stdlib generator) source-specs))
        (comparator-spec
         (find-source-library-spec '(stdlib comparator) source-specs))
        (receive-spec
@@ -1231,6 +1233,7 @@
          (and manifest-spec
               and-let-star-spec
               list-spec
+              generator-spec
               comparator-spec
               receive-spec
               assume-spec
@@ -1238,6 +1241,7 @@
               (string? (cadr (assq 'source-file manifest-spec)))
               (string? (cadr (assq 'source-file and-let-star-spec)))
               (string? (cadr (assq 'source-file list-spec)))
+              (string? (cadr (assq 'source-file generator-spec)))
               (string? (cadr (assq 'source-file comparator-spec)))
               (string? (cadr (assq 'source-file receive-spec)))
               (string? (cadr (assq 'source-file assume-spec)))
@@ -1255,6 +1259,10 @@
          (and list-spec
               (cadr (assq 'source-file list-spec)))
          "scheme/stdlib/list.sld")
+  (check 'stdlib-source-library-generator-file
+         (and generator-spec
+              (cadr (assq 'source-file generator-spec)))
+         "scheme/stdlib/generator.sld")
   (check 'stdlib-source-library-comparator-file
          (and comparator-spec
               (cadr (assq 'source-file comparator-spec)))
@@ -1515,6 +1523,75 @@
                   (stdlib list)
                   (stdlib list)
                   (stdlib list))"))
+
+(check-external 'srfi-158-generator-behavior
+                "(import (scheme base) (scheme generator))
+                 (list (generator->list (gmap - (make-range-generator 0 3)))
+                       (generator->list
+                        (gappend (generator 'a 'b)
+                                 (list->generator '(c d))))
+                       (let ((acc (list-accumulator)))
+	                         (acc 'x)
+	                         (acc 'y)
+	                         (acc (eof-object))))"
+                "((0 -1 -2) (a b c d) (x y))")
+
+(check-external 'srfi-158-alias-import
+                "(import (scheme base) (srfi 158))
+                 (generator->list
+                  (gselect (list->generator '(a b c d e))
+                           (list->generator '(#t #f #t #f #t))))"
+                "(a c e)")
+
+(check-external 'srfi-158-portable-alias-import
+                "(import (scheme base) (srfi srfi-158))
+                 (let ((acc (sum-accumulator)))
+                   (acc 1)
+                   (acc 2)
+                   (acc (eof-object)))"
+                "3")
+
+(check 'srfi-158-missing-export-diagnostic
+       (raises?
+        (lambda ()
+          (consent-eval-source
+           "(import (scheme base)
+                    (only (srfi 158) missing-generator))
+            missing-generator")))
+       #t)
+
+(check-external 'stdlib-srfi-158-manifest
+                "(import (scheme base) (stdlib manifest))
+                 (let ((entry (stdlib-manifest-ref '(stdlib generator)))
+                       (scheme-alias
+                        (stdlib-manifest-ref '(scheme generator)))
+                       (alias (stdlib-manifest-ref '(srfi 158)))
+                       (portable-alias
+                        (stdlib-manifest-ref '(srfi srfi-158))))
+                   (list (cdr (assq 'status entry))
+                         (cdr (assq 'implementation-library entry))
+                         (cdr (assq 'upstream-license entry))
+                         (cdr (assq 'local-license entry))
+                         (cdr (assq 'vendored? entry))
+                         (cdr (assq 'import-aliases entry))
+                         (cdr (assq 'dependencies entry))
+                         (cdr (assq 'target scheme-alias))
+                         (cdr (assq 'target alias))
+                         (cdr (assq 'target portable-alias))))"
+               (expected-datum-external
+                "(vendored-adapted-implementation
+                  (stdlib generator)
+                  \"MIT\"
+                  \"MIT\"
+                  #t
+                  ((stdlib generator)
+                   (scheme generator)
+                   (srfi 158)
+                   (srfi srfi-158))
+                  ((scheme base) (scheme case-lambda))
+                  (stdlib generator)
+                  (stdlib generator)
+                  (stdlib generator))"))
 
 (check-external 'srfi-180-json-read
                 (string-append
