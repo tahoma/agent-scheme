@@ -946,6 +946,7 @@
 (check-result-contains
  'library-bindings-reflection
  "(import (scheme base)
+          (scheme generator)
           (agent reflect))
   (define (field datum name)
     (cadr (assq name (cdr datum))))
@@ -2559,8 +2560,10 @@
                  (list (macro-binding-info 'twice)
                        (macro-binding-info 'missing)
                        (let ((source (syntax-source '(twice 21))))
-                         (list (cadr (assq 'origin (cdr source)))
-                               (cadr (assq 'phase (cdr source)))))
+                         (if source
+                             (list (cadr (assq 'origin (cdr source)))
+                                   (cadr (assq 'phase (cdr source))))
+                             'missing-source))
                        (syntax-source (list 'twice 21))
                        (equal? '(twice 21) (list 'twice 21)))"
                 '((source-metadata . #t))

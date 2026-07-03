@@ -30,7 +30,7 @@
 (declare-function consent--library-binding-library-key "consent-library")
 (declare-function consent--library-binding-name "consent-library")
 (declare-function consent--library-exports "consent-library")
-(declare-function consent--resolve-library "consent-library")
+(declare-function consent--library-name-key "consent-library")
 
 (defconst consent-reflect--omitted-manifest-fields
   '(:emacs-hook :portable-hook :emitter-hook :test-categories)
@@ -496,30 +496,33 @@ callers can distinguish unbounded from exhausted."
 
 (defun consent-reflect--library-binding-datum (binding)
   "Return BINDING as a Scheme-readable library-binding record."
-  (list
-   (consent-reflect--symbol "library-binding")
-   (consent-reflect--field
-    "name"
-    (consent-reflect--symbol
-     (consent--library-binding-name binding)))
-   (consent-reflect--field
-    "kind"
-    (consent-reflect--symbol
-     (consent--library-binding-kind binding)))
-   (consent-reflect--field
-    "library"
-    (consent-reflect--library-datum
-     (consent--library-binding-library-key binding)))))
+  (let ((library-key (consent--library-binding-library-key binding)))
+    (list
+     (consent-reflect--symbol "library-binding")
+     (consent-reflect--field
+      "name"
+      (consent-reflect--symbol
+       (consent--library-binding-name binding)))
+     (consent-reflect--field
+      "kind"
+      (consent-reflect--symbol
+       (consent--library-binding-kind binding)))
+     (consent-reflect--field
+      "library"
+      (consent-reflect--library-datum
+       (if (listp library-key)
+           (copy-sequence library-key)
+         library-key))))))
 
 (defun consent-reflect-library-bindings (library-name context)
-  "Return exported binding records for LIBRARY-NAME in CONTEXT."
-  (mapcar
-   #'consent-reflect--library-binding-datum
-   (consent--library-exports
-    (consent--resolve-library
-     library-name
-     context
-     (consent--eval-context-interaction-environment context)))))
+  "Return registered exported binding records for LIBRARY-NAME in CONTEXT."
+  (let* ((key (consent--library-name-key library-name))
+         (library (gethash key (consent--eval-context-libraries context))))
+    (unless library
+      (consent--eval-error "unknown library: %s" key))
+    (mapcar
+     #'consent-reflect--library-binding-datum
+     (consent--library-exports library))))
 
 (defun consent-reflect-current-session-info (context)
   "Return public session/job identity for CONTEXT."

@@ -138,7 +138,7 @@
     ;; table, so long-lived sessions trade older source lookups for bounded
     ;; metadata scans.  Keep this above ordinary form size so one read does not
     ;; evict its own active source metadata.
-    (define consent-source-metadata-limit 1000)
+    (define consent-source-metadata-limit 10000)
 
     ;; Current number of retained source metadata entries in the portable table.
     (define consent-source-metadata-count 0)
