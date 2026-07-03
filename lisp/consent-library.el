@@ -80,6 +80,7 @@
   '("(stdlib manifest)"
     "(stdlib and-let-star)"
     "(stdlib list)"
+    "(stdlib generator)"
     "(stdlib comparator)"
     "(stdlib receive)"
     "(stdlib assume)"
@@ -103,6 +104,12 @@
      (:target . "(stdlib list)"))
     ((:alias . "(srfi srfi-1)")
      (:target . "(stdlib list)"))
+    ((:alias . "(scheme generator)")
+     (:target . "(stdlib generator)"))
+    ((:alias . "(srfi 158)")
+     (:target . "(stdlib generator)"))
+    ((:alias . "(srfi srfi-158)")
+     (:target . "(stdlib generator)"))
     ((:alias . "(srfi 8)")
      (:target . "(stdlib receive)"))
     ((:alias . "(srfi srfi-8)")
@@ -243,6 +250,8 @@ core rather than the agent domain it governs.")
      . "../scheme/stdlib/and-let-star.sld")
     ("(stdlib list)"
      . "../scheme/stdlib/list.sld")
+    ("(stdlib generator)"
+     . "../scheme/stdlib/generator.sld")
     ("(stdlib comparator)"
      . "../scheme/stdlib/comparator.sld")
     ("(stdlib receive)"
