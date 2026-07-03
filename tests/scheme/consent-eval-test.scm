@@ -907,6 +907,43 @@
    "(description \"Set list containing elements from every input.\")")
  '((docstring-retention . full)))
 
+(check-result-contains
+ 'srfi-158-generator-docstring-reflection
+ "(import (scheme base)
+          (scheme generator)
+          (agent reflect))
+  (define (field datum name)
+    (cadr (assq name (cdr datum))))
+  (define (doc-string name)
+    (let ((datum (documentation name)))
+      (if datum
+          (cadr (assq 'documentation (field datum 'fields)))
+        #f)))
+  (define (metadata-field name field-name)
+    (let ((datum (documentation name)))
+      (if datum
+          (let ((entry (assq field-name (field datum 'fields))))
+            (if entry (cadr entry) #f))
+        #f)))
+  (list (doc-string 'generator)
+        (metadata-field 'generator 'parameters)
+        (metadata-field 'generator 'returns)
+        (doc-string 'generator-fold)
+        (metadata-field 'generator-fold 'parameters)
+        (metadata-field 'generator-fold 'returns)
+        (doc-string 'list-accumulator)
+        (metadata-field 'list-accumulator 'returns))"
+ '("\"Return a finite generator over ARGS.\""
+   "(args (type list)"
+   "(description \"Values to yield before EOF.\")"
+   "((type procedure)"
+   "\"Fold PROC over values from GENERATORS.\""
+   "(proc (type procedure)"
+   "(generators (type list)"
+   "\"Return an accumulator that builds a list in arrival order.\""
+   "(description \"Accumulator returning a list at EOF.\")")
+ '((docstring-retention . full)))
+
 ;; Replace PATH with CONTENTS using the host Scheme runtime.
 (define (write-host-test-file path contents)
   (if (file-exists? path)
