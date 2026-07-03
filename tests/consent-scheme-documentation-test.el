@@ -310,8 +310,13 @@ AND has no docstring, i.e. the comment is standing in for the docstring."
 
 (defun consent--scheme-documentation-exported-symbols (text)
   "Return symbols exported by a Scheme library TEXT."
+  (consent--scheme-documentation-exported-symbols-from-forms
+   (consent-read-all text)))
+
+(defun consent--scheme-documentation-exported-symbols-from-forms (forms)
+  "Return symbols exported by Scheme library FORMS."
   (let (symbols)
-    (dolist (form (consent-read-all text))
+    (dolist (form forms)
       (when (consent--scheme-documentation-form-head-named-p
              form
              "define-library")
@@ -561,8 +566,11 @@ AND has no docstring, i.e. the comment is standing in for the docstring."
   (let* ((text (with-temp-buffer
                  (insert-file-contents file)
                  (buffer-string)))
+         (max-lisp-eval-depth (max max-lisp-eval-depth 4096))
          (forms (consent-read-all text))
-         (exports (consent--scheme-documentation-exported-symbols text))
+         (exports
+          (consent--scheme-documentation-exported-symbols-from-forms
+           forms))
          (definitions
            (consent--scheme-documentation-library-definition-forms forms))
          (relative-file (file-relative-name file consent--test-root))
