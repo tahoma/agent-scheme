@@ -1243,8 +1243,10 @@
       (let ((prefix (take-while pred lis)))
         (if (null? prefix)
             (values '() lis)
-            (values (take! lis (length prefix))
-                    (drop lis (length prefix))))))
+            (let* ((count (length prefix))
+                   (suffix (drop lis count))
+                   (prefix (take! lis count)))
+              (values prefix suffix)))))
 
     (define (break! pred lis)
       "Destructively break LIS when practical."
