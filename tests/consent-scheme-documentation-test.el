@@ -308,55 +308,104 @@ AND has no docstring, i.e. the comment is standing in for the docstring."
         (goto-char start)
         (search-forward (prin1-to-string docstring) end t)))))
 
-(defun consent--scheme-documentation-export-form (text)
-  "Return the first export form text from Scheme library TEXT."
-  (when (string-match "(export\\_>" text)
-    (let ((cursor (match-beginning 0))
-          (depth 0)
-          (in-string nil)
-          (escaped nil)
-          end)
-      (while (and (< cursor (length text)) (not end))
-        (let ((char (aref text cursor)))
-          (cond
-           (escaped
-            (setq escaped nil))
-           ((and in-string (= char ?\\))
-            (setq escaped t))
-           ((= char ?\")
-            (setq in-string (not in-string)))
-           (in-string)
-           ((= char ?\()
-            (setq depth (1+ depth)))
-           ((= char ?\))
-            (setq depth (1- depth))
-            (when (= depth 0)
-              (setq end (1+ cursor))))))
-        (setq cursor (1+ cursor)))
-      (when end
-        (substring text (match-beginning 0) end)))))
-
 (defun consent--scheme-documentation-exported-symbols (text)
   "Return symbols exported by a Scheme library TEXT."
-  (let ((form (consent--scheme-documentation-export-form text))
-        symbols)
-    (when form
-      (with-temp-buffer
-        (insert form)
-        (goto-char (point-min))
-        (while (re-search-forward "[^[:space:]()]+" nil t)
-          (let ((token (match-string 0)))
-            (unless (member token '("export" "rename"))
-              (push token symbols))))))
+  (let (symbols)
+    (dolist (form (consent-read-all text))
+      (when (consent--scheme-documentation-form-head-named-p
+             form
+             "define-library")
+        (dolist (declaration (cddr form))
+          (when (consent--scheme-documentation-form-head-named-p
+                 declaration
+                 "export")
+            (dolist (spec (cdr declaration))
+              (dolist (name
+                       (consent--scheme-documentation-export-spec-names
+                        spec))
+                (push name symbols)))))))
     symbols))
 
-(defun consent--scheme-documentation-procedure-name (file line)
-  "Return top-level procedure name in LINE from FILE, or nil."
-  (when (consent--scheme-documentation-top-level-procedure-p file line)
-    (when (string-match
-           "\\`[[:space:]]*(define[[:space:]]+(\\([^[:space:]()]+\\)"
-           line)
-      (match-string 1 line))))
+(defun consent--scheme-documentation-symbol-name (value)
+  "Return VALUE's Consent Scheme symbol name, or nil."
+  (and (consent-symbol-p value) (consent-symbol-name value)))
+
+(defun consent--scheme-documentation-form-head-name (form)
+  "Return FORM's leading symbol name, or nil."
+  (and (consp form)
+       (consent--scheme-documentation-symbol-name (car form))))
+
+(defun consent--scheme-documentation-form-head-named-p (form name)
+  "Return non-nil when FORM's leading symbol is NAME."
+  (string= (or (consent--scheme-documentation-form-head-name form) "")
+           name))
+
+(defun consent--scheme-documentation-export-spec-names (spec)
+  "Return internal binding names exported by export SPEC."
+  (cond
+   ((consent-symbol-p spec)
+    (list (consent-symbol-name spec)))
+   ((and (consent--scheme-documentation-form-head-named-p spec "rename")
+         (consp (cdr spec))
+         (consent-symbol-p (cadr spec)))
+    (list (consent-symbol-name (cadr spec))))
+   (t nil)))
+
+(defun consent--scheme-documentation-value-procedure-form-p (value)
+  "Return non-nil when VALUE is an obvious procedure expression."
+  (or (consent--scheme-documentation-form-head-named-p value "lambda")
+      (consent--scheme-documentation-form-head-named-p value "case-lambda")))
+
+(defun consent--scheme-documentation-define-procedure-name (form)
+  "Return procedure name defined by FORM, or nil."
+  (when (consent--scheme-documentation-form-head-named-p form "define")
+    (let ((target (cadr form))
+          (value (caddr form)))
+      (cond
+       ((and (consp target) (consent-symbol-p (car target)))
+        (consent-symbol-name (car target)))
+       ((and (consent-symbol-p target)
+             (consent--scheme-documentation-value-procedure-form-p value))
+        (consent-symbol-name target))
+       (t nil)))))
+
+(defun consent--scheme-documentation-library-definition-forms (forms)
+  "Return definition forms from Scheme library FORMS."
+  (let (definitions)
+    (dolist (form forms)
+      (when (consent--scheme-documentation-form-head-named-p
+             form
+             "define-library")
+        (dolist (declaration (cddr form))
+          (when (consent--scheme-documentation-form-head-named-p
+                 declaration
+                 "begin")
+            (dolist (body-form (cdr declaration))
+              (when (consent--scheme-documentation-form-head-named-p
+                     body-form
+                     "define")
+                (push body-form definitions)))))))
+    (nreverse definitions)))
+
+(defun consent--scheme-documentation-form-source-line (form fallback)
+  "Return FORM's reader source line, or FALLBACK."
+  (let ((metadata (consent--datum-source-metadata form)))
+    (if (and (vectorp metadata)
+             (>= (length metadata) 3)
+             (eq (aref metadata 0) 'consent--source-note))
+        (aref metadata 2)
+      fallback)))
+
+(defun consent--scheme-documentation-form-source-text (source form)
+  "Return FORM's source slice from SOURCE."
+  (let ((metadata (consent--datum-source-metadata form)))
+    (if (and (vectorp metadata)
+             (= (length metadata) 6)
+             (eq (aref metadata 0) 'consent--source-note))
+        (let ((offset (aref metadata 4))
+              (span (aref metadata 5)))
+          (substring source offset (min (length source) (+ offset span))))
+      "")))
 
 (defun consent--scheme-documentation-proper-list-p (value)
   "Return non-nil when VALUE is a proper list."
@@ -512,32 +561,30 @@ AND has no docstring, i.e. the comment is standing in for the docstring."
   (let* ((text (with-temp-buffer
                  (insert-file-contents file)
                  (buffer-string)))
+         (forms (consent-read-all text))
          (exports (consent--scheme-documentation-exported-symbols text))
-         (lines (split-string text "\n"))
+         (definitions
+           (consent--scheme-documentation-library-definition-forms forms))
          (relative-file (file-relative-name file consent--test-root))
          errors)
-    (cl-loop for line in lines
-             for index from 0
-             for name = (consent--scheme-documentation-procedure-name
-                         file
-                         line)
-             when (and name (member name exports))
-             do
-             (let* ((end (consent--scheme-documentation-definition-end-index
-                          file
-                          lines
-                          index))
-                    (definition-text
-                      (mapconcat #'identity
-                                 (cl-subseq lines index end)
-                                 "\n")))
-               (unless (consent--scheme-documentation-rich-vector-p
-                        definition-text)
-                 (push (format "%s:%d exported procedure %s missing rich metadata vector with typed parameters and returns"
-                               relative-file
-                               (1+ index)
-                               name)
-                       errors))))
+    (dolist (definition definitions)
+      (let ((name
+             (consent--scheme-documentation-define-procedure-name definition)))
+        (when (and name (member name exports))
+          (let ((definition-text
+                 (consent--scheme-documentation-form-source-text
+                  text
+                  definition)))
+            (unless (consent--scheme-documentation-rich-vector-p
+                     definition-text)
+              (push
+               (format "%s:%d exported procedure %s missing rich metadata vector with typed parameters and returns"
+                       relative-file
+                       (consent--scheme-documentation-form-source-line
+                        definition
+                        1)
+                       name)
+               errors))))))
     (nreverse errors)))
 
 (defun consent--scheme-documentation-compact-type-style-errors (file)
@@ -627,6 +674,44 @@ AND has no docstring, i.e. the comment is standing in for the docstring."
     (should-not
      (consent--scheme-documentation-rich-vector-p obvious-shorthand))
     (should (consent--scheme-documentation-rich-vector-p explicit-type))))
+
+(ert-deftest consent-scheme-documentation-test-public-rich-detects-value-lambdas ()
+  "Treat exported lambda-valued definitions as public procedures."
+  (let ((file
+         (make-temp-file
+          "consent-doc-value-lambda" nil ".sld"
+          ";;; scratch.sld --- documentation fixture
+(define-library
+  (scratch docs)
+  (export
+    value-lambda
+    value-case-lambda)
+  (import (scheme base)
+          (scheme case-lambda))
+  (begin
+    (define
+      value-lambda
+      (lambda
+        (item)
+        item))
+    (define value-case-lambda
+      (case-lambda
+        (() #f)
+        ((item) item)))))")))
+    (unwind-protect
+        (let ((errors
+               (consent--scheme-documentation-public-rich-errors file)))
+          (should
+           (cl-some
+            (lambda (error)
+              (string-match-p "value-lambda missing rich metadata" error))
+            errors))
+          (should
+           (cl-some
+            (lambda (error)
+              (string-match-p "value-case-lambda missing rich metadata" error))
+            errors)))
+      (delete-file file))))
 
 (ert-deftest consent-scheme-documentation-test-compact-type-style ()
   "Require compact expanded type metadata when the head line fits."

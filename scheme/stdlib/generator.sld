@@ -63,6 +63,13 @@
 
     ;; The simplest finite generator.
     (define generator (lambda args
+      "Return a finite generator over ARGS."
+      #((parameters
+         (args (type list)
+          (description "Values to yield before EOF.")))
+        (returns (type procedure)
+         (description "A thunk yielding each value, then EOF."))
+        (effects allocation state-write))
       (lambda ()
         (if (null? args)
             (eof-object)
@@ -72,6 +79,13 @@
 
     ;; The simplest infinite generator over ARGS.
     (define circular-generator (lambda args
+      "Return an infinite generator cycling over ARGS."
+      #((parameters
+         (args (type list)
+          (description "Values to repeat indefinitely.")))
+        (returns (type procedure)
+         (description "A thunk yielding the values cyclically."))
+        (effects allocation state-write))
       (let ((base-args args))
         (lambda ()
           (when (null? args)
@@ -84,6 +98,13 @@
     (define make-iota-generator
       (case-lambda
         ((count)
+         "Return a generator over COUNT arithmetic values."
+         #((parameters
+            (count (type exact-integer)
+             (description "Number of values to generate.")))
+           (returns (type procedure)
+            (description "A finite arithmetic generator."))
+           (effects allocation state-write))
          (make-iota-generator count 0 1))
         ((count start)
          (make-iota-generator count start 1))
@@ -100,6 +121,13 @@
     (define make-range-generator
       (case-lambda
         ((start)
+         "Return a generator over an arithmetic range."
+         #((parameters
+            (start (type number)
+             (description "First generated value.")))
+           (returns (type procedure)
+            (description "An arithmetic range generator."))
+           (effects allocation state-write))
          (lambda ()
            (let ((result start))
              (set! start (+ start 1))
@@ -116,6 +144,13 @@
 
     ;; Build a generator from a procedure that calls YIELD to emit values.
     (define make-coroutine-generator (lambda (proc)
+      "Return a generator controlled by PROC and its yield callback."
+      #((parameters
+         (proc (type procedure)
+          (description "Procedure called with a yield procedure.")))
+        (returns (type procedure)
+         (description "A generator thunk driven by PROC."))
+        (effects procedure-call allocation state-write))
       (let ((return #f)
             (resume #f))
         (letrec
@@ -140,6 +175,13 @@
 
     ;; Build a generator over LIST.
     (define list->generator (lambda (list)
+      "Return a generator over LIST."
+      #((parameters
+         (list (type list)
+          (description "Values to yield in order.")))
+        (returns (type procedure)
+         (description "A finite generator over LIST."))
+        (effects allocation state-write))
       (lambda ()
         (if (null? list)
             (eof-object)
@@ -151,6 +193,13 @@
     (define vector->generator
       (case-lambda
         ((vector)
+         "Return a generator over VECTOR."
+         #((parameters
+            (vector (type vector)
+             (description "Vector to traverse from left to right.")))
+           (returns (type procedure)
+            (description "A finite generator over VECTOR."))
+           (effects allocation state-write))
          (vector->generator vector 0 (vector-length vector)))
         ((vector start)
          (vector->generator vector start (vector-length vector)))
@@ -166,6 +215,13 @@
     (define reverse-vector->generator
       (case-lambda
         ((vector)
+         "Return a reverse generator over VECTOR."
+         #((parameters
+            (vector (type vector)
+             (description "Vector to traverse from right to left.")))
+           (returns (type procedure)
+            (description "A finite reverse generator over VECTOR."))
+           (effects allocation state-write))
          (reverse-vector->generator vector 0 (vector-length vector)))
         ((vector start)
          (reverse-vector->generator vector start (vector-length vector)))
@@ -181,6 +237,13 @@
     (define string->generator
       (case-lambda
         ((string)
+         "Return a generator over STRING's characters."
+         #((parameters
+            (string (type string)
+             (description "String to traverse from left to right.")))
+           (returns (type procedure)
+            (description "A finite character generator."))
+           (effects allocation state-write))
          (string->generator string 0 (string-length string)))
         ((string start)
          (string->generator string start (string-length string)))
@@ -196,6 +259,13 @@
     (define bytevector->generator
       (case-lambda
         ((bytevector)
+         "Return a generator over BYTEVECTOR's bytes."
+         #((parameters
+            (bytevector (type bytevector)
+             (description "Bytevector to traverse from left to right.")))
+           (returns (type procedure)
+            (description "A finite byte generator."))
+           (effects allocation state-write))
          (bytevector->generator bytevector 0 (bytevector-length bytevector)))
         ((bytevector start)
          (bytevector->generator bytevector start
@@ -210,12 +280,34 @@
 
     ;; Convert a collection's for-each procedure into a generator.
     (define make-for-each-generator (lambda (for-each obj)
+      "Return a generator backed by FOR-EACH over OBJ."
+      #((parameters
+         (for-each (type procedure)
+          (description "Procedure that visits OBJ's values."))
+         (obj (type any)
+          (description "Collection argument passed to FOR-EACH.")))
+        (returns (type procedure)
+         (description "A generator yielding the visited values."))
+        (effects procedure-call allocation state-write))
       (make-coroutine-generator
        (lambda (yield)
          (for-each yield obj)))))
 
     ;; Build an unfold-style generator.
     (define make-unfold-generator (lambda (stop? mapper successor seed)
+      "Return a generator by unfolding SEED."
+      #((parameters
+         (stop? (type procedure)
+          (description "Predicate that stops generation."))
+         (mapper (type procedure)
+          (description "Procedure mapping state to a yielded value."))
+         (successor (type procedure)
+          (description "Procedure advancing state."))
+         (seed (type any)
+          (description "Initial unfold state.")))
+        (returns (type procedure)
+         (description "A generator over the unfolded values."))
+        (effects procedure-call allocation state-write))
       (make-coroutine-generator
        (lambda (yield)
          (let loop ((state seed))
@@ -227,6 +319,13 @@
 
     ;; Prefix ITEM values before delegating to the final generator.
     (define gcons* (lambda args
+      "Return a generator yielding ARGS before the final generator."
+      #((parameters
+         (args (type list)
+          (description "Prefix values followed by a final generator.")))
+        (returns (type procedure)
+         (description "A generator yielding prefix values then delegating."))
+        (effects allocation state-write procedure-call))
       (lambda ()
         (cond
          ((null? args) (eof-object))
@@ -238,6 +337,13 @@
 
     ;; Append generators, yielding from each until it is exhausted.
     (define gappend (lambda generators
+      "Return a generator appending GENERATORS in order."
+      #((parameters
+         (generators (type list)
+          (description "Generators to consume from left to right.")))
+        (returns (type procedure)
+         (description "A generator yielding every input stream in order."))
+        (effects allocation state-write procedure-call))
       (lambda ()
         (let loop ()
           (if (null? generators)
@@ -251,6 +357,13 @@
 
     ;; Flatten lists produced by GEN into one stream of values.
     (define gflatten (lambda (gen)
+      "Return a generator flattening lists produced by GEN."
+      #((parameters
+         (gen (type procedure)
+          (description "Generator yielding lists or EOF.")))
+        (returns (type procedure)
+         (description "A generator yielding each list element."))
+        (effects allocation state-write procedure-call))
       (let ((state '()))
         (lambda ()
           (when (null? state)
@@ -265,6 +378,15 @@
     (define ggroup
       (case-lambda
         ((gen k)
+         "Return a generator grouping values from GEN."
+         #((parameters
+            (gen (type procedure)
+             (description "Generator supplying values to group."))
+            (k (type exact-integer)
+             (description "Group size.")))
+           (returns (type procedure)
+            (description "A generator yielding lists of up to K values."))
+           (effects allocation state-write procedure-call))
          (simple-ggroup gen k))
         ((gen k padding)
          (padded-ggroup (simple-ggroup gen k) k padding))))
@@ -296,6 +418,13 @@
     (define gmerge
       (case-lambda
         ((less-than)
+         "Return a generator merging sorted input generators."
+         #((parameters
+            (less-than (type procedure)
+             (description "Ordering predicate for generated values.")))
+           (returns (type procedure)
+            (description "A generator yielding merged values in order."))
+           (effects allocation state-write procedure-call error))
          (error "wrong number of arguments for gmerge" less-than))
         ((less-than gen)
          gen)
@@ -338,6 +467,13 @@
     (define gmap
       (case-lambda
         ((proc)
+         "Return a generator mapping PROC over generators."
+         #((parameters
+            (proc (type procedure)
+             (description "Mapping procedure applied to generated values.")))
+           (returns (type procedure)
+            (description "A generator yielding mapped values."))
+           (effects allocation state-write procedure-call error))
          (error "wrong number of arguments for gmap" proc))
         ((proc gen)
          (lambda ()
@@ -352,6 +488,17 @@
 
     ;; Map with state over one or more generators.
     (define gcombine (lambda (proc seed . generators)
+      "Return a stateful generator combining GENERATORS with PROC."
+      #((parameters
+         (proc (type procedure)
+          (description "Procedure returning a value and next state."))
+         (seed (type any)
+          (description "Initial state."))
+         (generators (type list)
+          (description "Input generators.")))
+        (returns (type procedure)
+         (description "A generator yielding combined values."))
+        (effects allocation state-write procedure-call))
       (lambda ()
         (let ((items (map (lambda (gen) (gen)) generators)))
           (if (any eof-object? items)
@@ -364,6 +511,15 @@
 
     ;; Yield only values from GEN that satisfy PRED.
     (define gfilter (lambda (pred gen)
+      "Return a generator keeping values that satisfy PRED."
+      #((parameters
+         (pred (type procedure)
+          (description "Predicate applied to generated values."))
+         (gen (type procedure)
+          (description "Input generator.")))
+        (returns (type procedure)
+         (description "A filtering generator."))
+        (effects allocation state-write procedure-call))
       (lambda ()
         (let loop ()
           (let ((next (gen)))
@@ -373,6 +529,17 @@
 
     ;; Yield only values selected by PROC while threading state.
     (define gstate-filter (lambda (proc seed gen)
+      "Return a generator filtering GEN with stateful PROC."
+      #((parameters
+         (proc (type procedure)
+          (description "Procedure returning keep? and next state."))
+         (seed (type any)
+          (description "Initial state."))
+         (gen (type procedure)
+          (description "Input generator.")))
+        (returns (type procedure)
+         (description "A stateful filtering generator."))
+        (effects allocation state-write procedure-call))
       (let ((state seed))
         (lambda ()
           (let loop ((item (gen)))
@@ -386,12 +553,30 @@
 
     ;; Yield only values from GEN that do not satisfy PRED.
     (define gremove (lambda (pred gen)
+      "Return a generator removing values that satisfy PRED."
+      #((parameters
+         (pred (type procedure)
+          (description "Predicate applied to generated values."))
+         (gen (type procedure)
+          (description "Input generator.")))
+        (returns (type procedure)
+         (description "A filtering generator."))
+        (effects allocation state-write procedure-call))
       (gfilter (lambda (value) (not (pred value))) gen)))
 
     ;; Take at most K values from GEN.
     (define gtake
       (case-lambda
         ((gen k)
+         "Return a generator taking at most K values from GEN."
+         #((parameters
+            (gen (type procedure)
+             (description "Input generator."))
+            (k (type exact-integer)
+             (description "Maximum number of values to yield.")))
+           (returns (type procedure)
+            (description "A bounded generator."))
+           (effects allocation state-write procedure-call error))
          (check-non-negative-integer 'gtake k)
          (let ((remaining k)
                (done? #f))
@@ -420,6 +605,15 @@
 
     ;; Drop K values from GEN before yielding.
     (define gdrop (lambda (gen k)
+      "Return a generator dropping K initial values from GEN."
+      #((parameters
+         (gen (type procedure)
+          (description "Input generator."))
+         (k (type exact-integer)
+          (description "Number of values to skip.")))
+        (returns (type procedure)
+         (description "A generator yielding values after the skipped prefix."))
+        (effects allocation state-write procedure-call error))
       (check-non-negative-integer 'gdrop k)
       (let ((dropped? #f))
         (lambda ()
@@ -434,6 +628,15 @@
 
     ;; Yield values while PRED remains true.
     (define gtake-while (lambda (pred gen)
+      "Return a generator taking values while PRED remains true."
+      #((parameters
+         (pred (type procedure)
+          (description "Predicate applied to generated values."))
+         (gen (type procedure)
+          (description "Input generator.")))
+        (returns (type procedure)
+         (description "A prefix generator."))
+        (effects allocation state-write procedure-call))
       (let ((done? #f))
         (lambda ()
           (if done?
@@ -448,6 +651,15 @@
 
     ;; Drop values while PRED remains true, then yield the rest.
     (define gdrop-while (lambda (pred gen)
+      "Return a generator dropping values while PRED remains true."
+      #((parameters
+         (pred (type procedure)
+          (description "Predicate applied to generated values."))
+         (gen (type procedure)
+          (description "Input generator.")))
+        (returns (type procedure)
+         (description "A generator yielding the remaining suffix."))
+        (effects allocation state-write procedure-call))
       (let ((found? #f))
         (lambda ()
           (let loop ()
@@ -464,6 +676,15 @@
     (define gdelete
       (case-lambda
         ((item gen)
+         "Return a generator deleting ITEM from GEN."
+         #((parameters
+            (item (type any)
+             (description "Value to remove."))
+            (gen (type procedure)
+             (description "Input generator.")))
+           (returns (type procedure)
+            (description "A generator without matching values."))
+           (effects allocation state-write procedure-call))
          (gdelete item gen equal?))
         ((item gen equal)
          (lambda ()
@@ -477,6 +698,13 @@
     (define gdelete-neighbor-dups
       (case-lambda
         ((gen)
+         "Return a generator deleting adjacent duplicates from GEN."
+         #((parameters
+            (gen (type procedure)
+             (description "Input generator.")))
+           (returns (type procedure)
+            (description "A generator with adjacent duplicates collapsed."))
+           (effects allocation state-write procedure-call))
          (gdelete-neighbor-dups gen equal?))
         ((gen equal)
          (let ((first? #t)
@@ -497,6 +725,15 @@
 
     ;; Select values from VALUE-GEN at strictly increasing indices.
     (define gindex (lambda (value-gen index-gen)
+      "Return a generator selecting VALUE-GEN values by INDEX-GEN."
+      #((parameters
+         (value-gen (type procedure)
+          (description "Generator supplying values to select."))
+         (index-gen (type procedure)
+          (description "Generator supplying selected indices.")))
+        (returns (type procedure)
+         (description "A generator yielding indexed values."))
+        (effects allocation state-write procedure-call error))
       (let ((done? #f)
             (position 0)
             (previous-index -1))
@@ -529,6 +766,15 @@
 
     ;; Select values whose paired truth generator value is true.
     (define gselect (lambda (value-gen truth-gen)
+      "Return a generator selecting values paired with true values."
+      #((parameters
+         (value-gen (type procedure)
+          (description "Generator supplying values to select."))
+         (truth-gen (type procedure)
+          (description "Generator supplying selection booleans.")))
+        (returns (type procedure)
+         (description "A generator yielding selected values."))
+        (effects allocation state-write procedure-call))
       (let ((done? #f))
         (lambda ()
           (if done?
@@ -545,6 +791,13 @@
     (define generator->list
       (case-lambda
         ((gen)
+         "Return a list containing all values from GEN."
+         #((parameters
+            (gen (type procedure)
+             (description "Generator to consume.")))
+           (returns (type list)
+            (description "Generated values in order."))
+           (effects allocation procedure-call))
          (reverse (generator->reverse-list gen)))
         ((gen k)
          (generator->list (gtake gen k)))))
@@ -553,6 +806,13 @@
     (define generator->reverse-list
       (case-lambda
         ((gen)
+         "Return a reverse-order list containing all values from GEN."
+         #((parameters
+            (gen (type procedure)
+             (description "Generator to consume.")))
+           (returns (type list)
+            (description "Generated values in reverse order."))
+           (effects allocation procedure-call))
          (generator-fold cons '() gen))
         ((gen k)
          (generator->reverse-list (gtake gen k)))))
@@ -561,12 +821,30 @@
     (define generator->vector
       (case-lambda
         ((gen)
+         "Return a vector containing all values from GEN."
+         #((parameters
+            (gen (type procedure)
+             (description "Generator to consume.")))
+           (returns (type vector)
+            (description "Generated values in order."))
+           (effects allocation procedure-call))
          (list->vector (generator->list gen)))
         ((gen k)
          (list->vector (generator->list gen k)))))
 
     ;; Fill VECTOR with values from GEN starting at AT.
     (define generator->vector! (lambda (vector at gen)
+      "Write values from GEN into VECTOR starting at AT."
+      #((parameters
+         (vector (type vector)
+          (description "Vector to mutate."))
+         (at (type exact-integer)
+          (description "Starting index."))
+         (gen (type procedure)
+          (description "Generator to consume.")))
+        (returns (type exact-integer)
+         (description "Number of values written."))
+        (effects state-write procedure-call))
       (let loop ((value (gen)) (count 0) (index at))
         (cond
          ((eof-object? value) count)
@@ -579,12 +857,30 @@
     (define generator->string
       (case-lambda
         ((gen)
+         "Return a string containing characters from GEN."
+         #((parameters
+            (gen (type procedure)
+             (description "Generator yielding characters.")))
+           (returns (type string)
+            (description "Generated characters in order."))
+           (effects allocation procedure-call))
          (list->string (generator->list gen)))
         ((gen k)
          (list->string (generator->list gen k)))))
 
     ;; Fold over one or more generators.
     (define generator-fold (lambda (proc seed . generators)
+      "Fold PROC over values from GENERATORS."
+      #((parameters
+         (proc (type procedure)
+          (description "Folding procedure."))
+         (seed (type any)
+          (description "Initial fold state."))
+         (generators (type list)
+          (description "Generators to consume in parallel.")))
+        (returns (type any)
+         (description "Final fold state."))
+        (effects procedure-call))
       (let loop ((state seed))
         (let ((values (map (lambda (gen) (gen)) generators)))
           (if (any eof-object? values)
@@ -593,6 +889,15 @@
 
     ;; Apply PROC for side effects over one or more generators.
     (define generator-for-each (lambda (proc . generators)
+      "Apply PROC to values from GENERATORS for side effects."
+      #((parameters
+         (proc (type procedure)
+          (description "Procedure applied to generated values."))
+         (generators (type list)
+          (description "Generators to consume in parallel.")))
+        (returns (type any)
+         (description "Unspecified value."))
+        (effects procedure-call))
       (let loop ()
         (let ((values (map (lambda (gen) (gen)) generators)))
           (if (any eof-object? values)
@@ -603,6 +908,15 @@
 
     ;; Map PROC over one or more generators and return a list.
     (define generator-map->list (lambda (proc . generators)
+      "Return a list by mapping PROC over GENERATORS."
+      #((parameters
+         (proc (type procedure)
+          (description "Mapping procedure."))
+         (generators (type list)
+          (description "Generators to consume in parallel.")))
+        (returns (type list)
+         (description "Mapped values in order."))
+        (effects allocation procedure-call))
       (let loop ((result '()))
         (let ((values (map (lambda (gen) (gen)) generators)))
           (if (any eof-object? values)
@@ -611,6 +925,15 @@
 
     ;; Return the first value from GEN satisfying PRED, or #f.
     (define generator-find (lambda (pred gen)
+      "Return the first generated value satisfying PRED."
+      #((parameters
+         (pred (type procedure)
+          (description "Predicate applied to generated values."))
+         (gen (type procedure)
+          (description "Generator to consume.")))
+        (returns (type any)
+         (description "Matching value, or #f."))
+        (effects procedure-call))
       (let loop ((value (gen)))
         (cond
          ((eof-object? value) #f)
@@ -619,6 +942,15 @@
 
     ;; Count values from GEN satisfying PRED.
     (define generator-count (lambda (pred gen)
+      "Return the count of values from GEN satisfying PRED."
+      #((parameters
+         (pred (type procedure)
+          (description "Predicate applied to generated values."))
+         (gen (type procedure)
+          (description "Generator to consume.")))
+        (returns (type exact-integer)
+         (description "Number of matching values."))
+        (effects procedure-call))
       (generator-fold
        (lambda (value count)
          (if (pred value) (+ count 1) count))
@@ -627,6 +959,15 @@
 
     ;; Return the first true PRED result over GEN, or #f.
     (define generator-any (lambda (pred gen)
+      "Return the first true PRED result over GEN."
+      #((parameters
+         (pred (type procedure)
+          (description "Predicate applied to generated values."))
+         (gen (type procedure)
+          (description "Generator to consume.")))
+        (returns (type any)
+         (description "First true predicate result, or #f."))
+        (effects procedure-call))
       (let loop ((item (gen)))
         (cond
          ((eof-object? item) #f)
@@ -635,6 +976,15 @@
 
     ;; Return the last true PRED result over GEN, or the first false result.
     (define generator-every (lambda (pred gen)
+      "Return whether PRED succeeds for every value from GEN."
+      #((parameters
+         (pred (type procedure)
+          (description "Predicate applied to generated values."))
+         (gen (type procedure)
+          (description "Generator to consume.")))
+        (returns (type any)
+         (description "Last true predicate result, or #f."))
+        (effects procedure-call))
       (let loop ((item (gen)) (last #t))
         (if (eof-object? item)
             last
@@ -645,11 +995,33 @@
 
     ;; Unfold values from GEN with an SRFI 1 style UNFOLD procedure.
     (define generator-unfold (lambda (gen unfold . args)
+      "Apply UNFOLD to values from GEN."
+      #((parameters
+         (gen (type procedure)
+          (description "Generator to consume."))
+         (unfold (type procedure)
+          (description "SRFI 1 style unfold procedure."))
+         (args (type list)
+          (description "Additional arguments passed to UNFOLD.")))
+        (returns (type any)
+         (description "Result returned by UNFOLD."))
+        (effects allocation procedure-call))
       (apply unfold eof-object? (lambda (value) value)
              (lambda (value) (gen)) (gen) args)))
 
     ;; Build an accumulator from a folding procedure and finalizer.
     (define make-accumulator (lambda (kons knil finalizer)
+      "Return an accumulator using KONS, KNIL, and FINALIZER."
+      #((parameters
+         (kons (type procedure)
+          (description "Procedure incorporating each supplied value."))
+         (knil (type any)
+          (description "Initial accumulator state."))
+         (finalizer (type procedure)
+          (description "Procedure producing the final result.")))
+        (returns (type procedure)
+         (description "Accumulator procedure accepting values or EOF."))
+        (effects allocation state-write procedure-call))
       (let ((state knil)
             (done? #f))
         (lambda (obj)
@@ -665,6 +1037,11 @@
 
     ;; Count accumulated values.
     (define count-accumulator (lambda ()
+      "Return an accumulator that counts supplied values."
+      #((parameters)
+        (returns (type procedure)
+         (description "Accumulator returning a count at EOF."))
+        (effects allocation state-write))
       (make-accumulator
        (lambda (obj state)
          obj
@@ -674,14 +1051,29 @@
 
     ;; Accumulate values into a list in arrival order.
     (define list-accumulator (lambda ()
+      "Return an accumulator that builds a list in arrival order."
+      #((parameters)
+        (returns (type procedure)
+         (description "Accumulator returning a list at EOF."))
+        (effects allocation state-write))
       (make-accumulator cons '() reverse)))
 
     ;; Accumulate values into a list in reverse arrival order.
     (define reverse-list-accumulator (lambda ()
+      "Return an accumulator that builds a reverse-order list."
+      #((parameters)
+        (returns (type procedure)
+         (description "Accumulator returning a reverse-order list at EOF."))
+        (effects allocation state-write))
       (make-accumulator cons '() (lambda (state) state))))
 
     ;; Accumulate values into a vector in arrival order.
     (define vector-accumulator (lambda ()
+      "Return an accumulator that builds a vector in arrival order."
+      #((parameters)
+        (returns (type procedure)
+         (description "Accumulator returning a vector at EOF."))
+        (effects allocation state-write))
       (make-accumulator
        cons
        '()
@@ -689,10 +1081,24 @@
 
     ;; Accumulate values into a vector in reverse arrival order.
     (define reverse-vector-accumulator (lambda ()
+      "Return an accumulator that builds a reverse-order vector."
+      #((parameters)
+        (returns (type procedure)
+         (description "Accumulator returning a reverse-order vector at EOF."))
+        (effects allocation state-write))
       (make-accumulator cons '() list->vector)))
 
     ;; Accumulate values into VECTOR starting at AT.
     (define vector-accumulator! (lambda (vector at)
+      "Return an accumulator that writes into VECTOR starting at AT."
+      #((parameters
+         (vector (type vector)
+          (description "Vector to mutate."))
+         (at (type exact-integer)
+          (description "Starting index.")))
+        (returns (type procedure)
+         (description "Accumulator returning VECTOR at EOF."))
+        (effects allocation state-write error))
       (let ((done? #f))
         (lambda (obj)
           (if (eof-object? obj)
@@ -708,6 +1114,11 @@
 
     ;; Accumulate characters into a string.
     (define string-accumulator (lambda ()
+      "Return an accumulator that builds a string."
+      #((parameters)
+        (returns (type procedure)
+         (description "Accumulator returning a string at EOF."))
+        (effects allocation state-write))
       (make-accumulator
        cons
        '()
@@ -715,6 +1126,11 @@
 
     ;; Accumulate bytes into a bytevector.
     (define bytevector-accumulator (lambda ()
+      "Return an accumulator that builds a bytevector."
+      #((parameters)
+        (returns (type procedure)
+         (description "Accumulator returning a bytevector at EOF."))
+        (effects allocation state-write))
       (make-accumulator
        cons
        '()
@@ -722,6 +1138,15 @@
 
     ;; Accumulate bytes into BYTEVECTOR starting at AT.
     (define bytevector-accumulator! (lambda (bytevector at)
+      "Return an accumulator that writes into BYTEVECTOR starting at AT."
+      #((parameters
+         (bytevector (type bytevector)
+          (description "Bytevector to mutate."))
+         (at (type exact-integer)
+          (description "Starting index.")))
+        (returns (type procedure)
+         (description "Accumulator returning BYTEVECTOR at EOF."))
+        (effects allocation state-write error))
       (let ((done? #f))
         (lambda (obj)
           (if (eof-object? obj)
@@ -737,8 +1162,18 @@
 
     ;; Accumulate numbers into a sum.
     (define sum-accumulator (lambda ()
+      "Return an accumulator that sums supplied numbers."
+      #((parameters)
+        (returns (type procedure)
+         (description "Accumulator returning a numeric sum at EOF."))
+        (effects allocation state-write procedure-call))
       (make-accumulator + 0 (lambda (state) state))))
 
     ;; Accumulate numbers into a product.
     (define product-accumulator (lambda ()
+      "Return an accumulator that multiplies supplied numbers."
+      #((parameters)
+        (returns (type procedure)
+         (description "Accumulator returning a numeric product at EOF."))
+        (effects allocation state-write procedure-call))
       (make-accumulator * 1 (lambda (state) state))))))
