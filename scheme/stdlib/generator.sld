@@ -388,13 +388,16 @@
         (effects allocation state-write procedure-call))
       (let ((state '()))
         (lambda ()
-          (when (null? state)
-            (set! state (gen)))
-          (if (eof-object? state)
-              state
+          (let loop ()
+            (cond
+             ((eof-object? state) state)
+             ((null? state)
+              (set! state (gen))
+              (loop))
+             (else
               (let ((obj (car state)))
                 (set! state (cdr state))
-                obj)))))
+                obj)))))))
 
     ;; Group values from GEN into lists of K values.
     (define (ggroup gen k . rest)
@@ -899,13 +902,16 @@
         (returns (type exact-integer)
          (description "Number of values written."))
         (effects state-write procedure-call))
-      (let loop ((value (gen)) (count 0) (index at))
+      (let loop ((count 0) (index at))
         (cond
-         ((eof-object? value) count)
          ((>= index (vector-length vector)) count)
          (else
-          (vector-set! vector index value)
-          (loop (gen) (+ count 1) (+ index 1))))))
+          (let ((value (gen)))
+            (if (eof-object? value)
+                count
+                (begin
+                  (vector-set! vector index value)
+                  (loop (+ count 1) (+ index 1)))))))))
 
     ;; Consume GEN into a string, optionally bounded by K.
     (define (generator->string gen . rest)
