@@ -28,8 +28,7 @@
 (define failures 0)
 
 ;; Unique marker for unset CI matrix defaults.
-(define consent-test-option-unset
-  (list 'unset))
+(define consent-test-option-unset (list 'unset))
 
 ;; Return #t when VALUE is the unset marker.
 (define (consent-test-option-unset? value)
@@ -143,8 +142,7 @@
    (consent-test-merge-options (consent-test-rest-options rest))))
 
 ;; Alias kept for tests that read by string name.
-(define consent-eval-string
-  consent-eval-source)
+(define consent-eval-string consent-eval-source)
 
 ;; Expand EXPRESSION under the CI matrix defaults.
 (define (consent-expand expression . rest)
@@ -408,12 +406,10 @@
         (record-failure (field case 'id) expect actual-result))))
 
 ;; Canonical fixture suite loaded once for validation and execution.
-(define suite
-  (read-suite))
+(define suite (read-suite))
 
 ;; Shared fixture case list extracted from the canonical suite.
-(define cases
-  (suite-cases suite))
+(define cases (suite-cases suite))
 
 (check 'fixture-suite-tag (car suite) 'consent-fixture-suite)
 (check-true 'fixture-suite-has-cases (pair? cases))

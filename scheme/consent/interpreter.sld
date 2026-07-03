@@ -698,8 +698,7 @@ cursor across sessions."
              (or (not maximum) (<= count maximum)))))
 
     ;; Unique marker distinguishing a caught host condition from a value.
-    (define host-condition-tag
-      (list 'host-condition))
+    (define host-condition-tag (list 'host-condition))
 
     (define (host-condition-budget? condition)
       "Report whether CONDITION carries a Consent budget diagnostic."
@@ -8975,8 +8974,7 @@ cursor across sessions."
         (trampoline (make-sequence forms #t) environment context)))
 
     ;; String evaluation is an alias kept for callers that name the source kind.
-    (define consent-eval-string
-      consent-eval-source)
+    (define consent-eval-string consent-eval-source)
 
     (define (call-with-result-condition-handler context thunk)
       "Call THUNK, converting any raised condition to an evaluation-result datum."

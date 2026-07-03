@@ -890,18 +890,37 @@ Each result has the form (NAME START END)."
               errors)))
     (nreverse errors)))
 
-(defun consent--scheme-documentation-simple-datum-rhs-p (rhs)
-  "Return non-nil when RHS starts with a simple datum literal."
-  (string-match-p
-   (rx string-start
-       (* space)
-       (or "#t" "#f" "#\\" digit "\"" "'" "`" "#(" "#u8("
-           (: (? (or "+" "-")) digit)))
-   rhs))
+(defun consent--scheme-documentation-simple-value-rhs-p (rhs)
+  "Return non-nil when RHS is a simple value expression."
+  (let ((trimmed (string-trim rhs)))
+    (when (string-suffix-p ")" trimmed)
+      (setq trimmed (string-trim (substring trimmed 0 -1))))
+    (or
+     (string-match-p
+      (rx string-start
+          (or "#t" "#f" "#\\" digit "\"" "'" "`" "#(" "#u8("
+              (: (? (or "+" "-")) digit)))
+      trimmed)
+     (string-match-p
+      (rx string-start
+          (+ (not (any space "(" ")" ";")))
+          (* space)
+          string-end)
+      trimmed)
+     (and
+      (string-match
+       (rx string-start
+           "(" (* space)
+           (group (+ (not (any space "(" ")" ";"))))
+           symbol-end)
+       trimmed)
+      (not (member (match-string 1 trimmed)
+                   '("begin" "case-lambda" "cond" "define" "if"
+                     "lambda" "let" "let*" "letrec" "set!")))))))
 
 (defun consent--scheme-documentation-same-line-complex-define-errors
     (file)
-  "Return errors for same-line non-datum value definitions in FILE."
+  "Return errors for same-line complex value definitions in FILE."
   (let* ((text (with-temp-buffer
                  (insert-file-contents file)
                  (buffer-string)))
@@ -920,9 +939,9 @@ Each result has the form (NAME START END)."
                    line)
              do
              (let ((rhs (match-string 1 line)))
-               (unless (consent--scheme-documentation-simple-datum-rhs-p
+               (unless (consent--scheme-documentation-simple-value-rhs-p
                         rhs)
-                 (push (format "%s:%d place non-datum define value on a following line after the definition name"
+                 (push (format "%s:%d place complex define value on a following line after the definition name"
                                relative-file
                                (1+ index))
                        errors))))
@@ -1091,7 +1110,7 @@ Each result has the form (NAME START END)."
       (delete-file file))))
 
 (ert-deftest consent-scheme-documentation-test-value-define-style ()
-  "Allow same-line define values only for simple datum literals."
+  "Allow same-line define values for simple value expressions."
   (let ((file
          (make-temp-file
           "consent-doc-value-define-style" nil ".scm"
@@ -1100,8 +1119,11 @@ Each result has the form (NAME START END)."
            "(define good-number 42)\n"
            "(define good-string \"value\")\n"
            "(define good-quoted '(a b))\n"
-           "(define bad-call " "(list 'a))\n"
-           "(define bad-alias " "other-name)\n"))))
+           "(define good-call (list 'a))\n"
+           "(define good-nested-call (string (integer->char 27)))\n"
+           "(define good-alias other-name)\n"
+           "(define bad-branch " "(if ready? yes no))\n"
+           "(define bad-let " "(let ((value 1)) value))\n"))))
     (unwind-protect
         (let ((errors
                (consent--scheme-documentation-same-line-complex-define-errors
@@ -1109,7 +1131,7 @@ Each result has the form (NAME START END)."
           (should
            (cl-some
             (lambda (error)
-              (string-match-p "non-datum define value" error))
+              (string-match-p "complex define value" error))
             errors))
           (should (= (length errors) 2)))
       (delete-file file))))

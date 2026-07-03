@@ -65,8 +65,7 @@
        #t)
 
 ;; Store for exercising the portable approval boundary.
-(define approval-store
-  (approval:consent-make-approval-store))
+(define approval-store (approval:consent-make-approval-store))
 
 ;; Approval records are canonical Scheme-readable datums.
 (define portable-approval-id
@@ -98,8 +97,7 @@
        #t)
 
 ;; Store for exercising the portable job boundary.
-(define job-store
-  (job:consent-make-job-store))
+(define job-store (job:consent-make-job-store))
 
 ;; Job records are canonical Scheme-readable datums even when a host adapter
 ;; owns actual scheduling.
@@ -110,8 +108,7 @@
                         '((max-steps . 100))))
 
 ;; Id of the portable job record under test.
-(define portable-job-id
-  (job:job-datum-id portable-job))
+(define portable-job-id (job:job-datum-id portable-job))
 
 (check 'job-boundary-start-status
        (job:job-store-status job-store portable-job-id)
@@ -139,8 +136,7 @@
        'cancelled)
 
 ;; Store for exercising the portable memory boundary.
-(define memory-store
-  (memory:consent-make-memory-store))
+(define memory-store (memory:consent-make-memory-store))
 
 ;; Memory records are canonical Scheme-readable datums.
 (define portable-memory
@@ -167,8 +163,7 @@
        1)
 
 ;; Store for exercising the portable helper/artifact boundary.
-(define helper-store
-  (helper:consent-make-helper-store))
+(define helper-store (helper:consent-make-helper-store))
 
 ;; Helper libraries and artifacts are canonical Scheme-readable datums.
 (define portable-helper
@@ -214,8 +209,7 @@
        'agent-skill-candidate)
 
 ;; Store for exercising the portable plan boundary.
-(define plan-store
-  (plan:consent-make-plan-store))
+(define plan-store (plan:consent-make-plan-store))
 
 ;; Plan records are scoped, mutable Scheme-readable datums.
 (define portable-plan
@@ -278,8 +272,7 @@
        #f)
 
 ;; Store for exercising the portable session lifecycle boundary.
-(define session-store
-  (session:consent-make-session-store))
+(define session-store (session:consent-make-session-store))
 
 ;; Session datum created through the portable session module.
 (define portable-session
