@@ -349,8 +349,10 @@
                             (strategy pure-functional))
                            (hash-variant-out-of-scope
                             (issue . 624))
+                           (local-tests
+                            (file . "tests/scheme/stdlib-mapping-test.scm"))
                            (adapted-tests
-                            (file . "tests/scheme/stdlib-mapping-test.scm"))))
+                            (file . "tests/scheme/stdlib-mapping-conformance-test.scm"))))
          (implementation-library . (stdlib mapping))
          (import-aliases . ((stdlib mapping) (scheme mapping)
                             (srfi 146) (srfi srfi-146)))
@@ -360,7 +362,8 @@
                           (stdlib rbtree)))
          (test-status . (import-resolution representative-mapping-behavior
                          alias-import missing-export-diagnostic
-                         adapted-upstream-tests portable-host-suite)))
+                         adapted-upstream-tests direct-host-conformance
+                         compiled-host-smoke portable-host-suite)))
         ((library . (scheme mapping))
          (status . alias)
          (target . (stdlib mapping))

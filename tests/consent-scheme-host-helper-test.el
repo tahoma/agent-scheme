@@ -43,7 +43,7 @@
      'compiled
      "scheme"
      "tests/scheme/consent-reader-test.scm")
-    '("--script" "tests/scheme/consent-reader-test.scm")))
+    '("--host-run" "tests/scheme/consent-reader-test.scm")))
   (should
    (equal
     (consent--scheme-host-probe-arguments 'compiled "scheme")
@@ -57,11 +57,30 @@
      'gambit-native
      "scheme"
      "tests/scheme/consent-reader-test.scm")
-    '("--script" "tests/scheme/consent-reader-test.scm")))
+    '("--host-run" "tests/scheme/consent-reader-test.scm")))
   (should
    (equal
     (consent--scheme-host-probe-arguments 'gambit-native "scheme")
     '("--eval" "(+ 1 2)"))))
+
+(ert-deftest consent-portable-host-helper-test-selects-direct-only-files ()
+  "Keep expensive direct-only suites out of compiled host runs."
+  (should
+   (member
+    "tests/scheme/stdlib-mapping-test.scm"
+    (consent--scheme-host-test-files-for-host 'compiled)))
+  (should-not
+   (member
+    "tests/scheme/stdlib-mapping-conformance-test.scm"
+    (consent--scheme-host-test-files-for-host 'compiled)))
+  (should-not
+   (member
+    "tests/scheme/stdlib-mapping-conformance-test.scm"
+    (consent--scheme-host-test-files-for-host 'gambit-native)))
+  (should
+   (member
+    "tests/scheme/stdlib-mapping-conformance-test.scm"
+    (consent--scheme-host-test-files-for-host 'racket))))
 
 (ert-deftest consent-portable-host-helper-test-expands-gambit-native-runner-path ()
   "Expand repository-relative configured Gambit-compiled runner paths."
