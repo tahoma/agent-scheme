@@ -2102,6 +2102,41 @@
                    missing
                    ((1 . one) (2 . two)))"))
 
+(check-external 'srfi-146-alias-export-parity
+                "(import (scheme base)
+                         (scheme comparator)
+                         (rename (scheme mapping)
+                                 (mapping scheme-mapping)
+                                 (mapping->alist scheme-mapping->alist))
+                         (rename (srfi 146)
+                                 (mapping srfi-mapping)
+                                 (mapping->alist srfi-mapping->alist))
+                         (rename (srfi srfi-146)
+                                 (mapping portable-mapping)
+                                 (mapping->alist portable-mapping->alist)))
+                 (define comparator
+                   (make-comparator integer? = < number-hash))
+                 (list
+                  (scheme-mapping->alist
+                   (scheme-mapping comparator 2 'two 1 'one))
+                  (srfi-mapping->alist
+                   (srfi-mapping comparator 2 'two 1 'one))
+                  (portable-mapping->alist
+                   (portable-mapping comparator 2 'two 1 'one)))"
+                (expected-datum-external
+                 "(((1 . one) (2 . two))
+                   ((1 . one) (2 . two))
+                   ((1 . one) (2 . two)))"))
+
+(check 'srfi-146-hash-alias-unknown-library-diagnostic
+       (raises?
+        (lambda ()
+          (consent-eval-source
+           "(import (scheme base)
+                    (srfi 146 hash))
+            'unreachable")))
+       #t)
+
 (check-external 'stdlib-mapping-manifest
                 "(import (scheme base) (stdlib manifest))
                  (let ((entry (stdlib-manifest-ref '(stdlib mapping)))
