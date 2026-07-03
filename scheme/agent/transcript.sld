@@ -24,7 +24,8 @@
           transcript-summary-view
           transcript-rotate
           transcript-export)
-  (import (scheme base))
+  (import (scheme base)
+          (only (stdlib list) filter-map))
   (begin
     ;; Event kinds cover session lifecycle, evaluation, agent I/O, policy,
     ;; capability, skill, memory, and provider-routing activity.
@@ -386,16 +387,6 @@
         (if (or (<= count keep) (<= keep 0))
             events
             (drop events (- count keep)))))
-
-    (define (filter-map procedure items)
-      "Return non-#f values from ITEMS after applying PROCEDURE."
-      (let loop ((rest items) (result '()))
-        (cond
-         ((null? rest) (reverse result))
-         (else
-          (let ((value (procedure (car rest))))
-            (loop (cdr rest)
-                  (if value (cons value result) result)))))))
 
     (define (transcript-export events format)
       "Return a transcript view for EVENTS in FORMAT."

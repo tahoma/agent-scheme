@@ -17,6 +17,7 @@
           measure-reliability
           measure-policy-ablation)
   (import (scheme base)
+          (only (stdlib list) count)
           (scheme write)
           (agent runner)
           (agent task))
@@ -159,17 +160,9 @@
                     (datum->external-string expected))
               (list 'receipt receipt))))
 
-    (define (count-if predicate items)
-      "Return the number of ITEMS satisfying PREDICATE."
-      (let loop ((rest items) (count 0))
-        (cond
-         ((null? rest) count)
-         ((predicate (car rest)) (loop (cdr rest) (+ count 1)))
-         (else (loop (cdr rest) count)))))
-
     (define (count-reason results reason)
       "Return how many RESULTS stopped with normalized REASON."
-      (count-if
+      (count
        (lambda (result)
          (eq? (field-value result 'stop-reason 'failed-verifier) reason))
        results))
@@ -199,7 +192,7 @@
 
     (define (passed-count results)
       "Return how many RESULTS passed."
-      (count-if
+      (count
        (lambda (result)
          (field-value result 'passed #f))
        results))

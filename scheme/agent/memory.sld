@@ -20,6 +20,7 @@
           memory-record-id)
   (import (scheme base)
           (consent reader)
+          (only (stdlib list) filter find remove take)
           (scheme write))
   (begin
     ;; Public memory scopes mirror the Consent Scheme architecture document.
@@ -135,12 +136,10 @@
     (define (scope-records store scope)
       "Return records from STORE belonging to SCOPE, newest first."
       (let ((normalized-scope (normalize-scope scope)))
-        (let loop ((records (store-records store)) (result '()))
-          (cond
-           ((null? records) (reverse result))
-           ((eq? (field-value (car records) 'scope) normalized-scope)
-            (loop (cdr records) (cons (car records) result)))
-           (else (loop (cdr records) result))))))
+        (filter
+         (lambda (record)
+           (eq? (field-value record 'scope) normalized-scope))
+         (store-records store))))
 
     (define (memory-store-ref store scope key)
       "Return a memory record from STORE by SCOPE and KEY, or #f."
@@ -153,22 +152,19 @@
         (returns (type (or list boolean))
          (description "The matching memory record datum, or #f."))
         (effects state-read error))
-      (let loop ((records (scope-records store scope)))
-        (cond
-         ((null? records) #f)
-         ((equal? (memory-record-key (car records)) key) (car records))
-         (else (loop (cdr records))))))
+      (find
+       (lambda (record)
+         (equal? (memory-record-key record) key))
+       (scope-records store scope)))
 
     (define (without-record store scope key)
       "Return STORE records with any record matching KEY in SCOPE removed."
       (let ((normalized-scope (normalize-scope scope)))
-        (let loop ((records (store-records store)) (result '()))
-          (cond
-           ((null? records) (reverse result))
-           ((and (eq? (field-value (car records) 'scope) normalized-scope)
-                 (equal? (memory-record-key (car records)) key))
-            (loop (cdr records) result))
-           (else (loop (cdr records) (cons (car records) result)))))))
+        (remove
+         (lambda (record)
+           (and (eq? (field-value record 'scope) normalized-scope)
+                (equal? (memory-record-key record) key)))
+         (store-records store))))
 
     (define (make-memory-record store scope key kind datum existing)
       "Build a canonical Scheme-readable memory record."
@@ -294,12 +290,10 @@
         (returns (type (list-of list))
          (description "List of matching memory record datums in SCOPE."))
         (effects state-read error))
-      (let loop ((records (scope-records store scope)) (result '()))
-        (cond
-         ((null? records) (reverse result))
-         ((record-matches? (car records) query)
-          (loop (cdr records) (cons (car records) result)))
-         (else (loop (cdr records) result)))))
+      (filter
+       (lambda (record)
+         (record-matches? record query))
+       (scope-records store scope)))
 
     (define (memory-store-by-tag store scope tag)
       "Return SCOPE records tagged with TAG."
@@ -312,18 +306,10 @@
         (returns (type (list-of list))
          (description "List of memory record datums whose tags include TAG."))
         (effects state-read error))
-      (let loop ((records (scope-records store scope)) (result '()))
-        (cond
-         ((null? records) (reverse result))
-         ((member-equal? tag (memory-record-tags (car records)))
-          (loop (cdr records) (cons (car records) result)))
-         (else (loop (cdr records) result)))))
-
-    (define (take records count)
-      "Return the first COUNT records from RECORDS."
-      (if (or (<= count 0) (null? records))
-          '()
-          (cons (car records) (take (cdr records) (- count 1)))))
+      (filter
+       (lambda (record)
+         (member-equal? tag (memory-record-tags record)))
+       (scope-records store scope)))
 
     (define (memory-store-recent store scope count)
       "Return COUNT newest memory records in SCOPE."
@@ -339,4 +325,8 @@
         (returns (type (list-of list))
          (description "At most COUNT newest memory record datums in SCOPE."))
         (effects state-read error))
-      (take (scope-records store scope) (integer-value count)))))
+      (let* ((records (scope-records store scope))
+             (limit (integer-value count)))
+        (if (<= limit 0)
+            '()
+            (take records (min limit (length records))))))))
