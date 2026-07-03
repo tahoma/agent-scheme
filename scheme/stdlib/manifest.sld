@@ -362,6 +362,7 @@
                           (stdlib rbtree)))
          (test-status . (import-resolution representative-mapping-behavior
                          alias-import missing-export-diagnostic
+                         hash-alias-diagnostic model-oracle
                          adapted-upstream-tests direct-host-conformance
                          compiled-host-smoke portable-host-suite)))
         ((library . (scheme mapping))
