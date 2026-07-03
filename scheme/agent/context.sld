@@ -13,7 +13,8 @@
           make-conversation-summary
           make-focus-context
           make-context-bundle)
-  (import (scheme base))
+  (import (scheme base)
+          (only (stdlib list) filter))
   (begin
     (define (context-field name value)
       "Return a Scheme-readable context field named NAME with VALUE."
@@ -37,12 +38,7 @@
 
     (define (context-present-records records)
       "Return RECORDS without absent #f entries, preserving order."
-      (let loop ((rest records) (kept '()))
-        (cond
-         ((null? rest) (reverse kept))
-         ((context-present? (car rest))
-          (loop (cdr rest) (cons (car rest) kept)))
-         (else (loop (cdr rest) kept)))))
+      (filter context-present? records))
 
     (define (make-request-context request-id session-id request)
       "Return a request-context record, or #f when no request fields exist."
