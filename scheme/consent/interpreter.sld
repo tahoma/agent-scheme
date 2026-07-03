@@ -1782,7 +1782,8 @@ cursor across sessions."
       "Reparse an inexact decimal as its exact rational representation."
       (number->rational-pair
        (consent-read
-        (string-append "#e" (consent-number->external number)))
+        (string-append "#e" (consent-number->external number))
+        '((source-metadata . #f)))
        "exact"))
 
     (define (number-exact number)
@@ -3111,7 +3112,7 @@ cursor across sessions."
                    source-text))))
         (guard (condition
                 (else #f))
-          (let ((datum (consent-read source)))
+          (let ((datum (consent-read source '((source-metadata . #f)))))
             (if (consent-number? datum)
                 datum
                 #f)))))
@@ -3935,7 +3936,8 @@ cursor across sessions."
             (let ((result
                    (consent-read-from-string-at
                     (consent-port-source port)
-                    (consent-port-position port))))
+                    (consent-port-position port)
+                    (context-reader-options context))))
               (set-consent-port-position! port (cdr result))
               (audit-port-capability-result! context port 'read 'datum #f)
               (charge-literal!
@@ -4901,6 +4903,12 @@ cursor across sessions."
             (result-field 'max-value-nodes
                           (reflect-datumize
                            (context-maximum-value-nodes context)))
+            (result-field 'source-metadata-used
+                          (consent-make-canonical-integer
+                           (consent-source-metadata-count)))
+            (result-field 'max-source-metadata
+                          (reflect-datumize
+                           (context-maximum-source-metadata context)))
             (result-field 'interned-symbols-used
                           (consent-make-canonical-integer
                            (context-interned-symbols context)))
@@ -4941,6 +4949,10 @@ cursor across sessions."
                           (reflect-budget-headroom
                            (context-maximum-value-nodes context)
                            (context-value-nodes context)))
+            (result-field 'source-metadata
+                          (reflect-budget-headroom
+                           (context-maximum-source-metadata context)
+                           (consent-source-metadata-count)))
             (result-field 'interned-symbols
                           (reflect-budget-headroom
                            (context-maximum-interned-symbols context)
@@ -5912,6 +5924,7 @@ cursor across sessions."
       '(max-steps
         max-non-tail-steps
         max-value-nodes
+        max-source-metadata
         max-interned-symbols
         max-host-callbacks
         max-events
@@ -6937,7 +6950,9 @@ cursor across sessions."
                (string-append description " file is not readable")
                filename)))
         (audit-file-capability-result! context authorization 'read #f)
-        (list (consent-read-all (read-file-string path))
+        (list (consent-read-all
+               (read-file-string path)
+               (context-reader-options context))
               (path-directory path)
               authorization)))
 
@@ -8591,11 +8606,13 @@ cursor across sessions."
          (memq (consent-recovery-step-status
                 (consent-read-recover-from-string-at
                  (consent-port-source port)
-                 (consent-port-position port)))
+                 (consent-port-position port)
+                 (context-reader-options context)))
                '(datum invalid))))
       (let ((result (consent-read-from-string-at
                      (consent-port-source port)
-                     (consent-port-position port))))
+                     (consent-port-position port)
+                     (context-reader-options context))))
         (set-consent-port-position! port (cdr result))
         (audit-port-capability-result! context port 'read 'datum #f)
         (if (consent-read-eof? (car result))

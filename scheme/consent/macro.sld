@@ -1563,6 +1563,7 @@
          ((or (eq? name 'max-steps)
               (eq? name 'max-non-tail-steps)
               (eq? name 'max-value-nodes)
+              (eq? name 'max-source-metadata)
               (eq? name 'max-events)
               (eq? name 'max-event-nodes))
           name)

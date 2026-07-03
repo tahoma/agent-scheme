@@ -219,6 +219,13 @@ Scheme code."
       :max-value-nodes
       (consent--eval-context-maximum-value-nodes context))))
    (consent-job--field
+    "max-source-metadata"
+    (consent-job--integer
+     (consent-job--budget-value
+      options
+      :max-source-metadata
+      (consent--eval-context-maximum-source-metadata context))))
+   (consent-job--field
     "max-interned-symbols"
     (consent-job--integer
      (consent-job--budget-value
@@ -245,7 +252,7 @@ Scheme code."
   "Return OPTIONS with Scheme numeric budget values converted for the host."
   (let ((normalized (copy-sequence options)))
     (dolist (key '(:max-steps :max-non-tail-steps :max-value-nodes
-                   :max-interned-symbols
+                   :max-source-metadata :max-interned-symbols
                    :max-host-callbacks :max-events :max-event-nodes
                    :max-output-bytes :max-wall-time-ms)
                  normalized)

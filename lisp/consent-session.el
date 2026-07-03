@@ -798,6 +798,8 @@ Return the stale handles that were removed."
           (consent--eval-context-maximum-steps context)
           :maximum-value-nodes
           (consent--eval-context-maximum-value-nodes context)
+          :maximum-source-metadata
+          (consent--eval-context-maximum-source-metadata context)
           :host-callbacks 0
           :maximum-host-callbacks
           (consent--eval-context-maximum-host-callbacks context)

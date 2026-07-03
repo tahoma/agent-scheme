@@ -117,6 +117,8 @@
             (list 'max-events (option-ref options 'max-events 1000))
             (list 'max-value-nodes
                   (option-ref options 'max-value-nodes 10000000))
+            (list 'max-source-metadata
+                  (option-ref options 'max-source-metadata 1000000))
             (list 'max-interned-symbols
                   (option-ref options 'max-interned-symbols 1000000))
             (list 'max-output-bytes
