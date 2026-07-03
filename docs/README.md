@@ -29,6 +29,7 @@ project pitch and examples, see the top-level [README](../README.md).
 - [Stdlib Libraries](stdlib.md) — optional SRFI and R7RS-large library support outside the R7RS-small conformance contract.
 - [R7RS Implementation Test Mining](r7rs-implementation-mining.md) — a survey of external R7RS and near-R7RS test suites mined for fixtures.
 - [Docstring Metadata Convention](docstring-metadata.md) — carrying documentation metadata as ordinary R7RS data in source.
+- [Scheme Style Guidelines](scheme-style.md) — portable Scheme source layout, docstrings, and rich metadata style.
 - [Macro Expansion Introspection](macro-introspection.md) — exposing macro expansion as Scheme-readable data.
 - [Feature and Host Reflection](feature-reflection.md) — preferring capability discovery over hard-coded host assumptions.
 
