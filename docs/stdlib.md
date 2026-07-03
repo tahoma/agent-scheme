@@ -17,6 +17,7 @@ source-tree layers.
 | `(srfi 16)` | shimmed | Built-in shim over R7RS `(scheme case-lambda)`, recorded in `(stdlib manifest)` | `(srfi 16)`, `(srfi srfi-16)` | Optional SRFI compatibility for `case-lambda`; the implementation remains the R7RS-small library and is not vendored stdlib source. |
 | `(stdlib and-let-star)` | implemented | Vendored adapted SRFI 2 sample macro, recorded in `(stdlib manifest)` | `(stdlib and-let-star)`, `(srfi 2)`, `(srfi srfi-2)` | Optional SRFI 2 `and-let*` syntax for guarded sequential bindings; not part of the R7RS-small baseline. |
 | `(stdlib receive)` | shimmed | Built-in portable shim over R7RS multiple values, recorded in `(stdlib manifest)` | `(stdlib receive)`, `(srfi 8)`, `(srfi srfi-8)` | Optional SRFI 8 `receive` syntax for binding multiple values; not part of the R7RS-small baseline. |
+| `(stdlib assume)` | shimmed | Built-in portable SRFI 145 shim, recorded in `(stdlib manifest)` | `(stdlib assume)`, `(srfi 145)`, `(srfi srfi-145)` | Optional SRFI 145 `assume` syntax for invalid code paths; not part of the R7RS-small baseline. |
 | `(stdlib comparator)` | implemented | Vendored adapted SRFI 128 sample implementation, recorded in `(stdlib manifest)` | `(stdlib comparator)`, `(scheme comparator)`, `(srfi 128)`, `(srfi srfi-128)` | Primary stdlib spelling owns the source; R7RS-large and SRFI spellings are compatibility aliases. |
 
 The Scheme-readable `(stdlib manifest)` library records source URLs, upstream

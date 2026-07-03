@@ -81,6 +81,7 @@
     "(stdlib and-let-star)"
     "(stdlib comparator)"
     "(stdlib receive)"
+    "(stdlib assume)"
     "(stdlib json)")
   "Optional stdlib library keys backed by source files.")
 
@@ -99,6 +100,10 @@
      (:target . "(stdlib receive)"))
     ((:alias . "(srfi srfi-8)")
      (:target . "(stdlib receive)"))
+    ((:alias . "(srfi 145)")
+     (:target . "(stdlib assume)"))
+    ((:alias . "(srfi srfi-145)")
+     (:target . "(stdlib assume)"))
     ((:alias . "(consent json)")
      (:target . "(stdlib json)"))
     ((:alias . "(srfi 180)")
@@ -233,6 +238,8 @@ core rather than the agent domain it governs.")
      . "../scheme/stdlib/comparator.sld")
     ("(stdlib receive)"
      . "../scheme/stdlib/receive.sld")
+    ("(stdlib assume)"
+     . "../scheme/stdlib/assume.sld")
     ("(stdlib json)"
      . "../scheme/stdlib/json.sld"))
   "Checked-in optional stdlib libraries loaded as Scheme source.")

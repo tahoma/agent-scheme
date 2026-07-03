@@ -148,6 +148,7 @@
         (stdlib and-let-star)
         (stdlib comparator)
         (stdlib receive)
+        (stdlib assume)
         (stdlib json)))
 
     ;; Registry aliases can expose a target library directly or as a subset.
@@ -166,6 +167,10 @@
          (target . (stdlib receive)))
         ((alias . (srfi srfi-8))
          (target . (stdlib receive)))
+        ((alias . (srfi 145))
+         (target . (stdlib assume)))
+        ((alias . (srfi srfi-145))
+         (target . (stdlib assume)))
         ((alias . (consent json))
          (target . (stdlib json)))
         ((alias . (srfi 180))
@@ -355,6 +360,9 @@
         ((stdlib receive)
          "scheme/stdlib/receive.sld"
          "stdlib/receive.sld")
+        ((stdlib assume)
+         "scheme/stdlib/assume.sld"
+         "stdlib/assume.sld")
         ((stdlib json)
          "scheme/stdlib/json.sld"
          "stdlib/json.sld")))
