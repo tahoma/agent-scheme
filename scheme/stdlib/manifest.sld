@@ -271,6 +271,45 @@
          (test-status . (import-resolution representative-comparator-behavior
                          alias-import missing-export-diagnostic
                          portable-host-suite)))
+        ((library . (stdlib rbtree))
+         (status . vendored-adapted-implementation)
+         (source-url . "https://github.com/scheme-requests-for-implementation/srfi-146")
+         (source-path . "nieper")
+         (source-files . ("nieper/rbtree.sld" "nieper/rbtree.scm"))
+         (upstream-revision . "28bd72ed4d8445d8a91f84d919630d0f3a7564fb")
+         (upstream-source-blobs
+          . (("nieper/rbtree.sld" . "d74e8e469e990dcad0d6a02d8c9cc63943aa3cba")
+             ("nieper/rbtree.scm" . "03b901e37b5c82333860301ac0bbf6ef96646f26")))
+         (upstream-license . "MIT")
+         (local-license . "MIT")
+         (vendored? . #t)
+         (local-patches . ((library-name
+                            (from . (nieper rbtree))
+                            (to . (stdlib rbtree)))
+                           (inlined-include
+                            (file . "nieper/rbtree.scm"))
+                           (adapted-imports
+                            (from (srfi 2) (srfi 8) (srfi 158) (srfi 128))
+                            (to (stdlib and-let-star)
+                                (stdlib receive)
+                                (stdlib generator)
+                                (stdlib comparator)))
+                           (documentation-metadata
+                            (scope exported-procedures))
+                           (removed-unused-accessors
+                            (names key value))
+                           (internal-stdlib-helper
+                            (aliases . ()))
+                           (adapted-tests
+                            (file . "tests/scheme/stdlib-rbtree-test.scm"))))
+         (implementation-library . (stdlib rbtree))
+         (import-aliases . ((stdlib rbtree)))
+         (dependencies . ((scheme base) (scheme case-lambda)
+                          (stdlib and-let-star) (stdlib receive)
+                          (stdlib generator) (stdlib comparator)))
+         (test-status . (import-resolution representative-tree-behavior
+                         missing-export-diagnostic helper-smoke
+                         portable-host-suite)))
         ((library . (scheme comparator))
          (status . alias)
          (target . (stdlib comparator))

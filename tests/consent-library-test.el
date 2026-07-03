@@ -1013,6 +1013,78 @@
               (cdr (assq 'target portable-alias))))")
     "(vendored-adapted-implementation (stdlib comparator) \"MIT\" \"MIT\" ((stdlib comparator) (scheme comparator) (srfi 128) (srfi srfi-128)) ((scheme base) (scheme case-lambda) (scheme char) (scheme inexact) (scheme complex)) (stdlib comparator) (stdlib comparator) (stdlib comparator))")))
 
+(ert-deftest consent-library-test-stdlib-rbtree-import ()
+  "Import internal `(stdlib rbtree)' and exercise representative tree behavior."
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base)
+              (stdlib comparator)
+              (stdlib rbtree))
+      (define integer-comparator
+        (make-comparator integer? = < number-hash))
+      (define (tree-insert tree key value)
+        (call-with-values
+         (lambda ()
+           (tree-search integer-comparator
+                        tree
+                        key
+                        (lambda (insert ignore)
+                          (insert key value 'inserted))
+                        (lambda (old-key old-value update remove)
+                          (update old-key value 'updated))))
+         (lambda (next status) next)))
+      (define tree
+        (tree-insert
+         (tree-insert
+          (tree-insert (make-tree) 2 'two)
+          1
+          'one)
+         3
+         'three))
+      (list
+       (tree-fold/reverse
+        (lambda (key value acc)
+          (cons (cons key value) acc))
+        '()
+        tree)
+       (tree-key-successor integer-comparator tree 1 (lambda () 'none))
+       (tree-key-predecessor integer-comparator tree 3 (lambda () 'none)))")
+    "(((1 . one) (2 . two) (3 . three)) 2 2)")))
+
+(ert-deftest consent-library-test-stdlib-rbtree-missing-export-diagnostic ()
+  "Report missing rbtree imports through the ordinary resolver diagnostic."
+  (let ((error
+         (should-error
+          (consent-library-test--external
+           "(import (scheme base)
+                    (only (stdlib rbtree) missing-rbtree))
+            missing-rbtree")
+          :type 'consent-eval-error)))
+    (should
+     (string-match-p
+      (regexp-quote "only import name not found")
+      (error-message-string error)))
+    (should
+     (string-match-p
+      (regexp-quote "missing-rbtree")
+      (error-message-string error)))))
+
+(ert-deftest consent-library-test-stdlib-manifest-documents-rbtree ()
+  "Expose rbtree helper support status through the stdlib manifest."
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (stdlib manifest))
+      (let ((entry (stdlib-manifest-ref '(stdlib rbtree))))
+        (list (cdr (assq 'status entry))
+              (cdr (assq 'implementation-library entry))
+              (cdr (assq 'upstream-license entry))
+              (cdr (assq 'local-license entry))
+              (cdr (assq 'import-aliases entry))
+              (cdr (assq 'dependencies entry))))")
+    "(vendored-adapted-implementation (stdlib rbtree) \"MIT\" \"MIT\" ((stdlib rbtree)) ((scheme base) (scheme case-lambda) (stdlib and-let-star) (stdlib receive) (stdlib generator) (stdlib comparator)))")))
+
 (ert-deftest consent-library-test-stdlib-manifest-documents-srfi-16-shim ()
   "Expose SRFI 16 shim status through the stdlib manifest."
   (should

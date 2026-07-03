@@ -82,6 +82,7 @@
     "(stdlib list)"
     "(stdlib generator)"
     "(stdlib comparator)"
+    "(stdlib rbtree)"
     "(stdlib receive)"
     "(stdlib assume)"
     "(stdlib json)")
@@ -254,6 +255,8 @@ core rather than the agent domain it governs.")
      . "../scheme/stdlib/generator.sld")
     ("(stdlib comparator)"
      . "../scheme/stdlib/comparator.sld")
+    ("(stdlib rbtree)"
+     . "../scheme/stdlib/rbtree.sld")
     ("(stdlib receive)"
      . "../scheme/stdlib/receive.sld")
     ("(stdlib assume)"

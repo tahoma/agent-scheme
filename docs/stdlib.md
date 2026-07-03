@@ -22,6 +22,12 @@ source-tree layers.
 | `(stdlib assume)` | shimmed | Built-in portable SRFI 145 shim, recorded in `(stdlib manifest)` | `(stdlib assume)`, `(srfi 145)`, `(srfi srfi-145)` | Optional SRFI 145 `assume` syntax for invalid code paths; not part of the R7RS-small baseline. |
 | `(stdlib comparator)` | implemented | Vendored adapted SRFI 128 sample implementation, recorded in `(stdlib manifest)` | `(stdlib comparator)`, `(scheme comparator)`, `(srfi 128)`, `(srfi srfi-128)` | Primary stdlib spelling owns the source; R7RS-large and SRFI spellings are compatibility aliases. |
 
+## Internal Helpers
+
+| Library | Status | Source | Imports | Notes |
+| --- | --- | --- | --- | --- |
+| `(stdlib rbtree)` | implemented helper | Vendored adapted SRFI 146 `nieper/rbtree` helper, recorded in `(stdlib manifest)` | `(stdlib rbtree)` | Internal stdlib substrate for ordered SRFI 146 mappings; no R7RS-large or SRFI aliases are exposed for direct user-facing imports. |
+
 The Scheme-readable `(stdlib manifest)` library records source URLs, upstream
 revisions, licenses, local patches, import aliases, dependencies, and test
 status for stdlib libraries. The historical `(srfi manifest)` name remains an
