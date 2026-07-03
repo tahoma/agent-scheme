@@ -943,6 +943,52 @@
    "(description \"Accumulator returning a list at EOF.\")")
  '((docstring-retention . full)))
 
+(check-external/options
+ 'srfi-158-generator-docstring-metadata-coverage
+ "(import (scheme base)
+          (scheme generator)
+          (agent reflect))
+  (define exported-bindings
+    '(generator circular-generator make-iota-generator make-range-generator
+      make-coroutine-generator list->generator vector->generator
+      reverse-vector->generator string->generator bytevector->generator
+      make-for-each-generator make-unfold-generator
+      gcons* gappend gcombine gfilter gremove
+      gtake gdrop gtake-while gdrop-while
+      gflatten ggroup gmerge gmap gstate-filter
+      gdelete gdelete-neighbor-dups gindex gselect
+      generator->list generator->reverse-list
+      generator->vector generator->vector! generator->string
+      generator-fold generator-map->list generator-for-each generator-find
+      generator-count generator-any generator-every generator-unfold
+      make-accumulator count-accumulator list-accumulator
+      reverse-list-accumulator vector-accumulator
+      reverse-vector-accumulator vector-accumulator!
+      string-accumulator bytevector-accumulator bytevector-accumulator!
+      sum-accumulator product-accumulator))
+  (define (field datum name)
+    (let ((entry (assq name (cdr datum))))
+      (and entry (cadr entry))))
+  (define (metadata-entry fields field-name)
+    (assq field-name fields))
+  (define (documented? name)
+    (let ((datum (documentation name)))
+      (and datum
+           (let ((fields (field datum 'fields)))
+             (and fields
+                  (metadata-entry fields 'documentation)
+                  (metadata-entry fields 'parameters)
+                  (metadata-entry fields 'returns)
+                  (metadata-entry fields 'effects))))))
+  (let loop ((rest exported-bindings) (missing '()))
+    (if (null? rest)
+        (reverse missing)
+        (let ((name (car rest)))
+          (loop (cdr rest)
+                (if (documented? name) missing (cons name missing))))))"
+ '((docstring-retention . full))
+ "()")
+
 ;; Replace PATH with CONTENTS using the host Scheme runtime.
 (define (write-host-test-file path contents)
   (if (file-exists? path)
