@@ -39,7 +39,8 @@
           session-manager-current
           session-manager-list
           session-manager-close!)
-  (import (scheme base))
+  (import (scheme base)
+          (only (stdlib list) alist-delete filter-map))
   (begin
     ;; Session scopes distinguish one-off evaluation from named REPL and
     ;; project-rooted workspaces.
@@ -294,14 +295,11 @@
       (let ((scope (if (null? maybe-scope)
                        #f
                        (normalize-scope (car maybe-scope)))))
-        (let loop ((sessions (store-sessions store)) (result '()))
-          (cond
-           ((null? sessions) (reverse result))
-           ((or (not scope) (eq? (session-scope (cdar sessions)) scope))
-            (loop (cdr sessions)
-                  (cons (session->datum (cdar sessions)) result)))
-           (else
-            (loop (cdr sessions) result))))))
+        (filter-map
+         (lambda (cell)
+           (and (or (not scope) (eq? (session-scope (cdr cell)) scope))
+                (session->datum (cdr cell))))
+         (store-sessions store))))
 
     (define (require-session store id)
       "Return the session object named ID from STORE or raise an error."
@@ -533,11 +531,7 @@
       (set-manager-contexts!
        manager
        (cons (cons id context)
-             (let loop ((cells (manager-contexts manager)) (kept '()))
-               (cond
-                ((null? cells) (reverse kept))
-                ((eq? (caar cells) id) (loop (cdr cells) kept))
-                (else (loop (cdr cells) (cons (car cells) kept))))))))
+             (alist-delete id (manager-contexts manager) eq?))))
 
     (define (session-manager-create! manager scope options)
       "Create a SCOPE session in MANAGER with a fresh sandbox context."
@@ -636,11 +630,7 @@
       (let ((datum (session-store-retire! (manager-store manager) id)))
         (set-manager-contexts!
          manager
-         (let loop ((cells (manager-contexts manager)) (kept '()))
-           (cond
-            ((null? cells) (reverse kept))
-            ((eq? (caar cells) id) (loop (cdr cells) kept))
-            (else (loop (cdr cells) (cons (car cells) kept))))))
+         (alist-delete id (manager-contexts manager) eq?))
         (if (eq? (manager-default-id manager) id)
             (set-manager-default-id! manager #f))
         datum))))

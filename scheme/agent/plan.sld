@@ -25,6 +25,7 @@
           plan-step-status
           plan-memory-important?)
   (import (scheme base)
+          (only (stdlib list) filter find remove)
           (consent reader))
   (begin
     ;; Public plan scopes mirror fresh one-off evaluations, durable sessions,
@@ -197,12 +198,10 @@
     (define (scope-records store scope)
       "Return records from STORE belonging to SCOPE, newest first."
       (let ((normalized-scope (normalize-scope scope)))
-        (let loop ((records (store-records store)) (result '()))
-          (cond
-           ((null? records) (reverse result))
-           ((eq? (field-value (car records) 'scope) normalized-scope)
-            (loop (cdr records) (cons (car records) result)))
-           (else (loop (cdr records) result))))))
+        (filter
+         (lambda (record)
+           (eq? (field-value record 'scope) normalized-scope))
+         (store-records store))))
 
     (define (plan-store-ref store id)
       "Return a plan record from STORE by ID, or #f."
@@ -214,11 +213,10 @@
         (returns (type (or plan boolean))
          (description "The matching plan record datum, or #f."))
         (effects state-read))
-      (let loop ((records (store-records store)))
-        (cond
-         ((null? records) #f)
-         ((equal? (plan-record-id (car records)) id) (car records))
-         (else (loop (cdr records))))))
+      (find
+       (lambda (record)
+         (equal? (plan-record-id record) id))
+       (store-records store)))
 
     (define (plan-store-list store scope)
       "Return all plans in SCOPE."
@@ -234,12 +232,10 @@
 
     (define (without-plan store id)
       "Return STORE records with any plan matching ID removed."
-      (let loop ((records (store-records store)) (result '()))
-        (cond
-         ((null? records) (reverse result))
-         ((equal? (plan-record-id (car records)) id)
-          (loop (cdr records) result))
-         (else (loop (cdr records) (cons (car records) result))))))
+      (remove
+       (lambda (record)
+         (equal? (plan-record-id record) id))
+       (store-records store)))
 
     (define (normalize-step step generated)
       "Return STEP in canonical field order."

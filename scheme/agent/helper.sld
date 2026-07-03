@@ -18,6 +18,7 @@
           helper-store-artifact-save!
           helper-promote-to-skill)
   (import (scheme base)
+          (only (stdlib list) filter find remove)
           (consent reader))
   (begin
     ;; Public helper scopes mirror the Consent Scheme architecture boundary.
@@ -129,23 +130,19 @@
     (define (scope-helpers store scope)
       "Return helper records from STORE belonging to SCOPE, newest first."
       (let ((normalized-scope (normalize-scope scope)))
-        (let loop ((records (store-helpers store)) (result '()))
-          (cond
-           ((null? records) (reverse result))
-           ((eq? (field-value (car records) 'scope) normalized-scope)
-            (loop (cdr records) (cons (car records) result)))
-           (else (loop (cdr records) result))))))
+        (filter
+         (lambda (record)
+           (eq? (field-value record 'scope) normalized-scope))
+         (store-helpers store))))
 
     (define (without-helper store scope name)
       "Return STORE helper records with NAME removed from SCOPE."
       (let ((normalized-scope (normalize-scope scope)))
-        (let loop ((records (store-helpers store)) (result '()))
-          (cond
-           ((null? records) (reverse result))
-           ((and (eq? (field-value (car records) 'scope) normalized-scope)
-                 (equal? (helper-record-name (car records)) name))
-            (loop (cdr records) result))
-           (else (loop (cdr records) (cons (car records) result)))))))
+        (remove
+         (lambda (record)
+           (and (eq? (field-value record 'scope) normalized-scope)
+                (equal? (helper-record-name record) name)))
+         (store-helpers store))))
 
     (define (helper-store-ref store scope library-name)
       "Return a helper record from STORE by SCOPE and LIBRARY-NAME, or #f."
@@ -160,11 +157,10 @@
          (description "The matching helper record datum, or #f."))
         (effects state-read error))
       (let ((name (normalize-library-name library-name)))
-        (let loop ((records (scope-helpers store scope)))
-          (cond
-           ((null? records) #f)
-           ((equal? (helper-record-name (car records)) name) (car records))
-           (else (loop (cdr records)))))))
+        (find
+         (lambda (record)
+           (equal? (helper-record-name record) name))
+         (scope-helpers store scope))))
 
     (define (helper-store-list store scope)
       "Return helper records in SCOPE."
@@ -223,13 +219,11 @@
     (define (without-artifact store scope name)
       "Return STORE artifact records with NAME removed from SCOPE."
       (let ((normalized-scope (normalize-scope scope)))
-        (let loop ((records (store-artifacts store)) (result '()))
-          (cond
-           ((null? records) (reverse result))
-           ((and (eq? (field-value (car records) 'scope) normalized-scope)
-                 (equal? (field-value (car records) 'name) name))
-            (loop (cdr records) result))
-           (else (loop (cdr records) (cons (car records) result)))))))
+        (remove
+         (lambda (record)
+           (and (eq? (field-value record 'scope) normalized-scope)
+                (equal? (field-value record 'name) name)))
+         (store-artifacts store))))
 
     (define (make-artifact-record store scope name datum source existing)
       "Build a canonical helper artifact record."
