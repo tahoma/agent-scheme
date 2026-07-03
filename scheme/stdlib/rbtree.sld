@@ -377,15 +377,15 @@
         (returns (type any)
          (description "Successor key or FAILURE's result."))
         (effects procedure-call))
-      (let loop ((return failure) (tree tree))
+      (let loop ((resume failure) (tree tree))
         (tree-match tree
           ((black)
-           (return))
+           (resume))
           ((node _ a x b)
            (let ((key (item-key x)))
              (comparator-if<=> comparator key obj
-                               (loop return b)
-                               (loop return b)
+                               (loop resume b)
+                               (loop resume b)
                                (loop (lambda () key) a)))))))
 
     (define (tree-key-predecessor comparator tree obj failure)
@@ -402,16 +402,16 @@
         (returns (type any)
          (description "Predecessor key or FAILURE's result."))
         (effects procedure-call))
-      (let loop ((return failure) (tree tree))
+      (let loop ((resume failure) (tree tree))
         (tree-match tree
           ((black)
-           (return))
+           (resume))
           ((node _ a x b)
            (let ((key (item-key x)))
              (comparator-if<=> comparator key obj
                                (loop (lambda () key) b)
-                               (loop return a)
-                               (loop return a)))))))
+                               (loop resume a)
+                               (loop resume a)))))))
 
     (define (tree-map proc tree)
       "Return a tree containing PROC-transformed key/value pairs from TREE."
