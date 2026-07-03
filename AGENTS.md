@@ -20,6 +20,8 @@ Before starting issue work in this repository, read and follow:
 - `docs/multi-host-bootstrap.md` for the Emacs-first bootstrap stance and the
   portable Scheme self-hosting path
 - `docs/naming.md` for public and private Consent Scheme identifier conventions
+- `docs/scheme-style.md` for Scheme source layout, docstrings, and metadata
+  formatting
 - `docs/references.md` for canonical external Scheme references
 - `docs/r7rs-small-report.md` for the local R7RS-small language reference
 - `docs/licensing.md` for the project's Apache-2.0 + SPDX licensing policy
