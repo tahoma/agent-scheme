@@ -28,7 +28,7 @@ bulk allocation."
   :type 'integer
   :group 'consent)
 
-(defcustom consent-eval-maximum-source-metadata 1000000
+(defcustom consent-eval-maximum-source-metadata 10000000
   "Maximum retained source metadata entries admitted by one evaluation.
 Portable hosts keep source spans in a process-global side table so the loaded
 source graph remains introspectable up to this explicit resource ceiling.
