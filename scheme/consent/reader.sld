@@ -128,7 +128,8 @@
 
     ;; Singleton EOF sentinel returned by incremental reader calls at end of
     ;; input.
-    (define consent-read-eof (make-consent-read-eof))
+    (define consent-read-eof
+      (make-consent-read-eof))
 
     ;; Identity side table for source metadata.  It keeps metadata auxiliary so
     ;; ordinary datum equality and external writing remain R7RS datums.
@@ -246,7 +247,8 @@
       (pending consent-recovery-step-pending))
 
     ;; Character constant for R7RS page whitespace.
-    (define char-page (integer->char 12))
+    (define char-page
+      (integer->char 12))
 
     (define (consent-integer->radix-string integer radix)
       "Exported writer helper used by the reader, evaluator, and tests whenever"

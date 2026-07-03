@@ -597,12 +597,20 @@
         exit-code))
 
     ;; Optional-arity dispatcher for the public streaming REPL runner.
-    (define repl--run-dispatch
-      (case-lambda
+    (define (repl--run-dispatch read-chunk write-record write-output session
+                                . maybe-options)
+      "Dispatch optional REPL run arguments."
+      (apply
+       (case-lambda
        ((read-chunk write-record write-output session)
         (repl--engine read-chunk write-record write-output session '()))
        ((read-chunk write-record write-output session options)
-        (repl--engine read-chunk write-record write-output session options))))
+        (repl--engine read-chunk write-record write-output session options)))
+       read-chunk
+       write-record
+       write-output
+       session
+       maybe-options))
 
     (define (cli-repl-run read-chunk write-record write-output session
                           . maybe-options)
@@ -636,8 +644,11 @@
              maybe-options))
 
     ;; Optional-arity dispatcher for the record-collecting REPL driver.
-    (define repl--drive-dispatch
-      (case-lambda
+    (define (repl--drive-dispatch read-chunk session write-record
+                                  . maybe-options)
+      "Dispatch optional record-collecting REPL driver arguments."
+      (apply
+       (case-lambda
        ((read-chunk session write-record)
         (cli-repl-run read-chunk write-record (lambda (output) output) session))
        ((read-chunk session write-record options)
@@ -645,7 +656,11 @@
                       write-record
                       (lambda (output) output)
                       session
-                      options))))
+                      options)))
+       read-chunk
+       session
+       write-record
+       maybe-options))
 
     (define (cli-repl-drive read-chunk session . maybe-options)
       "Drive a REPL session over READ-CHUNK and return the ordered contract"
@@ -674,8 +689,10 @@
         (reverse records)))
 
     ;; Optional-arity dispatcher for string-backed REPL runs.
-    (define repl--records-from-string-dispatch
-      (case-lambda
+    (define (repl--records-from-string-dispatch input session . maybe-options)
+      "Dispatch optional string-backed REPL run arguments."
+      (apply
+       (case-lambda
        ((input session)
         (cli-repl-drive
          (repl--list-chunk-source (repl--split-lines input))
@@ -684,7 +701,10 @@
         (cli-repl-drive
          (repl--list-chunk-source (repl--split-lines input))
          session
-         options))))
+         options)))
+       input
+       session
+       maybe-options))
 
     (define (cli-repl-records-from-string input session . maybe-options)
       "Drive a REPL session over INPUT split into newline chunks and return"
@@ -779,8 +799,10 @@
             (loop (cdr sources) (cons "\n" (cons (car sources) parts))))))
 
     ;; Optional-arity dispatcher for transcript replay runs.
-    (define repl--replay-records-dispatch
-      (case-lambda
+    (define (repl--replay-records-dispatch records session . maybe-options)
+      "Dispatch optional transcript replay run arguments."
+      (apply
+       (case-lambda
        ((records session)
         (cli-repl-records-from-string
          (cli-repl-replay-input records)
@@ -789,7 +811,10 @@
         (cli-repl-records-from-string
          (cli-repl-replay-input records)
          session
-         options))))
+         options)))
+       records
+       session
+       maybe-options))
 
     (define (cli-repl-replay-records records session . maybe-options)
       "Replay the captured RECORDS by re-feeding their complete submissions"

@@ -22,7 +22,8 @@
           (agent test primitive))
   (begin
     ;; Sentinel used to distinguish a missing field from a present #f value.
-    (define missing-field (list 'missing-field))
+    (define missing-field
+      (list 'missing-field))
 
     ;; Registry of named test groups evaluated in the current interaction.
     (define registered-tests '())

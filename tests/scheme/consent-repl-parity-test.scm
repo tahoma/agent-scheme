@@ -281,10 +281,12 @@
 ;;;; Drive the corpus
 
 ;; Canonical parity suite loaded once for validation and execution.
-(define suite (read-suite))
+(define suite
+  (read-suite))
 
 ;; Shared parity case list extracted from the canonical suite.
-(define cases (suite-cases suite))
+(define cases
+  (suite-cases suite))
 
 (check 'parity-suite-tag (car suite) 'consent-fixture-suite)
 (check 'parity-suite-kind (field suite 'kind) 'repl-parity)
