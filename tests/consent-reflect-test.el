@@ -602,7 +602,7 @@
               (field (car (reverse bindings)) 'name)))")
     "(generator value (stdlib generator) product-accumulator)")))
 
-(ert-deftest consent-reflect-test-library-catalog-discovery ()
+(ert-deftest consent-reflect-test-library-catalog-discovery-stress ()
   "Discover cataloged libraries without importing them into the session."
   (consent-reflect-test--reset)
   (let ((external
@@ -640,7 +640,7 @@
              (regexp-quote "missing #t)")
              external))))
 
-(ert-deftest consent-reflect-test-documented-bindings-and-apropos ()
+(ert-deftest consent-reflect-test-documented-bindings-and-apropos-stress ()
   "Search current binding docs and catalog docs as Scheme-readable records."
   (consent-reflect-test--reset)
   (let ((external
@@ -679,6 +679,49 @@
              (regexp-quote "(binding needle-procedure)")
              external))))
 
+(ert-deftest consent-reflect-test-manifest-input-contract ()
+  "Register and remove an ad-hoc manifest through the public source record."
+  (consent-reflect-test--reset)
+  (let ((external
+         (consent-reflect-test--eval-value-string
+          "(import (scheme base) (agent reflect))
+           (define (field datum name)
+             (cadr (assq name (cdr datum))))
+           (define (source-has? sources id name)
+             (cond
+              ((null? sources) #f)
+              ((and (equal? (field (car sources) 'id) id)
+                    (member name (field (car sources) 'libraries)))
+               #t)
+              (else (source-has? (cdr sources) id name))))
+           (remove-manifest! 'reflect-contract)
+           (define added
+             (add-manifest!
+              'reflect-contract
+              '(library-catalog
+                (library
+                 (name (project contract))
+                 (category project)
+                 (status experimental)
+                 (source-kind ad-hoc)
+                 (exports (contract-run))
+                 (summary \"Contract manifest library.\")))))
+           (define visible-before-remove
+             (source-has? (catalog-sources)
+                          'reflect-contract
+                          '(project contract)))
+           (define removed (remove-manifest! 'reflect-contract))
+           (list (field added 'kind)
+                 (field added 'id)
+                 visible-before-remove
+                 removed
+                 (source-has? (catalog-sources)
+                              'reflect-contract
+                              '(project contract)))")))
+    (should
+     (equal external
+            "(ad-hoc-manifest reflect-contract #t #t #f)"))))
+
 (ert-deftest consent-reflect-test-reflection-helper-defaults ()
   "Distinguish absent helper fields from present #f values."
   (consent-reflect-test--reset)
@@ -697,7 +740,7 @@
             (docstring 'missing 'default))")
     "(#f default default \"Return the sum of all numeric arguments, or 0 when called with no arguments.\" default \"Return the sum of all numeric arguments, or 0 when called with no arguments.\" default)")))
 
-(ert-deftest consent-reflect-test-binding-libraries-crosswalk ()
+(ert-deftest consent-reflect-test-binding-libraries-crosswalk-stress ()
   "Find cataloged libraries that export a binding without importing them."
   (consent-reflect-test--reset)
   (let ((external
@@ -724,7 +767,7 @@
              (regexp-quote "#t)")
              external))))
 
-(ert-deftest consent-reflect-test-dynamic-manifest-inputs ()
+(ert-deftest consent-reflect-test-dynamic-manifest-inputs-stress ()
   "Register ad-hoc and manifest-root catalog inputs at runtime."
   (consent-reflect-test--reset)
   (let ((external

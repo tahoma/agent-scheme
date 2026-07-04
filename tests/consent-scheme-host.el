@@ -29,6 +29,7 @@
     "tests/scheme/consent-agent-prompt-test.scm"
     "tests/scheme/consent-models-openai-test.scm"
     "tests/scheme/consent-script-test.scm"
+    "tests/scheme/consent-reflect-test.scm"
     "tests/scheme/stdlib-list-test.scm"
     "tests/scheme/stdlib-comparator-test.scm"
     "tests/scheme/stdlib-rbtree-test.scm"
@@ -39,6 +40,10 @@
     "tests/scheme/stdlib-generator-test.scm"
     "tests/scheme/consent-eval-test.scm")
   "Portable Scheme test files exercised by full-suite host shards.")
+
+(defconst consent--scheme-host-reflect-stress-test-files
+  '("tests/scheme/consent-reflect-stress-test.scm")
+  "Portable Scheme reflection stress files exercised by dedicated shards.")
 
 (defconst consent--scheme-host-direct-only-test-files
   '("tests/scheme/stdlib-mapping-conformance-test.scm")
@@ -227,8 +232,8 @@ RACKET-COLLECTION-ROOT is accepted for API symmetry with test arguments."
                  racket-collection-root)))
       (file-error nil))))
 
-(defun consent--scheme-host-run-suite (host display-name)
-  "Run the full portable Scheme suite on HOST named DISPLAY-NAME."
+(defun consent--scheme-host-run-files (host display-name test-files)
+  "Run portable Scheme TEST-FILES on HOST named DISPLAY-NAME."
   (let ((runner (consent--scheme-host-command host)))
     (unless runner
       (ert-skip (format "%s is not available" display-name)))
@@ -258,7 +263,7 @@ RACKET-COLLECTION-ROOT is accepted for API symmetry with test arguments."
                 "%s does not support %s R7RS mode"
                 runner
                 display-name)))
-            (dolist (test-file (consent--scheme-host-test-files-for-host host))
+            (dolist (test-file test-files)
               (let ((status
                      (apply
                       #'process-file
@@ -280,6 +285,20 @@ RACKET-COLLECTION-ROOT is accepted for API symmetry with test arguments."
                    (file-directory-p racket-collection-root))
           (delete-directory racket-collection-root t))
         (kill-buffer output-buffer)))))
+
+(defun consent--scheme-host-run-suite (host display-name)
+  "Run the full portable Scheme suite on HOST named DISPLAY-NAME."
+  (consent--scheme-host-run-files
+   host
+   display-name
+   (consent--scheme-host-test-files-for-host host)))
+
+(defun consent--scheme-host-run-reflect-stress-suite (host display-name)
+  "Run the portable reflection stress suite on HOST named DISPLAY-NAME."
+  (consent--scheme-host-run-files
+   host
+   display-name
+   consent--scheme-host-reflect-stress-test-files))
 
 (provide 'consent-scheme-host)
 
