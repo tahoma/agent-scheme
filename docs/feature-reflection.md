@@ -125,11 +125,11 @@ Current procedures:
 - `(consent-version)` returns the canonical Consent Scheme runtime version
   datum, shaped as `(consent-version major minor ordinal)`.
   Components are exact non-negative integers. The current value is
-  `(consent-version 0 15 4)`: the `major` and `minor` components come from
-  the roadmap chunk's dotted number (`Chunk 0.15` → `0.15`), and `ordinal` is
+  `(consent-version 0 17 34)`: the `major` and `minor` components come from
+  the roadmap chunk's dotted number (`Chunk 0.17` → `0.17`), and `ordinal` is
   the issue's one-based position in that chunk. The major component is no longer
   hardcoded to `0`; a future `Chunk 1.x` line yields `1.x.x` versions while the
-  datum shape stays the same. Strings such as `0.15.4` are derived presentation,
+  datum shape stays the same. Strings such as `0.17.34` are derived presentation,
   not the canonical value. This scheme is roadmap-derived from #53, with
   completed chunks recorded in `docs/release-notes.md`.
 - `(current-capabilities)` returns public `host-capability` records from the
@@ -152,6 +152,15 @@ Current procedures:
   implementation fallback reports
   `(implementation-procedure string)`; argument-only metadata reports
   `(signature)`.
+- `(consent-doc subject)` returns the same `documentation-metadata` record as
+  `(documentation subject)`. It is the scriptable replacement for REPL
+  `:doc`-style sigils, so callers get ordinary Scheme-readable data in
+  interactive, `--script`, and shebang runs.
+- `(consent-describe subject)` returns a `binding-description` record for a
+  binding symbol/name or procedure value, or `#f` when the subject cannot be
+  described. The record includes `subject`, `binding-kind`, `value-kind`,
+  `library`, `source`, a string `value-summary`, and a nested
+  `documentation` field when metadata is available.
 - `(current-policy)` returns the active policy category actions and per-run
   overrides.
 - `(current-budget)` returns the evaluation budget ledger: the used count and
@@ -235,7 +244,7 @@ boundary remains Scheme-readable data.
 Current implemented pieces:
 
 - `(consent-version)` reports the roadmap-derived runtime version as
-  `(consent-version 0 15 4)`, and the Emacs host-adapter fixture points
+  `(consent-version 0 17 34)`, and the Emacs host-adapter fixture points
   at `scheme/consent/version.sld` as the single source of truth for the
   runtime version datum.
 - R7RS `cond-expand` library requirements are available for implemented
