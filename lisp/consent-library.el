@@ -192,6 +192,7 @@
     "(agent test primitive)"
     "(agent task)"
     "(agent memory)"
+    "(agent memory primitive)"
     "(agent plan)"
     "(agent models)"
     "(agent models primitive)"
@@ -241,6 +242,8 @@ core rather than the agent domain it governs.")
      . "../scheme/agent/prompt.sld")
     ("(agent task)"
      . "../scheme/agent/task.sld")
+    ("(agent memory)"
+     . "../scheme/agent/memory.sld")
     ("(agent test)"
      . "../scheme/agent/test.sld")
     ("(agent session)"
@@ -605,9 +608,17 @@ core rather than the agent domain it governs.")
       (consent-test-primitive-specs)
       context))
     ("(agent memory)"
+     (unless (gethash key (consent--eval-context-libraries context))
+       (consent--register-source-library
+        (consent--agent-source-library-source key) context environment)
+       (consent--register-library-primitive-bindings
+        key
+        (consent--memory-adapter-primitive-specs)
+        context)))
+    ("(agent memory primitive)"
      (consent--register-primitive-library
       key
-      (consent-memory-primitive-specs)
+      (consent--memory-adapter-primitive-specs)
       context))
     ("(agent plan)"
      (consent--register-primitive-library

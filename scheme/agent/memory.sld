@@ -17,11 +17,49 @@
           memory-store-find
           memory-store-by-tag
           memory-store-recent
+          memory-store-records
+          memory-store-replace-records!
+          memory-storage-rules
+          memory-scope-datum
+          memory-scope-datum-records
           memory-record-id)
   (import (scheme base)
-          (consent reader)
           (only (stdlib list) filter find remove take)
           (scheme write))
+  (cond-expand
+   ((library (consent reader))
+    (import (only (consent reader)
+                  consent-make-canonical-integer
+                  consent-number?
+                  consent-number-exactness
+                  consent-number-kind
+                  consent-number-value))
+     (begin
+       (define (integer-datum sequence)
+         "Return SEQUENCE as an Consent Scheme exact integer datum."
+         (consent-make-canonical-integer sequence))
+
+       (define (integer-value value)
+         "Return VALUE as a host integer for memory count arguments."
+         (cond
+          ((integer? value) value)
+          ((and (consent-number? value)
+                (eq? (consent-number-kind value) 'integer)
+                (eq? (consent-number-exactness value) 'exact))
+           (consent-number-value value))
+          (else
+           (error "memory count must be an exact integer" value))))))
+   (else
+    (begin
+      (define (integer-datum sequence)
+        "Return SEQUENCE as an exact integer datum."
+        sequence)
+
+      (define (integer-value value)
+        "Validate and return VALUE for memory count arguments."
+        (if (integer? value)
+            value
+            (error "memory count must be an exact integer" value))))))
   (begin
     ;; Public memory scopes mirror the Consent Scheme architecture document.
     (define consent-memory-scopes
@@ -69,21 +107,6 @@
       (string->symbol
        (string-append "m-" (number->string sequence))))
 
-    (define (integer-datum sequence)
-      "Return SEQUENCE as an Consent Scheme exact integer datum."
-      (consent-make-canonical-integer sequence))
-
-    (define (integer-value value)
-      "Return VALUE as a host integer for memory count arguments."
-      (cond
-       ((integer? value) value)
-       ((and (consent-number? value)
-             (eq? (consent-number-kind value) 'integer)
-             (eq? (consent-number-exactness value) 'exact))
-        (consent-number-value value))
-       (else
-        (error "memory count must be an exact integer" value))))
-
     (define (field-value datum name)
       "Return field NAME from RECORD or payload DATUM, or #f."
       (let loop ((fields (if (and (pair? datum) (eq? (car datum) 'memory))
@@ -106,6 +129,19 @@
         (effects pure))
       (field-value record 'id))
 
+    (define (memory-scope-datum-records datum)
+      "Return the records field from an agent-memory scope DATUM."
+      #((parameters
+         (datum (type list)
+          (description "Agent memory scope datum.")))
+        (returns (type list)
+         (description "The scope datum's memory records."))
+        (effects pure error))
+      (let ((records (field-value datum 'records)))
+        (if records
+            records
+            (error "memory scope datum must contain records"))))
+
     (define (memory-record-key record)
       "Return RECORD's key field."
       (field-value record 'key))
@@ -114,6 +150,46 @@
       "Return RECORD's tags field."
       (let ((tags (field-value record 'tags)))
         (if tags tags '())))
+
+    (define (memory-record-sequence record)
+      "Return RECORD's highest timestamp sequence, or zero when absent."
+      (max
+       (let ((created-at (field-value record 'created-at)))
+         (if created-at (integer-value created-at) 0))
+       (let ((updated-at (field-value record 'updated-at)))
+         (if updated-at (integer-value updated-at) 0))))
+
+    (define (memory-records-next-id records)
+      "Return the next-id floor implied by RECORDS."
+      (let loop ((rest records) (highest 0))
+        (if (null? rest)
+            highest
+            (loop (cdr rest)
+                  (max highest (memory-record-sequence (car rest)))))))
+
+    (define (memory-store-records store)
+      "Return STORE's canonical records, newest first."
+      #((parameters
+         (store (type consent-memory-store)
+          (description "Memory store to inspect.")))
+        (returns (type list)
+         (description "Canonical memory records in newest-first order."))
+        (effects state-read))
+      (store-records store))
+
+    (define (memory-store-replace-records! store records)
+      "Replace STORE's records and reset its generated id sequence."
+      #((parameters
+         (store (type consent-memory-store)
+          (description "Memory store to mutate."))
+         (records (type list)
+          (description "Canonical memory records in newest-first order.")))
+        (returns (type list)
+         (description "The installed record list."))
+        (effects state-write error))
+      (set-store-records! store records)
+      (set-store-next-id! store (memory-records-next-id records))
+      records)
 
     (define (datum->string datum)
       "Render DATUM to a string for simple portable substring search."
@@ -329,4 +405,60 @@
              (limit (integer-value count)))
         (if (<= limit 0)
             '()
-            (take records (min limit (length records))))))))
+            (take records (min limit (length records))))))
+
+    (define (memory-storage-rules scope private-file project-root tracked-file
+                                  tracked-enabled)
+      "Return safe public storage rules for SCOPE."
+      #((parameters
+         (scope (type symbol)
+          (description "Memory scope symbol."))
+         (private-file (type string)
+          (description "Private-local persistence path."))
+         (project-root (type (or string boolean))
+          (description "Project root for project scope, or #f."))
+         (tracked-file (type (or string boolean))
+          (description "Tracked project memory file, or #f."))
+         (tracked-enabled (type boolean)
+          (description "Whether tracked project memory is enabled.")))
+        (returns (type list)
+         (description "Public memory-storage rule datum."))
+        (effects pure error))
+      (append
+       (list 'memory-storage
+             (list 'scope (normalize-scope scope))
+             (list 'mode 'private-local)
+             (list 'private-file private-file))
+       (if project-root
+           (list
+            (list 'project-root project-root)
+            (list 'tracked-file tracked-file)
+            (list 'tracked-enabled tracked-enabled)
+            (list 'public-repository-safe #t))
+           '())))
+
+    (define (memory-scope-datum scope subject storage records)
+      "Return inspectable agent-memory SCOPE datum."
+      #((parameters
+         (scope (type symbol)
+          (description "Memory scope symbol."))
+         (subject (type (or symbol boolean))
+          (description "Session id for session scope, or #f."))
+         (storage (type (or list boolean))
+          (description "Storage rules for project scope, or #f."))
+         (records (type list)
+          (description "Canonical memory records for SCOPE.")))
+        (returns (type list)
+         (description "Inspectable agent-memory scope datum."))
+        (effects pure error))
+      (let ((normalized-scope (normalize-scope scope)))
+        (append
+         (list 'agent-memory
+               (list 'scope normalized-scope))
+         (cond
+          ((and (eq? normalized-scope 'session) subject)
+           (list (list 'session subject)))
+          ((and (eq? normalized-scope 'project) storage)
+           (list (list 'storage storage)))
+          (else '()))
+         (list (list 'records records)))))))
