@@ -325,6 +325,16 @@
             :ert-seconds 108.0
             :wall-seconds 109.0
             :tests nil))
+         (stdlib-reference-stress-full-shard
+          '(:name "Emacs stdlib/reference stress / source metadata on / docstrings full"
+            :selector "stdlib-reference-stress"
+            :ran 1
+            :expected 1
+            :unexpected 0
+            :skipped 0
+            :ert-seconds 80.0
+            :wall-seconds 81.0
+            :tests nil))
          (agent-control-full-shard
           '(:name "Emacs agent control / source metadata on / docstrings full"
             :selector "agent-control"
@@ -338,6 +348,7 @@
          (markdown
           (consent-ci-render-pr-markdown-summary
            (list agent-control-full-shard
+                 stdlib-reference-stress-full-shard
                  stdlib-reference-full-shard
                  library-full-shard
                  core-none-shard
@@ -357,9 +368,14 @@
              "| Emacs stdlib/reference corpus | 6 | 0 | 108\\.000s (109\\.000s wall) | n/a | n/a | n/a | n/a | n/a |"
              above-fold))
     (should (string-match-p
+             "| Emacs stdlib/reference stress | 1 | 0 | 80\\.000s (81\\.000s wall) | n/a | n/a | n/a | n/a | n/a |"
+             above-fold))
+    (should (string-match-p
              (rx "| Emacs library/conformance |"
                  (*? anything)
                  "| Emacs stdlib/reference corpus |"
+                 (*? anything)
+                 "| Emacs stdlib/reference stress |"
                  (*? anything)
                  "| Emacs agent control |")
              above-fold))
@@ -587,6 +603,18 @@
                       "^test-emacs-agent-reliability:"
                       "^test-emacs-capability-boundary:"
                       "^test-emacs-agent-state:"))
+      (should (string-match-p needle makefile)))))
+
+(ert-deftest consent-ci-test-make-splits-stdlib-reference-stress-shard ()
+  "Run large stdlib reference fixtures in a dedicated stress shard."
+  (let ((makefile (consent-ci-test--repo-file-string "Makefile")))
+    (should (string-match-p
+             "CONSENT_EMACS_TEST_SHARD_TARGETS \\?=.*test-emacs-stdlib-reference.*test-emacs-stdlib-reference-stress"
+             makefile))
+    (dolist (needle '("CONSENT_EMACS_STDLIB_REFERENCE_TEST_SELECTOR \\?=.*not"
+                      "CONSENT_EMACS_STDLIB_REFERENCE_STRESS_TEST_SELECTOR \\?="
+                      "^test-emacs-stdlib-reference:"
+                      "^test-emacs-stdlib-reference-stress:"))
       (should (string-match-p needle makefile)))))
 
 (ert-deftest consent-ci-test-pr-summary-uses-stable-shard-order ()
