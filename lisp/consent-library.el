@@ -676,7 +676,7 @@ core rather than the agent domain it governs.")
       (consent-read (plist-get entry :name)))
     entries)))
 
-(defun consent-library-catalog-add-manifest (source-id manifest)
+(defun consent--library-catalog-add-manifest (source-id manifest)
   "Add or replace ad-hoc catalog MANIFEST under SOURCE-ID."
   (let* ((normalized-id (consent--library-catalog-source-id source-id))
          (entries
@@ -691,7 +691,7 @@ core rather than the agent domain it governs.")
     (consent--library-catalog-source-record
      'ad-hoc-manifest normalized-id entries)))
 
-(defun consent-library-catalog-remove-manifest (source-id)
+(defun consent--library-catalog-remove-manifest (source-id)
   "Remove ad-hoc catalog manifest SOURCE-ID."
   (let* ((normalized-id (consent--library-catalog-source-id source-id))
          (removed/sources
@@ -702,7 +702,7 @@ core rather than the agent domain it governs.")
     (consent--library-catalog-invalidate)
     (car removed/sources)))
 
-(defun consent-library-catalog-add-root (root manifest)
+(defun consent--library-catalog-add-root (root manifest)
   "Add or replace explicit manifest ROOT with MANIFEST."
   (unless (stringp root)
     (consent--eval-error "catalog root must be a string"))
@@ -717,7 +717,7 @@ core rather than the agent domain it governs.")
     (consent--library-catalog-invalidate)
     (consent--library-catalog-source-record 'manifest-root root entries)))
 
-(defun consent-library-catalog-remove-root (root)
+(defun consent--library-catalog-remove-root (root)
   "Remove explicit manifest ROOT."
   (unless (stringp root)
     (consent--eval-error "catalog root must be a string"))
@@ -729,7 +729,7 @@ core rather than the agent domain it governs.")
     (consent--library-catalog-invalidate)
     (car removed/sources)))
 
-(defun consent-library-catalog-refresh ()
+(defun consent--library-catalog-refresh ()
   "Clear manifest-backed catalog cache and diagnostics."
   (setq consent--library-catalog-diagnostics nil)
   (consent--library-catalog-invalidate)
@@ -824,7 +824,7 @@ core rather than the agent domain it governs.")
     consent--library-catalog-root-manifests)
    (consent--library-catalog-built-in-entries)))
 
-(defun consent-library-catalog-entries ()
+(defun consent--library-catalog-entries ()
   "Return manifest-backed catalog metadata for repo-owned libraries."
   (or consent--library-catalog-cache
       (setq
@@ -832,7 +832,7 @@ core rather than the agent domain it governs.")
        (consent--library-catalog-deduplicate
         (consent--library-catalog-candidate-entries)))))
 
-(defun consent-library-catalog-sources ()
+(defun consent--library-catalog-sources ()
   "Return Scheme-readable catalog source records."
   (append
    (mapcar
@@ -856,13 +856,13 @@ core rather than the agent domain it governs.")
      (mapcar #'consent-read
              (consent--library-catalog-built-in-keys))))))
 
-(defun consent-library-catalog-diagnostics ()
+(defun consent--library-catalog-diagnostics ()
   "Return diagnostics from the most recent catalog build."
   (unless consent--library-catalog-cache
-    (consent-library-catalog-entries))
+    (consent--library-catalog-entries))
   consent--library-catalog-diagnostics)
 
-(defun consent-library-catalog-entry (library-name)
+(defun consent--library-catalog-lookup (library-name)
   "Return catalog metadata for LIBRARY-NAME, or nil when absent."
   (let ((key (if (stringp library-name)
                  library-name
@@ -870,9 +870,9 @@ core rather than the agent domain it governs.")
     (seq-find
      (lambda (entry)
        (equal (plist-get entry :name) key))
-     (consent-library-catalog-entries))))
+     (consent--library-catalog-entries))))
 
-(defun consent-library-catalog-search (query)
+(defun consent--library-catalog-search (query)
   "Return catalog entries whose name, alias, export, or category matches QUERY."
   (let ((needle (downcase query)))
     (seq-filter
@@ -899,9 +899,9 @@ core rather than the agent domain it governs.")
                       (plist-get entry :dependencies)))
                " ")))
          (string-match-p (regexp-quote needle) (downcase haystack))))
-     (consent-library-catalog-entries))))
+     (consent--library-catalog-entries))))
 
-(defun consent-library-catalog-runtime-source-files ()
+(defun consent--library-catalog-runtime-source-files ()
   "Return runtime source-file paths derived from the library catalog."
   (let ((files
          (append

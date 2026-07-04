@@ -35,16 +35,16 @@
 (declare-function consent--library-name-key "consent-library")
 (declare-function consent--library-catalog-private-context "consent-library")
 (declare-function consent--resolve-library "consent-library")
-(declare-function consent-library-catalog-entries "consent-library")
-(declare-function consent-library-catalog-entry "consent-library")
-(declare-function consent-library-catalog-search "consent-library")
-(declare-function consent-library-catalog-sources "consent-library")
-(declare-function consent-library-catalog-diagnostics "consent-library")
-(declare-function consent-library-catalog-add-manifest "consent-library")
-(declare-function consent-library-catalog-remove-manifest "consent-library")
-(declare-function consent-library-catalog-add-root "consent-library")
-(declare-function consent-library-catalog-remove-root "consent-library")
-(declare-function consent-library-catalog-refresh "consent-library")
+(declare-function consent--library-catalog-entries "consent-library")
+(declare-function consent--library-catalog-lookup "consent-library")
+(declare-function consent--library-catalog-search "consent-library")
+(declare-function consent--library-catalog-sources "consent-library")
+(declare-function consent--library-catalog-diagnostics "consent-library")
+(declare-function consent--library-catalog-add-manifest "consent-library")
+(declare-function consent--library-catalog-remove-manifest "consent-library")
+(declare-function consent--library-catalog-add-root "consent-library")
+(declare-function consent--library-catalog-remove-root "consent-library")
+(declare-function consent--library-catalog-refresh "consent-library")
 
 (defconst consent-reflect--omitted-manifest-fields
   '(:emacs-hook :portable-hook :emitter-hook :test-categories)
@@ -719,11 +719,11 @@ callers can distinguish unbounded from exhausted."
 (defun consent-reflect-libraries ()
   "Return cataloged libraries as `library-info' records."
   (mapcar #'consent-reflect--library-info-record
-          (consent-library-catalog-entries)))
+          (consent--library-catalog-entries)))
 
 (defun consent-reflect-library-info (library-name)
   "Return catalog metadata for LIBRARY-NAME, or #f when absent."
-  (let ((entry (consent-library-catalog-entry library-name)))
+  (let ((entry (consent--library-catalog-lookup library-name)))
     (if entry
         (consent-reflect--library-info-record entry)
       consent-false)))
@@ -731,7 +731,7 @@ callers can distinguish unbounded from exhausted."
 (defun consent-reflect-library-search (query)
   "Return catalog entries matching QUERY."
   (mapcar #'consent-reflect--library-info-record
-          (consent-library-catalog-search
+          (consent--library-catalog-search
            (cond
             ((consent-symbol-p query) (consent-symbol-name query))
             ((symbolp query) (symbol-name query))
@@ -740,11 +740,11 @@ callers can distinguish unbounded from exhausted."
 
 (defun consent-reflect-catalog-sources ()
   "Return manifest catalog source records."
-  (consent-library-catalog-sources))
+  (consent--library-catalog-sources))
 
 (defun consent-reflect-catalog-diagnostics ()
   "Return manifest catalog diagnostics."
-  (consent-library-catalog-diagnostics))
+  (consent--library-catalog-diagnostics))
 
 (defun consent-reflect--catalog-private-library (library-name)
   "Return (LIBRARY . CONTEXT) for LIBRARY-NAME in a private catalog context."
@@ -785,7 +785,7 @@ import environment is not mutated."
      (seq-filter
       (lambda (entry)
         (member name (plist-get entry :exports)))
-      (consent-library-catalog-entries)))))
+      (consent--library-catalog-entries)))))
 
 (defun consent-reflect-documented-bindings (context)
   "Return documentation records for documented bindings in CONTEXT."
@@ -935,7 +935,7 @@ falling back to DEFAULT."
               (consent-reflect--library-datum (plist-get entry :name))
               '("library")
               (or (plist-get entry :source-file) consent-false)))
-           (consent-library-catalog-search needle))))
+           (consent--library-catalog-search needle))))
     (append binding-matches library-matches)))
 
 (defun consent-reflect-current-session-info (context)
@@ -1127,28 +1127,28 @@ can classify a recent error or a nested evaluation's outcome."
 (defun consent-reflect--primitive-add-manifest! (arguments _context)
   "Primitive `add-manifest!'."
   (consent-reflect--redact
-   (consent-library-catalog-add-manifest (car arguments) (cadr arguments))))
+   (consent--library-catalog-add-manifest (car arguments) (cadr arguments))))
 
 (defun consent-reflect--primitive-remove-manifest! (arguments _context)
   "Primitive `remove-manifest!'."
   (consent-reflect--boolean
-   (consent-library-catalog-remove-manifest (car arguments))))
+   (consent--library-catalog-remove-manifest (car arguments))))
 
 (defun consent-reflect--primitive-add-manifest-root! (arguments _context)
   "Primitive `add-manifest-root!'."
   (consent-reflect--redact
-   (consent-library-catalog-add-root (car arguments) (cadr arguments))))
+   (consent--library-catalog-add-root (car arguments) (cadr arguments))))
 
 (defun consent-reflect--primitive-remove-manifest-root! (arguments _context)
   "Primitive `remove-manifest-root!'."
   (consent-reflect--boolean
-   (consent-library-catalog-remove-root (car arguments))))
+   (consent--library-catalog-remove-root (car arguments))))
 
 (defun consent-reflect--primitive-refresh-library-catalog!
     (_arguments _context)
   "Primitive `refresh-library-catalog!'."
   (consent-reflect--boolean
-   (consent-library-catalog-refresh)))
+   (consent--library-catalog-refresh)))
 
 (defun consent-reflect--primitive-library-documentation
     (arguments _context)
