@@ -24,7 +24,8 @@
         (only (consent reader)
               consent-datum->external
               consent-make-canonical-integer
-              consent-read)
+              consent-read
+              consent-source-metadata-count)
         (only (consent version)
               consent-version-datum)
         (only (consent runtime)
@@ -1504,10 +1505,22 @@
          (and assume-spec
               (cadr (assq 'source-file assume-spec)))
          "scheme/stdlib/assume.sld")
-  (check 'stdlib-source-library-json-file
+(check 'stdlib-source-library-json-file
          (and json-spec
               (cadr (assq 'source-file json-spec)))
          "scheme/stdlib/json.sld"))
+
+(check 'reflect-library-catalog-discovery-source-metadata-budget
+       (let ((before (consent-source-metadata-count)))
+         (let ((ignored
+                (consent-eval-source
+                 "(import (scheme base) (agent reflect))
+                  (length (library-search \"reflect\"))"
+                 #f
+                 '((source-metadata . #t)
+                   (max-source-metadata . 10000000)))))
+           (< (- (consent-source-metadata-count) before) 1000)))
+       #t)
 
 (check-external 'reflect-library-catalog-discovery
                 "(import (scheme base) (agent reflect))
