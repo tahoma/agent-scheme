@@ -182,6 +182,14 @@
   "Return repository-relative SRFI 180 fixture path for NAME."
   (concat "fixtures/srfi-180/files/" name))
 
+(defun consent-library-test--srfi-180-file-string-literal (name)
+  "Return SRFI 180 fixture NAME contents as a Scheme string literal."
+  (consent-library-test--scheme-string-literal
+   (with-temp-buffer
+     (insert-file-contents-literally
+      (expand-file-name name consent-library-test--srfi-180-fixture-directory))
+     (buffer-string))))
+
 (defun consent-library-test--srfi-180-options ()
   "Return file capability options for reading the SRFI 180 fixture corpus."
   (append
@@ -1129,14 +1137,12 @@
      (equal
       (consent-library-test--srfi-180-eval
        (format
-        "(call-with-input-file %s
-           (lambda (port)
-             (let ((items (generator->list (json-lines-read port))))
-               (list (length items)
-                     (cdr (assq 'a (car items)))
-                     (cdr (assq 'b (cadr items)))))))"
-        (consent-library-test--scheme-string-literal
-         (consent-library-test--srfi-180-relative-path name))))
+        "(let ((items (generator->list
+                       (json-lines-read (open-input-string %s)))))
+           (list (length items)
+                 (cdr (assq 'a (car items)))
+                 (cdr (assq 'b (cadr items)))))"
+        (consent-library-test--srfi-180-file-string-literal name)))
       "(2 1 2)"))))
 
 (ert-deftest consent-library-test-srfi-180-reference-json-sequences ()
@@ -1145,31 +1151,27 @@
    (equal
     (consent-library-test--srfi-180-eval
      (format
-      "(call-with-input-file %s
-         (lambda (port)
-           (define (last-item items)
-             (if (null? (cdr items)) (car items) (last-item (cdr items))))
-           (let ((items (generator->list (json-sequence-read port))))
-             (list (length items)
-                   (cdr (assq 'count (car items)))
-                   (cdr (assq 'count (last-item items)))))))"
-      (consent-library-test--scheme-string-literal
-       (consent-library-test--srfi-180-relative-path "json-sequence.log"))))
+      "(define (last-item items)
+         (if (null? (cdr items)) (car items) (last-item (cdr items))))
+       (let ((items (generator->list
+                     (json-sequence-read (open-input-string %s)))))
+         (list (length items)
+               (cdr (assq 'count (car items)))
+               (cdr (assq 'count (last-item items)))))"
+      (consent-library-test--srfi-180-file-string-literal
+       "json-sequence.log")))
     "(10 0 9)"))
   (should
    (equal
     (consent-library-test--srfi-180-eval
      (format
-      "(call-with-input-file %s
-         (lambda (port)
-           (guard (condition
-                   ((json-error? condition) 'json-error)
-                   (else 'wrong-condition))
-             (generator->list (json-sequence-read port))
-             'no-error)))"
-      (consent-library-test--scheme-string-literal
-       (consent-library-test--srfi-180-relative-path
-        "json-sequence-with-one-broken-json.log"))))
+      "(guard (condition
+               ((json-error? condition) 'json-error)
+               (else 'wrong-condition))
+         (generator->list (json-sequence-read (open-input-string %s)))
+         'no-error)"
+      (consent-library-test--srfi-180-file-string-literal
+       "json-sequence-with-one-broken-json.log")))
     "json-error")))
 
 (ert-deftest consent-library-test-srfi-1-list-library-behavior ()
