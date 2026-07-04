@@ -552,9 +552,10 @@ make test
 ```
 
 `make test` runs a trimmed default shard set for a fast local loop: one
-representative portable host (`test-portable-racket`,
-`CONSENT_DEFAULT_PORTABLE_TEST_SHARD_TARGETS`) plus the Emacs-hosted shard set
-in `CONSENT_EMACS_TEST_SHARD_TARGETS`. The portable reader/writer/docstring
+representative portable host (`test-portable-racket`) plus its reflection
+catalog stress companion (`test-portable-racket-reflect-stress`,
+`CONSENT_DEFAULT_PORTABLE_TEST_SHARD_TARGETS`) and the Emacs-hosted shard set in
+`CONSENT_EMACS_TEST_SHARD_TARGETS`. The portable reader/writer/docstring
 machinery that the source-metadata and docstring-retention modes exercise is
 host-independent, so one portable host is enough for the default loop.
 
@@ -562,12 +563,14 @@ The Emacs-hosted surface is split across multiple shards (#556) so the
 parallelizer can overlap them on hosts with more cores than there were once
 shards: `test-emacs-tools` keeps the tools and docs cluster (CI, compile,
 diagnostics, doc-pass tests, ...), while `test-emacs-integration` carries the
-heavier integration surface (REPL, VCS, reflect, native-CLI daemon) that used
-to dominate `test-emacs-tools`'s wall time. The four full host-compile +
-install/dist tests in `consent-compile-portable-test.el` are stranded into the
-opt-in `test-emacs-native-build` shard, which `make test` skips and `make
-test-full` runs. The native build path is already exercised separately by
-`test-portable-gambit-native` and `test-portable-compiled`; the
+heavier integration surface (REPL, VCS, native-CLI daemon) that used to dominate
+`test-emacs-tools`'s wall time. Reflection runs through its own contract and
+catalog-stress shards (`test-emacs-reflect` and `test-emacs-reflect-stress`) so
+manifest-backed discovery does not serialize the REPL/integration lane. The
+four full host-compile + install/dist tests in `consent-compile-portable-test.el`
+are stranded into the opt-in `test-emacs-native-build` shard, which `make test`
+skips and `make test-full` runs. The native build path is already exercised
+separately by `test-portable-gambit-native` and `test-portable-compiled`; the
 `test-emacs-native-build` shard additionally covers the install/dist packaging
 surface against a single shared host build per host (built once per Emacs
 process, reused across the runner-smoke and install/dist tests).
@@ -579,6 +582,13 @@ broader `test-emacs-library` shard so large upstream fixture corpora do not hide
 unrelated library/conformance timing. The stress shard keeps large valid cases
 such as the FoundationDB JSON sample as positive, budgeted conformance coverage
 without folding their wall time into the ordinary corpus row.
+
+Portable reflection tests follow the same behavior-surface split. Quick
+manifest-input and helper contracts stay in each ordinary portable full-suite
+host shard, while full catalog traversal and dynamic manifest add/remove stress
+coverage run in dedicated `test-portable-*-reflect-stress` shards. That keeps
+Guile and Gauche catalog-rebuild costs visible without folding them into the
+ordinary host timing row.
 
 `make test` defaults to `-j16` so up to 16 shard processes can run in parallel
 on a many-core host. Override with `CONSENT_TEST_JOBS=N make test` on narrower
@@ -820,11 +830,15 @@ failures stay visible by architectural path:
 
 ```sh
 CONSENT_GAMBIT=gsi make test-portable-gambit
+CONSENT_GAMBIT=gsi make test-portable-gambit-reflect-stress
 CONSENT_GAMBIT=gsi CONSENT_GAMBIT_COMPILER=gsc make test-portable-gambit-native
 CONSENT_RACKET=racket make test-portable-racket
+CONSENT_RACKET=racket make test-portable-racket-reflect-stress
 make test-portable-compiled
 CONSENT_GUILE=guile make test-portable-guile
+CONSENT_GUILE=guile make test-portable-guile-reflect-stress
 CONSENT_GAUCHE=gosh make test-portable-gauche
+CONSENT_GAUCHE=gosh make test-portable-gauche-reflect-stress
 make test-emacs-core
 make test-emacs-library
 make test-emacs-stdlib-reference
@@ -834,6 +848,8 @@ make test-emacs-agent-reliability
 make test-emacs-capability-boundary
 make test-emacs-agent-state
 make test-emacs-tools
+make test-emacs-reflect
+make test-emacs-reflect-stress
 make test-emacs-integration
 CONSENT_PARITY_HOST=guile make test-parity
 ```

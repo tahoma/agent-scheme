@@ -17,6 +17,12 @@
   "Run the full portable R7RS suite with Gambit Scheme."
   (consent--scheme-host-run-suite 'gambit "gambit"))
 
+(ert-deftest consent-scheme-gambit-host-test-r7rs-reflect-stress ()
+  "Run the portable reflection stress suite with Gambit Scheme."
+  (consent--scheme-host-run-reflect-stress-suite
+   'gambit
+   "gambit reflection stress"))
+
 (ert-deftest consent-scheme-gambit-native-host-test-r7rs-suite ()
   "Run the full portable R7RS suite with the Gambit-compiled Consent Scheme runner."
   (consent--scheme-host-run-suite
@@ -27,13 +33,31 @@
   "Run the full portable R7RS suite with Racket's R7RS package."
   (consent--scheme-host-run-suite 'racket "racket"))
 
+(ert-deftest consent-scheme-racket-host-test-r7rs-reflect-stress ()
+  "Run the portable reflection stress suite with Racket's R7RS package."
+  (consent--scheme-host-run-reflect-stress-suite
+   'racket
+   "racket reflection stress"))
+
 (ert-deftest consent-scheme-guile-host-test-r7rs-suite ()
   "Run the full portable R7RS suite with Guile Scheme."
   (consent--scheme-host-run-suite 'guile "guile"))
 
+(ert-deftest consent-scheme-guile-host-test-r7rs-reflect-stress ()
+  "Run the portable reflection stress suite with Guile Scheme."
+  (consent--scheme-host-run-reflect-stress-suite
+   'guile
+   "guile reflection stress"))
+
 (ert-deftest consent-scheme-gauche-host-test-r7rs-suite ()
   "Run the full portable R7RS suite with Gauche Scheme."
   (consent--scheme-host-run-suite 'gauche "gauche"))
+
+(ert-deftest consent-scheme-gauche-host-test-r7rs-reflect-stress ()
+  "Run the portable reflection stress suite with Gauche Scheme."
+  (consent--scheme-host-run-reflect-stress-suite
+   'gauche
+   "gauche reflection stress"))
 
 (ert-deftest consent-scheme-compiled-host-test-r7rs-suite ()
   "Run the full portable R7RS suite with the Racket-compiled Consent Scheme runner."
