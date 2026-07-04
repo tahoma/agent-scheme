@@ -199,6 +199,13 @@
          (consent-value->external (consent-eval-source source))
          expected))
 
+;; Evaluate SOURCE with OPTIONS and compare the stable external value.
+(define (check-external/options name source options expected)
+  (check name
+         (consent-value->external
+          (consent-eval-source source #f options))
+         expected))
+
 ;; Render a readable expected datum shape as canonical external text.
 (define (expected-datum-external . fragments)
   (consent-datum->external
@@ -242,16 +249,21 @@
                                     '(project contract)))"
                 "(ad-hoc-manifest reflect-contract #t #t #f)")
 
-(check-external 'reflect-documentation-contract
-                "(import (scheme base) (agent reflect))
-                 (define (needle-procedure x)
-                   \"Return the needle value for discovery tests.\"
-                   x)
-                 (list (docstring 'needle-procedure)
-                       (documentation-field (documentation 'needle-procedure)
-                                            'documentation)
-                       (docstring 'missing 'default))"
-                "(\"Return the needle value for discovery tests.\" \"Return the needle value for discovery tests.\" default)")
+(check-external/options 'reflect-documentation-contract
+                        "(import (scheme base) (agent reflect))
+                         (define (needle-procedure x)
+                           \"Return the needle value for discovery tests.\"
+                           x)
+                         (list (docstring 'needle-procedure)
+                               (documentation-field
+                                (documentation 'needle-procedure)
+                                'documentation)
+                               (docstring 'missing 'default))"
+                        '((docstring-retention . full))
+                        (expected-datum-external
+                         "(\"Return the needle value for discovery tests.\"
+                           \"Return the needle value for discovery tests.\"
+                           default)"))
 
 (check-external 'reflect-helper-defaults
                 "(import (scheme base) (agent reflect))
