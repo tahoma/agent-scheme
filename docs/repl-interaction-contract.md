@@ -839,8 +839,10 @@ capture are all covered by ordinary procedures and macros in a `(repl …)` /
 `(agent …)` library — which additionally stay scriptable in `--script`/shebang
 runs, deterministic, capability-introspectable, and parity-testable, where a
 meta-command would not. Introspection and control are therefore ordinary
-procedures (the Clojure stance: `apropos`, `doc`, `describe`, `trace` are
-bindings, not commands).
+procedures; `(consent-doc subject)` and `(consent-describe subject)` return
+Scheme-readable data instead of using `:doc` or `,describe` sigils. This follows
+the Clojure stance: `apropos`, `doc`, `describe`, `trace` are bindings, not
+commands.
 
 The one thing a meta-command can do that a procedure cannot is run when normal
 evaluation is untrustworthy — the debugger break loop. The contract handles that

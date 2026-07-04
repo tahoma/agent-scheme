@@ -1998,6 +1998,14 @@
                                   'primitive-documentation
                                   1
                                   1)
+          (library-primitive-spec 'consent-doc
+                                  'primitive-consent-doc
+                                  1
+                                  1)
+          (library-primitive-spec 'consent-describe
+                                  'primitive-consent-describe
+                                  1
+                                  1)
           (library-primitive-spec 'macroexpand
                                   'primitive-macroexpand
                                   1

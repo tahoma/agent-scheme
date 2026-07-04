@@ -313,8 +313,9 @@ they are owned by later issues, not omissions to fix here:
   and the batch/`consent-repl-stream` entries read line by line — use a terminal
   wrapper such as `rlwrap` on the portable host for editing convenience.
 - **No meta-command syntax.** Submissions are ordinary Scheme forms;
-  introspection and control are ordinary procedures, a deliberate contract
-  non-goal (no `,backtrace` / `:doc` / `%time` sigils).
+  introspection and control are ordinary procedures such as `consent-doc` and
+  `consent-describe`, a deliberate contract non-goal (no `,backtrace` /
+  `:doc` / `%time` sigils).
 - **No last-value bindings.** Neither host binds `*1`/`it`; this is a settled
   parity decision, not a per-host accident — a future revision must add them on
   both hosts together.
