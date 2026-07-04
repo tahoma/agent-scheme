@@ -374,6 +374,43 @@
        (cadr (assq 'status (cdr (session-store-retire! store 'source-alpha)))))")
     "(source-alpha source-alpha (source-alpha source-beta) suspended active source-snap source-beta retired)")))
 
+(ert-deftest consent-library-test-agent-memory-is-source-backed ()
+  "Load `(agent memory)' from the shared portable source library."
+  (let ((source-file
+         (consent--agent-source-library-file "(agent memory)")))
+    (should source-file)
+    (should (string-suffix-p "scheme/agent/memory.sld" source-file))
+    (should (file-readable-p source-file)))
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (agent memory))
+      (define store (consent-make-memory-store))
+      (define kept
+        (memory-store-put! store
+                           'instance
+                           'source-alpha
+                           '((tags (source fact))
+                             (value \"source-backed memory\")
+                             (confidence high))))
+      (define generated
+        (memory-store-add! store
+                           'project
+                           'note
+                           '((tags (project))
+                             (value \"generated memory\"))))
+      (list
+       (memory-record-id kept)
+       (memory-record-id
+        (memory-store-ref store 'instance 'source-alpha))
+       (map memory-record-id (memory-store-by-tag store 'instance 'source))
+       (map memory-record-id
+            (memory-store-find store 'project \"generated memory\"))
+       (memory-record-id generated)
+       (memory-store-delete! store 'instance 'source-alpha)
+       (memory-store-ref store 'instance 'source-alpha))")
+    "(source-alpha source-alpha (source-alpha) (m-2) m-2 (memory (id source-alpha) (scope instance) (key source-alpha) (kind datum) (tags (source fact)) (value \"source-backed memory\") (source ()) (confidence high) (created-at 1) (updated-at 1)) #f)")))
+
 (ert-deftest consent-library-test-standard-case-lambda-import ()
   "Import `(scheme case-lambda)' through the library registry."
   (should

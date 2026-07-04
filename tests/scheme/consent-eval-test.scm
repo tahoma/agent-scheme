@@ -4701,6 +4701,33 @@
 (let* ((result
         (consent-eval-source-result
          "(import (scheme base) (agent memory))
+          (define store (consent-make-memory-store))
+          (define kept
+            (memory-store-put! store
+                               'instance
+                               'portable-source
+                               '((tags (source fact))
+                                 (value \"source memory\")
+                                 (confidence high))))
+          (list
+           (memory-record-id kept)
+           (memory-record-id
+            (memory-store-ref store 'instance 'portable-source))
+           (map memory-record-id
+                (memory-store-by-tag store 'instance 'source))
+           (memory-store-ref store 'instance 'missing))"))
+       (value (field-value result 'value)))
+  (check 'agent-memory-source-store-helpers
+         (and (equal? (field-value result 'status) 'ok)
+              (string=?
+               (consent-value->external value)
+               "(portable-source portable-source (portable-source) #f)")
+              #t)
+         #t))
+
+(let* ((result
+        (consent-eval-source-result
+         "(import (scheme base) (agent memory))
           (memory-put! 'instance
                        'portable-yield
                        '((tags (portable))

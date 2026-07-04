@@ -53,6 +53,7 @@
      (library (agent test primitive))
      (library (agent task))
      (library (agent memory))
+     (library (agent memory primitive))
      (library (agent plan))
      (library (agent models))
      (library (agent models primitive))
