@@ -630,7 +630,7 @@
   "Run reflection contract and stress coverage as behavior-focused shards."
   (let ((makefile (consent-ci-test--repo-file-string "Makefile")))
     (should (string-match-p
-             "CONSENT_EMACS_TEST_SHARD_TARGETS \\?=.*test-emacs-reflect.*test-emacs-reflect-stress"
+             "CONSENT_EMACS_TEST_SHARD_TARGETS \\?=.*test-emacs-reflect.*test-emacs-reflect-catalog-stress.*test-emacs-reflect-documentation-stress.*test-emacs-reflect-binding-crosswalk-stress.*test-emacs-reflect-dynamic-manifest-stress"
              makefile))
     (should (string-match-p
              "CONSENT_DEFAULT_PORTABLE_TEST_SHARD_TARGETS \\?=.*test-portable-racket-reflect.*test-portable-racket-reflect-stress"
@@ -639,9 +639,17 @@
              "CONSENT_PORTABLE_TEST_SHARD_TARGETS \\?=.*test-portable-gambit-reflect.*test-portable-gambit-reflect-stress.*test-portable-racket-reflect.*test-portable-racket-reflect-stress.*test-portable-guile-reflect.*test-portable-guile-reflect-stress.*test-portable-gauche-reflect.*test-portable-gauche-reflect-stress"
              makefile))
     (dolist (needle '("CONSENT_EMACS_REFLECT_TEST_SELECTOR \\?=.*consent-reflect"
+                      "CONSENT_EMACS_REFLECT_CATALOG_STRESS_TEST_SELECTOR \\?="
+                      "CONSENT_EMACS_REFLECT_DOCUMENTATION_STRESS_TEST_SELECTOR \\?="
+                      "CONSENT_EMACS_REFLECT_BINDING_CROSSWALK_STRESS_TEST_SELECTOR \\?="
+                      "CONSENT_EMACS_REFLECT_DYNAMIC_MANIFEST_STRESS_TEST_SELECTOR \\?="
                       "CONSENT_EMACS_REFLECT_STRESS_TEST_SELECTOR \\?=.*stress"
                       "CONSENT_EMACS_INTEGRATION_TEST_SELECTOR \\?=.*consent-native-cli-daemon.*consent-repl.*consent-vcs"
                       "^test-emacs-reflect:"
+                      "^test-emacs-reflect-catalog-stress:"
+                      "^test-emacs-reflect-documentation-stress:"
+                      "^test-emacs-reflect-binding-crosswalk-stress:"
+                      "^test-emacs-reflect-dynamic-manifest-stress:"
                       "^test-emacs-reflect-stress:"
                       "^test-portable-gambit-reflect:"
                       "^test-portable-gambit-reflect-stress:"
@@ -660,9 +668,15 @@
   "Expose reflection contract and stress shards in the CI matrix."
   (let ((workflow (consent-ci-test--repo-file-string ".github/workflows/test.yml")))
     (dolist (needle '("shard: emacs-reflect"
-                      "shard: emacs-reflect-stress"
+                      "shard: emacs-reflect-catalog-stress"
+                      "shard: emacs-reflect-documentation-stress"
+                      "shard: emacs-reflect-binding-crosswalk-stress"
+                      "shard: emacs-reflect-dynamic-manifest-stress"
                       "summary_name: Emacs reflection contract"
                       "summary_name: Emacs reflection catalog stress"
+                      "summary_name: Emacs reflection documentation stress"
+                      "summary_name: Emacs reflection binding crosswalk stress"
+                      "summary_name: Emacs reflection dynamic manifest stress"
                       "CONSENT_CI_REFLECT_SHARD_SUMMARY_NAME: Portable R7RS Gambit reflection contract"
                       "CONSENT_CI_REFLECT_STRESS_SHARD_SUMMARY_NAME: Portable R7RS Gambit reflection stress"
                       "host: racket-reflect"
@@ -891,19 +905,53 @@
                                          :ert-seconds 1.0
                                          :wall-seconds 1.0
                                          :tests nil))
-         (reflect-stress-shard '(:name "Emacs reflection catalog stress"
-                                       :selector "reflect-stress"
-                                       :ran 1
-                                       :expected 1
-                                       :unexpected 0
-                                       :skipped 0
-                                       :ert-seconds 1.0
-                                       :wall-seconds 1.0
-                                       :tests nil))
+         (reflect-catalog-stress-shard
+          '(:name "Emacs reflection catalog stress"
+            :selector "reflect-catalog-stress"
+            :ran 1
+            :expected 1
+            :unexpected 0
+            :skipped 0
+            :ert-seconds 1.0
+            :wall-seconds 1.0
+            :tests nil))
+         (reflect-documentation-stress-shard
+          '(:name "Emacs reflection documentation stress"
+            :selector "reflect-documentation-stress"
+            :ran 1
+            :expected 1
+            :unexpected 0
+            :skipped 0
+            :ert-seconds 1.0
+            :wall-seconds 1.0
+            :tests nil))
+         (reflect-binding-crosswalk-stress-shard
+          '(:name "Emacs reflection binding crosswalk stress"
+            :selector "reflect-binding-crosswalk-stress"
+            :ran 1
+            :expected 1
+            :unexpected 0
+            :skipped 0
+            :ert-seconds 1.0
+            :wall-seconds 1.0
+            :tests nil))
+         (reflect-dynamic-manifest-stress-shard
+          '(:name "Emacs reflection dynamic manifest stress"
+            :selector "reflect-dynamic-manifest-stress"
+            :ran 1
+            :expected 1
+            :unexpected 0
+            :skipped 0
+            :ert-seconds 1.0
+            :wall-seconds 1.0
+            :tests nil))
          (markdown
           (consent-ci-render-pr-markdown-summary
            (list tools-shard
-                 reflect-stress-shard
+                 reflect-dynamic-manifest-stress-shard
+                 reflect-binding-crosswalk-stress-shard
+                 reflect-documentation-stress-shard
+                 reflect-catalog-stress-shard
                  reflect-contract-shard
                  agent-state-shard
                  capability-boundary-shard
@@ -927,7 +975,7 @@
                  portable-eval-shard))))
     (should
      (string-match-p
-      "| Portable R7RS Chibi evaluator subset |.*\n| Portable R7RS Chibi non-evaluator subset |.*\n| Portable R7RS Gambit full suite |.*\n| Portable R7RS Gambit reflection contract |.*\n| Portable R7RS Gambit reflection stress |.*\n| Portable R7RS Gambit-compiled Consent Scheme full suite |.*\n| Portable R7RS Racket full suite |.*\n| Portable R7RS Racket reflection contract |.*\n| Portable R7RS Racket reflection stress |.*\n| Portable R7RS Racket-compiled Consent Scheme full suite |.*\n| Portable R7RS Guile full suite |.*\n| Portable R7RS Guile reflection contract |.*\n| Portable R7RS Guile reflection stress |.*\n| Portable R7RS Gauche full suite |.*\n| Portable R7RS Gauche reflection contract |.*\n| Portable R7RS Gauche reflection stress |.*\n| Emacs agent control |.*\n| Emacs agent reliability |.*\n| Emacs capability boundary |.*\n| Emacs agent state |.*\n| Emacs tools/docs/integration |.*\n| Emacs reflection contract |.*\n| Emacs reflection catalog stress |"
+      "| Portable R7RS Chibi evaluator subset |.*\n| Portable R7RS Chibi non-evaluator subset |.*\n| Portable R7RS Gambit full suite |.*\n| Portable R7RS Gambit reflection contract |.*\n| Portable R7RS Gambit reflection stress |.*\n| Portable R7RS Gambit-compiled Consent Scheme full suite |.*\n| Portable R7RS Racket full suite |.*\n| Portable R7RS Racket reflection contract |.*\n| Portable R7RS Racket reflection stress |.*\n| Portable R7RS Racket-compiled Consent Scheme full suite |.*\n| Portable R7RS Guile full suite |.*\n| Portable R7RS Guile reflection contract |.*\n| Portable R7RS Guile reflection stress |.*\n| Portable R7RS Gauche full suite |.*\n| Portable R7RS Gauche reflection contract |.*\n| Portable R7RS Gauche reflection stress |.*\n| Emacs agent control |.*\n| Emacs agent reliability |.*\n| Emacs capability boundary |.*\n| Emacs agent state |.*\n| Emacs tools/docs/integration |.*\n| Emacs reflection contract |.*\n| Emacs reflection catalog stress |.*\n| Emacs reflection documentation stress |.*\n| Emacs reflection binding crosswalk stress |.*\n| Emacs reflection dynamic manifest stress |"
       markdown))))
 
 ;;; Structured per-run record (#465)

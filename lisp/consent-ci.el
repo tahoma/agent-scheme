@@ -82,8 +82,11 @@
     ("Emacs tools/docs/integration" . 29)
     ("Emacs reflection contract" . 30)
     ("Emacs reflection catalog stress" . 31)
-    ("Emacs native-build/install-dist" . 32)
-    ("Emacs integration/REPL" . 33))
+    ("Emacs reflection documentation stress" . 32)
+    ("Emacs reflection binding crosswalk stress" . 33)
+    ("Emacs reflection dynamic manifest stress" . 34)
+    ("Emacs native-build/install-dist" . 35)
+    ("Emacs integration/REPL" . 36))
   "Preferred display order for CI shard summaries.")
 
 (defconst consent-ci--portable-host-order
