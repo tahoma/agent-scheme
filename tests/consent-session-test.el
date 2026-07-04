@@ -101,6 +101,17 @@
      "(source-legacy-a source-legacy-a (source-legacy-a source-legacy-b) "
      "suspended active source-legacy-snap source-legacy-b () retired)"))))
 
+(ert-deftest consent-session-test-emacs-adapter-has-no-pure-store-twin ()
+  "Keep pure session lifecycle state single-sourced in `(agent session)'."
+  (dolist (symbol
+           '(consent-session--generated-id
+             consent-session--generated-snapshot-id
+             consent-session--snapshot-id
+             consent-session--make
+             consent-session--register!
+             consent-session--transition!))
+    (should-not (fboundp symbol))))
+
 (ert-deftest consent-session-test-suspend-resume-snapshot-fork-and-audit ()
   "Track lifecycle transitions, snapshots, forks, and audit entries."
   (consent-session-test--reset)
