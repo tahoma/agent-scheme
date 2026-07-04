@@ -62,6 +62,10 @@ CONSENT_PORTABLE_COMPILED_TEST_SELECTOR ?= "^consent-scheme-compiled-host-test-r
 CONSENT_PORTABLE_GUILE_TEST_SELECTOR ?= "^consent-scheme-guile-host-test-r7rs-suite$$"
 CONSENT_PORTABLE_GAUCHE_TEST_SELECTOR ?= "^consent-scheme-gauche-host-test-r7rs-suite$$"
 CONSENT_PORTABLE_CHIBI_TEST_SELECTOR ?= "^consent-scheme-chibi-host-test-r7rs-suite$$"
+CONSENT_PORTABLE_GAMBIT_REFLECT_TEST_SELECTOR ?= "^consent-scheme-gambit-host-test-r7rs-reflect$$"
+CONSENT_PORTABLE_RACKET_REFLECT_TEST_SELECTOR ?= "^consent-scheme-racket-host-test-r7rs-reflect$$"
+CONSENT_PORTABLE_GUILE_REFLECT_TEST_SELECTOR ?= "^consent-scheme-guile-host-test-r7rs-reflect$$"
+CONSENT_PORTABLE_GAUCHE_REFLECT_TEST_SELECTOR ?= "^consent-scheme-gauche-host-test-r7rs-reflect$$"
 CONSENT_PORTABLE_GAMBIT_REFLECT_STRESS_TEST_SELECTOR ?= "^consent-scheme-gambit-host-test-r7rs-reflect-stress$$"
 CONSENT_PORTABLE_RACKET_REFLECT_STRESS_TEST_SELECTOR ?= "^consent-scheme-racket-host-test-r7rs-reflect-stress$$"
 CONSENT_PORTABLE_GUILE_REFLECT_STRESS_TEST_SELECTOR ?= "^consent-scheme-guile-host-test-r7rs-reflect-stress$$"
@@ -109,13 +113,13 @@ CONSENT_EMACS_NATIVE_BUILD_TEST_SELECTOR ?= "^consent-compile-portable-test-\\(r
 CONSENT_PARITY_TEST_SELECTOR ?= "^consent-parity-test-.*"
 CONSENT_LIVE_MODEL_CI_SELECTOR ?= (or "consent-models-test-live-local-openai-compatible-completion" "consent-models-test-live-local-openai-compatible-tool-call" "consent-models-test-live-portable-racket-local-openai-compatible-tool-call" "consent-models-test-live-portable-compiled-local-openai-compatible-tool-call")
 CONSENT_LIVE_MODEL_SELECTOR ?= (or "consent-models-test-live-local-.*" "consent-models-test-live-portable-.*")
-CONSENT_PORTABLE_TEST_SHARD_TARGETS ?= test-portable-gambit test-portable-gambit-reflect-stress test-portable-gambit-native test-portable-racket test-portable-racket-reflect-stress test-portable-compiled test-portable-guile test-portable-guile-reflect-stress test-portable-gauche test-portable-gauche-reflect-stress
+CONSENT_PORTABLE_TEST_SHARD_TARGETS ?= test-portable-gambit test-portable-gambit-reflect test-portable-gambit-reflect-stress test-portable-gambit-native test-portable-racket test-portable-racket-reflect test-portable-racket-reflect-stress test-portable-compiled test-portable-guile test-portable-guile-reflect test-portable-guile-reflect-stress test-portable-gauche test-portable-gauche-reflect test-portable-gauche-reflect-stress
 CONSENT_EMACS_TEST_SHARD_TARGETS ?= test-emacs-core test-emacs-library test-emacs-stdlib-reference test-emacs-stdlib-reference-stress test-emacs-agent-control test-emacs-agent-reliability test-emacs-capability-boundary test-emacs-agent-state test-emacs-tools test-emacs-reflect test-emacs-reflect-stress test-emacs-integration
 # Representative portable host kept in the trimmed default make test shard set.
 # The reader/writer/docstring machinery exercised by the portable shards is
 # host-independent, so one host is enough for the fast local loop; the full host
 # matrix stays available through make test-full and the scheduled CI lane.
-CONSENT_DEFAULT_PORTABLE_TEST_SHARD_TARGETS ?= test-portable-racket test-portable-racket-reflect-stress
+CONSENT_DEFAULT_PORTABLE_TEST_SHARD_TARGETS ?= test-portable-racket test-portable-racket-reflect test-portable-racket-reflect-stress
 # Trimmed default: the Emacs byte-compile lint gate, the portable-host compiler
 # warnings gate, one representative portable host, the full Emacs shard set, and
 # the cross-implementation parity gate (#374). `test-emacs-native-build' is
@@ -138,7 +142,7 @@ CONSENT_FULL_TEST_JOBS ?= 16
 
 .DEFAULT_GOAL := help
 
-.PHONY: help print-version clean clean-compile compile install uninstall dist compile-elisp lint-elisp lint-elisp-docstrings lint-portable lint-branding lint-line-length repl test test-full test-portable test-portable-chibi test-portable-gambit test-portable-gambit-reflect-stress test-portable-gambit-native test-portable-racket test-portable-racket-reflect-stress test-portable-compiled test-portable-guile test-portable-guile-reflect-stress test-portable-gauche test-portable-gauche-reflect-stress test-emacs-hosted test-emacs-core test-emacs-library test-emacs-stdlib-reference test-emacs-stdlib-reference-stress test-emacs-agent-control test-emacs-agent-reliability test-emacs-capability-boundary test-emacs-agent-state test-emacs-capabilities test-emacs-tools test-emacs-reflect test-emacs-reflect-stress test-emacs-integration test-emacs-native-build test-parity test-live-model-ci test-live-model conformance-oracle
+.PHONY: help print-version clean clean-compile compile install uninstall dist compile-elisp lint-elisp lint-elisp-docstrings lint-portable lint-branding lint-line-length repl test test-full test-portable test-portable-chibi test-portable-gambit test-portable-gambit-reflect test-portable-gambit-reflect-stress test-portable-gambit-native test-portable-racket test-portable-racket-reflect test-portable-racket-reflect-stress test-portable-compiled test-portable-guile test-portable-guile-reflect test-portable-guile-reflect-stress test-portable-gauche test-portable-gauche-reflect test-portable-gauche-reflect-stress test-emacs-hosted test-emacs-core test-emacs-library test-emacs-stdlib-reference test-emacs-stdlib-reference-stress test-emacs-agent-control test-emacs-agent-reliability test-emacs-capability-boundary test-emacs-agent-state test-emacs-capabilities test-emacs-tools test-emacs-reflect test-emacs-reflect-stress test-emacs-integration test-emacs-native-build test-parity test-live-model-ci test-live-model conformance-oracle
 
 help:
 	@printf '%s\n' 'Consent Scheme top-level actions:'
@@ -162,14 +166,18 @@ help:
 	@printf '  %-26s %s\n' 'test-portable' 'Run the default portable R7RS host shards.'
 	@printf '  %-26s %s\n' 'test-portable-chibi' 'Run the optional portable R7RS Chibi full-suite host shard.'
 	@printf '  %-26s %s\n' 'test-portable-gambit' 'Run the portable R7RS Gambit full-suite host shard.'
+	@printf '  %-26s %s\n' 'test-portable-gambit-reflect' 'Run the portable R7RS Gambit reflection contract shard.'
 	@printf '  %-26s %s\n' 'test-portable-gambit-reflect-stress' 'Run the portable R7RS Gambit reflection stress shard.'
 	@printf '  %-26s %s\n' 'test-portable-gambit-native' 'Build and run the Gambit-compiled Consent Scheme full-suite host shard.'
 	@printf '  %-26s %s\n' 'test-portable-racket' 'Run the portable R7RS Racket full-suite host shard.'
+	@printf '  %-26s %s\n' 'test-portable-racket-reflect' 'Run the portable R7RS Racket reflection contract shard.'
 	@printf '  %-26s %s\n' 'test-portable-racket-reflect-stress' 'Run the portable R7RS Racket reflection stress shard.'
 	@printf '  %-26s %s\n' 'test-portable-compiled' 'Build and run the Racket-compiled Consent Scheme full-suite host shard.'
 	@printf '  %-26s %s\n' 'test-portable-guile' 'Run the portable R7RS Guile full-suite host shard.'
+	@printf '  %-26s %s\n' 'test-portable-guile-reflect' 'Run the portable R7RS Guile reflection contract shard.'
 	@printf '  %-26s %s\n' 'test-portable-guile-reflect-stress' 'Run the portable R7RS Guile reflection stress shard.'
 	@printf '  %-26s %s\n' 'test-portable-gauche' 'Run the portable R7RS Gauche full-suite host shard.'
+	@printf '  %-26s %s\n' 'test-portable-gauche-reflect' 'Run the portable R7RS Gauche reflection contract shard.'
 	@printf '  %-26s %s\n' 'test-portable-gauche-reflect-stress' 'Run the portable R7RS Gauche reflection stress shard.'
 	@printf '  %-26s %s\n' 'test-emacs-hosted' 'Run all non-portable Emacs-hosted ERT tests.'
 	@printf '  %-26s %s\n' 'test-emacs-core' 'Run the Emacs-hosted core language/runtime shard.'
@@ -216,12 +224,16 @@ help:
 	@printf '  %-50s %s\n' 'CONSENT_PORTABLE_CHIBI_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-chibi.'
 	@printf '  %-50s %s\n' 'CONSENT_PORTABLE_GAMBIT_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-gambit.'
 	@printf '  %-50s %s\n' 'CONSENT_PORTABLE_GAMBIT_NATIVE_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-gambit-native.'
+	@printf '  %-50s %s\n' 'CONSENT_PORTABLE_GAMBIT_REFLECT_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-gambit-reflect.'
 	@printf '  %-50s %s\n' 'CONSENT_PORTABLE_RACKET_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-racket.'
+	@printf '  %-50s %s\n' 'CONSENT_PORTABLE_RACKET_REFLECT_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-racket-reflect.'
 	@printf '  %-50s %s\n' 'CONSENT_PORTABLE_RACKET_REFLECT_STRESS_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-racket-reflect-stress.'
 	@printf '  %-50s %s\n' 'CONSENT_PORTABLE_COMPILED_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-compiled.'
 	@printf '  %-50s %s\n' 'CONSENT_PORTABLE_GUILE_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-guile.'
+	@printf '  %-50s %s\n' 'CONSENT_PORTABLE_GUILE_REFLECT_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-guile-reflect.'
 	@printf '  %-50s %s\n' 'CONSENT_PORTABLE_GUILE_REFLECT_STRESS_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-guile-reflect-stress.'
 	@printf '  %-50s %s\n' 'CONSENT_PORTABLE_GAUCHE_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-gauche.'
+	@printf '  %-50s %s\n' 'CONSENT_PORTABLE_GAUCHE_REFLECT_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-gauche-reflect.'
 	@printf '  %-50s %s\n' 'CONSENT_PORTABLE_GAUCHE_REFLECT_STRESS_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-gauche-reflect-stress.'
 	@printf '  %-50s %s\n' 'CONSENT_PORTABLE_GAMBIT_REFLECT_STRESS_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-gambit-reflect-stress.'
 	@printf '  %-50s %s\n' 'CONSENT_EMACS_HOSTED_TEST_SELECTOR=SEL' 'ERT selector used by make test-emacs-hosted.'
@@ -456,6 +468,9 @@ test-portable-chibi:
 test-portable-gambit:
 	CONSENT_TEST_SELECTOR='$(CONSENT_PORTABLE_GAMBIT_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
 
+test-portable-gambit-reflect:
+	CONSENT_TEST_SELECTOR='$(CONSENT_PORTABLE_GAMBIT_REFLECT_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
+
 test-portable-gambit-reflect-stress:
 	CONSENT_TEST_SELECTOR='$(CONSENT_PORTABLE_GAMBIT_REFLECT_STRESS_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
 
@@ -472,6 +487,9 @@ test-portable-gambit-native:
 test-portable-racket:
 	CONSENT_TEST_SELECTOR='$(CONSENT_PORTABLE_RACKET_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
 
+test-portable-racket-reflect:
+	CONSENT_TEST_SELECTOR='$(CONSENT_PORTABLE_RACKET_REFLECT_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
+
 test-portable-racket-reflect-stress:
 	CONSENT_TEST_SELECTOR='$(CONSENT_PORTABLE_RACKET_REFLECT_STRESS_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
 
@@ -486,11 +504,17 @@ test-portable-compiled:
 test-portable-guile:
 	CONSENT_TEST_SELECTOR='$(CONSENT_PORTABLE_GUILE_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
 
+test-portable-guile-reflect:
+	CONSENT_TEST_SELECTOR='$(CONSENT_PORTABLE_GUILE_REFLECT_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
+
 test-portable-guile-reflect-stress:
 	CONSENT_TEST_SELECTOR='$(CONSENT_PORTABLE_GUILE_REFLECT_STRESS_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
 
 test-portable-gauche:
 	CONSENT_TEST_SELECTOR='$(CONSENT_PORTABLE_GAUCHE_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
+
+test-portable-gauche-reflect:
+	CONSENT_TEST_SELECTOR='$(CONSENT_PORTABLE_GAUCHE_REFLECT_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
 
 test-portable-gauche-reflect-stress:
 	CONSENT_TEST_SELECTOR='$(CONSENT_PORTABLE_GAUCHE_REFLECT_STRESS_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)

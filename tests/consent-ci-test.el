@@ -624,19 +624,23 @@
              "CONSENT_EMACS_TEST_SHARD_TARGETS \\?=.*test-emacs-reflect.*test-emacs-reflect-stress"
              makefile))
     (should (string-match-p
-             "CONSENT_DEFAULT_PORTABLE_TEST_SHARD_TARGETS \\?=.*test-portable-racket-reflect-stress"
+             "CONSENT_DEFAULT_PORTABLE_TEST_SHARD_TARGETS \\?=.*test-portable-racket-reflect.*test-portable-racket-reflect-stress"
              makefile))
     (should (string-match-p
-             "CONSENT_PORTABLE_TEST_SHARD_TARGETS \\?=.*test-portable-gambit-reflect-stress.*test-portable-racket-reflect-stress.*test-portable-guile-reflect-stress.*test-portable-gauche-reflect-stress"
+             "CONSENT_PORTABLE_TEST_SHARD_TARGETS \\?=.*test-portable-gambit-reflect.*test-portable-gambit-reflect-stress.*test-portable-racket-reflect.*test-portable-racket-reflect-stress.*test-portable-guile-reflect.*test-portable-guile-reflect-stress.*test-portable-gauche-reflect.*test-portable-gauche-reflect-stress"
              makefile))
     (dolist (needle '("CONSENT_EMACS_REFLECT_TEST_SELECTOR \\?=.*consent-reflect"
                       "CONSENT_EMACS_REFLECT_STRESS_TEST_SELECTOR \\?=.*stress"
                       "CONSENT_EMACS_INTEGRATION_TEST_SELECTOR \\?=.*consent-native-cli-daemon.*consent-repl.*consent-vcs"
                       "^test-emacs-reflect:"
                       "^test-emacs-reflect-stress:"
+                      "^test-portable-gambit-reflect:"
                       "^test-portable-gambit-reflect-stress:"
+                      "^test-portable-racket-reflect:"
                       "^test-portable-racket-reflect-stress:"
+                      "^test-portable-guile-reflect:"
                       "^test-portable-guile-reflect-stress:"
+                      "^test-portable-gauche-reflect:"
                       "^test-portable-gauche-reflect-stress:"))
       (should (string-match-p needle makefile)))
     (should-not (string-match-p
@@ -650,12 +654,19 @@
                       "shard: emacs-reflect-stress"
                       "summary_name: Emacs reflection contract"
                       "summary_name: Emacs reflection catalog stress"
+                      "CONSENT_CI_REFLECT_SHARD_SUMMARY_NAME: Portable R7RS Gambit reflection contract"
                       "CONSENT_CI_REFLECT_STRESS_SHARD_SUMMARY_NAME: Portable R7RS Gambit reflection stress"
+                      "host: racket-reflect"
                       "host: racket-reflect-stress"
+                      "host: guile-reflect"
                       "host: guile-reflect-stress"
+                      "host: gauche-reflect"
                       "host: gauche-reflect-stress"
+                      "summary_name: Portable R7RS Racket reflection contract"
                       "summary_name: Portable R7RS Racket reflection stress"
+                      "summary_name: Portable R7RS Guile reflection contract"
                       "summary_name: Portable R7RS Guile reflection stress"
+                      "summary_name: Portable R7RS Gauche reflection contract"
                       "summary_name: Portable R7RS Gauche reflection stress"))
       (should (string-match-p needle workflow)))
     (should-not (string-match-p
@@ -727,6 +738,16 @@
                                         :ert-seconds 1.0
                                         :wall-seconds 1.0
                                         :tests nil))
+         (portable-gambit-reflect-shard
+          '(:name "Portable R7RS Gambit reflection contract"
+            :selector "portable-gambit-reflect"
+            :ran 1
+            :expected 1
+            :unexpected 0
+            :skipped 0
+            :ert-seconds 1.0
+            :wall-seconds 1.0
+            :tests nil))
          (portable-gambit-reflect-stress-shard
           '(:name "Portable R7RS Gambit reflection stress"
             :selector "portable-gambit-reflect-stress"
@@ -756,6 +777,16 @@
                                         :ert-seconds 1.0
                                         :wall-seconds 1.0
                                         :tests nil))
+         (portable-racket-reflect-shard
+          '(:name "Portable R7RS Racket reflection contract"
+            :selector "portable-racket-reflect"
+            :ran 1
+            :expected 1
+            :unexpected 0
+            :skipped 0
+            :ert-seconds 1.0
+            :wall-seconds 1.0
+            :tests nil))
          (portable-racket-reflect-stress-shard
           '(:name "Portable R7RS Racket reflection stress"
             :selector "portable-racket-reflect-stress"
@@ -784,6 +815,16 @@
                                        :ert-seconds 1.0
                                        :wall-seconds 1.0
                                        :tests nil))
+         (portable-guile-reflect-shard
+          '(:name "Portable R7RS Guile reflection contract"
+            :selector "portable-guile-reflect"
+            :ran 1
+            :expected 1
+            :unexpected 0
+            :skipped 0
+            :ert-seconds 1.0
+            :wall-seconds 1.0
+            :tests nil))
          (portable-guile-reflect-stress-shard
           '(:name "Portable R7RS Guile reflection stress"
             :selector "portable-guile-reflect-stress"
@@ -803,6 +844,16 @@
                                         :ert-seconds 1.0
                                         :wall-seconds 1.0
                                         :tests nil))
+         (portable-gauche-reflect-shard
+          '(:name "Portable R7RS Gauche reflection contract"
+            :selector "portable-gauche-reflect"
+            :ran 1
+            :expected 1
+            :unexpected 0
+            :skipped 0
+            :ert-seconds 1.0
+            :wall-seconds 1.0
+            :tests nil))
          (portable-gauche-reflect-stress-shard
           '(:name "Portable R7RS Gauche reflection stress"
             :selector "portable-gauche-reflect-stress"
@@ -850,20 +901,24 @@
                  agent-reliability-shard
                  agent-control-shard
                  portable-gauche-reflect-stress-shard
+                 portable-gauche-reflect-shard
                  portable-gauche-shard
                  portable-guile-reflect-stress-shard
+                 portable-guile-reflect-shard
                  portable-guile-shard
                  portable-compiled-shard
                  portable-racket-reflect-stress-shard
+                 portable-racket-reflect-shard
                  portable-racket-shard
                  portable-gambit-native-shard
                  portable-gambit-reflect-stress-shard
+                 portable-gambit-reflect-shard
                  portable-gambit-shard
                  portable-rest-shard
                  portable-eval-shard))))
     (should
      (string-match-p
-      "| Portable R7RS Chibi evaluator subset |.*\n| Portable R7RS Chibi non-evaluator subset |.*\n| Portable R7RS Gambit full suite |.*\n| Portable R7RS Gambit reflection stress |.*\n| Portable R7RS Gambit-compiled Consent Scheme full suite |.*\n| Portable R7RS Racket full suite |.*\n| Portable R7RS Racket reflection stress |.*\n| Portable R7RS Racket-compiled Consent Scheme full suite |.*\n| Portable R7RS Guile full suite |.*\n| Portable R7RS Guile reflection stress |.*\n| Portable R7RS Gauche full suite |.*\n| Portable R7RS Gauche reflection stress |.*\n| Emacs agent control |.*\n| Emacs agent reliability |.*\n| Emacs capability boundary |.*\n| Emacs agent state |.*\n| Emacs tools/docs/integration |.*\n| Emacs reflection contract |.*\n| Emacs reflection catalog stress |"
+      "| Portable R7RS Chibi evaluator subset |.*\n| Portable R7RS Chibi non-evaluator subset |.*\n| Portable R7RS Gambit full suite |.*\n| Portable R7RS Gambit reflection contract |.*\n| Portable R7RS Gambit reflection stress |.*\n| Portable R7RS Gambit-compiled Consent Scheme full suite |.*\n| Portable R7RS Racket full suite |.*\n| Portable R7RS Racket reflection contract |.*\n| Portable R7RS Racket reflection stress |.*\n| Portable R7RS Racket-compiled Consent Scheme full suite |.*\n| Portable R7RS Guile full suite |.*\n| Portable R7RS Guile reflection contract |.*\n| Portable R7RS Guile reflection stress |.*\n| Portable R7RS Gauche full suite |.*\n| Portable R7RS Gauche reflection contract |.*\n| Portable R7RS Gauche reflection stress |.*\n| Emacs agent control |.*\n| Emacs agent reliability |.*\n| Emacs capability boundary |.*\n| Emacs agent state |.*\n| Emacs tools/docs/integration |.*\n| Emacs reflection contract |.*\n| Emacs reflection catalog stress |"
       markdown))))
 
 ;;; Structured per-run record (#465)

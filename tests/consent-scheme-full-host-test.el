@@ -17,6 +17,12 @@
   "Run the full portable R7RS suite with Gambit Scheme."
   (consent--scheme-host-run-suite 'gambit "gambit"))
 
+(ert-deftest consent-scheme-gambit-host-test-r7rs-reflect ()
+  "Run the portable reflection contract suite with Gambit Scheme."
+  (consent--scheme-host-run-reflect-suite
+   'gambit
+   "gambit reflection contract"))
+
 (ert-deftest consent-scheme-gambit-host-test-r7rs-reflect-stress ()
   "Run the portable reflection stress suite with Gambit Scheme."
   (consent--scheme-host-run-reflect-stress-suite
@@ -33,6 +39,12 @@
   "Run the full portable R7RS suite with Racket's R7RS package."
   (consent--scheme-host-run-suite 'racket "racket"))
 
+(ert-deftest consent-scheme-racket-host-test-r7rs-reflect ()
+  "Run the portable reflection contract suite with Racket's R7RS package."
+  (consent--scheme-host-run-reflect-suite
+   'racket
+   "racket reflection contract"))
+
 (ert-deftest consent-scheme-racket-host-test-r7rs-reflect-stress ()
   "Run the portable reflection stress suite with Racket's R7RS package."
   (consent--scheme-host-run-reflect-stress-suite
@@ -43,6 +55,12 @@
   "Run the full portable R7RS suite with Guile Scheme."
   (consent--scheme-host-run-suite 'guile "guile"))
 
+(ert-deftest consent-scheme-guile-host-test-r7rs-reflect ()
+  "Run the portable reflection contract suite with Guile Scheme."
+  (consent--scheme-host-run-reflect-suite
+   'guile
+   "guile reflection contract"))
+
 (ert-deftest consent-scheme-guile-host-test-r7rs-reflect-stress ()
   "Run the portable reflection stress suite with Guile Scheme."
   (consent--scheme-host-run-reflect-stress-suite
@@ -52,6 +70,12 @@
 (ert-deftest consent-scheme-gauche-host-test-r7rs-suite ()
   "Run the full portable R7RS suite with Gauche Scheme."
   (consent--scheme-host-run-suite 'gauche "gauche"))
+
+(ert-deftest consent-scheme-gauche-host-test-r7rs-reflect ()
+  "Run the portable reflection contract suite with Gauche Scheme."
+  (consent--scheme-host-run-reflect-suite
+   'gauche
+   "gauche reflection contract"))
 
 (ert-deftest consent-scheme-gauche-host-test-r7rs-reflect-stress ()
   "Run the portable reflection stress suite with Gauche Scheme."
