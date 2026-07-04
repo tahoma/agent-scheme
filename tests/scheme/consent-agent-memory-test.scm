@@ -32,6 +32,15 @@
 (define (check-true name value)
   (check name (if value #t #f) #t))
 
+;; Assert THUNK raises an error.
+(define (check-error name thunk)
+  (check name
+         (guard (condition
+                 (else #t))
+           (thunk)
+           #f)
+         #t))
+
 ;; Return #t when VALUE appears in VALUES using equal?.
 (define (member-equal? value values)
   (cond
@@ -292,6 +301,303 @@
   (check 'session-candidate-filtered-by-scope
          (memory-record-field-value session-candidate 'reason #f)
          'scope-mismatch))
+
+;;;; Live projection applies to every store read surface
+
+(let* ((store (consent-make-memory-store))
+       (alpha-old
+        (memory-store-put! store
+                           'project
+                           'alpha
+                           '((tags (alpha old))
+                             (value "old alpha"))))
+       (alpha-new
+        (memory-store-put! store
+                           'project
+                           'alpha
+                           '((tags (alpha current))
+                             (value "new alpha"))))
+       (beta
+        (memory-store-put! store
+                           'project
+                           'beta
+                           '((tags (beta current))
+                             (value "live beta"))))
+       (access
+        (memory-store-access! store
+                              (memory-record-id alpha-new)
+                              'project
+                              'prompt-build))
+       (deleted (memory-store-delete! store 'project 'alpha))
+       (recent (memory-store-recent store 'project 10)))
+  (check 'live-projection-record-stream-count
+         (length (memory-store-records store))
+         5)
+  (check 'live-projection-deleted-record
+         (memory-record-id deleted)
+         (memory-record-id alpha-new))
+  (check 'live-projection-alpha-ref
+         (memory-store-ref store 'project 'alpha)
+         #f)
+  (check 'live-projection-beta-ref
+         (memory-record-id (memory-store-ref store 'project 'beta))
+         (memory-record-id beta))
+  (check 'live-projection-find-old
+         (memory-store-find store 'project "old alpha")
+         '())
+  (check 'live-projection-find-new-after-delete
+         (memory-store-find store 'project "new alpha")
+         '())
+  (check 'live-projection-by-current-tag
+         (map memory-record-id
+              (memory-store-by-tag store 'project 'current))
+         (list (memory-record-id beta)))
+  (check 'live-projection-access-event-not-live
+         (map memory-record-id
+              (memory-store-by-tag store 'project 'memory-access))
+         '())
+  (check 'live-projection-recent-only-live
+         (map memory-record-id recent)
+         (list (memory-record-id beta)))
+  (check-true 'live-projection-access-record-is-canonical
+              (member-equal? access (memory-store-records store)))
+  (check-true 'live-projection-old-record-remains-canonical
+              (member-equal? alpha-old (memory-store-records store))))
+
+;;;; Deterministic selection ordering, limit, and cutoff receipts
+
+(let* ((store (consent-make-memory-store))
+       (below
+        (memory-store-add! store
+                           'project
+                           'fact
+                           '((tags (ranking))
+                             (value "below cutoff")
+                             (importance 1))))
+       (tie-left
+        (memory-store-add! store
+                           'project
+                           'fact
+                           '((tags (ranking))
+                             (value "tie left")
+                             (importance 5))))
+       (tie-right
+        (memory-store-add! store
+                           'project
+                           'fact
+                           '((tags (ranking))
+                             (value "tie right")
+                             (importance 5))))
+       (selection
+        (memory-store-select
+         store
+         '(not-present)
+         '(retrieval-policy
+           (weights ((recency 0) (importance 1) (relevance 0)))
+           (cutoff 2)
+           (limit 1))
+         '(retrieval-context
+           (scope project)
+           (trust local)
+           (allowed-scopes (project))
+           (logical-clock 10))))
+       (below-candidate
+        (candidate-for-id selection (memory-record-id below)))
+       (left-candidate
+        (candidate-for-id selection (memory-record-id tie-left)))
+       (right-candidate
+        (candidate-for-id selection (memory-record-id tie-right))))
+  (check 'selection-limit-selected-list
+         (map memory-record-id (memory-selection-records selection))
+         (list (memory-record-id tie-left)))
+  (check 'selection-tie-breaks-by-id
+         (memory-record-id (car (memory-selection-records selection)))
+         'm-2)
+  (check 'selection-left-status
+         (memory-record-field-value left-candidate 'status #f)
+         'selected)
+  (check 'selection-left-score
+         (memory-record-field-value left-candidate 'score #f)
+         5)
+  (check 'selection-right-limited
+         (memory-record-field-value right-candidate 'status #f)
+         'not-selected)
+  (check 'selection-right-limit-reason
+         (memory-record-field-value right-candidate 'reason #f)
+         'below-cutoff-or-limit)
+  (check 'selection-below-cutoff
+         (memory-record-field-value below-candidate 'status #f)
+         'not-selected)
+  (check 'selection-below-cutoff-score
+         (memory-record-field-value below-candidate 'score #f)
+         1)
+  (check 'selection-below-cutoff-reason
+         (memory-record-field-value below-candidate 'reason #f)
+         'below-cutoff-or-limit))
+
+;;;; Scope datums and record replacement round-trip canonical memory
+
+(let* ((store (consent-make-memory-store))
+       (first
+        (memory-store-add! store
+                           'project
+                           'fact
+                           '((tags (roundtrip))
+                             (value "roundtrip one"))))
+       (storage
+        (memory-storage-rules
+         'project
+         "/private/consent/memory/project.scm"
+         "/repo/"
+         "/repo/.consent/memory.scm"
+         #f))
+       (scope-datum
+        (memory-scope-datum
+         'project
+         #f
+         storage
+         (memory-store-records store)))
+       (records (memory-scope-datum-records scope-datum))
+       (roundtrip (consent-make-memory-store))
+       (replaced (memory-store-replace-records! roundtrip records))
+       (second
+        (memory-store-add! roundtrip
+                           'project
+                           'fact
+                           '((tags (roundtrip))
+                             (value "roundtrip two"))))
+       (session-datum
+        (memory-scope-datum 'session 'session-1 #f records)))
+  (check 'scope-datum-scope
+         (memory-record-field-value scope-datum 'scope #f)
+         'project)
+  (check 'scope-datum-storage
+         (memory-record-field-value scope-datum 'storage #f)
+         storage)
+  (check 'scope-datum-records-roundtrip
+         records
+         (list first))
+  (check 'replace-records-return-value
+         replaced
+         (list first))
+  (check 'replace-records-resets-generated-id
+         (memory-record-id second)
+         'm-2)
+  (check 'replace-records-keeps-existing-record
+         (memory-record-id
+          (memory-store-ref roundtrip 'project (memory-record-id first)))
+         (memory-record-id first))
+  (check 'session-scope-datum-subject
+         (memory-record-field-value session-datum 'session #f)
+         'session-1))
+
+;;;; Validation failures and lower-trust redaction filtering
+
+(let* ((store (consent-make-memory-store))
+       (sensitive
+        (memory-store-add! store
+                           'project
+                           'fact
+                           '((tags (sensitive))
+                             (value (note (redaction (kind secret))))
+                             (importance 100))))
+       (local-selection
+        (memory-store-select
+         store
+         '(sensitive)
+         '(retrieval-policy (cutoff 0))
+         '(retrieval-context
+           (scope project)
+           (trust local)
+           (allowed-scopes (project))
+           (logical-clock 2))))
+       (remote-selection
+        (memory-store-select
+         store
+         '(sensitive)
+         '(retrieval-policy (cutoff 0))
+         '(retrieval-context
+           (scope project)
+           (trust remote)
+           (allowed-scopes (project))
+           (logical-clock 2))))
+       (public-selection
+        (memory-store-select
+         store
+         '(sensitive)
+         '(retrieval-policy (cutoff 0))
+         '(retrieval-context
+           (scope project)
+           (trust public)
+           (allowed-scopes (project))
+           (logical-clock 2))))
+       (lower-selection
+        (memory-store-select
+         store
+         '(sensitive)
+         '(retrieval-policy (cutoff 0))
+         '(retrieval-context
+           (scope project)
+           (trust lower-trust)
+           (allowed-scopes (project))
+           (logical-clock 2))))
+       (local-candidate
+        (candidate-for-id local-selection (memory-record-id sensitive)))
+       (remote-candidate
+        (candidate-for-id remote-selection (memory-record-id sensitive)))
+       (public-candidate
+        (candidate-for-id public-selection (memory-record-id sensitive)))
+       (lower-candidate
+        (candidate-for-id lower-selection (memory-record-id sensitive))))
+  (check-error 'invalid-scope
+               (lambda ()
+                 (memory-store-add! store
+                                    'workspace
+                                    'fact
+                                    '((value "bad scope")))))
+  (check-error 'invalid-memory-class
+               (lambda ()
+                 (memory-store-add! store
+                                    'project
+                                    'fact
+                                    '((memory-class mystery)
+                                      (value "bad class")))))
+  (check-error 'invalid-recent-count
+               (lambda ()
+                 (memory-store-recent store 'project 'one)))
+  (check-error 'invalid-selection-limit
+               (lambda ()
+                 (memory-store-select
+                  store
+                  '(sensitive)
+                  '(retrieval-policy (limit one))
+                  '(retrieval-context (scope project)))))
+  (check-error 'invalid-selection-cutoff
+               (lambda ()
+                 (memory-store-select
+                  store
+                  '(sensitive)
+                  '(retrieval-policy (cutoff high))
+                  '(retrieval-context (scope project)))))
+  (check-error 'scope-datum-missing-records
+               (lambda ()
+                 (memory-scope-datum-records
+                  '(agent-memory (scope project)))))
+  (check 'local-trust-allows-sensitive-record
+         (memory-record-field-value local-candidate 'status #f)
+         'selected)
+  (check 'remote-trust-filters-nested-redaction
+         (memory-record-field-value remote-candidate 'reason #f)
+         'redaction-or-local-only)
+  (check 'public-trust-filters-nested-redaction
+         (memory-record-field-value public-candidate 'reason #f)
+         'redaction-or-local-only)
+  (check 'lower-trust-filters-nested-redaction
+         (memory-record-field-value lower-candidate 'reason #f)
+         'redaction-or-local-only)
+  (check 'remote-selection-withholds-sensitive-records
+         (memory-selection-records remote-selection)
+         '()))
 
 (if (> failures 0)
     (error "portable agent memory tests failed" failures))
