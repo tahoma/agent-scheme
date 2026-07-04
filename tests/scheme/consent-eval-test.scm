@@ -4683,18 +4683,22 @@
                (string-append
                 "((memory (id portable-alpha) (scope instance) "
                 "(key portable-alpha) (kind datum) "
+                "(memory-class semantic) "
                 "(tags (portable fact)) (value \"portable alpha\") "
-                "(source ()) (confidence high) (created-at 1) "
-                "(updated-at 1)) "
+                "(source ()) (confidence high) (importance 1) "
+                "(created-at 1) (updated-at 1)) "
                 "((memory (id m-2) (scope project) (key m-2) "
-                "(kind fact) (tags (project portable)) "
+                "(kind fact) (memory-class semantic) "
+                "(tags (project portable)) "
                 "(value \"project portable\") (source ()) "
-                "(confidence unknown) (created-at 2) (updated-at 2))) "
+                "(confidence unknown) (importance 1) "
+                "(created-at 2) (updated-at 2))) "
                 "((memory (id portable-alpha) (scope instance) "
                 "(key portable-alpha) (kind datum) "
+                "(memory-class semantic) "
                 "(tags (portable fact)) (value \"portable alpha\") "
-                "(source ()) (confidence high) (created-at 1) "
-                "(updated-at 1))))"))
+                "(source ()) (confidence high) (importance 1) "
+                "(created-at 1) (updated-at 1))))"))
               #t)
          #t))
 
@@ -4728,6 +4732,74 @@
 (let* ((result
         (consent-eval-source-result
          "(import (scheme base) (agent memory))
+          (define base
+            (memory-add! 'project
+                         'fact
+                         '((tags (architecture r7rs))
+                           (value \"portable shared memory\")
+                           (importance 2))))
+          (define local
+            (memory-add! 'project
+                         'fact
+                         '((tags (architecture secret))
+                           (value \"withhold from remote\")
+                           (local-only #t)
+                           (importance 100))))
+          (define reflection
+            (memory-reflect! 'project
+                             'task-reflection
+                             '((value \"collect verifier evidence\"))
+                             (list (memory-record-id base))
+                             'failed
+                             'runner-step))
+          (memory-access! 'project (memory-record-id base) 'prompt-build)
+          (define selection
+            (memory-select
+             'project
+             '(architecture)
+             '(retrieval-policy
+               (weights ((recency 1) (importance 1) (relevance 3)))
+               (cutoff 3))
+             '(retrieval-context
+               (scope project)
+               (trust remote)
+               (allowed-scopes (project))
+               (logical-clock 8))))
+          (define (summary-match? wanted summaries)
+            (cond
+             ((null? summaries) #f)
+             ((equal? wanted (car summaries)) #t)
+             (else (summary-match? wanted (cdr summaries)))))
+          (define (member-equal? value values)
+            (cond
+             ((null? values) #f)
+             ((equal? value (car values)) #t)
+             (else (member-equal? value (cdr values)))))
+          (define summaries
+            (map
+             (lambda (candidate)
+               (list (memory-record-field-value candidate 'status)
+                     (memory-record-field-value candidate 'reason 'none)))
+             (memory-selection-candidates selection)))
+          (list (memory-selection? selection)
+                (member-equal? (memory-record-id base)
+                               (map memory-record-id
+                                    (memory-selection-records selection)))
+                (equal? (memory-record-field-value reflection 'cites)
+                        (list (memory-record-id base)))
+                (summary-match? '(filtered redaction-or-local-only)
+                                summaries)
+                (summary-match? '(selected none) summaries))"))
+       (value (field-value result 'value)))
+  (check 'agent-memory-reflection-selection-primitives
+         (if (equal? (field-value result 'status) 'ok)
+             (consent-value->external value)
+             (consent-result->external result))
+         "(#t #t #t #t #t)"))
+
+(let* ((result
+        (consent-eval-source-result
+         "(import (scheme base) (agent memory))
           (memory-put! 'instance
                        'portable-yield
                        '((tags (portable))
@@ -4736,18 +4808,16 @@
           'done"))
        (events (field-value result 'events)))
   (check 'agent-memory-yield-emits-agent-event
-         (and (equal? (field-value result 'status) 'ok)
-              (string=?
-               (consent-result->external (list 'events events))
-               (string-append
-                "(events ((yield (memory (id portable-yield) "
-                "(scope instance) (key portable-yield) "
-                "(kind datum) (tags (portable)) "
-                "(value \"yield portable\") (source ()) "
-                "(confidence unknown) (created-at 3) "
-                "(updated-at 3)))))"))
-         #t)
-         #t))
+         (if (equal? (field-value result 'status) 'ok)
+             (consent-result->external (list 'events events))
+             (consent-result->external result))
+         (string-append
+          "(events ((yield (memory (id portable-yield) "
+          "(scope instance) (key portable-yield) "
+          "(kind datum) (memory-class semantic) (tags (portable)) "
+          "(value \"yield portable\") (source ()) "
+          "(confidence unknown) (importance 1) (created-at 7) "
+          "(updated-at 7)))))")))
 
 (let* ((result
         (consent-eval-source-result

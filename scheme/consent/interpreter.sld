@@ -5794,6 +5794,30 @@ cursor across sessions."
                                   (car arguments)
                                   (second arguments)))
 
+    (define (primitive-memory-access! arguments context)
+      "Append a memory access event to the portable memory store."
+      (memory-model:memory-store-access! interpreter-memory-store
+                                   (second arguments)
+                                   (car arguments)
+                                   (third arguments)))
+
+    (define (primitive-memory-reflect! arguments context)
+      "Append a gated reflection datum to the portable memory store."
+      (memory-model:memory-store-reflect! interpreter-memory-store
+                                    (car arguments)
+                                    (second arguments)
+                                    (third arguments)
+                                    (fourth arguments)
+                                    (list-ref arguments 4)
+                                    (list-ref arguments 5)))
+
+    (define (primitive-memory-select arguments context)
+      "Select memory records with a replayable receipt."
+      (memory-model:memory-store-select interpreter-memory-store
+                                  (second arguments)
+                                  (third arguments)
+                                  (fourth arguments)))
+
     (define (primitive-memory-yield arguments context)
       "Yield matching memory records through the event channel."
       (let ((records
@@ -8160,6 +8184,9 @@ cursor across sessions."
        (cons 'primitive-memory-find primitive-memory-find)
        (cons 'primitive-memory-by-tag primitive-memory-by-tag)
        (cons 'primitive-memory-recent primitive-memory-recent)
+       (cons 'primitive-memory-access! primitive-memory-access!)
+       (cons 'primitive-memory-reflect! primitive-memory-reflect!)
+       (cons 'primitive-memory-select primitive-memory-select)
        (cons 'primitive-memory-yield primitive-memory-yield)
        (cons 'primitive-agent-artifact primitive-agent-artifact)
        (cons 'primitive-agent-helper-save! primitive-agent-helper-save!)

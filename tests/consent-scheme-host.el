@@ -21,6 +21,7 @@
     "tests/scheme/consent-repl-test.scm"
     "tests/scheme/consent-repl-parity-test.scm"
     "tests/scheme/consent-session-test.scm"
+    "tests/scheme/consent-agent-memory-test.scm"
     "tests/scheme/consent-agent-registry-test.scm"
     "tests/scheme/consent-agent-proposal-test.scm"
     "tests/scheme/consent-agent-runner-test.scm"
