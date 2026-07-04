@@ -553,7 +553,8 @@ make test
 
 `make test` runs a trimmed default shard set for a fast local loop: one
 representative portable host (`test-portable-racket`) plus its reflection
-catalog stress companion (`test-portable-racket-reflect-stress`,
+contract and catalog stress companions (`test-portable-racket-reflect` and
+`test-portable-racket-reflect-stress`,
 `CONSENT_DEFAULT_PORTABLE_TEST_SHARD_TARGETS`) and the Emacs-hosted shard set in
 `CONSENT_EMACS_TEST_SHARD_TARGETS`. The portable reader/writer/docstring
 machinery that the source-metadata and docstring-retention modes exercise is
@@ -584,11 +585,12 @@ such as the FoundationDB JSON sample as positive, budgeted conformance coverage
 without folding their wall time into the ordinary corpus row.
 
 Portable reflection tests follow the same behavior-surface split. Quick
-manifest-input and helper contracts stay in each ordinary portable full-suite
-host shard, while full catalog traversal and dynamic manifest add/remove stress
-coverage run in dedicated `test-portable-*-reflect-stress` shards. That keeps
-Guile and Gauche catalog-rebuild costs visible without folding them into the
-ordinary host timing row.
+manifest-input and helper contracts run in dedicated
+`test-portable-*-reflect` shards, while full catalog traversal and dynamic
+manifest add/remove stress coverage run in dedicated
+`test-portable-*-reflect-stress` shards. That keeps Guile and Gauche
+catalog-rebuild costs visible without folding them into the ordinary host timing
+row.
 
 `make test` defaults to `-j16` so up to 16 shard processes can run in parallel
 on a many-core host. Override with `CONSENT_TEST_JOBS=N make test` on narrower
@@ -830,14 +832,18 @@ failures stay visible by architectural path:
 
 ```sh
 CONSENT_GAMBIT=gsi make test-portable-gambit
+CONSENT_GAMBIT=gsi make test-portable-gambit-reflect
 CONSENT_GAMBIT=gsi make test-portable-gambit-reflect-stress
 CONSENT_GAMBIT=gsi CONSENT_GAMBIT_COMPILER=gsc make test-portable-gambit-native
 CONSENT_RACKET=racket make test-portable-racket
+CONSENT_RACKET=racket make test-portable-racket-reflect
 CONSENT_RACKET=racket make test-portable-racket-reflect-stress
 make test-portable-compiled
 CONSENT_GUILE=guile make test-portable-guile
+CONSENT_GUILE=guile make test-portable-guile-reflect
 CONSENT_GUILE=guile make test-portable-guile-reflect-stress
 CONSENT_GAUCHE=gosh make test-portable-gauche
+CONSENT_GAUCHE=gosh make test-portable-gauche-reflect
 CONSENT_GAUCHE=gosh make test-portable-gauche-reflect-stress
 make test-emacs-core
 make test-emacs-library
