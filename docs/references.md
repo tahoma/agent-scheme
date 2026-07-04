@@ -495,6 +495,52 @@ executable code in a live interpreter.
   keeping canonical Scheme-readable memory distinct from rebuildable
   in-context sets.
 
+### Agentic Session Memory and Development-Flow Memory
+
+These non-normative references collect development-flow memory prior art for
+durable procedural guidance, cross-session recall, MCP/tool memory, and
+repo-owned memory artifacts. For Consent Scheme, they are useful comparisons
+for keeping reviewed Scheme-readable memory canonical while treating generated
+summaries, vector indexes, graph stores, and hosted services as advisory or
+rebuildable layers.
+
+- [Codex Memories](https://developers.openai.com/codex/memories) and
+  [Chronicle](https://developers.openai.com/codex/memories/chronicle) document
+  opt-in Codex memory surfaces for turning prior thread and screen context into
+  local memory files. Useful product prior art for separating personal/session
+  continuity from repository-owned rules and source-controlled artifacts.
+- [Codex AGENTS.md](https://developers.openai.com/codex/guides/agents-md) and
+  [Agent Skills](https://developers.openai.com/codex/skills) document durable
+  procedural memory through checked-in instructions, reusable workflows, scripts,
+  and supporting references. Closest prior art for keeping hard agent rules and
+  repeatable procedures inspectable instead of hidden in model state.
+- [Codex MCP](https://developers.openai.com/codex/mcp) and the
+  [Model Context Protocol specification](https://modelcontextprotocol.io/specification)
+  document the tool/resource/prompt boundary used by many memory servers.
+  Relevant when exposing memory through capability-gated external tools while
+  retaining Scheme-readable data as the canonical store.
+- [Mem0 Codex integration](https://docs.mem0.ai/integrations/codex) and
+  [OpenMemory](https://mem0.ai/openmemory) document memory services for coding
+  agents and MCP-compatible workflows. Useful prior art for cross-session recall,
+  preference capture, and shared tool memory, provided authority and privacy
+  boundaries stay explicit.
+- [Supermemory MCP](https://supermemory.ai/docs/supermemory-mcp/introduction)
+  and [MemoryGraph](https://memorygraph.dev/docs/) document hosted/project-scoped
+  memory and local-first graph memory for AI assistants. Useful contrast between
+  hosted recall, local SQLite/graph storage, and Consent's append-only memory
+  model.
+- [Cognee MCP](https://docs.cognee.ai/cognee-mcp/mcp-overview),
+  [Zep Memory](https://help.getzep.com/v2/memory), and
+  [Graphiti](https://help.getzep.com/graphiti/getting-started/welcome) document
+  heavier persistent-memory, context-engineering, and temporal-knowledge-graph
+  systems. Useful when evaluating organization-scale or multi-agent recall, not
+  as requirements for the minimal harness.
+- [Chroma Agentic Memory](https://docs.trychroma.com/guides/build/agentic-memory)
+  describes semantic, procedural, and episodic memory over a vector collection
+  with phase-specific retrieval. Useful DIY prior art for repo-backed ADR,
+  agent-notes, and skills-style memory where embeddings help retrieval but
+  remain rebuildable indexes over reviewed source artifacts.
+
 ### Multi-Agent and Orchestration
 
 - [AutoGen: Enabling Next-Gen LLM Applications via Multi-Agent Conversation](https://arxiv.org/abs/2308.08155)
