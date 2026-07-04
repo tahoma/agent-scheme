@@ -421,14 +421,19 @@ jobs:
             summary_name: Emacs library/conformance
             selector: '(and (or "consent-conformance.*" "consent-fixture.*" "consent-host-adapter-fixture.*" "consent-library.*" "consent-oracle.*") (not "consent-library-test-srfi-180-reference-.*"))'
           # The SRFI 180 official reference corpus is intentionally isolated
-          # from the broader library/conformance shard. The invalid-corpus
-          # loop is a valuable upstream compatibility gate, but it became the
-          # dominant per-push Emacs-hosted test cost once #614 vendored it.
+          # from the broader library/conformance shard. The FoundationDB valid
+          # fixture remains positive coverage, but runs as stress coverage so
+          # it does not dominate the ordinary corpus shard's timing.
           - shard: emacs-stdlib-reference
             label: stdlib/reference corpus
             make_target: test-emacs-stdlib-reference
             summary_name: Emacs stdlib/reference corpus
-            selector: '"consent-library-test-srfi-180-reference-.*"'
+            selector: '(and "consent-library-test-srfi-180-reference-.*" (not "consent-library-test-srfi-180-reference-valid-stress-corpus"))'
+          - shard: emacs-stdlib-reference-stress
+            label: stdlib/reference stress
+            make_target: test-emacs-stdlib-reference-stress
+            summary_name: Emacs stdlib/reference stress
+            selector: '"consent-library-test-srfi-180-reference-valid-stress-corpus"'
           # The agent/capability surface used to run as one capabilities/policy
           # shard. It dominated per-push wall time, so the default lane splits
           # it into behavior-focused shards that can run in parallel.
