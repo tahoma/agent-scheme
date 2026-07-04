@@ -565,13 +565,15 @@ parallelizer can overlap them on hosts with more cores than there were once
 shards: `test-emacs-tools` keeps the tools and docs cluster (CI, compile,
 diagnostics, doc-pass tests, ...), while `test-emacs-integration` carries the
 heavier integration surface (REPL, VCS, native-CLI daemon) that used to dominate
-`test-emacs-tools`'s wall time. Reflection runs through its own contract and
-catalog-stress shards (`test-emacs-reflect` and `test-emacs-reflect-stress`) so
-manifest-backed discovery does not serialize the REPL/integration lane. The
-four full host-compile + install/dist tests in `consent-compile-portable-test.el`
-are stranded into the opt-in `test-emacs-native-build` shard, which `make test`
-skips and `make test-full` runs. The native build path is already exercised
-separately by `test-portable-gambit-native` and `test-portable-compiled`; the
+`test-emacs-tools`'s wall time. Reflection runs through its own contract shard
+(`test-emacs-reflect`) plus catalog, documentation/apropos, binding crosswalk,
+and dynamic manifest stress shards so manifest-backed discovery does not
+serialize the REPL/integration lane. The aggregate `test-emacs-reflect-stress`
+target remains available for ad hoc local runs. The four full host-compile +
+install/dist tests in `consent-compile-portable-test.el` are stranded into the
+opt-in `test-emacs-native-build` shard, which `make test` skips and
+`make test-full` runs. The native build path is already exercised separately by
+`test-portable-gambit-native` and `test-portable-compiled`; the
 `test-emacs-native-build` shard additionally covers the install/dist packaging
 surface against a single shared host build per host (built once per Emacs
 process, reused across the runner-smoke and install/dist tests).
@@ -855,7 +857,10 @@ make test-emacs-capability-boundary
 make test-emacs-agent-state
 make test-emacs-tools
 make test-emacs-reflect
-make test-emacs-reflect-stress
+make test-emacs-reflect-catalog-stress
+make test-emacs-reflect-documentation-stress
+make test-emacs-reflect-binding-crosswalk-stress
+make test-emacs-reflect-dynamic-manifest-stress
 make test-emacs-integration
 CONSENT_PARITY_HOST=guile make test-parity
 ```
