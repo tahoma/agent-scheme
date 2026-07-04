@@ -315,9 +315,33 @@
             :ert-seconds 51.0
             :wall-seconds 52.0
             :tests nil))
+         (stdlib-reference-full-shard
+          '(:name "Emacs stdlib/reference corpus / source metadata on / docstrings full"
+            :selector "stdlib-reference"
+            :ran 6
+            :expected 6
+            :unexpected 0
+            :skipped 0
+            :ert-seconds 108.0
+            :wall-seconds 109.0
+            :tests nil))
+         (agent-control-full-shard
+          '(:name "Emacs agent control / source metadata on / docstrings full"
+            :selector "agent-control"
+            :ran 40
+            :expected 40
+            :unexpected 0
+            :skipped 0
+            :ert-seconds 96.0
+            :wall-seconds 97.0
+            :tests nil))
          (markdown
           (consent-ci-render-pr-markdown-summary
-           (list library-full-shard core-none-shard core-full-shard)))
+           (list agent-control-full-shard
+                 stdlib-reference-full-shard
+                 library-full-shard
+                 core-none-shard
+                 core-full-shard)))
          (above-fold (car (split-string markdown "\n<details>" t))))
     (should (string-match-p "## Emacs Shard Timing" above-fold))
     (should (string-match-p
@@ -328,6 +352,16 @@
              above-fold))
     (should (string-match-p
              "| Emacs library/conformance | 94 | 7 | 51\\.000s (52\\.000s wall) | n/a | n/a | n/a | n/a | n/a |"
+             above-fold))
+    (should (string-match-p
+             "| Emacs stdlib/reference corpus | 6 | 0 | 108\\.000s (109\\.000s wall) | n/a | n/a | n/a | n/a | n/a |"
+             above-fold))
+    (should (string-match-p
+             (rx "| Emacs library/conformance |"
+                 (*? anything)
+                 "| Emacs stdlib/reference corpus |"
+                 (*? anything)
+                 "| Emacs agent control |")
              above-fold))
     (should-not
      (string-match-p "Emacs core language/runtime / source metadata" above-fold))))
