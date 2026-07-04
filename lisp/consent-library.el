@@ -12,6 +12,7 @@
 ;;; Code:
 
 (require 'cl-lib)
+(require 'seq)
 (require 'consent-reader)
 (require 'consent-runtime)
 (require 'consent-result)
@@ -42,6 +43,18 @@
 
 (defvar consent--source-library-procedures (make-hash-table :test #'equal)
   "Cached source-backed procedures keyed by library and procedure name.")
+
+(defvar consent--library-catalog-cache nil
+  "Cached manifest-backed library catalog entries.")
+
+(defvar consent--library-catalog-ad-hoc-manifests nil
+  "Ad-hoc manifest catalog sources, as (SOURCE-ID . ENTRIES).")
+
+(defvar consent--library-catalog-root-manifests nil
+  "Explicit manifest-root catalog sources, as (ROOT . ENTRIES).")
+
+(defvar consent--library-catalog-diagnostics nil
+  "Diagnostics from the most recent manifest-backed catalog build.")
 
 (declare-function consent--apply-procedure "consent-interpreter")
 (declare-function consent--make-empty-syntax-environment "consent-macro")
@@ -392,6 +405,514 @@ core rather than the agent domain it governs.")
              :source-file
              (consent--standard-source-library-file key))))
    consent--standard-source-library-files))
+
+(defun consent--library-catalog-source-file (key)
+  "Return catalog-safe source path for library KEY, or nil."
+  (let ((relative
+         (or (cdr (assoc key consent--standard-source-library-files))
+             (cdr (assoc key consent--stdlib-source-library-files))
+             (cdr (assoc key consent--agent-source-library-files)))))
+    (when relative
+      (if (string-prefix-p "../" relative)
+          (substring relative 3)
+        relative))))
+
+(defun consent--library-catalog-category (key)
+  "Return the public catalog category for library KEY."
+  (cond
+   ((consent--library-alias-spec key consent--stdlib-library-aliases)
+    'stdlib)
+   ((string-prefix-p "(scheme " key) 'standard)
+   ((or (string-prefix-p "(stdlib " key)
+        (string-prefix-p "(srfi " key)
+        (string-prefix-p "(consent json" key))
+    'stdlib)
+   ((string-prefix-p "(agent " key) 'agent)
+   ((string-prefix-p "(consent " key) 'consent)
+   ((string-prefix-p "(emacs " key) 'emacs)
+   (t 'library)))
+
+(defun consent--library-catalog-source-kind (key)
+  "Return the implementation source kind for library KEY."
+  (cond
+   ((consent--library-catalog-source-file key) 'portable-source)
+   ((consent--library-alias-spec key consent--stdlib-library-aliases) 'alias)
+   ((equal key consent--scheme-base-library-key) 'base-snapshot)
+   ((or (member key consent--standard-library-keys)
+        (member key consent--agent-library-keys)
+        (member key consent--consent-library-keys)
+        (member key (consent-emacs-capability-library-keys)))
+    'primitive)
+   (t 'manifest)))
+
+(defun consent--library-catalog-private-context ()
+  "Return a fresh context/environment pair for catalog export discovery."
+  (require 'consent-eval)
+  (let ((context (consent--new-eval-context nil))
+        (environment (consent-make-base-environment)))
+    (setf (consent--eval-context-interaction-environment context)
+          environment)
+    (consent--ensure-base-syntax context environment)
+    (cons context environment)))
+
+(defun consent--library-catalog-export-names (key)
+  "Return exported binding names for cataloged library KEY."
+  (condition-case _
+      (let* ((pair (consent--library-catalog-private-context))
+             (context (car pair))
+             (environment (cdr pair))
+             (library
+              (consent--resolve-library
+               (consent-read key)
+               context
+               environment)))
+        (mapcar #'consent--library-binding-name
+                (consent--library-exports library)))
+    (error nil)))
+
+(defun consent--library-catalog-aliases (key)
+  "Return aliases that resolve to library KEY."
+  (delq
+   nil
+   (mapcar
+    (lambda (alias)
+      (when (equal key (consent--library-alias-field alias :target))
+        (consent--library-alias-field alias :alias)))
+    consent--stdlib-library-aliases)))
+
+(defun consent--library-catalog-dependencies (key)
+  "Return manifest dependency names for KEY when known."
+  (cond
+   ((or (assoc key consent--standard-source-library-files)
+        (assoc key consent--stdlib-source-library-files)
+        (assoc key consent--agent-source-library-files))
+    nil)
+   ((consent--library-alias-spec key consent--stdlib-library-aliases)
+    (let ((target
+           (consent--library-alias-field
+            (consent--library-alias-spec key consent--stdlib-library-aliases)
+            :target)))
+      (and target (list target))))
+   (t nil)))
+
+(defun consent--library-catalog-invalidate ()
+  "Clear cached manifest-backed catalog entries."
+  (setq consent--library-catalog-cache nil))
+
+(defun consent--library-catalog-source-id (value)
+  "Return VALUE normalized as a catalog source id."
+  (cond
+   ((stringp value) value)
+   ((symbolp value) value)
+   ((consent-symbol-p value) (intern (consent-symbol-name value)))
+   (t (consent--eval-error "catalog source id must be a symbol or string"))))
+
+(defun consent--library-catalog-field-form (fields name)
+  "Return field form named NAME from manifest FIELDS."
+  (seq-find
+   (lambda (field)
+     (and (consp field)
+          (consent--symbol-named-p (car field) name)))
+   fields))
+
+(defun consent--library-catalog-manifest-field (fields name default)
+  "Return NAME's value from manifest FIELDS, or DEFAULT."
+  (let ((field (consent--library-catalog-field-form fields name)))
+    (if field
+        (cadr field)
+      default)))
+
+(defun consent--library-catalog-require-symbol (value description)
+  "Return VALUE as an Emacs Lisp symbol, or signal DESCRIPTION."
+  (cond
+   ((symbolp value) value)
+   ((consent-symbol-p value) (intern (consent-symbol-name value)))
+   (t (consent--eval-error "%s must be a symbol" description))))
+
+(defun consent--library-catalog-require-source-file (value)
+  "Return VALUE when it is nil, Scheme #f, or a string."
+  (cond
+   ((or (null value) (eq value consent-false)) nil)
+   ((stringp value) value)
+   (t (consent--eval-error "catalog source-file must be a string or #f"))))
+
+(defun consent--library-catalog-require-symbol-list (value description)
+  "Return VALUE as a list of symbol names."
+  (mapcar
+   (lambda (entry)
+     (consent--expect-symbol-name entry description))
+   (consent--proper-list-elements value description)))
+
+(defun consent--library-catalog-require-library-list (value description)
+  "Return VALUE as a list of normalized library-name keys."
+  (mapcar
+   #'consent--library-name-key
+   (consent--proper-list-elements value description)))
+
+(defun consent--library-catalog-require-target (value)
+  "Return VALUE as a normalized library-name key, or nil."
+  (unless (or (null value) (eq value consent-false))
+    (consent--library-name-key value)))
+
+(defun consent--library-catalog-manifest-library (form origin source-id)
+  "Validate manifest library FORM under ORIGIN and SOURCE-ID."
+  (let ((parts (consent--proper-list-elements form "catalog library entry")))
+    (unless (and parts (consent--symbol-named-p (car parts) "library"))
+      (consent--eval-error "catalog entry must begin with library"))
+    (let* ((fields (cdr parts))
+           (name
+            (consent--library-name-key
+             (consent--library-catalog-manifest-field fields "name" nil)))
+           (category
+            (consent--library-catalog-require-symbol
+             (consent--library-catalog-manifest-field
+              fields "category" 'library)
+             "catalog category"))
+           (status
+            (consent--library-catalog-require-symbol
+             (consent--library-catalog-manifest-field
+              fields "status" 'available)
+             "catalog status"))
+           (source-kind
+            (consent--library-catalog-require-symbol
+             (consent--library-catalog-manifest-field
+              fields "source-kind" 'manifest)
+             "catalog source-kind"))
+           (source-file
+            (consent--library-catalog-require-source-file
+             (consent--library-catalog-manifest-field
+              fields "source-file" nil)))
+           (aliases
+            (consent--library-catalog-require-library-list
+             (consent--library-catalog-manifest-field fields "aliases" nil)
+             "catalog aliases"))
+           (target
+            (consent--library-catalog-require-target
+             (consent--library-catalog-manifest-field fields "target" nil)))
+           (exports
+            (consent--library-catalog-require-symbol-list
+             (consent--library-catalog-manifest-field fields "exports" nil)
+             "catalog exports"))
+           (dependencies
+            (consent--library-catalog-require-library-list
+             (consent--library-catalog-manifest-field
+              fields "dependencies" nil)
+             "catalog dependencies"))
+           (summary
+            (consent--library-catalog-manifest-field fields "summary" nil)))
+      (when (eq summary consent-false)
+        (setq summary nil))
+      (unless (or (null summary) (stringp summary))
+        (consent--eval-error "catalog summary must be a string or #f"))
+      (list :name name
+            :category category
+            :status status
+            :source-kind source-kind
+            :source-file source-file
+            :aliases aliases
+            :target target
+            :exports exports
+            :dependencies dependencies
+            :origin origin
+            :source-id source-id
+            :summary summary))))
+
+(defun consent--library-catalog-parse-manifest (manifest origin source-id)
+  "Validate MANIFEST and return catalog entries tagged with ORIGIN/SOURCE-ID."
+  (let ((parts (consent--proper-list-elements
+                manifest "library catalog manifest")))
+    (unless (and parts (consent--symbol-named-p (car parts) "library-catalog"))
+      (consent--eval-error
+       "catalog manifest must begin with library-catalog"))
+    (mapcar
+     (lambda (form)
+       (consent--library-catalog-manifest-library form origin source-id))
+     (cdr parts))))
+
+(defun consent--library-catalog-replace-source (sources source-id entries)
+  "Return SOURCES with SOURCE-ID replaced by ENTRIES."
+  (cons (cons source-id entries)
+        (seq-remove
+         (lambda (source)
+           (equal (car source) source-id))
+         sources)))
+
+(defun consent--library-catalog-remove-source (sources source-id)
+  "Return (REMOVED . SOURCES) after removing SOURCE-ID."
+  (let ((removed nil)
+        result)
+    (dolist (source sources)
+      (if (equal (car source) source-id)
+          (setq removed t)
+        (push source result)))
+    (cons removed (nreverse result))))
+
+(defun consent--library-catalog-source-id-datum (source-id)
+  "Return SOURCE-ID as a Scheme-readable datum."
+  (cond
+   ((stringp source-id) source-id)
+   ((symbolp source-id) (consent--syntax-symbol (symbol-name source-id)))
+   ((consent-symbol-p source-id) source-id)
+   ((null source-id) consent-false)
+   (t source-id)))
+
+(defun consent--library-catalog-source-record-for-names
+    (kind source-id library-names)
+  "Return a Scheme-readable catalog-source record for LIBRARY-NAMES."
+  (list (consent--syntax-symbol "catalog-source")
+        (list (consent--syntax-symbol "kind")
+              (consent--syntax-symbol (symbol-name kind)))
+        (list (consent--syntax-symbol "id")
+              (consent--library-catalog-source-id-datum source-id))
+        (list (consent--syntax-symbol "libraries") library-names)))
+
+(defun consent--library-catalog-source-record (kind source-id entries)
+  "Return a Scheme-readable catalog-source record."
+  (consent--library-catalog-source-record-for-names
+   kind
+   source-id
+   (mapcar
+    (lambda (entry)
+      (consent-read (plist-get entry :name)))
+    entries)))
+
+(defun consent-library-catalog-add-manifest (source-id manifest)
+  "Add or replace ad-hoc catalog MANIFEST under SOURCE-ID."
+  (let* ((normalized-id (consent--library-catalog-source-id source-id))
+         (entries
+          (consent--library-catalog-parse-manifest
+           manifest 'ad-hoc-manifest normalized-id)))
+    (setq consent--library-catalog-ad-hoc-manifests
+          (consent--library-catalog-replace-source
+           consent--library-catalog-ad-hoc-manifests
+           normalized-id
+           entries))
+    (consent--library-catalog-invalidate)
+    (consent--library-catalog-source-record
+     'ad-hoc-manifest normalized-id entries)))
+
+(defun consent-library-catalog-remove-manifest (source-id)
+  "Remove ad-hoc catalog manifest SOURCE-ID."
+  (let* ((normalized-id (consent--library-catalog-source-id source-id))
+         (removed/sources
+          (consent--library-catalog-remove-source
+           consent--library-catalog-ad-hoc-manifests
+           normalized-id)))
+    (setq consent--library-catalog-ad-hoc-manifests (cdr removed/sources))
+    (consent--library-catalog-invalidate)
+    (car removed/sources)))
+
+(defun consent-library-catalog-add-root (root manifest)
+  "Add or replace explicit manifest ROOT with MANIFEST."
+  (unless (stringp root)
+    (consent--eval-error "catalog root must be a string"))
+  (let ((entries
+         (consent--library-catalog-parse-manifest
+          manifest 'manifest-root root)))
+    (setq consent--library-catalog-root-manifests
+          (consent--library-catalog-replace-source
+           consent--library-catalog-root-manifests
+           root
+           entries))
+    (consent--library-catalog-invalidate)
+    (consent--library-catalog-source-record 'manifest-root root entries)))
+
+(defun consent-library-catalog-remove-root (root)
+  "Remove explicit manifest ROOT."
+  (unless (stringp root)
+    (consent--eval-error "catalog root must be a string"))
+  (let ((removed/sources
+         (consent--library-catalog-remove-source
+          consent--library-catalog-root-manifests
+          root)))
+    (setq consent--library-catalog-root-manifests (cdr removed/sources))
+    (consent--library-catalog-invalidate)
+    (car removed/sources)))
+
+(defun consent-library-catalog-refresh ()
+  "Clear manifest-backed catalog cache and diagnostics."
+  (setq consent--library-catalog-diagnostics nil)
+  (consent--library-catalog-invalidate)
+  t)
+
+(defun consent--library-catalog-entry (key)
+  "Return manifest-backed catalog metadata for library KEY."
+  (let* ((alias-spec
+          (consent--library-alias-spec key consent--stdlib-library-aliases))
+         (source-kind (consent--library-catalog-source-kind key))
+         (source-file (consent--library-catalog-source-file key)))
+    (list
+     :name key
+     :category (consent--library-catalog-category key)
+     :status (if alias-spec 'alias 'implemented)
+     :source-kind source-kind
+     :source-file source-file
+     :aliases (consent--library-catalog-aliases key)
+     :target (and alias-spec
+                  (consent--library-alias-field alias-spec :target))
+     :exports (consent--library-catalog-export-names key)
+     :dependencies (consent--library-catalog-dependencies key)
+     :origin 'built-in-seed
+     :source-id 'built-in-seed
+     :summary nil)))
+
+(defun consent--library-catalog-built-in-keys ()
+  "Return built-in catalog keys in deterministic order."
+  (let ((keys
+         (delete-dups
+          (copy-sequence
+           (append (list consent--scheme-base-library-key)
+                   consent--standard-library-keys
+                   consent--stdlib-source-library-keys
+                   (mapcar
+                    (lambda (alias)
+                      (consent--library-alias-field alias :alias))
+                    consent--stdlib-library-aliases)
+                   consent--agent-library-keys
+                   consent--consent-library-keys
+                   (consent-emacs-capability-library-keys))))))
+    (sort keys #'string<)))
+
+(defun consent--library-catalog-built-in-entries ()
+  "Return built-in seed catalog entries."
+  (mapcar #'consent--library-catalog-entry
+          (consent--library-catalog-built-in-keys)))
+
+(defun consent--library-catalog-source-entries (sources)
+  "Return all catalog entries stored in SOURCES."
+  (apply #'append (mapcar #'cdr sources)))
+
+(defun consent--library-catalog-duplicate-diagnostic (entry previous)
+  "Return duplicate-library diagnostic for ENTRY shadowed by PREVIOUS."
+  (list (consent--syntax-symbol "catalog-diagnostic")
+        (list (consent--syntax-symbol "kind")
+              (consent--syntax-symbol "duplicate-library"))
+        (list (consent--syntax-symbol "name")
+              (consent-read (plist-get entry :name)))
+        (list (consent--syntax-symbol "kept-source")
+              (consent--library-catalog-source-id-datum
+               (plist-get previous :source-id)))
+        (list (consent--syntax-symbol "ignored-source")
+              (consent--library-catalog-source-id-datum
+               (plist-get entry :source-id)))))
+
+(defun consent--library-catalog-deduplicate (entries)
+  "Return ENTRIES with first-wins precedence and diagnostics."
+  (let ((seen nil)
+        result
+        diagnostics)
+    (dolist (entry entries)
+      (let* ((name (plist-get entry :name))
+             (previous (assoc name seen)))
+        (if previous
+            (push
+             (consent--library-catalog-duplicate-diagnostic
+              entry
+              (cdr previous))
+             diagnostics)
+          (push (cons name entry) seen)
+          (push entry result))))
+    (setq consent--library-catalog-diagnostics (nreverse diagnostics))
+    (nreverse result)))
+
+(defun consent--library-catalog-candidate-entries ()
+  "Return catalog input entries in precedence order."
+  (append
+   (consent--library-catalog-source-entries
+    consent--library-catalog-ad-hoc-manifests)
+   (consent--library-catalog-source-entries
+    consent--library-catalog-root-manifests)
+   (consent--library-catalog-built-in-entries)))
+
+(defun consent-library-catalog-entries ()
+  "Return manifest-backed catalog metadata for repo-owned libraries."
+  (or consent--library-catalog-cache
+      (setq
+       consent--library-catalog-cache
+       (consent--library-catalog-deduplicate
+        (consent--library-catalog-candidate-entries)))))
+
+(defun consent-library-catalog-sources ()
+  "Return Scheme-readable catalog source records."
+  (append
+   (mapcar
+    (lambda (source)
+      (consent--library-catalog-source-record
+       'ad-hoc-manifest
+       (car source)
+       (cdr source)))
+    consent--library-catalog-ad-hoc-manifests)
+   (mapcar
+    (lambda (source)
+      (consent--library-catalog-source-record
+       'manifest-root
+       (car source)
+       (cdr source)))
+    consent--library-catalog-root-manifests)
+   (list
+    (consent--library-catalog-source-record-for-names
+     'built-in-seed
+     'built-in-seed
+     (mapcar #'consent-read
+             (consent--library-catalog-built-in-keys))))))
+
+(defun consent-library-catalog-diagnostics ()
+  "Return diagnostics from the most recent catalog build."
+  (unless consent--library-catalog-cache
+    (consent-library-catalog-entries))
+  consent--library-catalog-diagnostics)
+
+(defun consent-library-catalog-entry (library-name)
+  "Return catalog metadata for LIBRARY-NAME, or nil when absent."
+  (let ((key (if (stringp library-name)
+                 library-name
+               (consent--library-name-key library-name))))
+    (seq-find
+     (lambda (entry)
+       (equal (plist-get entry :name) key))
+     (consent-library-catalog-entries))))
+
+(defun consent-library-catalog-search (query)
+  "Return catalog entries whose name, alias, export, or category matches QUERY."
+  (let ((needle (downcase query)))
+    (seq-filter
+     (lambda (entry)
+       (let ((haystack
+              (mapconcat
+               (lambda (item)
+                 (cond
+                  ((stringp item) item)
+                  ((symbolp item) (symbol-name item))
+                  (t (format "%S" item))))
+               (delq nil
+                     (append
+                      (list (plist-get entry :name)
+                            (symbol-name (plist-get entry :category))
+                            (symbol-name (plist-get entry :source-kind))
+                            (symbol-name (plist-get entry :status))
+                            (plist-get entry :target)
+                            (plist-get entry :source-file)
+                            (plist-get entry :source-id)
+                            (plist-get entry :summary))
+                      (plist-get entry :aliases)
+                      (plist-get entry :exports)
+                      (plist-get entry :dependencies)))
+               " ")))
+         (string-match-p (regexp-quote needle) (downcase haystack))))
+     (consent-library-catalog-entries))))
+
+(defun consent-library-catalog-runtime-source-files ()
+  "Return runtime source-file paths derived from the library catalog."
+  (let ((files
+         (append
+          '("scheme/consent/base-prelude.scm"
+            "scheme/consent/base-syntax.scm")
+          (delq nil
+                (mapcar
+                 (lambda (entry)
+                   (plist-get entry :source-file))
+                 (consent--library-catalog-built-in-entries))))))
+    (delete-dups files)))
 
 (defun consent--nonnegative-exact-integer-datum-p (datum)
   "Return non-nil if DATUM is an exact non-negative integer datum."

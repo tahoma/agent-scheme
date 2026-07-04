@@ -5094,6 +5094,265 @@ cursor across sessions."
                  (library-exports library))
             (eval-error "unknown library" key))))
 
+    (define (reflect-library-catalog-field entry field default)
+      "Return FIELD from catalog ENTRY, or DEFAULT when absent."
+      (let ((cell (assq field entry)))
+        (if cell (cadr cell) default)))
+
+    (define (reflect-library-catalog-value entry field default)
+      "Return FIELD from catalog ENTRY as a Scheme-readable datum."
+      (reflect-datumize
+       (reflect-library-catalog-field entry field default)))
+
+    (define (reflect-library-info-record entry)
+      "Return catalog ENTRY as a Scheme-readable library-info record."
+      (list 'library-info
+            (result-field
+             'name
+             (reflect-library-catalog-value entry 'name '()))
+            (result-field
+             'category
+             (reflect-library-catalog-value entry 'category 'library))
+            (result-field
+             'status
+             (reflect-library-catalog-value entry 'status 'implemented))
+            (result-field
+             'source-kind
+             (reflect-library-catalog-value entry 'source-kind 'manifest))
+            (result-field
+             'source-file
+             (reflect-library-catalog-value entry 'source-file #f))
+            (result-field
+             'aliases
+             (reflect-library-catalog-value entry 'aliases '()))
+            (result-field
+             'target
+             (reflect-library-catalog-value entry 'target #f))
+            (result-field
+             'exports
+             (reflect-library-catalog-value entry 'exports '()))
+            (result-field
+             'dependencies
+             (reflect-library-catalog-value entry 'dependencies '()))
+            (result-field
+             'origin
+             (reflect-library-catalog-value entry 'origin 'built-in-seed))
+            (result-field
+             'source-id
+             (reflect-library-catalog-value entry 'source-id #f))
+            (result-field
+             'summary
+             (reflect-library-catalog-value entry 'summary #f))))
+
+    (define (reflect-libraries)
+      "Return cataloged libraries as library-info records."
+      (map reflect-library-info-record (consent-library-catalog-entries)))
+
+    (define (reflect-library-info library-name)
+      "Return catalog metadata for LIBRARY-NAME, or #f when absent."
+      (let ((entry (consent-library-catalog-entry library-name)))
+        (if entry (reflect-library-info-record entry) #f)))
+
+    (define (reflect-library-search-query query)
+      "Return QUERY as catalog search input."
+      (cond
+       ((or (string? query) (symbol? query) (pair? query)) query)
+       (else (consent-value->external query))))
+
+    (define (reflect-library-search query)
+      "Return library catalog entries matching QUERY."
+      (map reflect-library-info-record
+           (consent-library-catalog-search
+            (reflect-library-search-query query))))
+
+    (define (reflect-catalog-sources)
+      "Return manifest catalog source records."
+      (reflect-datumize (consent-library-catalog-sources)))
+
+    (define (reflect-catalog-diagnostics)
+      "Return manifest catalog diagnostics."
+      (reflect-datumize (consent-library-catalog-diagnostics)))
+
+    (define (reflect-catalog-private-library library-name)
+      "Return (LIBRARY . CONTEXT) for LIBRARY-NAME in a private context."
+      (let* ((context (new-eval-context '()))
+             (environment (consent-make-base-environment)))
+        (set-context-interaction-environment! context environment)
+        (ensure-base-syntax! context environment)
+        (cons (resolve-library (library-name-key library-name)
+                               context
+                               environment)
+              context)))
+
+    (define (reflect-library-documentation library-name)
+      "Return documentation records for exported bindings in LIBRARY-NAME."
+      (let* ((library/context (reflect-catalog-private-library library-name))
+             (library (car library/context))
+             (context (cdr library/context)))
+        (let loop ((bindings (library-exports library)) (result '()))
+          (if (null? bindings)
+              (reverse result)
+              (let ((documentation
+                     (reflect-documentation
+                      (library-binding-name (car bindings))
+                      context)))
+                (loop (cdr bindings)
+                      (if documentation
+                          (cons documentation result)
+                          result)))))))
+
+    (define (reflect-binding-libraries symbol-or-name)
+      "Return cataloged libraries exporting SYMBOL-OR-NAME."
+      (let ((name (reflect-binding-name symbol-or-name)))
+        (if (not name)
+            (eval-error "binding-libraries expects a symbol or string"
+                        symbol-or-name))
+        (let loop ((entries (consent-library-catalog-entries)) (result '()))
+          (cond
+           ((null? entries)
+            (map reflect-library-info-record (reverse result)))
+           ((memq name
+                  (reflect-library-catalog-field
+                   (car entries)
+                   'exports
+                   '()))
+            (loop (cdr entries) (cons (car entries) result)))
+           (else (loop (cdr entries) result))))))
+
+    (define (reflect-documented-bindings context)
+      "Return documentation records for documented current bindings."
+      (let ((environment (context-interaction-environment context)))
+        (let loop ((frame (if environment (environment-frame environment) '()))
+                   (result '()))
+          (if (null? frame)
+              (reverse result)
+              (let ((documentation
+                     (reflect-documentation (caar frame) context)))
+                (loop (cdr frame)
+                      (if documentation
+                          (cons documentation result)
+                          result)))))))
+
+    (define (reflect-field-name name)
+      "Return NAME as a reflection field symbol."
+      (cond
+       ((symbol? name) name)
+       ((string? name) (string->symbol name))
+       (else name)))
+
+    (define (reflect-reflection-field record name default)
+      "Return NAME's value in RECORD, or DEFAULT when absent."
+      (if (not (pair? record))
+          default
+          (let ((cell (assq (reflect-field-name name) (cdr record))))
+            (if (and cell (pair? (cdr cell)))
+                (cadr cell)
+                default))))
+
+    (define (reflect-documentation-field documentation name default)
+      "Return NAME's value from DOCUMENTATION metadata, or DEFAULT."
+      (let ((fields
+             (reflect-reflection-field documentation 'fields #f)))
+        (if (not (list? fields))
+            default
+            (let ((cell (assq (reflect-field-name name) fields)))
+              (if (and cell (pair? (cdr cell)))
+                  (cadr cell)
+                  default)))))
+
+    (define (reflect-docstring subject default context)
+      "Return SUBJECT's documentation string, or DEFAULT when absent."
+      (let ((documentation
+             (if (and (pair? subject)
+                      (eq? (car subject) 'documentation-metadata))
+                 subject
+                 (reflect-documentation subject context))))
+        (reflect-documentation-field documentation 'documentation default)))
+
+    (define (reflect-string-prefix? prefix text)
+      "Report whether TEXT starts with PREFIX."
+      (let ((prefix-length (string-length prefix))
+            (text-length (string-length text)))
+        (and (<= prefix-length text-length)
+             (string=? prefix (substring text 0 prefix-length)))))
+
+    (define (reflect-string-contains? text needle)
+      "Report whether TEXT contains NEEDLE."
+      (let ((text-length (string-length text))
+            (needle-length (string-length needle)))
+        (let loop ((index 0))
+          (and (<= (+ index needle-length) text-length)
+               (or (reflect-string-prefix?
+                    needle
+                    (substring text index text-length))
+                   (loop (+ index 1)))))))
+
+    (define (reflect-documentation-summary documentation)
+      "Return DOCUMENTATION's human-readable summary, or #f."
+      (reflect-documentation-field documentation 'documentation #f))
+
+    (define (reflect-apropos-match kind name matched summary)
+      "Return a compact apropos-match record."
+      (list 'apropos-match
+            (result-field 'kind kind)
+            (result-field 'name name)
+            (result-field 'matched matched)
+            (result-field 'summary summary)))
+
+    (define (reflect-apropos query context)
+      "Search current documented bindings and the library catalog for QUERY."
+      (let ((needle
+             (string-downcase
+              (cond
+               ((string? query) query)
+               ((symbol? query) (symbol->string query))
+               (else (consent-value->external query))))))
+        (append
+         (let loop ((documents (reflect-documented-bindings context))
+                    (result '()))
+           (if (null? documents)
+               (reverse result)
+               (let* ((documentation (car documents))
+                      (subject
+                       (reflect-reflection-field documentation 'subject #f))
+                      (name
+                       (and (pair? subject)
+                            (pair? (cdr subject))
+                            (cadr subject)))
+                      (summary
+                       (reflect-documentation-summary documentation))
+                      (name-match?
+                       (and (symbol? name)
+                            (reflect-string-contains?
+                             (string-downcase (symbol->string name))
+                             needle)))
+                      (summary-match?
+                       (and (string? summary)
+                            (reflect-string-contains?
+                             (string-downcase summary)
+                             needle))))
+                 (loop
+                  (cdr documents)
+                  (if (or name-match? summary-match?)
+                      (cons
+                       (reflect-apropos-match
+                        'binding
+                        name
+                        (if summary-match?
+                            '(documentation name)
+                            '(name))
+                        summary)
+                       result)
+                      result)))))
+         (map
+          (lambda (entry)
+             (reflect-apropos-match
+              'library
+             (reflect-library-catalog-value entry 'name '())
+             '(library)
+             (reflect-library-catalog-value entry 'source-file #f)))
+          (consent-library-catalog-search needle)))))
+
     (define (reflect-current-session-info context)
       "Return public session and event identity for CONTEXT."
       ;; Report the session id this evaluation runs under (matching the Emacs
@@ -5194,6 +5453,113 @@ cursor across sessions."
       (redaction-model:redact
        (reflect-library-bindings (car arguments) context)
        'runtime-reflection))
+
+    (define (primitive-libraries arguments context)
+      "Return catalog metadata for every known library."
+      (redaction-model:redact (reflect-libraries) 'runtime-reflection))
+
+    (define (primitive-library-info arguments context)
+      "Return catalog metadata for one library name."
+      (redaction-model:redact
+       (reflect-library-info (car arguments))
+       'runtime-reflection))
+
+    (define (primitive-library-search arguments context)
+      "Search catalog metadata."
+      (redaction-model:redact
+       (reflect-library-search (car arguments))
+       'runtime-reflection))
+
+    (define (primitive-catalog-sources arguments context)
+      "Return manifest catalog source records."
+      (redaction-model:redact
+       (reflect-catalog-sources)
+       'runtime-reflection))
+
+    (define (primitive-catalog-diagnostics arguments context)
+      "Return manifest catalog diagnostics."
+      (redaction-model:redact
+       (reflect-catalog-diagnostics)
+       'runtime-reflection))
+
+    (define (primitive-add-manifest! arguments context)
+      "Add or replace an ad-hoc manifest datum."
+      (redaction-model:redact
+       (reflect-datumize
+        (consent-library-catalog-add-manifest! (car arguments)
+                                               (second arguments)))
+       'runtime-reflection))
+
+    (define (primitive-remove-manifest! arguments context)
+      "Remove an ad-hoc manifest source."
+      (consent-library-catalog-remove-manifest! (car arguments)))
+
+    (define (primitive-add-manifest-root! arguments context)
+      "Add or replace an explicit manifest-root input."
+      (redaction-model:redact
+       (reflect-datumize
+        (consent-library-catalog-add-root! (car arguments)
+                                           (second arguments)))
+       'runtime-reflection))
+
+    (define (primitive-remove-manifest-root! arguments context)
+      "Remove an explicit manifest-root input."
+      (consent-library-catalog-remove-root! (car arguments)))
+
+    (define (primitive-refresh-library-catalog! arguments context)
+      "Refresh catalog caches and diagnostics."
+      (consent-library-catalog-refresh!))
+
+    (define (primitive-library-documentation arguments context)
+      "Return documentation records for one library's exports."
+      (redaction-model:redact
+       (reflect-library-documentation (car arguments))
+       'runtime-reflection))
+
+    (define (primitive-binding-libraries arguments context)
+      "Return cataloged libraries exporting a binding name."
+      (redaction-model:redact
+       (reflect-binding-libraries (car arguments))
+       'runtime-reflection))
+
+    (define (primitive-documented-bindings arguments context)
+      "Return documentation records for documented current bindings."
+      (redaction-model:redact
+       (reflect-documented-bindings context)
+       'runtime-reflection))
+
+    (define (primitive-apropos arguments context)
+      "Search current documentation and the library catalog."
+      (redaction-model:redact
+       (reflect-apropos (car arguments) context)
+       'runtime-reflection))
+
+    (define (primitive-optional-default arguments offset)
+      "Return optional default argument at OFFSET, or #f when absent."
+      (if (> (length arguments) offset)
+          (list-ref arguments offset)
+          #f))
+
+    (define (primitive-reflection-field arguments context)
+      "Return a named field from a reflection record."
+      (reflect-reflection-field
+       (car arguments)
+       (second arguments)
+       (primitive-optional-default arguments 2)))
+
+    (define (primitive-documentation-field arguments context)
+      "Return a named metadata field from a documentation record."
+      (reflect-documentation-field
+       (car arguments)
+       (second arguments)
+       (primitive-optional-default arguments 2)))
+
+    (define (primitive-docstring arguments context)
+      "Return SUBJECT's documentation string."
+      (reflect-docstring
+       (car arguments)
+       (primitive-optional-default arguments 1)
+       context))
 
     (define (primitive-current-session-info arguments context)
       "Return current session metadata."
@@ -8215,6 +8581,26 @@ cursor across sessions."
        (cons 'primitive-budget-yield primitive-budget-yield)
        (cons 'primitive-current-imports primitive-current-imports)
        (cons 'primitive-library-bindings primitive-library-bindings)
+       (cons 'primitive-libraries primitive-libraries)
+       (cons 'primitive-library-info primitive-library-info)
+       (cons 'primitive-library-search primitive-library-search)
+       (cons 'primitive-catalog-sources primitive-catalog-sources)
+       (cons 'primitive-catalog-diagnostics primitive-catalog-diagnostics)
+       (cons 'primitive-add-manifest! primitive-add-manifest!)
+       (cons 'primitive-remove-manifest! primitive-remove-manifest!)
+       (cons 'primitive-add-manifest-root! primitive-add-manifest-root!)
+       (cons 'primitive-remove-manifest-root!
+             primitive-remove-manifest-root!)
+       (cons 'primitive-refresh-library-catalog!
+             primitive-refresh-library-catalog!)
+       (cons 'primitive-library-documentation
+             primitive-library-documentation)
+       (cons 'primitive-binding-libraries primitive-binding-libraries)
+       (cons 'primitive-documented-bindings primitive-documented-bindings)
+       (cons 'primitive-apropos primitive-apropos)
+       (cons 'primitive-reflection-field primitive-reflection-field)
+       (cons 'primitive-documentation-field primitive-documentation-field)
+       (cons 'primitive-docstring primitive-docstring)
        (cons 'primitive-current-session-info primitive-current-session-info)
        (cons 'primitive-create-session primitive-create-session)
        (cons 'primitive-switch-session primitive-switch-session)

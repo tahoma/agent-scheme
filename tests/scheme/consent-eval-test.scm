@@ -1509,6 +1509,204 @@
               (cadr (assq 'source-file json-spec)))
          "scheme/stdlib/json.sld"))
 
+(check-external 'reflect-library-catalog-discovery
+                "(import (scheme base) (agent reflect))
+                 (define (field datum name)
+                   (cadr (assq name (cdr datum))))
+                 (let* ((before (current-imports))
+                        (reflect (library-info '(agent reflect)))
+                        (lazy (library-info '(scheme lazy)))
+                        (json-read (library-info '(consent json read)))
+                        (hits (library-search \"reflect\"))
+                        (after (current-imports)))
+                   (list (field reflect 'name)
+                         (field reflect 'category)
+                         (field reflect 'source-kind)
+                         (field lazy 'source-file)
+                         (field json-read 'target)
+                         (if (memq 'json-read (field json-read 'exports))
+                             'json-read-exported
+                             'missing-json-read)
+                         (if (member '(agent reflect)
+                                     (map (lambda (hit) (field hit 'name))
+                                          hits))
+                             'found-reflect
+                             'missing-reflect)
+                         (if (library-info '(missing library)) 'bad 'missing)
+                         (equal? before after)))"
+                (expected-datum-external
+                 "((agent reflect)
+                   agent
+                   primitive
+                   \"scheme/consent/lazy.sld\"
+                   (stdlib json)
+                   json-read-exported
+                   found-reflect
+                   missing
+                   #t)"))
+
+(check-external/options 'reflect-documented-bindings-and-apropos
+                        "(import (scheme base) (agent reflect))
+                         (define (field datum name)
+                           (cadr (assq name (cdr datum))))
+                         (define (metadata-field datum name)
+                           (let ((entry (assq name (field datum 'fields))))
+                             (if entry (cadr entry) #f)))
+                         (define (documented-subject? docs name)
+                           (cond
+                            ((null? docs) #f)
+                            ((equal? (field (car docs) 'subject)
+                                     (list 'binding name))
+                             #t)
+                            (else (documented-subject? (cdr docs) name))))
+                         (define (needle-procedure x)
+                           \"Return the needle value for discovery tests.\"
+                           x)
+                         (let* ((docs (documented-bindings))
+                                (matches (apropos \"needle\")))
+                           (list
+                            (if (documented-subject? docs 'needle-procedure)
+                                'documented
+                                'missing)
+                            (metadata-field (documentation 'needle-procedure)
+                                            'documentation)
+                            (if (member '(binding needle-procedure)
+                                        (map (lambda (match)
+                                               (list (field match 'kind)
+                                                     (field match 'name)))
+                                             matches))
+                                'found-binding
+                                'missing-binding)))"
+                        '((docstring-retention . full))
+                        "(documented \"Return the needle value for discovery tests.\" found-binding)")
+
+(check-external 'reflect-helper-defaults
+                "(import (scheme base) (agent reflect))
+                 (define present-false '(sample (present #f)))
+                 (define missing '(sample))
+                 (list (reflection-field present-false 'present 'default)
+                       (reflection-field missing 'present 'default)
+                       (reflection-field #f 'present 'default)
+                       (documentation-field (documentation '+) 'documentation)
+                       (documentation-field (documentation '+) 'missing 'default)
+                       (docstring '+)
+                       (docstring 'missing 'default))"
+                (expected-datum-external
+                 "(#f
+                   default
+                   default
+                   \"Return the sum of all numeric arguments, or 0 when called with no arguments.\"
+                   default
+                   \"Return the sum of all numeric arguments, or 0 when called with no arguments.\"
+                   default)"))
+
+(check-external 'reflect-binding-libraries-crosswalk
+                "(import (scheme base) (agent reflect))
+                 (define (field datum name)
+                   (cadr (assq name (cdr datum))))
+                 (let ((before (current-imports)))
+                   (list (map (lambda (info) (field info 'name))
+                              (binding-libraries 'force))
+                         (map (lambda (info) (field info 'name))
+                              (binding-libraries 'json-read))
+                         (equal? before (current-imports))))"
+                (expected-datum-external
+                 "(((scheme lazy))
+                   ((stdlib json)
+                    (consent json)
+                    (srfi 180)
+                    (srfi srfi-180)
+                    (stdlib json read)
+                    (consent json read))
+                   #t)"))
+
+(check-external 'reflect-dynamic-manifest-inputs
+                "(import (scheme base) (agent reflect))
+                 (define (field datum name)
+                   (cadr (assq name (cdr datum))))
+                 (define (source-has? sources id name)
+                   (cond
+                    ((null? sources) #f)
+                    ((and (equal? (field (car sources) 'id) id)
+                          (member name (field (car sources) 'libraries)))
+                     #t)
+                    (else (source-has? (cdr sources) id name))))
+                 (remove-manifest! 'reflect-test-session)
+                 (remove-manifest-root! \"reflect-test-root\")
+                 (add-manifest!
+                  'reflect-test-session
+                  '(library-catalog
+                    (library
+                     (name (project generated))
+                     (category project)
+                     (status experimental)
+                     (source-kind ad-hoc)
+                     (aliases ((project generated alias)))
+                     (exports (generated-run))
+                     (dependencies ((scheme base)))
+                     (summary \"Generated project library.\"))))
+                 (define ad-hoc-info (library-info '(project generated)))
+                 (define ad-hoc-libraries
+                   (map (lambda (info) (field info 'name))
+                        (binding-libraries 'generated-run)))
+                 (define ad-hoc-source-visible
+                   (source-has? (catalog-sources)
+                                'reflect-test-session
+                                '(project generated)))
+                 (define removed-ad-hoc
+                   (remove-manifest! 'reflect-test-session))
+                 (add-manifest-root!
+                  \"reflect-test-root\"
+                  '(library-catalog
+                    (library
+                     (name (project rooted))
+                     (category project)
+                     (status available)
+                     (source-kind manifest-root)
+                     (exports (rooted-run))
+                     (summary \"Root manifest library.\"))))
+                 (define root-info (library-info '(project rooted)))
+                 (define root-libraries
+                   (map (lambda (info) (field info 'name))
+                        (binding-libraries 'rooted-run)))
+                 (define root-source-visible
+                   (source-has? (catalog-sources)
+                                \"reflect-test-root\"
+                                '(project rooted)))
+                 (define removed-root
+                   (remove-manifest-root! \"reflect-test-root\"))
+                 (list (field ad-hoc-info 'origin)
+                       (field ad-hoc-info 'source-id)
+                       (field ad-hoc-info 'summary)
+                       ad-hoc-libraries
+                       ad-hoc-source-visible
+                       removed-ad-hoc
+                       (if (library-info '(project generated))
+                           'bad
+                           'removed)
+                       (field root-info 'origin)
+                       (field root-info 'source-id)
+                       root-libraries
+                       root-source-visible
+                       removed-root
+                       (if (library-info '(project rooted))
+                           'bad
+                           'root-removed))"
+                (expected-datum-external
+                 "(ad-hoc-manifest
+                   reflect-test-session
+                   \"Generated project library.\"
+                   ((project generated))
+                   #t
+                   #t
+                   removed
+                   manifest-root
+                   \"reflect-test-root\"
+                   ((project rooted))
+                   #t
+                   #t
+                   root-removed)"))
+
 (check-external 'srfi-16-case-lambda-alias-import
                 "(import (scheme base) (srfi 16))
                  (define (describe . args)
