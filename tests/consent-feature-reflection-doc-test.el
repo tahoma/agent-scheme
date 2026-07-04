@@ -34,6 +34,9 @@
           (native
            (consent-feature-reflection-doc-test--read
             "docs/native-cli-daemon-adapter.md"))
+          (quickstart
+           (consent-feature-reflection-doc-test--read
+            "docs/reflection-quickstart.md"))
           (doc
            (consent-feature-reflection-doc-test--read
             "docs/feature-reflection.md")))
@@ -62,12 +65,29 @@
                  "(current-budget)"
                  "(recent-yields)"
                  "(recent-policy-decisions)"
+                 "reflection-quickstart.md"
                  "Availability is not authority"
                  "fixtures/host-adapters/emacs.scm"
                  "(name emacs)"
                  "#229"
                  "#235"
                  "#236"))
-        (should (string-match-p (regexp-quote needle) doc))))))
+        (should (string-match-p (regexp-quote needle) doc)))
+      (dolist (needle
+               '("# Reflection Quickstart"
+                 "(agent reflect)"
+                 "(apropos \"json\")"
+                 "(documentation 'needle-procedure)"
+                 "(docstring 'needle-procedure)"
+                 "(library-info '(agent reflect))"
+                 "(library-search \"reflect\")"
+                 "(binding-libraries 'force)"
+                 "(library-documentation '(scheme lazy))"
+                 "(add-manifest!"
+                 "(add-manifest-root!"
+                 "(catalog-sources)"
+                 "(catalog-diagnostics)"
+                 "metadata, not authority"))
+        (should (string-match-p (regexp-quote needle) quickstart))))))
 
 ;;; consent-feature-reflection-doc-test.el ends here
