@@ -1336,6 +1336,9 @@
        (library-primitive-spec 'memory-find 'primitive-memory-find 2 2)
        (library-primitive-spec 'memory-by-tag 'primitive-memory-by-tag 2 2)
        (library-primitive-spec 'memory-recent 'primitive-memory-recent 2 2)
+       (library-primitive-spec 'memory-access! 'primitive-memory-access! 3 3)
+       (library-primitive-spec 'memory-reflect! 'primitive-memory-reflect! 6 6)
+       (library-primitive-spec 'memory-select 'primitive-memory-select 4 4)
        (library-primitive-spec 'memory-yield 'primitive-memory-yield 2 2)))
 
     (define (char-library-specs)
