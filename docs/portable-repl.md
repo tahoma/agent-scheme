@@ -300,7 +300,8 @@ are owned by later issues:
   nested break loop, asynchronous/streamed evaluation, and cancellation are
   forward-compatibility points described in the contract, not implemented here.
 - **No meta-command syntax.** Submissions are ordinary Scheme forms; introspection
-  and control are ordinary procedures, per the contract's deliberate non-goal.
+  and control are ordinary procedures such as `consent-doc` and
+  `consent-describe`, per the contract's deliberate non-goal.
 - **Approval UX.** Interactive approval prompts use the prompt posture from the
   [Native CLI and daemon adapter contract](native-cli-daemon-adapter.md); a
   noninteractive session fails closed on a `confirm` action without a covering

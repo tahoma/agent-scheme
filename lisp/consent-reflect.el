@@ -19,6 +19,7 @@
 (require 'consent-policy)
 (require 'consent-reader)
 (require 'consent-redaction)
+(require 'consent-result)
 (require 'consent-runtime)
 
 (declare-function consent-macroexpand "consent-macro")
@@ -26,6 +27,7 @@
 (declare-function consent-macroexpand-library "consent-macro")
 (declare-function consent-macro-binding-info "consent-macro")
 (declare-function consent-syntax-source "consent-macro")
+(declare-function consent--syntax-environment-ref "consent-macro")
 (declare-function consent--library-binding-kind "consent-library")
 (declare-function consent--library-binding-library-key "consent-library")
 (declare-function consent--library-binding-name "consent-library")
@@ -332,6 +334,113 @@ SUBJECT may be a binding symbol/name or a procedure value."
            documentation
            spec)
         consent-false)))))
+
+(defun consent-reflect--value-kind (value)
+  "Return VALUE's Scheme-readable introspection kind."
+  (cond
+   ((consent-primitive-procedure-p value)
+    (consent-reflect--symbol "primitive-procedure"))
+   ((consent-procedure-p value)
+    (consent-reflect--symbol "procedure"))
+   ((consent-parameter-p value)
+    (consent-reflect--symbol "parameter"))
+   ((consent--continuation-p value)
+    (consent-reflect--symbol "continuation"))
+   ((consent-unspecified-p value)
+    (consent-reflect--symbol "unspecified"))
+   ((consent--undefined-p value)
+    (consent-reflect--symbol "undefined"))
+   (t
+    (consent-reflect--symbol "value"))))
+
+(defun consent-reflect--binding-documentation (subject value _context)
+  "Return documentation metadata for SUBJECT and VALUE in CONTEXT."
+  (let* ((spec (consent-reflect--primitive-procedure-spec value))
+         (documentation
+          (and value
+               (not (consent--undefined-p value))
+               (consent-reflect--procedure-documentation value))))
+    (if documentation
+        (consent-reflect--documentation-metadata subject documentation spec)
+      consent-false)))
+
+(defun consent-reflect--binding-description
+    (subject binding-kind value context)
+  "Return a Scheme-readable binding-description record."
+  (let ((spec (consent-reflect--primitive-procedure-spec value)))
+    (list
+     (consent-reflect--symbol "binding-description")
+     (consent-reflect--field "subject" subject)
+     (consent-reflect--field "binding-kind" binding-kind)
+     (consent-reflect--field "value-kind"
+                             (consent-reflect--value-kind value))
+     (consent-reflect--field
+      "library"
+      (if spec
+          (consent-reflect--library-datum (plist-get spec :library))
+        consent-false))
+     (consent-reflect--field
+      "source"
+      (if spec
+          (consent-reflect--datumize (plist-get spec :source))
+        consent-false))
+     (consent-reflect--field "value-summary"
+                             (consent-value->external value))
+     (consent-reflect--field
+      "documentation"
+      (consent-reflect--binding-documentation subject value context)))))
+
+(defun consent-reflect--syntax-description (name)
+  "Return a Scheme-readable syntax binding-description for NAME."
+  (list
+   (consent-reflect--symbol "binding-description")
+   (consent-reflect--field
+    "subject"
+    (list (consent-reflect--symbol "binding")
+          (consent-reflect--symbol name)))
+   (consent-reflect--field "binding-kind"
+                           (consent-reflect--symbol "syntax"))
+   (consent-reflect--field "value-kind" (consent-reflect--symbol "syntax"))
+   (consent-reflect--field "library" consent-false)
+   (consent-reflect--field "source" consent-false)
+   (consent-reflect--field "value-summary" "#<syntax>")
+   (consent-reflect--field "documentation" consent-false)))
+
+(defun consent-reflect-describe (subject context)
+  "Return Scheme-readable description data for SUBJECT, or #f.
+SUBJECT may be a binding symbol/name or a procedure value."
+  (cond
+   ((or (consent-procedure-p subject)
+        (consent-primitive-procedure-p subject))
+    (consent-reflect--binding-description
+     (list (consent-reflect--symbol "procedure"))
+     consent-false
+     subject
+     context))
+   (t
+    (let* ((name (consent-reflect--binding-name subject))
+           (environment
+            (and context
+                 (consent--eval-context-interaction-environment context)))
+           (cell (and name
+                      environment
+                      (consent--environment-cell environment name)))
+           (value (and cell (consent--cell-value cell))))
+      (cond
+       ((and cell (not (consent--undefined-p value)))
+        (consent-reflect--binding-description
+         (list (consent-reflect--symbol "binding")
+               (consent-reflect--symbol name))
+         (consent-reflect--symbol "value")
+         value
+         context))
+       ((and name
+             context
+             (consent--syntax-environment-ref
+              (consent--eval-context-syntax-environment context)
+              name))
+        (consent-reflect--syntax-description name))
+       (t consent-false))))))
 
 (defun consent-reflect-current-budget (context)
   "Return the active budget ledger -- counters, limits, and stop reason.
@@ -725,6 +834,16 @@ can classify a recent error or a nested evaluation's outcome."
   (consent-reflect--redact
    (consent-reflect-documentation (car arguments) context)))
 
+(defun consent-reflect--primitive-consent-doc (arguments context)
+  "Primitive `consent-doc'."
+  (consent-reflect--redact
+   (consent-reflect-documentation (car arguments) context)))
+
+(defun consent-reflect--primitive-consent-describe (arguments context)
+  "Primitive `consent-describe'."
+  (consent-reflect--redact
+   (consent-reflect-describe (car arguments) context)))
+
 (defun consent-reflect--macro-options (arguments)
   "Return optional macro introspection options from ARGUMENTS."
   (and (cdr arguments) (cadr arguments)))
@@ -811,6 +930,10 @@ can classify a recent error or a nested evaluation's outcome."
      ,#'consent-reflect--primitive-capability-info 1 1)
     ("documentation"
      ,#'consent-reflect--primitive-documentation 1 1)
+    ("consent-doc"
+     ,#'consent-reflect--primitive-consent-doc 1 1)
+    ("consent-describe"
+     ,#'consent-reflect--primitive-consent-describe 1 1)
     ("macroexpand"
      ,#'consent-reflect--primitive-macroexpand 1 2)
     ("macroexpand-1"

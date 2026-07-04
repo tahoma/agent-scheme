@@ -4870,6 +4870,84 @@ cursor across sessions."
                spec)
               #f)))))
 
+    (define (reflect-value-kind value)
+      "Return VALUE's Scheme-readable introspection kind."
+      (cond
+       ((consent-primitive-procedure? value) 'primitive-procedure)
+       ((consent-parameter? value) 'parameter)
+       ((consent-procedure? value) 'procedure)
+       ((continuation? value) 'continuation)
+       ((consent-unspecified? value) 'unspecified)
+       ((undefined? value) 'undefined)
+       (else 'value)))
+
+    (define (reflect-binding-documentation subject value context)
+      "Return documentation metadata for SUBJECT and VALUE in CONTEXT."
+      (let* ((spec (reflect-primitive-procedure-spec value))
+             (documentation
+              (and value
+                   (not (undefined? value))
+                   (reflect-procedure-documentation value))))
+        (if documentation
+            (reflect-documentation-record subject documentation spec)
+            #f)))
+
+    (define (reflect-binding-description subject binding-kind value context)
+      "Return a Scheme-readable binding-description record."
+      (let ((spec (reflect-primitive-procedure-spec value)))
+        (list 'binding-description
+              (result-field 'subject subject)
+              (result-field 'binding-kind binding-kind)
+              (result-field 'value-kind (reflect-value-kind value))
+              (result-field 'library
+                            (if spec
+                                (reflect-field-value spec 'library #f)
+                                #f))
+              (result-field 'source
+                            (if spec
+                                (reflect-field-value spec 'source #f)
+                                #f))
+              (result-field 'value-summary (consent-value->external value))
+              (result-field 'documentation
+                            (reflect-binding-documentation subject
+                                                           value
+                                                           context)))))
+
+    (define (reflect-syntax-description name)
+      "Return a Scheme-readable syntax binding-description for NAME."
+      (list 'binding-description
+            (result-field 'subject (list 'binding name))
+            (result-field 'binding-kind 'syntax)
+            (result-field 'value-kind 'syntax)
+            (result-field 'library #f)
+            (result-field 'source #f)
+            (result-field 'value-summary "#<syntax>")
+            (result-field 'documentation #f)))
+
+    (define (reflect-describe subject context)
+      "Return Scheme-readable description data for SUBJECT, or #f."
+      (cond
+       ((or (consent-procedure? subject)
+            (consent-primitive-procedure? subject))
+        (reflect-binding-description '(procedure) #f subject context))
+       (else
+        (let* ((name (reflect-binding-name subject))
+               (environment (context-interaction-environment context))
+               (cell (and name environment (environment-cell environment name)))
+               (value (if cell (cell-value cell) #f)))
+          (cond
+           ((and cell (not (undefined? value)))
+            (reflect-binding-description
+             (list 'binding name)
+             'value
+             value
+             context))
+           ((and name
+                 (syntax-environment-ref (context-syntax-environment context)
+                                         name))
+            (reflect-syntax-description name))
+           (else #f))))))
+
     (define (reflect-current-budget context)
       "Return the active budget ledger -- counters, limits, and stop reason."
       "The ledger is the single inspectable budget object: every enforced and"
@@ -5225,6 +5303,16 @@ cursor across sessions."
     (define (primitive-documentation arguments context)
       "Return documentation metadata for a binding or procedure."
       (redaction-model:redact (reflect-documentation (car arguments) context)
+                              'runtime-reflection))
+
+    (define (primitive-consent-doc arguments context)
+      "Return documentation metadata for a binding or procedure."
+      (redaction-model:redact (reflect-documentation (car arguments) context)
+                              'runtime-reflection))
+
+    (define (primitive-consent-describe arguments context)
+      "Return Scheme-readable description data for a binding or procedure."
+      (redaction-model:redact (reflect-describe (car arguments) context)
                               'runtime-reflection))
 
     (define (macro-primitive-options arguments)
@@ -8139,6 +8227,8 @@ cursor across sessions."
              primitive-recent-policy-decisions)
        (cons 'primitive-capability-info primitive-capability-info)
        (cons 'primitive-documentation primitive-documentation)
+       (cons 'primitive-consent-doc primitive-consent-doc)
+       (cons 'primitive-consent-describe primitive-consent-describe)
        (cons 'primitive-macroexpand primitive-macroexpand)
        (cons 'primitive-macroexpand-1 primitive-macroexpand-1)
        (cons 'primitive-macroexpand-library primitive-macroexpand-library)
