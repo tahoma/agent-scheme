@@ -29,7 +29,6 @@
     "tests/scheme/consent-agent-prompt-test.scm"
     "tests/scheme/consent-models-openai-test.scm"
     "tests/scheme/consent-script-test.scm"
-    "tests/scheme/consent-reflect-test.scm"
     "tests/scheme/stdlib-list-test.scm"
     "tests/scheme/stdlib-comparator-test.scm"
     "tests/scheme/stdlib-rbtree-test.scm"
@@ -40,6 +39,10 @@
     "tests/scheme/stdlib-generator-test.scm"
     "tests/scheme/consent-eval-test.scm")
   "Portable Scheme test files exercised by full-suite host shards.")
+
+(defconst consent--scheme-host-reflect-test-files
+  '("tests/scheme/consent-reflect-test.scm")
+  "Portable Scheme reflection contract files exercised by dedicated shards.")
 
 (defconst consent--scheme-host-reflect-stress-test-files
   '("tests/scheme/consent-reflect-stress-test.scm")
@@ -292,6 +295,13 @@ RACKET-COLLECTION-ROOT is accepted for API symmetry with test arguments."
    host
    display-name
    (consent--scheme-host-test-files-for-host host)))
+
+(defun consent--scheme-host-run-reflect-suite (host display-name)
+  "Run the portable reflection contract suite on HOST named DISPLAY-NAME."
+  (consent--scheme-host-run-files
+   host
+   display-name
+   consent--scheme-host-reflect-test-files))
 
 (defun consent--scheme-host-run-reflect-stress-suite (host display-name)
   "Run the portable reflection stress suite on HOST named DISPLAY-NAME."
