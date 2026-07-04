@@ -346,10 +346,14 @@
       "Read a JSON array from PORT at DEPTH using READ-VALUE."
       (json-check-depth depth)
       (json-skip-whitespace port)
-      (if (char=? (peek-char port) #\])
-          (begin
-            (json-read-char port)
-            '#())
+      (let ((next (peek-char port)))
+        (cond
+         ((eof-object? next)
+          (json-fail "Unexpected end of JSON array."))
+         ((char=? next #\])
+          (json-read-char port)
+          '#())
+         (else
           (let ((values (gen:vector-accumulator)))
             (let loop ()
               (let ((value (read-value (+ depth 1))))
@@ -360,8 +364,12 @@
                     (json-fail "Unexpected end of JSON array."))
                    ((char=? separator #\,)
                     (json-skip-whitespace port)
-                    (if (char=? (peek-char port) #\])
-                        (json-fail "Trailing comma in JSON array."))
+                    (let ((after-comma (peek-char port)))
+                      (cond
+                       ((eof-object? after-comma)
+                        (json-fail "Unexpected end of JSON array."))
+                       ((char=? after-comma #\])
+                        (json-fail "Trailing comma in JSON array."))))
                     (values value)
                     (loop))
                    ((char=? separator #\])
@@ -369,17 +377,21 @@
                     (values (eof-object)))
                    (else
                     (json-fail
-                     "Expected comma or close bracket in JSON array.")))))))))
+                     "Expected comma or close bracket in JSON array.")))))))))))
 
     ;; Read a JSON object into an alist with symbol keys.
     (define (json-read-object port depth read-value)
       "Read a JSON object from PORT at DEPTH using READ-VALUE."
       (json-check-depth depth)
       (json-skip-whitespace port)
-      (if (char=? (peek-char port) #\})
-          (begin
-            (json-read-char port)
-            '())
+      (let ((next (peek-char port)))
+        (cond
+         ((eof-object? next)
+          (json-fail "Unexpected end of JSON object."))
+         ((char=? next #\})
+          (json-read-char port)
+          '())
+         (else
           (let ((entries (gen:list-accumulator)))
             (let loop ()
               (json-skip-whitespace port)
@@ -399,8 +411,12 @@
                           (json-fail "Unexpected end of JSON object."))
                          ((char=? separator #\,)
                           (json-skip-whitespace port)
-                          (if (char=? (peek-char port) #\})
-                              (json-fail "Trailing comma in JSON object."))
+                          (let ((after-comma (peek-char port)))
+                            (cond
+                             ((eof-object? after-comma)
+                              (json-fail "Unexpected end of JSON object."))
+                             ((char=? after-comma #\})
+                              (json-fail "Trailing comma in JSON object."))))
                           (entries (cons (string->symbol key) value))
                           (loop))
                          ((char=? separator #\})
@@ -408,15 +424,18 @@
                           (entries (eof-object)))
                          (else
                           (json-fail
-                           "Expected comma or close brace in JSON object."))))))))))))
+                           "Expected comma or close brace in JSON object."))))))))))))))
 
     ;; Read one complete JSON value from PORT.
-    (define (json-read-from-port port)
+    (define (json-read-from-port port eof-allowed?)
       (define (read-value depth)
         (json-skip-whitespace port)
         (let ((char (json-read-char port)))
           (cond
-           ((eof-object? char) (eof-object))
+           ((eof-object? char)
+            (if eof-allowed?
+                (eof-object)
+                (json-fail "Expected JSON value.")))
            ((char=? char #\") (json-read-string-body port))
            ((char=? char #\{) (json-read-object port depth read-value))
            ((char=? char #\[) (json-read-array port depth read-value))
@@ -441,8 +460,8 @@
       "Dispatch optional JSON reader port arguments."
       (apply
        (case-lambda
-       (() (json-read-from-port (current-input-port)))
-       ((port) (json-read-from-port port)))
+       (() (json-read-from-port (current-input-port) #f))
+       ((port) (json-read-from-port port #f)))
        maybe-port))
 
     (define (json-read . maybe-port)
@@ -464,10 +483,10 @@
        (()
         (let ((port (current-input-port)))
           (lambda ()
-            (json-read port))))
+            (json-read-from-port port #t))))
        ((port)
         (lambda ()
-          (json-read port))))
+          (json-read-from-port port #t))))
        maybe-port))
 
     (define (json-generator . maybe-port)
