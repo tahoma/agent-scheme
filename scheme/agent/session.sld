@@ -18,6 +18,7 @@
           session-store-create!
           session-store-ref
           session-store-list
+          session-store-set-fields!
           session-store-suspend!
           session-store-resume!
           session-store-snapshot!
@@ -90,7 +91,9 @@
     ;; Scheme-readable datum returned by session->datum.
     (define-record-type <consent-session>
       (make-session id scope status imports definitions macros memory handles
-                    transcript recent-events snapshots parent-id forked-from)
+                    transcript recent-events snapshots parent-id forked-from
+                    project-root locked-by-job capability-grants
+                    skill-activations created-at updated-at retired-at failure)
       session?
       (id session-id)
       (scope session-scope)
@@ -104,7 +107,17 @@
       (recent-events session-recent-events set-session-recent-events!)
       (snapshots session-snapshots set-session-snapshots!)
       (parent-id session-parent-id)
-      (forked-from session-forked-from))
+      (forked-from session-forked-from)
+      (project-root session-project-root set-session-project-root!)
+      (locked-by-job session-locked-by-job set-session-locked-by-job!)
+      (capability-grants session-capability-grants
+                         set-session-capability-grants!)
+      (skill-activations session-skill-activations
+                         set-session-skill-activations!)
+      (created-at session-created-at set-session-created-at!)
+      (updated-at session-updated-at set-session-updated-at!)
+      (retired-at session-retired-at set-session-retired-at!)
+      (failure session-failure set-session-failure!))
 
     ;; Live session manager: the multi-environment-native layer over the pure
     ;; lifecycle store.  It owns a store of session records, a map of session id
@@ -157,6 +170,12 @@
                   value))
             default)))
 
+    (define (maybe-field name value)
+      "Return a public field for NAME and VALUE when VALUE is present."
+      (if value
+          (list (list name value))
+          '()))
+
     (define (generated-session-id store scope)
       (let ((next (+ (store-next-session-number store) 1)))
         (set-store-next-session-number! store next)
@@ -195,6 +214,8 @@
              (list 'id (session-id session))
              (list 'scope (session-scope session))
              (list 'status (session-status session)))
+       (maybe-field 'locked-by-job (session-locked-by-job session))
+       (maybe-field 'project-root (session-project-root session))
        (if (session-parent-id session)
            (list (list 'parent-id (session-parent-id session)))
            '())
@@ -207,12 +228,18 @@
         (list 'macros (session-macros session))
         (list 'memory (session-memory session))
         (list 'handles (session-record-handles session))
+        (list 'capability-grants (session-capability-grants session))
+        (list 'skill-activations (session-skill-activations session))
         (list 'transcript (session-transcript session))
         (list 'recent-events (session-recent-events session))
         (list 'snapshots
               (map (lambda (snapshot)
                      (cadr (cadr snapshot)))
-                   (session-snapshots session))))))
+                   (session-snapshots session))))
+       (maybe-field 'created-at (session-created-at session))
+       (maybe-field 'updated-at (session-updated-at session))
+       (maybe-field 'retired-at (session-retired-at session))
+       (maybe-field 'failure (session-failure session))))
 
     (define (session-datum-id session-datum)
       "Return the id field from a public SESSION-DATUM."
@@ -276,8 +303,16 @@
                             '()
                             '()
                             '()
-                            #f
-                            #f)))
+                            (option-ref options 'parent-id #f)
+                            (option-ref options 'forked-from #f)
+                            (option-ref options 'project-root #f)
+                            (option-ref options 'locked-by-job #f)
+                            (option-ref options 'capability-grants '())
+                            (option-ref options 'skill-activations '())
+                            (option-ref options 'created-at #f)
+                            (option-ref options 'updated-at #f)
+                            (option-ref options 'retired-at #f)
+                            (option-ref options 'failure #f))))
         (store-session! store session)
         (session->datum session)))
 
@@ -307,11 +342,12 @@
       (let ((scope (if (null? maybe-scope)
                        #f
                        (normalize-scope (car maybe-scope)))))
-        (filter-map
-         (lambda (cell)
-           (and (or (not scope) (eq? (session-scope (cdr cell)) scope))
-                (session->datum (cdr cell))))
-         (store-sessions store))))
+        (reverse
+         (filter-map
+          (lambda (cell)
+            (and (or (not scope) (eq? (session-scope (cdr cell)) scope))
+                 (session->datum (cdr cell))))
+          (store-sessions store)))))
 
     (define (require-session store id)
       "Return the session object named ID from STORE or raise an error."
@@ -320,6 +356,68 @@
             session
             (error "unknown session" id))))
 
+    (define (field-value field)
+      "Return FIELD's value from a proper field list or pair."
+      (let ((value (cdr field)))
+        (if (and (pair? value) (null? (cdr value)))
+            (car value)
+            value)))
+
+    (define (set-session-field! session field)
+      "Apply one public FIELD update to SESSION."
+      (let ((name (car field))
+            (value (field-value field)))
+        (cond
+         ((eq? name 'status)
+          (if (not (member-equal? value consent-session-states))
+              (error "unknown session status" value))
+          (set-session-status! session value))
+         ((eq? name 'imports) (set-session-imports! session value))
+         ((eq? name 'definitions) (set-session-definitions! session value))
+         ((eq? name 'macros) (set-session-macros! session value))
+         ((eq? name 'memory) (set-session-memory! session value))
+         ((eq? name 'handles) (set-session-record-handles! session value))
+         ((eq? name 'transcript) (set-session-transcript! session value))
+         ((eq? name 'recent-events) (set-session-recent-events! session value))
+         ((eq? name 'snapshots) (set-session-snapshots! session value))
+         ((eq? name 'project-root) (set-session-project-root! session value))
+         ((eq? name 'locked-by-job) (set-session-locked-by-job! session value))
+         ((eq? name 'capability-grants)
+          (set-session-capability-grants! session value))
+         ((eq? name 'skill-activations)
+          (set-session-skill-activations! session value))
+         ((eq? name 'created-at) (set-session-created-at! session value))
+         ((eq? name 'updated-at) (set-session-updated-at! session value))
+         ((eq? name 'retired-at) (set-session-retired-at! session value))
+         ((eq? name 'failure) (set-session-failure! session value))
+         (else (error "unknown session field" name)))))
+
+    (define (apply-session-fields! session fields)
+      "Apply FIELDS to SESSION and return SESSION."
+      (let loop ((fields fields))
+        (if (pair? fields)
+            (begin
+              (set-session-field! session (car fields))
+              (loop (cdr fields)))))
+      session)
+
+    (define (session-store-set-fields! store id fields)
+      "Patch public host-neutral fields for session ID in STORE."
+      #((parameters
+         (store (type consent-session-store)
+          (description "Session store to mutate."))
+         (id (type symbol)
+          (description "Session id symbol."))
+         (fields (type list)
+          (description "Association list of public session fields to update.")))
+        (returns (type list)
+         (description "The updated public session datum."))
+        (effects state-write error))
+      (session->datum
+       (apply-session-fields!
+        (require-session store id)
+        fields)))
+
     (define (transition! session status)
       "Move SESSION to STATUS and return its public datum."
       (if (not (member-equal? status consent-session-states))
@@ -327,48 +425,70 @@
       (set-session-status! session status)
       (session->datum session))
 
-    (define (session-store-suspend! store id)
+    (define (ensure-transitionable! session operation)
+      "Reject lifecycle OPERATION when SESSION is no longer live."
+      (if (member-equal? (session-status session) '(retired collectable))
+          (error "retired sessions cannot transition" operation)))
+
+    (define (session-store-suspend! store id . maybe-fields)
       "Suspend session ID in STORE."
       #((parameters
          (store (type consent-session-store)
           (description "Session store to mutate."))
          (id (type symbol)
-          (description "Session id symbol.")))
+          (description "Session id symbol."))
+         (maybe-fields (type list)
+          (description "Optional source field updates to apply first.")))
         (returns (type list)
          (description "The suspended public session datum."))
         (effects state-write error))
-      (transition! (require-session store id) 'suspended))
+      (let ((session (require-session store id)))
+        (if (pair? maybe-fields)
+            (apply-session-fields! session (car maybe-fields)))
+        (ensure-transitionable! session 'session-store-suspend!)
+        (transition! session 'suspended)))
 
-    (define (session-store-resume! store id)
+    (define (session-store-resume! store id . maybe-fields)
       "Resume session ID in STORE."
       #((parameters
          (store (type consent-session-store)
           (description "Session store to mutate."))
          (id (type symbol)
-          (description "Session id symbol.")))
+          (description "Session id symbol."))
+         (maybe-fields (type list)
+          (description "Optional source field updates to apply first.")))
         (returns (type list)
          (description "The active public session datum."))
         (effects state-write error))
-      (transition! (require-session store id) 'active))
+      (let ((session (require-session store id)))
+        (if (pair? maybe-fields)
+            (apply-session-fields! session (car maybe-fields)))
+        (ensure-transitionable! session 'session-store-resume!)
+        (set-session-failure! session #f)
+        (transition! session 'active)))
 
-    (define (snapshot-datum session snapshot-id)
+    (define (snapshot-datum session snapshot-id options)
       "Build a snapshot record for SESSION using SNAPSHOT-ID."
-      (list 'session-snapshot
-            (list 'id snapshot-id)
-            (list 'source-session (session-id session))
-            (list 'scope (session-scope session))
-            (list 'status (session-status session))
-            (list 'imports (session-imports session))
-            (list 'definitions (session-definitions session))
-            (list 'macros (session-macros session))
-            (list 'memory (session-memory session))
-            (list 'handles (session-record-handles session))
-            (list 'stale-handles '())
-            (list 'transcript (session-transcript session))
-            (list 'recent-events (session-recent-events session))
-            (list 'restores consent-session-restored-fields)
-            (list 'revalidates consent-session-revalidated-fields)
-            (list 'never-restore consent-session-never-restored-fields)))
+      (append
+       (list 'session-snapshot
+             (list 'id snapshot-id)
+             (list 'source-session (session-id session))
+             (list 'scope (session-scope session))
+             (list 'status (session-status session))
+             (list 'imports (session-imports session))
+             (list 'definitions (session-definitions session))
+             (list 'macros (session-macros session))
+             (list 'memory (session-memory session))
+             (list 'capability-grants (session-capability-grants session))
+             (list 'skill-activations (session-skill-activations session))
+             (list 'handles (session-record-handles session))
+             (list 'stale-handles (option-ref options 'stale-handles '()))
+             (list 'transcript (session-transcript session))
+             (list 'recent-events (session-recent-events session))
+             (list 'restores consent-session-restored-fields)
+             (list 'revalidates consent-session-revalidated-fields)
+             (list 'never-restore consent-session-never-restored-fields))
+       (maybe-field 'created-at (option-ref options 'created-at #f))))
 
     (define (session-store-snapshot! store id options)
       "Snapshot session ID in STORE using OPTIONS."
@@ -385,7 +505,10 @@
       (let* ((session (require-session store id))
              (snapshot-id
               (option-ref options 'id (generated-snapshot-id store)))
-             (snapshot (snapshot-datum session snapshot-id)))
+             (snapshot (snapshot-datum session snapshot-id options)))
+        (let ((updated-at (option-ref options 'updated-at #f)))
+          (if updated-at
+              (set-session-updated-at! session updated-at)))
         (set-session-snapshots!
          session
          (cons snapshot (session-snapshots session)))
@@ -422,23 +545,35 @@
                             (session-recent-events source)
                             '()
                             (session-id source)
-                            (session-id source))))
+                            (session-id source)
+                            (session-project-root source)
+                            #f
+                            (session-capability-grants source)
+                            (session-skill-activations source)
+                            (option-ref options 'created-at #f)
+                            (option-ref options 'updated-at #f)
+                            #f
+                            #f)))
         (store-session! store fork)
         (session->datum fork)))
 
-    (define (session-store-retire! store id)
+    (define (session-store-retire! store id . maybe-fields)
       "Retire session ID in STORE and return its datum."
       #((parameters
          (store (type consent-session-store)
           (description "Session store to mutate."))
          (id (type symbol)
-          (description "Session id symbol.")))
+          (description "Session id symbol."))
+         (maybe-fields (type list)
+          (description "Optional source field updates to apply first.")))
         (returns (type list)
          (description
           ("The retired public session datum with live handles"
             "cleared.")))
         (effects state-write error))
       (let ((session (require-session store id)))
+        (if (pair? maybe-fields)
+            (apply-session-fields! session (car maybe-fields)))
         (set-session-record-handles! session '())
         (transition! session 'retired)))
 

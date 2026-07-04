@@ -372,7 +372,7 @@
        (cadr (assq 'id (cdr snapshot)))
        (session-datum-id forked)
        (cadr (assq 'status (cdr (session-store-retire! store 'source-alpha)))))")
-    "(source-alpha source-alpha (source-beta source-alpha) suspended active source-snap source-beta retired)")))
+    "(source-alpha source-alpha (source-alpha source-beta) suspended active source-snap source-beta retired)")))
 
 (ert-deftest consent-library-test-standard-case-lambda-import ()
   "Import `(scheme case-lambda)' through the library registry."

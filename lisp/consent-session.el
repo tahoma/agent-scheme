@@ -24,6 +24,8 @@
 (require 'consent-runtime)
 (require 'consent-transcript)
 
+(declare-function consent--source-library-call "consent-library")
+
 (define-error 'consent-session-error
   "Consent Scheme session error"
   'consent-eval-error)
@@ -47,47 +49,19 @@ exposing this host structure."
   handles
   transcript
   recent-events
-  snapshots
   capability-grants
   skill-activations
   locked-by-job
-  parent-id
-  forked-from
   created-at
   updated-at
   retired-at
   failure)
 
-(defconst consent-session-scopes
-  '(fresh named project)
-  "Recognized Consent Scheme session scopes.")
-
-(defconst consent-session-states
-  '(new active idle suspended retired failed collectable)
-  "Recognized Consent Scheme session lifecycle states.")
-
-(defconst consent-session-restored-fields
-  '(imports definitions macros memory-bindings capability-grant-requests
-            transcripts recent-yields)
-  "Snapshot fields that can be restored directly as Scheme data.")
-
-(defconst consent-session-revalidated-fields
-  '(project-root handle-references capability-grants skill-activations)
-  "Snapshot fields that must be revalidated before use.")
-
-(defconst consent-session-never-restored-fields
-  '(stale-emacs-handles active-jobs approval-decisions provider-secrets
-                        host-runtime-internals)
-  "Runtime state that snapshots never blindly restore.")
+(defvar consent--session-source-store nil
+  "Source-backed session store for canonical lifecycle records.")
 
 (defvar consent--session-registry (make-hash-table :test #'equal)
-  "Registry of durable non-fresh sessions by string id.")
-
-(defvar consent--next-session-number 0
-  "Next numeric suffix used for generated session ids.")
-
-(defvar consent--next-snapshot-number 0
-  "Next numeric suffix used for generated snapshot ids.")
+  "Registry of durable live Emacs sessions by source-model id.")
 
 (defvar consent--session-current-job-id nil
   "Dynamically bound job id allowed to evaluate a locked session.")
@@ -131,7 +105,7 @@ REPL changes which session subsequent interactive forms evaluate in.")
           ((stringp scope)
            (intern scope))
           (t nil))))
-    (unless (memq normalized consent-session-scopes)
+    (unless (memq normalized '(fresh named project))
       (signal 'consent-session-error
               (list (format "unknown session scope: %S" scope))))
     normalized))
@@ -193,13 +167,117 @@ REPL changes which session subsequent interactive forms evaluate in.")
       (plist-get options key)
     default))
 
-(defun consent-session--generated-id (scope)
-  "Return a fresh id string for SCOPE."
-  (format "%s-%d" scope (cl-incf consent--next-session-number)))
+(defun consent-session--source-call (name &rest arguments)
+  "Call source-backed session procedure NAME with ARGUMENTS."
+  (apply #'consent--source-library-call
+         "(agent session)" name arguments))
 
-(defun consent-session--generated-snapshot-id ()
-  "Return a fresh snapshot id string."
-  (format "snapshot-%d" (cl-incf consent--next-snapshot-number)))
+(defun consent-session--source-store ()
+  "Return the source-backed canonical session store."
+  (or consent--session-source-store
+      (setq consent--session-source-store
+            (consent-session--source-call
+             "consent-make-session-store"))))
+
+(defun consent-session--source-id (value description)
+  "Return VALUE as a source-library id symbol for DESCRIPTION."
+  (consent-session--symbol
+   (consent-session--name value description)))
+
+(defun consent-session--source-option-value (key value)
+  "Return VALUE normalized for source-library option KEY."
+  (pcase key
+    ((or :id :parent-id :forked-from :locked-by-job)
+     (consent-session--source-id value
+                                 (substring (symbol-name key) 1)))
+    (:status
+     (consent-session--symbol value))
+    (_ value)))
+
+(defun consent-session--source-options (&rest plists)
+  "Return PLISTS as a source-library options alist."
+  (let (fields)
+    (dolist (plist plists (nreverse fields))
+      (while plist
+        (let ((key (pop plist))
+              (value (pop plist)))
+          (when value
+            (push
+             (consent-session--field
+              (substring (symbol-name key) 1)
+              (consent-session--source-option-value key value))
+             fields)))))))
+
+(defun consent-session--source-fields (session &rest plists)
+  "Return source-library field updates for SESSION and PLISTS."
+  (append
+   (list
+    (consent-session--field
+     "status" (consent-session--symbol (consent-session-status session)))
+    (consent-session--field
+     "imports" (consent-session--session-imports session))
+    (consent-session--field
+     "definitions"
+     (consent-session--name-list-datum
+      (consent-session--session-definitions session)))
+    (consent-session--field
+     "macros"
+     (consent-session--name-list-datum
+      (consent-session--session-macros session)))
+    (consent-session--field "memory" (consent-session-memory session))
+    (consent-session--field "handles" (consent-session-handles session))
+    (consent-session--field
+     "capability-grants"
+     (consent-session-capability-grants session))
+    (consent-session--field
+     "skill-activations"
+     (consent-session-skill-activations session))
+    (consent-session--field "transcript"
+                            (consent-session-transcript session))
+    (consent-session--field "recent-events"
+                            (consent-session-recent-events session))
+    (consent-session--field "created-at"
+                            (consent-session-created-at session))
+    (consent-session--field "updated-at"
+                            (consent-session-updated-at session)))
+   (when (consent-session-locked-by-job session)
+     (list
+      (consent-session--field
+       "locked-by-job"
+       (consent-session--symbol
+        (consent-session-locked-by-job session)))))
+   (when (consent-session-project-root session)
+     (list
+      (consent-session--field
+       "project-root" (consent-session-project-root session))))
+   (when (consent-session-retired-at session)
+     (list
+      (consent-session--field
+       "retired-at" (consent-session-retired-at session))))
+   (when (consent-session-failure session)
+     (list
+      (consent-session--field
+       "failure" (consent-session-failure session))))
+   (apply #'consent-session--source-options plists)))
+
+(defun consent-session--source-sync! (session &rest plists)
+  "Sync SESSION's public record fields into the source store."
+  (consent-session--source-call
+   "session-store-set-fields!"
+   (consent-session--source-store)
+   (consent-session--source-id (consent-session-id session) "session id")
+   (apply #'consent-session--source-fields session plists)))
+
+(defun consent-session--source-field-name (datum name description)
+  "Return source DATUM field NAME as a stable string for DESCRIPTION."
+  (consent-session--name
+   (consent-session--datum-field-value datum name)
+   description))
+
+(defun consent-session--source-field-symbol (datum name description)
+  "Return source DATUM field NAME as an Emacs symbol for DESCRIPTION."
+  (intern
+   (consent-session--source-field-name datum name description)))
 
 (defun consent-session--current-project-root ()
   "Return the current `project.el' root, or nil."
@@ -379,14 +457,34 @@ Return the stale handles that were removed."
   (setf (consent-session-updated-at session)
         (consent-session--timestamp)))
 
-(defun consent-session--transition! (session to operation &optional fields)
-  "Move SESSION to lifecycle state TO for OPERATION and audit it."
-  (unless (memq to consent-session-states)
-    (signal 'consent-session-error
-            (list (format "unknown session status: %S" to))))
-  (let ((from (consent-session-status session)))
-    (setf (consent-session-status session) to)
-    (consent-session--set-updated! session)
+(defun consent-session--record-lifecycle!
+    (session to operation &optional fields source-procedure)
+  "Record SESSION moving to TO for OPERATION through the source model."
+  (let ((from (consent-session-status session))
+        (timestamp (consent-session--timestamp))
+        datum)
+    (setq datum
+          (if source-procedure
+              (consent-session--source-call
+               source-procedure
+               (consent-session--source-store)
+               (consent-session--source-id
+                (consent-session-id session) "session id")
+               (consent-session--source-fields
+                session
+                (list :updated-at timestamp)))
+            (consent-session--source-call
+             "session-store-set-fields!"
+             (consent-session--source-store)
+             (consent-session--source-id
+              (consent-session-id session) "session id")
+             (consent-session--source-fields
+              session
+              (list :status to :updated-at timestamp)))))
+    (setf (consent-session-status session)
+          (consent-session--source-field-symbol
+           datum "status" "session status"))
+    (setf (consent-session-updated-at session) timestamp)
     (consent-audit-record
      'session-lifecycle
      (append
@@ -395,10 +493,10 @@ Return the stale handles that were removed."
         (session . ,(consent-session--symbol
                      (consent-session-id session)))
         (from . ,from)
-        (to . ,to)
+        (to . ,(consent-session-status session))
         (decision . completed))
-      fields)))
-  session)
+      fields))
+    datum))
 
 (defun consent-session--require (id)
   "Return the durable session named ID or signal."
@@ -443,8 +541,8 @@ Return the stale handles that were removed."
       (consent-session--set-updated! session)))
   session)
 
-(defun consent-session--register! (session)
-  "Register SESSION unless it is a fresh collectable session."
+(defun consent-session--register-live! (session)
+  "Register live SESSION unless it is a fresh collectable session."
   (unless (eq (consent-session-scope session) 'fresh)
     (when (gethash (consent-session-id session)
                    consent--session-registry)
@@ -456,23 +554,24 @@ Return the stale handles that were removed."
              consent--session-registry))
   session)
 
-(defun consent-session--make (scope options)
-  "Construct a session for SCOPE using OPTIONS."
+(defun consent-session--make-live (scope options source-datum)
+  "Construct a live Emacs session for SCOPE from SOURCE-DATUM."
   (let* ((normalized-scope (consent-session--scope scope))
-         (id-value (consent-session--option options :id nil))
-         (id (if id-value
-                 (consent-session--name id-value "session id")
-               (consent-session--generated-id normalized-scope)))
+         (id (consent-session--source-field-name
+              source-datum "id" "session id"))
+         (status (consent-session--source-field-symbol
+                  source-datum "status" "session status"))
          (environment (consent-make-base-environment))
          (context (consent--new-eval-context options))
          (capability-grants
           (consent-session--option options :capability-grants nil))
-         (timestamp (consent-session--timestamp))
+         (timestamp
+          (or (consent-session--datum-field-value source-datum "created-at")
+              (consent-session--timestamp)))
          (project-root
           (when (eq normalized-scope 'project)
             (or (consent-session--option options :project-root nil)
-                (consent-session--current-project-root))))
-         (status (if (eq normalized-scope 'fresh) 'collectable 'new)))
+                (consent-session--current-project-root)))))
     (setf (consent--eval-context-interaction-environment context)
           environment)
     (setf (consent--eval-context-capability-grants context)
@@ -494,104 +593,69 @@ Return the stale handles that were removed."
      :handles nil
      :transcript nil
      :recent-events nil
-     :snapshots nil
      :capability-grants capability-grants
      :skill-activations
      (consent-session--option options :skill-activations nil)
      :locked-by-job nil
-     :parent-id (consent-session--option options :parent-id nil)
-     :forked-from (consent-session--option options :forked-from nil)
      :created-at timestamp
      :updated-at timestamp)))
 
 (defun consent-session-datum (session)
   "Return SESSION as a Scheme-readable datum."
-  (append
-   (list
-    (consent-session--symbol "session")
-    (consent-session--field
-     "id" (consent-session--symbol (consent-session-id session)))
-    (consent-session--field
-     "scope" (consent-session--symbol
-              (consent-session-scope session)))
-    (consent-session--field
-     "status" (consent-session--symbol
-               (consent-session-status session))))
-   (when (consent-session-locked-by-job session)
-     (list (consent-session--field
-            "locked-by-job"
-            (consent-session--symbol
-             (consent-session-locked-by-job session)))))
-   (when (consent-session-project-root session)
-     (list (consent-session--field
-            "project-root" (consent-session-project-root session))))
-   (when (consent-session-parent-id session)
-     (list (consent-session--field
-            "parent-id"
-            (consent-session--symbol
-             (consent-session-parent-id session)))))
-   (when (consent-session-forked-from session)
-     (list (consent-session--field
-            "forked-from"
-            (consent-session--symbol
-             (consent-session-forked-from session)))))
-   (list
-    (consent-session--field
-     "imports" (consent-session--session-imports session))
-    (consent-session--field
-     "definitions"
-     (consent-session--name-list-datum
-      (consent-session--session-definitions session)))
-    (consent-session--field
-     "macros"
-     (consent-session--name-list-datum
-      (consent-session--session-macros session)))
-    (consent-session--field "memory"
-                                  (consent-session-memory session))
-    (consent-session--field "handles"
-                                  (consent-session-handles session))
-    (consent-session--field
-     "capability-grants"
-     (consent-session-capability-grants session))
-    (consent-session--field
-     "skill-activations"
-     (consent-session-skill-activations session))
-    (consent-session--field "transcript"
-                                  (consent-session-transcript session))
-    (consent-session--field "recent-events"
-                                  (consent-session-recent-events session))
-    (consent-session--field
-     "snapshots"
-     (mapcar
-      (lambda (snapshot)
-        (cadr (cadr snapshot)))
-      (consent-session-snapshots session)))
-    (consent-session--field "created-at"
-                                  (consent-session-created-at session))
-    (consent-session--field "updated-at"
-                                  (consent-session-updated-at session)))
-   (when (consent-session-retired-at session)
-     (list (consent-session--field
-            "retired-at" (consent-session-retired-at session))))
-   (when (consent-session-failure session)
-     (list (consent-session--field
-            "failure" (consent-session-failure session))))))
+  (consent-session--source-sync! session))
 
 ;;;###autoload
 (defun consent-session-create! (scope &optional options)
   "Create a session in SCOPE using OPTIONS and return its datum."
-  (let ((session (consent-session--register!
-                  (consent-session--make scope options))))
-    (consent-audit-record
-     'session-lifecycle
-     `((category . agent-session)
-       (operation . "session-create!")
-       (session . ,(consent-session--symbol
-                    (consent-session-id session)))
-       (scope . ,(consent-session-scope session))
-       (to . ,(consent-session-status session))
-       (decision . completed)))
-    (consent-session-datum session)))
+  (let* ((normalized-scope (consent-session--scope scope))
+         (timestamp (consent-session--timestamp))
+         (project-root
+          (when (eq normalized-scope 'project)
+            (or (consent-session--option options :project-root nil)
+                (consent-session--current-project-root))))
+         (source-options
+          (consent-session--source-options
+           options
+           (append
+            (list :created-at timestamp :updated-at timestamp)
+            (when project-root
+              (list :project-root project-root)))))
+         (source-datum
+          (consent-session--source-call
+           "session-store-create!"
+           (consent-session--source-store)
+           (consent-session--symbol normalized-scope)
+           source-options)))
+    (if (eq normalized-scope 'fresh)
+        (progn
+          (consent-audit-record
+           'session-lifecycle
+           `((category . agent-session)
+             (operation . "session-create!")
+             (session . ,(consent-session--datum-field-value
+                          source-datum "id"))
+             (scope . fresh)
+             (to . collectable)
+             (decision . completed)))
+          source-datum)
+      (let ((session
+             (consent-session--register-live!
+              (consent-session--make-live
+               normalized-scope
+               (append options
+                       (when project-root
+                         (list :project-root project-root)))
+               source-datum))))
+        (consent-audit-record
+         'session-lifecycle
+         `((category . agent-session)
+           (operation . "session-create!")
+           (session . ,(consent-session--symbol
+                        (consent-session-id session)))
+           (scope . ,(consent-session-scope session))
+           (to . ,(consent-session-status session))
+           (decision . completed)))
+        (consent-session-datum session)))))
 
 ;;;###autoload
 (defun consent-session-ref (id)
@@ -602,31 +666,31 @@ Return the stale handles that were removed."
 ;;;###autoload
 (defun consent-session-list (&optional scope)
   "Return known session datums, optionally filtered by SCOPE."
-  (let ((normalized-scope (and scope (consent-session--scope scope)))
-        sessions)
+  (let ((normalized-scope (and scope (consent-session--scope scope))))
     (maphash
      (lambda (_id session)
-       (when (or (not normalized-scope)
-                 (eq (consent-session-scope session) normalized-scope))
-         (push session sessions)))
+       (consent-session--source-sync! session))
      consent--session-registry)
-    (mapcar #'consent-session-datum
-            (sort sessions
-                  (lambda (left right)
-                    (string< (consent-session-id left)
-                             (consent-session-id right)))))))
+    (if normalized-scope
+        (consent-session--source-call
+         "session-store-list"
+         (consent-session--source-store)
+         (consent-session--symbol normalized-scope))
+      (consent-session--source-call
+       "session-store-list"
+       (consent-session--source-store)))))
 
 (defun consent-session--datum-field-value (datum name)
-  "Return field NAME from public session DATUM, or nil."
-  (when (and (consp datum)
-             (consent-symbol-p (car datum))
-             (equal (consent-symbol-name (car datum)) "session"))
+  "Return field NAME from public tagged DATUM, or nil."
+  (when (consp datum)
     (cadr
      (seq-find
       (lambda (field)
         (and (consp field)
-             (consent-symbol-p (car field))
-             (equal (consent-symbol-name (car field)) name)))
+             (or (and (consent-symbol-p (car field))
+                      (equal (consent-symbol-name (car field)) name))
+                 (and (symbolp (car field))
+                      (equal (symbol-name (car field)) name)))))
       (cdr datum)))))
 
 (defun consent-session--datum-p (datum)
@@ -656,102 +720,45 @@ Return the stale handles that were removed."
 (defun consent-session-suspend! (id)
   "Suspend session ID and return its updated datum."
   (let ((session (consent-session--require id)))
-    (when (memq (consent-session-status session) '(retired collectable))
-      (signal 'consent-session-error
-              (list "retired sessions cannot be suspended")))
-    (consent-session-datum
-     (consent-session--transition!
-      session 'suspended "session-suspend!"))))
+    (consent-session--record-lifecycle!
+     session 'suspended "session-suspend!" nil "session-store-suspend!")))
 
 ;;;###autoload
 (defun consent-session-resume! (id)
   "Resume session ID and return its updated datum."
   (let ((session (consent-session--require id)))
-    (when (memq (consent-session-status session) '(retired collectable))
-      (signal 'consent-session-error
-              (list "retired sessions cannot be resumed")))
     (setf (consent-session-failure session) nil)
-    (consent-session-datum
-     (consent-session--transition!
-      session 'active "session-resume!"))))
-
-(defun consent-session--snapshot-id (options)
-  "Return snapshot id from OPTIONS or a generated id."
-  (let ((id (consent-session--option options :id nil)))
-    (if id
-        (consent-session--name id "snapshot id")
-      (consent-session--generated-snapshot-id))))
+    (consent-session--record-lifecycle!
+     session 'active "session-resume!" nil "session-store-resume!")))
 
 ;;;###autoload
 (defun consent-session-snapshot! (id &optional options)
   "Snapshot session ID using OPTIONS and return a Scheme-readable record."
   (let* ((session (consent-session--require id))
-         (snapshot-id (consent-session--snapshot-id options))
          (stale-handles (consent-session--cleanup-handles session))
+         (timestamp (consent-session--timestamp))
          (snapshot
-          (list
-           (consent-session--symbol "session-snapshot")
-           (consent-session--field
-            "id" (consent-session--symbol snapshot-id))
-           (consent-session--field
-           "source-session"
-           (consent-session--symbol (consent-session-id session)))
-           (consent-session--field "scope"
-                                        (consent-session--symbol
-                                         (consent-session-scope session)))
-           (consent-session--field "status"
-                                        (consent-session--symbol
-                                         (consent-session-status
-                                          session)))
-           (consent-session--field
-            "imports" (consent-session--session-imports session))
-           (consent-session--field
-            "definitions"
-            (consent-session--name-list-datum
-             (consent-session--session-definitions session)))
-           (consent-session--field
-            "macros"
-            (consent-session--name-list-datum
-             (consent-session--session-macros session)))
-           (consent-session--field "memory"
-                                        (consent-session-memory session))
-           (consent-session--field
-            "capability-grants"
-            (consent-session-capability-grants session))
-           (consent-session--field
-            "skill-activations"
-            (consent-session-skill-activations session))
-           (consent-session--field
-            "handles" (consent-session-handles session))
-           (consent-session--field "stale-handles" stale-handles)
-           (consent-session--field
-            "transcript" (consent-session-transcript session))
-           (consent-session--field
-            "recent-events" (consent-session-recent-events session))
-           (consent-session--field
-            "restores"
-            (consent-session--name-list-datum
-             (mapcar #'symbol-name consent-session-restored-fields)))
-           (consent-session--field
-            "revalidates"
-            (consent-session--name-list-datum
-             (mapcar #'symbol-name consent-session-revalidated-fields)))
-           (consent-session--field
-            "never-restore"
-            (consent-session--name-list-datum
-             (mapcar #'symbol-name
-                     consent-session-never-restored-fields)))
-           (consent-session--field
-            "created-at" (consent-session--timestamp)))))
-    (push snapshot (consent-session-snapshots session))
-    (consent-session--set-updated! session)
+          (progn
+            (setf (consent-session-updated-at session) timestamp)
+            (consent-session--source-sync! session)
+            (consent-session--source-call
+             "session-store-snapshot!"
+             (consent-session--source-store)
+             (consent-session--source-id
+              (consent-session-id session) "session id")
+             (consent-session--source-options
+              options
+              (list :created-at timestamp
+                    :updated-at timestamp
+                    :stale-handles stale-handles))))))
     (consent-audit-record
      'session-lifecycle
      `((category . agent-session)
        (operation . "session-snapshot!")
        (session . ,(consent-session--symbol
                     (consent-session-id session)))
-       (snapshot . ,(consent-session--symbol snapshot-id))
+       (snapshot . ,(consent-session--datum-field-value
+                     snapshot "id"))
        (decision . completed)))
     snapshot))
 
@@ -880,12 +887,20 @@ Return the stale handles that were removed."
   "Fork session ID using OPTIONS and return the new session datum."
   (let* ((source (consent-session--require id))
          (_stale-handles (consent-session--cleanup-handles source))
-         (fork-id-value (consent-session--option options :id nil))
+         (timestamp (consent-session--timestamp))
+         (_source-datum (consent-session--source-sync! source))
+         (fork-datum
+          (consent-session--source-call
+           "session-store-fork!"
+           (consent-session--source-store)
+           (consent-session--source-id
+            (consent-session-id source) "session id")
+           (consent-session--source-options
+            options
+            (list :created-at timestamp :updated-at timestamp))))
          (fork-id
-          (if fork-id-value
-              (consent-session--name fork-id-value "fork session id")
-            (consent-session--generated-id
-             (consent-session-scope source))))
+          (consent-session--source-field-name
+           fork-datum "id" "fork session id"))
          (environment
           (consent-session--copy-environment
            (consent-session-environment source)))
@@ -893,12 +908,12 @@ Return the stale handles that were removed."
           (consent-session--copy-context
            (consent-session-context source)
            environment))
-         (timestamp (consent-session--timestamp))
          (fork
           (consent--make-session
            :id fork-id
            :scope (consent-session-scope source)
-           :status 'new
+           :status (consent-session--source-field-symbol
+                    fork-datum "status" "session status")
            :environment environment
            :context context
            :baseline-bindings
@@ -912,17 +927,15 @@ Return the stale handles that were removed."
            (copy-tree (consent-session-transcript source))
            :recent-events
            (copy-tree (consent-session-recent-events source))
-           :snapshots nil
            :capability-grants
            (copy-tree (consent-session-capability-grants source))
            :skill-activations
            (copy-tree (consent-session-skill-activations source))
            :locked-by-job nil
-           :parent-id (consent-session-id source)
-           :forked-from (consent-session-id source)
            :created-at timestamp
            :updated-at timestamp)))
-    (consent-session--register! fork)
+    (setf (consent--eval-context-session-id context) fork-id)
+    (consent-session--register-live! fork)
     (consent-audit-record
      'session-lifecycle
      `((category . agent-session)
@@ -944,10 +957,10 @@ Return the stale handles that were removed."
       (setf (consent-session-handles session) nil)
       (setf (consent-session-retired-at session)
             (consent-session--timestamp))
-      (consent-session-datum
-       (consent-session--transition!
-        session 'retired "session-retire!"
-        `((released-handles . ,released)))))))
+      (consent-session--record-lifecycle!
+       session 'retired "session-retire!"
+       `((released-handles . ,released))
+       "session-store-retire!"))))
 
 ;;;###autoload
 (defun consent-session-clear! ()
@@ -958,8 +971,7 @@ Return the stale handles that were removed."
       (consent-session-handles session)))
    consent--session-registry)
   (clrhash consent--session-registry)
-  (setq consent--next-session-number 0)
-  (setq consent--next-snapshot-number 0)
+  (setq consent--session-source-store nil)
   (setq consent--session-current-job-id nil)
   consent-unspecified)
 
@@ -1042,7 +1054,8 @@ Return the stale handles that were removed."
       (setf (consent--eval-context-event-hook context) nil))
     (setf (consent--eval-context-interaction-environment context)
           (consent-session-environment session)))
-  (consent-session--transition! session 'active "session-eval-start!"))
+  (consent-session--record-lifecycle!
+   session 'active "session-eval-start!"))
 
 (defun consent-session--record-eval-success!
     (session source value start-count)
@@ -1076,7 +1089,8 @@ Return the stale handles that were removed."
        (events . ,events)
        (decision . allowed)
        (result . ,(consent-value->external value))))
-    (consent-session--transition! session 'idle "session-eval-finish!"))
+    (consent-session--record-lifecycle!
+     session 'idle "session-eval-finish!"))
   value)
 
 (defun consent-session--record-eval-error!
@@ -1131,7 +1145,7 @@ Return the stale handles that were removed."
        (events . ,events)
        (decision . ,audit-decision)
        (error . ,message)))
-    (consent-session--transition!
+    (consent-session--record-lifecycle!
      session session-status transition-operation))
   condition)
 
