@@ -125,11 +125,11 @@ Current procedures:
 - `(consent-version)` returns the canonical Consent Scheme runtime version
   datum, shaped as `(consent-version major minor ordinal)`.
   Components are exact non-negative integers. The current value is
-  `(consent-version 0 17 34)`: the `major` and `minor` components come from
+  `(consent-version 0 17 35)`: the `major` and `minor` components come from
   the roadmap chunk's dotted number (`Chunk 0.17` → `0.17`), and `ordinal` is
   the issue's one-based position in that chunk. The major component is no longer
   hardcoded to `0`; a future `Chunk 1.x` line yields `1.x.x` versions while the
-  datum shape stays the same. Strings such as `0.17.34` are derived presentation,
+  datum shape stays the same. Strings such as `0.17.35` are derived presentation,
   not the canonical value. This scheme is roadmap-derived from #53, with
   completed chunks recorded in `docs/release-notes.md`.
 - `(current-capabilities)` returns public `host-capability` records from the
@@ -178,6 +178,47 @@ Current procedures:
   `(budget ...)` `spec` for that dynamic extent. See [budgets.md](budgets.md).
 - `(current-imports)` returns the libraries registered in the current
   evaluation context.
+- `(libraries)` returns manifest-backed `library-info` records for repo-owned
+  libraries known to the runtime. Each record includes `name`, `category`,
+  `status`, `source-kind`, `source-file`, `aliases`, `target`, `exports`,
+  `dependencies`, `origin`, `source-id`, and `summary` fields.
+- `(library-info library-name)` returns one `library-info` record or `#f` when
+  the library name is not cataloged.
+- `(library-search query)` searches cataloged library names, aliases,
+  categories, source paths, and exports, returning matching `library-info`
+  records.
+- `(catalog-sources)` returns `catalog-source` records for the active catalog
+  inputs in deterministic precedence order. The built-in seed is always present;
+  ad-hoc manifests and explicit manifest-root inputs appear ahead of it.
+- `(catalog-diagnostics)` returns Scheme-readable diagnostics from the most
+  recent catalog build, including duplicate-library diagnostics when a higher
+  precedence source shadows a later source.
+- `(add-manifest! source-id manifest)` and
+  `(remove-manifest! source-id)` add, replace, and remove explicit ad-hoc
+  manifest datums. A manifest is a `(library-catalog ...)` datum containing
+  `(library ...)` entries; it is validated before it affects discovery.
+- `(add-manifest-root! root manifest)` and
+  `(remove-manifest-root! root)` add, replace, and remove explicit
+  manifest-root inputs supplied as Scheme-readable manifest datums. These
+  operations update discovery metadata only; they do not grant authority to
+  import, load, or execute source.
+- `(refresh-library-catalog!)` clears cached catalog views and diagnostics.
+- `(library-bindings library-name)` returns the currently registered exported
+  bindings for an imported library.
+- `(library-documentation library-name)` resolves a cataloged library in a
+  private reflection context and returns documentation records for documented
+  exports without adding the library to the caller's current imports.
+- `(binding-libraries symbol-or-name)` returns cataloged libraries that export
+  the requested binding.
+- `(documented-bindings)` returns documentation records for documented
+  bindings in the current interaction environment.
+- `(apropos query)` searches current documented bindings and library catalog
+  metadata, returning `apropos-match` records.
+- `(reflection-field record field [default])`,
+  `(documentation-field documentation field [default])`, and
+  `(docstring subject [default])` are helper accessors for Scheme-readable
+  reflection records. A present field whose value is `#f` remains `#f`; the
+  default is used only when the field or documentation is absent.
 - `(current-session-info)` returns public session/job identity and event count
   information for the current evaluation.
 - `(recent-yields)`, `(recent-errors)`, and `(recent-policy-decisions)` return
@@ -244,7 +285,7 @@ boundary remains Scheme-readable data.
 Current implemented pieces:
 
 - `(consent-version)` reports the roadmap-derived runtime version as
-  `(consent-version 0 17 34)`, and the Emacs host-adapter fixture points
+  `(consent-version 0 17 35)`, and the Emacs host-adapter fixture points
   at `scheme/consent/version.sld` as the single source of truth for the
   runtime version datum.
 - R7RS `cond-expand` library requirements are available for implemented
@@ -255,8 +296,15 @@ Current implemented pieces:
 - The Emacs host-adapter declaration and capability manifest fixture is checked
   in as `fixtures/host-adapters/emacs.scm`.
 - `(agent reflect)` exposes capability, documentation, policy, budget, import,
+  manifest-backed library catalog, library discovery, binding crosswalk,
   session, macro expansion, recent yield, recent error, and recent
   policy-decision snapshots.
+- Runtime source-file enumeration is derived from the same catalog seed used by
+  library discovery, keeping the builder's embedded-source manifest and
+  reflection metadata on one repo-owned path list.
+- Ad-hoc manifest datums and explicit manifest-root inputs can be added,
+  inspected, refreshed, and removed at runtime. They participate in discovery
+  precedence and duplicate diagnostics, but remain metadata-only.
 
 Tracked follow-up work:
 

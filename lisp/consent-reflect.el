@@ -33,6 +33,18 @@
 (declare-function consent--library-binding-name "consent-library")
 (declare-function consent--library-exports "consent-library")
 (declare-function consent--library-name-key "consent-library")
+(declare-function consent--library-catalog-private-context "consent-library")
+(declare-function consent--resolve-library "consent-library")
+(declare-function consent-library-catalog-entries "consent-library")
+(declare-function consent-library-catalog-entry "consent-library")
+(declare-function consent-library-catalog-search "consent-library")
+(declare-function consent-library-catalog-sources "consent-library")
+(declare-function consent-library-catalog-diagnostics "consent-library")
+(declare-function consent-library-catalog-add-manifest "consent-library")
+(declare-function consent-library-catalog-remove-manifest "consent-library")
+(declare-function consent-library-catalog-add-root "consent-library")
+(declare-function consent-library-catalog-remove-root "consent-library")
+(declare-function consent-library-catalog-refresh "consent-library")
 
 (defconst consent-reflect--omitted-manifest-fields
   '(:emacs-hook :portable-hook :emitter-hook :test-categories)
@@ -645,6 +657,287 @@ callers can distinguish unbounded from exhausted."
      #'consent-reflect--library-binding-datum
      (consent--library-exports library))))
 
+(defun consent-reflect--library-list-datum (keys)
+  "Return KEYS as Scheme-readable library-name datums."
+  (mapcar #'consent-reflect--library-datum keys))
+
+(defun consent-reflect--symbol-list-datum (names)
+  "Return NAMES as Scheme symbol datums."
+  (mapcar #'consent-reflect--symbol names))
+
+(defun consent-reflect--library-info-record (entry)
+  "Return catalog ENTRY as a Scheme-readable `library-info' record."
+  (list
+   (consent-reflect--symbol "library-info")
+   (consent-reflect--field
+    "name"
+    (consent-reflect--library-datum (plist-get entry :name)))
+   (consent-reflect--field
+    "category"
+    (consent-reflect--symbol (plist-get entry :category)))
+   (consent-reflect--field
+    "status"
+    (consent-reflect--symbol (plist-get entry :status)))
+   (consent-reflect--field
+    "source-kind"
+    (consent-reflect--symbol (plist-get entry :source-kind)))
+   (consent-reflect--field
+    "source-file"
+    (or (plist-get entry :source-file) consent-false))
+   (consent-reflect--field
+    "aliases"
+    (consent-reflect--library-list-datum
+     (plist-get entry :aliases)))
+   (consent-reflect--field
+    "target"
+    (if (plist-get entry :target)
+        (consent-reflect--library-datum (plist-get entry :target))
+      consent-false))
+   (consent-reflect--field
+    "exports"
+    (consent-reflect--symbol-list-datum
+     (plist-get entry :exports)))
+   (consent-reflect--field
+    "dependencies"
+    (consent-reflect--library-list-datum
+     (plist-get entry :dependencies)))
+   (consent-reflect--field
+    "origin"
+    (consent-reflect--symbol (plist-get entry :origin)))
+   (consent-reflect--field
+    "source-id"
+    (let ((source-id (plist-get entry :source-id)))
+      (cond
+       ((stringp source-id) source-id)
+       ((symbolp source-id) (consent-reflect--symbol source-id))
+       ((null source-id) consent-false)
+       (t source-id))))
+   (consent-reflect--field
+    "summary"
+    (or (plist-get entry :summary) consent-false))))
+
+(defun consent-reflect-libraries ()
+  "Return cataloged libraries as `library-info' records."
+  (mapcar #'consent-reflect--library-info-record
+          (consent-library-catalog-entries)))
+
+(defun consent-reflect-library-info (library-name)
+  "Return catalog metadata for LIBRARY-NAME, or #f when absent."
+  (let ((entry (consent-library-catalog-entry library-name)))
+    (if entry
+        (consent-reflect--library-info-record entry)
+      consent-false)))
+
+(defun consent-reflect-library-search (query)
+  "Return catalog entries matching QUERY."
+  (mapcar #'consent-reflect--library-info-record
+          (consent-library-catalog-search
+           (cond
+            ((consent-symbol-p query) (consent-symbol-name query))
+            ((symbolp query) (symbol-name query))
+            ((stringp query) query)
+            (t (consent-value->external query))))))
+
+(defun consent-reflect-catalog-sources ()
+  "Return manifest catalog source records."
+  (consent-library-catalog-sources))
+
+(defun consent-reflect-catalog-diagnostics ()
+  "Return manifest catalog diagnostics."
+  (consent-library-catalog-diagnostics))
+
+(defun consent-reflect--catalog-private-library (library-name)
+  "Return (LIBRARY . CONTEXT) for LIBRARY-NAME in a private catalog context."
+  (let* ((pair (consent--library-catalog-private-context))
+         (context (car pair))
+         (environment (cdr pair))
+         (key (consent--library-name-key library-name))
+         (library
+          (consent--resolve-library
+           (consent-read key)
+           context
+           environment)))
+    (cons library context)))
+
+(defun consent-reflect-library-documentation (library-name)
+  "Return documentation records for exported bindings in LIBRARY-NAME.
+The lookup resolves the library in a private context so the caller's current
+import environment is not mutated."
+  (let* ((library/context
+          (consent-reflect--catalog-private-library library-name))
+         (library (car library/context))
+         (context (cdr library/context)))
+    (delq
+     consent-false
+     (mapcar
+      (lambda (binding)
+        (consent-reflect-documentation
+         (consent-reflect--symbol
+          (consent--library-binding-name binding))
+         context))
+      (consent--library-exports library)))))
+
+(defun consent-reflect-binding-libraries (symbol-or-name)
+  "Return cataloged libraries exporting SYMBOL-OR-NAME."
+  (let ((name (consent-reflect--binding-name symbol-or-name)))
+    (mapcar
+     #'consent-reflect--library-info-record
+     (seq-filter
+      (lambda (entry)
+        (member name (plist-get entry :exports)))
+      (consent-library-catalog-entries)))))
+
+(defun consent-reflect-documented-bindings (context)
+  "Return documentation records for documented bindings in CONTEXT."
+  (let (names)
+    (maphash
+     (lambda (name _cell)
+       (push name names))
+     (consent--environment-bindings
+      (consent--eval-context-interaction-environment context)))
+    (delq
+     consent-false
+     (mapcar
+      (lambda (name)
+        (consent-reflect-documentation
+         (consent-reflect--symbol name)
+         context))
+      (sort names #'string<)))))
+
+(defun consent-reflect--field-name-string (name)
+  "Return reflection field NAME as a string."
+  (cond
+   ((consent-symbol-p name) (consent-symbol-name name))
+   ((symbolp name) (symbol-name name))
+   ((stringp name) name)
+   (t (consent-value->external name))))
+
+(defun consent-reflect-reflection-field (record name default)
+  "Return NAME's value in RECORD, or DEFAULT when absent.
+A present field whose value is Scheme `#f' is returned as `#f' rather than
+falling back to DEFAULT."
+  (if (or (eq record consent-false) (not (consp record)))
+      default
+    (let* ((field-name (consent-reflect--field-name-string name))
+           (entry
+            (seq-find
+             (lambda (candidate)
+               (and (consp candidate)
+                    (equal (consent-reflect--record-head-name candidate)
+                           field-name)))
+             (cdr record))))
+      (if entry
+          (cadr entry)
+        default))))
+
+(defun consent-reflect-documentation-field (documentation name default)
+  "Return NAME's value from DOCUMENTATION metadata, or DEFAULT."
+  (let ((fields
+         (consent-reflect-reflection-field
+          documentation
+          (consent-reflect--symbol "fields")
+          consent-false)))
+    (if (or (eq fields consent-false) (not (listp fields)))
+        default
+      (let* ((field-name (consent-reflect--field-name-string name))
+             (entry
+              (seq-find
+               (lambda (candidate)
+                 (and (consp candidate)
+                      (equal (consent-reflect--record-head-name candidate)
+                             field-name)))
+               fields)))
+        (if entry
+            (cadr entry)
+          default)))))
+
+(defun consent-reflect-docstring (subject default context)
+  "Return SUBJECT's documentation string, or DEFAULT when absent."
+  (let ((documentation
+         (if (and (consp subject)
+                  (equal (consent-reflect--record-head-name subject)
+                         "documentation-metadata"))
+             subject
+           (consent-reflect-documentation subject context))))
+    (consent-reflect-documentation-field
+     documentation
+     (consent-reflect--symbol "documentation")
+     default)))
+
+(defun consent-reflect--documentation-summary (documentation)
+  "Return DOCUMENTATION's human documentation string, or #f."
+  (consent-reflect-documentation-field
+   documentation
+   (consent-reflect--symbol "documentation")
+   consent-false))
+
+(defun consent-reflect--apropos-match (kind name matched summary)
+  "Return a compact apropos match record."
+  (list
+   (consent-reflect--symbol "apropos-match")
+   (consent-reflect--field "kind" (consent-reflect--symbol kind))
+   (consent-reflect--field "name" name)
+   (consent-reflect--field
+    "matched"
+    (consent-reflect--symbol-list-datum matched))
+   (consent-reflect--field "summary" summary)))
+
+(defun consent-reflect-apropos (query context)
+  "Search current documented bindings and library catalog for QUERY."
+  (let* ((needle
+          (downcase
+           (cond
+            ((consent-symbol-p query) (consent-symbol-name query))
+            ((symbolp query) (symbol-name query))
+            ((stringp query) query)
+            (t (consent-value->external query)))))
+         (binding-matches
+          (delq
+           nil
+           (mapcar
+            (lambda (documentation)
+              (let* ((subject
+                      (consent-reflect--field-value documentation "subject"))
+                     (name
+                      (and (consp subject)
+                           (cadr subject)))
+                     (name-text
+                      (and (consent-symbol-p name)
+                           (consent-symbol-name name)))
+                     (summary
+                      (consent-reflect--documentation-summary documentation))
+                     (summary-text
+                      (and (stringp summary) summary)))
+                (when (and name-text
+                           (or (string-match-p
+                                (regexp-quote needle)
+                                (downcase name-text))
+                               (and summary-text
+                                    (string-match-p
+                                     (regexp-quote needle)
+                                     (downcase summary-text)))))
+                  (consent-reflect--apropos-match
+                   "binding"
+                   name
+                   (if (and summary-text
+                            (string-match-p
+                             (regexp-quote needle)
+                             (downcase summary-text)))
+                       '("documentation" "name")
+                     '("name"))
+                   summary))))
+            (consent-reflect-documented-bindings context))))
+         (library-matches
+          (mapcar
+           (lambda (entry)
+             (consent-reflect--apropos-match
+              "library"
+              (consent-reflect--library-datum (plist-get entry :name))
+              '("library")
+              (or (plist-get entry :source-file) consent-false)))
+           (consent-library-catalog-search needle))))
+    (append binding-matches library-matches)))
+
 (defun consent-reflect-current-session-info (context)
   "Return public session/job identity for CONTEXT."
   (list
@@ -806,6 +1099,108 @@ can classify a recent error or a nested evaluation's outcome."
   (consent-reflect--redact
    (consent-reflect-library-bindings (car arguments) context)))
 
+(defun consent-reflect--primitive-libraries (_arguments _context)
+  "Primitive `libraries'."
+  (consent-reflect--redact
+   (consent-reflect-libraries)))
+
+(defun consent-reflect--primitive-library-info (arguments _context)
+  "Primitive `library-info'."
+  (consent-reflect--redact
+   (consent-reflect-library-info (car arguments))))
+
+(defun consent-reflect--primitive-library-search (arguments _context)
+  "Primitive `library-search'."
+  (consent-reflect--redact
+   (consent-reflect-library-search (car arguments))))
+
+(defun consent-reflect--primitive-catalog-sources (_arguments _context)
+  "Primitive `catalog-sources'."
+  (consent-reflect--redact
+   (consent-reflect-catalog-sources)))
+
+(defun consent-reflect--primitive-catalog-diagnostics (_arguments _context)
+  "Primitive `catalog-diagnostics'."
+  (consent-reflect--redact
+   (consent-reflect-catalog-diagnostics)))
+
+(defun consent-reflect--primitive-add-manifest! (arguments _context)
+  "Primitive `add-manifest!'."
+  (consent-reflect--redact
+   (consent-library-catalog-add-manifest (car arguments) (cadr arguments))))
+
+(defun consent-reflect--primitive-remove-manifest! (arguments _context)
+  "Primitive `remove-manifest!'."
+  (consent-reflect--boolean
+   (consent-library-catalog-remove-manifest (car arguments))))
+
+(defun consent-reflect--primitive-add-manifest-root! (arguments _context)
+  "Primitive `add-manifest-root!'."
+  (consent-reflect--redact
+   (consent-library-catalog-add-root (car arguments) (cadr arguments))))
+
+(defun consent-reflect--primitive-remove-manifest-root! (arguments _context)
+  "Primitive `remove-manifest-root!'."
+  (consent-reflect--boolean
+   (consent-library-catalog-remove-root (car arguments))))
+
+(defun consent-reflect--primitive-refresh-library-catalog!
+    (_arguments _context)
+  "Primitive `refresh-library-catalog!'."
+  (consent-reflect--boolean
+   (consent-library-catalog-refresh)))
+
+(defun consent-reflect--primitive-library-documentation
+    (arguments _context)
+  "Primitive `library-documentation'."
+  (consent-reflect--redact
+   (consent-reflect-library-documentation (car arguments))))
+
+(defun consent-reflect--primitive-binding-libraries (arguments _context)
+  "Primitive `binding-libraries'."
+  (consent-reflect--redact
+   (consent-reflect-binding-libraries (car arguments))))
+
+(defun consent-reflect--primitive-documented-bindings
+    (_arguments context)
+  "Primitive `documented-bindings'."
+  (consent-reflect--redact
+   (consent-reflect-documented-bindings context)))
+
+(defun consent-reflect--primitive-apropos (arguments context)
+  "Primitive `apropos'."
+  (consent-reflect--redact
+   (consent-reflect-apropos (car arguments) context)))
+
+(defun consent-reflect--optional-default (arguments)
+  "Return optional helper default from ARGUMENTS, or Scheme #f."
+  (if (cdr arguments)
+      (cadr arguments)
+    consent-false))
+
+(defun consent-reflect--primitive-reflection-field
+    (arguments _context)
+  "Primitive `reflection-field'."
+  (consent-reflect-reflection-field
+   (car arguments)
+   (cadr arguments)
+   (consent-reflect--optional-default (cdr arguments))))
+
+(defun consent-reflect--primitive-documentation-field
+    (arguments _context)
+  "Primitive `documentation-field'."
+  (consent-reflect-documentation-field
+   (car arguments)
+   (cadr arguments)
+   (consent-reflect--optional-default (cdr arguments))))
+
+(defun consent-reflect--primitive-docstring (arguments context)
+  "Primitive `docstring'."
+  (consent-reflect-docstring
+   (car arguments)
+   (consent-reflect--optional-default arguments)
+   context))
+
 (defun consent-reflect--primitive-current-session-info (_arguments context)
   "Primitive `current-session-info'."
   (consent-reflect--redact
@@ -918,6 +1313,40 @@ can classify a recent error or a nested evaluation's outcome."
      ,#'consent-reflect--primitive-current-imports 0 0)
     ("library-bindings"
      ,#'consent-reflect--primitive-library-bindings 1 1)
+    ("libraries"
+     ,#'consent-reflect--primitive-libraries 0 0)
+    ("library-info"
+     ,#'consent-reflect--primitive-library-info 1 1)
+    ("library-search"
+     ,#'consent-reflect--primitive-library-search 1 1)
+    ("catalog-sources"
+     ,#'consent-reflect--primitive-catalog-sources 0 0)
+    ("catalog-diagnostics"
+     ,#'consent-reflect--primitive-catalog-diagnostics 0 0)
+    ("add-manifest!"
+     ,#'consent-reflect--primitive-add-manifest! 2 2)
+    ("remove-manifest!"
+     ,#'consent-reflect--primitive-remove-manifest! 1 1)
+    ("add-manifest-root!"
+     ,#'consent-reflect--primitive-add-manifest-root! 2 2)
+    ("remove-manifest-root!"
+     ,#'consent-reflect--primitive-remove-manifest-root! 1 1)
+    ("refresh-library-catalog!"
+     ,#'consent-reflect--primitive-refresh-library-catalog! 0 0)
+    ("library-documentation"
+     ,#'consent-reflect--primitive-library-documentation 1 1)
+    ("binding-libraries"
+     ,#'consent-reflect--primitive-binding-libraries 1 1)
+    ("documented-bindings"
+     ,#'consent-reflect--primitive-documented-bindings 0 0)
+    ("apropos"
+     ,#'consent-reflect--primitive-apropos 1 1)
+    ("reflection-field"
+     ,#'consent-reflect--primitive-reflection-field 2 3)
+    ("documentation-field"
+     ,#'consent-reflect--primitive-documentation-field 2 3)
+    ("docstring"
+     ,#'consent-reflect--primitive-docstring 1 2)
     ("current-session-info"
      ,#'consent-reflect--primitive-current-session-info 0 0)
     ("recent-yields"
