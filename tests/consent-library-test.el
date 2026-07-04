@@ -119,9 +119,10 @@
   "Vendored SRFI 180 JSON fixture corpus directory.")
 
 (defconst consent-library-test--srfi-180-valid-xfails
-  '(("y_foundationdb_status.json"
-     . "Large valid stress fixture exceeds the current evaluator step budget in this harness."))
-  "Valid SRFI 180 fixtures excluded from the deterministic parser corpus.")
+  nil
+  "Valid SRFI 180 fixtures excluded from the deterministic parser corpus.
+Keep this list empty: upstream `y_*.json' files are positive corpus coverage,
+including large stress fixtures such as `y_foundationdb_status.json'.")
 
 (defconst consent-library-test--srfi-180-invalid-xfails
   '(("n_array_comma_after_close.json"
@@ -197,6 +198,9 @@
     consent-library-test--root
     '("fixtures/srfi-180")
     '(metadata read))
+   ;; The valid corpus intentionally includes y_foundationdb_status.json. The
+   ;; batch ceilings must leave room for that large official fixture while still
+   ;; proving JSON reads are budgeted, not unbounded.
    '(:max-steps 12000000
      :max-host-callbacks 2000000)))
 
@@ -1086,11 +1090,15 @@
     (should (= (length valid) 97))
     (should (= (length invalid) 191))
     (should (= (length implementation) 35))
+    (should (member "y_foundationdb_status.json" valid))
     (dolist (name implementation)
       (should (consent-library-test--srfi-180-implementation-reason name)))
     (dolist (entry consent-library-test--srfi-180-valid-xfails)
       (should (member (car entry) valid))
       (should (stringp (cdr entry))))
+    (should-not
+     (assoc "y_foundationdb_status.json"
+            consent-library-test--srfi-180-valid-xfails))
     (dolist (entry consent-library-test--srfi-180-invalid-xfails)
       (should (member (car entry) invalid))
       (should (stringp (cdr entry))))))
