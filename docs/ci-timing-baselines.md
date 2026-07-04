@@ -37,7 +37,8 @@ the *set of shards* and the project name are not.
 | C | #359–#361 | + source-metadata × docstring combo columns | |
 | D | #362–#405 | + Gambit-native compiled shard | still `agent-scheme` |
 | E | #406–#518 | project renamed to **consent** | current format; shard names gain `Consent Scheme` |
-| F | #520–present | compiled shards parallel/incremental/cached | build-bound shards' wall time becomes cache-dependent; see the Era F section |
+| F | #520–#651 | compiled shards parallel/incremental/cached | build-bound shards' wall time becomes cache-dependent; see the Era F section |
+| G | #652–present | stdlib reference corpus split from library/conformance | compare `Emacs library/conformance` and `Emacs stdlib/reference corpus` as separate rows |
 
 The Era A→B boundary (#355→#356) is a hard discontinuity *for the portable
 side*: the slow single Chibi host (~70s `eval` + a 152s `rest` outlier) was
@@ -46,11 +47,16 @@ The Emacs shards have their own, separate level shift in this window — see the
 observations below; it is driven by two runtime changes (#355, #359), not by the
 host fan-out.
 
-## Current baseline (Era E, PR ≥ #406, `on/full`, 24 PRs)
+## Historical baseline (Era E, PR >= #406, `on/full`, 24 PRs)
 
 ERT seconds unless noted. `Ran` is the per-shard test count (always `1` for a
 portable host, which runs its whole suite as one aggregate test — so for hosts
 the ERT *is* the signal, with no `Ran`-growth guard to apply).
+
+The Emacs rows below predate the Era G stdlib reference corpus split. Until a
+post-split baseline is refreshed, compare Era G library and stdlib-reference
+rows against recent merged Era G PR timing comments rather than against the
+single historical `Emacs library/conformance` row below.
 
 | Shard / host | Ran (med) | ERT median | ERT min–max | Wall median |
 | --- | ---: | ---: | ---: | ---: |
