@@ -925,7 +925,9 @@ shard timing table and a collapsible detail section so reviewers can see timing
 at a glance from the PR conversation. Portable Scheme runners may also emit
 fine-grained `CONSENT_CI_CHECK_SECONDS` diagnostics for slow checks; the
 combined summary keeps those details below the fold and treats shard wall time
-as the primary signal.
+as the primary signal. The above-fold portable-host and Emacs-hosted sections
+use actual CI shard names so full-suite, reflection contract, and reflection
+stress rows can be compared directly across hosts.
 
 Alongside that human-facing summary, the combined timing job emits one
 machine-readable, append-only record per run for longitudinal analysis. The

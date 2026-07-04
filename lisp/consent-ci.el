@@ -89,16 +89,6 @@
     ("Emacs integration/REPL" . 36))
   "Preferred display order for CI shard summaries.")
 
-(defconst consent-ci--portable-host-order
-  '(("Chibi" . 0)
-    ("Gambit" . 1)
-    ("Gambit-compiled Consent Scheme" . 2)
-    ("Racket" . 3)
-    ("Racket-compiled Consent Scheme" . 4)
-    ("Guile" . 5)
-    ("Gauche" . 6))
-  "Preferred display order for portable host timing summaries.")
-
 (defconst consent-ci--source-metadata-order
   '(("on" . 0)
     ("off" . 1))
@@ -379,234 +369,29 @@ skipped totals separately."
   "Return SHARDS in stable report display order."
   (sort (copy-sequence shards) #'consent-ci--shard-less-p))
 
-(defun consent-ci--find-shard-named (shards names)
-  "Return the first shard in SHARDS whose name appears in NAMES."
-  (cl-find-if
-   (lambda (shard)
-     (member (plist-get shard :name) names))
-   shards))
-
 (defun consent-ci--sum-shard-field (shards field)
   "Return the numeric sum of FIELD across SHARDS."
   (let ((total 0))
     (dolist (shard shards total)
       (cl-incf total (or (plist-get shard field) 0)))))
 
-(defun consent-ci--chibi-portable-host-row (shards)
-  "Return an aggregate Chibi portable host row from split SHARDS."
-  (let ((eval-shard
-         (consent-ci--find-shard-named
-          shards
-          '("Portable R7RS Chibi evaluator subset"
-            "Portable Chibi-backed eval")))
-        (rest-shard
-         (consent-ci--find-shard-named
-          shards
-          '("Portable R7RS Chibi non-evaluator subset"
-            "Portable Chibi-backed rest"
-            "Portable Chibi-backed ERT"))))
-    (when (and eval-shard rest-shard)
-      (let ((chibi-shards (list eval-shard rest-shard)))
-        (list :host "Chibi"
-              :coverage "full suite (2 CI shards)"
-              :unexpected (consent-ci--sum-shard-field
-                           chibi-shards :unexpected)
-              :skipped (consent-ci--sum-shard-field
-                        chibi-shards :skipped)
-              :ert-seconds (consent-ci--sum-shard-field
-                            chibi-shards :ert-seconds)
-              :wall-seconds (consent-ci--sum-shard-field
-                             chibi-shards :wall-seconds))))))
-
-(defun consent-ci--portable-full-suite-host (shard)
-  "Return the portable host name for full-suite SHARD, or nil."
-  (let ((name (plist-get shard :name)))
-    (cond
-     ((string-match
-       "\\`Portable R7RS \\(.+\\) full suite\\(?: / .*\\)?\\'"
-       name)
-      (match-string 1 name))
-     ((string= name "Portable Gambit-backed suite")
-      "Gambit")
-     (t nil))))
-
-(defun consent-ci--portable-full-suite-coverage (shard)
-  "Return compact coverage text for portable full-suite SHARD."
-  (let ((name (plist-get shard :name)))
-    (if (string-match
-         "\\`Portable R7RS .+ full suite\\(?: / \\(.*\\)\\)?\\'"
-         name)
-        (if-let ((variant (match-string 1 name)))
-            (concat "full suite, " (string-replace " / " ", " variant))
-          "full suite")
-      "full suite")))
-
-(defun consent-ci--portable-host-row (shard)
-  "Return a compact portable host timing row for SHARD, or nil."
-  (let ((host (consent-ci--portable-full-suite-host shard)))
-    (when host
-      (let ((variant (consent-ci--option-variant shard)))
-        (list :host host
-              :coverage (consent-ci--portable-full-suite-coverage shard)
-              :source-metadata (car variant)
-              :docstrings (cdr variant)
-              :unexpected (plist-get shard :unexpected)
-              :skipped (plist-get shard :skipped)
-              :ert-seconds (plist-get shard :ert-seconds)
-              :wall-seconds (plist-get shard :wall-seconds))))))
-
-(defun consent-ci--portable-host-row-sort-key (row)
-  "Return display sort key for portable host ROW."
-  (or (cdr (assoc (plist-get row :host)
-                  consent-ci--portable-host-order))
-      99))
-
-(defun consent-ci--portable-host-row-less-p (left right)
-  "Return non-nil when LEFT should display before RIGHT."
-  (let ((left-host (consent-ci--portable-host-row-sort-key left))
-        (right-host (consent-ci--portable-host-row-sort-key right))
-        (left-variant (cons (plist-get left :source-metadata)
-                            (plist-get left :docstrings)))
-        (right-variant (cons (plist-get right :source-metadata)
-                             (plist-get right :docstrings))))
-    (cond
-     ((/= left-host right-host)
-      (< left-host right-host))
-     ((and (car left-variant) (car right-variant))
-      (< (consent-ci--option-variant-sort-key left-variant)
-         (consent-ci--option-variant-sort-key right-variant)))
-     ((car left-variant) nil)
-     ((car right-variant) t)
-     (t (string< (plist-get left :coverage)
-                 (plist-get right :coverage))))))
-
-(defun consent-ci--portable-host-rows (shards)
-  "Return comparable portable host timing rows for SHARDS."
-  (let ((chibi-row (consent-ci--chibi-portable-host-row shards))
-        rows)
-    (when chibi-row
-      (push chibi-row rows))
-    (dolist (shard shards)
-      (let ((row (consent-ci--portable-host-row shard)))
-        (when (and row
-                   (not (and chibi-row
-                             (string= (plist-get row :host) "Chibi"))))
-          (push row rows))))
-    (sort rows #'consent-ci--portable-host-row-less-p)))
-
-(defun consent-ci--render-portable-host-row (row)
-  "Render portable host timing ROW as one Markdown table row."
-  (format "| %s | %s | %d | %d | %s | %s |"
-          (consent-ci--markdown-cell (plist-get row :host))
-          (consent-ci--markdown-cell (plist-get row :coverage))
-          (plist-get row :unexpected)
-          (plist-get row :skipped)
-          (consent-ci--format-seconds
-           (plist-get row :ert-seconds))
-          (consent-ci--format-seconds
-           (plist-get row :wall-seconds))))
-
-(defun consent-ci--portable-variant-row-p (row)
-  "Return non-nil when ROW is one source metadata/docstring timing variant."
-  (and (plist-get row :source-metadata)
-       (plist-get row :docstrings)))
-
-(defun consent-ci--sorted-portable-hosts (rows)
-  "Return unique portable host names from ROWS in display order."
-  (let (hosts)
-    (dolist (row rows)
-      (let ((host (plist-get row :host)))
-        (unless (member host hosts)
-          (push host hosts))))
-    (sort hosts
-          (lambda (left right)
-            (< (or (cdr (assoc left consent-ci--portable-host-order)) 99)
-               (or (cdr (assoc right consent-ci--portable-host-order)) 99))))))
-
-(defun consent-ci--find-portable-variant-row (rows host variant)
-  "Return ROWS entry for HOST and source metadata/docstring VARIANT."
-  (cl-find-if
-   (lambda (row)
-     (and (string= (plist-get row :host) host)
-          (string= (plist-get row :source-metadata) (car variant))
-          (string= (plist-get row :docstrings) (cdr variant))))
-   rows))
-
-(defun consent-ci--render-portable-host-matrix (rows)
-  "Return Markdown matrix for portable host timing variant ROWS."
-  (let ((hosts (consent-ci--sorted-portable-hosts rows)))
-    (concat
-     "Host cells show ERT time with CI wall-clock time in parentheses.\n\n"
-     "| Syntax metadata | Docstrings | "
-     (mapconcat #'consent-ci--markdown-cell hosts " | ")
-     " |\n"
-     "| --- | --- | "
-     (mapconcat (lambda (_host) "---:") hosts " | ")
-     " |\n"
-     (mapconcat
-      (lambda (variant)
-        (concat
-         "| "
-         (consent-ci--markdown-cell (car variant))
-         " | "
-         (consent-ci--markdown-cell (cdr variant))
-         " | "
-         (mapconcat
-          (lambda (host)
-            (consent-ci--render-timing-cell
-             (consent-ci--find-portable-variant-row rows host variant)))
-          hosts
-          " | ")
-         " |"))
-      consent-ci--option-variants
-      "\n")
-     "\n\n")))
-
-(defun consent-ci--render-portable-host-table (rows &optional chibi-present)
-  "Return Markdown table for non-matrix portable host timing ROWS.
-CHIBI-PRESENT adds a note explaining aggregate Chibi rows."
-  (concat
-   (when chibi-present
-     "Chibi is split across CI shards; this table aggregates those shards for host-to-host timing comparison.\n\n")
-   "| Host | Coverage | Unexpected | Skipped | ERT time | Wall time |\n"
-   "| --- | --- | ---: | ---: | ---: | ---: |\n"
-   (mapconcat #'consent-ci--render-portable-host-row rows "\n")
-   "\n\n"))
-
-(defun consent-ci--render-portable-host-summary (shards)
-  "Return a top-level portable host timing comparison for SHARDS."
-  (let ((rows (consent-ci--portable-host-rows shards)))
-    (when rows
-      (let* ((variant-rows (cl-remove-if-not
-                            #'consent-ci--portable-variant-row-p
-                            rows))
-             (plain-rows (cl-remove-if
-                          #'consent-ci--portable-variant-row-p
-                          rows))
-             (chibi-present
-              (cl-some
-               (lambda (row)
-                 (string= (plist-get row :host) "Chibi"))
-               plain-rows)))
-        (concat
-         "## Portable Host Timing\n\n"
-         (when variant-rows
-           (consent-ci--render-portable-host-matrix variant-rows))
-         (when plain-rows
-           (consent-ci--render-portable-host-table
-            plain-rows
-            chibi-present)))))))
-
 (defun consent-ci--emacs-shard-p (shard)
   "Return non-nil when SHARD is an Emacs-hosted timing shard."
   (string-prefix-p "Emacs " (plist-get shard :name)))
+
+(defun consent-ci--portable-shard-p (shard)
+  "Return non-nil when SHARD is a portable-host timing shard."
+  (let ((name (plist-get shard :name)))
+    (or (string-prefix-p "Portable R7RS " name)
+        (string-prefix-p "Portable Chibi-backed " name)
+        (string-prefix-p "Portable Gambit-backed " name))))
 
 (defun consent-ci--variant-shard-p (shard)
   "Return non-nil when SHARD has source metadata/docstring variant metadata."
   (not (null (consent-ci--option-variant shard))))
 
-(defun consent-ci--unique-emacs-base-names (shards)
-  "Return unique Emacs logical shard names from SHARDS in display order."
+(defun consent-ci--unique-shard-base-names (shards)
+  "Return unique logical shard names from SHARDS in display order."
   (let (names)
     (dolist (shard (consent-ci--sort-shards shards))
       (let ((name (consent-ci--shard-base-name shard)))
@@ -614,8 +399,8 @@ CHIBI-PRESENT adds a note explaining aggregate Chibi rows."
           (push name names))))
     (nreverse names)))
 
-(defun consent-ci--find-emacs-variant-shard (shards base-name variant)
-  "Return Emacs SHARDS entry matching BASE-NAME and option VARIANT."
+(defun consent-ci--find-variant-shard (shards base-name variant)
+  "Return SHARDS entry matching BASE-NAME and option VARIANT."
   (cl-find-if
    (lambda (shard)
      (let ((shard-variant (consent-ci--option-variant shard)))
@@ -638,8 +423,8 @@ CHIBI-PRESENT adds a note explaining aggregate Chibi rows."
         (format "%d" first)
       (format "%d-%d" first last))))
 
-(defun consent-ci--render-emacs-variant-row (base-name shards)
-  "Return one Emacs timing matrix row for BASE-NAME across SHARDS."
+(defun consent-ci--render-variant-row (base-name shards)
+  "Return one timing matrix row for BASE-NAME across SHARDS."
   (let ((base-shards
          (cl-remove-if-not
           (lambda (shard)
@@ -656,7 +441,7 @@ CHIBI-PRESENT adds a note explaining aggregate Chibi rows."
      (mapconcat
       (lambda (variant)
         (consent-ci--render-timing-cell
-         (consent-ci--find-emacs-variant-shard
+         (consent-ci--find-variant-shard
           base-shards
           base-name
           variant)
@@ -665,8 +450,8 @@ CHIBI-PRESENT adds a note explaining aggregate Chibi rows."
       " | ")
      " |")))
 
-(defun consent-ci--render-emacs-variant-summary (shards)
-  "Return pivoted Markdown for Emacs option-matrix timing SHARDS."
+(defun consent-ci--render-variant-summary (shards)
+  "Return pivoted Markdown for option-matrix timing SHARDS."
   (concat
    "Option columns use `source metadata/docstrings`; cells show ERT time with CI wall-clock time in parentheses.\n\n"
    "| Shard | Ran | Skipped | "
@@ -679,8 +464,8 @@ CHIBI-PRESENT adds a note explaining aggregate Chibi rows."
    " |\n"
    (mapconcat
     (lambda (base-name)
-      (consent-ci--render-emacs-variant-row base-name shards))
-    (consent-ci--unique-emacs-base-names shards)
+      (consent-ci--render-variant-row base-name shards))
+    (consent-ci--unique-shard-base-names shards)
     "\n")
    "\n\n"))
 
@@ -709,9 +494,38 @@ CHIBI-PRESENT adds a note explaining aggregate Chibi rows."
       (concat
        "## Emacs Shard Timing\n\n"
        (when variant-shards
-         (consent-ci--render-emacs-variant-summary variant-shards))
+         (consent-ci--render-variant-summary variant-shards))
        (when plain-shards
          (consent-ci--render-emacs-plain-summary plain-shards))))))
+
+(defun consent-ci--render-portable-plain-summary (shards)
+  "Return compact Markdown for non-matrix portable-host timing SHARDS."
+  (concat
+   "| Shard | Ran | Unexpected | Skipped | ERT time | Wall time |\n"
+   "| --- | ---: | ---: | ---: | ---: | ---: |\n"
+   (mapconcat #'consent-ci--render-compact-shard-row
+              shards
+              "\n")
+   "\n\n"))
+
+(defun consent-ci--render-compact-portable-summary (shards)
+  "Return compact Markdown for portable-host timing SHARDS."
+  (let* ((portable-shards (cl-remove-if-not
+                           #'consent-ci--portable-shard-p
+                           (consent-ci--sort-shards shards)))
+         (variant-shards (cl-remove-if-not
+                          #'consent-ci--variant-shard-p
+                          portable-shards))
+         (plain-shards (cl-remove-if
+                        #'consent-ci--variant-shard-p
+                        portable-shards)))
+    (when portable-shards
+      (concat
+       "## Portable Host Shard Timing\n\n"
+       (when variant-shards
+         (consent-ci--render-variant-summary variant-shards))
+       (when plain-shards
+         (consent-ci--render-portable-plain-summary plain-shards))))))
 
 (defun consent-ci--paired-surface-rows (shards)
   "Return paired validation surface rows for SHARDS."
@@ -803,7 +617,7 @@ summary."
      "\n\n"
      (when (and run-url (not (string-empty-p run-url)))
        (format "Latest run: [GitHub Actions](%s).\n\n" run-url))
-     (or (consent-ci--render-portable-host-summary shards) "")
+     (or (consent-ci--render-compact-portable-summary shards) "")
      (or (consent-ci--render-compact-emacs-summary shards) "")
      "<details>\n"
      "<summary>Detailed shard timings and diagnostic timings</summary>\n\n"

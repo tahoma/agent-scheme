@@ -160,8 +160,8 @@
                                   markdown)))
       (delete-file log))))
 
-(ert-deftest consent-ci-test-pr-summary-aggregates-chibi-host-timing ()
-  "Aggregate split Chibi shards in the top-level portable host comparison."
+(ert-deftest consent-ci-test-pr-summary-renders-chibi-shard-timing ()
+  "Render split Chibi shards by CI shard name above the fold."
   (let* ((portable-eval-shard '(:name "Portable R7RS Chibi evaluator subset"
                                       :selector "portable-eval"
                                       :ran 1
@@ -195,20 +195,20 @@
                  portable-rest-shard
                  portable-eval-shard)))
          (above-fold (car (split-string markdown "\n<details>" t))))
-    (should (string-match-p "## Portable Host Timing" above-fold))
+    (should (string-match-p "## Portable Host Shard Timing" above-fold))
     (should (string-match-p
-             "| Chibi | full suite (2 CI shards) | 0 | 0 | 112\\.000s | 113\\.000s |"
+             "| Portable R7RS Chibi evaluator subset | 1 | 0 | 0 | 94\\.000s | 95\\.000s |"
              above-fold))
     (should (string-match-p
-             "| Gambit | full suite | 0 | 0 | 14\\.000s | 14\\.000s |"
+             "| Portable R7RS Chibi non-evaluator subset | 16 | 0 | 0 | 18\\.000s | 18\\.000s |"
              above-fold))
-    (should-not
-     (string-match-p "Portable R7RS Chibi evaluator subset" above-fold))
-    (should
-     (string-match-p "Portable R7RS Chibi evaluator subset" markdown))))
+    (should (string-match-p
+             "| Portable R7RS Gambit full suite | 1 | 0 | 0 | 14\\.000s | 14\\.000s |"
+             above-fold))
+    (should-not (string-match-p "full suite (2 CI shards)" above-fold))))
 
 (ert-deftest consent-ci-test-pr-summary-renders-without-chibi-host ()
-  "Render portable host comparison cleanly when Chibi is absent."
+  "Render portable shard comparison cleanly when Chibi is absent."
   (let* ((portable-gambit-shard '(:name "Portable R7RS Gambit full suite"
                                         :selector "portable-gambit"
                                         :ran 1
@@ -242,21 +242,21 @@
                  portable-racket-shard
                  portable-gambit-shard)))
          (above-fold (car (split-string markdown "\n<details>" t))))
-    (should (string-match-p "## Portable Host Timing" above-fold))
+    (should (string-match-p "## Portable Host Shard Timing" above-fold))
     (should (string-match-p
-             "| Gambit | full suite | 0 | 0 | 14\\.000s | 14\\.000s |"
+             "| Portable R7RS Gambit full suite | 1 | 0 | 0 | 14\\.000s | 14\\.000s |"
              above-fold))
     (should (string-match-p
-             "| Racket | full suite | 0 | 0 | 12\\.000s | 13\\.000s |"
+             "| Portable R7RS Racket full suite | 1 | 0 | 0 | 12\\.000s | 13\\.000s |"
              above-fold))
     (should (string-match-p
-             "| Racket-compiled Consent Scheme | full suite | 0 | 0 | 10\\.000s | 11\\.000s |"
+             "| Portable R7RS Racket-compiled Consent Scheme full suite | 1 | 0 | 0 | 10\\.000s | 11\\.000s |"
              above-fold))
     (should-not (string-match-p "Chibi is split" above-fold))
-    (should-not (string-match-p "| Chibi |" above-fold))))
+    (should-not (string-match-p "Portable R7RS Chibi" above-fold))))
 
-(ert-deftest consent-ci-test-pr-summary-renders-option-variant-host-rows ()
-  "Pivot option-matrix portable shards so host comparisons are scannable."
+(ert-deftest consent-ci-test-pr-summary-renders-option-variant-shard-rows ()
+  "Pivot option-matrix portable shards by actual CI shard name."
   (let* ((portable-gambit-shard
           '(:name "Portable R7RS Gambit full suite / source metadata off / docstrings none"
             :selector "portable-gambit"
@@ -281,15 +281,15 @@
           (consent-ci-render-pr-markdown-summary
            (list portable-racket-shard portable-gambit-shard)))
          (above-fold (car (split-string markdown "\n<details>" t))))
-    (should (string-match-p "## Portable Host Timing" above-fold))
+    (should (string-match-p "## Portable Host Shard Timing" above-fold))
     (should (string-match-p
-             "| Syntax metadata | Docstrings | Gambit | Racket |"
+             "| Shard | Ran | Skipped | on/full | on/simple | on/none | off/full | off/simple | off/none |"
              above-fold))
     (should (string-match-p
-             "| on | simple | n/a | 7\\.000s (8\\.000s wall) |"
+             "| Portable R7RS Racket full suite | 1 | 0 | n/a | 7\\.000s (8\\.000s wall) | n/a | n/a | n/a | n/a |"
              above-fold))
     (should (string-match-p
-             "| off | none | 11\\.000s (12\\.000s wall) | n/a |"
+             "| Portable R7RS Gambit full suite | 1 | 0 | n/a | n/a | n/a | n/a | n/a | 11\\.000s (12\\.000s wall) |"
              above-fold))
     (should-not
      (string-match-p "full suite, source metadata" above-fold))))
@@ -392,6 +392,82 @@
              above-fold))
     (should-not
      (string-match-p "Emacs core language/runtime / source metadata" above-fold))))
+
+(ert-deftest consent-ci-test-pr-summary-renders-portable-shards-by-ci-name ()
+  "Render portable shard timings by actual CI shard name above the fold."
+  (let* ((gambit-full-shard
+          '(:name "Portable R7RS Gambit full suite / source metadata on / docstrings full"
+            :selector "portable-gambit"
+            :ran 1
+            :expected 1
+            :unexpected 0
+            :skipped 0
+            :ert-seconds 14.0
+            :wall-seconds 15.0
+            :tests nil))
+         (gambit-stripped-shard
+          '(:name "Portable R7RS Gambit full suite / source metadata off / docstrings none"
+            :selector "portable-gambit"
+            :ran 1
+            :expected 1
+            :unexpected 0
+            :skipped 0
+            :ert-seconds 11.0
+            :wall-seconds 12.0
+            :tests nil))
+         (gambit-reflect-stress-shard
+          '(:name "Portable R7RS Gambit reflection stress / source metadata on / docstrings full"
+            :selector "portable-gambit-reflect-stress"
+            :ran 1
+            :expected 1
+            :unexpected 0
+            :skipped 0
+            :ert-seconds 55.0
+            :wall-seconds 56.0
+            :tests nil))
+         (gauche-reflect-stress-shard
+          '(:name "Portable R7RS Gauche reflection stress / source metadata on / docstrings full"
+            :selector "portable-gauche-reflect-stress"
+            :ran 1
+            :expected 1
+            :unexpected 0
+            :skipped 0
+            :ert-seconds 330.0
+            :wall-seconds 331.0
+            :tests nil))
+         (emacs-reflect-stress-shard
+          '(:name "Emacs reflection dynamic manifest stress / source metadata on / docstrings full"
+            :selector "emacs-reflect-dynamic-manifest-stress"
+            :ran 1
+            :expected 1
+            :unexpected 0
+            :skipped 0
+            :ert-seconds 230.0
+            :wall-seconds 231.0
+            :tests nil))
+         (markdown
+          (consent-ci-render-pr-markdown-summary
+           (list emacs-reflect-stress-shard
+                 gauche-reflect-stress-shard
+                 gambit-reflect-stress-shard
+                 gambit-stripped-shard
+                 gambit-full-shard)))
+         (above-fold (car (split-string markdown "\n<details>" t))))
+    (should (string-match-p "## Portable Host Shard Timing" above-fold))
+    (should (string-match-p
+             "| Shard | Ran | Skipped | on/full | on/simple | on/none | off/full | off/simple | off/none |"
+             above-fold))
+    (should (string-match-p
+             "| Portable R7RS Gambit full suite | 1 | 0 | 14\\.000s (15\\.000s wall) | n/a | n/a | n/a | n/a | 11\\.000s (12\\.000s wall) |"
+             above-fold))
+    (should (string-match-p
+             "| Portable R7RS Gambit reflection stress | 1 | 0 | 55\\.000s (56\\.000s wall) | n/a | n/a | n/a | n/a | n/a |"
+             above-fold))
+    (should (string-match-p
+             "| Portable R7RS Gauche reflection stress | 1 | 0 | 330\\.000s (331\\.000s wall) | n/a | n/a | n/a | n/a | n/a |"
+             above-fold))
+    (should-not (string-match-p "| Host | Coverage |" above-fold))
+    (should-not (string-match-p "| Gambit | full suite |" above-fold))))
 
 (ert-deftest consent-ci-test-pr-summary-omits-empty-paired-surfaces ()
   "Avoid showing zero portable paired-surface rows for whole-suite hosts."
