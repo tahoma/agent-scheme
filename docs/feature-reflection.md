@@ -120,6 +120,9 @@ runtime. It is for diagnostics, adaptive helper libraries, and agent-authored
 scripts that need to understand their current authority and budget before
 choosing what to do next.
 
+For a hands-on tour of discovery workflows, see
+[Reflection Quickstart](reflection-quickstart.md).
+
 Current procedures:
 
 - `(consent-version)` returns the canonical Consent Scheme runtime version

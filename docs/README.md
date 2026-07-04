@@ -31,6 +31,7 @@ project pitch and examples, see the top-level [README](../README.md).
 - [Docstring Metadata Convention](docstring-metadata.md) — carrying documentation metadata as ordinary R7RS data in source.
 - [Scheme Style Guidelines](scheme-style.md) — portable Scheme source layout, docstrings, and rich metadata style.
 - [Macro Expansion Introspection](macro-introspection.md) — exposing macro expansion as Scheme-readable data.
+- [Reflection Quickstart](reflection-quickstart.md) — a user guide for apropos, library discovery, binding crosswalks, and manifest-backed reflection.
 - [Feature and Host Reflection](feature-reflection.md) — preferring capability discovery over hard-coded host assumptions.
 
 ## Runtime & Capabilities
