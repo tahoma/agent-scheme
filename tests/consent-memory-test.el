@@ -31,6 +31,21 @@
   (consent-session-clear!)
   (consent-audit-clear))
 
+(ert-deftest consent-memory-test-emacs-adapter-has-no-pure-store-twin ()
+  "Keep pure memory store semantics in the source-loaded library."
+  (dolist (helper '(consent--memory-find-by-key
+                    consent--memory-generated-id
+                    consent--memory-make-record
+                    consent--memory-next-sequence
+                    consent--memory-query-match-p
+                    consent--memory-replace-record
+                    consent--memory-ensure-source
+                    consent--memory-source-procedure
+                    consent--memory-field-named-p
+                    consent--memory-record-field
+                    consent--memory-scope-datum-records))
+    (should-not (fboundp helper))))
+
 (defun consent-memory-test--buffer-string (buffer)
   "Return BUFFER contents without text properties."
   (with-current-buffer buffer
