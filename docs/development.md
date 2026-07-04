@@ -577,6 +577,10 @@ opt-in `test-emacs-native-build` shard, which `make test` skips and
 `test-emacs-native-build` shard additionally covers the install/dist packaging
 surface against a single shared host build per host (built once per Emacs
 process, reused across the runner-smoke and install/dist tests).
+`CONSENT_EMACS_TEST_SHARD_TARGETS` and the Emacs-hosted CI matrix list the
+longest expected wall-time shards first. That ordering is a scheduling hint so
+constrained runner pools start tail rows early; it does not change the behavior
+surface each shard covers.
 
 The official stdlib reference corpus tests are isolated in
 `test-emacs-stdlib-reference` and `test-emacs-stdlib-reference-stress`. They
