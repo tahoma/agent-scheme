@@ -633,7 +633,7 @@
 
     (define (source-library-form key source description)
       "Return the single define-library form read from SOURCE for KEY."
-      (let ((forms (consent-read-all source)))
+      (let ((forms (consent-read-all source '((source-metadata . #f)))))
         (if (not (= (length forms) 1))
             (eval-error
              (string-append description " must contain exactly one form")
