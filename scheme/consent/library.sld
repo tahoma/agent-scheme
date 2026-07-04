@@ -9,6 +9,17 @@
   (export consent-standard-source-library-specs
           consent-stdlib-source-library-specs
           consent-runtime-source-files
+          consent-library-catalog-entries
+          consent-library-catalog-entry
+          consent-library-catalog-search
+          consent-library-catalog-runtime-source-files
+          consent-library-catalog-sources
+          consent-library-catalog-diagnostics
+          consent-library-catalog-add-manifest!
+          consent-library-catalog-remove-manifest!
+          consent-library-catalog-add-root!
+          consent-library-catalog-remove-root!
+          consent-library-catalog-refresh!
           consent-install-library-backend!
           consent-apply-callable
           import-form?
@@ -411,6 +422,19 @@
     ;; Cache selected source path and contents by Agent library key.
     (define agent-source-library-source-cache '())
 
+    ;; Cache manifest-backed catalog entries after the evaluator backend is live.
+    (define library-catalog-cache #f)
+
+    ;; Ad-hoc manifest catalog sources are metadata only and have highest
+    ;; precedence in discovery.
+    (define library-catalog-ad-hoc-manifests '())
+
+    ;; Manifest root catalog sources are metadata only and follow ad-hoc inputs.
+    (define library-catalog-root-manifests '())
+
+    ;; Diagnostics emitted by the most recent catalog merge.
+    (define library-catalog-diagnostics '())
+
     (define (proper-list-elements/maybe datum)
       "Return DATUM's list elements, or #f when DATUM is not a proper list."
       (let loop ((cursor datum) (elements '()))
@@ -486,6 +510,28 @@
           (car paths)
           (source-library-relative-path (cdr paths))))
 
+    (define (library-catalog-runtime-load-path-entries)
+      "Return load-path entries for every source file in runtime load order."
+      (append standard-source-library-load-paths
+              stdlib-source-library-load-paths
+              agent-internal-source-library-load-paths
+              agent-source-library-load-paths
+              consent-source-library-load-paths))
+
+    (define (consent-library-catalog-runtime-source-files)
+      "Return runtime source files from the manifest-backed catalog seed."
+      #((parameters)
+        (returns (type list)
+         (description
+          ("A list of canonical relative source-file paths the runtime"
+            "loads as data, derived from catalog source entries.")))
+        (effects pure))
+      (append
+       (list (source-library-relative-path consent-base-prelude-load-paths)
+             (source-library-relative-path consent-base-syntax-load-paths))
+       (map (lambda (entry) (source-library-relative-path (cdr entry)))
+            (library-catalog-runtime-load-path-entries))))
+
     (define (consent-runtime-source-files)
       "Return the canonical relative paths of every runtime-provided"
       "source file the interpreter loads as data: the base prelude and"
@@ -500,19 +546,7 @@
           ("A list of canonical relative source-file paths the runtime"
             "loads as data.")))
         (effects pure))
-      (append
-       (list (source-library-relative-path consent-base-prelude-load-paths)
-             (source-library-relative-path consent-base-syntax-load-paths))
-       (map (lambda (entry) (source-library-relative-path (cdr entry)))
-            standard-source-library-load-paths)
-       (map (lambda (entry) (source-library-relative-path (cdr entry)))
-            stdlib-source-library-load-paths)
-       (map (lambda (entry) (source-library-relative-path (cdr entry)))
-            agent-internal-source-library-load-paths)
-       (map (lambda (entry) (source-library-relative-path (cdr entry)))
-            agent-source-library-load-paths)
-       (map (lambda (entry) (source-library-relative-path (cdr entry)))
-            consent-source-library-load-paths)))
+      (consent-library-catalog-runtime-source-files))
 
     (define (load-standard-source-library-source key)
       "Read KEY's source through the host/core resolution contract (search"
@@ -638,6 +672,668 @@
                     '()))
               (cddr
                (proper-list-elements form "standard source library")))))
+
+    (define (library-catalog-keys)
+      "Return repo-owned library keys in manifest catalog order."
+      (append (list scheme-base-library-key)
+              standard-library-keys
+              stdlib-library-keys
+              agent-library-keys
+              consent-library-keys
+              empty-emacs-capability-library-keys))
+
+    (define (library-catalog-source-file key)
+      "Return public catalog source path for KEY, or #f."
+      (cond
+       ((assoc/equal key standard-source-library-load-paths)
+        (car (standard-source-library-source-entry key)))
+       ((assoc/equal key stdlib-source-library-load-paths)
+        (car (stdlib-source-library-source-entry key)))
+       ((or (assoc/equal key agent-source-library-load-paths)
+            (assoc/equal key consent-source-library-load-paths))
+        (car (agent-source-library-source-entry key)))
+       (else #f)))
+
+    (define (library-catalog-category key)
+      "Return the public catalog category for KEY."
+      (cond
+       ((library-alias-spec key stdlib-library-aliases) 'stdlib)
+       ((eq? (car key) 'scheme) 'standard)
+       ((or (eq? (car key) 'stdlib)
+            (eq? (car key) 'srfi))
+        'stdlib)
+       ((and (eq? (car key) 'consent)
+             (pair? (cdr key))
+             (eq? (second key) 'json))
+        'stdlib)
+       ((eq? (car key) 'agent) 'agent)
+       ((eq? (car key) 'consent) 'consent)
+       ((eq? (car key) 'emacs) 'emacs)
+       (else 'library)))
+
+    (define (library-catalog-source-kind key)
+      "Return the implementation source kind for KEY."
+      (cond
+       ((library-catalog-source-file key) 'portable-source)
+       ((library-alias-spec key stdlib-library-aliases) 'alias)
+       ((equal? key scheme-base-library-key) 'base-snapshot)
+       ((or (member key standard-library-keys)
+            (member key agent-library-keys)
+            (member key consent-library-keys)
+            (member key empty-emacs-capability-library-keys))
+        'primitive)
+       (else 'manifest)))
+
+    (define (library-catalog-source-backed? key)
+      "Report whether KEY is backed by a public source library."
+      (or (assoc/equal key standard-source-library-load-paths)
+          (assoc/equal key stdlib-source-library-load-paths)
+          (assoc/equal key agent-source-library-load-paths)
+          (assoc/equal key consent-source-library-load-paths)))
+
+    (define (library-catalog-source-form key)
+      "Return KEY's define-library form when KEY is source-backed."
+      (cond
+       ((assoc/equal key standard-source-library-load-paths)
+        (standard-source-library-form key))
+       ((assoc/equal key stdlib-source-library-load-paths)
+        (source-library-form
+         key
+         (stdlib-source-library-source key)
+         "stdlib source library"))
+       ((or (assoc/equal key agent-source-library-load-paths)
+            (assoc/equal key consent-source-library-load-paths))
+        (source-library-form
+         key
+         (agent-source-library-source key)
+         "agent source library"))
+       (else #f)))
+
+    (define (library-catalog-private-context)
+      "Return a fresh context/environment pair for catalog export discovery."
+      (let ((context (new-eval-context '()))
+            (environment (consent-make-base-environment)))
+        (set-context-interaction-environment! context environment)
+        (ensure-base-syntax! context environment)
+        (cons context environment)))
+
+    (define (library-catalog-resolved-export-names key)
+      "Resolve KEY in a private context and return exported binding names."
+      (let* ((pair (library-catalog-private-context))
+             (context (car pair))
+             (environment (cdr pair))
+             (library (resolve-library key context environment)))
+        (map library-binding-name (library-exports library))))
+
+    (define (library-catalog-export-names key)
+      "Return exported binding names for cataloged library KEY."
+      (let ((alias-spec (library-alias-spec key stdlib-library-aliases)))
+        (cond
+         (alias-spec
+          (let ((exports (library-alias-field alias-spec 'exports))
+                (target (library-alias-field alias-spec 'target)))
+            (if exports exports (library-catalog-export-names target))))
+         ((library-catalog-source-backed? key)
+          (standard-source-library-export-names
+           (library-catalog-source-form key)))
+         ((equal? key scheme-base-library-key)
+          (map (lambda (spec) (second (assq 'name spec)))
+               (consent-base-binding-specs)))
+         (else
+          (library-catalog-resolved-export-names key)))))
+
+    (define (library-catalog-aliases key)
+      "Return aliases that resolve to library KEY."
+      (let loop ((aliases stdlib-library-aliases) (result '()))
+        (cond
+         ((null? aliases) (reverse result))
+         ((equal? key (library-alias-field (car aliases) 'target))
+          (loop (cdr aliases)
+                (cons (library-alias-field (car aliases) 'alias) result)))
+         (else (loop (cdr aliases) result)))))
+
+    (define (library-catalog-dependencies key)
+      "Return manifest dependency names for KEY when known."
+      (let ((alias-spec (library-alias-spec key stdlib-library-aliases)))
+        (cond
+         ((library-catalog-source-backed? key) '())
+         (alias-spec
+          (let ((target (library-alias-field alias-spec 'target)))
+            (if target (list target) '())))
+         (else '()))))
+
+    (define (library-catalog-invalidate!)
+      "Clear cached catalog entries after catalog inputs change."
+      (set! library-catalog-cache #f)
+      consent-unspecified)
+
+    (define (library-catalog-entry-field entry field default)
+      "Return FIELD from catalog ENTRY, or DEFAULT when absent."
+      (let ((cell (assq field entry)))
+        (if cell (cadr cell) default)))
+
+    (define (library-catalog-manifest-field fields field default)
+      "Return FIELD's value from manifest FIELDS, or DEFAULT."
+      (let ((cell (assq field fields)))
+        (if cell (cadr cell) default)))
+
+    (define (library-catalog-require-symbol value description)
+      "Return VALUE when it is a symbol, else raise a catalog diagnostic error."
+      (if (symbol? value)
+          value
+          (eval-error
+           (string-append description " must be a symbol")
+           value)))
+
+    (define (library-catalog-require-source-file value)
+      "Return VALUE when it is #f or a string source path."
+      (if (or (not value) (string? value))
+          value
+          (eval-error "catalog source-file must be a string or #f" value)))
+
+    (define (library-catalog-require-symbol-list value description)
+      "Return VALUE when it is a list of symbols."
+      (let ((parts (proper-list-elements value description)))
+        (for-each
+         (lambda (part)
+           (if (not (symbol? part))
+               (eval-error
+                (string-append description " entries must be symbols")
+                part)))
+         parts)
+        parts))
+
+    (define (library-catalog-require-library-list value description)
+      "Return VALUE normalized as a list of library keys."
+      (map library-name-key (proper-list-elements value description)))
+
+    (define (library-catalog-require-target value)
+      "Return VALUE normalized as a library key, or #f."
+      (if value (library-name-key value) #f))
+
+    (define (library-catalog-manifest-library form origin source-id)
+      "Validate one manifest library FORM for ORIGIN and SOURCE-ID."
+      (let ((parts (proper-list-elements form "catalog library entry")))
+        (if (or (null? parts)
+                (not (identifier-named? (car parts) 'library)))
+            (eval-error "catalog entry must begin with library" form))
+        (let* ((fields (cdr parts))
+               (name (library-name-key
+                      (library-catalog-manifest-field fields 'name #f)))
+               (category
+                (library-catalog-require-symbol
+                 (library-catalog-manifest-field fields 'category 'library)
+                 "catalog category"))
+               (status
+                (library-catalog-require-symbol
+                 (library-catalog-manifest-field fields 'status 'available)
+                 "catalog status"))
+               (source-kind
+                (library-catalog-require-symbol
+                 (library-catalog-manifest-field fields 'source-kind 'manifest)
+                 "catalog source-kind"))
+               (source-file
+                (library-catalog-require-source-file
+                 (library-catalog-manifest-field fields 'source-file #f)))
+               (aliases
+                (library-catalog-require-library-list
+                 (library-catalog-manifest-field fields 'aliases '())
+                 "catalog aliases"))
+               (target
+                (library-catalog-require-target
+                 (library-catalog-manifest-field fields 'target #f)))
+               (exports
+                (library-catalog-require-symbol-list
+                 (library-catalog-manifest-field fields 'exports '())
+                 "catalog exports"))
+               (dependencies
+                (library-catalog-require-library-list
+                 (library-catalog-manifest-field fields 'dependencies '())
+                 "catalog dependencies"))
+               (summary
+                (library-catalog-manifest-field fields 'summary #f)))
+          (if (and summary (not (string? summary)))
+              (eval-error "catalog summary must be a string or #f" summary))
+          (list
+           (list 'name name)
+           (list 'category category)
+           (list 'status status)
+           (list 'source-kind source-kind)
+           (list 'source-file source-file)
+           (list 'aliases aliases)
+           (list 'target target)
+           (list 'exports exports)
+           (list 'dependencies dependencies)
+           (list 'origin origin)
+           (list 'source-id source-id)
+           (list 'summary summary)))))
+
+    (define (library-catalog-parse-manifest manifest origin source-id)
+      "Validate MANIFEST and return catalog entries with ORIGIN and SOURCE-ID."
+      (let ((parts (proper-list-elements manifest "library catalog manifest")))
+        (if (or (null? parts)
+                (not (identifier-named? (car parts) 'library-catalog)))
+            (eval-error "catalog manifest must begin with library-catalog"
+                        manifest))
+        (map
+         (lambda (form)
+           (library-catalog-manifest-library form origin source-id))
+         (cdr parts))))
+
+    (define (library-catalog-replace-source sources source-id entries)
+      "Return SOURCES with SOURCE-ID replaced by ENTRIES at highest precedence."
+      (let loop ((rest sources) (result '()))
+        (cond
+         ((null? rest) (cons (cons source-id entries) (reverse result)))
+         ((equal? source-id (caar rest))
+          (append (reverse result)
+                  (cons (cons source-id entries) (cdr rest))))
+         (else (loop (cdr rest) (cons (car rest) result))))))
+
+    (define (library-catalog-remove-source sources source-id)
+      "Return (REMOVED? . SOURCES) after removing SOURCE-ID."
+      (let loop ((rest sources) (result '()) (removed? #f))
+        (cond
+         ((null? rest) (cons removed? (reverse result)))
+         ((equal? source-id (caar rest))
+          (loop (cdr rest) result #t))
+         (else (loop (cdr rest) (cons (car rest) result) removed?)))))
+
+    (define (library-catalog-source-entries sources)
+      "Return all catalog entries stored in SOURCES."
+      (if (null? sources)
+          '()
+          (apply append (map cdr sources))))
+
+    (define (library-catalog-source-record/names kind source-id library-names)
+      "Return a Scheme-readable catalog-source record for LIBRARY-NAMES."
+      (list 'catalog-source
+            (list 'kind kind)
+            (list 'id source-id)
+            (list 'libraries library-names)))
+
+    (define (library-catalog-source-record kind source-id entries)
+      "Return a Scheme-readable catalog-source record."
+      (library-catalog-source-record/names
+       kind
+       source-id
+       (map (lambda (entry)
+              (library-catalog-entry-field entry 'name '()))
+            entries)))
+
+    (define (consent-library-catalog-add-manifest! source-id manifest)
+      "Add or replace an ad-hoc catalog MANIFEST named SOURCE-ID."
+      #((parameters
+         (source-id (type (or symbol string))
+          (description "Identifier for the ad-hoc manifest source."))
+         (manifest (type list)
+          (description "A `(library-catalog ...)' manifest datum.")))
+        (returns (type list)
+         (description "A catalog-source record for the registered manifest."))
+        (effects state-read state-write allocation error))
+      (let ((entries
+             (library-catalog-parse-manifest
+              manifest
+              'ad-hoc-manifest
+              source-id)))
+        (set! library-catalog-ad-hoc-manifests
+              (library-catalog-replace-source
+               library-catalog-ad-hoc-manifests
+               source-id
+               entries))
+        (library-catalog-invalidate!)
+        (library-catalog-source-record 'ad-hoc-manifest source-id entries)))
+
+    (define (consent-library-catalog-remove-manifest! source-id)
+      "Remove the ad-hoc catalog manifest named SOURCE-ID."
+      #((parameters
+         (source-id (type (or symbol string))
+          (description "Identifier for the ad-hoc manifest source.")))
+        (returns (type boolean)
+         (description "#t when a manifest was removed, else #f."))
+        (effects state-write))
+      (let ((removed/sources
+             (library-catalog-remove-source
+              library-catalog-ad-hoc-manifests
+              source-id)))
+        (set! library-catalog-ad-hoc-manifests (cdr removed/sources))
+        (library-catalog-invalidate!)
+        (car removed/sources)))
+
+    (define (consent-library-catalog-add-root! root manifest)
+      "Add or replace an explicit manifest-root catalog input."
+      #((parameters
+         (root (type string)
+          (description "Manifest root identifier or directory path."))
+         (manifest (type list)
+          (description "A `(library-catalog ...)' manifest datum.")))
+        (returns (type list)
+         (description "A catalog-source record for the registered root."))
+        (effects state-read state-write allocation error))
+      (if (not (string? root))
+          (eval-error "catalog root must be a string" root))
+      (let ((entries
+             (library-catalog-parse-manifest
+              manifest
+              'manifest-root
+              root)))
+        (set! library-catalog-root-manifests
+              (library-catalog-replace-source
+               library-catalog-root-manifests
+               root
+               entries))
+        (library-catalog-invalidate!)
+        (library-catalog-source-record 'manifest-root root entries)))
+
+    (define (consent-library-catalog-remove-root! root)
+      "Remove an explicit manifest-root catalog input."
+      #((parameters
+         (root (type string)
+          (description "Manifest root identifier or directory path.")))
+        (returns (type boolean)
+         (description "#t when a root was removed, else #f."))
+        (effects state-write))
+      (let ((removed/sources
+             (library-catalog-remove-source
+              library-catalog-root-manifests
+              root)))
+        (set! library-catalog-root-manifests (cdr removed/sources))
+        (library-catalog-invalidate!)
+        (car removed/sources)))
+
+    (define (consent-library-catalog-refresh!)
+      "Clear cached catalog entries and diagnostics."
+      #((parameters)
+        (returns (type boolean)
+         (description "#t after catalog caches are refreshed."))
+        (effects state-write))
+      (set! library-catalog-diagnostics '())
+      (library-catalog-invalidate!)
+      #t)
+
+    (define (library-catalog-entry key)
+      "Return manifest-backed catalog metadata for library KEY."
+      (let ((alias-spec (library-alias-spec key stdlib-library-aliases)))
+        (list
+         (list 'name key)
+         (list 'category (library-catalog-category key))
+         (list 'status (if alias-spec 'alias 'implemented))
+         (list 'source-kind (library-catalog-source-kind key))
+         (list 'source-file (library-catalog-source-file key))
+         (list 'aliases (library-catalog-aliases key))
+         (list 'target
+               (and alias-spec (library-alias-field alias-spec 'target)))
+         (list 'exports (library-catalog-export-names key))
+         (list 'dependencies (library-catalog-dependencies key))
+         (list 'origin 'built-in-seed)
+         (list 'source-id 'built-in-seed)
+         (list 'summary #f))))
+
+    (define (library-catalog-field entry field default)
+      "Return FIELD from catalog ENTRY, or DEFAULT when absent."
+      (let ((cell (assq field entry)))
+        (if cell (cadr cell) default)))
+
+    (define (library-catalog-duplicate-diagnostic entry previous)
+      "Return a diagnostic for duplicate ENTRY shadowed by PREVIOUS."
+      (list 'catalog-diagnostic
+            (list 'kind 'duplicate-library)
+            (list 'name (library-catalog-field entry 'name '()))
+            (list 'kept-source
+                  (library-catalog-field previous 'source-id #f))
+            (list 'ignored-source
+                  (library-catalog-field entry 'source-id #f))))
+
+    (define (library-catalog-deduplicate entries)
+      "Return catalog ENTRIES under first-wins deterministic precedence."
+      (let loop ((rest entries) (seen '()) (result '()) (diagnostics '()))
+        (if (null? rest)
+            (begin
+              (set! library-catalog-diagnostics (reverse diagnostics))
+              (reverse result))
+            (let* ((entry (car rest))
+                   (name (library-catalog-field entry 'name '()))
+                   (previous (assoc/equal name seen)))
+              (if previous
+                  (loop (cdr rest)
+                        seen
+                        result
+                        (cons
+                         (library-catalog-duplicate-diagnostic
+                          entry
+                          (cdr previous))
+                         diagnostics))
+                  (loop (cdr rest)
+                        (cons (cons name entry) seen)
+                        (cons entry result)
+                        diagnostics))))))
+
+    (define (library-catalog-built-in-entries)
+      "Return built-in seed catalog entries."
+      (map library-catalog-entry (library-catalog-keys)))
+
+    (define (library-catalog-candidate-entries)
+      "Return all catalog input entries in precedence order."
+      (append
+       (library-catalog-source-entries library-catalog-ad-hoc-manifests)
+       (library-catalog-source-entries library-catalog-root-manifests)
+       (library-catalog-built-in-entries)))
+
+    (define (consent-library-catalog-sources)
+      "Return Scheme-readable catalog source records."
+      #((parameters)
+        (returns (type list)
+         (description "Catalog source records in precedence order."))
+        (effects state-read state-write allocation host-eval error))
+      (append
+       (map
+        (lambda (source)
+          (library-catalog-source-record
+           'ad-hoc-manifest
+           (car source)
+           (cdr source)))
+        library-catalog-ad-hoc-manifests)
+       (map
+        (lambda (source)
+          (library-catalog-source-record
+           'manifest-root
+           (car source)
+           (cdr source)))
+        library-catalog-root-manifests)
+       (list
+        (library-catalog-source-record/names
+         'built-in-seed
+         'built-in-seed
+         (library-catalog-keys)))))
+
+    (define (consent-library-catalog-diagnostics)
+      "Return catalog diagnostics from the most recent catalog build."
+      #((parameters)
+        (returns (type list)
+         (description "Scheme-readable catalog diagnostics."))
+        (effects state-read state-write allocation host-eval error))
+      (if (not library-catalog-cache)
+          (consent-library-catalog-entries))
+      library-catalog-diagnostics)
+
+    (define (library-catalog-name-part-text part)
+      "Return PART as public library-name text."
+      (cond
+       ((symbol? part) (symbol->string part))
+       ((number? part) (number->string part))
+       ((consent-number? part) (number->string (consent-number-value part)))
+       (else "")))
+
+    (define (library-catalog-library-name-text key)
+      "Return KEY formatted as an R7RS library-name string."
+      (let loop ((parts key) (text "("))
+        (cond
+         ((null? parts) (string-append text ")"))
+         ((null? (cdr parts))
+          (loop (cdr parts)
+                (string-append text
+                               (library-catalog-name-part-text (car parts)))))
+         (else
+          (loop (cdr parts)
+                (string-append text
+                               (library-catalog-name-part-text (car parts))
+                               " "))))))
+
+    (define (library-catalog-string-prefix? prefix text)
+      "Report whether TEXT starts with PREFIX."
+      (let ((prefix-length (string-length prefix))
+            (text-length (string-length text)))
+        (and (<= prefix-length text-length)
+             (string=? prefix (substring text 0 prefix-length)))))
+
+    (define (library-catalog-string-contains? text needle)
+      "Report whether TEXT contains NEEDLE."
+      (let ((text-length (string-length text))
+            (needle-length (string-length needle)))
+        (let loop ((index 0))
+          (and (<= (+ index needle-length) text-length)
+               (or (library-catalog-string-prefix?
+                    needle
+                    (substring text index text-length))
+                   (loop (+ index 1)))))))
+
+    (define (library-catalog-text-match? text needle)
+      "Report whether TEXT matches lowercase NEEDLE."
+      (and text
+           (library-catalog-string-contains?
+            (string-downcase text)
+            needle)))
+
+    (define (library-catalog-symbol-list-match? symbols needle)
+      "Report whether any symbol in SYMBOLS matches NEEDLE."
+      (let loop ((rest symbols))
+        (cond
+         ((null? rest) #f)
+         ((library-catalog-text-match? (symbol->string (car rest)) needle) #t)
+         (else (loop (cdr rest))))))
+
+    (define (library-catalog-name-list-match? names needle)
+      "Report whether any library name in NAMES matches NEEDLE."
+      (let loop ((rest names))
+        (cond
+         ((null? rest) #f)
+         ((library-catalog-text-match?
+           (library-catalog-library-name-text (car rest))
+           needle)
+          #t)
+         (else (loop (cdr rest))))))
+
+    (define (library-catalog-entry-match? entry needle)
+      "Report whether catalog ENTRY matches lowercase NEEDLE."
+      (or
+       (library-catalog-text-match?
+        (library-catalog-library-name-text
+         (library-catalog-field entry 'name '()))
+        needle)
+       (library-catalog-text-match?
+        (symbol->string (library-catalog-field entry 'category 'library))
+        needle)
+       (library-catalog-text-match?
+        (symbol->string (library-catalog-field entry 'source-kind 'manifest))
+        needle)
+       (library-catalog-text-match?
+        (symbol->string (library-catalog-field entry 'status 'implemented))
+        needle)
+       (library-catalog-text-match?
+        (symbol->string (library-catalog-field entry 'origin 'built-in-seed))
+        needle)
+       (library-catalog-text-match?
+        (library-catalog-field entry 'source-file #f)
+        needle)
+       (let ((source-id (library-catalog-field entry 'source-id #f)))
+         (library-catalog-text-match?
+          (cond
+           ((string? source-id) source-id)
+           ((symbol? source-id) (symbol->string source-id))
+           (else #f))
+          needle))
+       (library-catalog-text-match?
+        (library-catalog-field entry 'summary #f)
+        needle)
+       (let ((target (library-catalog-field entry 'target #f)))
+         (and target
+              (library-catalog-text-match?
+               (library-catalog-library-name-text target)
+               needle)))
+       (library-catalog-name-list-match?
+        (library-catalog-field entry 'aliases '())
+        needle)
+       (library-catalog-name-list-match?
+        (library-catalog-field entry 'dependencies '())
+        needle)
+       (library-catalog-symbol-list-match?
+        (library-catalog-field entry 'exports '())
+        needle)))
+
+    (define (library-catalog-query-text query)
+      "Return QUERY as catalog search text."
+      (cond
+       ((string? query) query)
+       ((symbol? query) (symbol->string query))
+       ((proper-library-name? query)
+        (library-catalog-library-name-text (library-name-key query)))
+       (else
+        (eval-error
+         "library search query must be a string, symbol, or library name"
+         query))))
+
+    (define (consent-library-catalog-entries)
+      "Return manifest-backed catalog metadata for repo-owned libraries."
+      #((parameters)
+        (returns (type list)
+         (description
+          ("A list of library catalog field records for every repo-owned"
+            "library known to the runtime manifest.")))
+        (effects state-read state-write allocation host-eval error))
+      (if library-catalog-cache
+          library-catalog-cache
+          (let ((entries
+                 (library-catalog-deduplicate
+                  (library-catalog-candidate-entries))))
+            (set! library-catalog-cache entries)
+            entries)))
+
+    (define (consent-library-catalog-entry library-name)
+      "Return catalog metadata for LIBRARY-NAME, or #f when absent."
+      #((parameters
+         (library-name (type (list-of (or symbol exact-integer)))
+          (description "R7RS library name to find in the catalog.")))
+        (returns (type (or list boolean))
+         (description
+          ("The catalog field record for LIBRARY-NAME, or #f when the"
+            "library is not cataloged.")))
+        (effects state-read state-write allocation host-eval error))
+      (let ((key (library-name-key library-name)))
+        (let loop ((entries (consent-library-catalog-entries)))
+          (cond
+           ((null? entries) #f)
+           ((equal? key (library-catalog-field (car entries) 'name '()))
+            (car entries))
+           (else (loop (cdr entries)))))))
+
+    (define (consent-library-catalog-search query)
+      "Return catalog entries matching QUERY."
+      #((parameters
+         (query (type (or string symbol list))
+          (description
+           ("Search text, symbol, or library name matched against catalog"
+             "names, aliases, source paths, categories, and exports."))))
+        (returns (type list)
+         (description "Catalog field records matching QUERY."))
+        (effects state-read state-write allocation host-eval error))
+      (let ((needle (string-downcase (library-catalog-query-text query))))
+        (let loop ((entries (consent-library-catalog-entries))
+                   (result '()))
+          (cond
+           ((null? entries) (reverse result))
+           ((library-catalog-entry-match? (car entries) needle)
+            (loop (cdr entries) (cons (car entries) result)))
+           (else (loop (cdr entries) result))))))
 
     (define (consent-standard-source-library-specs)
       "Public metadata accessor for standard libraries backed by source files."
@@ -1974,6 +2670,74 @@
                                   'primitive-library-bindings
                                   1
                                   1)
+          (library-primitive-spec 'libraries
+                                  'primitive-libraries
+                                  0
+                                  0)
+          (library-primitive-spec 'library-info
+                                  'primitive-library-info
+                                  1
+                                  1)
+          (library-primitive-spec 'library-search
+                                  'primitive-library-search
+                                  1
+                                  1)
+          (library-primitive-spec 'catalog-sources
+                                  'primitive-catalog-sources
+                                  0
+                                  0)
+          (library-primitive-spec 'catalog-diagnostics
+                                  'primitive-catalog-diagnostics
+                                  0
+                                  0)
+          (library-primitive-spec 'add-manifest!
+                                  'primitive-add-manifest!
+                                  2
+                                  2)
+          (library-primitive-spec 'remove-manifest!
+                                  'primitive-remove-manifest!
+                                  1
+                                  1)
+          (library-primitive-spec 'add-manifest-root!
+                                  'primitive-add-manifest-root!
+                                  2
+                                  2)
+          (library-primitive-spec 'remove-manifest-root!
+                                  'primitive-remove-manifest-root!
+                                  1
+                                  1)
+          (library-primitive-spec 'refresh-library-catalog!
+                                  'primitive-refresh-library-catalog!
+                                  0
+                                  0)
+          (library-primitive-spec 'library-documentation
+                                  'primitive-library-documentation
+                                  1
+                                  1)
+          (library-primitive-spec 'binding-libraries
+                                  'primitive-binding-libraries
+                                  1
+                                  1)
+          (library-primitive-spec 'documented-bindings
+                                  'primitive-documented-bindings
+                                  0
+                                  0)
+          (library-primitive-spec 'apropos
+                                  'primitive-apropos
+                                  1
+                                  1)
+          (library-primitive-spec 'reflection-field
+                                  'primitive-reflection-field
+                                  2
+                                  3)
+          (library-primitive-spec 'documentation-field
+                                  'primitive-documentation-field
+                                  2
+                                  3)
+          (library-primitive-spec 'docstring
+                                  'primitive-docstring
+                                  1
+                                  2)
           (library-primitive-spec 'current-session-info
                                   'primitive-current-session-info
                                   0
