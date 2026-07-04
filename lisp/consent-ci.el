@@ -100,15 +100,6 @@
     ("none" . 2))
   "Preferred display order for docstring retention timing variants.")
 
-(defconst consent-ci--option-variants
-  '(("on" . "full")
-    ("on" . "simple")
-    ("on" . "none")
-    ("off" . "full")
-    ("off" . "simple")
-    ("off" . "none"))
-  "Canonical source metadata/docstring timing variant order.")
-
 (defun consent-ci--file-string (path)
   "Return the contents of PATH as a string."
   (with-temp-buffer
@@ -318,31 +309,6 @@ durations, and optional wall-clock seconds recorded by the workflow."
                      consent-ci--docstring-retention-order))
          9)))
 
-(defun consent-ci--option-variant-label (variant)
-  "Return compact display label for source metadata/docstring VARIANT."
-  (format "%s/%s" (car variant) (cdr variant)))
-
-(defun consent-ci--render-timing-cell (row &optional omit-skipped)
-  "Return compact timing text for ROW.
-OMIT-SKIPPED suppresses skipped-count annotations for tables that already show
-skipped totals separately."
-  (if row
-      (let (notes)
-        (when (> (or (plist-get row :unexpected) 0) 0)
-          (push (format "%d unexpected" (plist-get row :unexpected)) notes))
-        (when (and (not omit-skipped)
-                   (> (or (plist-get row :skipped) 0) 0))
-          (push (format "%d skipped" (plist-get row :skipped)) notes))
-        (concat
-         (format "%s (%s wall)"
-                 (consent-ci--format-seconds
-                  (plist-get row :ert-seconds))
-                 (consent-ci--format-seconds
-                  (plist-get row :wall-seconds)))
-         (when notes
-           (concat "; " (mapconcat #'identity (nreverse notes) "; ")))))
-    "n/a"))
-
 (defun consent-ci--shard-sort-key (shard)
   "Return display sort key for SHARD."
   (or (cdr (assoc (consent-ci--shard-base-name shard)
@@ -369,163 +335,27 @@ skipped totals separately."
   "Return SHARDS in stable report display order."
   (sort (copy-sequence shards) #'consent-ci--shard-less-p))
 
+(defun consent-ci--shard-wall-seconds (shard)
+  "Return SHARD's CI wall-clock seconds, sorting absent values last."
+  (or (plist-get shard :wall-seconds) -1.0))
+
+(defun consent-ci--shard-wall-time-greater-p (left right)
+  "Return non-nil when LEFT should precede RIGHT by descending wall time."
+  (let ((left-wall (consent-ci--shard-wall-seconds left))
+        (right-wall (consent-ci--shard-wall-seconds right)))
+    (if (/= left-wall right-wall)
+        (> left-wall right-wall)
+      (consent-ci--shard-less-p left right))))
+
+(defun consent-ci--sort-shards-by-wall-time (shards)
+  "Return SHARDS ordered by descending CI wall-clock time."
+  (sort (copy-sequence shards) #'consent-ci--shard-wall-time-greater-p))
+
 (defun consent-ci--sum-shard-field (shards field)
   "Return the numeric sum of FIELD across SHARDS."
   (let ((total 0))
     (dolist (shard shards total)
       (cl-incf total (or (plist-get shard field) 0)))))
-
-(defun consent-ci--emacs-shard-p (shard)
-  "Return non-nil when SHARD is an Emacs-hosted timing shard."
-  (string-prefix-p "Emacs " (plist-get shard :name)))
-
-(defun consent-ci--portable-shard-p (shard)
-  "Return non-nil when SHARD is a portable-host timing shard."
-  (let ((name (plist-get shard :name)))
-    (or (string-prefix-p "Portable R7RS " name)
-        (string-prefix-p "Portable Chibi-backed " name)
-        (string-prefix-p "Portable Gambit-backed " name))))
-
-(defun consent-ci--variant-shard-p (shard)
-  "Return non-nil when SHARD has source metadata/docstring variant metadata."
-  (not (null (consent-ci--option-variant shard))))
-
-(defun consent-ci--unique-shard-base-names (shards)
-  "Return unique logical shard names from SHARDS in display order."
-  (let (names)
-    (dolist (shard (consent-ci--sort-shards shards))
-      (let ((name (consent-ci--shard-base-name shard)))
-        (unless (member name names)
-          (push name names))))
-    (nreverse names)))
-
-(defun consent-ci--find-variant-shard (shards base-name variant)
-  "Return SHARDS entry matching BASE-NAME and option VARIANT."
-  (cl-find-if
-   (lambda (shard)
-     (let ((shard-variant (consent-ci--option-variant shard)))
-       (and (string= (consent-ci--shard-base-name shard) base-name)
-            shard-variant
-            (string= (car shard-variant) (car variant))
-            (string= (cdr shard-variant) (cdr variant)))))
-   shards))
-
-(defun consent-ci--field-range-text (shards field)
-  "Return compact FIELD value text for SHARDS."
-  (let* ((values (sort (delete-dups
-                        (mapcar (lambda (shard)
-                                  (or (plist-get shard field) 0))
-                                shards))
-                       #'<))
-         (first (car values))
-         (last (car (last values))))
-    (if (= first last)
-        (format "%d" first)
-      (format "%d-%d" first last))))
-
-(defun consent-ci--render-variant-row (base-name shards)
-  "Return one timing matrix row for BASE-NAME across SHARDS."
-  (let ((base-shards
-         (cl-remove-if-not
-          (lambda (shard)
-            (string= (consent-ci--shard-base-name shard) base-name))
-          shards)))
-    (concat
-     "| "
-     (consent-ci--markdown-cell base-name)
-     " | "
-     (consent-ci--field-range-text base-shards :ran)
-     " | "
-     (consent-ci--field-range-text base-shards :skipped)
-     " | "
-     (mapconcat
-      (lambda (variant)
-        (consent-ci--render-timing-cell
-         (consent-ci--find-variant-shard
-          base-shards
-          base-name
-          variant)
-         t))
-      consent-ci--option-variants
-      " | ")
-     " |")))
-
-(defun consent-ci--render-variant-summary (shards)
-  "Return pivoted Markdown for option-matrix timing SHARDS."
-  (concat
-   "Option columns use `source metadata/docstrings`; cells show ERT time with CI wall-clock time in parentheses.\n\n"
-   "| Shard | Ran | Skipped | "
-   (mapconcat #'consent-ci--option-variant-label
-              consent-ci--option-variants
-              " | ")
-   " |\n"
-   "| --- | ---: | ---: | "
-   (mapconcat (lambda (_variant) "---:") consent-ci--option-variants " | ")
-   " |\n"
-   (mapconcat
-    (lambda (base-name)
-      (consent-ci--render-variant-row base-name shards))
-    (consent-ci--unique-shard-base-names shards)
-    "\n")
-   "\n\n"))
-
-(defun consent-ci--render-emacs-plain-summary (shards)
-  "Return compact Markdown for non-matrix Emacs-hosted timing SHARDS."
-  (concat
-   "| Shard | Ran | Unexpected | Skipped | ERT time | Wall time |\n"
-   "| --- | ---: | ---: | ---: | ---: | ---: |\n"
-   (mapconcat #'consent-ci--render-compact-shard-row
-              shards
-              "\n")
-   "\n\n"))
-
-(defun consent-ci--render-compact-emacs-summary (shards)
-  "Return compact Markdown for Emacs-hosted timing SHARDS."
-  (let* ((emacs-shards (cl-remove-if-not
-                        #'consent-ci--emacs-shard-p
-                        (consent-ci--sort-shards shards)))
-         (variant-shards (cl-remove-if-not
-                          #'consent-ci--variant-shard-p
-                          emacs-shards))
-         (plain-shards (cl-remove-if
-                        #'consent-ci--variant-shard-p
-                        emacs-shards)))
-    (when emacs-shards
-      (concat
-       "## Emacs Shard Timing\n\n"
-       (when variant-shards
-         (consent-ci--render-variant-summary variant-shards))
-       (when plain-shards
-         (consent-ci--render-emacs-plain-summary plain-shards))))))
-
-(defun consent-ci--render-portable-plain-summary (shards)
-  "Return compact Markdown for non-matrix portable-host timing SHARDS."
-  (concat
-   "| Shard | Ran | Unexpected | Skipped | ERT time | Wall time |\n"
-   "| --- | ---: | ---: | ---: | ---: | ---: |\n"
-   (mapconcat #'consent-ci--render-compact-shard-row
-              shards
-              "\n")
-   "\n\n"))
-
-(defun consent-ci--render-compact-portable-summary (shards)
-  "Return compact Markdown for portable-host timing SHARDS."
-  (let* ((portable-shards (cl-remove-if-not
-                           #'consent-ci--portable-shard-p
-                           (consent-ci--sort-shards shards)))
-         (variant-shards (cl-remove-if-not
-                          #'consent-ci--variant-shard-p
-                          portable-shards))
-         (plain-shards (cl-remove-if
-                        #'consent-ci--variant-shard-p
-                        portable-shards)))
-    (when portable-shards
-      (concat
-       "## Portable Host Shard Timing\n\n"
-       (when variant-shards
-         (consent-ci--render-variant-summary variant-shards))
-       (when plain-shards
-         (consent-ci--render-portable-plain-summary plain-shards))))))
 
 (defun consent-ci--paired-surface-rows (shards)
   "Return paired validation surface rows for SHARDS."
@@ -607,6 +437,20 @@ the case for whole-suite portable host shards."
           (consent-ci--format-seconds
            (plist-get shard :wall-seconds))))
 
+(defun consent-ci--render-wall-time-summary (shards)
+  "Return compact Markdown for SHARDS sorted by descending wall time."
+  (when shards
+    (concat
+     "## Shard Timing by Wall Time\n\n"
+     "Sorted by CI wall-clock time across all reported shards; "
+     "detailed stable-order diagnostics remain below the fold.\n\n"
+     "| Shard | Ran | Unexpected | Skipped | ERT time | Wall time |\n"
+     "| --- | ---: | ---: | ---: | ---: | ---: |\n"
+     (mapconcat #'consent-ci--render-compact-shard-row
+                (consent-ci--sort-shards-by-wall-time shards)
+                "\n")
+     "\n\n")))
+
 (defun consent-ci-render-pr-markdown-summary (shards &optional run-url)
   "Render SHARDS as an updatable pull request Markdown comment.
 When RUN-URL is non-nil, include a link to the workflow run that produced the
@@ -617,8 +461,7 @@ summary."
      "\n\n"
      (when (and run-url (not (string-empty-p run-url)))
        (format "Latest run: [GitHub Actions](%s).\n\n" run-url))
-     (or (consent-ci--render-compact-portable-summary shards) "")
-     (or (consent-ci--render-compact-emacs-summary shards) "")
+     (or (consent-ci--render-wall-time-summary shards) "")
      "<details>\n"
      "<summary>Detailed shard timings and diagnostic timings</summary>\n\n"
      (consent-ci-render-markdown-summary shards)
