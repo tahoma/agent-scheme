@@ -214,9 +214,9 @@ timing in three places. Read them in this order of convenience:
 
 1. **The PR timing comment.** On every `pull_request` run, the combined timing
    job upserts a single comment marked `<!-- consent-ci-timing-summary -->`,
-   holding portable-host and Emacs-hosted shard timing tables by actual CI shard
-   name, plus a collapsible per-shard detail section. Option-matrix cells show
-   ERT time with CI wall-clock time in parentheses. Fetch it for any PR with:
+   holding one wall-clock-sorted shard timing table by actual CI shard name,
+   plus a collapsible stable-order per-shard detail section. Fetch it for any
+   PR with:
 
    ```sh
    gh api repos/<owner>/<repo>/issues/<pr>/comments \

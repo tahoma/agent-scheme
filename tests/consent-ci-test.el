@@ -195,7 +195,6 @@
                  portable-rest-shard
                  portable-eval-shard)))
          (above-fold (car (split-string markdown "\n<details>" t))))
-    (should (string-match-p "## Portable Host Shard Timing" above-fold))
     (should (string-match-p
              "| Portable R7RS Chibi evaluator subset | 1 | 0 | 0 | 94\\.000s | 95\\.000s |"
              above-fold))
@@ -205,7 +204,102 @@
     (should (string-match-p
              "| Portable R7RS Gambit full suite | 1 | 0 | 0 | 14\\.000s | 14\\.000s |"
              above-fold))
+    (should (string-match-p "## Shard Timing by Wall Time" above-fold))
+    (should-not (string-match-p "## Portable Host Shard Timing" above-fold))
+    (should-not (string-match-p "## Emacs Shard Timing" above-fold))
     (should-not (string-match-p "full suite (2 CI shards)" above-fold))))
+
+(ert-deftest consent-ci-test-pr-summary-renders-shards-by-wall-time ()
+  "Render visible pull request timing rows by wall time across every shard."
+  (let* ((gambit-full-shard
+          '(:name "Portable R7RS Gambit full suite / source metadata on / docstrings full"
+            :selector "portable-gambit"
+            :ran 1
+            :expected 1
+            :unexpected 0
+            :skipped 0
+            :ert-seconds 14.0
+            :wall-seconds 15.0
+            :tests nil))
+         (gambit-stripped-shard
+          '(:name "Portable R7RS Gambit full suite / source metadata off / docstrings none"
+            :selector "portable-gambit"
+            :ran 1
+            :expected 1
+            :unexpected 0
+            :skipped 0
+            :ert-seconds 11.0
+            :wall-seconds 12.0
+            :tests nil))
+         (gauche-reflect-stress-shard
+          '(:name "Portable R7RS Gauche reflection stress / source metadata on / docstrings full"
+            :selector "portable-gauche-reflect-stress"
+            :ran 1
+            :expected 1
+            :unexpected 0
+            :skipped 0
+            :ert-seconds 330.0
+            :wall-seconds 331.0
+            :tests nil))
+         (emacs-reflect-stress-shard
+          '(:name "Emacs reflection dynamic manifest stress / source metadata on / docstrings full"
+            :selector "emacs-reflect-dynamic-manifest-stress"
+            :ran 1
+            :expected 1
+            :unexpected 0
+            :skipped 0
+            :ert-seconds 230.0
+            :wall-seconds 231.0
+            :tests nil))
+         (emacs-library-shard
+          '(:name "Emacs library/conformance / source metadata on / docstrings full"
+            :selector "library"
+            :ran 94
+            :expected 87
+            :unexpected 0
+            :skipped 7
+            :ert-seconds 51.0
+            :wall-seconds 52.0
+            :tests nil))
+         (markdown
+          (consent-ci-render-pr-markdown-summary
+           (list gambit-full-shard
+                 emacs-reflect-stress-shard
+                 gambit-stripped-shard
+                 emacs-library-shard
+                 gauche-reflect-stress-shard)))
+         (above-fold (car (split-string markdown "\n<details>" t))))
+    (cl-labels
+        ((row-index
+          (name)
+          (let ((index (string-match-p
+                        (regexp-quote (format "| %s |" name))
+                        above-fold)))
+            (unless index
+              (ert-fail (format "Missing timing row for %s" name)))
+            index)))
+      (should (string-match-p "## Shard Timing by Wall Time" above-fold))
+      (should-not (string-match-p "## Portable Host Shard Timing" above-fold))
+      (should-not (string-match-p "## Emacs Shard Timing" above-fold))
+      (let ((gauche-stress
+             (row-index
+              "Portable R7RS Gauche reflection stress / source metadata on / docstrings full"))
+            (emacs-stress
+             (row-index
+              "Emacs reflection dynamic manifest stress / source metadata on / docstrings full"))
+            (emacs-library
+             (row-index
+              "Emacs library/conformance / source metadata on / docstrings full"))
+            (gambit-full
+             (row-index
+              "Portable R7RS Gambit full suite / source metadata on / docstrings full"))
+            (gambit-stripped
+             (row-index
+              "Portable R7RS Gambit full suite / source metadata off / docstrings none")))
+        (should (< gauche-stress emacs-stress))
+        (should (< emacs-stress emacs-library))
+        (should (< emacs-library gambit-full))
+        (should (< gambit-full gambit-stripped))))))
 
 (ert-deftest consent-ci-test-pr-summary-renders-without-chibi-host ()
   "Render portable shard comparison cleanly when Chibi is absent."
@@ -242,7 +336,7 @@
                  portable-racket-shard
                  portable-gambit-shard)))
          (above-fold (car (split-string markdown "\n<details>" t))))
-    (should (string-match-p "## Portable Host Shard Timing" above-fold))
+    (should (string-match-p "## Shard Timing by Wall Time" above-fold))
     (should (string-match-p
              "| Portable R7RS Gambit full suite | 1 | 0 | 0 | 14\\.000s | 14\\.000s |"
              above-fold))
@@ -252,11 +346,13 @@
     (should (string-match-p
              "| Portable R7RS Racket-compiled Consent Scheme full suite | 1 | 0 | 0 | 10\\.000s | 11\\.000s |"
              above-fold))
+    (should-not (string-match-p "## Portable Host Shard Timing" above-fold))
+    (should-not (string-match-p "## Emacs Shard Timing" above-fold))
     (should-not (string-match-p "Chibi is split" above-fold))
     (should-not (string-match-p "Portable R7RS Chibi" above-fold))))
 
 (ert-deftest consent-ci-test-pr-summary-renders-option-variant-shard-rows ()
-  "Pivot option-matrix portable shards by actual CI shard name."
+  "Render option-variant portable shards as individual CI shard rows."
   (let* ((portable-gambit-shard
           '(:name "Portable R7RS Gambit full suite / source metadata off / docstrings none"
             :selector "portable-gambit"
@@ -281,21 +377,25 @@
           (consent-ci-render-pr-markdown-summary
            (list portable-racket-shard portable-gambit-shard)))
          (above-fold (car (split-string markdown "\n<details>" t))))
-    (should (string-match-p "## Portable Host Shard Timing" above-fold))
     (should (string-match-p
-             "| Shard | Ran | Skipped | on/full | on/simple | on/none | off/full | off/simple | off/none |"
+             "## Shard Timing by Wall Time"
              above-fold))
     (should (string-match-p
-             "| Portable R7RS Racket full suite | 1 | 0 | n/a | 7\\.000s (8\\.000s wall) | n/a | n/a | n/a | n/a |"
+             "| Portable R7RS Gambit full suite / source metadata off / docstrings none | 1 | 0 | 0 | 11\\.000s | 12\\.000s |"
              above-fold))
     (should (string-match-p
-             "| Portable R7RS Gambit full suite | 1 | 0 | n/a | n/a | n/a | n/a | n/a | 11\\.000s (12\\.000s wall) |"
+             "| Portable R7RS Racket full suite / source metadata on / docstrings simple | 1 | 0 | 0 | 7\\.000s | 8\\.000s |"
              above-fold))
+    (should-not (string-match-p "## Portable Host Shard Timing" above-fold))
+    (should-not (string-match-p "## Emacs Shard Timing" above-fold))
+    (should-not (string-match-p
+                 "| Shard | Ran | Skipped | on/full |"
+                 above-fold))
     (should-not
      (string-match-p "full suite, source metadata" above-fold))))
 
-(ert-deftest consent-ci-test-pr-summary-renders-emacs-option-matrix ()
-  "Pivot Emacs option-matrix shards by logical shard."
+(ert-deftest consent-ci-test-pr-summary-renders-emacs-option-variant-rows ()
+  "Render Emacs option variants as individual wall-time rows."
   (let* ((core-full-shard
           '(:name "Emacs core language/runtime / source metadata on / docstrings full"
             :selector "core"
@@ -365,36 +465,47 @@
                  core-none-shard
                  core-full-shard)))
          (above-fold (car (split-string markdown "\n<details>" t))))
-    (should (string-match-p "## Emacs Shard Timing" above-fold))
-    (should (string-match-p
-             "| Shard | Ran | Skipped | on/full | on/simple | on/none | off/full | off/simple | off/none |"
-             above-fold))
-    (should (string-match-p
-             "| Emacs core language/runtime | 73 | 0 | 52\\.000s (53\\.000s wall) | n/a | n/a | n/a | n/a | 49\\.000s (50\\.000s wall) |"
-             above-fold))
-    (should (string-match-p
-             "| Emacs library/conformance | 94 | 7 | 51\\.000s (52\\.000s wall) | n/a | n/a | n/a | n/a | n/a |"
-             above-fold))
-    (should (string-match-p
-             "| Emacs stdlib/reference corpus | 6 | 0 | 108\\.000s (109\\.000s wall) | n/a | n/a | n/a | n/a | n/a |"
-             above-fold))
-    (should (string-match-p
-             "| Emacs stdlib/reference stress | 1 | 0 | 80\\.000s (81\\.000s wall) | n/a | n/a | n/a | n/a | n/a |"
-             above-fold))
-    (should (string-match-p
-             (rx "| Emacs library/conformance |"
-                 (*? anything)
-                 "| Emacs stdlib/reference corpus |"
-                 (*? anything)
-                 "| Emacs stdlib/reference stress |"
-                 (*? anything)
-                 "| Emacs agent control |")
-             above-fold))
-    (should-not
-     (string-match-p "Emacs core language/runtime / source metadata" above-fold))))
+    (cl-labels
+        ((row-index
+          (name)
+          (let ((index (string-match-p
+                        (regexp-quote (format "| %s |" name))
+                        above-fold)))
+            (unless index
+              (ert-fail (format "Missing timing row for %s" name)))
+            index)))
+      (should (string-match-p "## Shard Timing by Wall Time" above-fold))
+      (should-not (string-match-p "## Portable Host Shard Timing" above-fold))
+      (should-not (string-match-p "## Emacs Shard Timing" above-fold))
+      (should-not (string-match-p
+                   "| Shard | Ran | Skipped | on/full |"
+                   above-fold))
+      (let ((stdlib-reference
+             (row-index
+              "Emacs stdlib/reference corpus / source metadata on / docstrings full"))
+            (agent-control
+             (row-index
+              "Emacs agent control / source metadata on / docstrings full"))
+            (stdlib-reference-stress
+             (row-index
+              "Emacs stdlib/reference stress / source metadata on / docstrings full"))
+            (core-full
+             (row-index
+              "Emacs core language/runtime / source metadata on / docstrings full"))
+            (library
+             (row-index
+              "Emacs library/conformance / source metadata on / docstrings full"))
+            (core-none
+             (row-index
+              "Emacs core language/runtime / source metadata off / docstrings none")))
+        (should (< stdlib-reference agent-control))
+        (should (< agent-control stdlib-reference-stress))
+        (should (< stdlib-reference-stress core-full))
+        (should (< core-full library))
+        (should (< library core-none))))))
 
 (ert-deftest consent-ci-test-pr-summary-renders-portable-shards-by-ci-name ()
-  "Render portable shard timings by actual CI shard name above the fold."
+  "Render portable shard rows by actual CI shard name above the fold."
   (let* ((gambit-full-shard
           '(:name "Portable R7RS Gambit full suite / source metadata on / docstrings full"
             :selector "portable-gambit"
@@ -453,19 +564,40 @@
                  gambit-stripped-shard
                  gambit-full-shard)))
          (above-fold (car (split-string markdown "\n<details>" t))))
-    (should (string-match-p "## Portable Host Shard Timing" above-fold))
-    (should (string-match-p
-             "| Shard | Ran | Skipped | on/full | on/simple | on/none | off/full | off/simple | off/none |"
-             above-fold))
-    (should (string-match-p
-             "| Portable R7RS Gambit full suite | 1 | 0 | 14\\.000s (15\\.000s wall) | n/a | n/a | n/a | n/a | 11\\.000s (12\\.000s wall) |"
-             above-fold))
-    (should (string-match-p
-             "| Portable R7RS Gambit reflection stress | 1 | 0 | 55\\.000s (56\\.000s wall) | n/a | n/a | n/a | n/a | n/a |"
-             above-fold))
-    (should (string-match-p
-             "| Portable R7RS Gauche reflection stress | 1 | 0 | 330\\.000s (331\\.000s wall) | n/a | n/a | n/a | n/a | n/a |"
-             above-fold))
+    (cl-labels
+        ((row-index
+          (name)
+          (let ((index (string-match-p
+                        (regexp-quote (format "| %s |" name))
+                        above-fold)))
+            (unless index
+              (ert-fail (format "Missing timing row for %s" name)))
+            index)))
+      (should (string-match-p "## Shard Timing by Wall Time" above-fold))
+      (should-not (string-match-p "## Portable Host Shard Timing" above-fold))
+      (should-not (string-match-p "## Emacs Shard Timing" above-fold))
+      (should-not (string-match-p
+                   "| Shard | Ran | Skipped | on/full |"
+                   above-fold))
+      (let ((gauche-stress
+             (row-index
+              "Portable R7RS Gauche reflection stress / source metadata on / docstrings full"))
+            (emacs-stress
+             (row-index
+              "Emacs reflection dynamic manifest stress / source metadata on / docstrings full"))
+            (gambit-stress
+             (row-index
+              "Portable R7RS Gambit reflection stress / source metadata on / docstrings full"))
+            (gambit-full
+             (row-index
+              "Portable R7RS Gambit full suite / source metadata on / docstrings full"))
+            (gambit-stripped
+             (row-index
+              "Portable R7RS Gambit full suite / source metadata off / docstrings none")))
+        (should (< gauche-stress emacs-stress))
+        (should (< emacs-stress gambit-stress))
+        (should (< gambit-stress gambit-full))
+        (should (< gambit-full gambit-stripped))))
     (should-not (string-match-p "| Host | Coverage |" above-fold))
     (should-not (string-match-p "| Gambit | full suite |" above-fold))))
 
@@ -1096,11 +1228,16 @@
                  portable-gambit-reflect-shard
                  portable-gambit-shard
                  portable-rest-shard
-                 portable-eval-shard))))
+                 portable-eval-shard)))
+         (details (cadr (split-string
+                         markdown
+                         "<summary>Detailed shard timings and diagnostic timings</summary>\n\n"
+                         t))))
+    (should details)
     (should
      (string-match-p
       "| Portable R7RS Chibi evaluator subset |.*\n| Portable R7RS Chibi non-evaluator subset |.*\n| Portable R7RS Gambit full suite |.*\n| Portable R7RS Gambit reflection contract |.*\n| Portable R7RS Gambit reflection stress |.*\n| Portable R7RS Gambit-compiled Consent Scheme full suite |.*\n| Portable R7RS Racket full suite |.*\n| Portable R7RS Racket reflection contract |.*\n| Portable R7RS Racket reflection stress |.*\n| Portable R7RS Racket-compiled Consent Scheme full suite |.*\n| Portable R7RS Guile full suite |.*\n| Portable R7RS Guile reflection contract |.*\n| Portable R7RS Guile reflection stress |.*\n| Portable R7RS Gauche full suite |.*\n| Portable R7RS Gauche reflection contract |.*\n| Portable R7RS Gauche reflection stress |.*\n| Emacs agent control |.*\n| Emacs agent reliability |.*\n| Emacs capability boundary |.*\n| Emacs agent state |.*\n| Emacs tools/docs/integration |.*\n| Emacs reflection contract |.*\n| Emacs reflection catalog stress |.*\n| Emacs reflection documentation stress |.*\n| Emacs reflection binding crosswalk stress |.*\n| Emacs reflection dynamic manifest stress |"
-      markdown))))
+      details))))
 
 ;;; Structured per-run record (#465)
 
