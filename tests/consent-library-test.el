@@ -532,6 +532,17 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
             (regexp-quote (format "(define-library %s" name))
             (buffer-string))))))))
 
+(ert-deftest consent-library-test-catalog-helpers-are-private ()
+  "Keep manifest catalog helpers out of the public Emacs Lisp namespace."
+  (let (public)
+    (mapatoms
+     (lambda (symbol)
+       (when (and (fboundp symbol)
+                  (string-prefix-p "consent-library-catalog-"
+                                   (symbol-name symbol)))
+         (push symbol public))))
+    (should-not public)))
+
 (ert-deftest consent-library-test-agent-session-is-source-backed ()
   "Load `(agent session)' from the shared portable source library."
   (let ((source-file
