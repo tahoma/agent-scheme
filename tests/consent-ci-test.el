@@ -27,6 +27,17 @@
       (insert-file-contents (expand-file-name relative-path root))
       (buffer-string))))
 
+(defun consent-ci-test--ordered-substrings-p (strings text)
+  "Return non-nil when STRINGS appear in TEXT in order."
+  (let ((start 0)
+        found)
+    (catch 'missing
+      (dolist (string strings t)
+        (setq found (string-match-p (regexp-quote string) text start))
+        (unless found
+          (throw 'missing nil))
+        (setq start (+ found (length string)))))))
+
 (ert-deftest consent-ci-test-parses-result-counts-and-slowest-tests ()
   "Parse ERT shard output plus CI wall-clock metadata."
   (let* ((log (consent-ci-test--write-log
@@ -595,12 +606,55 @@
              makefile))
     (should (string-match-p "^test-full:" makefile))))
 
+(ert-deftest consent-ci-test-emacs-shards-start-longest-first ()
+  "Order Emacs shard starts by expected wall time."
+  (let* ((makefile (consent-ci-test--repo-file-string "Makefile"))
+         (workflow (consent-ci-test--repo-file-string
+                    ".github/workflows/test.yml"))
+         (make-targets
+          '("test-emacs-stdlib-reference-stress"
+            "test-emacs-reflect-dynamic-manifest-stress"
+            "test-emacs-stdlib-reference"
+            "test-emacs-reflect-documentation-stress"
+            "test-emacs-library"
+            "test-emacs-agent-control"
+            "test-emacs-agent-reliability"
+            "test-emacs-integration"
+            "test-emacs-agent-state"
+            "test-emacs-reflect-catalog-stress"
+            "test-emacs-core"
+            "test-emacs-reflect-binding-crosswalk-stress"
+            "test-emacs-tools"
+            "test-emacs-capability-boundary"
+            "test-emacs-reflect"))
+         (workflow-shards
+          '("shard: emacs-stdlib-reference-stress"
+            "shard: emacs-reflect-dynamic-manifest-stress"
+            "shard: emacs-stdlib-reference"
+            "shard: emacs-reflect-documentation-stress"
+            "shard: emacs-library"
+            "shard: emacs-agent-control"
+            "shard: emacs-agent-reliability"
+            "shard: emacs-integration"
+            "shard: emacs-agent-state"
+            "shard: emacs-reflect-catalog-stress"
+            "shard: emacs-reflect-binding-crosswalk-stress"
+            "shard: emacs-tools"
+            "shard: emacs-capability-boundary"
+            "shard: emacs-reflect"
+            "shard: emacs-native-build")))
+    (should
+     (string-match-p
+      (regexp-quote
+       (concat "CONSENT_EMACS_TEST_SHARD_TARGETS ?= "
+               (mapconcat #'identity make-targets " ")))
+      makefile))
+    (should (consent-ci-test--ordered-substrings-p
+             workflow-shards workflow))))
+
 (ert-deftest consent-ci-test-make-splits-capability-default-shards ()
   "Run capability and agent tests as parallel default Emacs shards."
   (let ((makefile (consent-ci-test--repo-file-string "Makefile")))
-    (should (string-match-p
-             "CONSENT_EMACS_TEST_SHARD_TARGETS \\?=.*test-emacs-agent-control.*test-emacs-agent-reliability.*test-emacs-capability-boundary.*test-emacs-agent-state"
-             makefile))
     (should-not (string-match-p
                  "CONSENT_EMACS_TEST_SHARD_TARGETS \\?=.*test-emacs-capabilities"
                  makefile))
@@ -617,9 +671,6 @@
 (ert-deftest consent-ci-test-make-splits-stdlib-reference-stress-shard ()
   "Run large stdlib reference fixtures in a dedicated stress shard."
   (let ((makefile (consent-ci-test--repo-file-string "Makefile")))
-    (should (string-match-p
-             "CONSENT_EMACS_TEST_SHARD_TARGETS \\?=.*test-emacs-stdlib-reference.*test-emacs-stdlib-reference-stress"
-             makefile))
     (dolist (needle '("CONSENT_EMACS_STDLIB_REFERENCE_TEST_SELECTOR \\?=.*not"
                       "CONSENT_EMACS_STDLIB_REFERENCE_STRESS_TEST_SELECTOR \\?="
                       "^test-emacs-stdlib-reference:"
@@ -629,9 +680,6 @@
 (ert-deftest consent-ci-test-make-splits-reflection-behavior-shards ()
   "Run reflection contract and stress coverage as behavior-focused shards."
   (let ((makefile (consent-ci-test--repo-file-string "Makefile")))
-    (should (string-match-p
-             "CONSENT_EMACS_TEST_SHARD_TARGETS \\?=.*test-emacs-reflect.*test-emacs-reflect-catalog-stress.*test-emacs-reflect-documentation-stress.*test-emacs-reflect-binding-crosswalk-stress.*test-emacs-reflect-dynamic-manifest-stress"
-             makefile))
     (should (string-match-p
              "CONSENT_DEFAULT_PORTABLE_TEST_SHARD_TARGETS \\?=.*test-portable-racket-reflect.*test-portable-racket-reflect-stress"
              makefile))
