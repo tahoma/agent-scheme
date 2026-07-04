@@ -37,6 +37,13 @@
   (file-name-directory (or load-file-name buffer-file-name default-directory))
   "Directory containing the loaded Consent Scheme library source.")
 
+(defvar consent--source-library-environments (make-hash-table :test #'equal)
+  "Private evaluator environments used for source-backed adapter calls.")
+
+(defvar consent--source-library-procedures (make-hash-table :test #'equal)
+  "Cached source-backed procedures keyed by library and procedure name.")
+
+(declare-function consent--apply-procedure "consent-interpreter")
 (declare-function consent--make-empty-syntax-environment "consent-macro")
 (declare-function consent--policy-denied "consent-interpreter")
 (declare-function consent--syntax-environment-ref "consent-macro")
@@ -1107,6 +1114,53 @@ Each spec has (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY)."
       (consent--register-emacs-capability-library key context)))
     (or (gethash key (consent--eval-context-libraries context))
         (consent--eval-error "unknown library: %s" key))))
+
+(defun consent--source-library-environment (key)
+  "Return a private value environment for source library KEY."
+  (or (gethash key consent--source-library-environments)
+      (progn
+        (require 'consent-eval)
+        (let ((context (consent--new-eval-context nil))
+              (environment (consent-make-base-environment)))
+          (setf (consent--eval-context-interaction-environment context)
+                environment)
+          (consent--ensure-base-syntax context environment)
+          (consent--resolve-library (consent-read key) context environment)
+          (let* ((library
+                  (gethash key (consent--eval-context-libraries context)))
+                 (value-environment
+                  (and library
+                       (consent--library-value-environment library))))
+            (unless value-environment
+              (consent--eval-error
+               "source library is not registered: %s" key))
+            (puthash key value-environment
+                     consent--source-library-environments)
+            value-environment)))))
+
+(defun consent--source-library-procedure (key name)
+  "Return source-backed procedure NAME from source library KEY."
+  (let* ((cache-key (cons key name))
+         (cached (gethash cache-key consent--source-library-procedures)))
+    (or cached
+        (let ((procedure
+               (consent--environment-ref
+                (consent--source-library-environment key)
+                name)))
+          (puthash cache-key procedure consent--source-library-procedures)
+          procedure))))
+
+(defun consent--source-library-call (key name &rest arguments)
+  "Call source-backed procedure NAME from library KEY with ARGUMENTS."
+  (let ((context (consent--new-eval-context nil))
+        (environment (consent--source-library-environment key)))
+    (setf (consent--eval-context-interaction-environment context)
+          environment)
+    (consent--apply-procedure
+     (consent--source-library-procedure key name)
+     arguments
+     context
+     nil)))
 
 (defun consent--import-binding-local-name (binding)
   "Return BINDING's local import name."
