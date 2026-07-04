@@ -553,12 +553,10 @@ make test
 
 `make test` runs a trimmed default shard set for a fast local loop: one
 representative portable host (`test-portable-racket`,
-`CONSENT_DEFAULT_PORTABLE_TEST_SHARD_TARGETS`) plus all five Emacs-hosted
-trimmed shards (`test-emacs-core`, `test-emacs-library`,
-`test-emacs-capabilities`, `test-emacs-tools`, `test-emacs-integration`). The
-portable reader/writer/docstring machinery that the source-metadata and
-docstring-retention modes exercise is host-independent, so one portable host is
-enough for the default loop.
+`CONSENT_DEFAULT_PORTABLE_TEST_SHARD_TARGETS`) plus the Emacs-hosted shard set
+in `CONSENT_EMACS_TEST_SHARD_TARGETS`. The portable reader/writer/docstring
+machinery that the source-metadata and docstring-retention modes exercise is
+host-independent, so one portable host is enough for the default loop.
 
 The Emacs-hosted surface is split across multiple shards (#556) so the
 parallelizer can overlap them on hosts with more cores than there were once
@@ -573,6 +571,11 @@ test-full` runs. The native build path is already exercised separately by
 `test-emacs-native-build` shard additionally covers the install/dist packaging
 surface against a single shared host build per host (built once per Emacs
 process, reused across the runner-smoke and install/dist tests).
+
+The official stdlib reference corpus tests are isolated in
+`test-emacs-stdlib-reference`. They remain part of `make test` and per-push CI,
+but run in parallel with the broader `test-emacs-library` shard so large
+upstream fixture corpora do not hide unrelated library/conformance timing.
 
 `make test` defaults to `-j16` so up to 16 shard processes can run in parallel
 on a many-core host. Override with `CONSENT_TEST_JOBS=N make test` on narrower
@@ -821,7 +824,11 @@ CONSENT_GUILE=guile make test-portable-guile
 CONSENT_GAUCHE=gosh make test-portable-gauche
 make test-emacs-core
 make test-emacs-library
-make test-emacs-capabilities
+make test-emacs-stdlib-reference
+make test-emacs-agent-control
+make test-emacs-agent-reliability
+make test-emacs-capability-boundary
+make test-emacs-agent-state
 make test-emacs-tools
 make test-emacs-integration
 CONSENT_PARITY_HOST=guile make test-parity
@@ -863,9 +870,9 @@ Public Ubuntu mirror (`public.ecr.aws/ubuntu/ubuntu:26.04`) instead of Docker
 Hub, whose anonymous per-IP pull limit previously timed this job out at
 container provisioning. These shards contribute required host timing data. The
 Emacs-hosted shards split the non-portable ERT suite into core
-language/runtime, library/conformance, capability/policy, and
-tools/docs/integration groups. `make test-emacs-hosted` remains available as
-the local aggregate for all non-portable ERT tests with
+language/runtime, library/conformance, stdlib reference corpus,
+agent/capability, tools/docs, and integration groups. `make test-emacs-hosted`
+remains available as the local aggregate for all non-portable ERT tests with
 `(not "consent-scheme-.*")`.
 
 When `CONSENT_TEST_SELECTOR` is set, `make test` uses a single ERT runner
