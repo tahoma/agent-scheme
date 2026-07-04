@@ -308,12 +308,7 @@ jobs:
   test-portable-extra-hosts:
     name: portable R7RS / ${{ matrix.host.host_name }} / syntax ${{ matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention }}
     runs-on: ubuntu-latest
-    timeout-minutes: 45
-    # Pull the base image from the rate-limit-free AWS ECR Public Ubuntu mirror
-    # instead of Docker Hub (registry-1.docker.io), whose anonymous per-IP limit
-    # intermittently times this container job out at provisioning. Same Ubuntu
-    # 26.04 image, so interpreter versions are unchanged.
-    container: public.ecr.aws/ubuntu/ubuntu:26.04
+    timeout-minutes: 35
     env:
       DEBIAN_FRONTEND: noninteractive
       CONSENT_TEST_SOURCE_METADATA: ${{ matrix.source_metadata }}
@@ -373,30 +368,14 @@ jobs:
             make_target: test-portable-guile-reflect-stress
             summary_name: Portable R7RS Guile reflection stress
             selector: '"^consent-scheme-guile-host-test-r7rs-reflect-stress$"'
-          - host: gauche
-            host_name: Gauche
-            apt_package: gauche
-            make_target: test-portable-gauche
-            summary_name: Portable R7RS Gauche full suite
-            selector: '"^consent-scheme-gauche-host-test-r7rs-suite$"'
-          - host: gauche-reflect
-            host_name: Gauche reflection contract
-            apt_package: gauche
-            make_target: test-portable-gauche-reflect
-            summary_name: Portable R7RS Gauche reflection contract
-            selector: '"^consent-scheme-gauche-host-test-r7rs-reflect$"'
-          - host: gauche-reflect-stress
-            host_name: Gauche reflection stress
-            apt_package: gauche
-            make_target: test-portable-gauche-reflect-stress
-            summary_name: Portable R7RS Gauche reflection stress
-            selector: '"^consent-scheme-gauche-host-test-r7rs-reflect-stress$"'
 
     steps:
       - name: Install checkout tools
         shell: bash
         run: |
-          run() { timeout 180 "$@"; }
+          sudo=""
+          if [ "$(id -u)" -ne 0 ]; then sudo="sudo"; fi
+          run() { $sudo timeout 180 "$@"; }
           ok=0
           for attempt in 1 2 3 4; do
             if run apt-get update -o Acquire::Retries=3 \
@@ -451,10 +430,115 @@ jobs:
             guile|guile-reflect|guile-reflect-stress)
               guile --no-auto-compile --r7rs -c '(import (scheme base) (scheme write)) (write (+ 1 2)) (newline)'
               ;;
-            gauche|gauche-reflect|gauche-reflect-stress)
-              gosh -r7 -e '(import (scheme base) (scheme write)) (write (+ 1 2)) (newline)'
-              ;;
           esac
+
+      - name: Run portable R7RS host shard
+        shell: bash
+        run: |
+          mkdir -p ci-logs
+          started=$SECONDS
+          set +e
+          make "${{ matrix.host.make_target }}" 2>&1 | tee "ci-logs/${CONSENT_CI_LOG_FILE}"
+          status=${PIPESTATUS[0]}
+          wall=$((SECONDS - started))
+          {
+            printf 'CONSENT_CI_SHARD_NAME=%s\n' "${CONSENT_CI_SHARD_SUMMARY_NAME}"
+            printf 'CONSENT_CI_SHARD_SELECTOR=%s\n' '${{ matrix.host.selector }}'
+            printf 'CONSENT_CI_WALL_SECONDS=%s\n' "$wall"
+          } >> "ci-logs/${CONSENT_CI_LOG_FILE}"
+          exit "$status"
+
+      - name: Upload portable R7RS host shard log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-log-portable-${{ matrix.host.host }}-${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}
+          path: ci-logs/${{ env.CONSENT_CI_LOG_FILE }}
+          if-no-files-found: warn
+
+      - name: Render portable R7RS host shard timing summary
+        if: always()
+        run: |
+          if [ -f "ci-logs/${CONSENT_CI_LOG_FILE}" ]; then
+            emacs -Q --batch -L lisp \
+              --eval "(require 'consent-ci)" \
+              --eval "(consent-ci-write-summary (list (expand-file-name (getenv \"CONSENT_CI_LOG_FILE\") \"ci-logs\")) (getenv \"GITHUB_STEP_SUMMARY\"))"
+          fi
+
+  test-portable-gauche-hosts:
+    name: portable R7RS / ${{ matrix.host.host_name }} / syntax ${{ matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # Gauche is packaged in Ubuntu 26.04 but not the bare ubuntu-latest runner's
+    # Ubuntu 24.04 apt universe. Keep the container scoped to Gauche shards and
+    # run one containerized shard at a time to avoid registry pull throttling.
+    container: public.ecr.aws/ubuntu/ubuntu:26.04
+    env:
+      DEBIAN_FRONTEND: noninteractive
+      CONSENT_TEST_SOURCE_METADATA: ${{ matrix.source_metadata }}
+      CONSENT_TEST_DOCSTRING_RETENTION: ${{ matrix.docstring_retention }}
+      CONSENT_TEST_MAX_SOURCE_METADATA: ${{ matrix.source_metadata == 'on' && '250000' || '' }}
+      CONSENT_CI_LOG_FILE: portable-${{ matrix.host.host }}-${{ matrix.source_metadata }}-docstrings-${{ matrix.docstring_retention }}.log
+      CONSENT_CI_SHARD_SUMMARY_NAME: ${{ matrix.host.summary_name }} / source metadata ${{ matrix.source_metadata }} / docstrings ${{ matrix.docstring_retention }}
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      # Per-push lane runs the Gauche shards on the canonical on/full combo
+      # only; the scheduled / workflow_dispatch lane expands to the full 2x3
+      # cross. Gambit carries the full portable cross on every lane, so the
+      # host-independent metadata/docstring axis stays covered.
+      matrix:
+        source_metadata: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && fromJSON('["on", "off"]') || fromJSON('["on"]') }}
+        docstring_retention: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && fromJSON('["full", "simple", "none"]') || fromJSON('["full"]') }}
+        host:
+          - host: gauche
+            host_name: Gauche
+            apt_package: gauche
+            make_target: test-portable-gauche
+            summary_name: Portable R7RS Gauche full suite
+            selector: '"^consent-scheme-gauche-host-test-r7rs-suite$"'
+          - host: gauche-reflect
+            host_name: Gauche reflection contract
+            apt_package: gauche
+            make_target: test-portable-gauche-reflect
+            summary_name: Portable R7RS Gauche reflection contract
+            selector: '"^consent-scheme-gauche-host-test-r7rs-reflect$"'
+          - host: gauche-reflect-stress
+            host_name: Gauche reflection stress
+            apt_package: gauche
+            make_target: test-portable-gauche-reflect-stress
+            summary_name: Portable R7RS Gauche reflection stress
+            selector: '"^consent-scheme-gauche-host-test-r7rs-reflect-stress$"'
+
+    steps:
+      - name: Install checkout tools
+        shell: bash
+        run: |
+          run() { timeout 180 "$@"; }
+          ok=0
+          for attempt in 1 2 3 4; do
+            if run apt-get update -o Acquire::Retries=3 \
+               && run apt-get install -y --no-install-recommends -o Acquire::Retries=3 ca-certificates git tar zstd; then
+              ok=1
+              break
+            fi
+            echo "::warning::apt attempt ${attempt} failed; retrying" >&2
+            sleep $((attempt * 10))
+          done
+          [ "${ok}" -eq 1 ] || { echo "::error::apt failed after retries" >&2; exit 1; }
+
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Install portable R7RS host
+        uses: ./.github/actions/apt-install
+        with:
+          packages: make emacs-nox ${{ matrix.host.apt_package }}
+
+      - name: Verify portable R7RS host
+        shell: bash
+        run: |
+          gosh -r7 -e '(import (scheme base) (scheme write)) (write (+ 1 2)) (newline)'
 
       - name: Run portable R7RS host shard
         shell: bash
@@ -713,8 +797,8 @@ jobs:
     # the scheduled / workflow_dispatch lane expands to the full 2x3 cross, since
     # each core's own shards already carry the metadata/docstring axis. Guile is
     # the parity host here because it ships in the bare ubuntu-latest runner's
-    # apt universe; gauche is only packaged in the ubuntu:26.04 container the
-    # other portable-host shards run in.
+    # apt universe; Gauche is only packaged in the Ubuntu 26.04 container used by
+    # the Gauche-specific portable-host shards.
     env:
       CONSENT_PARITY_HOST: guile
       CONSENT_TEST_SOURCE_METADATA: ${{ matrix.source_metadata }}
@@ -781,6 +865,7 @@ jobs:
     needs:
       - test-portable-gambit
       - test-portable-extra-hosts
+      - test-portable-gauche-hosts
       - test-emacs-hosted
       - test-emacs-core
       - test-parity

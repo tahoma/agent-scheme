@@ -556,12 +556,21 @@
              "if: \\${{ matrix.combo.native }}"
              workflow))))
 
-(ert-deftest consent-ci-test-extra-hosts-base-image-avoids-docker-hub ()
-  "Pull the container base image from the rate-limit-free ECR Public mirror."
+(ert-deftest consent-ci-test-gauche-hosts-container-avoids-docker-hub ()
+  "Pull the Gauche container base image from ECR Public, not Docker Hub."
   (let ((workflow (consent-ci-test--repo-file-string
                    ".github/workflows/test.yml")))
     (should (string-match-p
+             "test-portable-gauche-hosts:"
+             workflow))
+    (should (string-match-p
+             "max-parallel: 1"
+             workflow))
+    (should (string-match-p
              "container: public\\.ecr\\.aws/ubuntu/ubuntu:26\\.04"
+             workflow))
+    (should (string-match-p
+             "test-portable-gauche-hosts"
              workflow))
     ;; The Docker Hub form (registry-1.docker.io) must no longer be requested.
     (should-not (string-match-p "container: ubuntu:26\\.04" workflow))))

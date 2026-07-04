@@ -811,13 +811,13 @@ axis-sensitive changes to the reader, writer, or docstring machinery: open the
 **Actions → Test** workflow and use **Run workflow** (`workflow_dispatch`), or
 wait for the nightly `schedule` run. The trimmed jobs
 (`test-portable-gambit`, `test-emacs-core`, `test-portable-extra-hosts`,
-`test-emacs-hosted`, and the `test-parity` gate) drive their `source_metadata`
-and `docstring_retention` matrix axes from a `github.event_name` expression, so
-those events expand them back to the full cross. The `test-parity` job (#374)
-runs the parity gate under Guile as a
-required check on every lane (Guile is packaged for the bare `ubuntu-latest`
-runner, whereas the other portable-host shards install their interpreters inside
-the `ubuntu:26.04` container).
+`test-portable-gauche-hosts`, `test-emacs-hosted`, and the `test-parity` gate)
+drive their `source_metadata` and `docstring_retention` matrix axes from a
+`github.event_name` expression, so those events expand them back to the full
+cross. The `test-parity` job (#374) runs the parity gate under Guile as a
+required check on every lane. Guile, Racket, and the Racket-compiled runner use
+the bare `ubuntu-latest` runner; Gauche is packaged only in the Ubuntu 26.04
+container and runs in its own matrix job.
 
 The `lint-elisp` job (#415) runs `make lint-elisp` on every lane as its own
 lightweight required check, alongside the `license-reuse` REUSE/SPDX job. It
@@ -889,12 +889,13 @@ same full-suite file list through
 file list through `build/compile/gambit/bin/consent --script`.
 CI builds and caches Gambit 4.9.7 because Ubuntu 24.04's `gambc` package is
 4.9.3 and does not accept the `-:r7rs` runtime option needed for the portable
-library search path. The extra R7RS host matrix runs inside an Ubuntu 26.04
-container because Ubuntu 24.04 does not ship the Gauche package used by that
-shard. That container base image is pulled from the rate-limit-free AWS ECR
-Public Ubuntu mirror (`public.ecr.aws/ubuntu/ubuntu:26.04`) instead of Docker
-Hub, whose anonymous per-IP pull limit previously timed this job out at
-container provisioning. These shards contribute required host timing data. The
+library search path. The Racket, Racket-compiled, and Guile extra-host shards
+run on the bare runner. The Gauche matrix runs inside an Ubuntu 26.04 container
+because Ubuntu 24.04 does not ship the Gauche package used by that shard. That
+container base image is pulled from the AWS ECR Public Ubuntu mirror
+(`public.ecr.aws/ubuntu/ubuntu:26.04`) instead of Docker Hub, and the Gauche
+matrix runs one shard at a time to avoid registry pull throttling during job
+provisioning. These shards contribute required host timing data. The
 Emacs-hosted shards split the non-portable ERT suite into core
 language/runtime, library/conformance, stdlib reference corpus, stdlib reference
 stress, agent/capability, tools/docs, and integration groups.
