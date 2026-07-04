@@ -60,6 +60,7 @@
      (library (agent reflect))
      (library (agent redaction))
      (library (agent session))
+     (library (agent session primitive))
      (library (agent registry))
      (library (agent proposal))
      (library (agent runner))
