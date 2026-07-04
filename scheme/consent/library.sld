@@ -257,6 +257,7 @@
         (agent test primitive)
         (agent task)
         (agent memory)
+        (agent memory primitive)
         (agent plan)
         (agent models)
         (agent models primitive)
@@ -315,6 +316,9 @@
         ((agent task)
          "scheme/agent/task.sld"
          "agent/task.sld")
+        ((agent memory)
+         "scheme/agent/memory.sld"
+         "agent/memory.sld")
         ((agent test)
          "scheme/agent/test.sld"
          "agent/test.sld")
@@ -338,9 +342,6 @@
         ((agent job)
          "scheme/agent/job.sld"
          "agent/job.sld")
-        ((agent memory)
-         "scheme/agent/memory.sld"
-         "agent/memory.sld")
         ((agent plan)
          "scheme/agent/plan.sld"
          "agent/plan.sld")
@@ -1278,6 +1279,65 @@
               value-environment
               syntax-environment)))))
 
+    (define (library-exports-with-binding exports binding)
+      "Return EXPORTS with BINDING replacing the same-named export."
+      (let ((name (library-binding-name binding)))
+        (let loop ((rest exports) (replaced? #f) (result '()))
+          (cond
+           ((null? rest)
+            (reverse (if replaced? result (cons binding result))))
+           ((eq? (library-binding-name (car rest)) name)
+            (loop (cdr rest) #t (cons binding result)))
+           (else
+            (loop (cdr rest) replaced? (cons (car rest) result)))))))
+
+    (define (register-library-primitive-bindings! key primitive-specs context)
+      "Overlay PRIMITIVE-SPECS onto the already registered source library KEY."
+      (let ((library (library-registry-ref context key)))
+        (if (not library)
+            (eval-error "source library is not registered" key))
+        (let ((value-environment (library-value-environment library))
+              (exports (library-exports library)))
+          (for-each
+           (lambda (spec)
+             (let ((name (car spec)))
+               (define-primitive!
+                value-environment
+                name
+                (second spec)
+                (third spec)
+                (fourth spec))
+               (set! exports
+                     (library-exports-with-binding
+                      exports
+                      (make-library-binding
+                       name
+                       'value
+                       (environment-cell value-environment name)
+                       key)))))
+           primitive-specs)
+          (library-registry-set!
+           context
+           key
+           (make-library
+            (library-name library)
+            (library-key library)
+            exports
+            value-environment
+            (library-syntax-environment library))))))
+
+    (define (memory-library-primitive-specs)
+      "Return host adapter primitive specs layered over `(agent memory)'."
+      (list
+       (library-primitive-spec 'memory-put! 'primitive-memory-put! 3 3)
+       (library-primitive-spec 'memory-ref 'primitive-memory-ref 2 2)
+       (library-primitive-spec 'memory-delete! 'primitive-memory-delete! 2 2)
+       (library-primitive-spec 'memory-add! 'primitive-memory-add! 3 3)
+       (library-primitive-spec 'memory-find 'primitive-memory-find 2 2)
+       (library-primitive-spec 'memory-by-tag 'primitive-memory-by-tag 2 2)
+       (library-primitive-spec 'memory-recent 'primitive-memory-recent 2 2)
+       (library-primitive-spec 'memory-yield 'primitive-memory-yield 2 2)))
+
     (define (char-library-specs)
       "Return primitive specs for `(scheme char)'."
       (list
@@ -1765,29 +1825,20 @@
                                   2))
          context))
        ((equal? key '(agent memory))
+        (if (not (library-registry-ref context key))
+            (begin
+              (register-source-library!
+               (agent-source-library-source key)
+               context
+               environment)
+              (register-library-primitive-bindings!
+               key
+               (memory-library-primitive-specs)
+               context))))
+       ((equal? key '(agent memory primitive))
         (register-primitive-library!
          key
-         (list
-          (library-primitive-spec 'memory-put! 'primitive-memory-put! 3 3)
-          (library-primitive-spec 'memory-ref 'primitive-memory-ref 2 2)
-          (library-primitive-spec 'memory-delete!
-                                  'primitive-memory-delete!
-                                  2
-                                  2)
-          (library-primitive-spec 'memory-add! 'primitive-memory-add! 3 3)
-          (library-primitive-spec 'memory-find 'primitive-memory-find 2 2)
-          (library-primitive-spec 'memory-by-tag
-                                  'primitive-memory-by-tag
-                                  2
-                                  2)
-          (library-primitive-spec 'memory-recent
-                                  'primitive-memory-recent
-                                  2
-                                  2)
-          (library-primitive-spec 'memory-yield
-                                  'primitive-memory-yield
-                                  2
-                                  2))
+         (memory-library-primitive-specs)
          context))
        ((equal? key '(agent plan))
         (register-primitive-library!
