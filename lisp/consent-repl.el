@@ -378,16 +378,17 @@ buffer."
            ((eq normalized-scope 'project)
             (consent-repl--project-session-id))
            ((eq normalized-scope 'named)
-            consent-repl-default-named-session-id)
-           (t
-            (consent-session--generated-id normalized-scope)))))
-    (unless (consent-session-ref session-id)
-      (consent-session-create!
-       normalized-scope
-       (append
-        (list :id session-id)
-        (when (eq normalized-scope 'project)
-          (list :project-root (consent-repl--project-root))))))
+            consent-repl-default-named-session-id))))
+    (unless (and session-id (consent-session-ref session-id))
+      (let ((created
+             (consent-session-create!
+              normalized-scope
+              (append
+               (when session-id
+                 (list :id session-id))
+               (when (eq normalized-scope 'project)
+                 (list :project-root (consent-repl--project-root)))))))
+        (setq session-id (consent-repl--session-id-from-datum created))))
     session-id))
 
 ;;;###autoload
