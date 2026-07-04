@@ -573,9 +573,12 @@ surface against a single shared host build per host (built once per Emacs
 process, reused across the runner-smoke and install/dist tests).
 
 The official stdlib reference corpus tests are isolated in
-`test-emacs-stdlib-reference`. They remain part of `make test` and per-push CI,
-but run in parallel with the broader `test-emacs-library` shard so large
-upstream fixture corpora do not hide unrelated library/conformance timing.
+`test-emacs-stdlib-reference` and `test-emacs-stdlib-reference-stress`. They
+remain part of `make test` and per-push CI, but run in parallel with the
+broader `test-emacs-library` shard so large upstream fixture corpora do not hide
+unrelated library/conformance timing. The stress shard keeps large valid cases
+such as the FoundationDB JSON sample as positive, budgeted conformance coverage
+without folding their wall time into the ordinary corpus row.
 
 `make test` defaults to `-j16` so up to 16 shard processes can run in parallel
 on a many-core host. Override with `CONSENT_TEST_JOBS=N make test` on narrower
@@ -825,6 +828,7 @@ CONSENT_GAUCHE=gosh make test-portable-gauche
 make test-emacs-core
 make test-emacs-library
 make test-emacs-stdlib-reference
+make test-emacs-stdlib-reference-stress
 make test-emacs-agent-control
 make test-emacs-agent-reliability
 make test-emacs-capability-boundary
@@ -870,8 +874,9 @@ Public Ubuntu mirror (`public.ecr.aws/ubuntu/ubuntu:26.04`) instead of Docker
 Hub, whose anonymous per-IP pull limit previously timed this job out at
 container provisioning. These shards contribute required host timing data. The
 Emacs-hosted shards split the non-portable ERT suite into core
-language/runtime, library/conformance, stdlib reference corpus,
-agent/capability, tools/docs, and integration groups. `make test-emacs-hosted`
+language/runtime, library/conformance, stdlib reference corpus, stdlib reference
+stress, agent/capability, tools/docs, and integration groups.
+`make test-emacs-hosted`
 remains available as the local aggregate for all non-portable ERT tests with
 `(not "consent-scheme-.*")`.
 

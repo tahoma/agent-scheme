@@ -120,9 +120,12 @@
 
 (defconst consent-library-test--srfi-180-valid-xfails
   nil
-  "Valid SRFI 180 fixtures excluded from the deterministic parser corpus.
-Keep this list empty: upstream `y_*.json' files are positive corpus coverage,
-including large stress fixtures such as `y_foundationdb_status.json'.")
+  "Valid SRFI 180 fixtures allowed to fail.
+Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
+
+(defconst consent-library-test--srfi-180-valid-stress-fixtures
+  '("y_foundationdb_status.json")
+  "Large valid SRFI 180 fixtures that run as positive stress coverage.")
 
 (defconst consent-library-test--srfi-180-invalid-xfails
   '(("n_array_comma_after_close.json"
@@ -178,6 +181,13 @@ including large stress fixtures such as `y_foundationdb_status.json'.")
   (sort (directory-files consent-library-test--srfi-180-fixture-directory
                          nil regexp)
         #'string<))
+
+(defun consent-library-test--srfi-180-non-stress-valid-fixtures (names)
+  "Return valid fixture NAMES except the large stress corpus fixtures."
+  (cl-remove-if
+   (lambda (name)
+     (member name consent-library-test--srfi-180-valid-stress-fixtures))
+   names))
 
 (defun consent-library-test--srfi-180-relative-path (name)
   "Return repository-relative SRFI 180 fixture path for NAME."
@@ -1091,6 +1101,8 @@ including large stress fixtures such as `y_foundationdb_status.json'.")
     (should (= (length invalid) 191))
     (should (= (length implementation) 35))
     (should (member "y_foundationdb_status.json" valid))
+    (dolist (name consent-library-test--srfi-180-valid-stress-fixtures)
+      (should (member name valid)))
     (dolist (name implementation)
       (should (consent-library-test--srfi-180-implementation-reason name)))
     (dolist (entry consent-library-test--srfi-180-valid-xfails)
@@ -1104,14 +1116,24 @@ including large stress fixtures such as `y_foundationdb_status.json'.")
       (should (stringp (cdr entry))))))
 
 (ert-deftest consent-library-test-srfi-180-reference-valid-corpus ()
-  "Parse deterministic valid SRFI 180 JSON fixtures."
+  "Parse non-stress valid SRFI 180 JSON fixtures."
   (let* ((valid (consent-library-test--srfi-180-fixture-names "\\`y_.*\\.json\\'"))
          (deterministic
-          (cl-remove-if (lambda (name)
-                          (assoc name consent-library-test--srfi-180-valid-xfails))
-                        valid)))
+          (consent-library-test--srfi-180-non-stress-valid-fixtures
+           (cl-remove-if (lambda (name)
+                           (assoc name consent-library-test--srfi-180-valid-xfails))
+                         valid))))
+    (should-not (member "y_foundationdb_status.json" deterministic))
     (should (equal (consent-library-test--srfi-180-valid-failures deterministic)
                    "()"))))
+
+(ert-deftest consent-library-test-srfi-180-reference-valid-stress-corpus ()
+  "Parse large valid SRFI 180 JSON stress fixtures."
+  (should
+   (equal
+    (consent-library-test--srfi-180-valid-failures
+     consent-library-test--srfi-180-valid-stress-fixtures)
+    "()")))
 
 (ert-deftest consent-library-test-srfi-180-reference-invalid-corpus ()
   "Require deterministic invalid SRFI 180 JSON fixtures to raise json-error?."
