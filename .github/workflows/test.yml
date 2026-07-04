@@ -594,25 +594,37 @@ jobs:
         source_metadata: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && fromJSON('["on", "off"]') || fromJSON('["on"]') }}
         docstring_retention: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && fromJSON('["full", "simple", "none"]') || fromJSON('["full"]') }}
         shard:
-          - shard: emacs-library
-            label: library/conformance
-            make_target: test-emacs-library
-            summary_name: Emacs library/conformance
-            selector: '(and (or "consent-conformance.*" "consent-fixture.*" "consent-host-adapter-fixture.*" "consent-library.*" "consent-oracle.*") (not "consent-library-test-srfi-180-reference-.*"))'
+          # Longest expected wall-time shards appear first so GitHub starts
+          # them in the first runner wave when matrix capacity is constrained.
           # The SRFI 180 official reference corpus is intentionally isolated
           # from the broader library/conformance shard. The FoundationDB valid
           # fixture remains positive coverage, but runs as stress coverage so
           # it does not dominate the ordinary corpus shard's timing.
-          - shard: emacs-stdlib-reference
-            label: stdlib/reference corpus
-            make_target: test-emacs-stdlib-reference
-            summary_name: Emacs stdlib/reference corpus
-            selector: '(and "consent-library-test-srfi-180-reference-.*" (not "consent-library-test-srfi-180-reference-valid-stress-corpus"))'
           - shard: emacs-stdlib-reference-stress
             label: stdlib/reference stress
             make_target: test-emacs-stdlib-reference-stress
             summary_name: Emacs stdlib/reference stress
             selector: '"consent-library-test-srfi-180-reference-valid-stress-corpus"'
+          - shard: emacs-reflect-dynamic-manifest-stress
+            label: reflection dynamic manifest stress
+            make_target: test-emacs-reflect-dynamic-manifest-stress
+            summary_name: Emacs reflection dynamic manifest stress
+            selector: '"consent-reflect-test-dynamic-manifest-inputs-stress"'
+          - shard: emacs-stdlib-reference
+            label: stdlib/reference corpus
+            make_target: test-emacs-stdlib-reference
+            summary_name: Emacs stdlib/reference corpus
+            selector: '(and "consent-library-test-srfi-180-reference-.*" (not "consent-library-test-srfi-180-reference-valid-stress-corpus"))'
+          - shard: emacs-reflect-documentation-stress
+            label: reflection docs/apropos stress
+            make_target: test-emacs-reflect-documentation-stress
+            summary_name: Emacs reflection documentation stress
+            selector: '"consent-reflect-test-documented-bindings-and-apropos-stress"'
+          - shard: emacs-library
+            label: library/conformance
+            make_target: test-emacs-library
+            summary_name: Emacs library/conformance
+            selector: '(and (or "consent-conformance.*" "consent-fixture.*" "consent-host-adapter-fixture.*" "consent-library.*" "consent-oracle.*") (not "consent-library-test-srfi-180-reference-.*"))'
           # The agent/capability surface used to run as one capabilities/policy
           # shard. It dominated per-push wall time, so the default lane splits
           # it into behavior-focused shards that can run in parallel.
@@ -626,11 +638,11 @@ jobs:
             make_target: test-emacs-agent-reliability
             summary_name: Emacs agent reliability
             selector: '(or "consent-agent-reliability.*" "consent-agent-runner.*")'
-          - shard: emacs-capability-boundary
-            label: capability boundary
-            make_target: test-emacs-capability-boundary
-            summary_name: Emacs capability boundary
-            selector: '(or "consent-approval.*" "consent-capability.*" "consent-network.*" "consent-policy.*")'
+          - shard: emacs-integration
+            label: integration/REPL
+            make_target: test-emacs-integration
+            summary_name: Emacs integration/REPL
+            selector: '(or "consent-native-cli-daemon.*" "consent-repl.*" "consent-vcs.*")'
           - shard: emacs-agent-state
             label: agent state
             make_target: test-emacs-agent-state
@@ -640,41 +652,31 @@ jobs:
           # the tools shard. Reflection now has contract and stress shards so
           # manifest-backed discovery can parallelize with REPL, VCS,
           # native-CLI daemon, and the rest of the Emacs-hosted suite.
-          - shard: emacs-tools
-            label: tools/docs/integration
-            make_target: test-emacs-tools
-            summary_name: Emacs tools/docs/integration
-            selector: '(and (or "consent-ci.*" "consent-compile.*" "consent-control-loop-doc.*" "consent-debugger.*" "consent-diagnostics.*" "consent-diff.*" "consent-feature-reflection-doc.*" "consent-job.*" "consent-skill.*" "consent-smoke.*" "consent-scheme-documentation-test-.*" "consent-scheme-module-ownership-test-.*" "^consent-scheme-eval-test-bootstrap-avoids-host-call/cc$" "^consent-scheme-module-boundary-test-runtime-version-loads-outside-repo$") (not "^consent-compile-portable-test-\(racket\|gambit\)-\(builds-runner\|install-and-dist\)$"))'
-          - shard: emacs-reflect
-            label: reflection contract
-            make_target: test-emacs-reflect
-            summary_name: Emacs reflection contract
-            selector: '(and "consent-reflect.*" (not "consent-reflect-test-.*stress.*"))'
           - shard: emacs-reflect-catalog-stress
             label: reflection catalog stress
             make_target: test-emacs-reflect-catalog-stress
             summary_name: Emacs reflection catalog stress
             selector: '"consent-reflect-test-library-catalog-discovery-stress"'
-          - shard: emacs-reflect-documentation-stress
-            label: reflection docs/apropos stress
-            make_target: test-emacs-reflect-documentation-stress
-            summary_name: Emacs reflection documentation stress
-            selector: '"consent-reflect-test-documented-bindings-and-apropos-stress"'
           - shard: emacs-reflect-binding-crosswalk-stress
             label: reflection binding crosswalk stress
             make_target: test-emacs-reflect-binding-crosswalk-stress
             summary_name: Emacs reflection binding crosswalk stress
             selector: '"consent-reflect-test-binding-libraries-crosswalk-stress"'
-          - shard: emacs-reflect-dynamic-manifest-stress
-            label: reflection dynamic manifest stress
-            make_target: test-emacs-reflect-dynamic-manifest-stress
-            summary_name: Emacs reflection dynamic manifest stress
-            selector: '"consent-reflect-test-dynamic-manifest-inputs-stress"'
-          - shard: emacs-integration
-            label: integration/REPL
-            make_target: test-emacs-integration
-            summary_name: Emacs integration/REPL
-            selector: '(or "consent-native-cli-daemon.*" "consent-repl.*" "consent-vcs.*")'
+          - shard: emacs-tools
+            label: tools/docs/integration
+            make_target: test-emacs-tools
+            summary_name: Emacs tools/docs/integration
+            selector: '(and (or "consent-ci.*" "consent-compile.*" "consent-control-loop-doc.*" "consent-debugger.*" "consent-diagnostics.*" "consent-diff.*" "consent-feature-reflection-doc.*" "consent-job.*" "consent-skill.*" "consent-smoke.*" "consent-scheme-documentation-test-.*" "consent-scheme-module-ownership-test-.*" "^consent-scheme-eval-test-bootstrap-avoids-host-call/cc$" "^consent-scheme-module-boundary-test-runtime-version-loads-outside-repo$") (not "^consent-compile-portable-test-\(racket\|gambit\)-\(builds-runner\|install-and-dist\)$"))'
+          - shard: emacs-capability-boundary
+            label: capability boundary
+            make_target: test-emacs-capability-boundary
+            summary_name: Emacs capability boundary
+            selector: '(or "consent-approval.*" "consent-capability.*" "consent-network.*" "consent-policy.*")'
+          - shard: emacs-reflect
+            label: reflection contract
+            make_target: test-emacs-reflect
+            summary_name: Emacs reflection contract
+            selector: '(and "consent-reflect.*" (not "consent-reflect-test-.*stress.*"))'
           # The native-build shard isolates the four full host-compile +
           # install/dist tests so they only run in `make test-full' locally
           # (#556). On CI's emacs-hosted runners neither gsc/gsi nor raco/racket
