@@ -70,6 +70,37 @@
        (session-create! 'named '((id scheme-main)))"))))
   (should (= (length (consent-session-list 'named)) 2)))
 
+(ert-deftest consent-session-test-source-library-legacy-session-verbs ()
+  "Expose legacy pure lifecycle verbs from the source-loaded session library."
+  (consent-session-test--reset)
+  (should
+   (equal
+    (consent-session-test--value-external
+     (consent-eval-source
+      "(import (scheme base) (agent session))
+       (define created
+         (session-create! 'named '((id source-legacy-a))))
+       (define snapshot
+         (session-snapshot! 'source-legacy-a '((id source-legacy-snap))))
+       (define forked
+         (session-fork! 'source-legacy-a '((id source-legacy-b))))
+       (list
+        (session-datum-id created)
+        (session-datum-id (session-ref 'source-legacy-a))
+        (map session-datum-id (session-list))
+        (cadr (assq 'status
+                    (cdr (session-suspend! 'source-legacy-a))))
+        (cadr (assq 'status
+                    (cdr (session-resume! 'source-legacy-a))))
+        (cadr (assq 'id (cdr snapshot)))
+        (session-datum-id forked)
+        (session-handles (session-ref 'source-legacy-b))
+        (cadr (assq 'status
+                    (cdr (session-retire! 'source-legacy-a)))))"))
+    (concat
+     "(source-legacy-a source-legacy-a (source-legacy-a source-legacy-b) "
+     "suspended active source-legacy-snap source-legacy-b () retired)"))))
+
 (ert-deftest consent-session-test-suspend-resume-snapshot-fork-and-audit ()
   "Track lifecycle transitions, snapshots, forks, and audit entries."
   (consent-session-test--reset)

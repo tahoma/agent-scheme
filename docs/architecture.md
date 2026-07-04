@@ -121,6 +121,13 @@ single-sourced, and the work should not be presented as architecturally complete
 until both sides are handled or the duplication is collapsed into portable
 Scheme.
 
+The repository-owned agent instructions in [AGENTS.md](../AGENTS.md) codify
+this as the standing contributor rule: libraries expressible over `(scheme
+base)` are shared source libraries; mixed libraries single-source the pure
+substrate and retain only host-effecting operations as primitives; the
+parallel-update obligation applies to the irreducible reader/evaluator/macro,
+base-primitive, and host-FFI layer.
+
 This parity rule is no longer enforced by prose and reviewer diligence alone.
 The `test-parity` gate (`make test-parity`, the `test-parity` CI job; #374) runs
 the shared fixture corpus through both in-repo cores and fails on any result

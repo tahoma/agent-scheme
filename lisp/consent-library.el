@@ -192,6 +192,7 @@
     "(agent reflect)"
     "(agent redaction)"
     "(agent session)"
+    "(agent session primitive)"
     "(agent registry)"
     "(agent proposal)"
     "(agent runner)"
@@ -235,6 +236,8 @@ core rather than the agent domain it governs.")
      . "../scheme/agent/task.sld")
     ("(agent test)"
      . "../scheme/agent/test.sld")
+    ("(agent session)"
+     . "../scheme/agent/session.sld")
     ("(agent transcript)"
      . "../scheme/agent/transcript.sld"))
   "Checked-in portable Consent Scheme libraries loaded as Scheme source.")
@@ -629,9 +632,17 @@ core rather than the agent domain it governs.")
       (consent-redaction-primitive-specs)
       context))
     ("(agent session)"
+     (unless (gethash key (consent--eval-context-libraries context))
+       (consent--register-source-library
+        (consent--agent-source-library-source key) context environment)
+       (consent--register-library-primitive-bindings
+        key
+        (consent--session-adapter-primitive-specs)
+        context)))
+    ("(agent session primitive)"
      (consent--register-primitive-library
       key
-      (consent-session-primitive-specs)
+      (consent--session-adapter-primitive-specs)
       context))
     ("(agent transcript)"
      (consent--register-source-library
@@ -733,6 +744,49 @@ Each spec has (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY)."
           value-environment
           syntax-environment)
          registry)))))
+
+(defun consent--library-exports-with-binding (exports binding)
+  "Return EXPORTS with BINDING replacing the same-named export."
+  (let ((name (consent--library-binding-name binding))
+        (replaced nil)
+        (result nil))
+    (dolist (export exports)
+      (if (equal (consent--library-binding-name export) name)
+          (progn
+            (setq replaced t)
+            (push binding result))
+        (push export result)))
+    (unless replaced
+      (push binding result))
+    (nreverse result)))
+
+(defun consent--register-library-primitive-bindings
+    (key primitive-specs context)
+  "Overlay PRIMITIVE-SPECS onto the already registered source library KEY."
+  (let* ((registry (consent--eval-context-libraries context))
+         (library (gethash key registry)))
+    (unless library
+      (consent--eval-error "source library is not registered: %s" key))
+    (let ((value-environment
+           (consent--library-value-environment library))
+          (exports (consent--library-exports library)))
+      (dolist (spec primitive-specs)
+        (let ((name (nth 0 spec)))
+          (consent--define-primitive
+           value-environment
+           name
+           (nth 1 spec)
+           (nth 2 spec)
+           (nth 3 spec))
+          (setq exports
+                (consent--library-exports-with-binding
+                 exports
+                 (consent--make-library-binding
+                  name
+                  'value
+                  (consent--environment-cell value-environment name)
+                  key)))))
+      (setf (consent--library-exports library) exports))))
 
 (defun consent--cxr-primitive (name)
   "Return a primitive procedure implementation for composed accessor NAME."
