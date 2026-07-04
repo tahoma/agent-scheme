@@ -189,8 +189,8 @@
     consent-library-test--root
     '("fixtures/srfi-180")
     '(metadata read))
-   '(:max-steps 2000000
-     :max-host-callbacks 500000)))
+   '(:max-steps 12000000
+     :max-host-callbacks 2000000)))
 
 (defun consent-library-test--srfi-180-eval (body)
   "Evaluate BODY with SRFI 180 corpus imports and file grants."
@@ -202,31 +202,57 @@
            body)
    (consent-library-test--srfi-180-options)))
 
-(defun consent-library-test--srfi-180-read-valid (name)
-  "Read valid fixture NAME and return an explicit success marker."
+(defun consent-library-test--srfi-180-path-list-literal (names)
+  "Return NAMES as a Scheme list literal of fixture-relative paths."
+  (concat
+   "("
+   (mapconcat
+    #'consent-library-test--scheme-string-literal
+    (mapcar #'consent-library-test--srfi-180-relative-path names)
+    " ")
+   ")"))
+
+(defun consent-library-test--srfi-180-valid-failures (names)
+  "Return Scheme-readable failures for valid fixture NAMES."
   (consent-library-test--srfi-180-eval
    (format
-    "(call-with-input-file %s
-       (lambda (port)
-         (json-read port)
-         'ok))"
-    (consent-library-test--scheme-string-literal
-     (consent-library-test--srfi-180-relative-path name)))))
+    "(let loop ((paths '%s) (failures '()))
+       (if (null? paths)
+           (reverse failures)
+           (let ((path (car paths)))
+             (let ((result
+                    (guard (condition
+                            (else 'raised))
+                      (call-with-input-file path
+                        (lambda (port)
+                          (json-read port)))
+                      'ok)))
+               (if (eq? result 'ok)
+                   (loop (cdr paths) failures)
+                   (loop (cdr paths) (cons (list path result) failures)))))))"
+    (consent-library-test--srfi-180-path-list-literal names))))
 
-(defun consent-library-test--srfi-180-invalid-result (name)
-  "Return the SRFI 180 invalid-fixture result for NAME."
+(defun consent-library-test--srfi-180-invalid-failures (names)
+  "Return Scheme-readable failures for deterministic invalid fixture NAMES."
   (consent-library-test--srfi-180-eval
    (format
     "(parameterize ((json-nesting-depth-limit 32))
-       (call-with-input-file %s
-         (lambda (port)
-           (guard (condition
-                   ((json-error? condition) 'json-error)
-                   (else 'wrong-condition))
-             (json-read port)
-             'no-error))))"
-    (consent-library-test--scheme-string-literal
-     (consent-library-test--srfi-180-relative-path name)))))
+       (let loop ((paths '%s) (failures '()))
+         (if (null? paths)
+             (reverse failures)
+             (let* ((path (car paths))
+                    (result
+                     (guard (condition
+                             ((json-error? condition) 'json-error)
+                             (else 'wrong-condition))
+                       (call-with-input-file path
+                         (lambda (port)
+                           (json-read port)
+                           'no-error)))))
+               (if (eq? result 'json-error)
+                   (loop (cdr paths) failures)
+                   (loop (cdr paths) (cons (list path result) failures)))))))"
+    (consent-library-test--srfi-180-path-list-literal names))))
 
 (defun consent-library-test--srfi-180-byte-xfail-reason (name)
   "Return byte-decoding xfail reason for fixture NAME, or nil."
@@ -1067,33 +1093,19 @@
          (deterministic
           (cl-remove-if (lambda (name)
                           (assoc name consent-library-test--srfi-180-valid-xfails))
-                        valid))
-         (failures
-          (cl-loop for name in deterministic
-                   for result = (condition-case error
-                                    (consent-library-test--srfi-180-read-valid name)
-                                  (error (format "raised %s"
-                                                 (error-message-string error))))
-                   unless (equal result "ok")
-                   collect (list name result))))
-    (should (null failures))))
+                        valid)))
+    (should (equal (consent-library-test--srfi-180-valid-failures deterministic)
+                   "()"))))
 
 (ert-deftest consent-library-test-srfi-180-reference-invalid-corpus ()
   "Require deterministic invalid SRFI 180 JSON fixtures to raise json-error?."
   (let* ((invalid (consent-library-test--srfi-180-fixture-names "\\`n_.*\\.json\\'"))
          (deterministic
           (cl-remove-if #'consent-library-test--srfi-180-invalid-xfail-reason
-                        invalid))
-         (failures
-          (cl-loop for name in deterministic
-                   for result = (condition-case error
-                                    (consent-library-test--srfi-180-invalid-result name)
-                                  (error (format "raised %s"
-                                                 (error-message-string error))))
-                   unless (equal result "json-error")
-                   collect (list name result))))
+                        invalid)))
     (should (> (length deterministic) 120))
-    (should (null failures))))
+    (should (equal (consent-library-test--srfi-180-invalid-failures deterministic)
+                   "()"))))
 
 (ert-deftest consent-library-test-srfi-180-reference-invalid-classification ()
   "Record explicit reasons for invalid SRFI 180 fixtures outside text coverage."
