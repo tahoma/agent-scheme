@@ -63,13 +63,35 @@ Repository conventions override generic workflow defaults. In particular:
   behavior can instead be single-sourced as portable Scheme loaded by both
   bootstraps.
 - The portable R7RS implementation is a first-class peer, not a secondary
-  mirror of the Emacs Lisp bootstrap. For semantic changes, evaluator pass
-  boundaries, public runtime behavior, standard libraries, fixtures, or tests,
-  prefer portable source libraries when the behavior is host-neutral. Maintain
-  twin Emacs Lisp and portable Scheme implementations only when a host boundary
-  or bootstrap constraint requires it; document that constraint and the path to
-  collapse the code back into portable Scheme instead of treating duplication as
-  complete architecture.
+  mirror of the Emacs Lisp bootstrap -- and the strongest form of parity is a
+  single shared implementation, not two kept in step. Any library expressible in
+  Consent Scheme over `(scheme base)` must be authored once as a host-neutral
+  `.sld` and loaded by both evaluator bootstraps, not implemented twice. The
+  established pattern is `scheme/consent/case-lambda.sld` /
+  `scheme/consent/lazy.sld` and the source-loaded `(agent ...)` libraries
+  registered through
+  `register-source-library` / `consent--agent-source-library-files` in
+  `lisp/consent-library.el`. Before writing or extending a native Emacs-Lisp
+  implementation of a library, ask whether it is expressible over
+  `(scheme base)`; if so, write or extend the shared `.sld` and load it from
+  both hosts instead of adding a twin. When an existing pure library is still
+  dual-implemented, prefer collapsing it to single source over maintaining
+  parity by hand.
+- Reserve parallel Emacs-Lisp and portable-Scheme implementation for the
+  irreducible layer the language cannot express about itself: the reader, the
+  evaluator core and its pass boundaries, base primitives, and host FFI
+  (process/network/filesystem I/O, buffers, persistence, policy and approval
+  effects). A library is mixed when only some of its operations are host effects
+  (e.g. `(agent context)`, whose `current-buffer-context` observes live
+  buffers): single-source its pure substrate and keep the host operations as
+  primitives. When you change the irreducible layer's semantics or public
+  runtime behavior, update both host implementations in parallel when practical;
+  if one side must lead, document the remaining parity work in the issue,
+  commit, or pull request instead of treating the refactor as complete. This
+  obligation governs the irreducible layer only -- it is not a license to mirror
+  pure library logic that should be single-sourced, and shared conformance
+  fixtures and tests are a single corpus exercised on both hosts, not duplicated
+  per host.
 - Public Consent Scheme identifiers must use `consent-`; private Emacs Lisp
   internals must use `consent--`.
 - For Scheme-specific language questions, consult the local R7RS-small report

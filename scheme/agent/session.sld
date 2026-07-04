@@ -23,6 +23,14 @@
           session-store-snapshot!
           session-store-fork!
           session-store-retire!
+          session-create!
+          session-ref
+          session-list
+          session-suspend!
+          session-resume!
+          session-snapshot!
+          session-fork!
+          session-retire!
           session-handles
           session-datum-id
           consent-make-session-manager
@@ -121,6 +129,10 @@
             "id counters.")))
         (effects allocation))
       (make-session-store '() 0 0))
+
+    ;; Default process-local store used by the legacy pure `session-*' API.
+    (define default-session-store
+      (consent-make-session-store))
 
     (define (member-equal? value list)
       "Report whether VALUE is in LIST using equal?."
@@ -429,6 +441,104 @@
       (let ((session (require-session store id)))
         (set-session-record-handles! session '())
         (transition! session 'retired)))
+
+    (define (session-create! scope . maybe-options)
+      "Create a session in the default portable store."
+      #((parameters
+         (scope (type symbol)
+          (description "Session scope symbol."))
+         (maybe-options (type list)
+          (description "Zero or one association list of construction fields.")))
+        (returns (type list)
+         (description "The created public session datum."))
+        (effects state-write error))
+      (session-store-create! default-session-store
+                             scope
+                             (if (null? maybe-options)
+                                 '()
+                                 (car maybe-options))))
+
+    (define (session-ref id)
+      "Return a session datum from the default portable store, or #f."
+      #((parameters
+         (id (type symbol)
+          (description "Session id symbol.")))
+        (returns (type (or list boolean))
+         (description "The public session datum, or #f when ID is unknown."))
+        (effects state-read))
+      (session-store-ref default-session-store id))
+
+    (define (session-list . maybe-scope)
+      "Return default-store session datums, optionally filtered by scope."
+      #((parameters
+         (maybe-scope (type list)
+          (description "Optional session scope symbol.")))
+        (returns (type (list-of list))
+         (description "List of public session datums."))
+        (effects state-read error))
+      (apply session-store-list default-session-store maybe-scope))
+
+    (define (session-suspend! id)
+      "Suspend default-store session ID."
+      #((parameters
+         (id (type symbol)
+          (description "Session id symbol.")))
+        (returns (type list)
+         (description "The suspended public session datum."))
+        (effects state-write error))
+      (session-store-suspend! default-session-store id))
+
+    (define (session-resume! id)
+      "Resume default-store session ID."
+      #((parameters
+         (id (type symbol)
+          (description "Session id symbol.")))
+        (returns (type list)
+         (description "The active public session datum."))
+        (effects state-write error))
+      (session-store-resume! default-session-store id))
+
+    (define (session-snapshot! id . maybe-options)
+      "Snapshot default-store session ID."
+      #((parameters
+         (id (type symbol)
+          (description "Session id symbol."))
+         (maybe-options (type list)
+          (description "Zero or one association list overriding the snapshot id.")))
+        (returns (type list)
+         (description "A `session-snapshot` datum."))
+        (effects state-write error))
+      (session-store-snapshot! default-session-store
+                               id
+                               (if (null? maybe-options)
+                                   '()
+                                   (car maybe-options))))
+
+    (define (session-fork! id . maybe-options)
+      "Fork default-store session ID."
+      #((parameters
+         (id (type symbol)
+          (description "Source session id symbol."))
+         (maybe-options (type list)
+          (description "Zero or one association list overriding the fork id.")))
+        (returns (type list)
+         (description "The forked public session datum."))
+        (effects state-write error))
+      (session-store-fork! default-session-store
+                           id
+                           (if (null? maybe-options)
+                               '()
+                               (car maybe-options))))
+
+    (define (session-retire! id)
+      "Retire default-store session ID."
+      #((parameters
+         (id (type symbol)
+          (description "Session id symbol.")))
+        (returns (type list)
+         (description "The retired public session datum."))
+        (effects state-write error))
+      (session-store-retire! default-session-store id))
 
     (define (consent-make-session-manager)
       "Construct an empty live session manager."

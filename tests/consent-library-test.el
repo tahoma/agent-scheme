@@ -345,6 +345,35 @@
             (regexp-quote (format "(define-library %s" name))
             (buffer-string))))))))
 
+(ert-deftest consent-library-test-agent-session-is-source-backed ()
+  "Load `(agent session)' from the shared portable source library."
+  (let ((source-file
+         (consent--agent-source-library-file "(agent session)")))
+    (should source-file)
+    (should (string-suffix-p "scheme/agent/session.sld" source-file))
+    (should (file-readable-p source-file)))
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (agent session))
+      (define store (consent-make-session-store))
+      (define created
+        (session-store-create! store 'named '((id source-alpha))))
+      (define snapshot
+        (session-store-snapshot! store 'source-alpha '((id source-snap))))
+      (define forked
+        (session-store-fork! store 'source-alpha '((id source-beta))))
+      (list
+       (session-datum-id created)
+       (session-datum-id (session-store-ref store 'source-alpha))
+       (map session-datum-id (session-store-list store))
+       (cadr (assq 'status (cdr (session-store-suspend! store 'source-alpha))))
+       (cadr (assq 'status (cdr (session-store-resume! store 'source-alpha))))
+       (cadr (assq 'id (cdr snapshot)))
+       (session-datum-id forked)
+       (cadr (assq 'status (cdr (session-store-retire! store 'source-alpha)))))")
+    "(source-alpha source-alpha (source-beta source-alpha) suspended active source-snap source-beta retired)")))
+
 (ert-deftest consent-library-test-standard-case-lambda-import ()
   "Import `(scheme case-lambda)' through the library registry."
   (should

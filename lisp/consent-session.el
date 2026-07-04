@@ -1246,9 +1246,8 @@ Retires the named session and clears the default session when it was current."
       (setq consent-session-current-id nil))
     datum))
 
-;;;###autoload
-(defun consent-session-primitive-specs ()
-  "Return primitive specs for the `(agent session)' library."
+(defun consent--session-adapter-primitive-specs ()
+  "Return host adapter primitive specs layered over `(agent session)'."
   `(("session-create!" ,#'consent-session--primitive-create 1 2)
     ("session-ref" ,#'consent-session--primitive-ref 1 1)
     ("session-list" ,#'consent-session--primitive-list 0 1)
