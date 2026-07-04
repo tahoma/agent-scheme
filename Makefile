@@ -80,6 +80,10 @@ CONSENT_EMACS_AGENT_RELIABILITY_TEST_SELECTOR ?= (or "consent-agent-reliability.
 CONSENT_EMACS_CAPABILITY_BOUNDARY_TEST_SELECTOR ?= (or "consent-approval.*" "consent-capability.*" "consent-network.*" "consent-policy.*")
 CONSENT_EMACS_AGENT_STATE_TEST_SELECTOR ?= (or "consent-agent-io.*" "consent-context.*" "consent-helper.*" "consent-memory.*" "consent-models.*" "consent-plan.*" "consent-redaction.*" "consent-session.*" "consent-test.*" "consent-transcript.*")
 CONSENT_EMACS_REFLECT_TEST_SELECTOR ?= (and "consent-reflect.*" (not "consent-reflect-test-.*stress.*"))
+CONSENT_EMACS_REFLECT_CATALOG_STRESS_TEST_SELECTOR ?= "consent-reflect-test-library-catalog-discovery-stress"
+CONSENT_EMACS_REFLECT_DOCUMENTATION_STRESS_TEST_SELECTOR ?= "consent-reflect-test-documented-bindings-and-apropos-stress"
+CONSENT_EMACS_REFLECT_BINDING_CROSSWALK_STRESS_TEST_SELECTOR ?= "consent-reflect-test-binding-libraries-crosswalk-stress"
+CONSENT_EMACS_REFLECT_DYNAMIC_MANIFEST_STRESS_TEST_SELECTOR ?= "consent-reflect-test-dynamic-manifest-inputs-stress"
 CONSENT_EMACS_REFLECT_STRESS_TEST_SELECTOR ?= "consent-reflect-test-.*stress.*"
 # Compatibility aggregate for ad hoc local runs. The default and CI shard sets
 # use the four narrower targets below so the long-running agent/capability
@@ -96,8 +100,8 @@ CONSENT_EMACS_CAPABILITY_TEST_SELECTOR ?= (or "consent-agent-io.*" "consent-agen
 CONSENT_EMACS_TOOLS_TEST_SELECTOR ?= (and (or "consent-ci.*" "consent-compile.*" "consent-control-loop-doc.*" "consent-debugger.*" "consent-diagnostics.*" "consent-diff.*" "consent-docstring-metadata-doc.*" "consent-feature-reflection-doc.*" "consent-job.*" "consent-script.*" "consent-skill.*" "consent-smoke.*" "consent-scheme-documentation-test-.*" "consent-scheme-module-ownership-test-.*" "^consent-scheme-eval-test-bootstrap-avoids-host-call/cc$$" "^consent-scheme-module-boundary-test-runtime-version-loads-outside-repo$$") (not "^consent-compile-portable-test-\\(racket\\|gambit\\)-\\(builds-runner\\|install-and-dist\\)$$"))
 # The integration shard takes the heavyweight Emacs-hosted runtime surfaces
 # split out of `test-emacs-tools' by #556 -- REPL, VCS, and the native-CLI daemon
-# -- so they overlap with the other Emacs shards. Reflection now has contract and
-# catalog-stress shards because manifest-backed discovery is its own behavior
+# -- so they overlap with the other Emacs shards. Reflection now has contract
+# and stress shards because manifest-backed discovery is its own behavior
 # surface and can dominate the older integration grouping.
 CONSENT_EMACS_INTEGRATION_TEST_SELECTOR ?= (or "consent-native-cli-daemon.*" "consent-repl.*" "consent-vcs.*")
 # The native-build shard isolates the four full host-compile + install/dist
@@ -114,7 +118,7 @@ CONSENT_PARITY_TEST_SELECTOR ?= "^consent-parity-test-.*"
 CONSENT_LIVE_MODEL_CI_SELECTOR ?= (or "consent-models-test-live-local-openai-compatible-completion" "consent-models-test-live-local-openai-compatible-tool-call" "consent-models-test-live-portable-racket-local-openai-compatible-tool-call" "consent-models-test-live-portable-compiled-local-openai-compatible-tool-call")
 CONSENT_LIVE_MODEL_SELECTOR ?= (or "consent-models-test-live-local-.*" "consent-models-test-live-portable-.*")
 CONSENT_PORTABLE_TEST_SHARD_TARGETS ?= test-portable-gambit test-portable-gambit-reflect test-portable-gambit-reflect-stress test-portable-gambit-native test-portable-racket test-portable-racket-reflect test-portable-racket-reflect-stress test-portable-compiled test-portable-guile test-portable-guile-reflect test-portable-guile-reflect-stress test-portable-gauche test-portable-gauche-reflect test-portable-gauche-reflect-stress
-CONSENT_EMACS_TEST_SHARD_TARGETS ?= test-emacs-core test-emacs-library test-emacs-stdlib-reference test-emacs-stdlib-reference-stress test-emacs-agent-control test-emacs-agent-reliability test-emacs-capability-boundary test-emacs-agent-state test-emacs-tools test-emacs-reflect test-emacs-reflect-stress test-emacs-integration
+CONSENT_EMACS_TEST_SHARD_TARGETS ?= test-emacs-core test-emacs-library test-emacs-stdlib-reference test-emacs-stdlib-reference-stress test-emacs-agent-control test-emacs-agent-reliability test-emacs-capability-boundary test-emacs-agent-state test-emacs-tools test-emacs-reflect test-emacs-reflect-catalog-stress test-emacs-reflect-documentation-stress test-emacs-reflect-binding-crosswalk-stress test-emacs-reflect-dynamic-manifest-stress test-emacs-integration
 # Representative portable host kept in the trimmed default make test shard set.
 # The reader/writer/docstring machinery exercised by the portable shards is
 # host-independent, so one host is enough for the fast local loop; the full host
@@ -142,7 +146,7 @@ CONSENT_FULL_TEST_JOBS ?= 16
 
 .DEFAULT_GOAL := help
 
-.PHONY: help print-version clean clean-compile compile install uninstall dist compile-elisp lint-elisp lint-elisp-docstrings lint-portable lint-branding lint-line-length repl test test-full test-portable test-portable-chibi test-portable-gambit test-portable-gambit-reflect test-portable-gambit-reflect-stress test-portable-gambit-native test-portable-racket test-portable-racket-reflect test-portable-racket-reflect-stress test-portable-compiled test-portable-guile test-portable-guile-reflect test-portable-guile-reflect-stress test-portable-gauche test-portable-gauche-reflect test-portable-gauche-reflect-stress test-emacs-hosted test-emacs-core test-emacs-library test-emacs-stdlib-reference test-emacs-stdlib-reference-stress test-emacs-agent-control test-emacs-agent-reliability test-emacs-capability-boundary test-emacs-agent-state test-emacs-capabilities test-emacs-tools test-emacs-reflect test-emacs-reflect-stress test-emacs-integration test-emacs-native-build test-parity test-live-model-ci test-live-model conformance-oracle
+.PHONY: help print-version clean clean-compile compile install uninstall dist compile-elisp lint-elisp lint-elisp-docstrings lint-portable lint-branding lint-line-length repl test test-full test-portable test-portable-chibi test-portable-gambit test-portable-gambit-reflect test-portable-gambit-reflect-stress test-portable-gambit-native test-portable-racket test-portable-racket-reflect test-portable-racket-reflect-stress test-portable-compiled test-portable-guile test-portable-guile-reflect test-portable-guile-reflect-stress test-portable-gauche test-portable-gauche-reflect test-portable-gauche-reflect-stress test-emacs-hosted test-emacs-core test-emacs-library test-emacs-stdlib-reference test-emacs-stdlib-reference-stress test-emacs-agent-control test-emacs-agent-reliability test-emacs-capability-boundary test-emacs-agent-state test-emacs-capabilities test-emacs-tools test-emacs-reflect test-emacs-reflect-catalog-stress test-emacs-reflect-documentation-stress test-emacs-reflect-binding-crosswalk-stress test-emacs-reflect-dynamic-manifest-stress test-emacs-reflect-stress test-emacs-integration test-emacs-native-build test-parity test-live-model-ci test-live-model conformance-oracle
 
 help:
 	@printf '%s\n' 'Consent Scheme top-level actions:'
@@ -191,7 +195,11 @@ help:
 	@printf '  %-26s %s\n' 'test-emacs-capabilities' 'Run all Emacs-hosted agent/capability tests.'
 	@printf '  %-26s %s\n' 'test-emacs-tools' 'Run the Emacs-hosted tools and docs shard.'
 	@printf '  %-26s %s\n' 'test-emacs-reflect' 'Run the Emacs-hosted reflection contract shard.'
-	@printf '  %-26s %s\n' 'test-emacs-reflect-stress' 'Run the Emacs-hosted reflection catalog stress shard.'
+	@printf '  %-26s %s\n' 'test-emacs-reflect-catalog-stress' 'Run the Emacs reflection catalog stress shard.'
+	@printf '  %-26s %s\n' 'test-emacs-reflect-documentation-stress' 'Run the Emacs reflection docs/apropos stress shard.'
+	@printf '  %-26s %s\n' 'test-emacs-reflect-binding-crosswalk-stress' 'Run the Emacs reflection binding crosswalk stress shard.'
+	@printf '  %-26s %s\n' 'test-emacs-reflect-dynamic-manifest-stress' 'Run the Emacs reflection dynamic manifest stress shard.'
+	@printf '  %-26s %s\n' 'test-emacs-reflect-stress' 'Run the aggregate Emacs reflection stress shard.'
 	@printf '  %-26s %s\n' 'test-emacs-integration' 'Run the Emacs-hosted REPL/VCS/native-CLI integration shard.'
 	@printf '  %-26s %s\n' 'test-emacs-native-build' 'Run the Emacs-hosted full host-compile + install/dist shard (opt-in).'
 	@printf '  %-26s %s\n' 'test-parity' 'Diff the Emacs and portable cores over the shared corpus (#374).'
@@ -248,6 +256,10 @@ help:
 	@printf '  %-50s %s\n' 'CONSENT_EMACS_CAPABILITY_TEST_SELECTOR=SEL' 'ERT selector used by make test-emacs-capabilities.'
 	@printf '  %-50s %s\n' 'CONSENT_EMACS_TOOLS_TEST_SELECTOR=SEL' 'ERT selector used by make test-emacs-tools.'
 	@printf '  %-50s %s\n' 'CONSENT_EMACS_REFLECT_TEST_SELECTOR=SEL' 'ERT selector used by make test-emacs-reflect.'
+	@printf '  %-50s %s\n' 'CONSENT_EMACS_REFLECT_CATALOG_STRESS_TEST_SELECTOR=SEL' 'ERT selector used by make test-emacs-reflect-catalog-stress.'
+	@printf '  %-50s %s\n' 'CONSENT_EMACS_REFLECT_DOCUMENTATION_STRESS_TEST_SELECTOR=SEL' 'ERT selector used by make test-emacs-reflect-documentation-stress.'
+	@printf '  %-50s %s\n' 'CONSENT_EMACS_REFLECT_BINDING_CROSSWALK_STRESS_TEST_SELECTOR=SEL' 'ERT selector used by make test-emacs-reflect-binding-crosswalk-stress.'
+	@printf '  %-50s %s\n' 'CONSENT_EMACS_REFLECT_DYNAMIC_MANIFEST_STRESS_TEST_SELECTOR=SEL' 'ERT selector used by make test-emacs-reflect-dynamic-manifest-stress.'
 	@printf '  %-50s %s\n' 'CONSENT_EMACS_REFLECT_STRESS_TEST_SELECTOR=SEL' 'ERT selector used by make test-emacs-reflect-stress.'
 	@printf '  %-50s %s\n' 'CONSENT_EMACS_INTEGRATION_TEST_SELECTOR=SEL' 'ERT selector used by make test-emacs-integration.'
 	@printf '  %-50s %s\n' 'CONSENT_EMACS_NATIVE_BUILD_TEST_SELECTOR=SEL' 'ERT selector used by make test-emacs-native-build.'
@@ -559,6 +571,18 @@ test-emacs-tools:
 
 test-emacs-reflect:
 	CONSENT_TEST_SELECTOR='$(CONSENT_EMACS_REFLECT_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
+
+test-emacs-reflect-catalog-stress:
+	CONSENT_TEST_SELECTOR='$(CONSENT_EMACS_REFLECT_CATALOG_STRESS_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
+
+test-emacs-reflect-documentation-stress:
+	CONSENT_TEST_SELECTOR='$(CONSENT_EMACS_REFLECT_DOCUMENTATION_STRESS_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
+
+test-emacs-reflect-binding-crosswalk-stress:
+	CONSENT_TEST_SELECTOR='$(CONSENT_EMACS_REFLECT_BINDING_CROSSWALK_STRESS_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
+
+test-emacs-reflect-dynamic-manifest-stress:
+	CONSENT_TEST_SELECTOR='$(CONSENT_EMACS_REFLECT_DYNAMIC_MANIFEST_STRESS_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
 
 test-emacs-reflect-stress:
 	CONSENT_TEST_SELECTOR='$(CONSENT_EMACS_REFLECT_STRESS_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)

@@ -637,8 +637,8 @@ jobs:
             summary_name: Emacs agent state
             selector: '(or "consent-agent-io.*" "consent-context.*" "consent-helper.*" "consent-memory.*" "consent-models.*" "consent-plan.*" "consent-redaction.*" "consent-session.*" "consent-test.*" "consent-transcript.*")'
           # #556 split the heavyweight Emacs-hosted integration surface out of
-          # the tools shard. Reflection now has contract and catalog-stress
-          # shards so manifest-backed discovery can parallelize with REPL, VCS,
+          # the tools shard. Reflection now has contract and stress shards so
+          # manifest-backed discovery can parallelize with REPL, VCS,
           # native-CLI daemon, and the rest of the Emacs-hosted suite.
           - shard: emacs-tools
             label: tools/docs/integration
@@ -650,11 +650,26 @@ jobs:
             make_target: test-emacs-reflect
             summary_name: Emacs reflection contract
             selector: '(and "consent-reflect.*" (not "consent-reflect-test-.*stress.*"))'
-          - shard: emacs-reflect-stress
+          - shard: emacs-reflect-catalog-stress
             label: reflection catalog stress
-            make_target: test-emacs-reflect-stress
+            make_target: test-emacs-reflect-catalog-stress
             summary_name: Emacs reflection catalog stress
-            selector: '"consent-reflect-test-.*stress.*"'
+            selector: '"consent-reflect-test-library-catalog-discovery-stress"'
+          - shard: emacs-reflect-documentation-stress
+            label: reflection docs/apropos stress
+            make_target: test-emacs-reflect-documentation-stress
+            summary_name: Emacs reflection documentation stress
+            selector: '"consent-reflect-test-documented-bindings-and-apropos-stress"'
+          - shard: emacs-reflect-binding-crosswalk-stress
+            label: reflection binding crosswalk stress
+            make_target: test-emacs-reflect-binding-crosswalk-stress
+            summary_name: Emacs reflection binding crosswalk stress
+            selector: '"consent-reflect-test-binding-libraries-crosswalk-stress"'
+          - shard: emacs-reflect-dynamic-manifest-stress
+            label: reflection dynamic manifest stress
+            make_target: test-emacs-reflect-dynamic-manifest-stress
+            summary_name: Emacs reflection dynamic manifest stress
+            selector: '"consent-reflect-test-dynamic-manifest-inputs-stress"'
           - shard: emacs-integration
             label: integration/REPL
             make_target: test-emacs-integration
