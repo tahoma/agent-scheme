@@ -409,7 +409,12 @@
        (memory-record-id generated)
        (memory-store-delete! store 'instance 'source-alpha)
        (memory-store-ref store 'instance 'source-alpha))")
-    "(source-alpha source-alpha (source-alpha) (m-2) m-2 (memory (id source-alpha) (scope instance) (key source-alpha) (kind datum) (tags (source fact)) (value \"source-backed memory\") (source ()) (confidence high) (created-at 1) (updated-at 1)) #f)")))
+    (concat
+     "(source-alpha source-alpha (source-alpha) (m-2) m-2 "
+     "(memory (id source-alpha) (scope instance) (key source-alpha) "
+     "(kind datum) (memory-class semantic) (tags (source fact)) "
+     "(value \"source-backed memory\") (source ()) (confidence high) "
+     "(importance 1) (created-at 1) (updated-at 1)) #f)"))))
 
 (ert-deftest consent-library-test-standard-case-lambda-import ()
   "Import `(scheme case-lambda)' through the library registry."

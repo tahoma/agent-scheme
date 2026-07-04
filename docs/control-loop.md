@@ -883,6 +883,36 @@ the verifier, and recorded in an `agent-completion`.
 > canonical justification: the agent does not get to grade its own diff. This is
 > the most consent-distinctive rule in the loop.
 
+## Append-Only Memory and Retrieval (D4)
+
+The canonical `(agent memory)` store is an append-only event stream. The live
+working set is a deterministic projection over that stream, so updates,
+deletes, recency, and reflections are new records rather than in-place
+mutation. A replacement `memory-put!` appends a newer datum; `memory-delete!`
+appends a `memory-tombstone` with `supersedes`; `memory-access!` appends a
+logical access event that retrieval can score without rewriting the base
+record.
+
+Every memory datum carries a `memory-class` from the CoALA-derived set
+`working`, `episodic`, `semantic`, and `procedural`. Plain writes default to
+`semantic`, access and tombstone receipts are `working`, and later transcript
+or skill projections can enter the same record stream without inventing a
+second storage model.
+
+Reflection follows the D3 completion rule: model-authored insight text is
+advisory until admitted by a deterministic loop step. The admitted record is
+appended as `task-reflection` or a synthesis datum with `cites`, `receipt`, and
+`source` fields. It never overwrites the observations it summarizes, and the
+`cites` edge keeps replay and audit tied to the exact base records.
+
+Retrieval returns a printable `memory-selection` receipt. The selector ranks by
+an all-Scheme policy datum over recency, importance, and relevance, records the
+cutoff, selected IDs, selected records, and per-candidate scores, and keeps the
+decision replayable across hosts. Scope and redaction guards run before
+ranking: a lower-trust request filters `local-only` or redacted records before
+they can enter the selected set or leak through a score-bearing candidate
+payload.
+
 ## Runner Scope and Follow-Ups
 
 The minimal runner in #286 is one observation, one plan, a bounded acting loop,

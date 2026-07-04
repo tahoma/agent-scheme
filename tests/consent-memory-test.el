@@ -108,7 +108,11 @@
       "mem-alpha"
       "(import (scheme base) (agent memory))
        (memory-ref 'session 'answer)"))
-    "(memory (id answer) (scope session) (key answer) (kind datum) (tags (session alpha)) (value 42) (source ()) (confidence high) (created-at 1) (updated-at 1))"))
+    (concat
+     "(memory (id answer) (scope session) (key answer) (kind datum) "
+     "(memory-class semantic) (tags (session alpha)) (value 42) "
+     "(source ()) (confidence high) (importance 1) "
+     "(created-at 1) (updated-at 1))")))
   (should
    (equal
     (consent-memory-test--value-external
@@ -153,6 +157,55 @@
      (string-match-p
       (regexp-quote "(value \"Emacs is an adapter\")")
       result))))
+
+(ert-deftest consent-memory-test-reflection-and-selection-primitives ()
+  "Bridge reflection and deterministic selection through the Emacs adapter."
+  (consent-memory-test--reset)
+  (let ((value
+         (consent-memory-test--value-external
+          (consent-eval-source
+           "(import (scheme base) (agent memory))
+            (define base
+              (memory-add! 'project
+                           'fact
+                           '((tags (architecture r7rs))
+                             (value \"shared memory\")
+                             (importance 2))))
+            (memory-add! 'project
+                         'fact
+                         '((tags (architecture secret))
+                           (value \"local secret\")
+                           (local-only #t)
+                           (importance 100)))
+            (define reflection
+              (memory-reflect! 'project
+                               'task-reflection
+                               '((value \"collect verifier evidence\"))
+                               (list (memory-record-id base))
+                               'failed
+                               'runner-step))
+            (memory-access! 'project (memory-record-id base) 'prompt-build)
+            (define selection
+              (memory-select
+               'project
+               '(architecture)
+               '(retrieval-policy
+                 (weights ((recency 1) (importance 1) (relevance 3)))
+                 (cutoff 3))
+               '(retrieval-context
+                 (scope project)
+                 (trust remote)
+                 (allowed-scopes (project))
+                 (logical-clock 4))))
+            (list (memory-selection? selection)
+                  (memory-record-field-value reflection 'cites)
+                  (memory-selection-records selection)
+                  (memory-selection-candidates selection))"))))
+    (should (string-match-p "(#t (m-1)" value))
+    (should (string-match-p "(status selected)" value))
+    (should (string-match-p "(status filtered)" value))
+    (should (string-match-p "(reason redaction-or-local-only)" value))
+    (should-not (string-match-p "(value \"local secret\")" value))))
 
 (ert-deftest consent-memory-test-buffers-and-private-local-persistence ()
   "Expose editable memory buffers and persist private-local memory datums."

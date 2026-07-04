@@ -337,6 +337,62 @@ the user or project opts in explicitly."
    "memory-store-recent" scope subject count))
 
 ;;;###autoload
+(defun consent-memory-access! (scope memory-id context &optional subject)
+  "Append a logical memory access event for MEMORY-ID in SCOPE."
+  (let* ((normalized-scope (consent--memory-scope scope))
+         (store (consent--memory-store normalized-scope subject))
+         (record
+          (consent--memory-source-call
+           "memory-store-access!"
+           store
+           memory-id
+           (consent--memory-source-scope normalized-scope)
+           context)))
+    (consent--memory-sync-session-view! normalized-scope store subject)
+    (consent--memory-audit
+     "memory-access!" normalized-scope
+     `((memory-id . ,memory-id)
+       (context . ,context)
+       (record . ,record)))
+    record))
+
+;;;###autoload
+(defun consent-memory-reflect!
+    (scope kind datum cites receipt loop-id &optional subject)
+  "Append a gated reflection or synthesis DATUM in SCOPE."
+  (let* ((normalized-scope (consent--memory-scope scope))
+         (store (consent--memory-store normalized-scope subject))
+         (record
+          (consent--memory-source-call
+           "memory-store-reflect!"
+           store
+           (consent--memory-source-scope normalized-scope)
+           (consent--memory-datum-key kind)
+           datum
+           cites
+           (consent--memory-datum-key receipt)
+           loop-id)))
+    (consent--memory-sync-session-view! normalized-scope store subject)
+    (consent--memory-audit
+     "memory-reflect!" normalized-scope
+     `((kind . ,kind)
+       (cites . ,cites)
+       (receipt . ,receipt)
+       (loop-id . ,loop-id)
+       (record . ,record)))
+    record))
+
+;;;###autoload
+(defun consent-memory-select (scope query policy context &optional subject)
+  "Return a replayable memory-selection receipt for QUERY in SCOPE."
+  (consent--memory-source-call
+   "memory-store-select"
+   (consent--memory-store scope subject)
+   query
+   policy
+   context))
+
+;;;###autoload
 (defun consent-memory-yield (scope query context &optional subject)
   "Yield memory records from SCOPE matching QUERY through CONTEXT."
   (let ((records (consent-memory-find scope query subject)))
@@ -553,6 +609,26 @@ the user or project opts in explicitly."
   "Primitive memory-recent over ARGUMENTS."
   (consent-memory-recent (car arguments) (cadr arguments)))
 
+(defun consent--memory-primitive-access (arguments _context)
+  "Primitive memory-access! over ARGUMENTS."
+  (consent-memory-access! (car arguments) (cadr arguments) (caddr arguments)))
+
+(defun consent--memory-primitive-reflect (arguments _context)
+  "Primitive memory-reflect! over ARGUMENTS."
+  (consent-memory-reflect! (car arguments)
+                           (cadr arguments)
+                           (caddr arguments)
+                           (cadddr arguments)
+                           (nth 4 arguments)
+                           (nth 5 arguments)))
+
+(defun consent--memory-primitive-select (arguments _context)
+  "Primitive memory-select over ARGUMENTS."
+  (consent-memory-select (car arguments)
+                         (cadr arguments)
+                         (caddr arguments)
+                         (cadddr arguments)))
+
 (defun consent--memory-primitive-yield (arguments context)
   "Primitive memory-yield over ARGUMENTS."
   (consent-memory-yield (car arguments) (cadr arguments) context))
@@ -566,6 +642,9 @@ the user or project opts in explicitly."
     ("memory-find" ,#'consent--memory-primitive-find 2 2)
     ("memory-by-tag" ,#'consent--memory-primitive-by-tag 2 2)
     ("memory-recent" ,#'consent--memory-primitive-recent 2 2)
+    ("memory-access!" ,#'consent--memory-primitive-access 3 3)
+    ("memory-reflect!" ,#'consent--memory-primitive-reflect 6 6)
+    ("memory-select" ,#'consent--memory-primitive-select 4 4)
     ("memory-yield" ,#'consent--memory-primitive-yield 2 2)))
 
 (provide 'consent-memory)
