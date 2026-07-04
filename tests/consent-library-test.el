@@ -114,6 +114,145 @@
   "Return TEXT rendered as a Scheme string literal."
   (prin1-to-string text))
 
+(defconst consent-library-test--srfi-180-fixture-directory
+  (expand-file-name "fixtures/srfi-180/files" consent-library-test--root)
+  "Vendored SRFI 180 JSON fixture corpus directory.")
+
+(defconst consent-library-test--srfi-180-valid-xfails
+  '(("y_foundationdb_status.json"
+     . "Large valid stress fixture exceeds the current evaluator step budget in this harness."))
+  "Valid SRFI 180 fixtures excluded from the deterministic parser corpus.")
+
+(defconst consent-library-test--srfi-180-invalid-xfails
+  '(("n_array_comma_after_close.json"
+     . "SRFI 180 json-read consumes one top-level value; this fixture tests trailing text.")
+    ("n_array_extra_close.json"
+     . "SRFI 180 json-read consumes one top-level value; this fixture tests trailing text.")
+    ("n_object_trailing_comment.json"
+     . "SRFI 180 json-read consumes one top-level value; this fixture tests trailing text.")
+    ("n_object_trailing_comment_open.json"
+     . "SRFI 180 json-read consumes one top-level value; this fixture tests trailing text.")
+    ("n_object_trailing_comment_slash_open.json"
+     . "SRFI 180 json-read consumes one top-level value; this fixture tests trailing text.")
+    ("n_object_trailing_comment_slash_open_incomplete.json"
+     . "SRFI 180 json-read consumes one top-level value; this fixture tests trailing text.")
+    ("n_object_with_trailing_garbage.json"
+     . "SRFI 180 json-read consumes one top-level value; this fixture tests trailing text.")
+    ("n_string_with_trailing_garbage.json"
+     . "SRFI 180 json-read consumes one top-level value; this fixture tests trailing text.")
+    ("n_structure_array_trailing_garbage.json"
+     . "SRFI 180 json-read consumes one top-level value; this fixture tests trailing text.")
+    ("n_structure_array_with_extra_array_close.json"
+     . "SRFI 180 json-read consumes one top-level value; this fixture tests trailing text.")
+    ("n_structure_close_unopened_array.json"
+     . "SRFI 180 json-read consumes one top-level value; this fixture tests trailing text.")
+    ("n_structure_double_array.json"
+     . "SRFI 180 json-read consumes one top-level value; this fixture tests trailing text.")
+    ("n_structure_number_with_trailing_garbage.json"
+     . "SRFI 180 json-read consumes one top-level value; this fixture tests trailing text.")
+    ("n_structure_object_followed_by_closing_object.json"
+     . "SRFI 180 json-read consumes one top-level value; this fixture tests trailing text.")
+    ("n_structure_object_with_trailing_garbage.json"
+     . "SRFI 180 json-read consumes one top-level value; this fixture tests trailing text.")
+    ("n_structure_open_array_object.json"
+     . "SRFI 180 json-read consumes one top-level value; this fixture tests trailing text.")
+    ("n_structure_trailing_#.json"
+     . "SRFI 180 json-read consumes one top-level value; this fixture tests trailing text."))
+  "Invalid SRFI 180 fixtures excluded from the json-read error corpus.")
+
+(defconst consent-library-test--srfi-180-byte-patterns
+  '("invalid[-_]utf8"
+    "invalid-utf-8"
+    "lone-invalid-utf-8"
+    "lone_utf8_continuation"
+    "overlong_sequence"
+    "truncated-utf-8"
+    "UTF-16"
+    "utf16"
+    "iso_latin_1")
+  "Filename patterns for byte-decoding cases beyond textual-port coverage.")
+
+(defun consent-library-test--srfi-180-fixture-names (regexp)
+  "Return sorted SRFI 180 fixture names matching REGEXP."
+  (sort (directory-files consent-library-test--srfi-180-fixture-directory
+                         nil regexp)
+        #'string<))
+
+(defun consent-library-test--srfi-180-relative-path (name)
+  "Return repository-relative SRFI 180 fixture path for NAME."
+  (concat "fixtures/srfi-180/files/" name))
+
+(defun consent-library-test--srfi-180-options ()
+  "Return file capability options for reading the SRFI 180 fixture corpus."
+  (append
+   (consent-library-test--file-grant-options
+    consent-library-test--root
+    '("fixtures/srfi-180")
+    '(metadata read))
+   '(:max-steps 2000000
+     :max-host-callbacks 500000)))
+
+(defun consent-library-test--srfi-180-eval (body)
+  "Evaluate BODY with SRFI 180 corpus imports and file grants."
+  (consent-library-test--external/options
+   (concat "(import (scheme base)\n"
+           "        (scheme file)\n"
+           "        (scheme generator)\n"
+           "        (srfi 180))\n"
+           body)
+   (consent-library-test--srfi-180-options)))
+
+(defun consent-library-test--srfi-180-read-valid (name)
+  "Read valid fixture NAME and return an explicit success marker."
+  (consent-library-test--srfi-180-eval
+   (format
+    "(call-with-input-file %s
+       (lambda (port)
+         (json-read port)
+         'ok))"
+    (consent-library-test--scheme-string-literal
+     (consent-library-test--srfi-180-relative-path name)))))
+
+(defun consent-library-test--srfi-180-invalid-result (name)
+  "Return the SRFI 180 invalid-fixture result for NAME."
+  (consent-library-test--srfi-180-eval
+   (format
+    "(parameterize ((json-nesting-depth-limit 32))
+       (call-with-input-file %s
+         (lambda (port)
+           (guard (condition
+                   ((json-error? condition) 'json-error)
+                   (else 'wrong-condition))
+             (json-read port)
+             'no-error))))"
+    (consent-library-test--scheme-string-literal
+     (consent-library-test--srfi-180-relative-path name)))))
+
+(defun consent-library-test--srfi-180-byte-xfail-reason (name)
+  "Return byte-decoding xfail reason for fixture NAME, or nil."
+  (and (cl-some (lambda (pattern) (string-match-p pattern name))
+                consent-library-test--srfi-180-byte-patterns)
+       "Fixture depends on byte decoding before JSON parsing; current tests use textual ports."))
+
+(defun consent-library-test--srfi-180-invalid-xfail-reason (name)
+  "Return invalid fixture xfail reason for NAME, or nil."
+  (or (cdr (assoc name consent-library-test--srfi-180-invalid-xfails))
+      (consent-library-test--srfi-180-byte-xfail-reason name)))
+
+(defun consent-library-test--srfi-180-implementation-reason (name)
+  "Return explicit implementation-defined classification reason for NAME."
+  (cond
+   ((string-prefix-p "i_number_" name)
+    "Numeric overflow, underflow, or precision is implementation-defined.")
+   ((string-prefix-p "i_structure_500_nested_arrays" name)
+    "Deep nesting is covered by the explicit json-nesting-depth-limit test.")
+   ((string-prefix-p "i_structure_UTF-8_BOM" name)
+    "UTF-8 BOM handling is implementation-defined for textual ports.")
+   ((or (string-prefix-p "i_string_" name)
+        (string-prefix-p "i_object_key_" name))
+    "Unicode surrogate and byte-decoding behavior is implementation-defined.")
+   (t nil)))
+
 (ert-deftest consent-library-test-imports-scheme-base-into-empty-environment ()
   "Import `(scheme base)' into an otherwise empty program environment."
   (should
@@ -851,8 +990,9 @@
               (cdr (assq 'implementation-library entry))
               (cdr (assq 'upstream-license entry))
               (cdr (assq 'import-aliases entry))
-              (cdr (assq 'dependencies entry))))")
-    "(direct-portable-implementation (stdlib json) \"MIT\" ((stdlib json) (consent json) (srfi 180) (srfi srfi-180)) ((stdlib and-let-star)))")))
+              (cdr (assq 'dependencies entry))
+              (cdr (assq 'test-status entry))))")
+    "(direct-portable-implementation (stdlib json) \"MIT\" ((stdlib json) (consent json) (srfi 180) (srfi srfi-180)) ((stdlib and-let-star)) (import-resolution representative-read-write emacs-json-oracle portable-host-suite imported-reference-corpus json-lines json-text-sequences))")))
 
 (ert-deftest consent-library-test-srfi-180-emacs-json-oracle ()
   "Cross-check portable SRFI 180 behavior against Emacs json.el."
@@ -902,6 +1042,123 @@
       (should (equal (aref (alist-get 'scores parsed) 1) t))
       (should (eq (aref (alist-get 'scores parsed) 2) :json-null))
       (should (eq (alist-get 'ok (alist-get 'nested parsed)) :json-false)))))
+
+(ert-deftest consent-library-test-srfi-180-reference-corpus-shape ()
+  "Keep the pinned SRFI 180 fixture corpus visible to the test harness."
+  (let ((valid (consent-library-test--srfi-180-fixture-names "\\`y_.*\\.json\\'"))
+        (invalid (consent-library-test--srfi-180-fixture-names "\\`n_.*\\.json\\'"))
+        (implementation
+         (consent-library-test--srfi-180-fixture-names "\\`i_.*\\.json\\'")))
+    (should (= (length valid) 97))
+    (should (= (length invalid) 191))
+    (should (= (length implementation) 35))
+    (dolist (name implementation)
+      (should (consent-library-test--srfi-180-implementation-reason name)))
+    (dolist (entry consent-library-test--srfi-180-valid-xfails)
+      (should (member (car entry) valid))
+      (should (stringp (cdr entry))))
+    (dolist (entry consent-library-test--srfi-180-invalid-xfails)
+      (should (member (car entry) invalid))
+      (should (stringp (cdr entry))))))
+
+(ert-deftest consent-library-test-srfi-180-reference-valid-corpus ()
+  "Parse deterministic valid SRFI 180 JSON fixtures."
+  (let* ((valid (consent-library-test--srfi-180-fixture-names "\\`y_.*\\.json\\'"))
+         (deterministic
+          (cl-remove-if (lambda (name)
+                          (assoc name consent-library-test--srfi-180-valid-xfails))
+                        valid))
+         (failures
+          (cl-loop for name in deterministic
+                   for result = (condition-case error
+                                    (consent-library-test--srfi-180-read-valid name)
+                                  (error (format "raised %s"
+                                                 (error-message-string error))))
+                   unless (equal result "ok")
+                   collect (list name result))))
+    (should (null failures))))
+
+(ert-deftest consent-library-test-srfi-180-reference-invalid-corpus ()
+  "Require deterministic invalid SRFI 180 JSON fixtures to raise json-error?."
+  (let* ((invalid (consent-library-test--srfi-180-fixture-names "\\`n_.*\\.json\\'"))
+         (deterministic
+          (cl-remove-if #'consent-library-test--srfi-180-invalid-xfail-reason
+                        invalid))
+         (failures
+          (cl-loop for name in deterministic
+                   for result = (condition-case error
+                                    (consent-library-test--srfi-180-invalid-result name)
+                                  (error (format "raised %s"
+                                                 (error-message-string error))))
+                   unless (equal result "json-error")
+                   collect (list name result))))
+    (should (> (length deterministic) 120))
+    (should (null failures))))
+
+(ert-deftest consent-library-test-srfi-180-reference-invalid-classification ()
+  "Record explicit reasons for invalid SRFI 180 fixtures outside text coverage."
+  (let* ((invalid (consent-library-test--srfi-180-fixture-names "\\`n_.*\\.json\\'"))
+         (xfails
+          (cl-loop for name in invalid
+                   for reason = (consent-library-test--srfi-180-invalid-xfail-reason
+                                 name)
+                   when reason
+                   collect (list name reason))))
+    (should (> (length xfails) 20))
+    (dolist (xfail xfails)
+      (should (stringp (cadr xfail))))))
+
+(ert-deftest consent-library-test-srfi-180-reference-json-lines ()
+  "Read vendored JSON Lines samples through the local SRFI 180 facade."
+  (dolist (name '("sample-crlf-line-separators.jsonl"
+                  "sample-no-eol-at-eof.jsonl"
+                  "sample.jsonl"))
+    (should
+     (equal
+      (consent-library-test--srfi-180-eval
+       (format
+        "(call-with-input-file %s
+           (lambda (port)
+             (let ((items (generator->list (json-lines-read port))))
+               (list (length items)
+                     (cdr (assq 'a (car items)))
+                     (cdr (assq 'b (cadr items)))))))"
+        (consent-library-test--scheme-string-literal
+         (consent-library-test--srfi-180-relative-path name))))
+      "(2 1 2)"))))
+
+(ert-deftest consent-library-test-srfi-180-reference-json-sequences ()
+  "Read vendored JSON Text Sequences samples through local SRFI 180 APIs."
+  (should
+   (equal
+    (consent-library-test--srfi-180-eval
+     (format
+      "(call-with-input-file %s
+         (lambda (port)
+           (define (last-item items)
+             (if (null? (cdr items)) (car items) (last-item (cdr items))))
+           (let ((items (generator->list (json-sequence-read port))))
+             (list (length items)
+                   (cdr (assq 'count (car items)))
+                   (cdr (assq 'count (last-item items)))))))"
+      (consent-library-test--scheme-string-literal
+       (consent-library-test--srfi-180-relative-path "json-sequence.log"))))
+    "(10 0 9)"))
+  (should
+   (equal
+    (consent-library-test--srfi-180-eval
+     (format
+      "(call-with-input-file %s
+         (lambda (port)
+           (guard (condition
+                   ((json-error? condition) 'json-error)
+                   (else 'wrong-condition))
+             (generator->list (json-sequence-read port))
+             'no-error)))"
+      (consent-library-test--scheme-string-literal
+       (consent-library-test--srfi-180-relative-path
+        "json-sequence-with-one-broken-json.log"))))
+    "json-error")))
 
 (ert-deftest consent-library-test-srfi-1-list-library-behavior ()
   "Import primary `(scheme list)' and exercise representative SRFI 1 behavior."

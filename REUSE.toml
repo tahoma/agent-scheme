@@ -30,3 +30,31 @@ path = ["docs/assets/consent-logo.png"]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2026 Tahoma Toelkes"
 SPDX-License-Identifier = "Apache-2.0"
+
+# Vendored SRFI 180 fixture corpus from
+# https://github.com/scheme-requests-for-implementation/srfi-180 at
+# 671857bac55c53e3190a24ec53b457321a1d8f12. The JSON fixtures are the
+# upstream `srfi/files` corpus covered by its bundled MIT notice.
+[[annotations]]
+path = [
+  "fixtures/srfi-180/files/*.json",
+  "fixtures/srfi-180/files/*.scm",
+  "fixtures/srfi-180/files/LICENSE",
+]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2016 Nicolas Seriot"
+SPDX-License-Identifier = "MIT"
+
+# JSON Lines samples in the SRFI 180 corpus are extracted from python-jsonlines.
+[[annotations]]
+path = ["fixtures/srfi-180/files/*.jsonl"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2016 Wouter Bolsterlee"
+SPDX-License-Identifier = "BSD-3-Clause"
+
+# JSON Text Sequences samples in the SRFI 180 corpus are from json-text-sequence.
+[[annotations]]
+path = ["fixtures/srfi-180/files/*.log"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2014 Joe Hildebrand"
+SPDX-License-Identifier = "MIT"

@@ -26,7 +26,9 @@
                             (srfi 180) (srfi srfi-180)))
          (dependencies . ((stdlib and-let-star)))
          (test-status . (import-resolution representative-read-write
-                         emacs-json-oracle portable-host-suite)))
+                         emacs-json-oracle portable-host-suite
+                         imported-reference-corpus json-lines
+                         json-text-sequences)))
         ((library . (consent json))
          (status . alias)
          (target . (stdlib json))
