@@ -701,9 +701,11 @@ make lint-line-length
 The default set also runs `lint-branding`, the assistant/tool/vendor branding
 gate. It enforces the AGENTS.md rule that no assistant, tool, vendor, or
 workflow branding appears in branch names, pull request titles or bodies, commit
-messages, documentation, or generated artifacts — machine-checking a rule that
-is otherwise left to contributor diligence, the same stance the two compiler
-lint gates take. Run it on its own with:
+messages, generated artifacts, or ordinary documentation. The dedicated
+project credits page is the exception for explicit tool-assisted development
+credit. The gate machine-checks that boundary rather than leaving it to
+contributor diligence, the same stance the two compiler lint gates take. Run it
+on its own with:
 
 ```sh
 make lint-branding
@@ -718,9 +720,10 @@ vendor or tool slugs are scanned only in those metadata contexts (commit
 messages, PR title/body, branch name), never in file contents, because the
 repository legitimately writes some of those words in prose — `CLAUDE.md` is a
 checked-in tool-config file, `docs/references.md` cites external papers by their
-publishers, and "cursor" is this project's own word for the shared stdin cursor.
-The slug set is therefore deliberately narrow and excludes words with a
-legitimate technical use here (notably "openai", as in the shipped
+publishers, [Project Credits](credits.md) gives explicit tool-assisted
+development credit, and "cursor" is this project's own word for the shared
+stdin cursor. The slug set is therefore deliberately narrow and excludes words
+with a legitimate technical use here (notably "openai", as in the shipped
 OpenAI-compatible transport). A third tier scans each commit's author and
 committer identity (`name <email>`) — and only that — for the vendor-bot email
 domains a real contributor never authors from. The author email is what GitHub

@@ -343,4 +343,5 @@ High-traffic starting points:
 `docs/`, grouped by topic.
 
 Also useful: [repository agent instructions](AGENTS.md) and the
-[project skill bundle](skills/README.md).
+[project skill bundle](skills/README.md). Project authorship and tool-assisted
+attribution policy live in [project credits](docs/credits.md).

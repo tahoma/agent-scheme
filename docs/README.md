@@ -19,6 +19,7 @@ project pitch and examples, see the top-level [README](../README.md).
 - [Roadmap](roadmap.md) — pointer to the GitHub-issue roadmap and how it is structured.
 - [GitHub Issue Taxonomy](issue-taxonomy.md) — the label taxonomy for where and how an issue can be worked.
 - [Licensing Policy](licensing.md) — the project's Apache-2.0 + SPDX licensing policy.
+- [Project Credits](credits.md) — human authorship, maintenance, and tool-assisted attribution policy.
 - [Resolved Graph Invariants](resolved-graph-invariants.md) — the roadmap dependency-graph invariants the resolved order must satisfy.
 - [Host-Compiled Staging and the Embedded VFS](host-compiled-staging.md) — the `make compile` pipeline as a borrowed-backend compiler front-end, and the embedded source store as a capability-addressable virtual filesystem.
 
