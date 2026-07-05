@@ -162,6 +162,22 @@ OPTIONS are evaluator options.  Return the ordered contract records."
                      "status"))
                    "closed-ok"))))
 
+(ert-deftest consent-repl-stream-unbound-identifier-display-names-symbol ()
+  "Unbound identifier conditions display the missing binding name."
+  (let* ((records
+          (consent-repl-stream-test--drive
+           (concat
+            "(define (uses-missing-helper value)\n"
+            "  (missing-helper value))\n"
+            "(uses-missing-helper '(a b))\n")))
+         (condition (car (consent-repl-stream-test--of records "repl-condition")))
+         (condition-datum (consent-repl-stream-test--field condition "condition")))
+    (should (equal (consent-repl-stream-test--field condition "display")
+                   "consent eval error: unbound identifier: missing-helper"))
+    (should (equal (consent-repl-stream-test--sym
+                    (consent-repl-stream-test--field condition-datum "symbol"))
+                   "missing-helper"))))
+
 ;;;; A recoverable reader condition keeps the session open
 
 (ert-deftest consent-repl-stream-recoverable-reader-condition ()

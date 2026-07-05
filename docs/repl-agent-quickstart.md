@@ -303,19 +303,19 @@ Plan:
 ```
 
 Displaying `code` prints the model's string; it does not evaluate the returned
-Scheme. If the model returns a fenced code block, paste only the Scheme inside
-the fence. If it returns prose, math notation, missing definitions, or anything
-else that is not executable Scheme source, treat that as a failed coder gate:
-revise the `scheme-scripter` prompt and try again, or stop and record that this
-role set did not pass the tutorial.
+Scheme. Do not type `(eval code)` or `(apply code)`; `code` is a string, not a
+sequence of REPL input forms.
+
+Inspect the displayed source as a coder gate. If it contains prose, math
+notation, missing definitions, missing imports, or anything else that is not
+ready to evaluate as Scheme source, revise the `scheme-scripter` prompt and try
+again, or stop and record that this role set did not pass the tutorial.
 
 After the REPL has evaluated the model draft and the session has live `deriv`
 and `differentiator-tests` bindings, capture the facts that later model prompts
 will reuse:
 
 ```scheme
-(import (scheme write))
-
 (define (datum->text datum)
   (let ((port (open-output-string)))
     (write datum port)

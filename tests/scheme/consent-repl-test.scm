@@ -142,6 +142,19 @@
          (field (car (records-of records 'repl-exit)) 'status)
          'closed-ok))
 
+(let ((records (drive (string-append
+                       "(define (uses-missing-helper value)\n"
+                       "  (missing-helper value))\n"
+                       "(uses-missing-helper '(a b))\n"))))
+  (let* ((condition-record (car (records-of records 'repl-condition)))
+         (condition (field condition-record 'condition)))
+    (check 'unbound-identifier-display-names-symbol
+           (field condition-record 'display)
+           "consent eval error: unbound identifier: missing-helper")
+    (check 'unbound-identifier-condition-symbol
+           (field condition 'symbol)
+           'missing-helper)))
+
 ;;;; A recoverable reader condition keeps the session open
 
 (let ((records (drive ")\n(+ 6 7)\n")))

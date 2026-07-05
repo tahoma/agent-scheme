@@ -71,6 +71,15 @@
          (end (string-match "^## " doc body-start)))
     (substring doc body-start end)))
 
+(defun consent-repl-agent-quickstart-doc-test--count (needle haystack)
+  "Return the number of non-overlapping NEEDLE occurrences in HAYSTACK."
+  (let ((start 0)
+        (count 0))
+    (while (string-match (regexp-quote needle) haystack start)
+      (setq count (1+ count))
+      (setq start (match-end 0)))
+    count))
+
 (ert-deftest consent-repl-agent-quickstart-doc-test-code-prompt-contract ()
   "The scripter prompt asks for executable Scheme definitions, not prose."
   (let* ((doc
@@ -98,6 +107,21 @@
              '("Displaying `code` prints the model's string; it does not evaluate the returned Scheme."
                "Do not continue to the reviewer or memory prompts until the REPL has evaluated Scheme and produced `test-results` and `sample-derivative`."))
       (should (string-match-p (regexp-quote needle) flat-doc)))))
+
+(ert-deftest consent-repl-agent-quickstart-doc-test-tutorial-imports-write-once ()
+  "The tutorial avoids duplicate import prompts during the same REPL session."
+  (let* ((doc
+          (consent-repl-agent-quickstart-doc-test--read
+           "docs/repl-agent-quickstart.md"))
+         (tutorial
+          (consent-repl-agent-quickstart-doc-test--section
+           doc
+           "Fifteen-Minute Tutorial Project")))
+    (should
+     (= 1
+        (consent-repl-agent-quickstart-doc-test--count
+         "(import (scheme write))"
+         tutorial)))))
 
 (ert-deftest consent-repl-agent-quickstart-doc-test-primary-repl-uses-default-chrome ()
   "The primary tutorial launch path introduces the default chrome first."
