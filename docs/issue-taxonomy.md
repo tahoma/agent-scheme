@@ -60,6 +60,33 @@ Use optional labels when they clarify issue selection or review needs.
 | `review:license-vendor` | Work needs explicit license, vendoring, attribution, or third-party source review. |
 | `documentation` | The primary deliverable is repository or issue documentation. |
 
+### Standards and Dockets
+
+Use these cross-cutting labels when they make SRFI/R7RS-large work queryable.
+They do not replace the required `surface:*` axis and do not imply roadmap
+placement.
+
+| Label | Use for |
+| --- | --- |
+| `standard:r7rs-large` | Issues that realize a library ratified in an R7RS-large edition or track an R7RS-large fascicle. |
+| `docket:red` | Committee B Red docket data-structure work, including Red Edition libraries. |
+| `docket:tangerine` | Committee B Tangerine docket numeric, mapping, regex, generator, bytevector, vector, and formatting work. |
+| `docket:hypnos` | Committee B Hypnos docket SRFI candidates. |
+| `docket:orange` | Committee B Orange docket SRFI candidates. |
+| `docket:eos` | Committee B Eos docket portable non-SRFI candidates with implementations. |
+| `docket:urania` | Committee B Urania docket portable non-SRFI candidates without implementations. |
+| `docket:selene` | Committee B Selene docket portable non-SRFI candidates without implementations. |
+| `docket:pan` | Committee B Pan docket portable non-SRFI candidates without implementations. |
+
+`docket:*` labels classify upstream Committee B docket placement. They are not
+work-surface labels, priority labels, schedule labels, or claims that a working
+proposal is normative for Consent Scheme. A ticket may carry
+`standard:r7rs-large` without a `docket:*` label when it tracks a ratified
+edition or fascicle outside the Committee B portable-library docket structure.
+Conversely, a docketed SRFI or proposal may carry a `docket:*` label without
+`standard:r7rs-large` when the issue is planning, compatibility, or draft work
+rather than a ratified R7RS-large realization.
+
 ## Maintenance
 
 When creating or revising an issue:
@@ -74,6 +101,8 @@ When creating or revising an issue:
    or relying on third-party material.
 7. Add `documentation` when the main output is documentation rather than runtime
    behavior.
+8. Add `standard:r7rs-large` and at most one `docket:*` label when an issue has
+   a clear R7RS-large standard or Committee B docket classification.
 
 Keep the taxonomy aligned with the roadmap issue. When an issue moves chunks or
 is split into follow-ups, update stale labels and roadmap placement in the same
