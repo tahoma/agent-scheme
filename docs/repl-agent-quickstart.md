@@ -1,14 +1,62 @@
 # REPL Agent Harness Quick Start
 
 This is the hands-on path from a checkout to a real local model-backed REPL
-workloop. Start by installing a practical local role set, then use the same
-Scheme forms from either the portable terminal REPL or the Emacs-hosted REPL.
+workloop. Start by installing the portable runtime path and a practical local
+role set, then use the same Scheme forms from either the portable terminal REPL
+or the Emacs-hosted REPL.
 
 The first tutorial builds a small symbolic differentiator in the SICP
 tradition: algebra is Scheme data, the derivative rules are Scheme procedures,
 and the REPL uses local models for planning, coding, review, and memory
 curation. The examples use actual `model-complete` calls through an
 OpenAI-compatible local endpoint and the role assignments you configure below.
+
+## Install the Portable Runtime
+
+For the best standalone first encounter, build and install the portable runtime
+with Gambit. Gambit is the build-time host Scheme: `gsi` reads the portable R7RS
+sources, `gsc` compiles them, and the resulting `consent` executable runs
+without needing another Scheme implementation on `PATH`.
+
+Install Gambit so `gsi` and `gsc` are available, then build the default
+host-compiled executable:
+
+```sh
+make compile
+build/compile/gambit/bin/consent --version
+```
+
+You can run it directly from the checkout:
+
+```sh
+build/compile/gambit/bin/consent --repl \
+  --session symbolic-agent-tour --chrome quiet
+```
+
+Or install it under a user prefix. Use the same `PREFIX` for `make compile`
+and `make install` so the installed binary knows where its runtime library tree
+lives:
+
+```sh
+make compile PREFIX="$HOME/.local"
+make install PREFIX="$HOME/.local"
+"$HOME/.local/bin/consent" --repl \
+  --session symbolic-agent-tour --chrome quiet
+```
+
+The interpreted launcher is still useful while hacking from a checkout, but it
+is not hostless. It needs Chibi, Guile, or Gauche on `PATH`, and you can select
+the host explicitly:
+
+```sh
+CONSENT_REPL_HOST=guile tools/consent-repl \
+  --session symbolic-agent-tour --chrome quiet
+```
+
+Use the Gambit-compiled `consent --repl` path when you want the faster portable
+standalone runtime without an active host Scheme. Use `tools/consent-repl` when
+you specifically want to exercise the interpreted launcher against Chibi, Guile,
+or Gauche.
 
 ## Install the Local Role Set
 
@@ -49,7 +97,22 @@ The local OpenAI-compatible endpoint is `http://127.0.0.1:11434/v1`.
 
 ## Start a REPL
 
-The portable standalone runtime starts from the repository root:
+If you built the Gambit standalone runtime above, start the tutorial REPL with:
+
+```sh
+build/compile/gambit/bin/consent --repl \
+  --session symbolic-agent-tour --chrome quiet
+```
+
+or, after `make install PREFIX="$HOME/.local"`:
+
+```sh
+"$HOME/.local/bin/consent" --repl \
+  --session symbolic-agent-tour --chrome quiet
+```
+
+The interpreted portable launcher starts from the repository root when Chibi,
+Guile, or Gauche is installed:
 
 ```sh
 tools/consent-repl --session symbolic-agent-tour --chrome quiet
@@ -70,10 +133,11 @@ For an interactive Emacs buffer, load the checkout and run
 (require 'consent-repl-comint)
 ```
 
-Use the portable terminal REPL when you want the standalone R7RS path. Use the
-Emacs-hosted REPL when you want the Emacs buffer, event, audit, approval, and
-interactive session surfaces. The Scheme forms below are the same in both
-runtimes when the portable host can spawn `curl` and Ollama is running locally.
+Use the portable terminal REPL when you want the R7RS path, with the
+Gambit-compiled binary as the recommended standalone entry. Use the Emacs-hosted
+REPL when you want the Emacs buffer, event, audit, approval, and interactive
+session surfaces. The Scheme forms below are the same in both runtimes when the
+portable host can spawn `curl` and Ollama is running locally.
 
 ## Register Local Models
 
@@ -244,10 +308,13 @@ produced an inspectable Scheme program rather than only a transport check.
 
 The Emacs-hosted runtime and the portable standalone runtime share the
 `(agent models)` registration, routing, and `model-complete` surface. The
-portable implementation lowers OpenAI-compatible HTTP through the host process
-shim and `curl`, so live completion needs a portable host with process spawning
-available. The plain `tools/consent-repl` launcher works on Chibi, Guile, or
-Gauche when that host can spawn `curl`.
+portable implementation lowers OpenAI-compatible HTTP through the process host
+shim and `curl`, so live completion needs a portable runtime that can spawn
+processes. The Gambit-compiled binary is the recommended standalone runtime:
+Gambit is required to build it, but not to run the installed `consent`
+executable. The plain `tools/consent-repl` launcher is the interpreted
+development path and works on Chibi, Guile, or Gauche when that host can spawn
+`curl`.
 
 If a portable host reports that process spawning is unavailable, use the
 Emacs-hosted REPL for the live local-model tutorial and keep the portable REPL
@@ -274,6 +341,13 @@ For compact machine-readable records, use:
 ```sh
 printf '(+ 1 2)\n(exit)\n' \
   | tools/consent-repl --session quickstart --chrome datum
+```
+
+The installed standalone binary accepts the same REPL options:
+
+```sh
+printf '(+ 1 2)\n(exit)\n' \
+  | consent --repl --session quickstart --chrome datum
 ```
 
 ## Create and Switch Sessions

@@ -23,8 +23,9 @@ Optional but useful:
   install the package with `raco pkg install --auto r7rs`
 - CHICKEN Scheme, `csi`, plus its `r7rs` egg for developer oracle comparisons;
   install the egg with `chicken-install r7rs`
-- Gambit Scheme, `gsi` and `gsc`, for developer oracle comparisons and future
-  compile-path checks; Homebrew packages it as `gambit-scheme`
+- Gambit Scheme, `gsi` and `gsc`, for developer oracle comparisons and
+  host-compiled portable executable checks; Homebrew packages it as
+  `gambit-scheme`
 - ShellCheck or other local lint tools for future scripts
 
 ## GitHub Access
@@ -300,13 +301,13 @@ not affect the default `make test` command.
 | Guile | opt-in comparison | `CONSENT_GUILE` | `guile` | Runs with `--no-auto-compile --r7rs`. |
 | Racket | developer-only comparison | `CONSENT_RACKET` | `racket` | Requires the Racket `r7rs` package; generated programs are wrapped with `#lang r7rs`. |
 | CHICKEN Scheme | developer-only comparison | `CONSENT_CHICKEN` | `csi` | Requires the `r7rs` egg; runs with `-q -R r7rs -s`. |
-| Gambit Scheme | developer-only comparison | `CONSENT_GAMBIT` | `gsi` | Homebrew formula `gambit-scheme`; runs with `-:r7rs,search=$REPO/scheme`. |
+| Gambit Scheme | opt-in comparison and compile host | `CONSENT_GAMBIT` | `gsi` | Homebrew formula `gambit-scheme`; `gsc` builds the standalone binary. |
 
-The Gambit compile path uses the same R7RS mode and library search stance as
-the interpreter shard. Set `CONSENT_GAMBIT_COMPILER` to choose a specific
-`gsc` executable; otherwise compile checks discover `gsc` on `PATH`. The
-oracle runner does not invoke `gsc`, but documenting both tools keeps
-interpreter and compiler setup aligned.
+The default host-compiled portable runtime uses the same R7RS mode and library
+search stance as the Gambit interpreter shard. Set
+`CONSENT_GAMBIT_COMPILER` to choose a specific `gsc` executable; otherwise
+compile checks discover `gsc` on `PATH`. The oracle runner does not invoke
+`gsc`, but documenting both tools keeps interpreter and compiler setup aligned.
 
 Oracle reports identify each fixture by case id and classify the comparison as
 `portable-agree`, `implementation-variant`, `agent-mismatch`,
