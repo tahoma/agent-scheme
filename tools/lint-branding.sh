@@ -6,7 +6,9 @@
 #
 # Enforces the AGENTS.md rule that no assistant, tool, vendor, or workflow
 # branding may appear in branch names, pull request titles or bodies, commit
-# messages, documentation, or generated artifacts. The rule is checked into the
+# messages, generated artifacts, or ordinary documentation. Explicit
+# tool-assisted development credit belongs in docs/credits.md instead of
+# repeated functional history or process metadata. The rule is checked into the
 # repository, so it is enforced by CI rather than left to contributor (or agent)
 # diligence -- the same stance the byte-compile (#415) and portable (#421) lint
 # gates take for their concerns.
@@ -18,15 +20,16 @@
 #     contents, commit messages, the PR title/body, and the branch name. These
 #     are unambiguous "made by a tool" signals (a `Co-authored-by:` trailer
 #     naming a model/tool, a "Generated with/by <tool>" line, a session URL, the
-#     robot emoji). They have no legitimate use and are verified absent from the
-#     tree.
+#     robot emoji). They have no legitimate use and are verified absent from
+#     tracked file contents.
 #
 #   * Bare vendor/tool slugs (TIER B) are scanned ONLY in metadata contexts
 #     (commit messages, PR title/body, branch name), never in file contents,
 #     because the repository legitimately writes some vendor words in prose:
 #     `CLAUDE.md` is a checked-in tool-config file, `docs/references.md` cites
-#     Anthropic's published papers, and "cursor" is this project's own word for
-#     the shared stdin cursor. The slug set is therefore deliberately narrow
+#     Anthropic's published papers, `docs/credits.md` gives explicit
+#     tool-assisted development credit, and "cursor" is this project's own word
+#     for the shared stdin cursor. The slug set is therefore deliberately narrow
 #     (claude, codex, copilot, chatgpt, devin) and excludes words with a
 #     legitimate technical use here (notably "openai", as in the shipped
 #     OpenAI-compatible transport, "anthropic", "cursor", and bare model words).

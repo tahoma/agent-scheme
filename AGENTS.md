@@ -103,8 +103,10 @@ Repository conventions override generic workflow defaults. In particular:
   line. Prefer plain description strings when they fit, and reserve
   string-list descriptions for wrapping prose.
 - Do not put assistant, tool, vendor, or workflow branding in branch names, pull
-  request titles, commit messages, issue text, documentation, or generated
-  artifacts.
+  request titles, commit messages, issue text, generated artifacts, or ordinary
+  documentation. The dedicated project credits page is the exception for
+  explicit tool-assisted development credit; keep that credit there instead of
+  repeating it in functional history or process metadata.
 - For documentation-only work, run the verification commands in
   `docs/development.md` and state when `make test` is unavailable.
 - After every commit pushed to a branch with an open pull request,

@@ -10,7 +10,8 @@ Consent Scheme is licensed under the **Apache License, Version 2.0**
 `LICENSE` (so GitHub's repository license detection reports `Apache-2.0`) and in
 `LICENSES/Apache-2.0.txt` (so the project is [REUSE](https://reuse.software)
 compliant). Attribution is recorded in the root `NOTICE` file. The copyright
-holder is **Tahoma Toelkes**.
+holder is **Tahoma Toelkes**. Project authorship, maintenance, and tool-assisted
+development attribution are recorded in [Project Credits](credits.md).
 
 This policy is permanent. It was settled by the project owner before broad
 outside contributions, vendored libraries, or generated artifacts grew, because

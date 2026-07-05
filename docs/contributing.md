@@ -120,6 +120,9 @@ Rules:
 - Do not use vague summaries such as `update docs`, `fix stuff`, or `changes`.
 - Do not include assistant, tool, vendor, or workflow branding in commit
   messages.
+- Use `Co-Authored-By` only for accountable human collaborators. Tool-assisted
+  development attribution belongs in [Project Credits](credits.md), not in
+  repeated commit trailers.
 
 Recommended types:
 
