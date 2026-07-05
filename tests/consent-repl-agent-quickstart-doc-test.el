@@ -108,6 +108,27 @@
                "(display session-note)"))
       (should (string-match-p (regexp-quote needle) doc)))))
 
+(ert-deftest consent-repl-agent-quickstart-doc-test-code-prompt-stays-plan-led ()
+  "The scripter step reuses the planner output without a canned outline."
+  (let* ((doc
+          (consent-repl-agent-quickstart-doc-test--read
+           "docs/repl-agent-quickstart.md"))
+         (code-block
+          (consent-repl-agent-quickstart-doc-test--scheme-block-containing
+           doc
+           "(define code")))
+    (should
+     (string-match-p
+      (rx "'scheme-scripter" (+ space) "plan")
+      code-block))
+    (dolist (forbidden
+             '("Return exactly seven top-level forms"
+               "The expected value of differentiator-tests"
+               "Sums are (+ left right). Products are (* left right)."
+               "(equal? (deriv 'x 'x) 1)"
+               "(equal? (deriv 'y 'x) 0)"))
+      (should-not (string-match-p (regexp-quote forbidden) code-block)))))
+
 (ert-deftest consent-repl-agent-quickstart-doc-test-model-routing-is-real-api ()
   "The documented model role shape routes through the real API."
   (unwind-protect

@@ -219,51 +219,27 @@ next prompt has a named value to reuse:
 (display plan)
 ```
 
-Then capture the Scheme coding role's draft in `code`. The prompt includes the
-planner's output plus strict constraints so the model works inside the small
-R7RS surface that the tutorial will evaluate:
+Then capture the Scheme coding role's draft in `code`. Feed the planner's
+output through as the source of work, so the second role elaborates the plan
+instead of replacing it:
 
 ```scheme
 (define code
   (model-complete
    'scheme-scripter
-   (string-append
-    plan
-    "
-
-Return plain portable R7RS Scheme source only.
-Do not use Markdown fences, prose, #lang, library forms, square brackets,
-quasiquote, display, printf, for-each, pass/fail symbols, or implementation
-extensions. Use only define, cond, and, or, if, number?, symbol?, pair?,
-car, eq?, =, +, *, list, cadr, caddr, and equal?.
-Return exactly seven top-level forms in this order:
-1. (define (=number? expression value) ...)
-2. (define (make-sum left right) ...)
-3. (define (make-product left right) ...)
-4. (define (sum? expression) ...)
-5. (define (product? expression) ...)
-6. (define (deriv expression variable) ...)
-7. (define differentiator-tests (list ...))
-Sums are (+ left right). Products are (* left right).
-Simplify addition by 0, multiplication by 0 and 1, and numeric constant
-folding. differentiator-tests must be a four-result boolean list, and every
-element must use equal?:
-(equal? (deriv 'x 'x) 1)
-(equal? (deriv 'y 'x) 0)
-(equal? (deriv '(+ (* x x) (* 3 x)) 'x) '(+ (+ x x) 3))
-(equal? (deriv '(* x (+ x 3)) 'x) '(+ x (+ x 3)))
-The expected value of differentiator-tests is exactly (#t #t #t #t).")
+   plan
    '((temperature 0.1) (timeout-seconds 300))))
 
 (display code)
 ```
 
 If the model returns a fenced code block, paste only the Scheme inside the
-fence. Evaluate the model's draft when it has the seven requested forms. Keep
-`code` available for inspection, but let the REPL's evaluated values drive the
-review and memory prompts. The REPL is the authority: if the draft does not
-produce the expected test value, use the known-good baseline below to keep the
-tutorial moving and compare the model's differences against a working program.
+fence. Evaluate the model's draft when it gives you a compact R7RS program that
+defines the differentiator and its checks. Keep `code` available for inspection,
+but let the REPL's evaluated values drive the review and memory prompts. The
+REPL is the authority: if the draft does not produce the expected test value,
+use the known-good baseline below to keep the tutorial moving and compare the
+model's differences against a working program.
 
 ```scheme
 (import (scheme cxr))
