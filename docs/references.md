@@ -10,7 +10,11 @@ prior art on agentic harnesses and language agents for the Chunk 0.17
 Milestone M2 *REPL Agent Harness — Minimal Loop* work; and in
 [Scheme and Lisp Type Annotation References](#scheme-and-lisp-type-annotation-references)
 prior art for typed documentation metadata, library-edge contract hints, and
-type-related context for coding agents. Keep project-specific decisions in this
+type-related context for coding agents; and in
+[Scheme and Lisp Prior-Art Corpus](scheme-lisp-prior-art.md), the broader
+Scheme/Lisp application, library, tooling, runtime, and book-code corpus that
+should inform Consent Scheme without becoming normative. Keep
+project-specific decisions in this
 repository's own design docs; use these references for language context,
 historical grounding, and implementation techniques.
 
@@ -257,6 +261,15 @@ for the content-addressed library store / inter-agent exchange work
 - [Unison](https://www.unison-lang.org/) for content-addressed definitions
   (hash = identity, alpha-normalized, references-by-hash) and the abilities
   effect system — the closest semantic-level model for definition identity.
+
+## Scheme and Lisp Prior-Art Corpus
+
+[Scheme and Lisp Prior-Art Corpus](scheme-lisp-prior-art.md) preserves the
+broader issue #654 research map: runtime comparison systems, major applications
+and libraries, interactive tooling, and book-code corpora. It is non-normative
+prior art for design pressure and coverage discovery; Consent Scheme's own
+R7RS-small, portable-core, and explicit-capability documents remain
+authoritative.
 
 ## Additional Candidates
 
