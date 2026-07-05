@@ -68,6 +68,35 @@
     (should (string-match-p (regexp-quote "(restarts ((restart (id abort)")
                             result))))
 
+(ert-deftest consent-debugger-test-condition-datum-carries-irritants ()
+  "Condition datums keep bounded structured irritants for diagnostics."
+  (let* ((context (consent--new-eval-context nil))
+         (condition
+          (consent-debugger-condition-datum
+           '(consent-eval-error
+             "local model transport failed"
+             (model-provider-error
+              (status unavailable)
+              (provider local-fail)
+              (model qwen-coder)
+              (transport openai-compatible-http)
+              (process
+               (process-failure
+                (detail "curl: failed")))
+              (credentials
+               ((api-key "sk-debugger-secret123456")))))
+           context))
+         (external (consent-result->external condition)))
+    (should
+     (string-match-p
+      (regexp-quote "(irritants ((model-provider-error")
+      external))
+    (should
+     (string-match-p
+      (regexp-quote "(provider local-fail)")
+      external))
+    (should-not (string-match-p "sk-debugger-secret" external))))
+
 (ert-deftest consent-debugger-test-private-procedure-docstring-in-environment ()
   "Debugger environment records expose reachable procedure-value docs."
   (let ((result

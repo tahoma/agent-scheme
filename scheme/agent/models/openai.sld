@@ -13,12 +13,15 @@
           model-openai-parse-response
           model-openai-compatible-http-complete)
   (import (scheme base)
+          (scheme write)
           (prefix (cli process-host) cli-host:)
           (prefix (stdlib generator) gen:)
           (prefix (stdlib json) json-model:))
   (begin
     ;; Default request timeout for local OpenAI-compatible HTTP transports.
     (define model-openai-default-timeout-seconds 30)
+    ;; Maximum process diagnostic text copied into model transport conditions.
+    (define model-openai-transport-detail-limit 240)
 
     (define (model-openai-field-values datum)
       "Return field pairs from DATUM, skipping a record head when present."
@@ -87,6 +90,102 @@
     (define (model-openai-name-string value description)
       "Return VALUE as a provider/model name string."
       (symbol->string (model-openai-name value description)))
+
+    (define (model-openai-object->string value)
+      "Return VALUE as a Scheme-readable diagnostic string."
+      (let ((port (open-output-string)))
+        (write value port)
+        (get-output-string port)))
+
+    (define (model-openai-bounded-detail detail)
+      "Return DETAIL as non-empty bounded transport diagnostic text."
+      (let* ((text
+              (cond
+               ((and (string? detail) (> (string-length detail) 0))
+                detail)
+               ((string? detail)
+                "no process detail")
+               (else
+                (model-openai-object->string detail))))
+             (length (string-length text))
+             (limit model-openai-transport-detail-limit))
+        (if (> length limit)
+            (string-append (substring text 0 (- limit 3)) "...")
+            text)))
+
+    (define (model-openai-condition-detail condition)
+      "Return host CONDITION as bounded transport diagnostic text."
+      (model-openai-bounded-detail
+       (cond
+        ((error-object? condition)
+         (error-object-message condition))
+        ((string? condition)
+         condition)
+        (else
+         condition))))
+
+    (define (model-openai-transport-error-datum
+             provider model status detail)
+      "Return structured public detail for a local transport failure."
+      (let ((provider-id
+             (model-openai-name-string
+              (model-openai-field-value provider 'id 'unknown-provider)
+              "provider id"))
+            (model-id
+             (model-openai-name-string
+              (model-openai-field-value model 'id 'unknown-model)
+              "model id"))
+            (transport
+             (model-openai-name-string
+              (model-openai-field-value provider
+                                        'transport
+                                        'openai-compatible-http)
+              "transport"))
+            (status-text (model-openai-object->string status))
+            (detail-text (model-openai-bounded-detail detail)))
+        (list 'model-provider-error
+              (list 'status 'unavailable)
+              (list 'provider (string->symbol provider-id))
+              (list 'model (string->symbol model-id))
+              (list 'transport (string->symbol transport))
+              (list 'process
+                    (list 'process-failure
+                          (list 'status status-text)
+                          (list 'detail detail-text)))
+              (list 'reason detail-text))))
+
+    (define (model-openai-raise-transport-error
+             provider model status detail)
+      "Raise a structured local transport error for PROVIDER and MODEL."
+      (let* ((provider-id
+              (model-openai-name-string
+               (model-openai-field-value provider 'id 'unknown-provider)
+               "provider id"))
+             (model-id
+              (model-openai-name-string
+               (model-openai-field-value model 'id 'unknown-model)
+               "model id"))
+             (transport
+              (model-openai-name-string
+               (model-openai-field-value provider
+                                         'transport
+                                         'openai-compatible-http)
+               "transport"))
+             (detail-text (model-openai-bounded-detail detail))
+             (diagnostic
+              (model-openai-transport-error-datum
+               provider model status detail)))
+        (error
+         (string-append
+          "local model transport failed for provider "
+          provider-id
+          " model "
+          model-id
+          " via "
+          transport
+          ": "
+          detail-text)
+         diagnostic)))
 
     (define (model-openai-record-head datum)
       "Return DATUM's record head, or #f."
@@ -446,13 +545,21 @@
                (request-json
                 (model-openai-request-json model-id prompt options))
                (result
-                (model-openai-retrieve
-                 (model-openai-completion-url endpoint)
-                 request-json
-                 options))
+                (guard (condition
+                        (else
+                         (model-openai-raise-transport-error
+                          provider
+                          model
+                          'host-exception
+                          (model-openai-condition-detail condition))))
+                  (model-openai-retrieve
+                   (model-openai-completion-url endpoint)
+                   request-json
+                   options)))
                (status (car result))
                (stdout (cadr result))
                (stderr (model-openai-third result)))
           (if (not (= status 0))
-              (error "local model transport failed" stderr))
+              (model-openai-raise-transport-error
+               provider model status stderr))
           (model-openai-parse-response stdout))))))

@@ -46,6 +46,33 @@
   (let ((entry (and (pair? record) (assq name (cdr record)))))
     (if entry (cadr entry) #f)))
 
+(define (string-contains? haystack needle)
+  "Return #t when HAYSTACK contains NEEDLE."
+  (let ((hay (string-length haystack))
+        (need (string-length needle)))
+    (if (zero? need)
+        #t
+        (let loop ((start 0))
+          (cond
+           ((> (+ start need) hay) #f)
+           ((let match ((index 0))
+              (cond
+               ((>= index need) #t)
+               ((char=? (string-ref haystack (+ start index))
+                        (string-ref needle index))
+                (match (+ index 1)))
+               (else #f)))
+            #t)
+           (else (loop (+ start 1))))))))
+
+(define (ascii-string? text)
+  "Return #t when TEXT contains only ASCII characters."
+  (let ((length (string-length text)))
+    (let loop ((index 0))
+      (or (= index length)
+          (and (< (char->integer (string-ref text index)) 128)
+               (loop (+ index 1)))))))
+
 ;; Canonical tool schema used by request projection checks.
 (define local-echo-tool
   '(model-tool
@@ -74,6 +101,42 @@
      "Call local-echo."
      (list (list 'tools (list local-echo-tool))
            (list 'tool-choice local-echo-tool))))))
+
+(let* ((non-ascii-prompt
+        (string-append "Reuse "
+                       (string (integer->char #x2192))
+                       " and "
+                       (string (integer->char #x3bb))
+                       " and "
+                       (string (integer->char #x1f600))))
+       (request-json
+        (model-openai-request-json "qwen3:0.6b" non-ascii-prompt '()))
+       (request (json-read (open-input-string request-json)))
+       (message (vector-ref (json-ref request 'messages) 0)))
+  (check-value 'model-openai-request-non-ascii-json-ascii-only
+               (ascii-string? request-json)
+               #t)
+  (check-value 'model-openai-request-non-ascii-roundtrip
+               (json-ref message 'content)
+               non-ascii-prompt)
+  (check-value 'model-openai-request-non-ascii-escapes-bmp
+               (and (string-contains? request-json "\\u2192")
+                    (string-contains? request-json "\\u03bb"))
+               #t)
+  (check-value 'model-openai-request-non-ascii-escapes-non-bmp
+               (string-contains? request-json "\\ud83d\\ude00")
+               #t)
+  (let* ((completion non-ascii-prompt)
+         (next-json
+          (model-openai-request-json "qwen3:0.6b" completion '()))
+         (next-request (json-read (open-input-string next-json)))
+         (next-message (vector-ref (json-ref next-request 'messages) 0)))
+    (check-value 'model-openai-request-non-ascii-roundtrip-reuse-as-prompt
+                 (json-ref next-message 'content)
+                 completion)
+    (check-value 'model-openai-request-non-ascii-reused-json-ascii-only
+                 (ascii-string? next-json)
+                 #t)))
 
 (let* ((request (request-with-tool))
        (tools (json-ref request 'tools))
