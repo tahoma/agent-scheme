@@ -345,6 +345,11 @@ nesting depth."
   "Return non-nil when STRING is empty or only whitespace."
   (string-empty-p (string-trim string)))
 
+(defun consent-repl-stream--ends-with-newline-p (string)
+  "Return non-nil when STRING is non-empty and ends with a newline."
+  (and (> (length string) 0)
+       (eq (aref string (1- (length string))) ?\n)))
+
 (defun consent-repl-stream--horizontal-whitespace-p (char)
   "Return non-nil when CHAR is space or tab.
 That is horizontal whitespace, not a break."
@@ -453,7 +458,7 @@ EMIT-OUTPUT on separate streams, under SESSION and evaluator OPTIONS."
          (next-chunk () (funcall read-chunk))
          (eof-chunk-p (chunk) (eq chunk consent-repl-stream--eof))
          ;; Acquire one complete form, returning a list (KIND PAYLOAD CURRENT)
-         ;; where KIND is complete/malformed/eof/eof-incomplete.
+         ;; where KIND is complete/malformed/blank/eof/eof-incomplete.
          (acquire (buffer ordinal)
            (let ((outcome (consent-repl-stream--try-read buffer)))
              (pcase (car outcome)
@@ -463,7 +468,11 @@ EMIT-OUTPUT on separate streams, under SESSION and evaluator OPTIONS."
                 (let ((chunk (next-chunk)))
                   (if (eof-chunk-p chunk)
                       (list 'eof nil buffer)
-                    (acquire (concat buffer chunk) ordinal))))
+                    (let ((next-buffer (concat buffer chunk)))
+                      (if (and (consent-repl-stream--blank-p next-buffer)
+                               (consent-repl-stream--ends-with-newline-p chunk))
+                          (list 'blank nil "")
+                        (acquire next-buffer ordinal))))))
                (_                       ; incomplete
                 ;; A partial form is buffered, so the continuation gutter is a
                 ;; request for more input: emit (and flush) it *before* the
@@ -491,6 +500,8 @@ EMIT-OUTPUT on separate streams, under SESSION and evaluator OPTIONS."
                (emit (consent-repl-stream--exit-record
                       session "eof" "closed-ok" count nil))
                (setq closed t))
+              ('blank
+               (setq buffer ""))
               ('eof-incomplete
                (let ((source (string-trim payload)))
                  (emit (consent-repl-stream--submission-record

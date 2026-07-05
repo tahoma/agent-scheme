@@ -200,6 +200,33 @@ OPTIONS are evaluator options.  Return the ordered contract records."
                     "display")
                    "3"))))
 
+;;;; Blank ready-prompt input redraws a same-ordinal ready prompt
+
+(ert-deftest consent-repl-stream-blank-ready-prompt-reprompts ()
+  "Blank ready-prompt input redraws a ready prompt without a submission."
+  (let* ((records (consent-repl-stream-test--drive "\n(+ 1 2)\n"))
+         (prompts (consent-repl-stream-test--of records "repl-prompt")))
+    (should (= (length prompts) 3))
+    (dolist (prompt prompts)
+      (should (equal (consent-repl-stream-test--sym
+                      (consent-repl-stream-test--field prompt "state"))
+                     "ready")))
+    (should (= (consent-repl-stream-test--int
+                (consent-repl-stream-test--field (nth 0 prompts) "ordinal"))
+               1))
+    (should (= (consent-repl-stream-test--int
+                (consent-repl-stream-test--field (nth 1 prompts) "ordinal"))
+               1))
+    (should (= (consent-repl-stream-test--int
+                (consent-repl-stream-test--field (nth 2 prompts) "ordinal"))
+               2))
+    (should (= (consent-repl-stream-test--count records "repl-submission") 1))
+    (should (equal
+             (consent-repl-stream-test--field
+              (car (consent-repl-stream-test--of records "repl-result"))
+              "display")
+             "3"))))
+
 ;;;; The continuation prompt carries the reader's pending-nesting indicator
 
 (ert-deftest consent-repl-stream-continuation-carries-nesting ()
@@ -540,6 +567,17 @@ flag exists for model symmetry and is exercised here through the rendered hook."
     (should (equal (consent-repl-stream-rendered-from-string
                     "(+ 1 2)\n" "repl-main" 'comment nil nil t)
                    "#| 1 |# ;;   => 3\n;;\n#| 2 |# ;;   __ exit closed-ok\n"))))
+
+(ert-deftest consent-repl-stream-chrome-blank-ready-prompt-reprompts ()
+  "Human chromes redraw a same-ordinal ready prompt after blank input."
+  ;; These helpers render only the control channel.  In a live TTY, the echoed
+  ;; blank line and typed datum appear between the repeated ready prompts.
+  (should (equal (consent-repl-stream-rendered-from-string
+                  "\n(+ 1 2)\n" "repl-main" 'comment nil nil t)
+                 "#| 1 |# #| 1 |# ;;   => 3\n;;\n#| 2 |# ;;   __ exit closed-ok\n"))
+  (should (equal (consent-repl-stream-rendered-from-string
+                  "\n(+ 1 2)\n" "repl-main" 'classic nil nil t)
+                 "> > = 3\n\n> _ exit closed-ok\n")))
 
 (ert-deftest consent-repl-stream-chrome-classic-quiet-silent ()
   "The `classic', `quiet', and `silent' chromes match the portable rendering.
