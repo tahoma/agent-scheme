@@ -138,6 +138,12 @@
            ((repl--whitespace? (string-ref string index)) (loop (+ index 1)))
            (else #f)))))
 
+    (define (repl--ends-with-newline? string)
+      "Return #t when STRING is non-empty and ends with a newline."
+      (let ((length (string-length string)))
+        (and (> length 0)
+             (char=? (string-ref string (- length 1)) #\newline))))
+
     (define (repl--trim string)
       "Return STRING without leading or trailing whitespace."
       (let ((length (string-length string)))
@@ -474,7 +480,7 @@
               (emit-output output))))
         (define (acquire buffer ordinal)
           "Acquire one complete form, returning (values KIND PAYLOAD"
-          "BUFFER) for KIND complete/malformed/eof/eof-incomplete."
+          "BUFFER) for KIND complete/malformed/blank/eof/eof-incomplete."
           (let ((outcome (repl--try-read buffer)))
             (cond
              ((eq? (car outcome) 'complete)
@@ -485,7 +491,11 @@
               (let ((chunk (read-chunk)))
                 (if (eof-object? chunk)
                     (values 'eof #f buffer)
-                    (acquire (string-append buffer chunk) ordinal))))
+                    (let ((next-buffer (string-append buffer chunk)))
+                      (if (and (repl--blank? next-buffer)
+                               (repl--ends-with-newline? chunk))
+                          (values 'blank #f "")
+                          (acquire next-buffer ordinal))))))
              (else                       ; incomplete
               ;; A partial form is buffered, so the continuation gutter is a
               ;; request for more input: emit (and flush) it *before* the
@@ -528,6 +538,8 @@
             (cond
               ((eq? kind 'eof)
                (emit (repl--exit-record session 'eof 'closed-ok count #f)))
+              ((eq? kind 'blank)
+               (loop "" ordinal count))
               ((eq? kind 'eof-incomplete)
                (let ((source (repl--trim payload)))
                  (emit (repl--submission-record session ordinal source #f #t))

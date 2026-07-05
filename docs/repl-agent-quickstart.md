@@ -30,7 +30,7 @@ You can run it directly from the checkout:
 
 ```sh
 build/compile/gambit/bin/consent --repl \
-  --session symbolic-agent-tour --chrome quiet
+  --session symbolic-agent-tour
 ```
 
 Or install it under a user prefix. Use the same `PREFIX` for `make compile`
@@ -41,7 +41,7 @@ lives:
 make compile PREFIX="$HOME/.local"
 make install PREFIX="$HOME/.local"
 "$HOME/.local/bin/consent" --repl \
-  --session symbolic-agent-tour --chrome quiet
+  --session symbolic-agent-tour
 ```
 
 The interpreted launcher is still useful while hacking from a checkout, but it
@@ -50,7 +50,7 @@ the host explicitly:
 
 ```sh
 CONSENT_REPL_HOST=guile tools/consent-repl \
-  --session symbolic-agent-tour --chrome quiet
+  --session symbolic-agent-tour
 ```
 
 Use the Gambit-compiled `consent --repl` path when you want the faster portable
@@ -113,22 +113,26 @@ If you built the Gambit standalone runtime above, start the tutorial REPL with:
 
 ```sh
 build/compile/gambit/bin/consent --repl \
-  --session symbolic-agent-tour --chrome quiet
+  --session symbolic-agent-tour
 ```
 
 or, after `make install PREFIX="$HOME/.local"`:
 
 ```sh
 "$HOME/.local/bin/consent" --repl \
-  --session symbolic-agent-tour --chrome quiet
+  --session symbolic-agent-tour
 ```
 
 The interpreted portable launcher starts from the repository root when Chibi,
 Guile, or Gauche is installed:
 
 ```sh
-tools/consent-repl --session symbolic-agent-tour --chrome quiet
+tools/consent-repl --session symbolic-agent-tour
 ```
+
+These commands use the default `comment` chrome, which is the normal
+human-facing transcript view. Use `--chrome quiet` later if you deliberately
+want terse result-only output.
 
 The Emacs-hosted batch entry uses the same REPL contract:
 

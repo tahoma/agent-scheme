@@ -99,6 +99,29 @@
                "Do not continue to the reviewer or memory prompts until the REPL has evaluated Scheme and produced `test-results` and `sample-derivative`."))
       (should (string-match-p (regexp-quote needle) flat-doc)))))
 
+(ert-deftest consent-repl-agent-quickstart-doc-test-primary-repl-uses-default-chrome ()
+  "The primary tutorial launch path introduces the default chrome first."
+  (let* ((doc
+          (consent-repl-agent-quickstart-doc-test--read
+           "docs/repl-agent-quickstart.md"))
+         (install
+          (consent-repl-agent-quickstart-doc-test--section
+           doc
+           "Install the Portable Runtime"))
+         (start
+          (consent-repl-agent-quickstart-doc-test--section
+           doc
+           "Start a REPL")))
+    (dolist (section (list install start))
+      (should-not
+       (string-match-p
+        (regexp-quote "--session symbolic-agent-tour --chrome quiet")
+        section)))
+    (should
+     (string-match-p
+      (regexp-quote "default `comment` chrome")
+      start))))
+
 (ert-deftest consent-repl-agent-quickstart-doc-test-main-path-has-no-canned-answer ()
   "The main tutorial path does not embed a completed differentiator answer."
   (let* ((doc

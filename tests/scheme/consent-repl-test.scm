@@ -168,6 +168,26 @@
                                      'display)
          "3"))
 
+;;;; Blank ready-prompt input redraws a same-ordinal ready prompt
+
+(let ((records (drive "\n(+ 1 2)\n")))
+  (let ((prompts (records-of records 'repl-prompt)))
+    (check 'blank-ready-prompt-count (length prompts) 3)
+    (check 'blank-ready-first-state (field (list-ref prompts 0) 'state) 'ready)
+    (check 'blank-ready-second-state (field (list-ref prompts 1) 'state) 'ready)
+    (check 'blank-ready-third-state (field (list-ref prompts 2) 'state) 'ready)
+    (check 'blank-ready-first-ordinal
+           (consent-number-value (field (list-ref prompts 0) 'ordinal)) 1)
+    (check 'blank-ready-second-ordinal
+           (consent-number-value (field (list-ref prompts 1) 'ordinal)) 1)
+    (check 'blank-ready-third-ordinal
+           (consent-number-value (field (list-ref prompts 2) 'ordinal)) 2))
+  (check 'blank-ready-submission-count
+         (count-of records 'repl-submission) 1)
+  (check 'blank-ready-result
+         (field (car (records-of records 'repl-result)) 'display)
+         "3"))
+
 ;;;; The continuation prompt carries the reader's pending-nesting indicator
 
 ;; The depth narrows as constructs close (two open lists, then one), the kind
@@ -510,6 +530,12 @@
 (check 'comment-echoed-default-session-prompt
        (cli-repl-rendered-from-string "(+ 1 2)\n" "repl-main" 'comment #f #t)
        "#| 1 |# ;;   => 3\n;;\n#| 2 |# ;;   __ exit closed-ok\n")
+;; A blank line at an input-echoed ready prompt does not start a submission and
+;; does not mean continuation.  The control-channel helper shows adjacent
+;; same-ordinal prompts; in a live TTY the echoed blank line sits between them.
+(check 'comment-echoed-blank-ready-reprompts
+       (cli-repl-rendered-from-string "\n(+ 1 2)\n" "repl-main" 'comment #f #t)
+       "#| 1 |# #| 1 |# ;;   => 3\n;;\n#| 2 |# ;;   __ exit closed-ok\n")
 ;; A named session grows a `<session>:<ordinal>' body, and the markers align to
 ;; that wider gutter so the value still lands under the echoed form.
 (check 'comment-named-session-prompt
@@ -538,6 +564,11 @@
 (check 'classic-prompts-and-values
        (cli-repl-rendered-from-string "(+ 1 2)\n" "repl-main" 'classic #f)
        "> (+ 1 2)\n= 3\n\n> _ exit closed-ok\n")
+;; The same blank-ready-prompt redraw applies to `classic'.  The helper omits
+;; terminal echo, so it shows the repeated ready prompts next to each other.
+(check 'classic-echoed-blank-ready-reprompts
+       (cli-repl-rendered-from-string "\n(+ 1 2)\n" "repl-main" 'classic #f #t)
+       "> > = 3\n\n> _ exit closed-ok\n")
 ;; A condition is marked `! ' (not `- '), so it pops in a colorless capture.  The
 ;; diagnostic text is now cross-host identical for an error whose wording agrees
 ;; (the `consent eval error: ' prefix matches the Emacs twin after its message
