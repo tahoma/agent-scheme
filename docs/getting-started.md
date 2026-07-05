@@ -4,7 +4,7 @@ This guide covers the currently supported first-use path for Consent Scheme from
 local checkout. The supported user entry point today is the Emacs-hosted native
 REPL session. The portable Scheme code and native CLI/daemon adapter contract
 are part of the project direction, but they are not yet the general first-use
-interface. For a copy-pasteable REPL-to-agent-harness path across both REPL
+interface. For a copy-pasteable local-model REPL workloop across both REPL
 hosts, see the [REPL Agent Harness Quick Start](repl-agent-quickstart.md).
 
 ## Prerequisites
@@ -248,10 +248,11 @@ run a local OpenAI-compatible completion request:
 ```
 
 For the Emacs host, `model-complete` calls the selected local provider through
-the OpenAI-compatible `/chat/completions` endpoint. Tests replace that transport
-with a fake function, so CI does not require a running model server. The
-portable Scheme implementation registers the same library and routing surface;
-portable completion reports that no portable host transport is configured.
+the OpenAI-compatible `/chat/completions` endpoint. The portable Scheme
+implementation registers the same library and routing surface, and its live
+transport uses the portable process-host shim plus `curl` when the selected R7RS
+host can spawn local processes. Hosts without a process-spawning shim fail
+before network access.
 
 Tool specs are derived from typed docstring metadata rather than written as
 hand-authored JSON. Pass the resulting `model-tool` datums through the `tools`
@@ -360,18 +361,11 @@ Suggested downloadable local model profiles by Consent Scheme role:
 | `reviewer` | `qwen2.5-coder:32b`, `qwen3:32b`, `llama3.1:70b` |
 | `summarizer` | `gemma3:4b`, `gemma3:12b`, `qwen3:8b` |
 | `memory-curator` | `qwen3:4b`, `qwen3:8b`, `gemma3:4b` |
-| `cheap-background` | `qwen2.5-coder:0.5b`, `qwen3:0.6b`, `gemma3:1b` |
 | `approval-explainer` | `qwen3:4b`, `qwen3:8b`, `gemma3:12b` |
-
-The `cheap-background` models are for CI smoke tests and transport checks, not
-the main first-use recommendation.
 
 To prepare the full suggested local model matrix with Ollama:
 
 ```sh
-ollama pull qwen2.5-coder:0.5b
-ollama pull qwen3:0.6b
-ollama pull gemma3:1b
 ollama pull qwen2.5-coder:7b
 ollama pull qwen2.5-coder:14b
 ollama pull qwen2.5-coder:32b
@@ -384,8 +378,12 @@ ollama pull gemma3:4b
 ollama pull gemma3:12b
 ```
 
-To run the same opt-in live local model smoke test used by CI, start an
-OpenAI-compatible local server such as Ollama and run:
+Developer-only live transport checks are documented in
+[Development](development.md). They use separate test-oriented defaults so the
+developer checks stay bounded; keep first-use setup on the role matrix above.
+
+To run the opt-in CI transport check after reading the development notes, start
+an OpenAI-compatible local server such as Ollama and run:
 
 ```sh
 make test-live-model-ci
@@ -398,9 +396,8 @@ matrix after pulling those models, run:
 make test-live-model
 ```
 
-The test defaults to `http://127.0.0.1:11434/v1` and
-`qwen3:0.6b`. Override those with
-`CONSENT_LIVE_MODEL_ENDPOINT` and `CONSENT_LIVE_MODEL_ID`.
+Override the test endpoint and model with `CONSENT_LIVE_MODEL_ENDPOINT` and
+`CONSENT_LIVE_MODEL_ID`.
 The Make targets set `CONSENT_LIVE_MODEL_TEST=1`; `make test-live-model`
 also sets `CONSENT_LIVE_MODEL_MATRIX=1`. The matrix test checks that each
 documented local model completes through Consent Scheme's OpenAI-compatible

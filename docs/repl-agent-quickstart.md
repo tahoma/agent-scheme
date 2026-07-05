@@ -1,56 +1,162 @@
 # REPL Agent Harness Quick Start
 
-This is the hands-on path from a checkout to using the REPL as an agent harness.
-Start with the fifteen-minute tutorial project, then use the later sections as
-the reference for each surface. The same Scheme forms work on the portable
-terminal REPL and the Emacs REPL entry unless a section calls out a host-specific
-boundary.
+This is the hands-on path from a checkout to a real local model-backed REPL
+workloop. Start by installing a practical local role set, then use the same
+Scheme forms from either the portable terminal REPL or the Emacs-hosted REPL.
 
-The examples start with stubbed provider steps so the harness is runnable before
-any model downloads. That path exercises the real session, agent registry,
-prompt verbs, task runner, result, transcript, audit, policy, and budget
-surfaces. After that, set up a local role environment so the same REPL session
-can route real prompts to useful local models instead of only smoke-test models.
+The first tutorial builds a small symbolic differentiator in the SICP
+tradition: algebra is Scheme data, the derivative rules are Scheme procedures,
+and the REPL uses local models for planning, coding, review, and memory
+curation. The examples use actual `model-complete` calls through an
+OpenAI-compatible local endpoint and the role assignments you configure below.
+
+## Install the Local Role Set
+
+Ollama is the simplest local OpenAI-compatible provider to use while this layer
+is bootstrapping. Install Ollama for your platform, then pull the profile that
+matches the machine you are actually using:
+
+| Machine profile | Pull these first |
+| --- | --- |
+| Small laptop, 8-16 GB memory | `qwen2.5-coder:7b`, `qwen3:4b`, `gemma3:4b` |
+| Developer laptop, 16-32 GB memory | `qwen2.5-coder:14b`, `qwen3:8b`, `gemma3:12b` |
+| Large local box, 48 GB+ memory | `qwen2.5-coder:32b`, `qwen3:30b`, `gemma3:12b` |
+
+The developer-laptop profile is the recommended first setup. It gives a useful
+coding model, a useful planning model, and a useful summarization/memory model
+without requiring 30B+ downloads. On a large machine, add `llama3.1:70b` for
+slower planning or review passes when latency and disk use are acceptable.
+
+For the recommended profile:
+
+```sh
+ollama pull qwen2.5-coder:14b
+ollama pull qwen3:8b
+ollama pull gemma3:12b
+ollama serve
+```
+
+For a smaller machine:
+
+```sh
+ollama pull qwen2.5-coder:7b
+ollama pull qwen3:4b
+ollama pull gemma3:4b
+ollama serve
+```
+
+The local OpenAI-compatible endpoint is `http://127.0.0.1:11434/v1`.
+
+## Start a REPL
+
+The portable standalone runtime starts from the repository root:
+
+```sh
+tools/consent-repl --session symbolic-agent-tour --chrome quiet
+```
+
+The Emacs-hosted batch entry uses the same REPL contract:
+
+```sh
+emacs -Q --batch -L lisp -l consent-repl-stream \
+  -f consent-repl-stream-main
+```
+
+For an interactive Emacs buffer, load the checkout and run
+`M-x consent-repl-comint`:
+
+```elisp
+(add-to-list 'load-path (expand-file-name "lisp" "/path/to/consent/"))
+(require 'consent-repl-comint)
+```
+
+Use the portable terminal REPL when you want the standalone R7RS path. Use the
+Emacs-hosted REPL when you want the Emacs buffer, event, audit, approval, and
+interactive session surfaces. The Scheme forms below are the same in both
+runtimes when the portable host can spawn `curl` and Ollama is running locally.
+
+## Register Local Models
+
+Paste this into the REPL. It registers Ollama as the local provider and maps the
+downloaded models to concrete agent roles:
+
+```scheme
+(import (scheme base)
+        (agent models))
+
+(model-provider-register!
+ '(model-provider
+   (id local-ollama)
+   (kind local)
+   (transport openai-compatible-http)
+   (endpoint "http://127.0.0.1:11434/v1")
+   (models
+    (((id qwen2.5-coder:14b)
+      (roles (scheme-scripter coder reviewer))
+      (privacy local))
+     ((id qwen3:8b)
+      (roles (planner approval-explainer))
+      (privacy local))
+     ((id gemma3:12b)
+      (roles (summarizer memory-curator))
+      (privacy local))))))
+```
+
+If you pulled the smaller profile, replace those model ids with
+`qwen2.5-coder:7b`, `qwen3:4b`, and `gemma3:4b`. If you pulled the large profile,
+use `qwen2.5-coder:32b` for `scheme-scripter`, `coder`, and `reviewer`;
+`qwen3:30b` for `planner`; and `gemma3:12b` for `summarizer` and
+`memory-curator`.
+
+Check that the roles route to the expected local models:
+
+```scheme
+(list (model-route 'planner '())
+      (model-route 'scheme-scripter '())
+      (model-route 'reviewer '())
+      (model-route 'memory-curator '()))
+```
+
+Look for `status selected`, provider `local-ollama`, and the model ids you
+registered.
 
 ## Fifteen-Minute Tutorial Project
 
-The first project is a small symbolic differentiator in the SICP tradition:
-represent algebra as Scheme data, implement the derivative rules, and use the
-agent harness to route the work through planner, coder, reviewer, and
-memory-curator roles. The project is deterministic in the portable standalone
-runtime because it uses stubbed provider steps. If Ollama and the Emacs-hosted
-runtime are ready, the local model section below shows the live `model-complete`
-step for asking a real coder model to extend the differentiator. Large model
-download time depends on your network; choose the small laptop profile if you
-want the first run to stay near fifteen minutes.
+This project uses the local role set to build and review a small symbolic
+differentiator. Model download time depends on your network; the tutorial itself
+is about fifteen minutes once the models are available.
 
-Run this from the repository root:
+First ask the planner for the work breakdown:
 
-```sh
-tools/consent-repl --session symbolic-agent-tour --chrome quiet <<'SCM'
-(import (scheme base) (scheme cxr) (agent prompt))
+```scheme
+(model-complete
+ 'planner
+ "Plan a tiny R7RS Scheme symbolic differentiator tutorial. Use lists for
+  sums and products, keep the implementation small, and include tests for
+  d/dx of x, y, (+ (* x x) (* 3 x)), and (* x (+ x 3)). Reply with a compact
+  ordered plan."
+ '((temperature 0.2) (timeout-seconds 180)))
+```
 
-(define registry (make-agent-registry))
-(register-agent registry
-                (make-agent 'planner-1
-                            '((role planner) (model qwen3:8b))))
-(register-agent registry
-                (make-agent 'scheme-coder-1
-                            '((role coder) (model qwen2.5-coder:14b))))
-(register-agent registry
-                (make-agent 'reviewer-1
-                            '((role reviewer) (model qwen2.5-coder:14b))))
-(register-agent registry
-                (make-agent 'memory-1
-                            '((role memory-curator) (model gemma3:12b))))
+Then ask the Scheme coding role to draft the implementation:
 
-(define harness (make-prompt-harness (list (list 'registry registry))))
-(list (map agent-id (agents harness)) (roles harness) (models harness))
+```scheme
+(model-complete
+ 'scheme-scripter
+ "Write portable R7RS Scheme code for a tiny symbolic differentiator. Represent
+  sums as '(+ left right), products as '(* left right), simplify addition by 0,
+  simplify multiplication by 0 and 1, and implement (deriv expression variable).
+  Include a four-result test list for x, y, (+ (* x x) (* 3 x)), and
+  (* x (+ x 3))."
+ '((temperature 0.2) (timeout-seconds 240)))
+```
 
-(prompt-result-agent-id
- (prompt-model harness 'qwen3:8b
-               '(plan symbolic differentiation project)
-               '((provider ((finish planned))) (verifier passed))))
+If the coder gives you a different valid implementation, paste that into the
+REPL and run its tests. The version below is a known-good baseline you can use
+to keep the tutorial moving or to compare against the model's draft:
+
+```scheme
+(import (scheme cxr))
 
 (define (=number? expression value)
   (and (number? expression) (= expression value)))
@@ -88,11 +194,6 @@ tools/consent-repl --session symbolic-agent-tour --chrome quiet <<'SCM'
                         (caddr expression))))
         (else '(unsupported expression))))
 
-(define code-result
-  (prompt-role harness 'coder '(implement deriv)
-               '((provider ((finish complete))) (verifier passed))))
-(prompt-result-agent-id code-result)
-
 (define differentiator-tests
   (list
    (equal? (deriv 'x 'x) 1)
@@ -104,87 +205,54 @@ tools/consent-repl --session symbolic-agent-tour --chrome quiet <<'SCM'
 
 differentiator-tests
 (deriv '(+ (* x x) (* 3 x)) 'x)
-
-(define review-result
-  (prompt-role harness 'reviewer '(review deriv tests)
-               '((provider ((finish reviewed))) (verifier passed))))
-(prompt-result-agent-id review-result)
-(map (lambda (entry) (cadr (assq 'kind (cdr entry))))
-     (prompt-result-audit review-result))
-
-(prompt-result-agent-id
- (prompt-role harness 'memory-curator
-              '(remember symbolic differentiator tutorial)
-              '((provider ((finish captured))) (verifier passed))))
-
-(exit)
-SCM
 ```
 
-The interesting records are:
+The expected evaluation records include:
 
 ```scheme
-((default planner-1 scheme-coder-1 reviewer-1 memory-1)
- (planner coder reviewer memory-curator)
- (auto qwen3:8b qwen2.5-coder:14b gemma3:12b))
-planner-1
-scheme-coder-1
 (#t #t #t #t)
 (+ (+ x x) 3)
-reviewer-1
-(agent-selected model-route)
-memory-1
 ```
 
-At that point you have seen the core loop: normal Scheme evaluation,
-role-specific agent registration, model-id discovery, a planned implementation,
-executable tests, a reviewer route, a memory-curator route, and audit entries
-that explain why the reviewer agent was selected. Continue through the sections
-below to mutate sessions, inspect transcripts, exercise policy and budget
-failures, and connect the same role names to local models.
-
-## Start a REPL
-
-From the repository root, start the portable terminal REPL:
-
-```sh
-tools/consent-repl --session quickstart
-```
-
-For compact machine-readable records, use the `datum` chrome:
-
-```sh
-printf '(+ 1 2)\n(exit)\n' \
-  | tools/consent-repl --session quickstart --chrome datum
-```
-
-The high-signal records are:
+Now send the result to the reviewer role:
 
 ```scheme
-(repl-result ... (display "3"))
-(repl-exit (session quickstart) (reason explicit) (status closed-ok) ...)
+(model-complete
+ 'reviewer
+ "Review this tiny Scheme symbolic differentiator result. The tests returned
+  (#t #t #t #t), and d/dx of (+ (* x x) (* 3 x)) returned (+ (+ x x) 3).
+  Identify one strength, one limitation, and one next extension that would be
+  useful for a new Scheme user."
+ '((temperature 0.2) (timeout-seconds 180)))
 ```
 
-The Emacs parity entry uses the same REPL contract:
+Finally capture a durable session note:
 
-```sh
-printf '(+ 1 2)\n(exit)\n' \
-  | emacs -Q --batch -L lisp -l consent-repl-stream \
-      -f consent-repl-stream-main
+```scheme
+(model-complete
+ 'memory-curator
+ "Summarize the durable facts from this tutorial in three bullets: local role
+  setup, the symbolic differentiator behavior, and the next extension to try."
+ '((temperature 0.2) (timeout-seconds 180)))
 ```
 
-For an interactive Emacs buffer, load the checkout and run
-`M-x consent-repl-comint`:
+At that point the first encounter has exercised the real local model path:
+planner, Scheme coder, evaluator, reviewer, and memory curator. It has also
+produced an inspectable Scheme program rather than only a transport check.
 
-```elisp
-(add-to-list 'load-path (expand-file-name "lisp" "/path/to/consent/"))
-(require 'consent-repl-comint)
-```
+## Runtime Notes
 
-The complete REPL reference is [Using the Consent Scheme REPL](repl.md). The
-portable shell details are in [Portable Terminal REPL Shell](portable-repl.md),
-and the host-neutral record vocabulary is in
-[Cross-Host REPL Interaction Contract](repl-interaction-contract.md).
+The Emacs-hosted runtime and the portable standalone runtime share the
+`(agent models)` registration, routing, and `model-complete` surface. The
+portable implementation lowers OpenAI-compatible HTTP through the host process
+shim and `curl`, so live completion needs a portable host with process spawning
+available. The plain `tools/consent-repl` launcher works on Chibi, Guile, or
+Gauche when that host can spawn `curl`.
+
+If a portable host reports that process spawning is unavailable, use the
+Emacs-hosted REPL for the live local-model tutorial and keep the portable REPL
+for host-neutral Scheme evaluation, sessions, role registration, and route
+inspection until that host adapter is available.
 
 ## Evaluate Scheme
 
@@ -201,6 +269,13 @@ Successful forms produce `repl-result` records. An unbound identifier produces a
 recoverable `repl-condition`, and the session keeps running. Under the `comment`
 chrome you see a human transcript; under `datum` you see the raw records.
 
+For compact machine-readable records, use:
+
+```sh
+printf '(+ 1 2)\n(exit)\n' \
+  | tools/consent-repl --session quickstart --chrome datum
+```
+
 ## Create and Switch Sessions
 
 Session verbs live in `(agent session)`:
@@ -215,357 +290,33 @@ Session verbs live in `(agent session)`:
 
 Mutating session verbs are policy-gated by `window-session`. Without that
 authority, they fail closed as `repl-condition` records and the REPL continues.
-The plain `tools/consent-repl` launcher currently keeps this default-deny
-posture; hosts that need to demonstrate granted session mutation pass evaluator
-options to the REPL driver.
+The plain `tools/consent-repl` launcher keeps this default-deny posture; hosts
+that need to demonstrate granted session mutation pass evaluator options to the
+REPL driver.
 
-This copy-pasteable portable driver grants `window-session`, creates two
-sessions, switches between them, and shows that each session keeps an isolated
-binding for `marker`:
+## Inspect Providers
 
-```sh
-chibi-scheme -A scheme /dev/stdin <<'SCM'
-(import (scheme base) (scheme write) (cli repl-shell) (consent reader))
-
-(define source
-  "(import (agent session))\n\
-(create-session 'named '((id work-a)))\n\
-(create-session 'named '((id work-b)))\n\
-(switch-session 'work-a)\n\
-(import (agent session))\n\
-(define marker 'a)\n\
-marker\n\
-(switch-session 'work-b)\n\
-(import (agent session))\n\
-(define marker 'b)\n\
-marker\n\
-(switch-session 'work-a)\n\
-marker\n\
-(exit)\n")
-
-(for-each
- (lambda (record)
-   (write-string (consent-datum->external record))
-   (newline))
- (cli-repl-records-from-string
-  source
-  "project-main"
-  '((policy-actions (window-session . allow)))))
-SCM
-```
-
-Look for result displays in this order:
+Use route and diagnostics records instead of scraping model output:
 
 ```scheme
-(display "a")
-(display "b")
-(display "a")
+(model-route 'scheme-scripter '())
+(model-provider-diagnostics)
 ```
 
-The Emacs driver accepts the same policy idea as an evaluator option:
-`'(:policy-actions ((window-session . allow)))`. The interactive Emacs session
-commands and the Scheme `switch-session` verb share the same current-session
-pointer; see [Session Lifecycle and Snapshots](session-lifecycle.md).
+The route record tells you which provider and model were selected for a role.
+Diagnostics records show provider ids, transports, endpoints, roles, model
+status, and redacted credentials.
 
-## Prompt an Agent
+## References
 
-The `(agent prompt)` library turns a REPL session into a small agent harness.
-It re-exports the registry helpers, so one import is enough for discovery,
-registration, and the three prompt verbs:
+The complete REPL reference is [Using the Consent Scheme REPL](repl.md). The
+portable shell details are in [Portable Terminal REPL Shell](portable-repl.md),
+and the host-neutral record vocabulary is in
+[Cross-Host REPL Interaction Contract](repl-interaction-contract.md).
 
-```sh
-tools/consent-repl --session quickstart --chrome quiet <<'SCM'
-(import (scheme base) (agent prompt))
-
-(define registry (make-agent-registry))
-(begin
-  (register-agent
-   registry
-   (make-agent 'coder-1 '((role coder) (model qwen2.5-coder:14b))))
-  (register-agent
-   registry
-   (make-agent 'reviewer-1 '((role reviewer) (model qwen2.5-coder:14b))))
-  (define harness (make-prompt-harness (list (list 'registry registry))))
-  (list (map agent-id (agents harness)) (roles harness) (models harness)))
-
-(prompt-result-agent-id
- (prompt harness 'plan '((provider ((finish done))) (verifier passed))))
-
-(prompt-result-agent-id
- (prompt-role harness 'reviewer 'review
-              '((provider ((finish done))) (verifier passed))))
-
-(prompt-result-agent-id
- (prompt-model harness 'qwen2.5-coder:14b 'code
-               '((provider ((finish done))) (verifier passed))))
-
-(exit)
-SCM
-```
-
-The result values are:
-
-```scheme
-((default coder-1 reviewer-1) (planner coder reviewer)
- (auto qwen2.5-coder:14b))
-default
-reviewer-1
-coder-1
-```
-
-`prompt` asks the registry to select an agent automatically. With no stronger
-configuration, selection falls back to the seeded `default` planner. `prompt-role`
-and `prompt-model` add a requested role or model to the selection context; the
-returned `agent-selection` record says whether the match was by role, by model,
-or by fallback.
-
-The first `(import (agent prompt))` can take a moment on an interpreted portable
-host because it loads the single-sourced agent stack.
-
-## Read Results, Yields, and Audit
-
-A prompt returns one `prompt-result` record. Use accessors instead of scraping
-display text:
-
-```scheme
-(define result
-  (prompt (make-prompt-harness)
-          'summarize-status
-          '((provider ((finish done))) (verifier passed))))
-
-(prompt-result-status result)      ; selected
-(prompt-result-state result)       ; complete
-(prompt-result-receipt result)     ; task-stop / task-pause / prompt-error
-(prompt-result-budget result)      ; task-budget
-```
-
-The transcript contains the runner's yielded and progress events, including the
-opening `agent-yield` and the fake local model route used by the stub provider:
-
-```scheme
-(map (lambda (event) (cadr (assq 'kind (cdr event))))
-     (prompt-result-transcript result))
-;; => (agent-yield agent-progress agent-progress model-route)
-```
-
-The prompt audit records explain selection and route decisions:
-
-```scheme
-(map (lambda (entry) (cadr (assq 'kind (cdr entry))))
-     (prompt-result-audit result))
-;; => (agent-selected model-route)
-```
-
-For the broader task lifecycle, see
-[Task Lifecycle and Control Loop](control-loop.md). Human collaboration and
-richer paused-task UX are tracked by #52; the current Emacs session, event,
-audit, and approval buffers are described in
-[Getting Started](getting-started.md) and
-[Session Lifecycle and Snapshots](session-lifecycle.md).
-
-## Policy and Budgets
-
-Prompt dispatch fails closed when the harness has no granted authority:
-
-```scheme
-(define denied
-  (prompt (make-prompt-harness '((authority #f)))
-          'sensitive
-          '((provider ((finish done))) (verifier passed))))
-
-(list (prompt-result-status denied)
-      (prompt-result-state denied)
-      (prompt-result-receipt denied))
-;; => (authority-missing failed-closed
-;;     (prompt-error (reason authority-missing) ...))
-```
-
-Noninteractive prompts must preload authority as data:
-
-```scheme
-(define authority
-  (make-prompt-authority
-   '((origin noninteractive)
-     (source grant)
-     (grants ((capability-grant
-               (id script-prompt)
-               (domain provider)
-               (operations complete)
-               (expires never)))))))
-
-(define script-harness
-  (make-prompt-harness (list (list 'authority authority))))
-```
-
-Budgets shape how far a prompt may run. A zero step budget halts with a
-structured stop receipt:
-
-```scheme
-(define exhausted
-  (prompt (make-prompt-harness)
-          'budget-check
-          '((provider ((finish done))) (verifier passed) (max-steps 0))))
-
-(list (prompt-result-state exhausted)
-      (prompt-result-receipt exhausted)
-      (prompt-result-budget exhausted))
-;; => (failed
-;;     (task-stop ... (stop-reason budget-exhausted))
-;;     (task-budget (max-steps 0) ...))
-```
-
-For the full ledger, reasons, and `with-budget`, see
-[Evaluation Budgets](budgets.md). Capability and provider authority are
-described in
-[Capability Environment and Effect Lowering](capability-environment.md).
-
-## Practical Local Role Environment
-
-The stubbed prompt examples above are a no-model smoke path:
-
-```scheme
-'((provider ((finish done))) (verifier passed))
-```
-
-That is useful for deterministic tests, but it is not a satisfying first local
-agent setup. For a real first encounter, install a small role matrix through an
-OpenAI-compatible local server such as Ollama, then register those model ids
-with both `(agent models)` and the prompt agent registry.
-
-Use the starter profile that matches your machine:
-
-| Machine profile | Pull these first |
-| --- | --- |
-| Small laptop, 8-16 GB memory | `qwen2.5-coder:7b`, `qwen3:4b`, `gemma3:4b` |
-| Developer laptop, 16-32 GB memory | `qwen2.5-coder:14b`, `qwen3:8b`, `gemma3:12b` |
-| Large local box, 48 GB+ memory | `qwen2.5-coder:32b`, `qwen3:30b`, `gemma3:12b` |
-
-The small profile is good enough for first coding, planning, summarizing, and
-memory experiments. The developer-laptop profile is the recommended first setup
-for a solid local experience without jumping to 30B+ downloads. On a large local
-box, add `llama3.1:70b` when latency and disk use are acceptable.
-
-The tiny `qwen3:0.6b`, `qwen2.5-coder:0.5b`, and `gemma3:1b` models remain
-useful for CI smoke tests and quick transport checks. They should not be the
-main recommendation for someone evaluating the system as an agent harness.
-
-The recommended developer-laptop setup is:
-
-```sh
-ollama pull qwen2.5-coder:14b
-ollama pull qwen3:8b
-ollama pull gemma3:12b
-ollama serve
-```
-
-For a smaller machine, replace that pull set with:
-
-```sh
-ollama pull qwen2.5-coder:7b
-ollama pull qwen3:4b
-ollama pull gemma3:4b
-ollama serve
-```
-
-The Ollama OpenAI-compatible endpoint is `http://127.0.0.1:11434/v1`. Register
-that endpoint and map the local models to Consent roles:
-
-```scheme
-(import (scheme base)
-        (agent models)
-        (agent prompt))
-
-(model-provider-register!
- '(model-provider
-   (id local-ollama)
-   (kind local)
-   (transport openai-compatible-http)
-   (endpoint "http://127.0.0.1:11434/v1")
-   (models
-    (((id qwen2.5-coder:14b)
-      (roles (scheme-scripter coder reviewer))
-      (privacy local))
-     ((id qwen3:8b)
-      (roles (planner approval-explainer))
-      (privacy local))
-     ((id gemma3:12b)
-      (roles (summarizer memory-curator))
-      (privacy local))))))
-```
-
-On the small profile, use the same shape with `qwen2.5-coder:7b`, `qwen3:4b`,
-and `gemma3:4b`. On a large machine, use `qwen2.5-coder:32b` for coder and
-reviewer, `qwen3:30b` or `llama3.1:70b` for planner, and keep `gemma3:12b` for
-summaries and memory curation.
-
-Check routing before asking for a completion:
-
-```scheme
-(map model-route
-     '(planner scheme-scripter coder reviewer summarizer memory-curator)
-     '(() () () () () ()))
-```
-
-In the portable standalone runtime, stop at routing and registry checks for now;
-it shares the provider datums and role assignment surface, but it does not yet
-lower live HTTP model transport. In the Emacs-hosted runtime, test one real
-local completion through the registered role:
-
-```scheme
-(model-complete
- 'scheme-scripter
- "Write a portable Scheme procedure that returns the last element of a proper list."
- '((temperature 0.2)))
-```
-
-`model-complete` is the current Emacs-hosted live local-model surface. The
-`prompt` verbs above still use injected provider steps in this bootstrap slice,
-so a live model completion and a prompt-run are adjacent REPL exercises rather
-than one combined streaming provider path. Keep the ids aligned anyway; the
-prompt registry then selects the same role/model names your local provider knows
-about:
-
-```scheme
-(define registry (make-agent-registry))
-(register-agent registry
-                (make-agent 'planner-1
-                            '((role planner)
-                              (model qwen3:8b)
-                              (description "Breaks work into local steps."))))
-(register-agent registry
-                (make-agent 'scheme-coder-1
-                            '((role coder)
-                              (model qwen2.5-coder:14b)
-                              (description "Writes Consent Scheme code."))))
-(register-agent registry
-                (make-agent 'reviewer-1
-                            '((role reviewer)
-                              (model qwen2.5-coder:14b)
-                              (description "Reviews Scheme and docs diffs."))))
-(register-agent registry
-                (make-agent 'memory-1
-                            '((role memory-curator)
-                              (model gemma3:12b)
-                              (description "Summarizes durable session state."))))
-
-(define local-harness
-  (make-prompt-harness (list (list 'registry registry))))
-
-(list (map agent-id (agents local-harness))
-      (roles local-harness)
-      (models local-harness))
-```
-
-Expected shape:
-
-```scheme
-((default planner-1 scheme-coder-1 reviewer-1 memory-1)
- (planner coder reviewer memory-curator)
- (auto qwen3:8b qwen2.5-coder:14b gemma3:12b))
-```
-
-The full model-provider reference, tool-call example, and opt-in live test
-targets are in [Local Model Providers](getting-started.md#local-model-providers).
-Provider hardening, streaming, and broader protocol documentation remain
-separate follow-up work; this quick-start focuses on the first usable REPL
-harness and local-role setup.
+The model-provider reference, tool-call example, and opt-in live test targets
+are in [Local Model Providers](getting-started.md#local-model-providers). The
+broader task lifecycle is in [Task Lifecycle and Control Loop](control-loop.md).
+Capability and provider authority are described in
+[Capability Environment and Effect Lowering](capability-environment.md), and
+budget behavior is in [Evaluation Budgets](budgets.md).
