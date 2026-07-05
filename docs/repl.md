@@ -23,7 +23,9 @@ The REPL is defined once and realized twice:
   asserted.
 
 If you are reading the runtime's behavior into tooling, read the contract. If you
-just want to start typing forms, start here.
+want the short path from launching a REPL to prompting an agent, use the
+[REPL Agent Harness Quick Start](repl-agent-quickstart.md). If you just want to
+start typing forms, start here.
 
 ## The two hosts at a glance
 

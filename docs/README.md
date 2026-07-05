@@ -51,6 +51,7 @@ project pitch and examples, see the top-level [README](../README.md).
 ## Host Adapters & REPL
 
 - [Native CLI and Daemon Adapter Contract](native-cli-daemon-adapter.md) — the first planned non-Emacs host adapter contract.
+- [REPL Agent Harness Quick Start](repl-agent-quickstart.md) — five-minute path from launching a REPL to prompting an agent with stubbed provider steps.
 - [Using the Consent Scheme REPL](repl.md) — single guide to starting the REPL on both hosts, with a cross-host parity matrix.
 - [Portable Terminal REPL Shell](portable-repl.md) — the first interactive non-Emacs REPL entry point.
 - [Cross-Host REPL Interaction Contract](repl-interaction-contract.md) — the shared interaction contract a REPL must honor across hosts.
