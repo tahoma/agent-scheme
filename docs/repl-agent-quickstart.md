@@ -1,14 +1,90 @@
 # REPL Agent Harness Quick Start
 
-This is the five-minute path from a checkout to using the REPL as an agent
-harness. It shows the same Scheme forms on the portable terminal REPL and the
-Emacs REPL entry, then points to the reference documents for the full contract.
+This is the hands-on path from a checkout to using the REPL as an agent harness.
+Start with the fifteen-minute tutorial project, then use the later sections as
+the reference for each surface. The same Scheme forms work on the portable
+terminal REPL and the Emacs REPL entry unless a section calls out a host-specific
+boundary.
 
 The examples start with stubbed provider steps so the harness is runnable before
 any model downloads. That path exercises the real session, agent registry,
 prompt verbs, task runner, result, transcript, audit, policy, and budget
 surfaces. After that, set up a local role environment so the same REPL session
 can route real prompts to useful local models instead of only smoke-test models.
+
+## Fifteen-Minute Tutorial Project
+
+The first project is a tiny Scheme helper bench with local-model roles attached:
+define a helper, route a coder prompt through a registered agent, and inspect
+the audit trail. It is deterministic in the portable standalone runtime because
+it uses stubbed provider steps. If Ollama and the Emacs-hosted runtime are ready,
+the local model section below shows the live `model-complete` step for asking a
+real coder model to draft another helper. Large model download time depends on
+your network; choose the small laptop profile if you want the first run to stay
+near fifteen minutes.
+
+Run this from the repository root:
+
+```sh
+tools/consent-repl --session helper-tour --chrome quiet <<'SCM'
+(import (scheme base) (agent prompt))
+
+(define (last-with-index values)
+  (if (null? values)
+      '()
+      (let loop ((rest (cdr values))
+                 (index 0)
+                 (last (car values)))
+        (if (null? rest)
+            (list index last)
+            (loop (cdr rest) (+ index 1) (car rest))))))
+
+(last-with-index '(install route prompt inspect))
+
+(define registry (make-agent-registry))
+(register-agent registry
+                (make-agent 'planner-1
+                            '((role planner) (model qwen3:8b))))
+(register-agent registry
+                (make-agent 'scheme-coder-1
+                            '((role coder) (model qwen2.5-coder:14b))))
+(register-agent registry
+                (make-agent 'reviewer-1
+                            '((role reviewer) (model qwen2.5-coder:14b))))
+(register-agent registry
+                (make-agent 'memory-1
+                            '((role memory-curator) (model gemma3:12b))))
+
+(define harness (make-prompt-harness (list (list 'registry registry))))
+(list (map agent-id (agents harness)) (roles harness) (models harness))
+
+(define code-result
+  (prompt-role harness 'coder '(write last-with-index)
+               '((provider ((finish complete))) (verifier passed))))
+(prompt-result-agent-id code-result)
+(map (lambda (entry) (cadr (assq 'kind (cdr entry))))
+     (prompt-result-audit code-result))
+
+(exit)
+SCM
+```
+
+The interesting records are:
+
+```scheme
+(3 inspect)
+((default planner-1 scheme-coder-1 reviewer-1 memory-1)
+ (planner coder reviewer memory-curator)
+ (auto qwen3:8b qwen2.5-coder:14b gemma3:12b))
+scheme-coder-1
+(agent-selected model-route)
+```
+
+At that point you have seen the core loop: normal Scheme evaluation,
+role-specific agent registration, model-id discovery, a routed prompt result,
+and the audit entries that explain why the coder agent was selected. Continue
+through the sections below to mutate sessions, inspect transcripts, exercise
+policy and budget failures, and connect the same role names to local models.
 
 ## Start a REPL
 
