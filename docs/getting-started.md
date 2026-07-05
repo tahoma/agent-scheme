@@ -250,9 +250,11 @@ run a local OpenAI-compatible completion request:
 For the Emacs host, `model-complete` calls the selected local provider through
 the OpenAI-compatible `/chat/completions` endpoint. The portable Scheme
 implementation registers the same library and routing surface, and its live
-transport uses the portable process-host shim plus `curl` when the selected R7RS
-host can spawn local processes. Hosts without a process-spawning shim fail
-before network access.
+transport uses the portable process-host shim plus `curl` when the selected
+R7RS host can spawn local processes. R7RS-small provides ports but not a
+standard socket, TLS, HTTP, proxy, or certificate API, so `curl` is the current
+portable host adapter backend rather than the Scheme-facing contract. Hosts
+without a process-spawning shim fail before network access.
 
 Tool specs are derived from typed docstring metadata rather than written as
 hand-authored JSON. Pass the resulting `model-tool` datums through the `tools`
@@ -310,6 +312,12 @@ ollama pull qwen3:4b
 ollama pull gemma3:4b
 ```
 
+The lighter set is useful for route checks, grounded summaries, and constrained
+follow-along prompts. For the full symbolic-differentiator quick start, prefer
+the developer-laptop set or the larger set in
+[REPL Agent Harness Quick Start](repl-agent-quickstart.md); the 7B coder model
+is not reliable enough for a first greenfield Scheme coding experience.
+
 Start the local server if it is not already running:
 
 ```sh
@@ -345,18 +353,20 @@ Register that local server from Consent Scheme:
 ```
 
 Other local profiles can use the same provider shape with different model ids.
-Useful starting points are `qwen2.5-coder:7b` or `qwen2.5-coder:14b` for routine
-code work, `qwen2.5-coder:32b` for stronger code and review work, `qwen3:8b` or
-`gemma3:12b` for summarization and explanation, and `qwen3:30b`, `qwen3:32b`,
-or `llama3.1:70b` for slower planning or review passes on machines with enough
-memory.
+Useful starting points are `qwen2.5-coder:14b` for bounded code work,
+`qwen2.5-coder:32b` for stronger code and review work, `qwen3:8b` or
+`gemma3:12b` for grounded summarization and explanation, and `qwen3:30b`,
+`qwen3:32b`, or `llama3.1:70b` for slower planning or review passes on
+machines with enough memory. Keep `qwen2.5-coder:7b` prompts especially
+constrained and verify its output in the REPL before treating it as tutorial
+code.
 
 Suggested downloadable local model profiles by Consent Scheme role:
 
 | Role | Practical local models |
 | --- | --- |
 | `planner` | `qwen3:30b`, `qwen3:32b`, `llama3.1:70b` |
-| `scheme-scripter` | `qwen2.5-coder:7b`, `qwen2.5-coder:14b`, `qwen2.5-coder:32b` |
+| `scheme-scripter` | `qwen2.5-coder:7b` for bounded prompts, `qwen2.5-coder:14b`, `qwen2.5-coder:32b` |
 | `coder` | `qwen2.5-coder:14b`, `qwen2.5-coder:32b` |
 | `reviewer` | `qwen2.5-coder:32b`, `qwen3:32b`, `llama3.1:70b` |
 | `summarizer` | `gemma3:4b`, `gemma3:12b`, `qwen3:8b` |
