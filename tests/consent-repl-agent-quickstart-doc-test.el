@@ -10,6 +10,7 @@
 ;;; Code:
 
 (require 'ert)
+(require 'consent-base)
 (require 'consent-eval)
 (require 'consent-models)
 (require 'consent-result)
@@ -47,6 +48,14 @@
   (consent-value->external
    (consent-eval-source source)))
 
+(defun consent-repl-agent-quickstart-doc-test--external-sequence (&rest sources)
+  "Evaluate SOURCES in one environment and return the last value externally."
+  (let ((environment (consent-make-base-environment))
+        value)
+    (dolist (source sources)
+      (setq value (consent-eval-source source environment)))
+    (consent-value->external value)))
+
 (defun consent-repl-agent-quickstart-doc-test--transport
     (_provider _model request _context)
   "Return a deterministic quick-start fake completion for REQUEST."
@@ -60,7 +69,7 @@
   (setq consent-repl-agent-quickstart-doc-test--requests nil))
 
 (ert-deftest consent-repl-agent-quickstart-doc-test-known-good-baseline-runs ()
-  "The tutorial's known-good differentiator remains executable."
+  "The tutorial's known-good differentiator and fact capture remain executable."
   (let* ((doc
           (consent-repl-agent-quickstart-doc-test--read
            "docs/repl-agent-quickstart.md"))
@@ -68,14 +77,36 @@
           (consent-repl-agent-quickstart-doc-test--scheme-block-containing
            doc
            "(import (scheme cxr))"))
+         (capture
+          (consent-repl-agent-quickstart-doc-test--scheme-block-containing
+           doc
+           "(define test-results"))
          (external
-          (consent-repl-agent-quickstart-doc-test--external
-           (concat
-            baseline
-            "\n(list differentiator-tests"
-            " (deriv '(+ (* x x) (* 3 x)) 'x))"))))
+          (consent-repl-agent-quickstart-doc-test--external-sequence
+           baseline
+           capture)))
     (should (equal external
                    "((#t #t #t #t) (+ (+ x x) 3))"))))
+
+(ert-deftest consent-repl-agent-quickstart-doc-test-captures-reusable-values ()
+  "The tutorial names outputs that later prompts reuse."
+  (let ((doc
+         (consent-repl-agent-quickstart-doc-test--read
+          "docs/repl-agent-quickstart.md")))
+    (dolist (needle
+             '("(define plan"
+               "(display plan)"
+               "(define code"
+               "(display code)"
+               "(define test-results"
+               "(define sample-derivative"
+               "(datum->text test-results)"
+               "(datum->text sample-derivative)"
+               "(define review"
+               "(display review)"
+               "(define session-note"
+               "(display session-note)"))
+      (should (string-match-p (regexp-quote needle) doc)))))
 
 (ert-deftest consent-repl-agent-quickstart-doc-test-model-routing-is-real-api ()
   "The documented model role shape routes through the real API."

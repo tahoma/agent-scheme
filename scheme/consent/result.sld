@@ -179,6 +179,8 @@
 
     ;; Maximum current-frame binding names included in debugger conditions.
     (define debugger-maximum-frame-bindings 40)
+    ;; Maximum condition irritants included in debugger records.
+    (define debugger-maximum-condition-irritants 5)
 
     (define (string-prefix? prefix text)
       "Report whether TEXT begins with PREFIX."
@@ -258,6 +260,12 @@
       (if (or (= count 0) (null? items))
           '()
           (cons (car items) (take (cdr items) (- count 1)))))
+
+    (define (debugger-condition-irritants condition)
+      "Return public debugger irritants for CONDITION."
+      (map value->result-datum
+           (take (condition-irritants condition)
+                 debugger-maximum-condition-irritants)))
 
     (define (debugger-documentation-field fields name)
       "Return documentation metadata field NAME from FIELDS, or #f."
@@ -466,13 +474,17 @@
               (debugger-environment-frame
                (context-interaction-environment context)
                frame-id))
-             (symbol (debugger-condition-symbol condition)))
+             (symbol (debugger-condition-symbol condition))
+             (irritants (debugger-condition-irritants condition)))
         (append
          (list 'condition
                (result-field 'type type)
                (result-field 'message message)
                (result-field 'phase phase))
          (if symbol (list (result-field 'symbol symbol)) '())
+         (if (null? irritants)
+             '()
+             (list (result-field 'irritants irritants)))
          ;; A budget exhaustion names the dimension that stopped the run so the
          ;; stop receipt answers "which budget was no longer admissible?".
          (if (and (eq? type 'budget-exhausted)

@@ -199,57 +199,71 @@ intentionally grounded and bounded: the model suggests the work, drafts a small
 piece of Scheme, the REPL evaluates it, and the reviewer and memory roles see
 the actual evaluation facts rather than guessing from an empty prompt.
 
-First ask the planner for the work breakdown:
+First capture the planner's work breakdown in `plan`, then print it so the
+next prompt has a named value to reuse:
 
 ```scheme
-(model-complete
- 'planner
- "Plan a tiny R7RS Scheme symbolic differentiator tutorial.
-  Use only ASCII text. Do not write code.
-  The implementation will represent sums as (+ left right), products as
-  (* left right), and will test d/dx of x, y, (+ (* x x) (* 3 x)), and
-  (* x (+ x 3)). Reply with exactly five numbered steps for a
-  beginner-friendly REPL workloop."
- '((temperature 0.1) (timeout-seconds 300)))
+(import (scheme write))
+
+(define plan
+  (model-complete
+   'planner
+   "Plan a tiny R7RS Scheme symbolic differentiator tutorial.
+    Use only ASCII text. Do not write code.
+    The implementation will represent sums as (+ left right), products as
+    (* left right), and will test d/dx of x, y, (+ (* x x) (* 3 x)), and
+    (* x (+ x 3)). Reply with exactly five numbered steps for a
+    beginner-friendly REPL workloop."
+   '((temperature 0.1) (timeout-seconds 300))))
+
+(display plan)
 ```
 
-Then ask the Scheme coding role to draft the implementation. The constraints
-are deliberately strict so the model works inside the small R7RS surface that
-the tutorial will evaluate:
+Then capture the Scheme coding role's draft in `code`. The prompt includes the
+planner's output plus strict constraints so the model works inside the small
+R7RS surface that the tutorial will evaluate:
 
 ```scheme
-(model-complete
- 'scheme-scripter
- "Return plain portable R7RS Scheme source only.
-  Do not use Markdown fences, prose, #lang, library forms, square brackets,
-  quasiquote, display, printf, for-each, pass/fail symbols, or implementation
-  extensions. Use only define, cond, and, or, if, number?, symbol?, pair?,
-  car, eq?, =, +, *, list, cadr, caddr, and equal?.
-  Return exactly seven top-level forms in this order:
-  1. (define (=number? expression value) ...)
-  2. (define (make-sum left right) ...)
-  3. (define (make-product left right) ...)
-  4. (define (sum? expression) ...)
-  5. (define (product? expression) ...)
-  6. (define (deriv expression variable) ...)
-  7. (define differentiator-tests (list ...))
-  Sums are (+ left right). Products are (* left right).
-  Simplify addition by 0, multiplication by 0 and 1, and numeric constant
-  folding. differentiator-tests must be a four-result boolean list, and every
-  element must use equal?:
-  (equal? (deriv 'x 'x) 1)
-  (equal? (deriv 'y 'x) 0)
-  (equal? (deriv '(+ (* x x) (* 3 x)) 'x) '(+ (+ x x) 3))
-  (equal? (deriv '(* x (+ x 3)) 'x) '(+ x (+ x 3)))
-  The expected value of differentiator-tests is exactly (#t #t #t #t)."
- '((temperature 0.1) (timeout-seconds 300)))
+(define code
+  (model-complete
+   'scheme-scripter
+   (string-append
+    plan
+    "
+
+Return plain portable R7RS Scheme source only.
+Do not use Markdown fences, prose, #lang, library forms, square brackets,
+quasiquote, display, printf, for-each, pass/fail symbols, or implementation
+extensions. Use only define, cond, and, or, if, number?, symbol?, pair?,
+car, eq?, =, +, *, list, cadr, caddr, and equal?.
+Return exactly seven top-level forms in this order:
+1. (define (=number? expression value) ...)
+2. (define (make-sum left right) ...)
+3. (define (make-product left right) ...)
+4. (define (sum? expression) ...)
+5. (define (product? expression) ...)
+6. (define (deriv expression variable) ...)
+7. (define differentiator-tests (list ...))
+Sums are (+ left right). Products are (* left right).
+Simplify addition by 0, multiplication by 0 and 1, and numeric constant
+folding. differentiator-tests must be a four-result boolean list, and every
+element must use equal?:
+(equal? (deriv 'x 'x) 1)
+(equal? (deriv 'y 'x) 0)
+(equal? (deriv '(+ (* x x) (* 3 x)) 'x) '(+ (+ x x) 3))
+(equal? (deriv '(* x (+ x 3)) 'x) '(+ x (+ x 3)))
+The expected value of differentiator-tests is exactly (#t #t #t #t).")
+   '((temperature 0.1) (timeout-seconds 300))))
+
+(display code)
 ```
 
 If the model returns a fenced code block, paste only the Scheme inside the
-fence. Evaluate the model's draft when it has the seven requested forms. The
-REPL is the authority: if the draft does not produce the expected test value,
-use the known-good baseline below to keep the tutorial moving and compare the
-model's differences against a working program.
+fence. Evaluate the model's draft when it has the seven requested forms. Keep
+`code` available for inspection, but let the REPL's evaluated values drive the
+review and memory prompts. The REPL is the authority: if the draft does not
+produce the expected test value, use the known-good baseline below to keep the
+tutorial moving and compare the model's differences against a working program.
 
 ```scheme
 (import (scheme cxr))
@@ -298,49 +312,84 @@ model's differences against a working program.
            '(+ (+ x x) 3))
    (equal? (deriv '(* x (+ x 3)) 'x)
            '(+ x (+ x 3)))))
-
-differentiator-tests
-(deriv '(+ (* x x) (* 3 x)) 'x)
 ```
 
-The expected evaluation records include:
+After either the model draft or the known-good baseline has defined `deriv` and
+`differentiator-tests`, capture the facts that later model prompts will reuse:
 
 ```scheme
-(#t #t #t #t)
-(+ (+ x x) 3)
+(import (scheme write))
+
+(define (datum->text datum)
+  (let ((port (open-output-string)))
+    (write datum port)
+    (get-output-string port)))
+
+(define test-results differentiator-tests)
+(define sample-derivative
+  (deriv '(+ (* x x) (* 3 x)) 'x))
+
+(list test-results sample-derivative)
 ```
 
-Now send the result to the reviewer role:
+The expected evaluation record is:
 
 ```scheme
-(model-complete
- 'reviewer
- "Review this R7RS Scheme symbolic differentiator result.
-  Facts: tests returned (#t #t #t #t).
-  The derivative of (+ (* x x) (* 3 x)) returned (+ (+ x x) 3).
-  Use only these facts. Reply with exactly three bullets:
-  strength, limitation, next extension."
- '((temperature 0.1) (timeout-seconds 300)))
+((#t #t #t #t) (+ (+ x x) 3))
 ```
 
-Finally capture a durable session note:
+Now capture the reviewer response in `review`, building its prompt from the
+actual evaluated values:
 
 ```scheme
-(model-complete
- 'memory-curator
- "Summarize durable facts from this exact Consent Scheme REPL tutorial.
-  Use only facts in this prompt. Do not add external platforms, frameworks,
-  APIs, deployment details, or cloud-service details.
-  Facts:
-  - Local Ollama provider local-ollama was registered with roles planner,
-    scheme-scripter, reviewer, and memory-curator.
-  - The tutorial built a tiny R7RS Scheme symbolic differentiator using
-    Scheme lists for sums and products.
-  - Evaluation returned (#t #t #t #t) for the four tests.
-  - d/dx of (+ (* x x) (* 3 x)) returned (+ (+ x x) 3).
-  - A good next extension is exponentiation.
-  Reply with exactly three ASCII bullets."
- '((temperature 0.1) (timeout-seconds 300)))
+(define review
+  (model-complete
+   'reviewer
+   (string-append
+    "Review this R7RS Scheme symbolic differentiator result.
+Facts: tests returned "
+    (datum->text test-results)
+    ".
+The derivative of (+ (* x x) (* 3 x)) returned "
+    (datum->text sample-derivative)
+    ".
+Use only these facts. Reply with exactly three bullets:
+strength, limitation, next extension.")
+   '((temperature 0.1) (timeout-seconds 300))))
+
+(display review)
+```
+
+Finally capture a durable session note in `session-note`, reusing the same
+evaluated facts and the reviewer response:
+
+```scheme
+(define session-note
+  (model-complete
+   'memory-curator
+   (string-append
+    "Summarize durable facts from this exact Consent Scheme REPL tutorial.
+Use only facts in this prompt. Do not add external platforms, frameworks,
+APIs, deployment details, or cloud-service details.
+Facts:
+- Local Ollama provider local-ollama was registered with roles planner,
+  scheme-scripter, reviewer, and memory-curator.
+- The tutorial built a tiny R7RS Scheme symbolic differentiator using
+  Scheme lists for sums and products.
+- Evaluation returned "
+    (datum->text test-results)
+    " for the four tests.
+- d/dx of (+ (* x x) (* 3 x)) returned "
+    (datum->text sample-derivative)
+    ".
+- Reviewer response:
+"
+    review
+    "
+Reply with exactly three ASCII bullets.")
+   '((temperature 0.1) (timeout-seconds 300))))
+
+(display session-note)
 ```
 
 At that point the first encounter has exercised the real local model path:

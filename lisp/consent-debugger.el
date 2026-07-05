@@ -23,6 +23,9 @@
 (defconst consent-debugger--maximum-frame-bindings 40
   "Maximum binding names included in one debugger environment frame.")
 
+(defconst consent-debugger--maximum-condition-irritants 5
+  "Maximum condition irritants included in debugger records.")
+
 (defconst consent-debugger--buffer-name "*Consent Scheme Debugger*"
   "Name of the Consent Scheme debugger display buffer.")
 
@@ -175,6 +178,24 @@ hosts.  Other conditions keep their raw host message."
              (append value nil))))
    (t
     (consent-value->external value))))
+
+(defun consent-debugger--condition-irritants (condition)
+  "Return host CONDITION's irritant payload values."
+  (when (consp condition)
+    (let ((data (cdr condition)))
+      (if (and (consp data) (stringp (car data)))
+          (cdr data)
+        data))))
+
+(defun consent-debugger--condition-irritant-datums (condition)
+  "Return bounded public debugger irritants for host CONDITION."
+  (mapcar
+   (lambda (irritant)
+     (consent-redact
+      (consent-debugger--documentation-datumize irritant)
+      'debugger))
+   (seq-take (consent-debugger--condition-irritants condition)
+             consent-debugger--maximum-condition-irritants)))
 
 (defun consent-debugger--documentation-origin (documentation)
   "Return Scheme-readable origin data for DOCUMENTATION."
@@ -361,7 +382,9 @@ inspection.  PHASE defaults to `evaluation'."
                (and context
                     (consent--eval-context-interaction-environment
                      context)))
-           frame-id)))
+           frame-id))
+         (irritants
+          (consent-debugger--condition-irritant-datums condition)))
     (append
      (list
       (consent-debugger--symbol "condition")
@@ -372,6 +395,8 @@ inspection.  PHASE defaults to `evaluation'."
        "phase" (consent-debugger--symbol phase-name)))
      (when-let ((symbol (consent-debugger--condition-symbol message)))
        (list (consent-debugger--field "symbol" symbol)))
+     (when irritants
+       (list (consent-debugger--field "irritants" irritants)))
      ;; A budget exhaustion names the dimension that stopped the run so the
      ;; stop receipt answers "which budget was no longer admissible?".
      (when-let ((reason (and (eq type 'budget-exhausted)

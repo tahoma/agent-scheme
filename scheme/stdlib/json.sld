@@ -609,6 +609,17 @@
                 (loop (- count 1)))))
         (emit hex)))
 
+    ;; Emit CODE as JSON unicode escape(s), using surrogate pairs when needed.
+    (define (json-write-unicode-escape code emit)
+      "Emit CODE as one JSON unicode escape, or a surrogate pair."
+      (if (> code #xffff)
+          (let* ((value (- code #x10000))
+                 (high (+ #xd800 (quotient value #x400)))
+                 (low (+ #xdc00 (modulo value #x400))))
+            (json-write-hex4 high emit)
+            (json-write-hex4 low emit))
+          (json-write-hex4 code emit)))
+
     ;; Emit TEXT with JSON string escaping.
     (define (json-write-string-value text emit)
       "Emit TEXT as a JSON string through EMIT."
@@ -626,6 +637,8 @@
           ((char=? char #\tab) (emit "\\t"))
           ((json-control-character? char)
            (json-write-hex4 (char->integer char) emit))
+          ((> (char->integer char) 127)
+           (json-write-unicode-escape (char->integer char) emit))
           (else (emit char))))
        text)
       (emit #\"))

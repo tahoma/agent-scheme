@@ -349,6 +349,68 @@
             #t)
            (else (loop (+ start 1))))))))
 
+;;;; Model transport diagnostics stay specific and structured
+
+(let* ((input
+        (string-append
+         "(import (scheme base) (agent models))\n"
+         "(model-provider-register!\n"
+         " '(model-provider\n"
+         "   (id local-fail)\n"
+         "   (kind local)\n"
+         "   (transport openai-compatible-http)\n"
+         "   (endpoint \"http://127.0.0.1:1/v1\")\n"
+         "   (models\n"
+         "    (((id qwen-coder)\n"
+         "      (roles (scheme-scripter))\n"
+         "      (privacy local))))))\n"
+         "(model-complete 'scheme-scripter\n"
+         "                \"transport diagnostic prompt\"\n"
+         "                '((timeout-seconds 1) (retry-count 0)))\n"))
+       (records (drive input))
+       (condition-record (car (records-of records 'repl-condition)))
+       (condition (field condition-record 'condition))
+       (irritants (field condition 'irritants))
+       (detail (and (pair? irritants) (car irritants)))
+       (process (and detail (field detail 'process)))
+       (comment-rendered
+        (cli-repl-chrome-paint
+         ((cli-repl-chrome-lookup 'comment) condition-record)
+         #f)))
+  (check 'model-transport-condition-phase
+         (field condition-record 'phase) 'eval)
+  (check 'model-transport-condition-type
+         (field condition 'type) 'evaluation-error)
+  (check-true 'model-transport-display-specific
+              (string-contains? (field condition-record 'display)
+                                "local model transport failed"))
+  (check-true 'model-transport-display-provider
+              (string-contains? (field condition-record 'display)
+                                "local-fail"))
+  (check-true 'model-transport-comment-specific
+              (string-contains? comment-rendered
+                                "local model transport failed"))
+  (check 'model-transport-detail-head
+         (and (pair? detail) (car detail))
+         'model-provider-error)
+  (check 'model-transport-detail-provider
+         (field detail 'provider) 'local-fail)
+  (check 'model-transport-detail-model
+         (field detail 'model) 'qwen-coder)
+  (check 'model-transport-detail-transport
+         (field detail 'transport) 'openai-compatible-http)
+  (check 'model-transport-process-head
+         (and (pair? process) (car process))
+         'process-failure)
+  (check-true 'model-transport-process-detail-bounded
+              (let ((detail-text (field process 'detail)))
+                (and (string? detail-text)
+                     (> (string-length detail-text) 0)
+                     (<= (string-length detail-text) 240))))
+  (check-false 'model-transport-detail-no-prompt
+               (string-contains? (consent-datum->external detail)
+                                 "transport diagnostic prompt")))
+
 ;; Render RECORDS as the raw datum stream the `datum' chrome must reproduce.
 (define (datum-stream records)
   (let ((port (open-output-string)))
