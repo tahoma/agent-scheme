@@ -204,18 +204,6 @@
                     (substring text index text-length))
                    (loop (+ index 1)))))))
 
-    (define (condition-message condition)
-      "Return CONDITION's printable message."
-      (cond
-       ((error-object? condition)
-        (error-object-message condition))
-       ((consent-error-object? condition)
-        (consent-error-object-message condition))
-       ((string? condition)
-        condition)
-       (else
-        "error")))
-
     (define (condition-irritants condition)
       "Return CONDITION's portable irritants when they are available."
       (let ((irritants
@@ -226,6 +214,33 @@
                (consent-error-object-irritants condition))
               (else '()))))
         (if (list? irritants) irritants '())))
+
+    (define (condition-symbol-irritant condition)
+      "Return CONDITION's first symbol irritant, or #f."
+      (let loop ((irritants (condition-irritants condition)))
+        (cond
+         ((null? irritants) #f)
+         ((symbol? (car irritants)) (car irritants))
+         (else (loop (cdr irritants))))))
+
+    (define (condition-message condition)
+      "Return CONDITION's printable message."
+      (let ((message
+             (cond
+              ((error-object? condition)
+               (error-object-message condition))
+              ((consent-error-object? condition)
+               (consent-error-object-message condition))
+              ((string? condition)
+               condition)
+              (else
+               "error"))))
+        (let ((symbol (condition-symbol-irritant condition)))
+          (if (and (string-contains? message "unbound identifier") symbol)
+              (string-append message
+                             ": "
+                             (symbol->string symbol))
+              message))))
 
     (define (debugger-condition-type condition message)
       "Return a debugger condition type derived from CONDITION and MESSAGE."
@@ -249,11 +264,7 @@
 
     (define (debugger-condition-symbol condition)
       "Return the first symbol irritant for CONDITION, if any."
-      (let loop ((irritants (condition-irritants condition)))
-        (cond
-         ((null? irritants) #f)
-         ((symbol? (car irritants)) (car irritants))
-         (else (loop (cdr irritants))))))
+      (condition-symbol-irritant condition))
 
     (define (take items count)
       "Return the first COUNT items from ITEMS."
