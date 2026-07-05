@@ -958,6 +958,13 @@ sets `CONSENT_LIVE_MODEL_MATRIX=1`. Use
 `CONSENT_LIVE_MODEL_ENDPOINT` and `CONSENT_LIVE_MODEL_ID` to override
 the default local endpoint and smoke model id.
 
+The normal `test-emacs-tools` shard also runs a deterministic quick-start
+contract test for `docs/repl-agent-quickstart.md`. That test extracts and
+evaluates the tutorial's known-good Scheme differentiator and checks the
+documented role/provider shape through a fake model transport. It deliberately
+does not download or call real models; use the opt-in live targets above when
+you need to validate a local model set against the actual endpoint.
+
 For documentation-only changes, also run:
 
 ```sh
