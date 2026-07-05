@@ -96,6 +96,15 @@ ollama pull gemma3:4b
 ollama serve
 ```
 
+For a large local box:
+
+```sh
+ollama pull qwen2.5-coder:32b
+ollama pull qwen3:30b
+ollama pull gemma3:12b
+ollama serve
+```
+
 The local OpenAI-compatible endpoint is `http://127.0.0.1:11434/v1`.
 
 ## Start a REPL
@@ -147,8 +156,35 @@ endpoint.
 
 ## Register Local Models
 
-Paste this into the REPL. It registers Ollama as the local provider and maps the
-downloaded models to concrete agent roles:
+Paste exactly one profile into the REPL. Each block registers Ollama as
+`local-ollama`, so the route checks and tutorial prompts below do not change
+after you choose the profile.
+
+For a smaller machine:
+
+```scheme
+(import (scheme base)
+        (agent models))
+
+(model-provider-register!
+ '(model-provider
+   (id local-ollama)
+   (kind local)
+   (transport openai-compatible-http)
+   (endpoint "http://127.0.0.1:11434/v1")
+   (models
+    (((id qwen2.5-coder:7b)
+      (roles (scheme-scripter coder reviewer))
+      (privacy local))
+     ((id qwen3:4b)
+      (roles (planner approval-explainer))
+      (privacy local))
+     ((id gemma3:4b)
+      (roles (summarizer memory-curator))
+      (privacy local))))))
+```
+
+For the recommended profile:
 
 ```scheme
 (import (scheme base)
@@ -172,11 +208,29 @@ downloaded models to concrete agent roles:
       (privacy local))))))
 ```
 
-If you pulled the smaller profile, replace those model ids with
-`qwen2.5-coder:7b`, `qwen3:4b`, and `gemma3:4b`. If you pulled the large profile,
-use `qwen2.5-coder:32b` for `scheme-scripter`, `coder`, and `reviewer`;
-`qwen3:30b` for `planner`; and `gemma3:12b` for `summarizer` and
-`memory-curator`.
+For a large local box:
+
+```scheme
+(import (scheme base)
+        (agent models))
+
+(model-provider-register!
+ '(model-provider
+   (id local-ollama)
+   (kind local)
+   (transport openai-compatible-http)
+   (endpoint "http://127.0.0.1:11434/v1")
+   (models
+    (((id qwen2.5-coder:32b)
+      (roles (scheme-scripter coder reviewer))
+      (privacy local))
+     ((id qwen3:30b)
+      (roles (planner approval-explainer))
+      (privacy local))
+     ((id gemma3:12b)
+      (roles (summarizer memory-curator))
+      (privacy local))))))
+```
 
 Check that the roles route to the expected local models:
 
@@ -220,78 +274,40 @@ next prompt has a named value to reuse:
 ```
 
 Then capture the Scheme coding role's draft in `code`. Feed the planner's
-output through as the source of work, so the second role elaborates the plan
-instead of replacing it:
+output through as the source of work, but wrap it in a stricter source contract
+so the second role produces Scheme instead of another plan:
 
 ```scheme
 (define code
   (model-complete
    'scheme-scripter
-   plan
+   (string-append
+    "Write the R7RS Scheme source for this plan.
+Return only executable R7RS Scheme source.
+Do not include Markdown fences, prose, math notation, or explanations.
+Define deriv as a procedure that accepts an expression and a variable symbol.
+Define differentiator-tests as a list of four boolean test results.
+Use only (scheme base) and (scheme cxr); import any needed libraries at the top.
+Represent sums as (+ left right) and products as (* left right).
+Implement and test d/dx of x, y, (+ (* x x) (* 3 x)), and (* x (+ x 3)).
+Plan:
+"
+    plan)
    '((temperature 0.1) (timeout-seconds 300))))
 
 (display code)
 ```
 
-If the model returns a fenced code block, paste only the Scheme inside the
-fence. Evaluate the model's draft when it gives you a compact R7RS program that
-defines the differentiator and its checks. Keep `code` available for inspection,
-but let the REPL's evaluated values drive the review and memory prompts. The
-REPL is the authority: if the draft does not produce the expected test value,
-use the known-good baseline below to keep the tutorial moving and compare the
-model's differences against a working program.
+Displaying `code` prints the model's string; it does not evaluate the returned
+Scheme. If the model returns a fenced code block, paste only the Scheme inside
+the fence. If it returns prose, math notation, missing definitions, or anything
+else that is not executable Scheme source, treat that as a failed coder gate:
+revise the `scheme-scripter` prompt and try again, or stop and record that this
+role set did not pass the tutorial.
 
-```scheme
-(import (scheme cxr))
-
-(define (=number? expression value)
-  (and (number? expression) (= expression value)))
-
-(define (make-sum left right)
-  (cond ((=number? left 0) right)
-        ((=number? right 0) left)
-        ((and (number? left) (number? right)) (+ left right))
-        (else (list '+ left right))))
-
-(define (make-product left right)
-  (cond ((or (=number? left 0) (=number? right 0)) 0)
-        ((=number? left 1) right)
-        ((=number? right 1) left)
-        ((and (number? left) (number? right)) (* left right))
-        (else (list '* left right))))
-
-(define (sum? expression)
-  (and (pair? expression) (eq? (car expression) '+)))
-
-(define (product? expression)
-  (and (pair? expression) (eq? (car expression) '*)))
-
-(define (deriv expression variable)
-  (cond ((number? expression) 0)
-        ((symbol? expression) (if (eq? expression variable) 1 0))
-        ((sum? expression)
-         (make-sum (deriv (cadr expression) variable)
-                   (deriv (caddr expression) variable)))
-        ((product? expression)
-         (make-sum
-          (make-product (cadr expression)
-                        (deriv (caddr expression) variable))
-          (make-product (deriv (cadr expression) variable)
-                        (caddr expression))))
-        (else '(unsupported expression))))
-
-(define differentiator-tests
-  (list
-   (equal? (deriv 'x 'x) 1)
-   (equal? (deriv 'y 'x) 0)
-   (equal? (deriv '(+ (* x x) (* 3 x)) 'x)
-           '(+ (+ x x) 3))
-   (equal? (deriv '(* x (+ x 3)) 'x)
-           '(+ x (+ x 3)))))
-```
-
-After either the model draft or the known-good baseline has defined `deriv` and
-`differentiator-tests`, capture the facts that later model prompts will reuse:
+After the REPL has evaluated the model draft and the session has live `deriv`
+and `differentiator-tests` bindings, capture the facts that later model prompts
+will reuse:
 
 ```scheme
 (import (scheme write))
@@ -313,6 +329,9 @@ The expected evaluation record is:
 ```scheme
 ((#t #t #t #t) (+ (+ x x) 3))
 ```
+
+Do not continue to the reviewer or memory prompts until the REPL has evaluated
+Scheme and produced `test-results` and `sample-derivative`.
 
 Now capture the reviewer response in `review`, building its prompt from the
 actual evaluated values:

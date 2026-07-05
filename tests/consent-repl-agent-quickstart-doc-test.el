@@ -48,14 +48,6 @@
   (consent-value->external
    (consent-eval-source source)))
 
-(defun consent-repl-agent-quickstart-doc-test--external-sequence (&rest sources)
-  "Evaluate SOURCES in one environment and return the last value externally."
-  (let ((environment (consent-make-base-environment))
-        value)
-    (dolist (source sources)
-      (setq value (consent-eval-source source environment)))
-    (consent-value->external value)))
-
 (defun consent-repl-agent-quickstart-doc-test--transport
     (_provider _model request _context)
   "Return a deterministic quick-start fake completion for REQUEST."
@@ -68,25 +60,90 @@
   (consent-models-clear!)
   (setq consent-repl-agent-quickstart-doc-test--requests nil))
 
-(ert-deftest consent-repl-agent-quickstart-doc-test-known-good-baseline-runs ()
-  "The tutorial's known-good differentiator and fact capture remain executable."
+(defun consent-repl-agent-quickstart-doc-test--section (doc heading)
+  "Return the Markdown section named HEADING from DOC."
+  (let* ((start-regexp
+          (concat "^## " (regexp-quote heading) "$"))
+         (start
+          (or (string-match start-regexp doc)
+              (ert-fail (format "No quick-start section named %S." heading))))
+         (body-start (match-end 0))
+         (end (string-match "^## " doc body-start)))
+    (substring doc body-start end)))
+
+(ert-deftest consent-repl-agent-quickstart-doc-test-code-prompt-contract ()
+  "The scripter prompt asks for executable Scheme definitions, not prose."
   (let* ((doc
           (consent-repl-agent-quickstart-doc-test--read
            "docs/repl-agent-quickstart.md"))
-         (baseline
+         (code-block
           (consent-repl-agent-quickstart-doc-test--scheme-block-containing
            doc
-           "(import (scheme cxr))"))
-         (capture
-          (consent-repl-agent-quickstart-doc-test--scheme-block-containing
+           "(define code")))
+    (dolist (needle
+             '("Return only executable R7RS Scheme source."
+               "Do not include Markdown fences, prose, math notation, or explanations."
+               "Define deriv"
+               "Define differentiator-tests"))
+      (should (string-match-p (regexp-quote needle) code-block)))))
+
+(ert-deftest consent-repl-agent-quickstart-doc-test-display-is-not-eval-gate ()
+  "The tutorial distinguishes inspecting model text from evaluating it."
+  (let* ((doc
+          (consent-repl-agent-quickstart-doc-test--read
+           "docs/repl-agent-quickstart.md"))
+         (flat-doc
+          (replace-regexp-in-string "[[:space:]\n]+" " " doc)))
+    (dolist (needle
+             '("Displaying `code` prints the model's string; it does not evaluate the returned Scheme."
+               "Do not continue to the reviewer or memory prompts until the REPL has evaluated Scheme and produced `test-results` and `sample-derivative`."))
+      (should (string-match-p (regexp-quote needle) flat-doc)))))
+
+(ert-deftest consent-repl-agent-quickstart-doc-test-main-path-has-no-canned-answer ()
+  "The main tutorial path does not embed a completed differentiator answer."
+  (let* ((doc
+          (consent-repl-agent-quickstart-doc-test--read
+           "docs/repl-agent-quickstart.md"))
+         (tutorial
+          (consent-repl-agent-quickstart-doc-test--section
            doc
-           "(define test-results"))
-         (external
-          (consent-repl-agent-quickstart-doc-test--external-sequence
-           baseline
-           capture)))
-    (should (equal external
-                   "((#t #t #t #t) (+ (+ x x) 3))"))))
+           "Fifteen-Minute Tutorial Project")))
+    (dolist (forbidden
+             '("known-good baseline"
+               "(define (=number? expression value)"
+               "(define (make-sum left right)"
+               "(define (make-product left right)"
+               "(define (deriv expression variable)"))
+      (should-not (string-match-p (regexp-quote forbidden) tutorial)))))
+
+(ert-deftest consent-repl-agent-quickstart-doc-test-local-profiles-are-paste-ready ()
+  "Each supported local model profile has a complete registration form."
+  (let ((doc
+         (consent-repl-agent-quickstart-doc-test--read
+          "docs/repl-agent-quickstart.md")))
+    (dolist (profile
+             '(("qwen2.5-coder:7b" "qwen3:4b" "gemma3:4b")
+               ("qwen2.5-coder:14b" "qwen3:8b" "gemma3:12b")
+               ("qwen2.5-coder:32b" "qwen3:30b" "gemma3:12b")))
+      (let ((block
+             (consent-repl-agent-quickstart-doc-test--scheme-block-containing
+              doc
+              (format "(id %s)" (car profile)))))
+        (dolist (needle
+                 (append
+                  '("(import (scheme base)"
+                    "(agent models)"
+                    "(model-provider-register!"
+                    "(id local-ollama)"
+                    "(roles (scheme-scripter coder reviewer))"
+                    "(roles (planner approval-explainer))"
+                    "(roles (summarizer memory-curator))")
+                  profile))
+          (should (string-match-p (regexp-quote needle) block)))))
+    (should-not
+     (string-match-p
+      (regexp-quote "replace those model ids")
+      doc))))
 
 (ert-deftest consent-repl-agent-quickstart-doc-test-captures-reusable-values ()
   "The tutorial names outputs that later prompts reuse."
@@ -119,7 +176,19 @@
            "(define code")))
     (should
      (string-match-p
-      (rx "'scheme-scripter" (+ space) "plan")
+      (regexp-quote "'scheme-scripter")
+      code-block))
+    (should
+     (string-match-p
+      (regexp-quote "(string-append")
+      code-block))
+    (should
+     (string-match-p
+      (regexp-quote "Plan:")
+      code-block))
+    (should
+     (string-match-p
+      (regexp-quote "    plan)")
       code-block))
     (dolist (forbidden
              '("Return exactly seven top-level forms"
