@@ -2,6 +2,8 @@
 
 This document collects external references that are useful while building
 Consent Scheme: Scheme-language references for the runtime core; in
+[R7RS-Large References](#r7rs-large-references), orientation material for the
+optional SRFI/R7RS-large library shelves; in
 [REPL and Interactive-Environment References](#repl-and-interactive-environment-references)
 prior art on REPLs and interactive programming environments for the Chunk 0.16
 interactive-surface work; and in
@@ -82,6 +84,38 @@ historical grounding, and implementation techniques.
   [Docstring Metadata Convention](docstring-metadata.md) is influenced by that
   shape but defines its own R7RS-compatible public behavior and
   Scheme-readable metadata records.
+
+## R7RS-Large References
+
+Consent Scheme targets R7RS-small first. Optional R7RS-large and SRFI shelves
+must preserve that source-of-truth hierarchy: released Scheme reports and
+ratified SRFI documents define normative behavior for adopted libraries, while
+working repositories, dockets, ballots, and proposals provide planning context,
+dependency discovery, and historical notes.
+
+- [Scheme Standards](https://standards.scheme.org/) remains the canonical
+  starting point for official Scheme reports and standardization material.
+- [Scheme Requests for Implementation](https://srfi.schemers.org/) remains the
+  canonical archive for ratified and draft SRFI documents. Use individual SRFI
+  documents as the normative source when a ticket adopts a specific SRFI.
+- [johnwcowan/r7rs-work](https://github.com/johnwcowan/r7rs-work) collects
+  R7RS-large project notes, dockets, proposal writeups, ballots, and
+  implementation pointers. Treat it as non-normative orientation unless a ticket
+  explicitly names one of its files as planning input.
+- [Committee B dockets](https://github.com/johnwcowan/r7rs-work/blob/master/CommitteeBDockets.md)
+  organize portable-library candidates into R7RS-large docket groups. This is a
+  high-signal guide for SRFI/R7RS-large issue labels, dependency discovery, and
+  implementation planning, not a conformance requirement by itself.
+- [Red Edition ballot archive](https://github.com/johnwcowan/r7rs-work/blob/master/RedEdition.md)
+  records the voted Red data-structure libraries and their intended
+  `(scheme ...)` names.
+- [Tangerine Edition definition](https://github.com/johnwcowan/r7rs-work/blob/master/TangerineEdition.md)
+  records the voted Tangerine mapping, regex, generator, numeric, vector,
+  bytevector, and formatting libraries and their intended `(scheme ...)` names.
+- The local roadmap issue
+  [#53](https://github.com/tahoma/consent/issues/53) is Consent Scheme's
+  scheduling source of truth for when optional SRFI and R7RS-large shelves land.
+  Do not infer roadmap placement from upstream docket order.
 
 ## Scheme and Lisp Type Annotation References
 
