@@ -4,10 +4,11 @@ This is the five-minute path from a checkout to using the REPL as an agent
 harness. It shows the same Scheme forms on the portable terminal REPL and the
 Emacs REPL entry, then points to the reference documents for the full contract.
 
-The examples use stubbed provider steps by default. They exercise the real
-session, agent registry, prompt verbs, task runner, result, transcript, audit,
-policy, and budget surfaces, but they do not require a model server. Add a local
-provider later when you want real model text.
+The examples start with stubbed provider steps so the harness is runnable before
+any model downloads. That path exercises the real session, agent registry,
+prompt verbs, task runner, result, transcript, audit, policy, and budget
+surfaces. After that, set up a local role environment so the same REPL session
+can route real prompts to useful local models instead of only smoke-test models.
 
 ## Start a REPL
 
@@ -147,10 +148,10 @@ tools/consent-repl --session quickstart --chrome quiet <<'SCM'
 (begin
   (register-agent
    registry
-   (make-agent 'coder-1 '((role coder) (model local-coder))))
+   (make-agent 'coder-1 '((role coder) (model qwen2.5-coder:14b))))
   (register-agent
    registry
-   (make-agent 'reviewer-1 '((role reviewer) (model local-reviewer))))
+   (make-agent 'reviewer-1 '((role reviewer) (model qwen2.5-coder:14b))))
   (define harness (make-prompt-harness (list (list 'registry registry))))
   (list (map agent-id (agents harness)) (roles harness) (models harness)))
 
@@ -162,7 +163,7 @@ tools/consent-repl --session quickstart --chrome quiet <<'SCM'
               '((provider ((finish done))) (verifier passed))))
 
 (prompt-result-agent-id
- (prompt-model harness 'local-coder 'code
+ (prompt-model harness 'qwen2.5-coder:14b 'code
                '((provider ((finish done))) (verifier passed))))
 
 (exit)
@@ -173,7 +174,7 @@ The result values are:
 
 ```scheme
 ((default coder-1 reviewer-1) (planner coder reviewer)
- (auto local-coder local-reviewer))
+ (auto qwen2.5-coder:14b))
 default
 reviewer-1
 coder-1
@@ -285,26 +286,153 @@ For the full ledger, reasons, and `with-budget`, see
 described in
 [Capability Environment and Effect Lowering](capability-environment.md).
 
-## Local Models
+## Practical Local Role Environment
 
-The prompt examples above use stubbed provider steps:
+The stubbed prompt examples above are a no-model smoke path:
 
 ```scheme
 '((provider ((finish done))) (verifier passed))
 ```
 
-That is intentional. It makes the harness runnable with no model installed and
-keeps the first result deterministic. To call a real local model directly, use
-the `(agent models)` provider setup in
-[Getting Started](getting-started.md#local-model-providers). The shortest
-Ollama path is:
+That is useful for deterministic tests, but it is not a satisfying first local
+agent setup. For a real first encounter, install a small role matrix through an
+OpenAI-compatible local server such as Ollama, then register those model ids
+with both `(agent models)` and the prompt agent registry.
+
+Use the starter profile that matches your machine:
+
+| Machine profile | Pull these first |
+| --- | --- |
+| Small laptop, 8-16 GB memory | `qwen2.5-coder:7b`, `qwen3:4b`, `gemma3:4b` |
+| Developer laptop, 16-32 GB memory | `qwen2.5-coder:14b`, `qwen3:8b`, `gemma3:12b` |
+| Large local box, 48 GB+ memory | `qwen2.5-coder:32b`, `qwen3:30b`, `gemma3:12b` |
+
+The small profile is good enough for first coding, planning, summarizing, and
+memory experiments. The developer-laptop profile is the recommended first setup
+for a solid local experience without jumping to 30B+ downloads. On a large local
+box, add `llama3.1:70b` when latency and disk use are acceptable.
+
+The tiny `qwen3:0.6b`, `qwen2.5-coder:0.5b`, and `gemma3:1b` models remain
+useful for CI smoke tests and quick transport checks. They should not be the
+main recommendation for someone evaluating the system as an agent harness.
+
+The recommended developer-laptop setup is:
 
 ```sh
-ollama pull qwen3:0.6b
+ollama pull qwen2.5-coder:14b
+ollama pull qwen3:8b
+ollama pull gemma3:12b
 ollama serve
 ```
 
-Then register the loopback OpenAI-compatible endpoint from Consent Scheme as
-shown in [Ollama Setup](getting-started.md#ollama-setup). Provider hardening,
-streaming, and broader protocol documentation remain separate follow-up work;
-the quick-start stays on the runnable REPL harness slice.
+For a smaller machine, replace that pull set with:
+
+```sh
+ollama pull qwen2.5-coder:7b
+ollama pull qwen3:4b
+ollama pull gemma3:4b
+ollama serve
+```
+
+The Ollama OpenAI-compatible endpoint is `http://127.0.0.1:11434/v1`. Register
+that endpoint and map the local models to Consent roles:
+
+```scheme
+(import (scheme base)
+        (agent models)
+        (agent prompt))
+
+(model-provider-register!
+ '(model-provider
+   (id local-ollama)
+   (kind local)
+   (transport openai-compatible-http)
+   (endpoint "http://127.0.0.1:11434/v1")
+   (models
+    (((id qwen2.5-coder:14b)
+      (roles (scheme-scripter coder reviewer))
+      (privacy local))
+     ((id qwen3:8b)
+      (roles (planner approval-explainer))
+      (privacy local))
+     ((id gemma3:12b)
+      (roles (summarizer memory-curator))
+      (privacy local))))))
+```
+
+On the small profile, use the same shape with `qwen2.5-coder:7b`, `qwen3:4b`,
+and `gemma3:4b`. On a large machine, use `qwen2.5-coder:32b` for coder and
+reviewer, `qwen3:30b` or `llama3.1:70b` for planner, and keep `gemma3:12b` for
+summaries and memory curation.
+
+Check routing before asking for a completion:
+
+```scheme
+(map model-route
+     '(planner scheme-scripter coder reviewer summarizer memory-curator)
+     '(() () () () () ()))
+```
+
+In the portable standalone runtime, stop at routing and registry checks for now;
+it shares the provider datums and role assignment surface, but it does not yet
+lower live HTTP model transport. In the Emacs-hosted runtime, test one real
+local completion through the registered role:
+
+```scheme
+(model-complete
+ 'scheme-scripter
+ "Write a portable Scheme procedure that returns the last element of a proper list."
+ '((temperature 0.2)))
+```
+
+`model-complete` is the current Emacs-hosted live local-model surface. The
+`prompt` verbs above still use injected provider steps in this bootstrap slice,
+so a live model completion and a prompt-run are adjacent REPL exercises rather
+than one combined streaming provider path. Keep the ids aligned anyway; the
+prompt registry then selects the same role/model names your local provider knows
+about:
+
+```scheme
+(define registry (make-agent-registry))
+(register-agent registry
+                (make-agent 'planner-1
+                            '((role planner)
+                              (model qwen3:8b)
+                              (description "Breaks work into local steps."))))
+(register-agent registry
+                (make-agent 'scheme-coder-1
+                            '((role coder)
+                              (model qwen2.5-coder:14b)
+                              (description "Writes Consent Scheme code."))))
+(register-agent registry
+                (make-agent 'reviewer-1
+                            '((role reviewer)
+                              (model qwen2.5-coder:14b)
+                              (description "Reviews Scheme and docs diffs."))))
+(register-agent registry
+                (make-agent 'memory-1
+                            '((role memory-curator)
+                              (model gemma3:12b)
+                              (description "Summarizes durable session state."))))
+
+(define local-harness
+  (make-prompt-harness (list (list 'registry registry))))
+
+(list (map agent-id (agents local-harness))
+      (roles local-harness)
+      (models local-harness))
+```
+
+Expected shape:
+
+```scheme
+((default planner-1 scheme-coder-1 reviewer-1 memory-1)
+ (planner coder reviewer memory-curator)
+ (auto qwen3:8b qwen2.5-coder:14b gemma3:12b))
+```
+
+The full model-provider reference, tool-call example, and opt-in live test
+targets are in [Local Model Providers](getting-started.md#local-model-providers).
+Provider hardening, streaming, and broader protocol documentation remain
+separate follow-up work; this quick-start focuses on the first usable REPL
+harness and local-role setup.
