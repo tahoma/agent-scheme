@@ -236,3 +236,47 @@ to the end of the chunk.
 - 0.16.37 — #528 connect binary standard streams (read-u8/write-u8 over stdio-backed ports)
 - 0.16.38 — #529 refine the comment and classic REPL chrome rendering
 - 0.16.39 — #556 rebalance local make test shards: isolate native-build tests, cache the compile-portable build, raise -j
+
+## 0.17 REPL Agent Harness — Minimal Loop
+
+Ordinals follow this chunk's final positions in #53.
+
+- 0.17.1 — #459 curate agentic-harness and language-agent references
+- 0.17.2 — #561 design the agent-layer consent stance
+- 0.17.3 — #395 add Scheme-callable session management for the REPL
+- 0.17.4 — #396 add agent abstraction, registry, and default selection
+- 0.17.5 — #569 add the project logo
+- 0.17.6 — #51 add comprehensive evaluation budgets
+- 0.17.7 — #368 bound the global symbol intern table
+- 0.17.8 — #508 bound REPL value rendering
+- 0.17.9 — #598 enforce rich docstring metadata on runtime Scheme procedures
+- 0.17.10 — #286 add the minimal task runner control loop
+- 0.17.11 — #397 add the `(agent prompt)` REPL harness library
+- 0.17.12 — #400 define promptable non-interactive script authority
+- 0.17.13 — #604 adopt typed docstring metadata for parameters and returns
+- 0.17.14 — #287 add the task control-loop fixture suite
+- 0.17.15 — #185 add SRFI 180 JSON support
+- 0.17.16 — #531 add native tool/function calling over the shipped local transport
+- 0.17.17 — #562 admit tool/code calls by AST subtree match
+- 0.17.18 — #563 measure pass^k reliability by stop-receipt cause
+- 0.17.19 — #180 add SRFI 128 comparators
+- 0.17.20 — #166 add SRFI 16 variable-arity procedure syntax
+- 0.17.21 — #625 wrap Emacs Lisp docstrings and enforce docstring width
+- 0.17.22 — #628 preserve runtime procedure defining syntax environments
+- 0.17.23 — #205 add SRFI 2 AND-LET*
+- 0.17.24 — #204 add SRFI 8 receive
+- 0.17.25 — #621 add SRFI 145 assumptions
+- 0.17.26 — #176 add SRFI 1 list library support
+- 0.17.27 — #183 add SRFI 158 generators and accumulators
+- 0.17.28 — #622 add the portable red-black tree helper for SRFI 146
+- 0.17.29 — #191 add SRFI 146 ordered mappings
+- 0.17.30 — #439 single-source the `(agent session)` library
+- 0.17.31 — #437 single-source the `(agent memory)` library
+- 0.17.32 — #564 add append-only gated reflection and deterministic retrieval
+- 0.17.33 — #614 vendor SRFI 180 JSON reference tests
+- 0.17.34 — #509 add introspection procedures as Scheme-readable data
+- 0.17.35 — #670 add manifest-backed reflection and library discovery
+- 0.17.36 — #654 preserve Scheme and Lisp prior-art references
+- 0.17.37 — #398 add the REPL agent-harness quick-start guide
+- 0.17.38 — #676 record project credits and normalize attribution
+- 0.17.39 — #688 fix non-ASCII model prompt transport and REPL diagnostics
