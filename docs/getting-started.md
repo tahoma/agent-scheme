@@ -4,7 +4,8 @@ This guide covers the currently supported first-use path for Consent Scheme from
 local checkout. The supported user entry point today is the Emacs-hosted native
 REPL session. The portable Scheme code and native CLI/daemon adapter contract
 are part of the project direction, but they are not yet the general first-use
-interface.
+interface. For a copy-pasteable REPL-to-agent-harness path across both REPL
+hosts, see the [REPL Agent Harness Quick Start](repl-agent-quickstart.md).
 
 ## Prerequisites
 
