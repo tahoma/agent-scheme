@@ -14,32 +14,21 @@ can route real prompts to useful local models instead of only smoke-test models.
 
 ## Fifteen-Minute Tutorial Project
 
-The first project is a tiny Scheme helper bench with local-model roles attached:
-define a helper, route a coder prompt through a registered agent, and inspect
-the audit trail. It is deterministic in the portable standalone runtime because
-it uses stubbed provider steps. If Ollama and the Emacs-hosted runtime are ready,
-the local model section below shows the live `model-complete` step for asking a
-real coder model to draft another helper. Large model download time depends on
-your network; choose the small laptop profile if you want the first run to stay
-near fifteen minutes.
+The first project is a small symbolic differentiator in the SICP tradition:
+represent algebra as Scheme data, implement the derivative rules, and use the
+agent harness to route the work through planner, coder, reviewer, and
+memory-curator roles. The project is deterministic in the portable standalone
+runtime because it uses stubbed provider steps. If Ollama and the Emacs-hosted
+runtime are ready, the local model section below shows the live `model-complete`
+step for asking a real coder model to extend the differentiator. Large model
+download time depends on your network; choose the small laptop profile if you
+want the first run to stay near fifteen minutes.
 
 Run this from the repository root:
 
 ```sh
-tools/consent-repl --session helper-tour --chrome quiet <<'SCM'
-(import (scheme base) (agent prompt))
-
-(define (last-with-index values)
-  (if (null? values)
-      '()
-      (let loop ((rest (cdr values))
-                 (index 0)
-                 (last (car values)))
-        (if (null? rest)
-            (list index last)
-            (loop (cdr rest) (+ index 1) (car rest))))))
-
-(last-with-index '(install route prompt inspect))
+tools/consent-repl --session symbolic-agent-tour --chrome quiet <<'SCM'
+(import (scheme base) (scheme cxr) (agent prompt))
 
 (define registry (make-agent-registry))
 (register-agent registry
@@ -58,12 +47,75 @@ tools/consent-repl --session helper-tour --chrome quiet <<'SCM'
 (define harness (make-prompt-harness (list (list 'registry registry))))
 (list (map agent-id (agents harness)) (roles harness) (models harness))
 
+(prompt-result-agent-id
+ (prompt-model harness 'qwen3:8b
+               '(plan symbolic differentiation project)
+               '((provider ((finish planned))) (verifier passed))))
+
+(define (=number? expression value)
+  (and (number? expression) (= expression value)))
+
+(define (make-sum left right)
+  (cond ((=number? left 0) right)
+        ((=number? right 0) left)
+        ((and (number? left) (number? right)) (+ left right))
+        (else (list '+ left right))))
+
+(define (make-product left right)
+  (cond ((or (=number? left 0) (=number? right 0)) 0)
+        ((=number? left 1) right)
+        ((=number? right 1) left)
+        ((and (number? left) (number? right)) (* left right))
+        (else (list '* left right))))
+
+(define (sum? expression)
+  (and (pair? expression) (eq? (car expression) '+)))
+
+(define (product? expression)
+  (and (pair? expression) (eq? (car expression) '*)))
+
+(define (deriv expression variable)
+  (cond ((number? expression) 0)
+        ((symbol? expression) (if (eq? expression variable) 1 0))
+        ((sum? expression)
+         (make-sum (deriv (cadr expression) variable)
+                   (deriv (caddr expression) variable)))
+        ((product? expression)
+         (make-sum
+          (make-product (cadr expression)
+                        (deriv (caddr expression) variable))
+          (make-product (deriv (cadr expression) variable)
+                        (caddr expression))))
+        (else '(unsupported expression))))
+
 (define code-result
-  (prompt-role harness 'coder '(write last-with-index)
+  (prompt-role harness 'coder '(implement deriv)
                '((provider ((finish complete))) (verifier passed))))
 (prompt-result-agent-id code-result)
+
+(define differentiator-tests
+  (list
+   (equal? (deriv 'x 'x) 1)
+   (equal? (deriv 'y 'x) 0)
+   (equal? (deriv '(+ (* x x) (* 3 x)) 'x)
+           '(+ (+ x x) 3))
+   (equal? (deriv '(* x (+ x 3)) 'x)
+           '(+ x (+ x 3)))))
+
+differentiator-tests
+(deriv '(+ (* x x) (* 3 x)) 'x)
+
+(define review-result
+  (prompt-role harness 'reviewer '(review deriv tests)
+               '((provider ((finish reviewed))) (verifier passed))))
+(prompt-result-agent-id review-result)
 (map (lambda (entry) (cadr (assq 'kind (cdr entry))))
-     (prompt-result-audit code-result))
+     (prompt-result-audit review-result))
+
+(prompt-result-agent-id
+ (prompt-role harness 'memory-curator
+              '(remember symbolic differentiator tutorial)
+              '((provider ((finish captured))) (verifier passed))))
 
 (exit)
 SCM
@@ -72,19 +124,24 @@ SCM
 The interesting records are:
 
 ```scheme
-(3 inspect)
 ((default planner-1 scheme-coder-1 reviewer-1 memory-1)
  (planner coder reviewer memory-curator)
  (auto qwen3:8b qwen2.5-coder:14b gemma3:12b))
+planner-1
 scheme-coder-1
+(#t #t #t #t)
+(+ (+ x x) 3)
+reviewer-1
 (agent-selected model-route)
+memory-1
 ```
 
 At that point you have seen the core loop: normal Scheme evaluation,
-role-specific agent registration, model-id discovery, a routed prompt result,
-and the audit entries that explain why the coder agent was selected. Continue
-through the sections below to mutate sessions, inspect transcripts, exercise
-policy and budget failures, and connect the same role names to local models.
+role-specific agent registration, model-id discovery, a planned implementation,
+executable tests, a reviewer route, a memory-curator route, and audit entries
+that explain why the reviewer agent was selected. Continue through the sections
+below to mutate sessions, inspect transcripts, exercise policy and budget
+failures, and connect the same role names to local models.
 
 ## Start a REPL
 
