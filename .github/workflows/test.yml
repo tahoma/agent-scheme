@@ -666,7 +666,7 @@ jobs:
             label: tools/docs/integration
             make_target: test-emacs-tools
             summary_name: Emacs tools/docs/integration
-            selector: '(and (or "consent-ci.*" "consent-compile.*" "consent-control-loop-doc.*" "consent-debugger.*" "consent-diagnostics.*" "consent-diff.*" "consent-feature-reflection-doc.*" "consent-job.*" "consent-skill.*" "consent-smoke.*" "consent-scheme-documentation-test-.*" "consent-scheme-module-ownership-test-.*" "^consent-scheme-eval-test-bootstrap-avoids-host-call/cc$" "^consent-scheme-module-boundary-test-runtime-version-loads-outside-repo$") (not "^consent-compile-portable-test-\(racket\|gambit\)-\(builds-runner\|install-and-dist\)$"))'
+            selector: '(and (or "consent-ci.*" "consent-compile.*" "consent-control-loop-doc.*" "consent-debugger.*" "consent-diagnostics.*" "consent-diff.*" "consent-feature-reflection-doc.*" "consent-job.*" "consent-repl-agent-quickstart-doc.*" "consent-skill.*" "consent-smoke.*" "consent-scheme-documentation-test-.*" "consent-scheme-module-ownership-test-.*" "^consent-scheme-eval-test-bootstrap-avoids-host-call/cc$" "^consent-scheme-module-boundary-test-runtime-version-loads-outside-repo$") (not "^consent-compile-portable-test-\(racket\|gambit\)-\(builds-runner\|install-and-dist\)$"))'
           - shard: emacs-capability-boundary
             label: capability boundary
             make_target: test-emacs-capability-boundary
