@@ -45,7 +45,8 @@
   "Cached source-backed procedures keyed by library and procedure name.")
 
 (defconst consent--source-library-call-options
-  '(:max-host-callbacks 200000)
+  '(:max-steps 12000000
+    :max-host-callbacks 200000)
   "Evaluation budget for calls into cached source-backed libraries.")
 
 (defvar consent--library-catalog-cache nil
