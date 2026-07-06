@@ -1740,6 +1740,21 @@
       "Numbers and eof objects cross as plain host Scheme values, and"
       "containers are walked so nested scalars and the options-alist"
       "callback convention both preserve the portable library surface."
+      #((parameters
+         (value (type object)
+          (description
+           ("Portable argument value about to cross into a native binding.")))
+         (context (type eval-context)
+          (description
+           ("Evaluation context that nested callable shims should re-enter"
+            "when native higher-order code applies them."))))
+        (returns (type object)
+         (description
+          ("VALUE converted to the host-facing argument form: host numbers"
+           "or eof objects for scalar runtime records, host callbacks for"
+           "nested callables, and copy-on-write container rewrites when"
+           "needed.")))
+        (effects pure allocation))
       (if (or (pair? value)
               (vector? value)
               (consent-number? value)
