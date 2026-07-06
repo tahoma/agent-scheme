@@ -563,6 +563,46 @@
           "transport prompt must stay hidden"
           external))))))
 
+(ert-deftest consent-models-test-openai-http-error-honors-detail-budget-override ()
+  "Per-call detail budgets can raise the excerpt cap without removing it."
+  (consent-models-test--reset)
+  (consent-models-test--register-local-provider)
+  (let* ((detail (concat (make-string 260 ?a) "tail-marker"))
+         (body (format "{\"error\":{\"message\":\"%s\"}}" detail))
+         (consent-models-transport-function
+          #'consent-models-openai-compatible-http))
+    (cl-letf (((symbol-function 'url-retrieve-synchronously)
+               (lambda (_url _silent _inhibit-cookies _timeout)
+                 (consent-models-test--http-buffer
+                  503
+                  "Service Unavailable"
+                  body
+                  '(("Content-Type" . "application/json"))))))
+      (let* ((error
+              (should-error
+               (consent-models-test--complete-local-model
+                "override prompt must stay hidden"
+                (consent-read
+                 "((max-transport-detail-bytes 320) (retry-count 0))"))
+               :type 'consent-models-error))
+             (datum (consent-models-test--error-datum error))
+             (http (consent-models--field-value datum "http"))
+             (excerpt (consent-models--field-value http "body-excerpt"))
+             (request (consent-models--field-value datum "request")))
+        (should (stringp excerpt))
+        (should (> (length excerpt) 240))
+        (should (<= (length excerpt) 320))
+        (should (string-match-p "tail-marker" excerpt))
+        (should
+         (= (consent-number-value
+             (consent-models--field-value request
+                                          "max-transport-detail-bytes"))
+            320))
+        (should-not
+         (string-match-p
+          "override prompt must stay hidden"
+          (consent-models-test--error-external error)))))))
+
 (ert-deftest consent-models-test-openai-decode-failure-keeps-body-excerpt ()
   "Malformed provider bodies surface decode detail without leaking prompts."
   (consent-models-test--reset)
