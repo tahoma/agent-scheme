@@ -416,12 +416,65 @@ write_racket_main_common() {
                 (list 'scope (list 'backing 'stderr)) (list 'expires 'never))))
    options))
 
+(define (consent-main-condition-message condition)
+  (cond
+   ((error-object? condition)
+    (error-object-message condition))
+   ((consent-main:runtime:consent-error-object? condition)
+    (consent-main:runtime:consent-error-object-message condition))
+   ((string? condition)
+    condition)
+   (else
+    (consent-value->external condition))))
+
+(define (consent-main-condition-irritants condition)
+  (let ((irritants
+         (cond
+          ((error-object? condition)
+           (error-object-irritants condition))
+          ((consent-main:runtime:consent-error-object? condition)
+           (consent-main:runtime:consent-error-object-irritants condition))
+          (else
+           '()))))
+    (if (list? irritants) irritants '())))
+
+(define (consent-main-join-fragments fragments)
+  (if (null? fragments)
+      ""
+      (let loop ((rest (cdr fragments))
+                 (joined (car fragments)))
+        (if (null? rest)
+            joined
+            (loop (cdr rest)
+                  (string-append joined " " (car rest)))))))
+
+(define (consent-main-diagnostic-fragment value)
+  (cond
+   ((error-object? value)
+    (consent-main-condition-text value))
+   ((consent-main:runtime:consent-error-object? value)
+    (consent-main-condition-text value))
+   (else
+    (consent-value->external value))))
+
+(define (consent-main-condition-text condition)
+  (let ((message (consent-main-condition-message condition))
+        (irritants (consent-main-condition-irritants condition)))
+    (if (null? irritants)
+        message
+        (string-append
+         message
+         ": "
+         (consent-main-join-fragments
+          (map consent-main-diagnostic-fragment irritants))))))
+
 (define (consent-main-eval source options)
   (guard (condition
           (else
            (display "consent: evaluation failed" (current-error-port))
            (display ": " (current-error-port))
-           (write condition (current-error-port))
+           (display (consent-main-condition-text condition)
+                    (current-error-port))
            (newline (current-error-port))
            (exit 1)))
     (display
@@ -434,7 +487,8 @@ write_racket_main_common() {
           (else
            (display "consent: script failed" (current-error-port))
            (display ": " (current-error-port))
-           (write condition (current-error-port))
+           (display (consent-main-condition-text condition)
+                    (current-error-port))
            (newline (current-error-port))
            (exit 1)))
     ;; Run the script through the Consent interpreter with the standard streams
@@ -457,7 +511,8 @@ write_racket_main_common() {
           (else
            (display "consent: host-run failed" (current-error-port))
            (display ": " (current-error-port))
-           (write condition (current-error-port))
+           (display (consent-main-condition-text condition)
+                    (current-error-port))
            (newline (current-error-port))
            (exit 1)))
     (let ((outcome
@@ -711,12 +766,65 @@ write_gambit_main_common() {
                 (list 'scope (list 'backing 'stderr)) (list 'expires 'never))))
    options))
 
+(define (consent-main-condition-message condition)
+  (cond
+   ((error-object? condition)
+    (error-object-message condition))
+   ((consent-main:runtime:consent-error-object? condition)
+    (consent-main:runtime:consent-error-object-message condition))
+   ((string? condition)
+    condition)
+   (else
+    (consent-value->external condition))))
+
+(define (consent-main-condition-irritants condition)
+  (let ((irritants
+         (cond
+          ((error-object? condition)
+           (error-object-irritants condition))
+          ((consent-main:runtime:consent-error-object? condition)
+           (consent-main:runtime:consent-error-object-irritants condition))
+          (else
+           '()))))
+    (if (list? irritants) irritants '())))
+
+(define (consent-main-join-fragments fragments)
+  (if (null? fragments)
+      ""
+      (let loop ((rest (cdr fragments))
+                 (joined (car fragments)))
+        (if (null? rest)
+            joined
+            (loop (cdr rest)
+                  (string-append joined " " (car rest)))))))
+
+(define (consent-main-diagnostic-fragment value)
+  (cond
+   ((error-object? value)
+    (consent-main-condition-text value))
+   ((consent-main:runtime:consent-error-object? value)
+    (consent-main-condition-text value))
+   (else
+    (consent-value->external value))))
+
+(define (consent-main-condition-text condition)
+  (let ((message (consent-main-condition-message condition))
+        (irritants (consent-main-condition-irritants condition)))
+    (if (null? irritants)
+        message
+        (string-append
+         message
+         ": "
+         (consent-main-join-fragments
+          (map consent-main-diagnostic-fragment irritants))))))
+
 (define (consent-main-eval source options)
   (guard (condition
           (else
            (display "consent: evaluation failed" (current-error-port))
            (display ": " (current-error-port))
-           (write condition (current-error-port))
+           (display (consent-main-condition-text condition)
+                    (current-error-port))
            (newline (current-error-port))
            (exit 1)))
     (display
@@ -729,7 +837,8 @@ write_gambit_main_common() {
           (else
            (display "consent: script failed" (current-error-port))
            (display ": " (current-error-port))
-           (write condition (current-error-port))
+           (display (consent-main-condition-text condition)
+                    (current-error-port))
            (newline (current-error-port))
            (exit 1)))
     ;; Run the script through the Consent interpreter with the standard streams
@@ -752,7 +861,8 @@ write_gambit_main_common() {
           (else
            (display "consent: host-run failed" (current-error-port))
            (display ": " (current-error-port))
-           (write condition (current-error-port))
+           (display (consent-main-condition-text condition)
+                    (current-error-port))
            (newline (current-error-port))
            (exit 1)))
     (let ((outcome

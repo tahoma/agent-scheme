@@ -236,6 +236,74 @@ failing closed on everything."
       (ignore-errors (delete-file deny-script))
       (ignore-errors (delete-file deny-marker)))))
 
+(defun consent-compile-portable-test--assert-eval-error-diagnostics (runner)
+  "Assert RUNNER's `--eval' surfaces the underlying error message."
+  (let ((result
+         (consent-compile-portable-test--run-executable
+          runner
+          "--eval"
+          "(error \"boom\")")))
+    (should-not
+     (equal (consent-compile-portable-test--status result) 0))
+    (should
+     (string-match-p
+      (regexp-quote "boom")
+      (consent-compile-portable-test--output result)))
+    (should-not
+     (string-match-p
+     (regexp-quote "#<error-exception")
+      (consent-compile-portable-test--output result)))))
+
+(defun consent-compile-portable-test--assert-host-run-timeout-option-diagnostics
+    (runner)
+  "Assert RUNNER's `--host-run' preserves numeric transport options."
+  (let ((probe-script (make-temp-file "consent-timeout-option-probe-" nil ".scm")))
+    (unwind-protect
+        (progn
+          (with-temp-file probe-script
+            (insert
+             "(import (scheme base)\n"
+             "        (scheme write)\n"
+             "        (agent models openai))\n"
+             "(write\n"
+             " (model-openai-compatible-http-completion-result\n"
+             "  '(model-provider\n"
+             "    (id local-fail)\n"
+             "    (kind local)\n"
+             "    (transport openai-compatible-http)\n"
+             "    (endpoint \"http://127.0.0.1:1/v1\"))\n"
+             "  '((id qwen-coder)\n"
+             "    (roles (scheme-scripter))\n"
+             "    (privacy local))\n"
+             "  'scheme-scripter\n"
+             "  \"transport diagnostic prompt\"\n"
+             "  '((timeout-seconds 7)\n"
+             "    (retry-count 1)\n"
+             "    (max-transport-detail-bytes 320))))\n"
+             "(newline)\n"))
+          (let ((result
+                 (consent-compile-portable-test--run-executable
+                  runner "--host-run" probe-script)))
+            (should
+             (equal (consent-compile-portable-test--status result) 0))
+            (should
+             (string-match-p
+              (regexp-quote "(timeout-seconds 7)")
+              (consent-compile-portable-test--output result)))
+            (should
+             (string-match-p
+              (regexp-quote "(retry-count 1)")
+              (consent-compile-portable-test--output result)))
+            (should
+             (string-match-p
+              (regexp-quote "(max-transport-detail-bytes 320)")
+              (consent-compile-portable-test--output result)))
+            (should-not
+             (string-match-p
+              (regexp-quote "(timeout-seconds 30)")
+              (consent-compile-portable-test--output result)))))
+      (ignore-errors (delete-file probe-script)))))
+
 (ert-deftest consent-compile-portable-test-rejects-unknown-host ()
   "Reject unknown compile hosts with an actionable setup message."
   (let* ((build-dir
@@ -365,6 +433,9 @@ failing closed on everything."
         (consent-compile-portable-test--run-executable
          runner "--eval" "(+ 1 2)")
         '(:status 0 :output "3\n")))
+      (consent-compile-portable-test--assert-eval-error-diagnostics runner)
+      (consent-compile-portable-test--assert-host-run-timeout-option-diagnostics
+       runner)
       (consent-compile-portable-test--assert-gated-script runner)
       (should
        (equal
@@ -464,6 +535,9 @@ failing closed on everything."
         (consent-compile-portable-test--run-executable
          runner "--eval" "(+ 1 2)")
         '(:status 0 :output "3\n")))
+      (consent-compile-portable-test--assert-eval-error-diagnostics runner)
+      (consent-compile-portable-test--assert-host-run-timeout-option-diagnostics
+       runner)
       (consent-compile-portable-test--assert-gated-script runner)
       (should
        (equal

@@ -426,6 +426,9 @@
   (check-true 'model-transport-comment-specific
               (string-contains? comment-rendered
                                 "local model transport failed"))
+  (check-true 'model-transport-comment-request-path
+              (string-contains? comment-rendered
+                                "/v1/chat/completions"))
   (check 'model-transport-detail-head
          (and (pair? detail) (car detail))
          'model-provider-error)

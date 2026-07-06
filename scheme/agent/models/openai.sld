@@ -17,6 +17,11 @@
           (scheme write)
           (prefix (agent redaction) redaction-model:)
           (prefix (cli process-host) cli-host:)
+          (only (consent reader)
+                consent-number?
+                consent-number-exactness
+                consent-number-kind
+                consent-number-value)
           (prefix (stdlib generator) gen:)
           (prefix (stdlib json) json-model:))
   (begin
@@ -30,6 +35,18 @@
     (define model-openai-local-only-replacement "[local-only]")
     ;; Curl metadata marker appended after the response body.
     (define model-openai-curl-meta-marker "__CONSENT_OPENAI_META__")
+    ;; Unique marker distinguishing an absent field from one whose value
+    ;; happens to equal the caller's default.
+    (define model-openai-missing-field (list 'missing-field))
+
+    (define (model-openai-field-name=? left right)
+      "Return #t when LEFT and RIGHT name the same field."
+      (cond
+       ((and (symbol? left) (symbol? right))
+        (string=? (symbol->string left)
+                  (symbol->string right)))
+       (else
+        (eq? left right))))
 
     (define (model-openai-field-values datum)
       "Return field pairs from DATUM, skipping a record head when present."
@@ -73,7 +90,7 @@
       (let loop ((fields (model-openai-field-values datum)))
         (cond
          ((null? fields) default)
-         ((eq? (car (car fields)) name)
+         ((model-openai-field-name=? (car (car fields)) name)
           (model-openai-field-entry-value (car fields) default))
          (else (loop (cdr fields))))))
 
@@ -82,8 +99,11 @@
       (if (null? names)
           default
           (let ((value
-                 (model-openai-field-value datum (car names) default)))
-            (if (eq? value default)
+                 (model-openai-field-value
+                  datum
+                  (car names)
+                  model-openai-missing-field)))
+            (if (eq? value model-openai-missing-field)
                 (model-openai-field-value-any datum (cdr names) default)
                 value))))
 
@@ -98,6 +118,17 @@
     (define (model-openai-name-string value description)
       "Return VALUE as a provider/model name string."
       (symbol->string (model-openai-name value description)))
+
+    (define (model-openai-host-exact-integer value)
+      "Return VALUE as a host exact integer, or #f when it is not one."
+      (cond
+       ((integer? value) value)
+       ((and (consent-number? value)
+             (eq? (consent-number-kind value) 'integer)
+             (eq? (consent-number-exactness value) 'exact)
+             (integer? (consent-number-value value)))
+        (consent-number-value value))
+       (else #f)))
 
     (define (model-openai-field name value)
       "Return a Scheme-readable field named NAME with VALUE."
@@ -760,7 +791,8 @@
     (define (model-openai-option-integer options names default)
       "Return integer option from OPTIONS field NAMES, or DEFAULT."
       (let ((value (model-openai-field-value-any options names default)))
-        (if (integer? value) value default)))
+        (let ((host-integer (model-openai-host-exact-integer value)))
+          (if host-integer host-integer default))))
 
     (define (model-openai-split-curl-output stdout)
       "Return `(BODY HTTP-STATUS ELAPSED-MS)' parsed from curl STDOUT."

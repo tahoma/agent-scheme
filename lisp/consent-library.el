@@ -242,6 +242,8 @@ core rather than the agent domain it governs.")
 (defconst consent--agent-source-library-files
   '(("(consent capability)"
      . "../scheme/consent/capability.sld")
+    ("(consent reader)"
+     . "../scheme/consent/reader.sld")
     ("(agent diagnostics)"
      . "../scheme/agent/diagnostics.sld")
     ("(agent diff)"
