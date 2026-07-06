@@ -21,7 +21,7 @@
           consent-native-library-ref
           consent-install-native-applier!
           consent-native-applier-ref
-          consent-host-datum->guest-datum
+          consent-host-datum->consent-datum
           consent-make-empty-environment
           consent-unspecified
           consent-unspecified?
@@ -2395,8 +2395,8 @@
       (capability-flatten-values
        (network-resource-field-values resource field)))
 
-    (define (host-number->guest-number number)
-      "Convert host NUMBER to the canonical guest numeric representation."
+    (define (host-number->consent-number number)
+      "Convert host NUMBER to the canonical Consent numeric representation."
       (cond
        ((and (real? number) (exact? number) (integer? number))
         (consent-make-canonical-integer number))
@@ -2409,24 +2409,25 @@
        (else
         (consent-read (number->string number)))))
 
-    (define (consent-host-datum->guest-datum datum . maybe-wrap-procedure)
-      "Convert host-owned DATUM into the guest-facing runtime representation."
+    (define (consent-host-datum->consent-datum datum . maybe-wrap-procedure)
+      "Convert host-owned DATUM into the Consent runtime representation."
       "Numbers become canonical Consent numbers, the host eof object becomes"
-      "the guest eof record, pairs and vectors are rebuilt copy-on-write while"
-      "preserving attached reader source metadata, and an optional procedure"
-      "wrapper can translate host callables when a boundary needs that bridge."
+      "the Consent eof record, pairs and vectors are rebuilt copy-on-write"
+      "while preserving attached reader source metadata, and an optional"
+      "procedure wrapper can translate host callables when a boundary needs"
+      "that bridge."
       #((parameters
          (datum (type object)
           (description
-           ("Host datum or scalar crossing into the guest-facing runtime"
+           ("Host datum or scalar crossing into the Consent runtime"
              "representation.")))
          (maybe-wrap-procedure (type list)
           (description
            ("Optional single procedure that rewrites host procedures before"
-             "they enter guest data; omitted leaves them unchanged."))))
+             "they enter Consent data; omitted leaves them unchanged."))))
         (returns (type object)
          (description
-          ("DATUM rewritten into guest-facing runtime data, preserving source"
+          ("DATUM rewritten into Consent runtime data, preserving source"
             "metadata on rebuilt pairs and vectors.")))
         (effects pure allocation))
       (let ((wrap-procedure
@@ -2441,7 +2442,7 @@
                       (consent-eof-object? value))
                   value)
                  ((number? value)
-                  (host-number->guest-number value))
+                  (host-number->consent-number value))
                  ((eof-object? value)
                   consent-eof-object)
                  ((procedure? value)
@@ -2482,8 +2483,8 @@
           (convert datum '()))))
 
     (define (network-public-datum datum)
-      "Convert host-owned network metadata to guest data before publication."
-      (consent-host-datum->guest-datum datum))
+      "Convert host-owned network metadata to Consent data before publication."
+      (consent-host-datum->consent-datum datum))
 
     (define (network-redacted-public-datum datum)
       "Redact network metadata, then make it safe for external rendering."

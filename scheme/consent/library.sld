@@ -1638,9 +1638,9 @@
 
     (define (native-callback-shim value context)
       "Wrap interpreted callable VALUE as a host procedure applying it in"
-      "CONTEXT. Callback arguments re-enter the guest world through the"
-      "shared host-datum bridge, so interpreted callbacks see canonical guest"
-      "numbers and preserved source-metadata structure instead of raw host"
+      "CONTEXT. Callback arguments re-enter the Consent world through the"
+      "shared host-datum bridge, so interpreted callbacks see canonical"
+      "Consent numbers and preserved source-metadata structure instead of raw host"
       "runtime values leaking through the compiled boundary."
       "The closure's result crosses back under the callback result conversion"
       "(canonical records become raw host numbers), so native higher-order"
@@ -1661,7 +1661,7 @@
     ;; context.
     (define native-call-context #f)
 
-    ;; Some internal-library exports operate on reader-owned guest datums whose
+    ;; Some internal-library exports operate on reader-owned Consent datums whose
     ;; identity must survive the native call boundary intact: source-metadata
     ;; accessors key off the original pair/vector/string object, and numeric
     ;; predicates should inspect canonical number records instead of a
@@ -1687,7 +1687,7 @@
           consent-number->external))))
 
     ;; Accessors that intentionally publish a host scalar payload should keep
-    ;; that surface instead of rewrapping the result back into a guest number.
+    ;; that surface instead of rewrapping the result back into a Consent number.
     (define native-host-result-bindings
       '((((consent reader) consent-number-value))))
 
@@ -1717,7 +1717,7 @@
            library-key
            name)
           'host
-          'guest))
+          'consent))
 
     (define (native-binding-argument library-key name argument context)
       "Bridge one ARGUMENT for NAME in LIBRARY-KEY into native code."
@@ -1842,7 +1842,7 @@
       "Every other host-owned datum crosses under the shared host-datum"
       "bridge, which canonicalizes numbers/eof and preserves source metadata"
       "on rebuilt structure."
-      (consent-host-datum->guest-datum
+      (consent-host-datum->consent-datum
        value
        (lambda (procedure)
          (cell-value

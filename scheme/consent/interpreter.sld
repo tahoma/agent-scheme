@@ -1979,7 +1979,7 @@ cursor across sessions."
               (consent-make-canonical-infnan "+inf.0"))
              (else #f)))
            (else
-            (consent-host-datum->guest-datum
+            (consent-host-datum->consent-datum
              ((if (eq? operation '*) * /)
               (number->host-float left description)
               (number->host-float right description)))))))
@@ -4167,7 +4167,7 @@ cursor across sessions."
                   (begin
                     (set-consent-port-position! port (+ position 1))
                     (audit-port-capability-result! context port 'read 1 #f)
-                    (consent-host-datum->guest-datum
+                    (consent-host-datum->consent-datum
                      (bytevector-u8-ref source position))))))))
 
     (define (primitive-peek-u8 arguments context)
@@ -4193,7 +4193,7 @@ cursor across sessions."
                     consent-eof-object)
                   (begin
                     (audit-port-capability-result! context port 'read 1 #f)
-                    (consent-host-datum->guest-datum
+                    (consent-host-datum->consent-datum
                      (bytevector-u8-ref source position))))))))
 
     (define (primitive-u8-ready? arguments context)
@@ -4317,7 +4317,7 @@ cursor across sessions."
                       (set-consent-port-position! port (+ position amount))
                       (audit-port-capability-result!
                        context port 'read amount #f)
-                      (consent-host-datum->guest-datum amount))))))))
+                      (consent-host-datum->consent-datum amount))))))))
 
     (define (primitive-write-u8 arguments context)
       "Implement the `write-u8` primitive with argument validation and Consent"
@@ -4664,7 +4664,7 @@ cursor across sessions."
 
     (define (reflect-datumize value)
       "Return host VALUE as a Scheme-readable reflection datum."
-      (consent-host-datum->guest-datum value))
+      (consent-host-datum->consent-datum value))
 
     (define (reflect-host-capability-spec? spec)
       "Report whether SPEC describes a host capability."
@@ -6431,7 +6431,7 @@ cursor across sessions."
         (if (not record)
             (eval-error "unknown helper library" (car arguments)))
         (drain-state
-         (eval-sequence (consent-host-datum->guest-datum
+         (eval-sequence (consent-host-datum->consent-datum
                          (helper-model:helper-record-forms record))
                         (context-interaction-environment context)
                         context

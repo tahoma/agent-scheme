@@ -175,7 +175,7 @@
          (context-host-callbacks context)))))
 
     (define (context-events context)
-      "Return policy and agent-channel events in the order they were recorded."
+      "Return policy and event-channel events in the order they were recorded."
       (reverse (context-audit-events context)))
 
     ;; Maximum current-frame binding names included in debugger conditions.

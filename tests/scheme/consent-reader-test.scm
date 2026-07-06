@@ -94,13 +94,13 @@
  character-writer-cases)
 
 (check-external 'integer "42" "42")
-;; Agent ownership means read numbers share the canonical constructors'
-;; representation class. Compare against a canonical integer rather than
-;; hardcoding what the surrounding Scheme's `number?' answers: on a reference
-;; host both are records (#f and #f); when this file runs on the Consent
-;; runtime itself via --host-run, agent-owned numbers ARE the runtime's numbers
-;; (#t and #t). The invariant is the agreement, not the host's answer.
-(check 'integer-is-agent-owned
+;; Read numbers share the canonical constructors' representation class.
+;; Compare against a canonical integer rather than hardcoding what the
+;; surrounding Scheme's `number?' answers: on a reference host both are
+;; records (#f and #f); when this file runs on the Consent runtime itself via
+;; --host-run, canonical Consent numbers ARE the runtime's numbers (#t and
+;; #t). The invariant is the agreement, not the host's answer.
+(check 'integer-matches-canonical-number-class
        (number? (consent-read "42"))
        (number? (consent-make-canonical-integer 42)))
 (check 'host-integer-writer
