@@ -41,7 +41,7 @@
     (should (string-match-p (regexp-quote "(kind case)") external))
     (should (string-match-p (regexp-quote "(kind expected-error)") external))))
 
-(ert-deftest consent-test-test-yield-failures-emits-agent-event ()
+(ert-deftest consent-test-test-yield-failures-emits-context-event ()
   "Failed self-tests can be yielded through `(agent io)'."
   (let ((external
          (consent-test-test--result-external

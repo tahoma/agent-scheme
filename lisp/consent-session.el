@@ -986,8 +986,8 @@ Return the stale handles that were removed."
                                   (max 0 (- (length entries) start-count)))))
     (nreverse newest-first)))
 
-(defun consent-session--agent-event-p (entry)
-  "Return non-nil when ENTRY is an agent event audit datum."
+(defun consent-session--context-event-p (entry)
+  "Return non-nil when ENTRY is a context event audit datum."
   (let ((event-field
          (seq-find
           (lambda (field)
@@ -998,7 +998,7 @@ Return the stale handles that were removed."
     (and event-field
          (consent-symbol-p (cadr event-field))
          (equal (consent-symbol-name (cadr event-field))
-                "agent-event"))))
+                "context-event"))))
 
 (defun consent-session--policy-datum (decision)
   "Return a Scheme-readable pure-evaluation policy datum for DECISION."
@@ -1063,7 +1063,7 @@ Return the stale handles that were removed."
   (consent-session--refresh-handles session value)
   (let* ((new-entries (consent-session--new-audit-entries start-count))
          (events (consent-redact
-                  (seq-filter #'consent-session--agent-event-p
+                  (seq-filter #'consent-session--context-event-p
                               new-entries)
                   'transcript))
          (entry
@@ -1098,7 +1098,7 @@ Return the stale handles that were removed."
   "Record failed SESSION evaluation of SOURCE with CONDITION."
   (let* ((new-entries (consent-session--new-audit-entries start-count))
          (events (consent-redact
-                  (seq-filter #'consent-session--agent-event-p
+                  (seq-filter #'consent-session--context-event-p
                               new-entries)
                   'transcript))
          (message (error-message-string condition))

@@ -5997,7 +5997,7 @@ creates undo boundaries around the atomic change group."
                  results))))
     (consent--record-event! context event)
     (consent-audit-record
-     'agent-event
+     'context-event
      `((category . emacs-search)
        (operation . "search-yield")
        (decision . recorded)

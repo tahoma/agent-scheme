@@ -869,7 +869,7 @@ datum before `consent-debugger-restart-action-function' is called."
                       condition)))
     (consent--record-event! context event)
     (consent-audit-record
-     'agent-event
+     'context-event
      `((category . agent-debugger)
        (operation . "debugger-yield")
        (decision . recorded)

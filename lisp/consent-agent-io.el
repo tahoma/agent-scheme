@@ -19,11 +19,11 @@
 
 (defun consent-agent-io--record (operation event fields context)
   "Record OPERATION EVENT with FIELDS in CONTEXT and the audit log."
-  (let ((redacted-event (consent-redact event 'agent-event))
-        (redacted-fields (consent-redact fields 'agent-event)))
+  (let ((redacted-event (consent-redact event 'context-event))
+        (redacted-fields (consent-redact fields 'context-event)))
     (consent--record-event! context redacted-event)
     (consent-audit-record
-     'agent-event
+     'context-event
      (append
       `((category . agent-io)
         (operation . ,operation)

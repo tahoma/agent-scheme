@@ -4469,12 +4469,12 @@ cursor across sessions."
 
     (define (primitive-agent-yield arguments context)
       "Emit a primary structured observation event into the current context."
-      (record-agent-event! context (list 'yield (car arguments)))
+      (record-context-event! context (list 'yield (car arguments)))
       consent-unspecified)
 
     (define (primitive-agent-log arguments context)
       "Emit a structured log event into the current context."
-      (record-agent-event!
+      (record-context-event!
        context
        (list 'log
              (result-field 'level (car arguments))
@@ -4484,7 +4484,7 @@ cursor across sessions."
 
     (define (primitive-agent-progress arguments context)
       "Emit a structured progress event into the current context."
-      (record-agent-event!
+      (record-context-event!
        context
        (list 'progress
              (result-field 'phase (car arguments))
@@ -4493,7 +4493,7 @@ cursor across sessions."
 
     (define (primitive-agent-warn arguments context)
       "Emit a structured warning event into the current context."
-      (record-agent-event!
+      (record-context-event!
        context
        (list 'warn
              (result-field 'message (car arguments))
@@ -4502,7 +4502,7 @@ cursor across sessions."
 
     (define (primitive-agent-request arguments context)
       "Emit a structured request event into the current context."
-      (record-agent-event! context (list 'request (car arguments)))
+      (record-context-event! context (list 'request (car arguments)))
       consent-unspecified)
 
     (define (context-current-request context)
@@ -4612,7 +4612,7 @@ cursor across sessions."
       "Yield selected context through the event channel."
       (let ((record (context-select (car arguments) context)))
         (if record
-            (record-agent-event!
+            (record-context-event!
              context
              (list 'yield (redaction-model:redact record 'agent-context))))
         record))
@@ -5440,7 +5440,7 @@ cursor across sessions."
     (define (primitive-budget-yield arguments context)
       "Emit the current budget ledger as a yield event and return it."
       (let ((ledger (reflect-current-budget context)))
-        (record-agent-event! context (list 'yield ledger))
+        (record-context-event! context (list 'yield ledger))
         (redaction-model:redact ledger 'runtime-reflection)))
 
     (define (primitive-current-imports arguments context)
@@ -5740,7 +5740,7 @@ cursor across sessions."
               (context-interaction-environment context)
               context
               (second arguments))))
-        (record-agent-event! context (list 'macroexpand result))
+        (record-context-event! context (list 'macroexpand result))
         result))
 
     (define (primitive-current-error arguments context)
@@ -5797,7 +5797,7 @@ cursor across sessions."
       "Emit a structured debugger event into the current result stream."
       (let* ((condition (redaction-model:redact (car arguments) 'debugger))
              (event (list 'debugger condition)))
-        (record-agent-event! context event)
+        (record-context-event! context event)
         consent-unspecified))
 
     (define (primitive-approval-request! arguments context)
@@ -5827,7 +5827,7 @@ cursor across sessions."
              (approval-model:approval-store-pending interpreter-approval-store)))
         (for-each
          (lambda (record)
-           (record-agent-event! context (list 'yield record)))
+           (record-context-event! context (list 'yield record)))
          records)
         records))
 
@@ -6340,7 +6340,7 @@ cursor across sessions."
                                     (second arguments))))
         (for-each
          (lambda (record)
-           (record-agent-event! context (list 'yield record)))
+           (record-context-event! context (list 'yield record)))
          records)
         records))
 
@@ -6392,7 +6392,7 @@ cursor across sessions."
                                      (car arguments)
                                      (second arguments)
                                      (helper-source scope context))))
-        (record-agent-event! context (list 'yield record))
+        (record-context-event! context (list 'yield record))
         record))
 
     (define (primitive-agent-helper-save! arguments context)
@@ -6631,7 +6631,7 @@ cursor across sessions."
                                     (car arguments))))
         (if (not record)
             (eval-error "unknown plan"))
-        (record-agent-event! context (list 'yield record))
+        (record-context-event! context (list 'yield record))
         (record-audit-event!
          context
          'agent-plan
