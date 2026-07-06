@@ -323,7 +323,7 @@
           "(message \"Yielded diagnostic\")")))))
   (should
    (consent-diagnostics-test--audit-entry-matching
-    "(event agent-event)"
+    "(event context-event)"
     "(category agent-io)"
     "(operation \"agent-yield\")"
     "(decision recorded)")))

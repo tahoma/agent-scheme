@@ -4870,7 +4870,7 @@
           (memory-yield 'instance \"yield portable\")
           'done"))
        (events (field-value result 'events)))
-  (check 'agent-memory-yield-emits-agent-event
+  (check 'agent-memory-yield-emits-context-event
          (if (equal? (field-value result 'status) 'ok)
              (consent-result->external (list 'events events))
              (consent-result->external result))
@@ -5064,7 +5064,7 @@
           (plan-yield 'portable-yield)
           'done"))
        (events (field-value result 'events)))
-  (check 'agent-plan-yield-emits-agent-event
+  (check 'agent-plan-yield-emits-context-event
          (and (equal? (field-value result 'status) 'ok)
               (string-contains?
                (consent-result->external (list 'events events))

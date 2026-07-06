@@ -331,7 +331,7 @@
          context
          (list (consent-context--symbol "yield") redacted))
         (consent-audit-record
-         'agent-event
+         'context-event
          `((category . agent-context)
            (operation . "context-yield")
            (query . ,query)

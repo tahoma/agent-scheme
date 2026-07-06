@@ -46,7 +46,7 @@
     "#<unspecified>"))
   (should
    (consent-agent-io-test--audit-entry-matching
-    "(event agent-event)"
+    "(event context-event)"
     "(category agent-io)"
     "(operation \"agent-yield\")"
     "(decision recorded)"
@@ -63,26 +63,26 @@
     (agent-request '(approval (policy buffer-edit)))")
   (should
    (consent-agent-io-test--audit-entry-matching
-    "(event agent-event)"
+    "(event context-event)"
     "(operation \"agent-log\")"
     "(level info)"
     "(message \"starting\")"
     "(fields ((scope test)))"))
   (should
    (consent-agent-io-test--audit-entry-matching
-    "(event agent-event)"
+    "(event context-event)"
     "(operation \"agent-progress\")"
     "(phase reader)"
     "(datum (parsed 2))"))
   (should
    (consent-agent-io-test--audit-entry-matching
-    "(event agent-event)"
+    "(event context-event)"
     "(operation \"agent-warn\")"
     "(message \"careful\")"
     "(fields ((kind stale-handle)))"))
   (should
    (consent-agent-io-test--audit-entry-matching
-    "(event agent-event)"
+    "(event context-event)"
     "(operation \"agent-request\")"
     "(request (approval (policy buffer-edit)))")))
 

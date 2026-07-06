@@ -1203,7 +1203,7 @@
         result))))
   (should
    (consent-capability-test--audit-entry-matching
-    "(event agent-event)"
+    "(event context-event)"
     "(category emacs-search)"
     "(operation \"search-yield\")"
     "(decision recorded)")))

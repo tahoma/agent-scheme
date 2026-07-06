@@ -293,7 +293,7 @@
           audit-clock-capability-result!
           new-eval-context
           record-audit-event!
-          record-agent-event!
+          record-context-event!
           note-step!
           note-host-callback!
           note-interned-symbol!
@@ -355,10 +355,10 @@
     ;; well above the comprehensive self-hosted suite's per-run peak (~0.78M
     ;; nodes) while still tripping a runaway bulk allocation.
     (define consent-default-maximum-value-nodes 10000000)
-    ;; Default maximum guest `string->symbol' interning operations for one
+    ;; Default maximum evaluated `string->symbol' interning operations for one
     ;; evaluation run. Each call charges one unit, and because a call interns at
     ;; most one new symbol this bounds the symbols a run can add to the global
-    ;; intern table -- a resource-exhaustion vector that untrusted guest code
+    ;; intern table -- a resource-exhaustion vector that untrusted evaluated code
     ;; such as a `(string->symbol (number->string i))' loop would otherwise grow
     ;; without limit. Sized well above legitimate per-run symbol generation while
     ;; still tripping a runaway flood; reader-created identifiers are bounded by
@@ -793,7 +793,7 @@
       (maximum-source-metadata context-maximum-source-metadata
                                set-context-maximum-source-metadata!)
       (value-nodes context-value-nodes set-context-value-nodes!)
-      ;; Cumulative guest `string->symbol' interning operations and the run's
+      ;; Cumulative evaluated `string->symbol' interning operations and the run's
       ;; ceiling. Each call charges one unit, bounding how many symbols a run
       ;; can add to the global intern table.
       (interned-symbols context-interned-symbols set-context-interned-symbols!)
@@ -3108,7 +3108,7 @@
          (cons entry (context-audit-events context)))
         entry))
 
-    (define (record-agent-event! context event)
+    (define (record-context-event! context event)
       "Record an ordered event-channel EVENT after enforcing event budgets."
       #((parameters
          (context (type eval-context)
@@ -3212,8 +3212,8 @@
                         (primitive-procedure-name primitive))))
 
     (define (note-interned-symbol! context)
-      "Charge one guest symbol-interning operation against the symbol budget."
-      "Called once per guest `string->symbol' before the name is interned, so a"
+      "Charge one evaluated symbol-interning operation against the symbol budget."
+      "Called once per evaluated `string->symbol' before the name is interned, so a"
       "flood of distinct names fails closed naming the `interned-symbols'"
       "dimension rather than relying on the step budget as a proxy. Each call"
       "interns at most one new symbol, so the per-call charge is a conservative"

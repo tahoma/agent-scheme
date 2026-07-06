@@ -374,7 +374,7 @@ When EXISTING is non-nil, preserve its id and creation sequence."
          (records (consent--plan-records scope context))
          (existing (and existing-id
                         (consent--plan-find-by-id records existing-id)))
-         (redacted-datum (consent-redact datum 'agent-event))
+         (redacted-datum (consent-redact datum 'context-event))
          (record (consent--plan-make-record redacted-datum
                                                  context
                                                  existing)))
@@ -462,7 +462,7 @@ When EXISTING is non-nil, preserve its id and creation sequence."
                               (list (format "unknown plan: %S" id)))))
          (record (caddr located))
          (step (consent--plan-normalize-step
-                (consent-redact step-datum 'agent-event)
+                (consent-redact step-datum 'context-event)
                 (consent--plan-generated-id
                  "step"
                  (1+ consent--plan-next-id))))

@@ -794,7 +794,7 @@ Example events:
 
 The outer agent loop, native REPL buffers, audit buffers, and MCP responses
 should preserve event records as Scheme-readable data.  The current Emacs
-bootstrap registers `(agent io)` and records emitted events as `agent-event`
+bootstrap registers `(agent io)` and records emitted events as `context-event`
 audit datums.  The `(agent job)` layer streams those same event records from
 running jobs before the final evaluation result is available.
 
