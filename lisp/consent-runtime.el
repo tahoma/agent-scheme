@@ -37,15 +37,18 @@ Trusted callers can retry with a higher `:max-source-metadata' grant."
   :group 'consent)
 
 (defcustom consent-eval-maximum-interned-symbols 1000000
-  "Maximum evaluated `string->symbol' interning operations in one evaluation run.
-Each `string->symbol' call is charged one unit, and because a call interns at
-most one new symbol this ceiling bounds the symbols a run can add to the
-process-global intern table -- a resource-exhaustion vector, since untrusted
-evaluated code such as a `(string->symbol (number->string i))' loop would otherwise
-grow interned-symbol memory without an explicit limit.  It is sized well above
-any legitimate per-run symbol generation while still tripping a runaway flood;
-reader-created identifiers go through a separate path bounded by the reader's
-node budgets rather than this one.  Cross-run intern-table ownership is a
+  "Maximum evaluated `string->symbol' interning operations in one
+evaluation run.
+Each `string->symbol' call is charged one unit, and because a call
+interns at most one new symbol this ceiling bounds the symbols a run
+can add to the process-global intern table -- a resource-exhaustion
+vector, since untrusted evaluated code such as a
+`(string->symbol (number->string i))' loop would otherwise grow
+interned-symbol memory without an explicit limit.  It is sized well
+above any legitimate per-run symbol generation while still tripping a
+runaway flood; reader-created identifiers go through a separate path
+bounded by the reader's node budgets rather than this one.  Cross-run
+intern-table ownership is a
 separate concern tracked alongside the portable symbol-identity work."
   :type 'integer
   :group 'consent)
@@ -1428,12 +1431,14 @@ otherwise no clock is read and evaluation stays deterministic."
              "wall-time budget exceeded")))))))
 
 (defun consent--note-interned-symbol (context)
-  "Charge one evaluated symbol-interning operation against CONTEXT's symbol budget.
-Called once per evaluated `string->symbol' before the name is interned, so a flood
-of distinct names fails closed on its own dimension -- naming `interned-symbols'
-in the stop receipt -- rather than relying on the step budget as a proxy.  Each
-call interns at most one new symbol, so the per-call charge is a conservative
-upper bound on the symbols the run adds to the global intern table."
+  "Charge one evaluated symbol-interning operation against CONTEXT's
+symbol budget.
+Called once per evaluated `string->symbol' before the name is interned,
+so a flood of distinct names fails closed on its own dimension --
+naming `interned-symbols' in the stop receipt -- rather than relying on
+the step budget as a proxy.  Each call interns at most one new symbol,
+so the per-call charge is a conservative upper bound on the symbols the
+run adds to the global intern table."
   (when context
     (cl-incf (consent--eval-context-interned-symbols context))
     (when (> (consent--eval-context-interned-symbols context)
