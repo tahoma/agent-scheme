@@ -614,6 +614,21 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
      "(value \"source-backed memory\") (source ()) (confidence high) "
      "(importance 1) (created-at 1) (updated-at 1)) #f)"))))
 
+(ert-deftest consent-library-test-agent-models-openai-is-source-backed ()
+  "Load `(agent models openai)' from the shared portable source library."
+  (let ((source-file
+         (consent--agent-source-library-file "(agent models openai)")))
+    (should source-file)
+    (should (string-suffix-p "scheme/agent/models/openai.sld" source-file))
+    (should (file-readable-p source-file)))
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (agent models openai))
+      (model-openai-parse-response
+       \"{\\\"choices\\\":[{\\\"message\\\":{\\\"content\\\":\\\"source completion\\\"}}]}\")")
+    "\"source completion\"")))
+
 (ert-deftest consent-library-test-standard-case-lambda-import ()
   "Import `(scheme case-lambda)' through the library registry."
   (should
