@@ -58,6 +58,63 @@
   (consent-audit-clear)
   (setq consent-models-test--requests nil))
 
+(defun consent-models-test--register-local-provider (&optional endpoint)
+  "Register one local provider rooted at ENDPOINT."
+  (consent-models-register-provider!
+   (consent-read
+    (format
+     "(model-provider
+       (id local-errors)
+       (kind local)
+       (transport openai-compatible-http)
+       (endpoint %S)
+       (models
+        (((id qwen-coder)
+          (roles (scheme-scripter))
+          (privacy local)))))"
+     (or endpoint "http://127.0.0.1:11434/v1")))))
+
+(defun consent-models-test--complete-local-model (prompt &optional options)
+  "Complete PROMPT through the registered local test model."
+  (consent-models-complete 'scheme-scripter
+                           prompt
+                           (or options '())))
+
+(defun consent-models-test--error-message (error)
+  "Return the stable message carried by transport ERROR."
+  (if (and (consp error)
+           (stringp (cadr error)))
+      (cadr error)
+    (error-message-string error)))
+
+(defun consent-models-test--error-datum (error)
+  "Return the structured provider datum carried by ERROR, or nil."
+  (cond
+   ((and (consp error) (nth 2 error))
+    (nth 2 error))
+   ((and (consp error)
+         (nth 1 error)
+         (not (stringp (nth 1 error))))
+    (nth 1 error))
+   (t nil)))
+
+(defun consent-models-test--error-external (error)
+  "Return ERROR's structured datum as a stable external string."
+  (consent-result->external
+   (consent-models-test--error-datum error)))
+
+(defun consent-models-test--http-buffer
+    (status reason body &optional headers)
+  "Return a fake HTTP response buffer with STATUS, REASON, BODY, and HEADERS."
+  (let ((buffer (generate-new-buffer " *consent-model-http*")))
+    (with-current-buffer buffer
+      (insert (format "HTTP/1.1 %d %s\r\n" status reason))
+      (dolist (header headers)
+        (insert (format "%s: %s\r\n" (car header) (cdr header))))
+      (insert "\r\n")
+      (insert body))
+    buffer))
+
 (defun consent-models-test--live-enabled-p ()
   "Return non-nil when live local model tests are explicitly enabled."
   (let ((enabled (getenv "CONSENT_LIVE_MODEL_TEST")))
@@ -384,35 +441,163 @@
 (ert-deftest consent-models-test-transport-error-maps-to-provider-error ()
   "Map local transport failures to structured model-provider-error data."
   (consent-models-test--reset)
-  (consent-models-register-provider!
-   (consent-read
-    "(model-provider
-      (id local-errors)
-      (kind local)
-      (transport openai-compatible-http)
-      (endpoint \"http://127.0.0.1:11434/v1\")
-      (models
-       (((id qwen-coder)
-         (roles (scheme-scripter))
-         (privacy local)))))"))
+  (consent-models-test--register-local-provider)
   (let ((consent-models-transport-function
          (lambda (_provider _model _request _context)
            (signal 'consent-models-error
                    (list "connection refused")))))
     (let ((error
            (should-error
-            (consent-models-complete 'scheme-scripter
-                                     "Write a helper."
-                                     '())
+            (consent-models-test--complete-local-model
+             "Write a helper.")
             :type 'consent-models-error)))
       (should
        (string-match-p
+        "connection refused"
+        (consent-models-test--error-message error)))
+      (should
+       (string-match-p
         "(model-provider-error"
-        (consent-result->external (cadr error))))
+        (consent-models-test--error-external error)))
       (should
        (string-match-p
         "(status unavailable)"
-        (consent-result->external (cadr error)))))))
+        (consent-models-test--error-external error))))))
+
+(ert-deftest consent-models-test-transport-error-preserves-structured-detail ()
+  "Preserve a transport's structured provider diagnostic instead of collapsing it."
+  (consent-models-test--reset)
+  (consent-models-test--register-local-provider)
+  (let* ((detail
+          (consent-read
+           "(model-provider-error
+              (status unavailable)
+              (provider local-errors)
+              (model qwen-coder)
+              (transport openai-compatible-http)
+              (phase http)
+              (request
+               (model-provider-request
+                (prompt
+                 (redaction
+                  (kind prompt)
+                  (source provider-request)
+                  (replacement \"[local-only]\")
+                  (policy local-only)))))
+              (http
+               (http-failure
+                (status 503)
+                (body-excerpt \"model still loading\")))
+              (reason \"HTTP 503 Service Unavailable: model still loading\"))"))
+         (consent-models-transport-function
+          (lambda (_provider _model _request _context)
+            (signal 'consent-models-error
+                    (list
+                     "HTTP 503 Service Unavailable: model still loading"
+                     detail)))))
+    (let* ((error
+            (should-error
+             (consent-models-test--complete-local-model
+              "prompt text must not leak")
+             :type 'consent-models-error))
+           (external (consent-models-test--error-external error)))
+      (should
+       (string-match-p
+        "HTTP 503 Service Unavailable"
+        (consent-models-test--error-message error)))
+      (should
+       (string-match-p
+        "(http (http-failure (status 503)"
+        external))
+      (should
+       (string-match-p
+        "(redaction (kind prompt)"
+        external))
+      (should-not
+       (string-match-p
+        "prompt text must not leak"
+        external)))))
+
+(ert-deftest consent-models-test-openai-http-error-keeps-status-and-body-excerpt ()
+  "HTTP failures keep status, bounded body detail, and safe request metadata."
+  (consent-models-test--reset)
+  (consent-models-test--register-local-provider)
+  (let ((consent-models-transport-function
+         #'consent-models-openai-compatible-http))
+    (cl-letf (((symbol-function 'url-retrieve-synchronously)
+               (lambda (_url _silent _inhibit-cookies _timeout)
+                 (consent-models-test--http-buffer
+                  503
+                  "Service Unavailable"
+                  "{\"error\":{\"message\":\"model still loading\"}}"
+                  '(("Content-Type" . "application/json"))))))
+      (let* ((error
+              (should-error
+               (consent-models-test--complete-local-model
+                "transport prompt must stay hidden"
+                (consent-read "((timeout-seconds 7) (retry-count 0))"))
+               :type 'consent-models-error))
+             (external (consent-models-test--error-external error)))
+        (should
+         (string-match-p
+          "HTTP 503 Service Unavailable"
+          (consent-models-test--error-message error)))
+        (should
+         (string-match-p
+          "(endpoint-origin \"http://127.0.0.1:11434\")"
+          external))
+        (should
+         (string-match-p
+          "(request-path \"/v1/chat/completions\")"
+          external))
+        (should
+         (string-match-p
+          "(timeout-seconds 7)"
+          external))
+        (should
+         (string-match-p
+          "model still loading"
+          external))
+        (should-not
+         (string-match-p
+          "transport prompt must stay hidden"
+          external))))))
+
+(ert-deftest consent-models-test-openai-decode-failure-keeps-body-excerpt ()
+  "Malformed provider bodies surface decode detail without leaking prompts."
+  (consent-models-test--reset)
+  (consent-models-test--register-local-provider)
+  (let ((consent-models-transport-function
+         #'consent-models-openai-compatible-http))
+    (cl-letf (((symbol-function 'url-retrieve-synchronously)
+               (lambda (_url _silent _inhibit-cookies _timeout)
+                 (consent-models-test--http-buffer
+                  200
+                  "OK"
+                  "{\"choices\":[{\"message\":{\"content\":42}}]}"
+                  '(("Content-Type" . "application/json"))))))
+      (let* ((error
+              (should-error
+               (consent-models-test--complete-local-model
+                "decode prompt must stay hidden")
+               :type 'consent-models-error))
+             (external (consent-models-test--error-external error)))
+        (should
+         (string-match-p
+          "decode"
+          (consent-models-test--error-message error)))
+        (should
+         (string-match-p
+          "(phase decode)"
+          external))
+        (should
+         (string-match-p
+          "(body-excerpt"
+          external))
+        (should-not
+         (string-match-p
+          "decode prompt must stay hidden"
+          external))))))
 
 (ert-deftest consent-models-test-live-local-openai-compatible-completion ()
   "Opt-in live proof that `model-complete' reaches a local model endpoint."

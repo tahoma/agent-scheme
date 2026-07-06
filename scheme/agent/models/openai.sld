@@ -14,6 +14,7 @@
           model-openai-compatible-http-complete)
   (import (scheme base)
           (scheme write)
+          (prefix (agent redaction) redaction-model:)
           (prefix (cli process-host) cli-host:)
           (prefix (stdlib generator) gen:)
           (prefix (stdlib json) json-model:))
@@ -22,6 +23,10 @@
     (define model-openai-default-timeout-seconds 30)
     ;; Maximum process diagnostic text copied into model transport conditions.
     (define model-openai-transport-detail-limit 240)
+    ;; Replacement text used when prompt content is intentionally withheld.
+    (define model-openai-local-only-replacement "[local-only]")
+    ;; Curl metadata marker appended after the response body.
+    (define model-openai-curl-meta-marker "__CONSENT_OPENAI_META__")
 
     (define (model-openai-field-values datum)
       "Return field pairs from DATUM, skipping a record head when present."
@@ -91,6 +96,10 @@
       "Return VALUE as a provider/model name string."
       (symbol->string (model-openai-name value description)))
 
+    (define (model-openai-field name value)
+      "Return a Scheme-readable field named NAME with VALUE."
+      (list name value))
+
     (define (model-openai-object->string value)
       "Return VALUE as a Scheme-readable diagnostic string."
       (let ((port (open-output-string)))
@@ -107,11 +116,11 @@
                 "no process detail")
                (else
                 (model-openai-object->string detail))))
-             (length (string-length text))
              (limit model-openai-transport-detail-limit))
-        (if (> length limit)
-            (string-append (substring text 0 (- limit 3)) "...")
-            text)))
+        (let ((redacted (redaction-model:redact text 'model-diagnostics)))
+          (if (> (string-length redacted) limit)
+              (string-append (substring redacted 0 (- limit 3)) "...")
+              redacted))))
 
     (define (model-openai-condition-detail condition)
       "Return host CONDITION as bounded transport diagnostic text."
@@ -124,68 +133,277 @@
         (else
          condition))))
 
-    (define (model-openai-transport-error-datum
-             provider model status detail)
-      "Return structured public detail for a local transport failure."
-      (let ((provider-id
-             (model-openai-name-string
-              (model-openai-field-value provider 'id 'unknown-provider)
-              "provider id"))
-            (model-id
-             (model-openai-name-string
-              (model-openai-field-value model 'id 'unknown-model)
-              "model id"))
-            (transport
-             (model-openai-name-string
+    (define (model-openai-string-contains? haystack needle)
+      "Return #t when HAYSTACK contains NEEDLE."
+      (let ((haystack-length (string-length haystack))
+            (needle-length (string-length needle)))
+        (let loop ((start 0))
+          (cond
+           ((> (+ start needle-length) haystack-length) #f)
+           ((string=? (substring haystack start (+ start needle-length))
+                      needle)
+            #t)
+           (else (loop (+ start 1)))))))
+
+    (define (model-openai-last-index-of haystack needle)
+      "Return the last index of NEEDLE in HAYSTACK, or #f."
+      (let ((haystack-length (string-length haystack))
+            (needle-length (string-length needle)))
+        (let loop ((start (- haystack-length needle-length)))
+          (cond
+           ((< start 0) #f)
+           ((string=? (substring haystack start (+ start needle-length))
+                      needle)
+            start)
+           (else
+            (loop (- start 1)))))))
+
+    (define (model-openai-redaction-marker kind source replacement policy)
+      "Return a Scheme-readable redaction marker."
+      (list 'redaction
+            (model-openai-field 'kind kind)
+            (model-openai-field 'source source)
+            (model-openai-field 'replacement replacement)
+            (model-openai-field 'policy policy)))
+
+    (define (model-openai-endpoint-origin url)
+      "Return URL's origin prefix, or #f."
+      (let ((scheme-index (model-openai-last-index-of url "://")))
+        (if (not scheme-index)
+            #f
+            (let* ((authority-start (+ scheme-index 3))
+                   (path-index
+                    (let loop ((index authority-start))
+                      (cond
+                       ((>= index (string-length url)) #f)
+                       ((char=? (string-ref url index) #\/) index)
+                       (else (loop (+ index 1)))))))
+              (if path-index
+                  (substring url 0 path-index)
+                  url)))))
+
+    (define (model-openai-request-path url)
+      "Return URL's request path, or `/'."
+      (let ((scheme-index (model-openai-last-index-of url "://")))
+        (if (not scheme-index)
+            "/"
+            (let* ((authority-start (+ scheme-index 3))
+                   (path-index
+                    (let loop ((index authority-start))
+                      (cond
+                       ((>= index (string-length url)) #f)
+                       ((char=? (string-ref url index) #\/) index)
+                       (else (loop (+ index 1)))))))
+              (if path-index
+                  (substring url path-index (string-length url))
+                  "/")))))
+
+    (define (model-openai-safe-request-datum provider model role url options)
+      "Return safe request metadata for transport diagnostics."
+      (list 'model-provider-request
+            (model-openai-field 'role role)
+            (model-openai-field
+             'provider
+             (model-openai-field-value provider 'id 'unknown-provider))
+            (model-openai-field
+             'model
+             (model-openai-field-value model 'id 'unknown-model))
+            (model-openai-field
+             'kind
+             (model-openai-field-value provider 'kind 'local))
+            (model-openai-field
+             'transport
+             (model-openai-field-value provider
+                                       'transport
+                                       'openai-compatible-http))
+            (if (model-openai-endpoint-origin url)
+                (model-openai-field
+                 'endpoint-origin
+                 (model-openai-endpoint-origin url))
+                '(endpoint-origin #f))
+            (model-openai-field 'request-path
+                                (model-openai-request-path url))
+            (model-openai-field
+             'prompt
+             (model-openai-redaction-marker
+              'prompt
+              'provider-request
+              model-openai-local-only-replacement
+              'local-only))
+            (model-openai-field
+             'timeout-seconds
+             (model-openai-option-integer
+              options
+              '(timeout-seconds)
+              model-openai-default-timeout-seconds))
+            (model-openai-field
+             'retry-count
+             (max 0
+                  (model-openai-option-integer options '(retry-count) 0)))))
+
+    (define (model-openai-provider-error-datum
+             provider model role url options reason extra-fields)
+      "Return a structured transport failure record."
+      (append
+       (list 'model-provider-error
+             (model-openai-field
+              'request
+              (model-openai-safe-request-datum
+               provider model role url options))
+             (model-openai-field 'status 'unavailable)
+             (model-openai-field
+              'provider
+              (model-openai-field-value provider 'id 'unknown-provider))
+             (model-openai-field
+              'model
+              (model-openai-field-value model 'id 'unknown-model))
+             (model-openai-field
+              'transport
               (model-openai-field-value provider
                                         'transport
-                                        'openai-compatible-http)
-              "transport"))
-            (status-text (model-openai-object->string status))
-            (detail-text (model-openai-bounded-detail detail)))
-        (list 'model-provider-error
-              (list 'status 'unavailable)
-              (list 'provider (string->symbol provider-id))
-              (list 'model (string->symbol model-id))
-              (list 'transport (string->symbol transport))
-              (list 'process
-                    (list 'process-failure
-                          (list 'status status-text)
-                          (list 'detail detail-text)))
-              (list 'reason detail-text))))
+                                        'openai-compatible-http))
+             (model-openai-field 'reason reason)
+             (model-openai-field 'retry 'bounded-local-transport-retry)
+             (model-openai-field 'task-state 'blocked))
+       extra-fields))
 
-    (define (model-openai-raise-transport-error
-             provider model status detail)
-      "Raise a structured local transport error for PROVIDER and MODEL."
-      (let* ((provider-id
-              (model-openai-name-string
-               (model-openai-field-value provider 'id 'unknown-provider)
-               "provider id"))
-             (model-id
-              (model-openai-name-string
-               (model-openai-field-value model 'id 'unknown-model)
-               "model id"))
-             (transport
-              (model-openai-name-string
-               (model-openai-field-value provider
-                                         'transport
-                                         'openai-compatible-http)
-               "transport"))
-             (detail-text (model-openai-bounded-detail detail))
-             (diagnostic
-              (model-openai-transport-error-datum
-               provider model status detail)))
-        (error
+    (define (model-openai-provider-error-summary datum)
+      "Return DATUM as one concise human-facing transport error string."
+      (string-append
+       "local model transport failed for provider "
+       (model-openai-name-string
+        (model-openai-field-value datum 'provider 'unknown-provider)
+        "provider id")
+       " model "
+       (model-openai-name-string
+        (model-openai-field-value datum 'model 'unknown-model)
+        "model id")
+       " via "
+       (model-openai-name-string
+        (model-openai-field-value datum
+                                  'transport
+                                  'openai-compatible-http)
+        "transport")
+       ": "
+       (model-openai-bounded-detail
+        (model-openai-field-value datum 'reason "transport failed"))))
+
+    (define (model-openai-raise-provider-error datum)
+      "Raise DATUM as a structured local transport failure."
+      (error (model-openai-provider-error-summary datum) datum))
+
+    (define (model-openai-curl-status-detail status timeout stderr)
+      "Return a concise detail string for curl STATUS and STDERR."
+      (let ((stderr-text (model-openai-bounded-detail stderr)))
+        (cond
+         ((and (= status 28)
+               (> timeout 0))
+          (string-append
+           "request timed out after "
+           (number->string timeout)
+           "s"))
+         ((= status 7)
+          "curl exited 7: connection refused")
+         ((= status 6)
+          "curl exited 6: dns failure")
+         ((and (string? stderr-text)
+               (> (string-length stderr-text) 0)
+               (not (string=? stderr-text "no process detail")))
+          (string-append
+           "curl exited "
+           (number->string status)
+           ": "
+           stderr-text))
+         (else
+          (string-append
+           "curl exited "
+           (number->string status))))))
+
+    (define (model-openai-process-error-datum
+             provider model role url options status stderr elapsed-ms)
+      "Return a structured process failure record."
+      (let ((detail (model-openai-curl-status-detail
+                     status
+                     (model-openai-option-integer
+                      options '(timeout-seconds) model-openai-default-timeout-seconds)
+                     stderr)))
+        (model-openai-provider-error-datum
+         provider
+         model
+         role
+         url
+         options
+         detail
+         (append
+          (list (model-openai-field 'phase 'process)
+                (model-openai-field
+                 'process
+                 (list 'process-failure
+                       (model-openai-field 'exit-status status)
+                       (model-openai-field 'detail detail))))
+          (if elapsed-ms
+              (list (model-openai-field 'elapsed-ms elapsed-ms))
+              '())))))
+
+    (define (model-openai-http-error-datum
+             provider model role url options status body elapsed-ms)
+      "Return a structured HTTP failure record."
+      (let ((excerpt (model-openai-bounded-detail body)))
+        (model-openai-provider-error-datum
+         provider
+         model
+         role
+         url
+         options
          (string-append
-          "local model transport failed for provider "
-          provider-id
-          " model "
-          model-id
-          " via "
-          transport
-          ": "
-          detail-text)
-         diagnostic)))
+          "HTTP "
+          (number->string status)
+          (if (> (string-length excerpt) 0)
+              (string-append ": " excerpt)
+              ""))
+         (append
+          (list (model-openai-field 'phase 'http)
+                (model-openai-field
+                 'http
+                 (append
+                  (list 'http-failure
+                        (model-openai-field 'status status))
+                  (if (> (string-length excerpt) 0)
+                      (list (model-openai-field 'body-excerpt excerpt))
+                      '()))))
+          (if elapsed-ms
+              (list (model-openai-field 'elapsed-ms elapsed-ms))
+              '())))))
+
+    (define (model-openai-decode-error-datum
+             provider model role url options detail body elapsed-ms status)
+      "Return a structured decode failure record."
+      (let ((excerpt (model-openai-bounded-detail body))
+            (detail-text (model-openai-bounded-detail detail)))
+        (model-openai-provider-error-datum
+         provider
+         model
+         role
+         url
+         options
+         (string-append "response decode failed: " detail-text)
+         (append
+          (list
+           (model-openai-field 'phase 'decode)
+           (model-openai-field
+            'decode
+            (append
+             (list 'decode-failure
+                   (model-openai-field 'detail detail-text))
+             (if status
+                 (list (model-openai-field 'http-status status))
+                 '())
+             (if (> (string-length excerpt) 0)
+                 (list (model-openai-field 'body-excerpt excerpt))
+                 '()))))
+          (if elapsed-ms
+              (list (model-openai-field 'elapsed-ms elapsed-ms))
+              '())))))
 
     (define (model-openai-record-head datum)
       "Return DATUM's record head, or #f."
@@ -475,12 +693,53 @@
       (let ((value (model-openai-field-value-any options names default)))
         (if (integer? value) value default)))
 
+    (define (model-openai-split-curl-output stdout)
+      "Return `(BODY HTTP-STATUS ELAPSED-MS)' parsed from curl STDOUT."
+      (let ((marker-index
+             (model-openai-last-index-of stdout model-openai-curl-meta-marker)))
+        (if (not marker-index)
+            (list stdout 0 #f)
+            (let* ((body (substring stdout 0 marker-index))
+                   (meta (substring stdout
+                                    (+ marker-index
+                                       (string-length
+                                        model-openai-curl-meta-marker))
+                                    (string-length stdout)))
+                   (space-index
+                    (let loop ((index 0))
+                      (cond
+                       ((>= index (string-length meta)) #f)
+                       ((char=? (string-ref meta index) #\space) index)
+                       (else (loop (+ index 1))))))
+                   (status-text
+                    (if space-index
+                        (substring meta 0 space-index)
+                        meta))
+                   (time-text
+                    (if space-index
+                        (substring meta (+ space-index 1) (string-length meta))
+                        ""))
+                   (status
+                    (let ((value (string->number status-text)))
+                      (if (number? value) value 0)))
+                   (elapsed-ms
+                    (let ((value (string->number time-text)))
+                      (if (number? value)
+                          (exact
+                           (round (* value 1000)))
+                          #f))))
+              (list body status elapsed-ms)))))
+
     (define (model-openai-curl-attempt url request-json timeout)
       "POST REQUEST-JSON to URL with curl and return `(STATUS STDOUT STDERR)'."
       (cli-host:cli-host-run
        "curl"
        (list "-sS"
              "--max-time" (number->string timeout)
+             "--write-out"
+             (string-append
+              model-openai-curl-meta-marker
+              "%{http_code} %{time_total}")
              "-X" "POST"
              "-H" "Content-Type: application/json"
              "-d" request-json
@@ -547,19 +806,47 @@
                (result
                 (guard (condition
                         (else
-                         (model-openai-raise-transport-error
-                          provider
-                          model
-                          'host-exception
-                          (model-openai-condition-detail condition))))
+                         (model-openai-raise-provider-error
+                          (model-openai-process-error-datum
+                           provider
+                           model
+                           role
+                           (model-openai-completion-url endpoint)
+                           options
+                           -1
+                           (model-openai-condition-detail condition)
+                           #f))))
                   (model-openai-retrieve
                    (model-openai-completion-url endpoint)
                    request-json
                    options)))
                (status (car result))
                (stdout (cadr result))
-               (stderr (model-openai-third result)))
+               (stderr (model-openai-third result))
+               (parsed (model-openai-split-curl-output stdout))
+               (body (car parsed))
+               (http-status (cadr parsed))
+               (elapsed-ms (model-openai-third parsed))
+               (url (model-openai-completion-url endpoint)))
           (if (not (= status 0))
-              (model-openai-raise-transport-error
-               provider model status stderr))
-          (model-openai-parse-response stdout))))))
+              (model-openai-raise-provider-error
+               (model-openai-process-error-datum
+                provider model role url options status stderr elapsed-ms)))
+          (if (>= http-status 400)
+              (model-openai-raise-provider-error
+               (model-openai-http-error-datum
+                provider model role url options http-status body elapsed-ms)))
+          (guard (condition
+                  (else
+                   (model-openai-raise-provider-error
+                    (model-openai-decode-error-datum
+                     provider
+                     model
+                     role
+                     url
+                     options
+                     (model-openai-condition-detail condition)
+                     body
+                     elapsed-ms
+                     http-status))))
+            (model-openai-parse-response body)))))))

@@ -11,6 +11,6 @@
   (export consent-version-datum)
   (import (scheme base))
   (begin
-	    ;; Define the canonical Consent Scheme version datum.
-	    (define consent-version-datum
-	      '(consent-version 0 18 3))))
+    ;; Define the canonical Consent Scheme version datum.
+    (define consent-version-datum
+      '(consent-version 0 18 4))))
