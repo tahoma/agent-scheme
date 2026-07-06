@@ -341,12 +341,47 @@
             (cadr (assq 'condition (cdr error-entry)))
             (list 'condition (list 'type 'evaluation-error)))))
 
+    (define (repl--detail-field datum name)
+      "Return field NAME from a tagged detail DATUM, or #f."
+      (let ((entry (and (pair? datum) (assq name (cdr datum)))))
+        (and entry (pair? (cdr entry)) (cadr entry))))
+
+    (define (repl--model-provider-error-detail condition)
+      "Return the structured model-provider-error irritant from CONDITION."
+      (let ((irritants (repl--detail-field condition 'irritants)))
+        (and (pair? irritants)
+             (pair? (car irritants))
+             (eq? (caar irritants) 'model-provider-error)
+             (car irritants))))
+
+    (define (repl--model-provider-error-display-suffix condition)
+      "Return a compact transport suffix for CONDITION, or the empty string."
+      (let* ((detail (repl--model-provider-error-detail condition))
+             (request (and detail (repl--detail-field detail 'request)))
+             (phase (and detail (repl--detail-field detail 'phase)))
+             (path (and request (repl--detail-field request 'request-path))))
+        (if (not detail)
+            ""
+            (string-append
+             " ["
+             (if phase (symbol->string phase) "transport")
+             (if (and (string? path) (> (string-length path) 0))
+                 (string-append " " path)
+                 "")
+             "]"))))
+
     (define (repl--error-message evaluation-result)
       "Return the host message string for an error EVALUATION-RESULT."
-      (let ((error-entry (assq 'error (cdr evaluation-result))))
-        (let ((message-entry (and error-entry
-                                  (assq 'message (cdr error-entry)))))
-          (if message-entry (cadr message-entry) "evaluation error"))))
+      (let* ((error-entry (assq 'error (cdr evaluation-result)))
+             (message-entry (and error-entry
+                                 (assq 'message (cdr error-entry))))
+             (message (if message-entry
+                          (cadr message-entry)
+                          "evaluation error"))
+             (condition (repl--error-condition evaluation-result)))
+        (string-append
+         message
+         (repl--model-provider-error-display-suffix condition))))
 
     (define (repl--read-condition message)
       "Build a debugger-condition datum for a reader error MESSAGE, shaped"
