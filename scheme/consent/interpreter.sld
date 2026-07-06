@@ -1753,10 +1753,31 @@ cursor across sessions."
     (define (host-number->agent-number number)
       "Convert a host numeric result to the canonical Consent Scheme number."
       (cond
-       ((integer? number)
+       ((and (real? number) (exact? number) (integer? number))
         (consent-make-canonical-integer number))
+       ((and (real? number) (exact? number))
+        (consent-make-canonical-rational
+         (numerator number)
+         (denominator number)))
+       ((real? number)
+        (consent-make-canonical-decimal number))
        (else
-        (consent-make-canonical-decimal number))))
+        (consent-make-canonical-complex
+         (host-number->agent-number (real-part number))
+         (host-number->agent-number (imag-part number))))))
+
+    (define (host-datum->agent-datum datum)
+      "Convert portable host DATUM back into evaluator-owned internal data."
+      (cond
+       ((consent-number? datum) datum)
+       ((number? datum) (host-number->agent-number datum))
+       ((eof-object? datum) consent-eof-object)
+       ((pair? datum)
+        (cons (host-datum->agent-datum (car datum))
+              (host-datum->agent-datum (cdr datum))))
+       ((vector? datum)
+        (list->vector (map host-datum->agent-datum (vector->list datum))))
+       (else datum)))
 
     (define (number-from-rational-pair pair . maybe-exactness)
       "Build an Consent Scheme number from a numerator/denominator pair."
@@ -4672,14 +4693,7 @@ cursor across sessions."
 
     (define (reflect-datumize value)
       "Return host VALUE as a Scheme-readable reflection datum."
-      (cond
-       ((integer? value) (consent-make-canonical-integer value))
-       ((pair? value)
-        (cons (reflect-datumize (car value))
-              (reflect-datumize (cdr value))))
-       ((vector? value)
-        (list->vector (map reflect-datumize (vector->list value))))
-       (else value)))
+      (host-datum->agent-datum value))
 
     (define (reflect-host-capability-spec? spec)
       "Report whether SPEC describes a host capability."
@@ -6446,7 +6460,8 @@ cursor across sessions."
         (if (not record)
             (eval-error "unknown helper library" (car arguments)))
         (drain-state
-         (eval-sequence (helper-model:helper-record-forms record)
+         (eval-sequence (host-datum->agent-datum
+                         (helper-model:helper-record-forms record))
                         (context-interaction-environment context)
                         context
                         #t
