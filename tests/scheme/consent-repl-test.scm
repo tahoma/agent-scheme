@@ -440,6 +440,12 @@
                 (and (string? detail-text)
                      (> (string-length detail-text) 0)
                      (<= (string-length detail-text) 240))))
+  (check-false 'model-transport-process-detail-not-generic
+               (string-contains? (field process 'detail)
+                                 "no process detail"))
+  (check-true 'model-transport-detail-request-path
+              (string-contains? (consent-datum->external detail)
+                                "/v1/chat/completions"))
   (check-false 'model-transport-detail-no-prompt
                (string-contains? (consent-datum->external detail)
                                  "transport diagnostic prompt")))
