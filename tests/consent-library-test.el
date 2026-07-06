@@ -629,6 +629,22 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
        \"{\\\"choices\\\":[{\\\"message\\\":{\\\"content\\\":\\\"source completion\\\"}}]}\")")
     "\"source completion\"")))
 
+(ert-deftest consent-library-test-source-backed-calls-use-adapter-budget ()
+  "Source-backed adapter calls use their own evaluation budget."
+  ;; Prime the source environment so the assertion only covers procedure calls.
+  (consent--source-library-procedure
+   "(agent models openai)"
+   "model-openai-parse-response")
+  (let ((consent-eval-maximum-steps 1))
+    (should
+     (equal
+      (consent-result->external
+       (consent--source-library-call
+        "(agent models openai)"
+        "model-openai-parse-response"
+        "{\"choices\":[{\"message\":{\"content\":\"budgeted source\"}}]}"))
+      "\"budgeted source\""))))
+
 (ert-deftest consent-library-test-standard-case-lambda-import ()
   "Import `(scheme case-lambda)' through the library registry."
   (should
