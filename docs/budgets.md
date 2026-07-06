@@ -72,7 +72,7 @@ primitive invocations.  **Events** bound the yield/audit channel.  **Allocation*
 is charged at construction time and is measured in value-graph *nodes*, a
 host-independent unit, rather than host bytes; the spec accepts `allocation-bytes`
 as an alias for the same node budget.  **Interned symbols** are charged once per
-guest `string->symbol` call, before the name is interned; because each call
+evaluated `string->symbol` call, before the name is interned; because each call
 interns at most one new symbol, the ceiling bounds how many symbols a run can add
 to the process-global intern table, closing a resource-exhaustion vector where
 untrusted code such as `(string->symbol (number->string i))` in a loop would

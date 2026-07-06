@@ -31,10 +31,10 @@ that shaped everything after — Consent Scheme has **two loading layers**:
 
 1. a **host layer**, where the R7RS `.sld` runtime is linked into a native
    binary by a host toolchain (Racket `raco exe`, Gambit `gsc`, Cyclone), and
-2. a **guest layer**, where `(consent library)` resolves `import` /
+2. a **runtime library layer**, where `(consent library)` resolves `import` /
    `define-library` at runtime for user programs the interpreter evaluates.
 
-Almost everything that followed is about the guest layer.
+Almost everything that followed is about the runtime library layer.
 
 ## Two corrections that reframed the problem
 
@@ -48,7 +48,7 @@ table, and any conclusion leaning on that closure was retracted.
 *compiled / loadable* native code with *ungateable*. Reading the actual gating
 (`check-port-capability-limit!` and the audit calls in `interpreter.sld`) showed
 security does **not** live in interpretation. It lives in (a) the **primitive
-environment** — guest code can only reach the gated primitives installed for it —
+environment** — evaluated code can only reach the gated primitives installed for it —
 and (b) the **in-primitive monitor + audit**, ordinary Scheme that consults a
 threaded `context`. Both survive compilation, *provided* compiled code can only
 call the same gated primitives. So "compiled ⇒ ungateable" was a category error.
@@ -64,7 +64,7 @@ three currently ship a *sealed binary*. So the mismatch that made the Cyclone
 integration hard was build-time assembly style (and Cyclone bugs), not a runtime
 loadable-library posture forced on the project. Conclusion: host sealing is a
 **low-stakes, separable concern** about the TCB; the interesting facility is the
-guest library system, built the same way on any host.
+runtime library system, built the same way on any host.
 
 ## The vision shift: libraries as live, transmissible entities
 
@@ -413,7 +413,7 @@ leave the membrane — so even at link-time granularity it warrants *elevated
 scrutiny*: never the frictionless ambient-team tier, and presented as
 categorically different from bounded capabilities, not flattened among them (else
 the human rubber-stamps the one grant that matters most). Given the closed-surface
-default, this mostly governs the F1/runtime-author path, not routine guest grants.
+default, this mostly governs the F1/runtime-author path, not routine script grants.
 Net: one link-time consent model spans all authority, with FFI at the
 high-scrutiny top of the gradient.
 

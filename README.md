@@ -7,7 +7,7 @@
 
 # Consent Scheme
 
-Consent Scheme is an R7RS-small guest language and agentic REPL design whose first host is Emacs.
+Consent Scheme is an R7RS-small language and agentic REPL design whose first host is Emacs.
 
 The project goal is to give agents and users a Lisp-native scripting environment with:
 

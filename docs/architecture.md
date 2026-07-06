@@ -1,6 +1,6 @@
 # Consent Scheme Architecture and Threat Model
 
-Consent Scheme is an R7RS-small guest runtime for agentic scripting. Its first
+Consent Scheme is an R7RS-small runtime for agentic scripting. Its first
 host is Emacs, but Emacs is an adapter around the language, not the language's
 semantic center.
 

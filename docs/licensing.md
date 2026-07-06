@@ -23,7 +23,7 @@ relicensing is only trivial while copyright is held by a single author.
   compilation backends: **Chez** (Apache-2.0), **Gambit** (Apache-2.0/LGPL
   dual), and modern **Racket** (Apache-2.0/MIT dual; relicensed from LGPL in
   2019).
-- The reasoning that moved Racket off LGPL applies directly: a guest language
+- The reasoning that moved Racket off LGPL applies directly: a language
   whose libraries are inlined and macro-expanded into host programs, plus a
   content-addressed library exchange that copies code between agents.
 - Over bare MIT/BSD it adds an explicit **patent grant** with retaliation,
