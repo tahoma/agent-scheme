@@ -115,6 +115,9 @@
     (consent-datum->external
      (consent--make-canonical-decimal 3.0))
     "3.0"))
+  (should (equal (consent-datum->external 42) "42"))
+  (should (equal (consent-datum->external 1.5) "1.5"))
+  (should (equal (consent-datum->external 3.0) "3.0"))
   (should-error (consent-read "1/0")
                 :type 'consent-reader-error))
 

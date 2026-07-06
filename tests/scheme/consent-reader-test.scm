@@ -103,6 +103,15 @@
 (check 'integer-is-agent-owned
        (number? (consent-read "42"))
        (number? (consent-make-canonical-integer 42)))
+(check 'host-integer-writer
+       (consent-datum->external 42)
+       "42")
+(check 'host-rational-writer
+       (consent-datum->external (/ 3 2))
+       "3/2")
+(check 'host-decimal-writer
+       (consent-datum->external 3.0)
+       "3.0")
 (check-external 'hex-integer "#x2a" "42")
 (check-external 'rational "3/4" "3/4")
 (check-external 'decimal "1.5" "1.5")

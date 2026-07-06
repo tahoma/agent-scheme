@@ -18,8 +18,7 @@
           helper-store-artifact-save!
           helper-promote-to-skill)
   (import (scheme base)
-          (only (stdlib list) filter find remove)
-          (consent reader))
+          (only (stdlib list) filter find remove))
   (begin
     ;; Public helper scopes mirror the Consent Scheme architecture boundary.
     (define consent-helper-scopes
@@ -75,8 +74,8 @@
         next))
 
     (define (integer-datum sequence)
-      "Return SEQUENCE as an Consent Scheme exact integer datum."
-      (consent-make-canonical-integer sequence))
+      "Return SEQUENCE as an exact integer datum."
+      sequence)
 
     (define (field-value record field)
       "Return FIELD from RECORD or #f."

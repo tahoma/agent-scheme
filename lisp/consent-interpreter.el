@@ -6095,6 +6095,7 @@ objects so result records can be rendered by `consent-datum->external'."
           (eq value consent-false)
           (consent-symbol-p value)
           (consent-character-p value)
+          (numberp value)
           (consent-number-p value)
           (stringp value)
           (consent-bytevector-p value))

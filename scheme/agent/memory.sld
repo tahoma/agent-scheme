@@ -36,69 +36,26 @@
   (import (scheme base)
           (only (stdlib list) filter find remove take)
           (scheme write))
-  (cond-expand
-   ((library (consent reader))
-    (import (only (consent reader)
-                  consent-make-canonical-integer
-                  consent-number?
-                  consent-number-exactness
-                  consent-number-kind
-                  consent-number-value))
-     (begin
-       (define (integer-datum sequence)
-         "Return SEQUENCE as an Consent Scheme exact integer datum."
-         (consent-make-canonical-integer sequence))
-
-       (define (integer-value value)
-         "Return VALUE as a host integer for memory count arguments."
-         (cond
-          ((integer? value) value)
-          ((and (consent-number? value)
-                (eq? (consent-number-kind value) 'integer)
-                (eq? (consent-number-exactness value) 'exact))
-           (consent-number-value value))
-          (else
-           (error "memory count must be an exact integer" value))))
-
-       (define (numeric-value value)
-         "Return VALUE as a host real number for memory scoring."
-         (cond
-          ((number? value) value)
-          ((and (consent-number? value)
-                (eq? (consent-number-kind value) 'integer))
-           (consent-number-value value))
-          ((and (consent-number? value)
-                (eq? (consent-number-kind value) 'rational))
-           (let ((pair (consent-number-value value)))
-             (/ (car pair) (cdr pair))))
-          (else
-           (error "memory score must be numeric" value))))
-
-       (define (memory-number? value)
-         "Return #t when VALUE is a host or Consent number."
-         (or (number? value) (consent-number? value)))))
-   (else
-    (begin
-      (define (integer-datum sequence)
-        "Return SEQUENCE as an exact integer datum."
-        sequence)
-
-      (define (integer-value value)
-        "Validate and return VALUE for memory count arguments."
-        (if (integer? value)
-            value
-            (error "memory count must be an exact integer" value)))
-
-      (define (numeric-value value)
-        "Validate and return VALUE for memory scoring."
-        (if (number? value)
-            value
-            (error "memory score must be numeric" value)))
-
-      (define (memory-number? value)
-        "Return #t when VALUE is a host number."
-        (number? value)))))
   (begin
+    (define (integer-datum sequence)
+      "Return SEQUENCE as an exact integer datum."
+      sequence)
+
+    (define (integer-value value)
+      "Validate and return VALUE for memory count arguments."
+      (if (and (integer? value) (exact? value))
+          value
+          (error "memory count must be an exact integer" value)))
+
+    (define (numeric-value value)
+      "Validate and return VALUE for memory scoring."
+      (if (number? value)
+          value
+          (error "memory score must be numeric" value)))
+
+    (define (memory-number? value)
+      "Return #t when VALUE is a number."
+      (number? value))
     ;; Public memory scopes mirror the Consent Scheme architecture document.
     (define consent-memory-scopes
       '(instance session project))
