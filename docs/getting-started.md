@@ -373,7 +373,7 @@ Suggested downloadable local model profiles by Consent Scheme role:
 | `memory-curator` | `qwen3:4b`, `qwen3:8b`, `gemma3:4b` |
 | `approval-explainer` | `qwen3:4b`, `qwen3:8b`, `gemma3:12b` |
 
-To prepare the full suggested local model matrix with Ollama:
+To prepare the broader optional local model pool with Ollama:
 
 ```sh
 ollama pull qwen2.5-coder:7b
@@ -389,8 +389,9 @@ ollama pull gemma3:12b
 ```
 
 Developer-only live transport checks are documented in
-[Development](development.md). They use separate test-oriented defaults so the
-developer checks stay bounded; keep first-use setup on the role matrix above.
+[Development](development.md). They shard the three quick-start profile sets
+separately so local checks stay bounded; keep first-use setup on the role matrix
+above.
 
 To run the opt-in CI transport check after reading the development notes, start
 an OpenAI-compatible local server such as Ollama and run:
@@ -399,8 +400,15 @@ an OpenAI-compatible local server such as Ollama and run:
 make test-live-model-ci
 ```
 
-To run all live local model tests, including the full suggested local model
-matrix after pulling those models, run:
+To run the quick-start profile you pulled, use the matching opt-in local shard:
+
+```sh
+make test-live-model-small
+make test-live-model-recommended
+make test-live-model-large
+```
+
+To run all three quick-start profile sets together, run:
 
 ```sh
 make test-live-model
@@ -408,10 +416,10 @@ make test-live-model
 
 Override the test endpoint and model with `CONSENT_LIVE_MODEL_ENDPOINT` and
 `CONSENT_LIVE_MODEL_ID`.
-The Make targets set `CONSENT_LIVE_MODEL_TEST=1`; `make test-live-model`
-also sets `CONSENT_LIVE_MODEL_MATRIX=1`. The matrix test checks that each
-documented local model completes through Consent Scheme's OpenAI-compatible
-transport; it is not a quality or correctness benchmark.
+The Make targets set `CONSENT_LIVE_MODEL_TEST=1`; the profile shards and
+`make test-live-model` also set `CONSENT_LIVE_MODEL_MATRIX=1`. The matrix test
+checks that each selected `ROLE=MODEL` case completes through Consent Scheme's
+OpenAI-compatible transport; it is not a quality or correctness benchmark.
 
 Keep provider profiles and credentials in private Emacs initialization or an
 ignored local file, then load them with `consent-models-register-provider!`

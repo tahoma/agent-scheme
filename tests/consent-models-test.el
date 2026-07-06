@@ -132,21 +132,38 @@
   (let ((enabled (getenv "CONSENT_LIVE_MODEL_MATRIX")))
     (and enabled (> (length enabled) 0))))
 
-(defconst consent-models-test--live-suggested-models
-  '((cheap-background . "qwen2.5-coder:0.5b")
-    (cheap-background . "qwen3:0.6b")
-    (cheap-background . "gemma3:1b")
-    (scheme-scripter . "qwen2.5-coder:7b")
-    (coder . "qwen2.5-coder:14b")
-    (reviewer . "qwen2.5-coder:32b")
-    (memory-curator . "qwen3:4b")
-    (approval-explainer . "qwen3:8b")
-    (planner . "qwen3:30b")
-    (planner . "qwen3:32b")
-    (reviewer . "llama3.1:70b")
-    (summarizer . "gemma3:4b")
-    (approval-explainer . "gemma3:12b"))
-  "Representative live local model cases for the documented role matrix.")
+(defun consent-models-test--live-matrix-case (case)
+  "Return one live matrix CASE as a ROLE . MODEL pair."
+  (unless (string-match "\\`\\([^=[:space:]]+\\)=\\(.+\\)\\'" case)
+    (ert-fail (format "Malformed CONSENT_LIVE_MODEL_MATRIX_CASES entry: %S"
+                      case)))
+  (cons (intern (match-string 1 case))
+        (match-string 2 case)))
+
+(defun consent-models-test--live-matrix-cases ()
+  "Return live matrix cases supplied by the invoking shard."
+  (let ((cases (getenv "CONSENT_LIVE_MODEL_MATRIX_CASES")))
+    (unless (and cases (> (length cases) 0))
+      (ert-fail "CONSENT_LIVE_MODEL_MATRIX_CASES is required."))
+    (mapcar #'consent-models-test--live-matrix-case
+            (split-string cases "," t "[[:space:]\n\t]+"))))
+
+(ert-deftest consent-models-test-live-matrix-cases-come-from-environment ()
+  "Read opt-in live matrix cases from the invoking shard."
+  (let ((process-environment
+         (cons
+          (concat
+           "CONSENT_LIVE_MODEL_MATRIX_CASES="
+           "scheme-scripter=qwen2.5-coder:7b,"
+           "planner=qwen3:4b,"
+           "memory-curator=gemma3:4b")
+          process-environment)))
+    (should
+     (equal
+      (consent-models-test--live-matrix-cases)
+      '((scheme-scripter . "qwen2.5-coder:7b")
+        (planner . "qwen3:4b")
+        (memory-curator . "gemma3:4b"))))))
 
 (defun consent-models-test--live-completion-external (role model)
   "Return live completion output for ROLE and MODEL as external text."
@@ -701,12 +718,12 @@
    'compiled
    "Racket-compiled Consent Scheme live model tool-call"))
 
-(ert-deftest consent-models-test-live-local-suggested-model-matrix ()
-  "Opt-in live proof across the documented local role/model matrix."
+(ert-deftest consent-models-test-live-local-quick-start-model-matrix ()
+  "Opt-in live proof across the selected quick-start role/model matrix."
   (skip-unless (and (consent-models-test--live-enabled-p)
                     (consent-models-test--live-matrix-enabled-p)))
   (let (failures)
-    (dolist (case consent-models-test--live-suggested-models)
+    (dolist (case (consent-models-test--live-matrix-cases))
       (let ((role (car case))
             (model (cdr case)))
         (consent-models-test--reset)

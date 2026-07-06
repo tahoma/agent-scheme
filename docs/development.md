@@ -949,24 +949,33 @@ Scheme host. Run the CI smoke selector with:
 make test-live-model-ci
 ```
 
-Run all opt-in live local model tests, including the documented local model
-matrix, with:
+Run one quick-start profile shard after pulling that profile's models:
+
+```sh
+make test-live-model-small
+make test-live-model-recommended
+make test-live-model-large
+```
+
+Run all opt-in live local model tests, including all three quick-start profile
+sets, with:
 
 ```sh
 make test-live-model
 ```
 
-Both live targets set `CONSENT_LIVE_MODEL_TEST=1`. The all-live target also
-sets `CONSENT_LIVE_MODEL_MATRIX=1`. Use
-`CONSENT_LIVE_MODEL_ENDPOINT` and `CONSENT_LIVE_MODEL_ID` to override
-the default local endpoint and smoke model id.
+All live targets set `CONSENT_LIVE_MODEL_TEST=1`. The profile and all-live
+targets also set `CONSENT_LIVE_MODEL_MATRIX=1` and pass
+`CONSENT_LIVE_MODEL_MATRIX_CASES` as comma-separated `ROLE=MODEL` cases. Use
+`CONSENT_LIVE_MODEL_ENDPOINT` and `CONSENT_LIVE_MODEL_ID` to override the
+default local endpoint and smoke model id.
 
 The normal `test-emacs-tools` shard also runs a deterministic quick-start
 contract test for `docs/repl-agent-quickstart.md`. That test extracts and
 evaluates the tutorial's known-good Scheme differentiator and checks the
 documented role/provider shape through a fake model transport. It deliberately
-does not download or call real models; use the opt-in live targets above when
-you need to validate a local model set against the actual endpoint.
+does not download or call real models; use the opt-in local live targets above
+when you need to validate a local model set against the actual endpoint.
 
 For documentation-only changes, also run:
 
