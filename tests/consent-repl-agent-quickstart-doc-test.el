@@ -49,11 +49,11 @@
    (consent-eval-source source)))
 
 (defun consent-repl-agent-quickstart-doc-test--transport
-    (_provider _model request _context)
-  "Return a deterministic quick-start fake completion for REQUEST."
-  (push request consent-repl-agent-quickstart-doc-test--requests)
+    (_provider _model _role prompt _options)
+  "Return a deterministic quick-start fake completion for PROMPT."
+  (push prompt consent-repl-agent-quickstart-doc-test--requests)
   (format "quick-start deterministic completion: %s"
-          (plist-get request :prompt)))
+          prompt))
 
 (defun consent-repl-agent-quickstart-doc-test--reset ()
   "Reset model provider state touched by quick-start doc tests."
@@ -248,8 +248,9 @@
 (ert-deftest consent-repl-agent-quickstart-doc-test-model-routing-is-real-api ()
   "The documented model role shape routes through the real API."
   (unwind-protect
-      (let ((consent-models-transport-function
-             #'consent-repl-agent-quickstart-doc-test--transport))
+      (cl-letf (((symbol-function
+                  'consent-models--source-openai-compatible-http-complete)
+                 #'consent-repl-agent-quickstart-doc-test--transport))
         (consent-repl-agent-quickstart-doc-test--reset)
         (let ((external
                (consent-repl-agent-quickstart-doc-test--external

@@ -13,16 +13,15 @@
 ;;; Code:
 
 (require 'cl-lib)
-(require 'json)
 (require 'seq)
 (require 'subr-x)
-(require 'url)
-(require 'url-parse)
 (require 'consent-audit)
 (require 'consent-policy)
 (require 'consent-redaction)
 (require 'consent-result)
 (require 'consent-runtime)
+
+(declare-function consent--source-library-call "consent-library")
 
 (define-error 'consent-models-error
   "Consent Scheme model provider error"
@@ -30,31 +29,6 @@
 
 (defvar consent-models--providers nil
   "Registered model providers as normalized plists in registration order.")
-
-(defcustom consent-models-transport-function
-  #'consent-models-openai-compatible-http
-  "Function used to complete local model requests.
-The function receives PROVIDER, MODEL, REQUEST, and CONTEXT.  It is
-called only after routing has selected a local provider whose
-transport is `openai-compatible-http'."
-  :type 'function
-  :group 'consent)
-
-(defcustom consent-models-request-timeout-seconds 30
-  "Default timeout in seconds for local OpenAI-compatible requests."
-  :type 'integer
-  :group 'consent)
-
-(defcustom consent-models-transport-retry-count 1
-  "Default number of bounded retries for local transport errors."
-  :type 'integer
-  :group 'consent)
-
-(defconst consent-models--transport-detail-limit 240
-  "Maximum diagnostic excerpt length copied into transport failures.")
-
-(defconst consent-models--transport-detail-limit-maximum 4096
-  "Hard upper bound for per-call transport diagnostic excerpts.")
 
 (defun consent-models--symbol (name)
   "Return NAME as an Consent Scheme symbol datum."
@@ -76,10 +50,6 @@ transport is `openai-compatible-http'."
 (defun consent-models--field (name &rest values)
   "Return a Scheme-readable field named NAME with VALUES."
   (cons (consent-models--symbol name) values))
-
-(defun consent-models--integer-datum (value)
-  "Return VALUE as a canonical exact integer datum."
-  (consent--make-canonical-integer value))
 
 (defun consent-models--symbol-name (datum)
   "Return DATUM as a plain symbol/string name, or nil."
@@ -416,159 +386,9 @@ transport is `openai-compatible-http'."
             (list "tool-choice must be a symbol, string, or model-tool"
                   tool-choice)))))
 
-(defun consent-models--option-integer (options names default)
-  "Return integer option from OPTIONS field NAMES, or DEFAULT."
-  (let ((value (consent-models--field-value-any options names nil)))
-    (cond
-     ((null value) default)
-     ((and (consent-number-p value)
-           (eq (consent-number-kind value) 'integer))
-      (consent-number-value value))
-     ((integerp value) value)
-     (t default))))
-
-(defun consent-models--normalize-transport-detail-limit (value)
-  "Return VALUE as an effective transport detail limit."
-  (if (and (integerp value) (> value 0))
-      (min value consent-models--transport-detail-limit-maximum)
-    consent-models--transport-detail-limit))
-
-(defun consent-models--request-transport-detail-limit (request)
-  "Return REQUEST's effective transport detail limit."
-  (consent-models--normalize-transport-detail-limit
-   (plist-get request :max-transport-detail-bytes)))
-
-(defun consent-models--bounded-text (text &optional limit)
-  "Return TEXT as a trimmed, redacted diagnostic excerpt."
-  (let* ((rendered
-          (string-trim
-           (if (stringp text)
-               text
-             (format "%S" text))))
-         (redacted
-          (consent-redact rendered 'model-diagnostics))
-         (effective-limit
-          (consent-models--normalize-transport-detail-limit limit)))
-    (if (> (length redacted) effective-limit)
-        (concat
-         (substring redacted 0 (- effective-limit 3))
-         "...")
-      redacted)))
-
-(defun consent-models--redaction-marker (kind source replacement policy)
-  "Return a Scheme-readable redaction marker datum."
-  (list
-   (consent-models--symbol "redaction")
-   (consent-models--field "kind" (consent-models--symbol kind))
-   (consent-models--field "source" (consent-models--symbol source))
-   (consent-models--field "replacement" replacement)
-   (consent-models--field "policy" (consent-models--symbol policy))))
-
-(defun consent-models--endpoint-origin (url)
-  "Return URL's origin string, or nil when URL is malformed."
-  (when url
-    (let* ((parsed (url-generic-parse-url url))
-           (scheme (url-type parsed))
-           (host (url-host parsed))
-           (port (url-port parsed))
-           (default-port
-            (pcase scheme
-              ("http" 80)
-              ("https" 443)
-              (_ nil))))
-      (when (and scheme host)
-        (format "%s://%s%s"
-                scheme
-                host
-                (if (and port
-                         (not (equal port default-port)))
-                    (format ":%s" port)
-                  ""))))))
-
-(defun consent-models--request-path (url)
-  "Return URL's path component, defaulting to `/'."
-  (let ((path (and url (url-filename (url-generic-parse-url url)))))
-    (if (and path (> (length path) 0)) path "/")))
-
-(defun consent-models--safe-request-datum (request)
-  "Return redacted request metadata for REQUEST."
-  (let* ((provider (plist-get request :provider))
-         (model (plist-get request :model))
-         (url (consent-models--completion-url (plist-get provider :endpoint))))
-    (delq
-     nil
-     (list
-      (consent-models--symbol "model-provider-request")
-      (consent-models--field "role"
-                             (consent-models--symbol
-                              (plist-get request :role)))
-      (consent-models--field "provider"
-                             (consent-models--symbol
-                              (plist-get provider :id)))
-      (consent-models--field "model"
-                             (consent-models--symbol
-                              (plist-get model :id)))
-      (consent-models--field "kind"
-                             (consent-models--symbol
-                              (plist-get provider :kind)))
-      (consent-models--field "transport"
-                             (consent-models--symbol
-                              (plist-get provider :transport)))
-      (when-let ((origin (consent-models--endpoint-origin url)))
-        (consent-models--field "endpoint-origin" origin))
-      (consent-models--field "request-path"
-                             (consent-models--request-path url))
-      (consent-models--field
-       "prompt"
-       (consent-models--redaction-marker
-        'prompt
-        'provider-request
-        consent-redaction-local-only-replacement
-        'local-only))
-      (consent-models--field "timeout-seconds"
-                             (consent-models--integer-datum
-                              (or (plist-get request :timeout-seconds)
-                                  consent-models-request-timeout-seconds)))
-      (consent-models--field
-       "max-transport-detail-bytes"
-       (consent-models--integer-datum
-        (consent-models--request-transport-detail-limit request)))
-      (consent-models--field "retry-count"
-                             (consent-models--integer-datum
-                              (or (plist-get request :retry-count)
-                                  consent-models-transport-retry-count)))))))
-
 (defun consent-models--provider-error-record-p (datum)
   "Return non-nil when DATUM is a `model-provider-error' record."
   (consent-models--record-p datum "model-provider-error"))
-
-(defun consent-models--provider-error-datum (request reason &rest fields)
-  "Return a structured model-provider-error datum for REQUEST, REASON, and FIELDS."
-  (let* ((provider (plist-get request :provider))
-         (model (plist-get request :model)))
-    (append
-     (list
-      (consent-models--symbol "model-provider-error")
-      (consent-models--field "request"
-                             (consent-models--safe-request-datum request))
-      (consent-models--field "status"
-                             (consent-models--symbol "unavailable"))
-      (consent-models--field "provider"
-                             (consent-models--symbol
-                              (plist-get provider :id)))
-      (consent-models--field "model"
-                             (consent-models--symbol
-                              (plist-get model :id)))
-      (consent-models--field "transport"
-                             (consent-models--symbol
-                              (plist-get provider :transport)))
-      (consent-models--field "reason" reason)
-      (consent-models--field "retry"
-                             (consent-models--symbol
-                              "bounded-local-transport-retry"))
-      (consent-models--field "task-state"
-                             (consent-models--symbol "blocked")))
-     (delq nil fields))))
 
 (defun consent-models--provider-error-summary (datum)
   "Return DATUM as a concise human-facing transport summary."
@@ -619,33 +439,6 @@ transport is `openai-compatible-http'."
     (caddr error))
    (t nil)))
 
-(defun consent-models--http-response-data (buffer)
-  "Return BUFFER's HTTP status, reason, and body as a plist."
-  (with-current-buffer buffer
-    (save-excursion
-      (goto-char (point-min))
-      (let ((status-line
-             (buffer-substring-no-properties
-              (line-beginning-position)
-              (line-end-position))))
-        (unless (or (search-forward "\r\n\r\n" nil t)
-                    (progn
-                      (goto-char (point-min))
-                      (search-forward "\n\n" nil t)))
-          (signal 'consent-models-error
-                  (list "local model response had no HTTP body")))
-        (let ((status 0)
-              (reason ""))
-          (when (string-match
-                 "\\`HTTP/[0-9.]+[[:space:]]+\\([0-9]+\\)\\(?:[[:space:]]+\\(.*\\)\\)?\\'"
-                 status-line)
-            (setq status (string-to-number (match-string 1 status-line)))
-            (setq reason (or (match-string 2 status-line) "")))
-          (list
-           :status status
-           :reason (string-trim reason)
-           :body (buffer-substring-no-properties (point) (point-max))))))))
-
 (defun consent-models--transport-error-message (error)
   "Return ERROR as a concise string for transport diagnostics."
   (cond
@@ -656,113 +449,6 @@ transport is `openai-compatible-http'."
    (t
     (error-message-string error))))
 
-(defun consent-models--network-error-datum (request error)
-  "Return a structured network failure datum for REQUEST and ERROR."
-  (let* ((detail-limit
-          (consent-models--request-transport-detail-limit request))
-         (detail (consent-models--bounded-text
-                  (consent-models--transport-error-message error)
-                  detail-limit))
-         (timeout-seconds
-          (or (plist-get request :timeout-seconds)
-              consent-models-request-timeout-seconds))
-         (class
-          (cond
-           ((string-match-p "timed out\\|timeout\\|did not respond" detail)
-            "timeout")
-           ((string-match-p "refused" detail)
-            "connection-refused")
-           ((string-match-p "resolve\\|name or service" detail)
-            "dns-failure")
-           (t
-            "request-error")))
-         (reason
-          (if (string= class "timeout")
-              (format "request timed out after %ss" timeout-seconds)
-            detail)))
-    (consent-models--provider-error-datum
-     request
-     reason
-     (consent-models--field "phase" (consent-models--symbol "network"))
-     (consent-models--field
-      "network"
-      (delq
-       nil
-       (list
-        (consent-models--symbol "network-failure")
-        (consent-models--field "class" (consent-models--symbol class))
-        (consent-models--field "detail" detail)))))))
-
-(defun consent-models--http-error-datum
-    (request status reason-phrase body elapsed-ms)
-  "Return a structured HTTP failure datum for REQUEST."
-  (let* ((detail-limit
-          (consent-models--request-transport-detail-limit request))
-         (excerpt (consent-models--bounded-text body detail-limit))
-         (reason
-          (string-trim
-           (format "HTTP %s%s%s"
-                   status
-                   (if (and reason-phrase
-                            (> (length reason-phrase) 0))
-                       (format " %s" reason-phrase)
-                     "")
-                   (if (> (length excerpt) 0)
-                       (format ": %s" excerpt)
-                     "")))))
-    (consent-models--provider-error-datum
-     request
-     reason
-     (consent-models--field "phase" (consent-models--symbol "http"))
-     (when elapsed-ms
-       (consent-models--field
-        "elapsed-ms"
-        (consent-models--integer-datum elapsed-ms)))
-     (consent-models--field
-      "http"
-      (delq
-       nil
-       (list
-        (consent-models--symbol "http-failure")
-        (consent-models--field
-         "status"
-         (consent-models--integer-datum status))
-        (when (and reason-phrase (> (length reason-phrase) 0))
-          (consent-models--field "reason-phrase" reason-phrase))
-        (when (> (length excerpt) 0)
-          (consent-models--field "body-excerpt" excerpt))))))))
-
-(defun consent-models--decode-error-datum
-    (request error body elapsed-ms &optional http-status)
-  "Return a structured decode failure datum for REQUEST."
-  (let* ((detail-limit
-          (consent-models--request-transport-detail-limit request))
-         (detail (consent-models--bounded-text
-                  (consent-models--transport-error-message error)
-                  detail-limit))
-         (excerpt (consent-models--bounded-text body detail-limit)))
-    (consent-models--provider-error-datum
-     request
-     (format "response decode failed: %s" detail)
-     (consent-models--field "phase" (consent-models--symbol "decode"))
-     (when elapsed-ms
-       (consent-models--field
-        "elapsed-ms"
-        (consent-models--integer-datum elapsed-ms)))
-     (consent-models--field
-      "decode"
-      (delq
-       nil
-       (list
-        (consent-models--symbol "decode-failure")
-        (when http-status
-          (consent-models--field
-           "http-status"
-           (consent-models--integer-datum http-status)))
-        (consent-models--field "detail" detail)
-        (when (> (length excerpt) 0)
-          (consent-models--field "body-excerpt" excerpt))))))))
-
 (defun consent-models--signal-provider-error (request error)
   "Map transport ERROR for REQUEST to a structured provider error."
   (if-let ((datum (consent-models--condition-provider-error-datum error)))
@@ -772,9 +458,119 @@ transport is `openai-compatible-http'."
        (if (and (consp error) (stringp (cadr error)))
            (cadr error)
          nil))
-    (consent-models--signal-provider-error-datum
+    (signal 'consent-models-error
+            (list (consent-models--transport-error-message error)))))
+
+(defun consent-models--model-source-datum (model)
+  "Return MODEL as a normalized Scheme-readable source-library datum."
+  (list
+   (consent-models--field "id"
+                          (consent-models--symbol (plist-get model :id)))
+   (consent-models--field
+    "roles"
+    (mapcar #'consent-models--symbol (plist-get model :roles)))
+   (consent-models--field "privacy"
+                          (consent-models--symbol
+                           (plist-get model :privacy)))
+   (consent-models--field "status"
+                          (consent-models--symbol
+                           (plist-get model :status)))))
+
+(defun consent-models--provider-source-datum (provider)
+  "Return PROVIDER as a normalized Scheme-readable source-library datum."
+  (append
+   (list
+    (consent-models--field "id"
+                           (consent-models--symbol
+                            (plist-get provider :id)))
+    (consent-models--field "kind"
+                           (consent-models--symbol
+                            (plist-get provider :kind)))
+    (consent-models--field "transport"
+                           (consent-models--symbol
+                            (plist-get provider :transport)))
+    (consent-models--field "endpoint"
+                           (plist-get provider :endpoint))
+    (consent-models--field "available"
+                           (consent-models--boolean
+                            (plist-get provider :available))))
+   (when-let ((credentials (plist-get provider :credentials)))
+     (list (consent-models--field "credentials" credentials)))
+   (list
+    (consent-models--field
+     "models"
+     (mapcar #'consent-models--model-source-datum
+             (plist-get provider :models))))))
+
+(defun consent-models--source-openai-call (name &rest arguments)
+  "Call source-backed OpenAI model procedure NAME with ARGUMENTS."
+  (require 'consent-library)
+  (apply #'consent--source-library-call
+         "(agent models openai)" name arguments))
+
+(defun consent-models--source-completion-result-value (request result)
+  "Return completion value from source-backed RESULT, or signal its error."
+  (unless (consent-models--record-p result "model-completion-result")
+    (signal 'consent-models-error
+            (list "model transport returned malformed completion result"
+                  result)))
+  (pcase (consent-models--symbol-name
+          (consent-models--field-value result "status"))
+    ("ok"
+     (consent-models--field-value result "value"))
+    ("error"
+     (let ((datum (consent-models--field-value result "error"))
+           (message (consent-models--field-value result "message")))
+       (if (consent-models--provider-error-record-p datum)
+           (consent-models--signal-provider-error-datum request datum message)
+         (signal 'consent-models-error
+                 (list (or message "model transport failed"))))))
+    (_
+     (signal 'consent-models-error
+             (list "model transport returned unknown completion status"
+                   result)))))
+
+(defun consent-models--source-transport-options (options tools tool-choice)
+  "Return OPTIONS enriched with normalized TOOLS and TOOL-CHOICE."
+  (append
+   (delq
+    nil
+    (list
+     (when tools
+       (consent-models--field "tools" tools))
+     (when tool-choice
+       (consent-models--field "tool-choice" tool-choice))))
+   options))
+
+(defun consent-models--source-single-value (value)
+  "Return VALUE unwrapped from a single source-library value wrapper."
+  (if (consent--multiple-values-p value)
+      (let ((values (consent--multiple-values-values value)))
+        (if (= (length values) 1)
+            (car values)
+          value))
+    value))
+
+(defun consent-models--source-openai-compatible-http-complete
+    (provider model role prompt options)
+  "Complete PROMPT through the source-backed OpenAI-compatible transport."
+  (let* ((request
+          (list :role (consent-models--symbol-name role)
+                :prompt prompt
+                :options options
+                :provider provider
+                :model model))
+         (result
+          (consent-models--source-openai-call
+           "model-openai-compatible-http-completion-result"
+           (consent-models--provider-source-datum provider)
+           (consent-models--model-source-datum model)
+           role
+           prompt
+           options)))
+    (consent-models--source-completion-result-value
      request
-     (consent-models--network-error-datum request error))))
+     (consent-models--source-single-value result))))
 
 ;;;###autoload
 (defun consent-models-complete (role prompt options &optional context)
@@ -794,6 +590,9 @@ transport is `openai-compatible-http'."
             (consent-models--normalize-tool-choice
              (consent-models--field-value-any
               options '("tool-choice" "tool_choice") nil)))
+           (transport-options
+            (consent-models--source-transport-options
+             options tools tool-choice))
            (request-datum
             (consent-models--request-datum
              role-name prompt options provider model tools tool-choice)))
@@ -808,33 +607,20 @@ transport is `openai-compatible-http'."
       (consent-models--ensure-local-transport provider)
       (let* ((request (list :role role-name
                             :prompt (consent-models--prompt-string prompt)
-                            :options options
+                            :options transport-options
                             :tools tools
                             :tool-choice tool-choice
-                            :timeout-seconds
-                            (consent-models--option-integer
-                             options
-                             '("timeout-seconds" "timeout_seconds")
-                             consent-models-request-timeout-seconds)
-                            :max-transport-detail-bytes
-                            (consent-models--normalize-transport-detail-limit
-                             (consent-models--option-integer
-                              options
-                              '("max-transport-detail-bytes"
-                                "max_transport_detail_bytes")
-                              consent-models--transport-detail-limit))
-                            :retry-count
-                            (consent-models--option-integer
-                             options
-                             '("retry-count" "retry_count")
-                             consent-models-transport-retry-count)
                             :provider provider
                             :model model
                             :request-datum request-datum))
              (completion
               (condition-case error
-                  (funcall consent-models-transport-function
-                           provider model request context)
+                  (consent-models--source-openai-compatible-http-complete
+                   provider
+                   model
+                   (consent-models--symbol role-name)
+                   (plist-get request :prompt)
+                   transport-options)
                 (consent-models-error
                  (consent-models--signal-provider-error request error))
                 (error
@@ -850,278 +636,6 @@ transport is `openai-compatible-http'."
            (role . ,role-name)
            (result . ok)))
         completion))))
-
-(defun consent-models--local-endpoint-p (endpoint)
-  "Return non-nil when ENDPOINT targets a loopback host."
-  (let* ((parsed (url-generic-parse-url endpoint))
-         (scheme (url-type parsed))
-         (host (url-host parsed)))
-    (and host
-         (member scheme '("http" "https"))
-         (or (equal host "localhost")
-             (equal host "127.0.0.1")
-             (string-prefix-p "127." host)
-             (equal host "::1")))))
-
-(defun consent-models--completion-url (endpoint)
-  "Return OpenAI-compatible chat completions URL for ENDPOINT."
-  (let ((base (string-remove-suffix "/" endpoint)))
-    (cond
-     ((string-suffix-p "/chat/completions" base)
-      base)
-     ((string-suffix-p "/v1" base)
-      (concat base "/chat/completions"))
-     (t
-      (concat base "/v1/chat/completions")))))
-
-(defun consent-models--schema-field-p (value)
-  "Return non-nil when VALUE is a Scheme-readable field entry."
-  (and (consp value)
-       (consent-models--symbol-name (car value))))
-
-(defun consent-models--schema-fields-p (value)
-  "Return non-nil when VALUE is a list of Scheme-readable fields."
-  (and (listp value)
-       (not (null value))
-       (seq-every-p #'consent-models--schema-field-p value)))
-
-(defun consent-models--json-value (datum)
-  "Return DATUM projected into the JSON subset used at the model edge."
-  (cond
-   ((eq datum consent-false)
-    :json-false)
-   ((eq datum consent-true)
-    t)
-   ((consent-number-p datum)
-    (consent-number-value datum))
-   ((consent-symbol-p datum)
-    (consent-symbol-name datum))
-   ((symbolp datum)
-    (symbol-name datum))
-   ((stringp datum)
-    datum)
-   ((vectorp datum)
-    (vconcat (mapcar #'consent-models--json-value (append datum nil))))
-   ((consent-models--schema-fields-p datum)
-    (mapcar
-     (lambda (field)
-       (cons (consent-models--expect-name (car field) "schema field")
-             (consent-models--json-value
-              (if (and (consp (cdr field))
-                       (null (cddr field)))
-                  (cadr field)
-                (cdr field)))))
-     datum))
-   ((consp datum)
-    (vconcat (mapcar #'consent-models--json-value datum)))
-   ((null datum)
-    [])
-   (t datum)))
-
-(defun consent-models--tool-json (tool)
-  "Return TOOL as an OpenAI-compatible JSON object."
-  (let ((schema (consent-models--field-value tool "schema")))
-    (unless (consent-models--record-p schema "openai-tool")
-      (signal 'consent-models-error
-              (list "model-tool schema must be an openai-tool datum")))
-    (consent-models--json-value (cdr schema))))
-
-(defun consent-models--tool-choice-json (tool-choice)
-  "Return TOOL-CHOICE projected into OpenAI-compatible JSON."
-  (cond
-   ((not tool-choice)
-    nil)
-   ((consent-models--model-tool-p tool-choice)
-    (let* ((name (consent-models--field-value tool-choice "name"))
-           (name-text (consent-models--expect-name name "tool name")))
-      `((type . "function")
-        (function . ((name . ,name-text))))))
-   (t
-    (consent-models--expect-name tool-choice "tool-choice"))))
-
-(defun consent-models--openai-request-data (model request)
-  "Return JSON request payload for MODEL and normalized REQUEST."
-  (let ((payload
-         `((model . ,(plist-get model :id))
-           (messages . [((role . "user")
-                         (content . ,(plist-get request :prompt)))])
-           (stream . :json-false))))
-    (when-let ((tools (plist-get request :tools)))
-      (setq payload
-            (append payload
-                    `((tools . ,(vconcat
-                                 (mapcar #'consent-models--tool-json
-                                         tools)))))))
-    (when-let ((tool-choice
-                (consent-models--tool-choice-json
-                 (plist-get request :tool-choice))))
-      (setq payload
-            (append payload
-                    `((tool_choice . ,tool-choice)))))
-    (json-encode payload)))
-
-(defun consent-models--json-object-p (value)
-  "Return non-nil when VALUE is a decoded JSON object alist."
-  (and (listp value)
-       (seq-every-p (lambda (entry)
-                      (and (consp entry) (symbolp (car entry))))
-                    value)))
-
-(defun consent-models--json->datum (value)
-  "Return decoded JSON VALUE as a Scheme-readable datum."
-  (cond
-   ((eq value :json-false) consent-false)
-   ((eq value :json-null) consent-false)
-   ((eq value t) consent-true)
-   ((stringp value) value)
-   ((integerp value) (consent--make-canonical-integer value))
-   ((numberp value) value)
-   ((vectorp value)
-    (mapcar #'consent-models--json->datum (append value nil)))
-   ((consent-models--json-object-p value)
-    (mapcar
-     (lambda (entry)
-       (list (consent-models--symbol (symbol-name (car entry)))
-             (consent-models--json->datum (cdr entry))))
-     value))
-   ((listp value)
-    (mapcar #'consent-models--json->datum value))
-   (t value)))
-
-(defun consent-models--parse-tool-arguments (arguments)
-  "Decode OpenAI function ARGUMENTS into a Scheme-readable alist."
-  (let* ((json-object-type 'alist)
-         (json-array-type 'list)
-         (json-key-type 'symbol)
-         (json-false :json-false)
-         (json-null :json-null)
-         (decoded
-          (cond
-           ((stringp arguments)
-            (if (string-empty-p arguments)
-                '()
-              (json-read-from-string arguments)))
-           ((consent-models--json-object-p arguments)
-            arguments)
-           (t
-            (signal 'consent-models-error
-                    (list "OpenAI tool arguments must be a JSON object"))))))
-    (unless (or (null decoded)
-                (consent-models--json-object-p decoded))
-      (signal 'consent-models-error
-              (list "OpenAI tool arguments must be a JSON object")))
-    (consent-models--json->datum decoded)))
-
-(defun consent-models--parse-tool-call (tool-call)
-  "Decode one OpenAI-compatible TOOL-CALL object."
-  (let* ((id (alist-get 'id tool-call))
-         (function (alist-get 'function tool-call))
-         (name (and function (alist-get 'name function)))
-         (arguments (and function (alist-get 'arguments function))))
-    (unless (stringp name)
-      (signal 'consent-models-error
-              (list "OpenAI tool call did not contain a function name")))
-    (append
-     (list
-      (consent-models--symbol "tool-call"))
-     (when (stringp id)
-       (list (list (consent-models--symbol "id") id)))
-     (list
-      (list (consent-models--symbol "name")
-            (consent-models--symbol name))
-      (list (consent-models--symbol "arguments")
-            (consent-models--parse-tool-arguments arguments))))))
-
-(defun consent-models--parse-openai-response (body)
-  "Return completion data from OpenAI-compatible response BODY."
-  (let* ((json-object-type 'alist)
-         (json-array-type 'list)
-         (json-key-type 'symbol)
-         (json-false :json-false)
-         (json-null :json-null)
-         (data (json-read-from-string body))
-         (choice (car (alist-get 'choices data)))
-         (message (alist-get 'message choice))
-         (content (alist-get 'content message))
-         (tool-calls (alist-get 'tool_calls message)))
-    (cond
-     ((and tool-calls (not (null tool-calls)))
-      (list
-       (consent-models--symbol "model-message")
-       (list (consent-models--symbol "text")
-             (if (stringp content) content ""))
-       (list (consent-models--symbol "tool-calls")
-             (mapcar #'consent-models--parse-tool-call tool-calls))))
-     ((stringp content)
-      content)
-     (t
-      (signal 'consent-models-error
-              (list "OpenAI-compatible response did not contain text"))))))
-
-(defun consent-models--retrieve-synchronously (url request)
-  "Retrieve URL for REQUEST with bounded local retries."
-  (let ((attempts (1+ (max 0 (or (plist-get request :retry-count) 0))))
-        (timeout (or (plist-get request :timeout-seconds)
-                     consent-models-request-timeout-seconds))
-        last-error
-        buffer)
-    (dotimes (_ attempts)
-      (unless buffer
-        (condition-case error
-            (setq buffer
-                  (url-retrieve-synchronously url t nil timeout))
-          (error
-           (setq last-error error)))))
-    (or buffer
-        (if last-error
-            (signal (car last-error) (cdr last-error))
-          (signal 'consent-models-error
-                  (list "local model endpoint did not respond"))))))
-
-;;;###autoload
-(defun consent-models-openai-compatible-http
-    (provider model request _context)
-  "Complete REQUEST through local OpenAI-compatible HTTP PROVIDER and MODEL."
-  (let ((endpoint (plist-get provider :endpoint)))
-    (unless (and endpoint (consent-models--local-endpoint-p endpoint))
-      (signal 'consent-models-error
-              (list "local model endpoint must use a loopback host")))
-    (let* ((started (float-time))
-           (url (consent-models--completion-url endpoint))
-           (url-request-method "POST")
-           (url-request-extra-headers
-            '(("Content-Type" . "application/json")))
-           (url-request-data
-            (consent-models--openai-request-data model request))
-           (buffer
-            (consent-models--retrieve-synchronously
-             url
-             request)))
-      (unwind-protect
-          (let* ((response (consent-models--http-response-data buffer))
-                 (status (plist-get response :status))
-                 (reason-phrase (plist-get response :reason))
-                 (body (plist-get response :body))
-                 (elapsed-ms
-                  (truncate (* 1000.0 (- (float-time) started)))))
-            (if (>= status 400)
-                (consent-models--signal-provider-error-datum
-                 request
-                 (consent-models--http-error-datum
-                  request status reason-phrase body elapsed-ms))
-              (condition-case error
-                  (consent-models--parse-openai-response body)
-                (consent-models-error
-                 (consent-models--signal-provider-error-datum
-                  request
-                  (consent-models--decode-error-datum
-                   request error body elapsed-ms status)))
-                (error
-                 (consent-models--signal-provider-error-datum
-                  request
-                  (consent-models--decode-error-datum
-                   request error body elapsed-ms status))))))
-        (kill-buffer buffer)))))
 
 (defun consent-models--model-datum (model)
   "Return Scheme-readable diagnostic datum for MODEL."

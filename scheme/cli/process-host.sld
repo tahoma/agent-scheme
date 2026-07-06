@@ -25,6 +25,19 @@
   ;; `cli-host-available?' and `cli-host--capture', the only host-dependent
   ;; pieces; everything below in the host-neutral `begin' builds on them.
   (cond-expand
+   ((library (cli process-host primitive))
+    (import (rename (cli process-host primitive)
+                    (primitive-cli-host-available? cli-host-available?)
+                    (primitive-cli-host-run primitive-cli-host-run)))
+    (begin
+      (define (cli-host--capture shell-command)
+        (let ((result (primitive-cli-host-run "/bin/sh"
+                                              (list "-c" shell-command)
+                                              #f
+                                              #f
+                                              #f
+                                              '())))
+          (cadr result)))))
    (gambit
     ;; Import only `shell-command'; `(gambit)' as a whole re-exports `guard' and
     ;; other identifiers that clash with `(scheme base)', and Gambit's keyword

@@ -44,6 +44,10 @@
 (defvar consent--source-library-procedures (make-hash-table :test #'equal)
   "Cached source-backed procedures keyed by library and procedure name.")
 
+(defconst consent--source-library-call-options
+  '(:max-host-callbacks 200000)
+  "Evaluation budget for calls into cached source-backed libraries.")
+
 (defvar consent--library-catalog-cache nil
   "Cached manifest-backed library catalog entries.")
 
@@ -222,6 +226,10 @@
     "(agent transcript)")
   "Agent interaction library keys with focused bootstrap support.")
 
+(defconst consent--cli-library-keys
+  '("(cli process-host primitive)")
+  "CLI host-effect primitive library keys with focused bootstrap support.")
+
 (defconst consent--consent-library-keys
   '("(consent capability)"
     "(consent capability primitive)")
@@ -243,6 +251,10 @@ core rather than the agent domain it governs.")
      . "../scheme/agent/network.sld")
     ("(agent models)"
      . "../scheme/agent/models.sld")
+    ("(agent models openai)"
+     . "../scheme/agent/models/openai.sld")
+    ("(cli process-host)"
+     . "../scheme/cli/process-host.sld")
     ("(agent registry)"
      . "../scheme/agent/registry.sld")
     ("(agent proposal)"
@@ -440,6 +452,7 @@ core rather than the agent domain it governs.")
    ((equal key consent--scheme-base-library-key) 'base-snapshot)
    ((or (member key consent--standard-library-keys)
         (member key consent--agent-library-keys)
+        (member key consent--cli-library-keys)
         (member key consent--consent-library-keys)
         (member key (consent-emacs-capability-library-keys)))
     'primitive)
@@ -769,6 +782,7 @@ core rather than the agent domain it governs.")
                       (consent--library-alias-field alias :alias))
                     consent--stdlib-library-aliases)
                    consent--agent-library-keys
+                   consent--cli-library-keys
                    consent--consent-library-keys
                    (consent-emacs-capability-library-keys))))))
     (sort keys #'string<)))
@@ -1207,6 +1221,26 @@ core rather than the agent domain it governs.")
     (_
      (consent--eval-error "unknown consent library: %s" key))))
 
+(defun consent--register-cli-library (key context)
+  "Register CLI host-effect library KEY in CONTEXT."
+  (pcase key
+    ("(cli process-host primitive)"
+     (consent--register-primitive-library
+      key
+      (consent--cli-process-host-primitive-specs)
+      context))
+    (_
+     (consent--eval-error "unknown cli library: %s" key))))
+
+(defun consent--register-source-backed-library
+    (key context environment)
+  "Register source-backed library KEY in CONTEXT."
+  (unless (gethash key (consent--eval-context-libraries context))
+    (consent--register-source-library
+     (consent--agent-source-library-source key)
+     context
+     environment)))
+
 (defun consent--register-source-library
     (source context environment)
   "Evaluate one define-library SOURCE into CONTEXT."
@@ -1620,9 +1654,13 @@ Each spec has (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY)."
       t)
      ((member key consent--agent-library-keys)
       t)
+     ((member key consent--cli-library-keys)
+      t)
      ((member key consent--consent-library-keys)
       t)
      ((member key (consent-emacs-capability-library-keys))
+      t)
+     ((assoc key consent--agent-source-library-files)
       t)
      (t
       (and (gethash key (consent--eval-context-libraries context))
@@ -1640,10 +1678,14 @@ Each spec has (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY)."
       (consent--register-stdlib-library key context environment))
      ((member key consent--agent-library-keys)
       (consent--register-agent-library key context environment))
+     ((member key consent--cli-library-keys)
+      (consent--register-cli-library key context))
      ((member key consent--consent-library-keys)
       (consent--register-consent-library key context environment))
      ((member key (consent-emacs-capability-library-keys))
-      (consent--register-emacs-capability-library key context)))
+      (consent--register-emacs-capability-library key context))
+     ((assoc key consent--agent-source-library-files)
+      (consent--register-source-backed-library key context environment)))
     (or (gethash key (consent--eval-context-libraries context))
         (consent--eval-error "unknown library: %s" key))))
 
@@ -1684,7 +1726,8 @@ Each spec has (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY)."
 
 (defun consent--source-library-call (key name &rest arguments)
   "Call source-backed procedure NAME from library KEY with ARGUMENTS."
-  (let ((context (consent--new-eval-context nil))
+  (let ((context
+         (consent--new-eval-context consent--source-library-call-options))
         (environment (consent--source-library-environment key)))
     (setf (consent--eval-context-interaction-environment context)
           environment)

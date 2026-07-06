@@ -11,6 +11,7 @@
 (define-library (agent models openai)
   (export model-openai-request-json
           model-openai-parse-response
+          model-openai-compatible-http-completion-result
           model-openai-compatible-http-complete)
   (import (scheme base)
           (scheme write)
@@ -453,6 +454,26 @@
       "Return DATUM's record head, or #f."
       (and (pair? datum) (symbol? (car datum)) (car datum)))
 
+    (define (model-openai-provider-error? datum)
+      "Return #t when DATUM is a structured model-provider-error record."
+      (eq? (model-openai-record-head datum) 'model-provider-error))
+
+    (define (model-openai-condition-provider-error condition)
+      "Return CONDITION's structured provider-error irritant, or #f."
+      (and
+       (error-object? condition)
+       (let loop ((irritants (error-object-irritants condition)))
+         (cond
+          ((null? irritants) #f)
+          ((model-openai-provider-error? (car irritants)) (car irritants))
+          (else (loop (cdr irritants)))))))
+
+    (define (model-openai-condition-message condition)
+      "Return CONDITION's concise message."
+      (if (error-object? condition)
+          (error-object-message condition)
+          (model-openai-object->string condition)))
+
     (define (model-openai-model-tool? datum)
       "Return #t when DATUM is a canonical model-tool record."
       (eq? (model-openai-record-head datum) 'model-tool))
@@ -568,8 +589,9 @@
        ((model-openai-model-tool? tool-choice)
         (let* ((name (model-openai-field-value tool-choice 'name #f))
                (name-text (model-openai-name-string name "tool name")))
-          `((type . "function")
-            (function . ((name . ,name-text))))))
+          (list (cons 'type "function")
+                (cons 'function
+                      (list (cons 'name name-text))))))
        ((or (symbol? tool-choice) (string? tool-choice))
         (model-openai-name-string tool-choice "tool-choice"))
        (else
@@ -600,10 +622,13 @@
                                             '(tool-choice tool_choice)
                                             #f))
              (payload
-              `((model . ,model-id)
-                (messages . #(((role . "user")
-                               (content . ,prompt))))
-                (stream . #f)))
+              (list
+               (cons 'model model-id)
+               (cons 'messages
+                     (vector
+                      (list (cons 'role "user")
+                            (cons 'content prompt))))
+               (cons 'stream #f)))
              (with-tools
               (if tools
                   (append payload
@@ -899,4 +924,43 @@
                      body
                      elapsed-ms
                      http-status))))
-            (model-openai-parse-response body)))))))
+            (model-openai-parse-response body)))))
+
+    (define (model-openai-compatible-http-completion-result
+             provider model role prompt options)
+      "Return a result datum for an OpenAI-compatible completion attempt."
+      #((parameters
+         (provider (type list)
+          (description "Normalized provider entry selected by the model router."))
+         (model (type list)
+          (description "Normalized model entry selected by the model router."))
+         (role (type symbol)
+          (description "Requested model role."))
+         (prompt (type string)
+          (description "User prompt text to send as one chat message."))
+         (options (type list)
+          (description "Model completion options, including tools.")))
+        (returns (type list)
+         (description
+          ("A model-completion-result datum with either an ok value or a"
+            "structured model-provider-error.")))
+        (effects host-eval allocation))
+      (guard (condition
+              (else
+               (let ((datum
+                      (model-openai-condition-provider-error condition)))
+                 (if datum
+                     (list 'model-completion-result
+                           (list 'status 'error)
+                           (list 'message
+                                 (model-openai-provider-error-summary datum))
+                           (list 'error datum))
+                     (list 'model-completion-result
+                           (list 'status 'error)
+                           (list 'message
+                                 (model-openai-condition-message condition)))))))
+        (list 'model-completion-result
+              (list 'status 'ok)
+              (list 'value
+                    (model-openai-compatible-http-complete
+                     provider model role prompt options)))))))

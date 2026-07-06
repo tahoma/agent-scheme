@@ -2418,6 +2418,120 @@ OPERATION defaults to BINDING and may be a symbol or string."
      (consent--proper-list-elements
       environment "process environment"))))
 
+(defun consent--cli-process-host-maybe-string (datum description)
+  "Return DATUM as a string, or nil for Scheme false in DESCRIPTION."
+  (cond
+   ((or (null datum) (eq datum consent-false))
+    nil)
+   ((stringp datum)
+    datum)
+   (t
+    (consent--eval-error "%s must be a string or #f" description))))
+
+(defun consent--cli-process-host-arguments (datum)
+  "Return DATUM as a list of process argument strings."
+  (mapcar
+   (lambda (entry)
+     (consent--capability-string entry "cli-host-run argument"))
+   (consent--proper-list-elements datum "cli-host-run arguments")))
+
+(defun consent--cli-process-host-environment-entry (entry)
+  "Return ENTRY as a process environment cons cell."
+  (let ((elements
+         (consent--proper-list-elements entry "cli-host-run environment")))
+    (unless (= (length elements) 2)
+      (consent--eval-error
+       "cli-host-run environment entries must be (name value)"))
+    (cons (consent--capability-string
+           (car elements) "cli-host-run environment name")
+          (consent--capability-string
+           (cadr elements) "cli-host-run environment value"))))
+
+(defun consent--cli-process-host-environment (datum)
+  "Return DATUM as an alist of string process environment entries."
+  (mapcar
+   #'consent--cli-process-host-environment-entry
+   (consent--proper-list-elements datum "cli-host-run environment")))
+
+(defun consent--cli-process-host-read-file (path)
+  "Return PATH contents, or the empty string when PATH does not exist."
+  (if (and path (file-exists-p path))
+      (with-temp-buffer
+        (insert-file-contents-literally path)
+        (buffer-string))
+    ""))
+
+(defun consent--primitive-cli-host-available? (_arguments _context)
+  "Primitive cli-host-available?."
+  consent-true)
+
+(defun consent--primitive-cli-host-run (arguments _context)
+  "Primitive cli-host-run over ARGUMENTS."
+  (let* ((command
+          (consent--capability-string
+           (nth 0 arguments) "cli-host-run command"))
+         (process-arguments
+          (consent--cli-process-host-arguments (nth 1 arguments)))
+         (stdin-file
+          (consent--cli-process-host-maybe-string
+           (nth 2 arguments) "cli-host-run stdin-file"))
+         (provided-stderr-file
+          (consent--cli-process-host-maybe-string
+           (nth 3 arguments) "cli-host-run stderr-file"))
+         (stderr-file
+          (or provided-stderr-file
+              (make-temp-file "consent-cli-stderr-")))
+         (cwd
+          (consent--cli-process-host-maybe-string
+           (nth 4 arguments) "cli-host-run cwd"))
+         (environment
+          (consent--cli-process-host-environment (nth 5 arguments)))
+         (stdout-buffer (generate-new-buffer " *Consent cli-host stdout*"))
+         (default-directory (or cwd default-directory))
+         (process-environment
+          (append
+           (mapcar (lambda (entry)
+                     (format "%s=%s" (car entry) (cdr entry)))
+                   environment)
+           process-environment)))
+    (unwind-protect
+        (let* ((status
+                (apply #'process-file
+                       command
+                       stdin-file
+                       (list stdout-buffer stderr-file)
+                       nil
+                       process-arguments))
+               (stdout
+                (with-current-buffer stdout-buffer
+                  (buffer-substring-no-properties (point-min) (point-max))))
+               (stderr
+                (consent--cli-process-host-read-file stderr-file)))
+          (list
+           (consent--scheme-integer (if (integerp status) status -1))
+           stdout
+           (if (stringp status)
+               (concat status
+                       (if (> (length stderr) 0) ": " "")
+                       stderr)
+             stderr)))
+      (when (buffer-live-p stdout-buffer)
+        (kill-buffer stdout-buffer))
+      (when (and (not provided-stderr-file)
+                 (file-exists-p stderr-file))
+        (delete-file stderr-file)))))
+
+(defun consent--cli-process-host-primitive-specs ()
+  "Return primitive specs for the `(cli process-host primitive)' library."
+  `(("primitive-cli-host-available?"
+     ,(lambda (arguments context)
+        (consent--primitive-cli-host-available? arguments context))
+     0 0)
+    ("primitive-cli-host-run"
+     ,(lambda (arguments context)
+        (consent--primitive-cli-host-run arguments context))
+     6 6)))
+
 (defun consent--process-environment-names (environment)
   "Return variable names from normalized process ENVIRONMENT."
   (mapcar #'car environment))
