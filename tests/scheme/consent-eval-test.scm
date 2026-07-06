@@ -1228,12 +1228,12 @@
         #f)))))
 
 (check-external 'literal-number "42" "42")
-;; Agent ownership means evaluated numbers share the canonical constructors'
-;; representation class (see the reader suite's integer-is-agent-owned): the
+;; Evaluated numbers share the canonical constructors' representation class
+;; (see the reader suite's integer-matches-canonical-number-class): the
 ;; invariant is agreement with a canonical integer, not the surrounding
 ;; Scheme's own number? answer, which legitimately differs when this file runs
 ;; on the Consent runtime itself via --host-run.
-(check 'literal-number-is-agent-owned
+(check 'literal-number-matches-canonical-number-class
        (number? (consent-eval-source "42"))
        (number? (consent-make-canonical-integer 42)))
 (check-external 'literal-string "\"ok\"" "\"ok\"")
@@ -2230,7 +2230,7 @@
                        total)"
                 "(10 (4 9 16) 6)")
 
-(check-external 'sequence-length-primitives-return-agent-numbers
+(check-external 'sequence-length-primitives-return-canonical-numbers
                 "(list
                    (string-length \"abc\")
                    (vector-length '#(a b c d))

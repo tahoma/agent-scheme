@@ -786,8 +786,8 @@
 
     (define (consent-make-canonical-integer value . rest)
       "Canonical number constructors are the public boundary for"
-      "agent-owned numeric values created by readers, primitives, and"
-      "result renderers."
+      "canonical Consent numeric values created by readers, primitives,"
+      "and result renderers."
       "An already-canonical number is returned unchanged, so a call site"
       "that already carries a reader-owned number can normalize idempotently"
       "alongside a plain host literal from another evaluation posture."
@@ -955,8 +955,9 @@
          (cons real imaginary))))
 
     (define (consent-number-zero? number)
-      "Numeric predicates and helpers inspect the agent-owned representation"
-      "instead of asking the host whether wrapped numbers are ordinary numbers."
+      "Numeric predicates and helpers inspect the canonical Consent"
+      "representation instead of asking the host whether wrapped numbers are"
+      "ordinary numbers."
       #((parameters
          (number (type consent-number)
           (description ("Value to test; only a canonical number record can be zero."))))
