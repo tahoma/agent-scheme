@@ -1638,11 +1638,10 @@
 
     (define (native-callback-shim value context)
       "Wrap interpreted callable VALUE as a host procedure applying it in"
-      "CONTEXT. Arguments cross into the closure under the native-argument"
-      "conversion, which preserves ordinary host Scheme scalars while still"
-      "walking containers for nested callable shims; this keeps exported"
-      "portable library APIs expressible in plain `(scheme base)' data rather"
-      "than forcing callers to manufacture canonical runtime records."
+      "CONTEXT. Callback arguments re-enter the guest world through the"
+      "shared host-datum bridge, so interpreted callbacks see canonical guest"
+      "numbers and preserved source-metadata structure instead of raw host"
+      "runtime values leaking through the compiled boundary."
       "The closure's result crosses back under the callback result conversion"
       "(canonical records become raw host numbers), so native higher-order"
       "code can consume what the closure returns."
@@ -1651,7 +1650,7 @@
           (native-callback-result
            (applier value
                     (map (lambda (argument)
-                           (consent-native-argument-value argument context))
+                           (native-result-value argument))
                          arguments)
                     context)
            '()))))
@@ -1661,6 +1660,76 @@
     ;; applied by native higher-order code run in the calling program's
     ;; context.
     (define native-call-context #f)
+
+    ;; Some internal-library exports operate on reader-owned guest datums whose
+    ;; identity must survive the native call boundary intact: source-metadata
+    ;; accessors key off the original pair/vector/string object, and numeric
+    ;; predicates should inspect canonical number records instead of a
+    ;; host-unwrapped payload. Most other portable libraries still want the
+    ;; ordinary host-facing scalar conversion.
+    (define native-preserved-argument-bindings
+      '((((consent macro) consent-syntax-source))
+        (((consent reader)
+          consent-datum-source
+          consent-datum-source-set!
+          consent-copy-datum-source!
+          consent-datum->external
+          consent-datum->external-bounded
+          consent-number?
+          consent-number-lexeme
+          consent-number-exactness
+          consent-number-radix
+          consent-number-kind
+          consent-number-value
+          consent-number-zero?
+          consent-number-negative?
+          consent-number-abs
+          consent-number->external))))
+
+    ;; Accessors that intentionally publish a host scalar payload should keep
+    ;; that surface instead of rewrapping the result back into a guest number.
+    (define native-host-result-bindings
+      '((((consent reader) consent-number-value))))
+
+    (define (native-binding-policy-member? table library-key name)
+      "Report whether TABLE marks NAME in LIBRARY-KEY for special handling."
+      (let loop ((rest table))
+        (if (null? rest)
+            #f
+            (let ((entry (car rest)))
+              (if (equal? (caar entry) library-key)
+                  (memq name (cdar entry))
+                  (loop (cdr rest)))))))
+
+    (define (native-binding-argument-policy library-key name)
+      "Return how NAME in LIBRARY-KEY should receive its arguments."
+      (if (native-binding-policy-member?
+           native-preserved-argument-bindings
+           library-key
+           name)
+          'preserve
+          'convert))
+
+    (define (native-binding-result-policy library-key name)
+      "Return how NAME in LIBRARY-KEY should publish its result."
+      (if (native-binding-policy-member?
+           native-host-result-bindings
+           library-key
+           name)
+          'host
+          'guest))
+
+    (define (native-binding-argument library-key name argument context)
+      "Bridge one ARGUMENT for NAME in LIBRARY-KEY into native code."
+      (if (eq? (native-binding-argument-policy library-key name) 'preserve)
+          argument
+          (consent-native-argument-value argument context)))
+
+    (define (native-binding-result library-key name value)
+      "Bridge native VALUE back for NAME in LIBRARY-KEY."
+      (if (eq? (native-binding-result-policy library-key name) 'host)
+          (native-callback-result value '())
+          (native-result-value value)))
 
     (define (consent-apply-callable value arguments)
       "Apply callable VALUE to ARGUMENTS across the native import boundary."
@@ -1762,19 +1831,7 @@
           (native-nested-argument value context '())
           value))
 
-    (define (native-result-scalar value)
-      "Wrap a host-number scalar as a canonical number record, else pass through."
-      (cond
-       ((not (number? value)) value)
-       ((and (exact? value) (integer? value))
-        (consent-make-canonical-integer value))
-       ((exact? value)
-        (consent-make-canonical-rational (numerator value) (denominator value)))
-       ((real? value)
-        (consent-make-canonical-decimal value))
-       (else value)))
-
-    (define (native-result-value value seen)
+    (define (native-result-value value)
       "Convert one native RESULT for interpreted use."
       "Native unwrap accessors return raw host numbers (consent-number-value,"
       "read positions); interpreted callers expect canonical records,"
@@ -1782,40 +1839,16 @@
       "host procedure result (a REPL chrome lookup, for example) wraps as a"
       "native primitive through the shared binding cells so repeated lookups"
       "stay eqv? and the interpreted world can both recognize and apply it."
-      "Pairs and vectors are walked copy-on-write -- canonical structure"
-      "passes through untouched and keeps its identity -- and SEEN returns"
-      "cyclic data unchanged on revisit."
-      (cond
-       ((number? value) (native-result-scalar value))
-       ((procedure? value)
-        (cell-value (native-binding-cell 'result value)))
-       ((pair? value)
-        (if (memq value seen)
-            value
-            (let* ((next-seen (cons value seen))
-                   (head (native-result-value (car value) next-seen))
-                   (tail (native-result-value (cdr value) next-seen)))
-              (if (and (eq? head (car value)) (eq? tail (cdr value)))
-                  value
-                  (cons head tail)))))
-       ((vector? value)
-        (if (memq value seen)
-            value
-            (let* ((next-seen (cons value seen))
-                   (length (vector-length value))
-                   (converted
-                    (let loop ((index 0) (acc '()) (changed #f))
-                      (if (= index length)
-                          (and changed (reverse acc))
-                          (let* ((element (vector-ref value index))
-                                 (next (native-result-value element next-seen)))
-                            (loop (+ index 1)
-                                  (cons next acc)
-                                  (or changed (not (eq? next element)))))))))
-              (if converted (list->vector converted) value))))
-       (else value)))
+      "Every other host-owned datum crosses under the shared host-datum"
+      "bridge, which canonicalizes numbers/eof and preserves source metadata"
+      "on rebuilt structure."
+      (consent-host-datum->guest-datum
+       value
+       (lambda (procedure)
+         (cell-value
+          (native-binding-cell '(native result) 'result procedure)))))
 
-    (define (native-binding-value name value)
+    (define (native-binding-value library-key name value)
       "Wrap native VALUE for interpreted use."
       "Host procedures become primitives whose arguments are converted under"
       "the two boundary conventions (bare callables cross as the runtime's"
@@ -1833,12 +1866,18 @@
                (dynamic-wind
                 (lambda () (set! native-call-context context))
                 (lambda ()
-                  (native-result-value
+                  (native-binding-result
+                   library-key
+                   name
                    (apply value
                           (map (lambda (argument)
-                                 (consent-native-argument-value argument context))
+                                 (native-binding-argument
+                                  library-key
+                                  name
+                                  argument
+                                  context))
                                arguments))
-                   '()))
+                  ))
                 (lambda () (set! native-call-context previous)))))
            0
            #f)
@@ -1846,24 +1885,38 @@
           ;; raw host numbers a native reader would consume directly; convert
           ;; them once at registration so interpreted callers see canonical
           ;; numbers.
-          (native-result-value value '())))
+          (native-binding-result library-key name value)))
 
-    ;; Cache pairing each registered native value with its shared binding cell.
+    ;; Cache pairing each registered native value and boundary policy with its
+    ;; shared binding cell.
     (define native-binding-cells '())
 
-    (define (native-binding-cell name value)
+    (define (native-binding-cell library-key name value)
       "Return the shared binding cell for native VALUE, creating it on first"
       "use. Internal libraries re-export one another's bindings ((consent"
       "eval) re-exports the (consent runtime) predicates, for example), and"
       "importing two such libraries into one program is only compatible when"
-      "both export records carry the same cell, so the cache is keyed by the"
-      "native value itself."
-      (let ((entry (assq value native-binding-cells)))
+      "both export records carry the same boundary policy, so the cache key is"
+      "the native VALUE plus its argument/result policy pair."
+      (let* ((argument-policy (native-binding-argument-policy library-key name))
+             (result-policy (native-binding-result-policy library-key name))
+             (entry
+              (let loop ((rest native-binding-cells))
+                (if (null? rest)
+                    #f
+                    (let ((cell (car rest)))
+                      (if (and (eq? (car cell) value)
+                               (eq? (cadr cell) argument-policy)
+                               (eq? (car (cdr (cdr cell))) result-policy))
+                          cell
+                          (loop (cdr rest))))))))
         (if entry
-            (cdr entry)
-            (let ((cell (make-cell (native-binding-value name value))))
+            (car (cdr (cdr (cdr entry))))
+            (let ((cell (make-cell
+                         (native-binding-value library-key name value))))
               (set! native-binding-cells
-                    (cons (cons value cell) native-binding-cells))
+                    (cons (list value argument-policy result-policy cell)
+                          native-binding-cells))
               cell))))
 
     (define (register-native-library! key bindings context)
@@ -1875,7 +1928,9 @@
            (set-environment-frame!
             value-environment
             (cons (cons (car binding)
-                        (native-binding-cell (car binding) (cdr binding)))
+                        (native-binding-cell key
+                                             (car binding)
+                                             (cdr binding)))
                   (environment-frame value-environment))))
          bindings)
         (library-registry-set!

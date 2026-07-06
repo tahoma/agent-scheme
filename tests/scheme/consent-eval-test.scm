@@ -23,6 +23,8 @@
               consent-syntax-source)
         (only (consent reader)
               consent-datum->external
+              consent-number?
+              consent-number-value
               consent-make-canonical-integer
               consent-read)
         (only (consent version)
@@ -356,6 +358,14 @@
          (consent-read "\n  (twice 21)\n"
                             '((source-metadata . #t)))))
        "(source (origin source) (source-id #f) (line 2) (column 3) (offset 3) (span 10) (phase read))")
+
+(check 'reader-native-number-predicate-preserves-canonical-record
+       (consent-number? (consent-make-canonical-integer 21))
+       #t)
+
+(check 'reader-native-number-value-unwraps-canonical-record
+       (consent-number-value (consent-make-canonical-integer 21))
+       (consent-number-value 21))
 
 (define (consent-test-source-metadata-graph count)
   (let loop ((index 0) (parts '("(")))
