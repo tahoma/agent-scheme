@@ -56,6 +56,7 @@
               (null? value)
               (symbol? value)
               (char? value)
+              (number? value)
               (consent-number? value)
               (string? value)
               (bytevector? value))

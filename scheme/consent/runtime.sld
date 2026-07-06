@@ -2904,9 +2904,9 @@
 
     (define (option-count options key default)
       "Return numeric option KEY as a host count."
-      "A canonical number record is unwrapped: a caller whose options alist"
-      "crossed the compiled host-runner boundary carries canonical numbers"
-      "where a native call site would have written host literals."
+      "A canonical number record is unwrapped when present, but plain host"
+      "numbers are accepted too so native and source-hosted callers share"
+      "the same Scheme numeric surface."
       (let ((value (option-ref options key default)))
         (if (consent-number? value)
             (consent-number-value value)

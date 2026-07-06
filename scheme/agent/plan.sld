@@ -25,8 +25,7 @@
           plan-step-status
           plan-memory-important?)
   (import (scheme base)
-          (only (stdlib list) filter find remove)
-          (consent reader))
+          (only (stdlib list) filter find remove))
   (begin
     ;; Public plan scopes mirror fresh one-off evaluations, durable sessions,
     ;; and project-shared work.
@@ -90,8 +89,8 @@
        (string-append prefix "-" (number->string sequence))))
 
     (define (integer-datum sequence)
-      "Return SEQUENCE as an Consent Scheme exact integer datum."
-      (consent-make-canonical-integer sequence))
+      "Return SEQUENCE as an exact integer datum."
+      sequence)
 
     (define (field-value datum name)
       "Return field NAME from DATUM or #f."

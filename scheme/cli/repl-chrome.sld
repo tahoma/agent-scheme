@@ -48,8 +48,7 @@
   (import (scheme base)
           (scheme write)
           (only (consent reader)
-                consent-datum->external
-                consent-number-value))
+                consent-datum->external))
 
   (begin
 
@@ -117,9 +116,9 @@
     ;;;; Comment-chrome alignment
 
     (define (chrome--field-integer record name default)
-      "Return integer field NAME in RECORD as a host integer, or DEFAULT when absent."
+      "Return integer field NAME in RECORD, or DEFAULT when absent."
       (let ((value (chrome--field record name)))
-        (if value (consent-number-value value) default)))
+        (if (and value (integer? value)) value default)))
 
     ;; The `comment' chrome right-aligns its result/condition/output/exit markers
     ;; and pads its continuation dots to the ready-prompt gutter, so a turn's

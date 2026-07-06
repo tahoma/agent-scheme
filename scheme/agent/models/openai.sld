@@ -17,11 +17,6 @@
           (scheme write)
           (prefix (agent redaction) redaction-model:)
           (prefix (cli process-host) cli-host:)
-          (only (consent reader)
-                consent-number?
-                consent-number-exactness
-                consent-number-kind
-                consent-number-value)
           (prefix (stdlib generator) gen:)
           (prefix (stdlib json) json-model:))
   (begin
@@ -119,16 +114,9 @@
       "Return VALUE as a provider/model name string."
       (symbol->string (model-openai-name value description)))
 
-    (define (model-openai-host-exact-integer value)
-      "Return VALUE as a host exact integer, or #f when it is not one."
-      (cond
-       ((integer? value) value)
-       ((and (consent-number? value)
-             (eq? (consent-number-kind value) 'integer)
-             (eq? (consent-number-exactness value) 'exact)
-             (integer? (consent-number-value value)))
-        (consent-number-value value))
-       (else #f)))
+    (define (model-openai-exact-integer value)
+      "Return VALUE when it is an exact integer, or #f otherwise."
+      (and (integer? value) (exact? value) value))
 
     (define (model-openai-field name value)
       "Return a Scheme-readable field named NAME with VALUE."
@@ -791,8 +779,8 @@
     (define (model-openai-option-integer options names default)
       "Return integer option from OPTIONS field NAMES, or DEFAULT."
       (let ((value (model-openai-field-value-any options names default)))
-        (let ((host-integer (model-openai-host-exact-integer value)))
-          (if host-integer host-integer default))))
+        (let ((exact-integer (model-openai-exact-integer value)))
+          (if exact-integer exact-integer default))))
 
     (define (model-openai-split-curl-output stdout)
       "Return `(BODY HTTP-STATUS ELAPSED-MS)' parsed from curl STDOUT."

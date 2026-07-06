@@ -294,9 +294,9 @@
 
     (define (option-count options key default)
       "Return numeric option KEY as a host count."
-      "A canonical number record is unwrapped: an options alist that crossed"
-      "the compiled host-runner boundary carries canonical numbers where a"
-      "native call site would have written host literals."
+      "A canonical number record is unwrapped when present, but plain host"
+      "numbers are accepted too so compiled/native postures preserve the"
+      "same Scheme numeric surface as source-hosted code."
       (let ((value (option-ref options key default)))
         (if (consent-number? value)
             (consent-number-value-field value)
@@ -789,9 +789,8 @@
       "agent-owned numeric values created by readers, primitives, and"
       "result renderers."
       "An already-canonical number is returned unchanged, so a call site"
-      "whose argument crossed the compiled host-runner boundary as a"
-      "canonical record gets the same answer it would on a reference host"
-      "with a host literal."
+      "that already carries a reader-owned number can normalize idempotently"
+      "alongside a plain host literal from another evaluation posture."
       #((parameters
          (value (type exact-integer)
           (description
@@ -829,9 +828,8 @@
 
     (define (canonical-component value)
       "Return numeric component VALUE as a host number."
-      "An already-canonical record is unwrapped: constructor arguments that"
-      "crossed the compiled host-runner boundary arrive as canonical records"
-      "where a native call site would have written host literals."
+      "An already-canonical record is unwrapped, while plain host numbers"
+      "pass through unchanged across compiled and source-hosted postures."
       (if (consent-number? value)
           (consent-number-value-field value)
           value))
@@ -1061,16 +1059,34 @@
              (integer-decimal-text? (substring text 0 (- length 1))))))
 
     (define (consent-number->external number)
-      "Public renderer for Consent Scheme number records."
+      "Public renderer for Consent Scheme numeric values."
       #((parameters
-         (number (type consent-number)
-          (description "Canonical Consent Scheme number record to render.")))
+         (number (type (or consent-number number))
+          (description
+           ("Canonical Consent Scheme number record or plain host"
+             "number to render."))))
         (returns (type string)
          (description
-          ("A string with the number's canonical external spelling for"
-            "integer, rational, decimal, infnan, and complex kinds.")))
+          ("A string with the number's canonical external spelling,"
+            "accepting plain host numbers so native/exported code can"
+            "stay on the ordinary Scheme numeric surface.")))
         (effects error))
       (cond
+       ((not (or (consent-number? number) (number? number)))
+        (error "consent-number->external expected numeric value" number))
+       ((not (consent-number? number))
+        (if (and (real? number) (inexact? number))
+            (let ((special-kind (host-inexact-special-kind number)))
+              (if special-kind
+                  special-kind
+                  (let ((text (number->string number)))
+                    (cond
+                     ((integer-decimal-text? text)
+                      (string-append text ".0"))
+                     ((terminal-dot-decimal-text? text)
+                      (string-append text "0"))
+                     (else text)))))
+            (number->string number)))
        ((eq? (consent-number-kind number) 'integer)
         (consent-integer->radix-string
          (consent-number-value number)
@@ -2144,9 +2160,8 @@
        ((string? value) value)
        ((symbol? value) (symbol->string value))
        ((char? value) (string value))
-       ((consent-number? value) (consent-number->external value))
-       ((and (number? value) (exact? value) (integer? value))
-        (consent-integer->radix-string value 10))
+       ((or (consent-number? value) (number? value))
+        (consent-number->external value))
        (else "?")))
 
     (define (condition-reason condition)
@@ -2771,7 +2786,8 @@
             (if display?
                 (string value)
                 (write-character-datum value)))
-           ((consent-number? value) (consent-number->external value))
+           ((or (consent-number? value) (number? value))
+            (consent-number->external value))
            ((string? value)
             (if display?
                 value

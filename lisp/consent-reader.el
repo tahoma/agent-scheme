@@ -874,41 +874,59 @@ DEPTH is used when reading a datum comment's discarded datum."
     (_ number)))
 
 (defun consent--number->external (number)
-  "Return canonical external representation for NUMBER."
-  (pcase (consent-number-kind number)
-    ('integer
-     (number-to-string (consent-number-value number)))
-    ('rational
-     (let ((value (consent-number-value number)))
-       (format "%s/%s" (car value) (cdr value))))
-    ('decimal
-     (let ((text (number-to-string (consent-number-value number))))
-       (if (string-match-p "\\`[+-]?[0-9]+\\'" text)
-           (concat text ".0")
-         text)))
-    ('infnan
-     (pcase (consent-number-value number)
-       ('+inf.0 "+inf.0")
-       ('-inf.0 "-inf.0")
-       ('+nan.0 "+nan.0")))
-    ('complex
-     (let* ((value (consent-number-value number))
-            (real (car value))
-            (imaginary (cdr value)))
-        (concat
-         (consent--number->external real)
-         (if (eq (consent-number-kind imaginary) 'infnan)
-             (consent--number->external imaginary)
-           (let ((negative (consent--number-negative-p imaginary))
-                 (magnitude (consent--number-abs imaginary)))
-             (concat
-              (if negative "-" "+")
-              (consent--number->external magnitude))))
-         "i")))
-    (_
-     (or (consent-number-lexeme number)
-         (error "cannot write unknown number kind: %S"
-                (consent-number-kind number))))))
+  "Return canonical external representation for NUMBER.
+NUMBER may be a reader-owned canonical number datum or a plain Emacs number."
+  (cond
+   ((numberp number)
+    (let ((special-kind (and (floatp number)
+                             (consent--host-inexact-special-kind number))))
+      (if special-kind
+          (pcase special-kind
+            ('+inf.0 "+inf.0")
+            ('-inf.0 "-inf.0")
+            ('+nan.0 "+nan.0"))
+        (let ((text (number-to-string number)))
+          (if (and (floatp number)
+                   (string-match-p "\\`[+-]?[0-9]+\\'" text))
+              (concat text ".0")
+            text)))))
+   ((consent-number-p number)
+    (pcase (consent-number-kind number)
+      ('integer
+       (number-to-string (consent-number-value number)))
+      ('rational
+       (let ((value (consent-number-value number)))
+         (format "%s/%s" (car value) (cdr value))))
+      ('decimal
+       (let ((text (number-to-string (consent-number-value number))))
+         (if (string-match-p "\\`[+-]?[0-9]+\\'" text)
+             (concat text ".0")
+           text)))
+      ('infnan
+       (pcase (consent-number-value number)
+         ('+inf.0 "+inf.0")
+         ('-inf.0 "-inf.0")
+         ('+nan.0 "+nan.0")))
+      ('complex
+       (let* ((value (consent-number-value number))
+              (real (car value))
+              (imaginary (cdr value)))
+         (concat
+          (consent--number->external real)
+          (if (eq (consent-number-kind imaginary) 'infnan)
+              (consent--number->external imaginary)
+            (let ((negative (consent--number-negative-p imaginary))
+                  (magnitude (consent--number-abs imaginary)))
+              (concat
+               (if negative "-" "+")
+               (consent--number->external magnitude))))
+          "i")))
+      (_
+       (or (consent-number-lexeme number)
+           (error "cannot write unknown number kind: %S"
+                  (consent-number-kind number))))))
+   (t
+    (error "cannot write non-numeric value as a number: %S" number))))
 
 (defun consent--initial-char-p (char)
   "Return non-nil if CHAR can begin an ordinary identifier."
@@ -2118,7 +2136,8 @@ strings, symbols, and characters use display rendering."
                 (char-to-string (consent-character-code value))
               (consent--write-character
                (consent-character-code value))))
-           ((consent-number-p value)
+           ((or (consent-number-p value)
+                (numberp value))
             (consent--number->external value))
            ((stringp value)
             (if displayp

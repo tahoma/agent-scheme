@@ -21,6 +21,7 @@
           consent-library-catalog-remove-root!
           consent-library-catalog-refresh!
           consent-install-library-backend!
+          consent-native-argument-value
           consent-apply-callable
           import-form?
           define-library-form?
@@ -1637,18 +1638,20 @@
 
     (define (native-callback-shim value context)
       "Wrap interpreted callable VALUE as a host procedure applying it in"
-      "CONTEXT. Arguments cross into the closure under the native result"
-      "conversion (raw host numbers become canonical records, matching what"
-      "interpreted code expects everywhere else) and the closure's result"
-      "crosses back under the callback result conversion (canonical records"
-      "become raw host numbers), so native higher-order code can consume what"
-      "the closure returns."
+      "CONTEXT. Arguments cross into the closure under the native-argument"
+      "conversion, which preserves ordinary host Scheme scalars while still"
+      "walking containers for nested callable shims; this keeps exported"
+      "portable library APIs expressible in plain `(scheme base)' data rather"
+      "than forcing callers to manufacture canonical runtime records."
+      "The closure's result crosses back under the callback result conversion"
+      "(canonical records become raw host numbers), so native higher-order"
+      "code can consume what the closure returns."
       (let ((applier (consent-native-applier-ref)))
         (lambda arguments
           (native-callback-result
            (applier value
                     (map (lambda (argument)
-                           (native-result-value argument '()))
+                           (consent-native-argument-value argument context))
                          arguments)
                     context)
            '()))))
@@ -1683,14 +1686,19 @@
       "Callables nested in data follow the callback convention -- a custom"
       "reader resync strategy or a policy-confirmation-function inside an"
       "options alist -- so they become host callbacks native higher-order"
-      "code can apply directly. Canonical number records cross unchanged:"
-      "they are the datum-position number representation the native writer"
-      "and audit layers expect, and the native consumers that compare them"
-      "(capability scope matching, option counts) coerce payloads through"
-      "consent-number-value at the comparison site. Pairs and vectors are"
-      "walked copy-on-write so untouched structure keeps its identity. SEEN"
-      "guards against cyclic data, which is returned unchanged on revisit."
+      "code can apply directly. Ordinary `(scheme base)' scalar data keep"
+      "their language-level surface here too: canonical number records and"
+      "the interpreter's eof record unwrap to host Scheme values instead of"
+      "leaking reader/runtime representation details into native consumers."
+      "Pairs and vectors are walked copy-on-write so untouched structure"
+      "keeps its identity. SEEN guards against cyclic data, which is"
+      "returned unchanged on revisit."
       (cond
+       ((consent-number? value)
+        (let ((host (consent-number-value value)))
+          (if (number? host) host value)))
+       ((consent-eof-object? value)
+        (eof-object))
        ((or (consent-procedure? value)
             (consent-primitive-procedure? value)
             (continuation? value)
@@ -1723,16 +1731,19 @@
               (if converted (list->vector converted) value))))
        (else value)))
 
-    (define (native-argument-value value context)
+    (define (consent-native-argument-value value context)
       "Convert one argument crossing into native code."
       "A bare callable argument crosses unchanged: it is the runtime's own"
       "procedure record, which native predicates, accessors, and the shared"
       "apply machinery already handle (consent-procedure? on a"
       "consent-eval-source result must see the record, not a wrapper)."
-      "Containers are walked so callables nested in data -- the options-alist"
-      "callback convention -- become host callbacks native higher-order code"
-      "can apply directly."
-      (if (or (pair? value) (vector? value))
+      "Numbers and eof objects cross as plain host Scheme values, and"
+      "containers are walked so nested scalars and the options-alist"
+      "callback convention both preserve the portable library surface."
+      (if (or (pair? value)
+              (vector? value)
+              (consent-number? value)
+              (consent-eof-object? value))
           (native-nested-argument value context '())
           value))
 
@@ -1810,7 +1821,7 @@
                   (native-result-value
                    (apply value
                           (map (lambda (argument)
-                                 (native-argument-value argument context))
+                                 (consent-native-argument-value argument context))
                                arguments))
                    '()))
                 (lambda () (set! native-call-context previous)))))

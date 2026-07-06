@@ -218,9 +218,9 @@
           session
           (string->symbol session)))
 
-    ;; Contract records are consent data: numeric fields embed canonical
-    ;; number records (matching the Emacs twin's consent-repl-stream--int)
-    ;; so the record stream renders through the consent writer.
+    ;; Contract records are ordinary Consent data: numeric fields stay Scheme
+    ;; numbers, which render and compare through the shared numeric surface
+    ;; without depending on reader-owned constructors.
     (define (repl--prompt-record session ordinal state pending
                                  . maybe-pending-stack)
       "Build a `repl-prompt' record for SESSION at ORDINAL with STATE and"
@@ -237,12 +237,12 @@
         (append
          (list 'repl-prompt
                (list 'session (repl--session-field session))
-               (list 'ordinal (consent-make-canonical-integer ordinal))
+               (list 'ordinal ordinal)
                (list 'state state)
                (list 'pending pending))
          (if (eq? state 'continuation)
              (list (list 'nesting
-                         (consent-make-canonical-integer (length stack)))
+                         (length stack))
                    (list 'pending-kind
                          (if (pair? stack) (car stack) 'datum)))
              '()))))
@@ -252,7 +252,7 @@
       (list 'repl-submission
             (list 'id (repl--tag "sub" ordinal))
             (list 'session (repl--session-field session))
-            (list 'ordinal (consent-make-canonical-integer ordinal))
+            (list 'ordinal ordinal)
             (list 'source source)
             (list 'complete complete)
             (list 'eof eof)))
@@ -266,7 +266,7 @@
             (list 'id (repl--tag "res" ordinal))
             (list 'submission (repl--tag "sub" ordinal))
             (list 'session (repl--session-field session))
-            (list 'ordinal (consent-make-canonical-integer ordinal))
+            (list 'ordinal ordinal)
             (list 'evaluation-result evaluation-result)
             (list 'display display)))
 
@@ -279,7 +279,7 @@
             (list 'id (repl--tag "cond" ordinal))
             (list 'submission (repl--tag "sub" ordinal))
             (list 'session (repl--session-field session))
-            (list 'ordinal (consent-make-canonical-integer ordinal))
+            (list 'ordinal ordinal)
             (list 'phase phase)
             (list 'recoverable recoverable)
             (list 'condition condition)
@@ -291,7 +291,7 @@
             (list 'session (repl--session-field session))
             (list 'reason reason)
             (list 'status status)
-            (list 'count (consent-make-canonical-integer count))
+            (list 'count count)
             (list 'detail detail)))
 
     ;;;; Bounded result rendering (#508)
@@ -949,7 +949,7 @@
       "Build a `repl-replay-divergence' datum for the submission at INDEX."
       (append
        (list 'repl-replay-divergence
-             (list 'index (consent-make-canonical-integer index))
+             (list 'index index)
              (list 'source source))
        (list (cons 'captured (repl--outcome-fields captured-outcome)))
        (list (cons 'replayed (repl--outcome-fields replayed-outcome)))))
@@ -1012,7 +1012,7 @@
         (list 'repl-replay-report
               (list 'status (if (null? divergences) 'reproduced 'diverged))
               (list 'submissions
-                    (consent-make-canonical-integer (length captured-outcomes)))
+                    (length captured-outcomes))
               (list 'divergences divergences))))
 
     ;;;; Terminal entry
