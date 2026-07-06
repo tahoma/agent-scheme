@@ -21,6 +21,7 @@
           consent-native-library-ref
           consent-install-native-applier!
           consent-native-applier-ref
+          consent-host-datum->guest-datum
           consent-make-empty-environment
           consent-unspecified
           consent-unspecified?
@@ -2394,22 +2395,95 @@
       (capability-flatten-values
        (network-resource-field-values resource field)))
 
-    (define (network-public-datum datum)
-      "Convert host-owned network metadata to Consent Scheme datums before"
-      "publishing it through result or audit records."
+    (define (host-number->guest-number number)
+      "Convert host NUMBER to the canonical guest numeric representation."
       (cond
-       ((consent-number? datum) datum)
-       ((and (number? datum) (integer? datum))
-        (consent-make-canonical-integer datum))
-       ((number? datum)
-        (consent-make-canonical-decimal datum))
-       ((pair? datum)
-        (cons (network-public-datum (car datum))
-              (network-public-datum (cdr datum))))
-       ((vector? datum)
-        (list->vector
-         (map network-public-datum (vector->list datum))))
-       (else datum)))
+       ((and (real? number) (exact? number) (integer? number))
+        (consent-make-canonical-integer number))
+       ((and (real? number) (exact? number))
+        (consent-make-canonical-rational
+         (numerator number)
+         (denominator number)))
+       ((real? number)
+        (consent-make-canonical-decimal number))
+       (else
+        (consent-read (number->string number)))))
+
+    (define (consent-host-datum->guest-datum datum . maybe-wrap-procedure)
+      "Convert host-owned DATUM into the guest-facing runtime representation."
+      "Numbers become canonical Consent numbers, the host eof object becomes"
+      "the guest eof record, pairs and vectors are rebuilt copy-on-write while"
+      "preserving attached reader source metadata, and an optional procedure"
+      "wrapper can translate host callables when a boundary needs that bridge."
+      #((parameters
+         (datum (type object)
+          (description
+           ("Host datum or scalar crossing into the guest-facing runtime"
+             "representation.")))
+         (maybe-wrap-procedure (type list)
+          (description
+           ("Optional single procedure that rewrites host procedures before"
+             "they enter guest data; omitted leaves them unchanged."))))
+        (returns (type object)
+         (description
+          ("DATUM rewritten into guest-facing runtime data, preserving source"
+            "metadata on rebuilt pairs and vectors.")))
+        (effects pure allocation))
+      (let ((wrap-procedure
+             (if (null? maybe-wrap-procedure)
+                 (lambda (value) value)
+                 (car maybe-wrap-procedure))))
+        (letrec
+            ((convert
+              (lambda (value seen)
+                (cond
+                 ((or (consent-number? value)
+                      (consent-eof-object? value))
+                  value)
+                 ((number? value)
+                  (host-number->guest-number value))
+                 ((eof-object? value)
+                  consent-eof-object)
+                 ((procedure? value)
+                  (wrap-procedure value))
+                 ((pair? value)
+                  (if (memq value seen)
+                      value
+                      (let* ((next-seen (cons value seen))
+                             (head (convert (car value) next-seen))
+                             (tail (convert (cdr value) next-seen)))
+                        (if (and (eq? head (car value))
+                                 (eq? tail (cdr value)))
+                            value
+                            (let ((result (cons head tail)))
+                              (consent-copy-datum-source! result value)
+                              result)))))
+                 ((vector? value)
+                  (if (memq value seen)
+                      value
+                      (let* ((next-seen (cons value seen))
+                             (length (vector-length value))
+                             (converted
+                              (let loop ((index 0) (acc '()) (changed #f))
+                                (if (= index length)
+                                    (and changed (reverse acc))
+                                    (let* ((element (vector-ref value index))
+                                           (next (convert element next-seen)))
+                                      (loop (+ index 1)
+                                            (cons next acc)
+                                            (or changed
+                                                (not (eq? next element)))))))))
+                        (if converted
+                            (let ((result (list->vector converted)))
+                              (consent-copy-datum-source! result value)
+                              result)
+                            value))))
+                 (else value)))))
+          (convert datum '()))))
+
+    (define (network-public-datum datum)
+      "Convert host-owned network metadata to guest data before publication."
+      (consent-host-datum->guest-datum datum))
 
     (define (network-redacted-public-datum datum)
       "Redact network metadata, then make it safe for external rendering."

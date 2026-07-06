@@ -36,6 +36,10 @@
   (if (not (equal? actual expected))
       (record-failure name expected actual)))
 
+;; Normalize a numeric literal across direct hosts and self-hosted runners.
+(define (portable-host-number datum)
+  (consent-number-value datum))
+
 ;; Assert VALUE is true after normalizing to canonical booleans.
 (define (check-true name value)
   (check name (if value #t #f) #t))
@@ -88,13 +92,15 @@
     (check 'simple-eval-prompt-state (field prompt 'state) 'ready)
     (check 'simple-eval-prompt-pending (field prompt 'pending) #f)
     (check 'simple-eval-prompt-ordinal
-           (consent-number-value (field prompt 'ordinal)) 1))
+           (consent-number-value (field prompt 'ordinal))
+           (portable-host-number 1)))
   (check 'simple-eval-one-exit (count-of records 'repl-exit) 1)
   (let ((exit (car (records-of records 'repl-exit))))
     (check 'simple-eval-exit-reason (field exit 'reason) 'eof)
     (check 'simple-eval-exit-status (field exit 'status) 'closed-ok)
     (check 'simple-eval-exit-count
-           (consent-number-value (field exit 'count)) 1)))
+           (consent-number-value (field exit 'count))
+           (portable-host-number 1))))
 
 ;;;; Definitions, imports, and macros persist across submissions
 
@@ -173,7 +179,8 @@
     (check 'continuation-second-prompt-pending
            (field (list-ref prompts 1) 'pending) #t)
     (check 'continuation-keeps-ordinal
-           (consent-number-value (field (list-ref prompts 1) 'ordinal)) 1))
+           (consent-number-value (field (list-ref prompts 1) 'ordinal))
+           (portable-host-number 1)))
   (let ((submission (car (records-of records 'repl-submission))))
     (check 'continuation-submission-complete (field submission 'complete) #t)
     (check 'continuation-submission-source (field submission 'source) "(+ 1\n2)"))
@@ -190,11 +197,14 @@
     (check 'blank-ready-second-state (field (list-ref prompts 1) 'state) 'ready)
     (check 'blank-ready-third-state (field (list-ref prompts 2) 'state) 'ready)
     (check 'blank-ready-first-ordinal
-           (consent-number-value (field (list-ref prompts 0) 'ordinal)) 1)
+           (consent-number-value (field (list-ref prompts 0) 'ordinal))
+           (portable-host-number 1))
     (check 'blank-ready-second-ordinal
-           (consent-number-value (field (list-ref prompts 1) 'ordinal)) 1)
+           (consent-number-value (field (list-ref prompts 1) 'ordinal))
+           (portable-host-number 1))
     (check 'blank-ready-third-ordinal
-           (consent-number-value (field (list-ref prompts 2) 'ordinal)) 2))
+           (consent-number-value (field (list-ref prompts 2) 'ordinal))
+           (portable-host-number 2)))
   (check 'blank-ready-submission-count
          (count-of records 'repl-submission) 1)
   (check 'blank-ready-result
@@ -210,18 +220,21 @@
     (check 'nesting-ready-prompt-omits-field
            (field (list-ref prompts 0) 'nesting) #f)
     (check 'nesting-depth-two
-           (consent-number-value (field (list-ref prompts 1) 'nesting)) 2)
+           (consent-number-value (field (list-ref prompts 1) 'nesting))
+           (portable-host-number 2))
     (check 'nesting-kind-list
            (field (list-ref prompts 1) 'pending-kind) 'list)
     (check 'nesting-narrows-to-one
-           (consent-number-value (field (list-ref prompts 2) 'nesting)) 1)))
+           (consent-number-value (field (list-ref prompts 2) 'nesting))
+           (portable-host-number 1))))
 
 ;; An unterminated string is the innermost pending construct even inside a
 ;; list, so a chrome can distinguish "inside a string" from list nesting.
 (let ((records (drive "(string-length \"a\nb\")\n")))
   (let ((prompts (records-of records 'repl-prompt)))
     (check 'nesting-string-depth
-           (consent-number-value (field (list-ref prompts 1) 'nesting)) 2)
+           (consent-number-value (field (list-ref prompts 1) 'nesting))
+           (portable-host-number 2))
     (check 'nesting-string-kind
            (field (list-ref prompts 1) 'pending-kind) 'string)))
 
@@ -230,7 +243,8 @@
 (let ((records (drive "'\n1\n")))
   (let ((prompts (records-of records 'repl-prompt)))
     (check 'nesting-datum-prefix-depth
-           (consent-number-value (field (list-ref prompts 1) 'nesting)) 0)
+           (consent-number-value (field (list-ref prompts 1) 'nesting))
+           (portable-host-number 0))
     (check 'nesting-datum-prefix-kind
            (field (list-ref prompts 1) 'pending-kind) 'datum))
   (check 'nesting-datum-prefix-result
@@ -296,7 +310,8 @@
     (check 'explicit-exit-reason (field exit 'reason) 'explicit)
     (check 'explicit-exit-status (field exit 'status) 'closed-ok)
     (check 'explicit-exit-count
-           (consent-number-value (field exit 'count)) 2)))
+           (consent-number-value (field exit 'count))
+           (portable-host-number 2))))
 
 ;;;; Default policy denies an ungranted host effect, fail closed
 
@@ -785,7 +800,8 @@
   (check 'replay-report-reproduced (field report 'status) 'reproduced)
   (check 'replay-report-no-divergences (field report 'divergences) '())
   (check 'replay-report-submission-count
-         (consent-number-value (field report 'submissions)) 3))
+         (consent-number-value (field report 'submissions))
+         (portable-host-number 3)))
 
 ;; A live host effect cannot be reproduced under a weaker replay posture.  A
 ;; submission that resolved the session interaction environment as a result when

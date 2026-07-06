@@ -1750,35 +1750,6 @@ cursor across sessions."
                (string-append description " expected real number")
                datum))))))
 
-    (define (host-number->agent-number number)
-      "Convert a host numeric result to the canonical Consent Scheme number."
-      (cond
-       ((and (real? number) (exact? number) (integer? number))
-        (consent-make-canonical-integer number))
-       ((and (real? number) (exact? number))
-        (consent-make-canonical-rational
-         (numerator number)
-         (denominator number)))
-       ((real? number)
-        (consent-make-canonical-decimal number))
-       (else
-        (consent-make-canonical-complex
-         (host-number->agent-number (real-part number))
-         (host-number->agent-number (imag-part number))))))
-
-    (define (host-datum->agent-datum datum)
-      "Convert portable host DATUM back into evaluator-owned internal data."
-      (cond
-       ((consent-number? datum) datum)
-       ((number? datum) (host-number->agent-number datum))
-       ((eof-object? datum) consent-eof-object)
-       ((pair? datum)
-        (cons (host-datum->agent-datum (car datum))
-              (host-datum->agent-datum (cdr datum))))
-       ((vector? datum)
-        (list->vector (map host-datum->agent-datum (vector->list datum))))
-       (else datum)))
-
     (define (number-from-rational-pair pair . maybe-exactness)
       "Build an Consent Scheme number from a numerator/denominator pair."
       (let* ((exactness
@@ -2008,7 +1979,7 @@ cursor across sessions."
               (consent-make-canonical-infnan "+inf.0"))
              (else #f)))
            (else
-            (host-number->agent-number
+            (consent-host-datum->guest-datum
              ((if (eq? operation '*) * /)
               (number->host-float left description)
               (number->host-float right description)))))))
@@ -4196,7 +4167,7 @@ cursor across sessions."
                   (begin
                     (set-consent-port-position! port (+ position 1))
                     (audit-port-capability-result! context port 'read 1 #f)
-                    (host-number->agent-number
+                    (consent-host-datum->guest-datum
                      (bytevector-u8-ref source position))))))))
 
     (define (primitive-peek-u8 arguments context)
@@ -4222,7 +4193,7 @@ cursor across sessions."
                     consent-eof-object)
                   (begin
                     (audit-port-capability-result! context port 'read 1 #f)
-                    (host-number->agent-number
+                    (consent-host-datum->guest-datum
                      (bytevector-u8-ref source position))))))))
 
     (define (primitive-u8-ready? arguments context)
@@ -4346,7 +4317,7 @@ cursor across sessions."
                       (set-consent-port-position! port (+ position amount))
                       (audit-port-capability-result!
                        context port 'read amount #f)
-                      (host-number->agent-number amount))))))))
+                      (consent-host-datum->guest-datum amount))))))))
 
     (define (primitive-write-u8 arguments context)
       "Implement the `write-u8` primitive with argument validation and Consent"
@@ -4693,7 +4664,7 @@ cursor across sessions."
 
     (define (reflect-datumize value)
       "Return host VALUE as a Scheme-readable reflection datum."
-      (host-datum->agent-datum value))
+      (consent-host-datum->guest-datum value))
 
     (define (reflect-host-capability-spec? spec)
       "Report whether SPEC describes a host capability."
@@ -6460,7 +6431,7 @@ cursor across sessions."
         (if (not record)
             (eval-error "unknown helper library" (car arguments)))
         (drain-state
-         (eval-sequence (host-datum->agent-datum
+         (eval-sequence (consent-host-datum->guest-datum
                          (helper-model:helper-record-forms record))
                         (context-interaction-environment context)
                         context

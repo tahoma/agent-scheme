@@ -188,6 +188,12 @@
 (define (range-offset range name)
   (consent-number-value (alist-field (cdr range) name)))
 
+;; Normalize a numeric literal across direct hosts and self-hosted runners.
+(define (portable-host-number datum)
+  (if (consent-number? datum)
+      (consent-number-value datum)
+      datum))
+
 ;; Return the (start . end) offset pair for a diagnostic's range.
 (define (diagnostic-span-pair diagnostic)
   (let ((range (record-field diagnostic 'range)))
@@ -229,7 +235,8 @@
     ;; The malformed top-level form runs from "(broken" to the next line.
     (check 'recover-diagnostic-span
            (diagnostic-span-pair diagnostic)
-           '(9 . 19)))
+           (cons (portable-host-number 9)
+                 (portable-host-number 19))))
   ;; The skipped bytes are preserved in the span, never silently dropped.
   (let ((span (car (consent-recovery-result-spans result))))
     (check 'recover-span-kind
