@@ -46,7 +46,7 @@
 
 (defconst consent--source-library-call-options
   '(:max-steps 12000000
-    :max-host-callbacks 200000)
+    :max-host-callbacks 2000000)
   "Evaluation budget for calls into cached source-backed libraries.")
 
 (defvar consent--library-catalog-cache nil

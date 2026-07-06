@@ -165,9 +165,47 @@
         (planner . "qwen3:4b")
         (memory-curator . "gemma3:4b"))))))
 
+(ert-deftest consent-models-test-live-planner-matrix-uses-quick-start-prompt ()
+  "The planner matrix case exercises the quick-start tutorial prompt shape."
+  (let ((prompt (consent-models-test--live-role-prompt 'planner))
+        (options (consent-models-test--live-role-options 'planner)))
+    (should (string-match-p "symbolic differentiator tutorial" prompt))
+    (should (string-match-p "exactly five numbered steps" prompt))
+    (should (member '(timeout-seconds 300) options))))
+
+(defun consent-models-test--live-role-prompt (role)
+  "Return the quick-start matrix prompt for ROLE."
+  (cond
+   ((eq role 'planner)
+    "Plan a tiny R7RS Scheme symbolic differentiator tutorial.
+Use only ASCII text. Do not write code.
+The implementation will represent sums as (+ left right), products as
+(* left right), and will test d/dx of x, y, (+ (* x x) (* 3 x)), and
+(* x (+ x 3)). Reply with exactly five numbered steps for a
+beginner-friendly REPL workloop.")
+   ((eq role 'scheme-scripter)
+    "Write only executable R7RS Scheme source.
+Define a procedure square that returns the product of its argument with itself.
+Define square-tests as a list of two boolean test results for 3 and -4.
+Use only ASCII text and do not include Markdown fences or prose.")
+   ((eq role 'memory-curator)
+    "Summarize these REPL session facts as three concise memory bullets:
+planner produced five steps, scheme-scripter drafted a differentiator, and
+the local tests passed. Use only ASCII text.")
+   (t
+    "What is 2 plus 3? Reply with only the numeral.")))
+
+(defun consent-models-test--live-role-options (role)
+  "Return quick-start matrix model options for ROLE."
+  (if (memq role '(planner scheme-scripter memory-curator))
+      '((temperature 0.1) (timeout-seconds 300))
+    '()))
+
 (defun consent-models-test--live-completion-external (role model)
   "Return live completion output for ROLE and MODEL as external text."
-  (let ((role-name (symbol-name role)))
+  (let ((role-name (symbol-name role))
+        (prompt (consent-models-test--live-role-prompt role))
+        (options (consent-models-test--live-role-options role)))
     (consent-models-test--external
      (format
       "(import (scheme base) (agent models))
@@ -182,12 +220,14 @@
              (roles (%s))
              (privacy local))))))
        (model-complete '%s
-                       \"What is 2 plus 3? Reply with only the numeral.\"
-                       '())"
+                       %S
+                       '%S)"
       (consent-models-test--live-endpoint)
       model
       role-name
-      role-name))))
+      role-name
+      prompt
+      options))))
 
 (defun consent-models-test--live-completion-present-p (external)
   "Return non-nil when EXTERNAL renders a non-empty completion string."
@@ -493,6 +533,45 @@
          (consent-read "((timeout-seconds 7) (retry-count 1))"))
         "ok"))
       (should (= calls 2)))))
+
+(ert-deftest consent-models-test-source-transport-budget-covers-large-planner-response ()
+  "Source-backed transport budget covers a large local planner completion."
+  (consent-models-test--reset)
+  (let ((callbacks 0))
+    (cl-letf (((symbol-function 'consent--primitive-cli-host-run)
+               (lambda (_arguments context)
+                 (dotimes (_ 250000)
+                   (setq callbacks (1+ callbacks))
+                   (consent--note-host-callback
+                    context
+                    'primitive-cli-host-run))
+                 (list (consent--scheme-integer 0)
+                       (consent-models-test--cli-captured-output
+                        (consent-models-test--openai-curl-output
+                         "{\"choices\":[{\"message\":{\"content\":\"1. inspect\\n2. plan\\n3. draft\\n4. test\\n5. review\"}}]}"
+                         200)
+                        0)
+                       ""))))
+      (should
+       (equal
+        (consent-models-test--external
+         "(import (scheme base) (agent models))
+          (model-provider-register!
+           '(model-provider
+             (id local-large)
+             (kind local)
+             (transport openai-compatible-http)
+             (endpoint \"http://127.0.0.1:11434/v1\")
+             (models
+              (((id qwen3:30b)
+                (roles (planner))
+                (privacy local))))))
+          (model-complete
+           'planner
+           \"Plan a tiny R7RS Scheme symbolic differentiator tutorial.\"
+           '((temperature 0.1) (timeout-seconds 300)))")
+        "\"1. inspect\\n2. plan\\n3. draft\\n4. test\\n5. review\""))
+      (should (= callbacks 250000)))))
 
 (ert-deftest consent-models-test-source-error-preserves-structured-detail ()
   "Preserve the source transport's structured provider diagnostic."
