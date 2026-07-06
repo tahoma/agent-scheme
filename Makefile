@@ -117,6 +117,14 @@ CONSENT_EMACS_NATIVE_BUILD_TEST_SELECTOR ?= "^consent-compile-portable-test-\\(r
 CONSENT_PARITY_TEST_SELECTOR ?= "^consent-parity-test-.*"
 CONSENT_LIVE_MODEL_CI_SELECTOR ?= (or "consent-models-test-live-local-openai-compatible-completion" "consent-models-test-live-local-openai-compatible-tool-call" "consent-models-test-live-portable-racket-local-openai-compatible-tool-call" "consent-models-test-live-portable-compiled-local-openai-compatible-tool-call")
 CONSENT_LIVE_MODEL_SELECTOR ?= (or "consent-models-test-live-local-.*" "consent-models-test-live-portable-.*")
+CONSENT_LIVE_MODEL_SMALL_SET ?= scheme-scripter=qwen2.5-coder:7b,planner=qwen3:4b,memory-curator=gemma3:4b
+CONSENT_LIVE_MODEL_RECOMMENDED_SET ?= scheme-scripter=qwen2.5-coder:14b,planner=qwen3:8b,memory-curator=gemma3:12b
+CONSENT_LIVE_MODEL_LARGE_SET ?= scheme-scripter=qwen2.5-coder:32b,planner=qwen3:30b,memory-curator=gemma3:12b
+CONSENT_LIVE_MODEL_MATRIX_CASES ?= $(CONSENT_LIVE_MODEL_SMALL_SET),$(CONSENT_LIVE_MODEL_RECOMMENDED_SET),$(CONSENT_LIVE_MODEL_LARGE_SET)
+CONSENT_LIVE_MODEL_SMALL_SMOKE_ID ?= $(if $(strip $(CONSENT_LIVE_MODEL_ID)),$(CONSENT_LIVE_MODEL_ID),qwen3:4b)
+CONSENT_LIVE_MODEL_RECOMMENDED_SMOKE_ID ?= $(if $(strip $(CONSENT_LIVE_MODEL_ID)),$(CONSENT_LIVE_MODEL_ID),qwen3:8b)
+CONSENT_LIVE_MODEL_LARGE_SMOKE_ID ?= $(if $(strip $(CONSENT_LIVE_MODEL_ID)),$(CONSENT_LIVE_MODEL_ID),qwen3:30b)
+CONSENT_LIVE_MODEL_SMOKE_ID ?= $(CONSENT_LIVE_MODEL_RECOMMENDED_SMOKE_ID)
 CONSENT_PORTABLE_TEST_SHARD_TARGETS ?= test-portable-gambit test-portable-gambit-reflect test-portable-gambit-reflect-stress test-portable-gambit-native test-portable-racket test-portable-racket-reflect test-portable-racket-reflect-stress test-portable-compiled test-portable-guile test-portable-guile-reflect test-portable-guile-reflect-stress test-portable-gauche test-portable-gauche-reflect test-portable-gauche-reflect-stress
 CONSENT_EMACS_TEST_SHARD_TARGETS ?= test-emacs-stdlib-reference-stress test-emacs-reflect-dynamic-manifest-stress test-emacs-stdlib-reference test-emacs-reflect-documentation-stress test-emacs-library test-emacs-agent-control test-emacs-agent-reliability test-emacs-integration test-emacs-agent-state test-emacs-reflect-catalog-stress test-emacs-core test-emacs-reflect-binding-crosswalk-stress test-emacs-tools test-emacs-capability-boundary test-emacs-reflect
 # Representative portable host kept in the trimmed default make test shard set.
@@ -146,7 +154,7 @@ CONSENT_FULL_TEST_JOBS ?= 16
 
 .DEFAULT_GOAL := help
 
-.PHONY: help print-version clean clean-compile compile install uninstall dist compile-elisp lint-elisp lint-elisp-docstrings lint-portable lint-branding lint-line-length repl test test-full test-portable test-portable-chibi test-portable-gambit test-portable-gambit-reflect test-portable-gambit-reflect-stress test-portable-gambit-native test-portable-racket test-portable-racket-reflect test-portable-racket-reflect-stress test-portable-compiled test-portable-guile test-portable-guile-reflect test-portable-guile-reflect-stress test-portable-gauche test-portable-gauche-reflect test-portable-gauche-reflect-stress test-emacs-hosted test-emacs-core test-emacs-library test-emacs-stdlib-reference test-emacs-stdlib-reference-stress test-emacs-agent-control test-emacs-agent-reliability test-emacs-capability-boundary test-emacs-agent-state test-emacs-capabilities test-emacs-tools test-emacs-reflect test-emacs-reflect-catalog-stress test-emacs-reflect-documentation-stress test-emacs-reflect-binding-crosswalk-stress test-emacs-reflect-dynamic-manifest-stress test-emacs-reflect-stress test-emacs-integration test-emacs-native-build test-parity test-live-model-ci test-live-model conformance-oracle
+.PHONY: help print-version clean clean-compile compile install uninstall dist compile-elisp lint-elisp lint-elisp-docstrings lint-portable lint-branding lint-line-length repl test test-full test-portable test-portable-chibi test-portable-gambit test-portable-gambit-reflect test-portable-gambit-reflect-stress test-portable-gambit-native test-portable-racket test-portable-racket-reflect test-portable-racket-reflect-stress test-portable-compiled test-portable-guile test-portable-guile-reflect test-portable-guile-reflect-stress test-portable-gauche test-portable-gauche-reflect test-portable-gauche-reflect-stress test-emacs-hosted test-emacs-core test-emacs-library test-emacs-stdlib-reference test-emacs-stdlib-reference-stress test-emacs-agent-control test-emacs-agent-reliability test-emacs-capability-boundary test-emacs-agent-state test-emacs-capabilities test-emacs-tools test-emacs-reflect test-emacs-reflect-catalog-stress test-emacs-reflect-documentation-stress test-emacs-reflect-binding-crosswalk-stress test-emacs-reflect-dynamic-manifest-stress test-emacs-reflect-stress test-emacs-integration test-emacs-native-build test-parity test-live-model-ci test-live-model test-live-model-small test-live-model-recommended test-live-model-large conformance-oracle
 
 help:
 	@printf '%s\n' 'Consent Scheme top-level actions:'
@@ -205,6 +213,9 @@ help:
 	@printf '  %-26s %s\n' 'test-parity' 'Diff the Emacs and portable cores over the shared corpus (#374).'
 	@printf '  %-26s %s\n' 'test-live-model-ci' 'Run the CI live local model smoke test.'
 	@printf '  %-26s %s\n' 'test-live-model' 'Run all opt-in live local model tests.'
+	@printf '  %-26s %s\n' 'test-live-model-small' 'Run opt-in live tests for the quick-start small profile.'
+	@printf '  %-26s %s\n' 'test-live-model-recommended' 'Run opt-in live tests for the quick-start recommended profile.'
+	@printf '  %-26s %s\n' 'test-live-model-large' 'Run opt-in live tests for the quick-start large profile.'
 	@printf '  %-26s %s\n' 'conformance-oracle' 'Compare pure shared fixtures with reference R7RS implementations.'
 	@printf '\n%s\n' 'Variables:'
 	@printf '  %-50s %s\n' 'EMACS=emacs' 'Emacs command used by make test.'
@@ -269,6 +280,7 @@ help:
 	@printf '  %-50s %s\n' 'CONSENT_LIVE_MODEL_SELECTOR=SEL' 'ERT selector used by make test-live-model.'
 	@printf '  %-50s %s\n' 'CONSENT_LIVE_MODEL_ENDPOINT=URL' 'OpenAI-compatible endpoint for live local model tests.'
 	@printf '  %-50s %s\n' 'CONSENT_LIVE_MODEL_ID=ID' 'Model id used by the live local smoke test.'
+	@printf '  %-50s %s\n' 'CONSENT_LIVE_MODEL_MATRIX_CASES=ROLE=MODEL,...' 'Cases used by the opt-in live model matrix.'
 	@printf '  %-50s %s\n' 'CONSENT_CHIBI=chibi-scheme' 'Optional Chibi Scheme command for Chibi portable checks and oracle runs.'
 	@printf '  %-50s %s\n' 'CONSENT_GAUCHE=gosh' 'Optional Gauche command for oracle runs.'
 	@printf '  %-50s %s\n' 'CONSENT_GUILE=guile' 'Optional Guile command for oracle runs.'
@@ -619,7 +631,16 @@ test-live-model:
 	else \
 		printf '%s\n' 'Racket compile prerequisites are not available; compiled live model shard will skip if no runner exists.'; \
 	fi
-	CONSENT_LIVE_MODEL_TEST=1 CONSENT_LIVE_MODEL_MATRIX=1 CONSENT_COMPILED='$(abspath $(CONSENT_COMPILE_BUILD_DIR)/racket/bin/consent)' CONSENT_TEST_SELECTOR='$(CONSENT_LIVE_MODEL_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
+	CONSENT_LIVE_MODEL_TEST=1 CONSENT_LIVE_MODEL_MATRIX=1 CONSENT_LIVE_MODEL_ID='$(CONSENT_LIVE_MODEL_SMOKE_ID)' CONSENT_LIVE_MODEL_MATRIX_CASES='$(CONSENT_LIVE_MODEL_MATRIX_CASES)' CONSENT_COMPILED='$(abspath $(CONSENT_COMPILE_BUILD_DIR)/racket/bin/consent)' CONSENT_TEST_SELECTOR='$(CONSENT_LIVE_MODEL_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
+
+test-live-model-small:
+	$(CONSENT_PARALLEL_MAKE) test-live-model CONSENT_LIVE_MODEL_ID='$(CONSENT_LIVE_MODEL_SMALL_SMOKE_ID)' CONSENT_LIVE_MODEL_MATRIX_CASES='$(CONSENT_LIVE_MODEL_SMALL_SET)'
+
+test-live-model-recommended:
+	$(CONSENT_PARALLEL_MAKE) test-live-model CONSENT_LIVE_MODEL_ID='$(CONSENT_LIVE_MODEL_RECOMMENDED_SMOKE_ID)' CONSENT_LIVE_MODEL_MATRIX_CASES='$(CONSENT_LIVE_MODEL_RECOMMENDED_SET)'
+
+test-live-model-large:
+	$(CONSENT_PARALLEL_MAKE) test-live-model CONSENT_LIVE_MODEL_ID='$(CONSENT_LIVE_MODEL_LARGE_SMOKE_ID)' CONSENT_LIVE_MODEL_MATRIX_CASES='$(CONSENT_LIVE_MODEL_LARGE_SET)'
 
 conformance-oracle:
 	$(EMACS) -Q --batch -L lisp --eval "(require 'consent-oracle)" --eval "(consent-oracle-batch-main)"

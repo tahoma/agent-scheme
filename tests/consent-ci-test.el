@@ -38,6 +38,18 @@
           (throw 'missing nil))
         (setq start (+ found (length string)))))))
 
+(ert-deftest consent-ci-test-live-model-profile-shards-are-local-only ()
+  "Keep quick-start live model profile shards explicit and opt-in."
+  (let ((makefile (consent-ci-test--repo-file-string "Makefile")))
+    (dolist (target '("test-live-model-small:"
+                      "test-live-model-recommended:"
+                      "test-live-model-large:"))
+      (should (string-match-p (regexp-quote target) makefile)))
+    (dolist (cases '("CONSENT_LIVE_MODEL_MATRIX_CASES='$(CONSENT_LIVE_MODEL_SMALL_SET)'"
+                     "CONSENT_LIVE_MODEL_MATRIX_CASES='$(CONSENT_LIVE_MODEL_RECOMMENDED_SET)'"
+                     "CONSENT_LIVE_MODEL_MATRIX_CASES='$(CONSENT_LIVE_MODEL_LARGE_SET)'"))
+      (should (string-match-p (regexp-quote cases) makefile)))))
+
 (ert-deftest consent-ci-test-parses-result-counts-and-slowest-tests ()
   "Parse ERT shard output plus CI wall-clock metadata."
   (let* ((log (consent-ci-test--write-log
