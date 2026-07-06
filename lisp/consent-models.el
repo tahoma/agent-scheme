@@ -53,6 +53,9 @@ transport is `openai-compatible-http'."
 (defconst consent-models--transport-detail-limit 240
   "Maximum diagnostic excerpt length copied into transport failures.")
 
+(defconst consent-models--transport-detail-limit-maximum 4096
+  "Hard upper bound for per-call transport diagnostic excerpts.")
+
 (defun consent-models--symbol (name)
   "Return NAME as an Consent Scheme symbol datum."
   (consent--syntax-symbol
@@ -424,7 +427,18 @@ transport is `openai-compatible-http'."
      ((integerp value) value)
      (t default))))
 
-(defun consent-models--bounded-text (text)
+(defun consent-models--normalize-transport-detail-limit (value)
+  "Return VALUE as an effective transport detail limit."
+  (if (and (integerp value) (> value 0))
+      (min value consent-models--transport-detail-limit-maximum)
+    consent-models--transport-detail-limit))
+
+(defun consent-models--request-transport-detail-limit (request)
+  "Return REQUEST's effective transport detail limit."
+  (consent-models--normalize-transport-detail-limit
+   (plist-get request :max-transport-detail-bytes)))
+
+(defun consent-models--bounded-text (text &optional limit)
   "Return TEXT as a trimmed, redacted diagnostic excerpt."
   (let* ((rendered
           (string-trim
@@ -432,10 +446,12 @@ transport is `openai-compatible-http'."
                text
              (format "%S" text))))
          (redacted
-          (consent-redact rendered 'model-diagnostics)))
-    (if (> (length redacted) consent-models--transport-detail-limit)
+          (consent-redact rendered 'model-diagnostics))
+         (effective-limit
+          (consent-models--normalize-transport-detail-limit limit)))
+    (if (> (length redacted) effective-limit)
         (concat
-         (substring redacted 0 (- consent-models--transport-detail-limit 3))
+         (substring redacted 0 (- effective-limit 3))
          "...")
       redacted)))
 
@@ -513,6 +529,10 @@ transport is `openai-compatible-http'."
                              (consent-models--integer-datum
                               (or (plist-get request :timeout-seconds)
                                   consent-models-request-timeout-seconds)))
+      (consent-models--field
+       "max-transport-detail-bytes"
+       (consent-models--integer-datum
+        (consent-models--request-transport-detail-limit request)))
       (consent-models--field "retry-count"
                              (consent-models--integer-datum
                               (or (plist-get request :retry-count)
@@ -638,8 +658,11 @@ transport is `openai-compatible-http'."
 
 (defun consent-models--network-error-datum (request error)
   "Return a structured network failure datum for REQUEST and ERROR."
-  (let* ((detail (consent-models--bounded-text
-                  (consent-models--transport-error-message error)))
+  (let* ((detail-limit
+          (consent-models--request-transport-detail-limit request))
+         (detail (consent-models--bounded-text
+                  (consent-models--transport-error-message error)
+                  detail-limit))
          (timeout-seconds
           (or (plist-get request :timeout-seconds)
               consent-models-request-timeout-seconds))
@@ -673,7 +696,9 @@ transport is `openai-compatible-http'."
 (defun consent-models--http-error-datum
     (request status reason-phrase body elapsed-ms)
   "Return a structured HTTP failure datum for REQUEST."
-  (let* ((excerpt (consent-models--bounded-text body))
+  (let* ((detail-limit
+          (consent-models--request-transport-detail-limit request))
+         (excerpt (consent-models--bounded-text body detail-limit))
          (reason
           (string-trim
            (format "HTTP %s%s%s"
@@ -710,9 +735,12 @@ transport is `openai-compatible-http'."
 (defun consent-models--decode-error-datum
     (request error body elapsed-ms &optional http-status)
   "Return a structured decode failure datum for REQUEST."
-  (let ((detail (consent-models--bounded-text
-                 (consent-models--transport-error-message error)))
-        (excerpt (consent-models--bounded-text body)))
+  (let* ((detail-limit
+          (consent-models--request-transport-detail-limit request))
+         (detail (consent-models--bounded-text
+                  (consent-models--transport-error-message error)
+                  detail-limit))
+         (excerpt (consent-models--bounded-text body detail-limit)))
     (consent-models--provider-error-datum
      request
      (format "response decode failed: %s" detail)
@@ -788,6 +816,13 @@ transport is `openai-compatible-http'."
                              options
                              '("timeout-seconds" "timeout_seconds")
                              consent-models-request-timeout-seconds)
+                            :max-transport-detail-bytes
+                            (consent-models--normalize-transport-detail-limit
+                             (consent-models--option-integer
+                              options
+                              '("max-transport-detail-bytes"
+                                "max_transport_detail_bytes")
+                              consent-models--transport-detail-limit))
                             :retry-count
                             (consent-models--option-integer
                              options

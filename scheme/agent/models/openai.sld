@@ -23,6 +23,8 @@
     (define model-openai-default-timeout-seconds 30)
     ;; Maximum process diagnostic text copied into model transport conditions.
     (define model-openai-transport-detail-limit 240)
+    ;; Hard upper bound for per-call transport diagnostic excerpts.
+    (define model-openai-transport-detail-limit-maximum 4096)
     ;; Replacement text used when prompt content is intentionally withheld.
     (define model-openai-local-only-replacement "[local-only]")
     ;; Curl metadata marker appended after the response body.
@@ -106,7 +108,21 @@
         (write value port)
         (get-output-string port)))
 
-    (define (model-openai-bounded-detail detail)
+    (define (model-openai-normalize-transport-detail-limit value)
+      "Return VALUE as an effective transport detail limit."
+      (if (and (integer? value) (> value 0))
+          (min value model-openai-transport-detail-limit-maximum)
+          model-openai-transport-detail-limit))
+
+    (define (model-openai-transport-detail-limit-for-options options)
+      "Return OPTIONS's effective transport detail limit."
+      (model-openai-normalize-transport-detail-limit
+       (model-openai-option-integer
+        options
+        '(max-transport-detail-bytes max_transport_detail_bytes)
+        model-openai-transport-detail-limit)))
+
+    (define (model-openai-bounded-detail detail limit)
       "Return DETAIL as non-empty bounded transport diagnostic text."
       (let* ((text
               (cond
@@ -116,13 +132,16 @@
                 "no process detail")
                (else
                 (model-openai-object->string detail))))
-             (limit model-openai-transport-detail-limit))
+             (effective-limit
+              (model-openai-normalize-transport-detail-limit limit)))
         (let ((redacted (redaction-model:redact text 'model-diagnostics)))
-          (if (> (string-length redacted) limit)
-              (string-append (substring redacted 0 (- limit 3)) "...")
+          (if (> (string-length redacted) effective-limit)
+              (string-append
+               (substring redacted 0 (- effective-limit 3))
+               "...")
               redacted))))
 
-    (define (model-openai-condition-detail condition)
+    (define (model-openai-condition-detail condition limit)
       "Return host CONDITION as bounded transport diagnostic text."
       (model-openai-bounded-detail
        (cond
@@ -131,7 +150,8 @@
         ((string? condition)
          condition)
         (else
-         condition))))
+         condition))
+       limit))
 
     (define (model-openai-string-contains? haystack needle)
       "Return #t when HAYSTACK contains NEEDLE."
@@ -237,6 +257,9 @@
               '(timeout-seconds)
               model-openai-default-timeout-seconds))
             (model-openai-field
+             'max-transport-detail-bytes
+             (model-openai-transport-detail-limit-for-options options))
+            (model-openai-field
              'retry-count
              (max 0
                   (model-openai-option-integer options '(retry-count) 0)))))
@@ -269,24 +292,32 @@
 
     (define (model-openai-provider-error-summary datum)
       "Return DATUM as one concise human-facing transport error string."
-      (string-append
-       "local model transport failed for provider "
-       (model-openai-name-string
-        (model-openai-field-value datum 'provider 'unknown-provider)
-        "provider id")
-       " model "
-       (model-openai-name-string
-        (model-openai-field-value datum 'model 'unknown-model)
-        "model id")
-       " via "
-       (model-openai-name-string
-        (model-openai-field-value datum
-                                  'transport
-                                  'openai-compatible-http)
-        "transport")
-       ": "
-       (model-openai-bounded-detail
-        (model-openai-field-value datum 'reason "transport failed"))))
+      (let* ((request (model-openai-field-value datum 'request #f))
+             (limit
+              (model-openai-normalize-transport-detail-limit
+               (model-openai-field-value
+                request
+                'max-transport-detail-bytes
+                model-openai-transport-detail-limit))))
+        (string-append
+         "local model transport failed for provider "
+         (model-openai-name-string
+          (model-openai-field-value datum 'provider 'unknown-provider)
+          "provider id")
+         " model "
+         (model-openai-name-string
+          (model-openai-field-value datum 'model 'unknown-model)
+          "model id")
+         " via "
+         (model-openai-name-string
+          (model-openai-field-value datum
+                                    'transport
+                                    'openai-compatible-http)
+          "transport")
+         ": "
+         (model-openai-bounded-detail
+          (model-openai-field-value datum 'reason "transport failed")
+          limit))))
 
     (define (model-openai-raise-provider-error datum)
       "Raise DATUM as a structured local transport failure."
@@ -294,7 +325,10 @@
 
     (define (model-openai-curl-status-detail status timeout stderr)
       "Return a concise detail string for curl STATUS and STDERR."
-      (let ((stderr-text (model-openai-bounded-detail stderr)))
+      (let ((stderr-text
+             (model-openai-bounded-detail
+              stderr
+              model-openai-transport-detail-limit)))
         (cond
          ((and (= status 28)
                (> timeout 0))
@@ -322,11 +356,16 @@
     (define (model-openai-process-error-datum
              provider model role url options status stderr elapsed-ms)
       "Return a structured process failure record."
-      (let ((detail (model-openai-curl-status-detail
-                     status
-                     (model-openai-option-integer
-                      options '(timeout-seconds) model-openai-default-timeout-seconds)
-                     stderr)))
+      (let ((detail
+             (model-openai-bounded-detail
+              (model-openai-curl-status-detail
+               status
+               (model-openai-option-integer
+                options
+                '(timeout-seconds)
+                model-openai-default-timeout-seconds)
+               stderr)
+              (model-openai-transport-detail-limit-for-options options))))
         (model-openai-provider-error-datum
          provider
          model
@@ -348,7 +387,10 @@
     (define (model-openai-http-error-datum
              provider model role url options status body elapsed-ms)
       "Return a structured HTTP failure record."
-      (let ((excerpt (model-openai-bounded-detail body)))
+      (let ((excerpt
+             (model-openai-bounded-detail
+              body
+              (model-openai-transport-detail-limit-for-options options))))
         (model-openai-provider-error-datum
          provider
          model
@@ -378,8 +420,10 @@
     (define (model-openai-decode-error-datum
              provider model role url options detail body elapsed-ms status)
       "Return a structured decode failure record."
-      (let ((excerpt (model-openai-bounded-detail body))
-            (detail-text (model-openai-bounded-detail detail)))
+      (let* ((limit
+              (model-openai-transport-detail-limit-for-options options))
+             (excerpt (model-openai-bounded-detail body limit))
+             (detail-text (model-openai-bounded-detail detail limit)))
         (model-openai-provider-error-datum
          provider
          model
@@ -807,14 +851,17 @@
                 (guard (condition
                         (else
                          (model-openai-raise-provider-error
-                          (model-openai-process-error-datum
+                         (model-openai-process-error-datum
                            provider
                            model
                            role
                            (model-openai-completion-url endpoint)
                            options
                            -1
-                           (model-openai-condition-detail condition)
+                           (model-openai-condition-detail
+                            condition
+                            (model-openai-transport-detail-limit-for-options
+                             options))
                            #f))))
                   (model-openai-retrieve
                    (model-openai-completion-url endpoint)
@@ -845,7 +892,10 @@
                      role
                      url
                      options
-                     (model-openai-condition-detail condition)
+                     (model-openai-condition-detail
+                      condition
+                      (model-openai-transport-detail-limit-for-options
+                       options))
                      body
                      elapsed-ms
                      http-status))))

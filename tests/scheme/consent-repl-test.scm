@@ -399,12 +399,15 @@
          "      (privacy local))))))\n"
          "(model-complete 'scheme-scripter\n"
          "                \"transport diagnostic prompt\"\n"
-         "                '((timeout-seconds 1) (retry-count 0)))\n"))
+         "                '((timeout-seconds 1)\n"
+         "                  (retry-count 0)\n"
+         "                  (max-transport-detail-bytes 320)))\n"))
        (records (drive input))
        (condition-record (car (records-of records 'repl-condition)))
        (condition (field condition-record 'condition))
        (irritants (field condition 'irritants))
        (detail (and (pair? irritants) (car irritants)))
+       (request (and detail (field detail 'request)))
        (process (and detail (field detail 'process)))
        (comment-rendered
         (cli-repl-chrome-paint
@@ -443,6 +446,9 @@
   (check-false 'model-transport-process-detail-not-generic
                (string-contains? (field process 'detail)
                                  "no process detail"))
+  (check-true 'model-transport-detail-budget-recorded
+              (string-contains? (consent-datum->external detail)
+                                "(max-transport-detail-bytes"))
   (check-true 'model-transport-detail-request-path
               (string-contains? (consent-datum->external detail)
                                 "/v1/chat/completions"))
