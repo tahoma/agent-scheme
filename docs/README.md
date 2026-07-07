@@ -14,6 +14,7 @@ project pitch and examples, see the top-level [README](../README.md).
 ## Architecture & Design
 
 - [Architecture and Threat Model](architecture.md) — the Consent Scheme runtime design, host boundary, and threat model.
+- [Runtime Core Diagrams](runtime-core-diagrams.md) — Mermaid diagrams for the portable runtime core, Emacs Lisp twin, evaluation pipeline, host boundary, bootstrap hooks, and parity matrix.
 - [Naming Convention](naming.md) — public and private Consent Scheme identifier conventions.
 - [Multi-Host Adapter and Bootstrap Strategy](multi-host-bootstrap.md) — the Emacs-first bootstrap stance and the portable Scheme self-hosting path.
 - [Roadmap](roadmap.md) — pointer to the GitHub-issue roadmap and how it is structured.

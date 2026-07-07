@@ -222,6 +222,10 @@ is replayable and parity-checkable:
 
 ## Runtime Shape
 
+For a visual overview of the current portable Scheme core, Emacs Lisp twin,
+evaluation pipeline, host boundary, bootstrap hooks, and parity matrix, see
+[Runtime Core Diagrams](runtime-core-diagrams.md).
+
 The runtime has three layers.
 
 ### Language Core
