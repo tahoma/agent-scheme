@@ -553,7 +553,8 @@ the reader must read #\\( #\\| etc. literally; char->integer must yield a number
     (should (equal (consent-eval-test--external argument-source) "not-text"))
     (let ((argument-result
            (consent-eval-test--result-external
-            argument-source '(:boundary-contract-checking t))))
+            argument-source
+            '(:boundary-contract-checking t :docstring-retention full))))
       (should
        (string-match-p
         (regexp-quote "(condition (type boundary-contract)")
@@ -580,7 +581,8 @@ the reader must read #\\( #\\| etc. literally; char->integer must yield a number
         argument-result)))
     (let ((return-result
            (consent-eval-test--result-external
-            return-source '(:boundary-contract-checking t))))
+            return-source
+            '(:boundary-contract-checking t :docstring-retention full))))
       (should
        (string-match-p
         (regexp-quote "(contract-failure (boundary procedure-return)")
@@ -615,7 +617,7 @@ the reader must read #\\( #\\| etc. literally; char->integer must yield a number
         (values (car names) (cdr cell)))
       (accept-shapes '(\"ada\") #(1 2) (cons \"ada\" 7) #f
                      (lambda (text) text))"
-     '(:boundary-contract-checking t)))))
+     '(:boundary-contract-checking t :docstring-retention full)))))
 
 (ert-deftest consent-eval-test-boundary-contract-checking-reports-stripped-metadata ()
   "Checking mode reports when rich contract metadata has been stripped."
@@ -658,7 +660,7 @@ the reader must read #\\( #\\| etc. literally; char->integer must yield a number
          x)
        (documented 'bad)"
       environment
-      '(:boundary-contract-checking t))
+      '(:boundary-contract-checking t :docstring-retention full))
      :type 'consent-eval-error)
     (should
      (equal (consent-value->external

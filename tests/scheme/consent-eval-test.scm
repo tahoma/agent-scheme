@@ -1031,7 +1031,8 @@
    "(parameter text)"
    "(expected string)"
    "(value-shape symbol)")
- '((boundary-contract-checking . #t)))
+ '((boundary-contract-checking . #t)
+   (docstring-retention . full)))
 
 (check-result-contains
  'boundary-contract-checking-return-failure
@@ -1048,7 +1049,8 @@
    "(blame callee)"
    "(expected string)"
    "(value-shape symbol)")
- '((boundary-contract-checking . #t)))
+ '((boundary-contract-checking . #t)
+   (docstring-retention . full)))
 
 (check-result-contains
  'boundary-contract-checking-lowerable-shapes
@@ -1071,7 +1073,8 @@
   (accept-shapes '(\"ada\") #(1 2) (cons \"ada\" 7) #f
                  (lambda (text) text))"
  '("(evaluation-result (status values) (values (\"ada\" 7))")
- '((boundary-contract-checking . #t)))
+ '((boundary-contract-checking . #t)
+   (docstring-retention . full)))
 
 (check-result-contains
  'boundary-contract-checking-reports-stripped-metadata
@@ -1111,7 +1114,8 @@
                           x)
                         (documented 'bad)"
                        environment
-                       '((boundary-contract-checking . #t)))
+                       '((boundary-contract-checking . #t)
+                         (docstring-retention . full)))
                       #f))))))
            (and raised?
                 (equal? (consent-value->external
