@@ -14,6 +14,10 @@ architectural parity instead of allowing the portable side to trail as cleanup.
 This document records the host/core boundary for contributors before the
 adapter APIs become executable code.
 
+The companion [Runtime Core Diagrams](runtime-core-diagrams.md) page maps the
+current portable Scheme runtime core, Emacs Lisp twin, host boundary, bootstrap
+hooks, and parity test matrix as Mermaid source.
+
 ## Design Goals
 
 - Keep R7RS-small semantics independent from any one host.
