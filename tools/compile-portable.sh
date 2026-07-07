@@ -107,15 +107,18 @@ EOF
 # collections, so the Racket call must run after generate_racket_collections.
 enumerate_runtime_source_files() {
   enum_prog='(import (scheme base) (scheme write) (consent library)) (for-each (lambda (p) (display p) (newline)) (consent-runtime-source-files))'
+  enum_library_path="$scheme_dir${CONSENT_LIBRARY_PATH:+:$CONSENT_LIBRARY_PATH}"
   case "$compile_host" in
     gambit)
-      "$gsi" -:r7rs,search="$scheme_dir" -e "$enum_prog" \
+      CONSENT_LIBRARY_PATH="$enum_library_path" \
+        "$gsi" -:r7rs,search="$scheme_dir" -e "$enum_prog" \
         || die "could not enumerate runtime source files via gsi"
       ;;
     racket)
       enum_file="$build_dir/consent-runtime-source-files.rkt"
       { printf '%s\n' '#lang r7rs'; printf '%s\n' "$enum_prog"; } > "$enum_file"
-      PLTCOLLECTS="$collections_dir:${PLTCOLLECTS:-}" "$racket" "$enum_file" \
+      CONSENT_LIBRARY_PATH="$enum_library_path" \
+        PLTCOLLECTS="$collections_dir:${PLTCOLLECTS:-}" "$racket" "$enum_file" \
         || { rm -f "$enum_file"; die "could not enumerate runtime source files via racket"; }
       rm -f "$enum_file"
       ;;
