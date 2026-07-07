@@ -823,6 +823,18 @@
                    ((type (values string any))
                     (description \"String result and opaque payload.\")))"))
 
+(check-external 'boundary-contract-checking-default-advisory
+                "(define (string-identity text)
+                   \"Return TEXT.\"
+                   #((parameters
+                      (text (type string)
+                       (description \"Text to return.\")))
+                     (returns (type string)
+                      (description \"The same text.\")))
+                   text)
+                 (string-identity 'not-text)"
+                "not-text")
+
 (check-external/options 'docstring-retention-simple
                 "(import (scheme base) (agent reflect))
                  (define (field datum name)
@@ -1001,6 +1013,111 @@
                (if (not (string-contains? actual (car rest)))
                    (record-failure name (car rest) actual))
                (loop (cdr rest)))))))))
+
+(check-result-contains
+ 'boundary-contract-checking-argument-failure
+ "(define (string-identity text)
+    \"Return TEXT.\"
+    #((parameters
+       (text (type string)
+        (description \"Text to return.\")))
+      (returns (type string)
+       (description \"The same text.\")))
+    text)
+  (string-identity 'not-text)"
+ '("(condition (type boundary-contract)"
+   "(contract-failure (boundary procedure-call)"
+   "(blame caller)"
+   "(parameter text)"
+   "(expected string)"
+   "(value-shape symbol)")
+ '((boundary-contract-checking . #t)))
+
+(check-result-contains
+ 'boundary-contract-checking-return-failure
+ "(define (bad-return text)
+    \"Return a string for TEXT.\"
+    #((parameters
+       (text (type string)
+        (description \"Input text.\")))
+      (returns (type string)
+       (description \"A string result.\")))
+    'not-text)
+  (bad-return \"ok\")"
+ '("(contract-failure (boundary procedure-return)"
+   "(blame callee)"
+   "(expected string)"
+   "(value-shape symbol)")
+ '((boundary-contract-checking . #t)))
+
+(check-result-contains
+ 'boundary-contract-checking-lowerable-shapes
+ "(define (accept-shapes names scores cell maybe callback)
+    \"Return two checked values.\"
+    #((parameters
+       (names (type (list-of string))
+        (description \"Name strings.\"))
+       (scores (type (vector-of number))
+        (description \"Numeric scores.\"))
+       (cell (type (pair string number))
+        (description \"Name and score pair.\"))
+       (maybe (type (or #f symbol))
+        (description \"Optional marker.\"))
+       (callback (type (procedure (string) string))
+        (description \"Shallow procedure callback.\")))
+      (returns (type (values string number))
+       (description \"Name and score.\")))
+    (values (car names) (cdr cell)))
+  (accept-shapes '(\"ada\") #(1 2) (cons \"ada\" 7) #f
+                 (lambda (text) text))"
+ '("(evaluation-result (status values) (values (\"ada\" 7))")
+ '((boundary-contract-checking . #t)))
+
+(check-result-contains
+ 'boundary-contract-checking-reports-stripped-metadata
+ "(define (documented x)
+    \"Return X.\"
+    #((parameters
+       (x (type string)
+        (description \"Text.\")))
+      (returns (type string)
+       (description \"Text.\")))
+    x)
+  (documented 'bad)"
+ '("(condition (type boundary-contract-unavailable)"
+   "docstring-retention")
+ '((boundary-contract-checking . #t)
+   (docstring-retention . #f)))
+
+(check 'boundary-contract-checking-precedes-body-prep
+       (let ((environment (consent-make-base-environment)))
+         (let ((raised?
+                (call/cc
+                 (lambda (return)
+                   (with-exception-handler
+                    (lambda (condition) (return #t))
+                    (lambda ()
+                      (consent-eval-source
+                       "(define observed 'clean)
+                        (define (documented x)
+                          \"Return X.\"
+                          #((parameters
+                             (x (type string)
+                              (description \"Text.\")))
+                            (returns (type string)
+                             (description \"Text.\")))
+                          (define marker
+                            (begin (set! observed 'ran) x))
+                          x)
+                        (documented 'bad)"
+                       environment
+                       '((boundary-contract-checking . #t)))
+                      #f))))))
+           (and raised?
+                (equal? (consent-value->external
+                         (consent-eval-source "observed" environment))
+                        "clean"))))
+       #t)
 
 (check-result-contains
  'srfi-1-list-docstring-reflection

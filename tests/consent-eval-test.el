@@ -528,6 +528,143 @@ the reader must read #\\( #\\| etc. literally; char->integer must yield a number
                (list left right)))")
           "(8 13)")))
 
+(ert-deftest consent-eval-test-boundary-contract-checking-is-opt-in ()
+  "Lower typed metadata into optional shallow boundary checks."
+  (let ((argument-source
+         "(define (string-identity text)
+            \"Return TEXT.\"
+            #((parameters
+               (text (type string)
+                (description \"Text to return.\")))
+              (returns (type string)
+               (description \"The same text.\")))
+            text)
+          (string-identity 'not-text)")
+        (return-source
+         "(define (bad-return text)
+            \"Return a string for TEXT.\"
+            #((parameters
+               (text (type string)
+                (description \"Input text.\")))
+              (returns (type string)
+               (description \"A string result.\")))
+            'not-text)
+          (bad-return \"ok\")"))
+    (should (equal (consent-eval-test--external argument-source) "not-text"))
+    (let ((argument-result
+           (consent-eval-test--result-external
+            argument-source '(:boundary-contract-checking t))))
+      (should
+       (string-match-p
+        (regexp-quote "(condition (type boundary-contract)")
+        argument-result))
+      (should
+       (string-match-p
+        (regexp-quote "(contract-failure (boundary procedure-call)")
+        argument-result))
+      (should
+       (string-match-p
+        (regexp-quote "(blame caller)")
+        argument-result))
+      (should
+       (string-match-p
+        (regexp-quote "(parameter text)")
+        argument-result))
+      (should
+       (string-match-p
+        (regexp-quote "(expected string)")
+        argument-result))
+      (should
+       (string-match-p
+        (regexp-quote "(value-shape symbol)")
+        argument-result)))
+    (let ((return-result
+           (consent-eval-test--result-external
+            return-source '(:boundary-contract-checking t))))
+      (should
+       (string-match-p
+        (regexp-quote "(contract-failure (boundary procedure-return)")
+        return-result))
+      (should
+       (string-match-p
+        (regexp-quote "(blame callee)")
+        return-result)))))
+
+(ert-deftest consent-eval-test-boundary-contract-checking-lowers-shapes ()
+  "Accept lowerable first-order descriptor shapes under shallow checking."
+  (should
+   (string-match-p
+    (regexp-quote
+     "(evaluation-result (status values) (values (\"ada\" 7))")
+    (consent-eval-test--result-external
+     "(define (accept-shapes names scores cell maybe callback)
+        \"Return two checked values.\"
+        #((parameters
+           (names (type (list-of string))
+            (description \"Name strings.\"))
+           (scores (type (vector-of number))
+            (description \"Numeric scores.\"))
+           (cell (type (pair string number))
+            (description \"Name and score pair.\"))
+           (maybe (type (or #f symbol))
+            (description \"Optional marker.\"))
+           (callback (type (procedure (string) string))
+            (description \"Shallow procedure callback.\")))
+          (returns (type (values string number))
+           (description \"Name and score.\")))
+        (values (car names) (cdr cell)))
+      (accept-shapes '(\"ada\") #(1 2) (cons \"ada\" 7) #f
+                     (lambda (text) text))"
+     '(:boundary-contract-checking t)))))
+
+(ert-deftest consent-eval-test-boundary-contract-checking-reports-stripped-metadata ()
+  "Checking mode reports when rich contract metadata has been stripped."
+  (let ((result
+         (consent-eval-test--result-external
+          "(define (documented x)
+             \"Return X.\"
+             #((parameters
+                (x (type string)
+                 (description \"Text.\")))
+               (returns (type string)
+                (description \"Text.\")))
+             x)
+           (documented 'bad)"
+          '(:boundary-contract-checking t :docstring-retention nil))))
+    (should
+     (string-match-p
+      (regexp-quote "(condition (type boundary-contract-unavailable)")
+      result))
+    (should
+     (string-match-p
+      (regexp-quote "docstring-retention")
+      result))))
+
+(ert-deftest consent-eval-test-boundary-contract-checking-precedes-body-prep ()
+  "Argument contract failures run before internal definition initializers."
+  (let ((environment (consent-make-base-environment)))
+    (should-error
+     (consent-eval-source
+      "(define observed 'clean)
+       (define (documented x)
+         \"Return X.\"
+         #((parameters
+            (x (type string)
+             (description \"Text.\")))
+           (returns (type string)
+            (description \"Text.\")))
+         (define marker
+           (begin (set! observed 'ran) x))
+         x)
+       (documented 'bad)"
+      environment
+      '(:boundary-contract-checking t))
+     :type 'consent-eval-error)
+    (should
+     (equal (consent-value->external
+             (consent-eval-source "observed" environment))
+            "clean"))))
+
 (ert-deftest consent-eval-test-continuations-and-dynamic-wind ()
   "Evaluate re-enterable continuations and dynamic-wind transitions."
   (should

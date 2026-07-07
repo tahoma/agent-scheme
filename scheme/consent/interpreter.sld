@@ -775,6 +775,280 @@ cursor across sessions."
             ;; of an already-budgeted argument, so it creates nothing to charge.
             (continue continuation (cdr outcome)))))
 
+    (define (contract-enabled? context)
+      "Return true when CONTEXT enables shallow boundary contracts."
+      (eq? (context-boundary-contract-checking context) 'shallow))
+
+    (define (contract-field name . values)
+      "Return a Scheme-readable contract field named NAME with VALUES."
+      (cons name values))
+
+    (define (contract-field-value fields name)
+      "Return the value list for NAME in FIELDS, or #f."
+      (let loop ((rest fields))
+        (cond
+         ((null? rest) #f)
+         ((and (pair? (car rest)) (eq? (caar rest) name))
+          (cdar rest))
+         (else (loop (cdr rest))))))
+
+    (define (contract-descriptor-type descriptor)
+      "Return DESCRIPTOR's type datum, defaulting to `any'."
+      (let ((entry (contract-field-value descriptor 'type)))
+        (if (and entry (pair? entry)) (car entry) 'any)))
+
+    (define (contract-procedure? value)
+      "Return true when VALUE is callable by the evaluator."
+      (or (consent-procedure? value)
+          (consent-primitive-procedure? value)
+          (consent-parameter? value)
+          (continuation? value)))
+
+    (define (contract-exact-integer? value)
+      "Return true when VALUE is an exact integer."
+      (or (and (integer? value) (exact? value))
+          (and (consent-number? value)
+               (eq? (consent-number-kind value) 'integer)
+               (eq? (consent-number-exactness value) 'exact))))
+
+    (define (contract-integer? value)
+      "Return true when VALUE is an integer number."
+      (or (integer? value)
+          (and (consent-number? value)
+               (eq? (consent-number-kind value) 'integer))))
+
+    (define (contract-type-matches? type value)
+      "Return true when VALUE satisfies shallow contract TYPE."
+      "Unknown type extensions remain advisory and therefore pass."
+      (cond
+       ((eq? type #f) (eq? value #f))
+       ((symbol? type)
+        (case type
+          ((any) #t)
+          ((boolean) (boolean? value))
+          ((symbol) (symbol? value))
+          ((string) (string? value))
+          ((number) (or (number? value) (consent-number? value)))
+          ((integer) (contract-integer? value))
+          ((exact-integer) (contract-exact-integer? value))
+          ((char character) (char? value))
+          ((pair) (pair? value))
+          ((list) (list? value))
+          ((null) (null? value))
+          ((vector) (vector? value))
+          ((bytevector) (bytevector? value))
+          ((procedure) (contract-procedure? value))
+          ((port) (consent-port? value))
+          ((input-port) (and (consent-port? value)
+                             (consent-port-input? value)))
+          ((output-port) (and (consent-port? value)
+                              (consent-port-output? value)))
+          ((textual-port) (and (consent-port? value)
+                               (consent-port-textual? value)))
+          ((binary-port) (and (consent-port? value)
+                              (consent-port-binary? value)))
+          ((eof-object) (consent-eof-object? value))
+          (else #t)))
+       ((pair? type)
+        (case (car type)
+          ((or)
+           (let loop ((variants (cdr type)))
+             (cond
+              ((null? variants) #f)
+              ((contract-type-matches? (car variants) value) #t)
+              (else (loop (cdr variants))))))
+          ((list-of)
+           (if (= (length type) 2)
+               (and (list? value)
+                    (let loop ((items value))
+                      (cond
+                       ((null? items) #t)
+                       ((contract-type-matches? (cadr type) (car items))
+                        (loop (cdr items)))
+                       (else #f))))
+               #t))
+          ((vector-of)
+           (if (= (length type) 2)
+               (and (vector? value)
+                    (let loop ((index 0))
+                      (cond
+                       ((= index (vector-length value)) #t)
+                       ((contract-type-matches?
+                         (cadr type)
+                         (vector-ref value index))
+                        (loop (+ index 1)))
+                       (else #f))))
+               #t))
+          ((pair)
+           (cond
+            ((= (length type) 3)
+             (and (pair? value)
+                  (contract-type-matches? (cadr type) (car value))
+                  (contract-type-matches? (third type) (cdr value))))
+            (else (pair? value))))
+          ((procedure)
+           (contract-procedure? value))
+          ((values)
+           #t)
+          (else #t)))
+       (else #t)))
+
+    (define (contract-value-shape value)
+      "Return a Scheme-readable shallow shape symbol for VALUE."
+      (cond
+       ((eq? value #f) '#f)
+       ((eq? value #t) 'boolean)
+       ((symbol? value) 'symbol)
+       ((string? value) 'string)
+       ((or (number? value) (consent-number? value)) 'number)
+       ((char? value) 'character)
+       ((null? value) 'list)
+       ((and (pair? value) (list? value)) 'list)
+       ((pair? value) 'pair)
+       ((vector? value) 'vector)
+       ((bytevector? value) 'bytevector)
+       ((contract-procedure? value) 'procedure)
+       ((consent-port? value) 'port)
+       ((consent-eof-object? value) 'eof-object)
+       (else 'opaque)))
+
+    (define (contract-failure-datum boundary blame expected value . fields)
+      "Return a Scheme-readable boundary contract failure datum."
+      (cons 'contract-failure
+            (append
+             (list (contract-field 'boundary boundary)
+                   (contract-field 'blame blame))
+             fields
+             (list (contract-field 'expected expected)
+                   (contract-field 'value-shape
+                                   (contract-value-shape value))))))
+
+    (define (contract-raise-failure!
+             context boundary blame expected value . fields)
+      "Record and raise a boundary contract failure."
+      (let ((failure
+             (apply contract-failure-datum
+                    boundary blame expected value fields)))
+        (record-context-event! context failure)
+        (eval-error "boundary contract violation" failure)))
+
+    (define (contract-raise-unavailable! context)
+      "Record and raise an unavailable boundary contract diagnostic."
+      (let ((datum
+             (list
+              'contract-unavailable
+              (contract-field 'reason 'docstring-retention)
+              (contract-field 'retention
+                              (context-docstring-retention context)))))
+        (record-context-event! context datum)
+        (eval-error
+         "boundary contract checking unavailable: docstring-retention strips rich metadata"
+         datum)))
+
+    (define (contract-parameter-descriptor parameters name)
+      "Return parameter descriptor in PARAMETERS for NAME, or #f."
+      (let loop ((rest parameters))
+        (cond
+         ((null? rest) #f)
+         ((and (pair? (car rest)) (eq? (caar rest) name))
+          (cdar rest))
+         (else (loop (cdr rest))))))
+
+    (define (contract-check-argument! context descriptor value name position)
+      "Check one argument VALUE against DESCRIPTOR for NAME at POSITION."
+      (if descriptor
+          (let ((type (contract-descriptor-type descriptor)))
+            (if (not (contract-type-matches? type value))
+                (contract-raise-failure!
+                 context
+                 'procedure-call
+                 'caller
+                 type
+                 value
+                 (contract-field 'parameter name)
+                 (contract-field 'position position))))))
+
+    (define (contract-check-arguments! procedure arguments context)
+      "Check PROCEDURE ARGUMENTS against lowered parameter metadata."
+      (let* ((metadata (procedure-documentation procedure))
+             (parameters
+              (and metadata
+                   (contract-field-value
+                    (documentation-metadata-fields metadata)
+                    'parameters))))
+        (if parameters
+            (let ((required (formals-required (procedure-formals procedure)))
+                  (rest-name (formals-rest (procedure-formals procedure))))
+              (let loop ((names required)
+                         (remaining arguments)
+                         (position 1))
+                (cond
+                 ((pair? names)
+                  (contract-check-argument!
+                   context
+                   (contract-parameter-descriptor parameters (car names))
+                   (car remaining)
+                   (car names)
+                   position)
+                  (loop (cdr names) (cdr remaining) (+ position 1)))
+                 (rest-name
+                  (contract-check-argument!
+                   context
+                   (contract-parameter-descriptor parameters rest-name)
+                   remaining
+                   rest-name
+                   position))))))))
+
+    (define (contract-check-return! procedure value context)
+      "Check PROCEDURE return VALUE against lowered return metadata."
+      (let* ((metadata (procedure-documentation procedure))
+             (descriptor
+              (and metadata
+                   (contract-field-value
+                    (documentation-metadata-fields metadata)
+                    'returns))))
+        (if descriptor
+            (let ((type (contract-descriptor-type descriptor)))
+              (if (and (pair? type) (eq? (car type) 'values))
+                  (let ((actual-values (values-list value))
+                        (types (cdr type)))
+                    (if (not (= (length actual-values) (length types)))
+                        (contract-raise-failure!
+                         context 'procedure-return 'callee type value))
+                    (let loop ((expected types) (actual actual-values))
+                      (if (pair? expected)
+                          (begin
+                            (if (not (contract-type-matches?
+                                      (car expected)
+                                      (car actual)))
+                                (contract-raise-failure!
+                                 context
+                                 'procedure-return
+                                 'callee
+                                 (car expected)
+                                 (car actual)))
+                            (loop (cdr expected) (cdr actual))))))
+                  (let ((actual-values (values-list value)))
+                    (if (not (= (length actual-values) 1))
+                        (contract-raise-failure!
+                         context 'procedure-return 'callee type value)
+                        (let ((actual (car actual-values)))
+                          (if (not (contract-type-matches? type actual))
+                              (contract-raise-failure!
+                               context
+                               'procedure-return
+                               'callee
+                               type
+                               actual))))))))))
+
+    (define (contract-wrap-continuation procedure context continuation)
+      "Return CONTINUATION wrapped with PROCEDURE return checking if enabled."
+      (if (contract-enabled? context)
+          (lambda (value)
+            (contract-check-return! procedure value context)
+            (continue continuation value))
+          continuation))
+
     (define (apply-procedure procedure arguments context tail? . maybe-continuation)
       "All callable values pass through this boundary so primitive callbacks,"
       "parameter procedures, compound procedures, and continuations share"
@@ -853,6 +1127,9 @@ cursor across sessions."
           (finish
            (apply-parameter/k procedure arguments context continuation)))
          ((consent-procedure? procedure)
+          (if (and (contract-enabled? context)
+                   (not (eq? (context-docstring-retention context) 'full)))
+              (contract-raise-unavailable! context))
           (let ((closure-syntax-environment
                  (procedure-syntax-environment procedure))
                 (caller-syntax-environment
@@ -867,25 +1144,31 @@ cursor across sessions."
                          (procedure-formals procedure)
                          arguments
                          (procedure-environment procedure)
-                         context))
-                       (body-state
+                         context)))
+                  (if (contract-enabled? context)
+                      (contract-check-arguments! procedure arguments context))
+                  (let* ((body-state
                         (prepare-body-environment
                          (procedure-body procedure)
                          call-environment
                          context))
                        (body-expression
                         (make-sequence (cdr body-state) #f)))
-                  (make-bounce body-expression
-                               (car body-state)
-                               closure-syntax-environment
-                               (if tail?
-                                   continuation
-                                   (lambda (value)
-                                     (with-syntax-environment
-                                      context
-                                      caller-syntax-environment
-                                      (lambda ()
-                                        (continue continuation value))))))))))))
+                    (make-bounce body-expression
+                                 (car body-state)
+                                 closure-syntax-environment
+                                 (if tail?
+                                     (contract-wrap-continuation
+                                      procedure context continuation)
+                                     (lambda (value)
+                                       (with-syntax-environment
+                                        context
+                                        caller-syntax-environment
+                                        (lambda ()
+                                          (continue
+                                           (contract-wrap-continuation
+                                            procedure context continuation)
+                                           value)))))))))))))
          ((continuation? procedure)
           (finish
            (invoke-continuation procedure arguments context)))
