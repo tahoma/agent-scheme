@@ -433,6 +433,7 @@
     (define consent-library-system-directories
       (consent-environment-library-search-directories))
 
+    ;; User-provided manifest roots layered after system roots by default.
     (define consent-library-user-directories '())
 
     (define (consent-set-library-system-directories! directories)
