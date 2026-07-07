@@ -67,7 +67,7 @@ ENVIRONMENT defaults to a fresh base environment.  OPTIONS is a
 plist supporting `:max-steps', `:max-non-tail-steps',
 `:max-value-nodes', `:max-source-metadata', `:max-interned-symbols',
 `:max-host-callbacks', `:max-events', and `:max-event-nodes'."
-  (let ((max-lisp-eval-depth (max max-lisp-eval-depth 4096))
+  (let ((max-lisp-eval-depth (max max-lisp-eval-depth 16384))
         (context (consent--new-eval-context options))
         (eval-environment (or environment
                               (consent-make-base-environment)))
@@ -97,7 +97,7 @@ plist supporting `:max-steps', `:max-non-tail-steps',
   "Read and evaluate all datums in SOURCE.
 ENVIRONMENT defaults to a fresh base environment.  The returned value
 is the result of the last command or definition."
-  (let* ((max-lisp-eval-depth (max max-lisp-eval-depth 4096))
+  (let* ((max-lisp-eval-depth (max max-lisp-eval-depth 16384))
          (context (consent--new-eval-context options))
          (eval-environment (or environment
                                (consent-make-base-environment)))
@@ -231,7 +231,7 @@ agent events, and handle references across calls."
 ;;;###autoload
 (defun consent-eval-result (expression &optional environment options)
   "Evaluate EXPRESSION and return a Scheme-readable result datum."
-  (let ((max-lisp-eval-depth (max max-lisp-eval-depth 4096))
+  (let ((max-lisp-eval-depth (max max-lisp-eval-depth 16384))
         (context (consent--new-eval-context options))
         (eval-environment (or environment
                               (consent-make-base-environment)))
@@ -259,7 +259,7 @@ agent events, and handle references across calls."
 ;;;###autoload
 (defun consent-eval-source-result (source &optional environment options)
   "Read and evaluate SOURCE and return a Scheme-readable result datum."
-  (let ((max-lisp-eval-depth (max max-lisp-eval-depth 4096))
+  (let ((max-lisp-eval-depth (max max-lisp-eval-depth 16384))
         (context (consent--new-eval-context options))
         (eval-environment (or environment
                               (consent-make-base-environment)))

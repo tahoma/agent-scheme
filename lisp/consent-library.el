@@ -220,7 +220,7 @@
 (defun consent--manifest-library-quoted-variable
     (source key variable description)
   "Return quoted VARIABLE from manifest library SOURCE."
-  (let* ((max-lisp-eval-depth (max max-lisp-eval-depth 4096))
+  (let* ((max-lisp-eval-depth (max max-lisp-eval-depth 16384))
          (forms (consent-read-all source '(:source-metadata nil))))
     (unless (= (length forms) 1)
       (consent--eval-error
@@ -1406,7 +1406,7 @@
 (defun consent--register-source-library
     (source context environment)
   "Evaluate one define-library SOURCE into CONTEXT."
-  (let ((max-lisp-eval-depth (max max-lisp-eval-depth 4096))
+  (let ((max-lisp-eval-depth (max max-lisp-eval-depth 16384))
         (consent--source-library-internal-imports-allowed t)
         (forms (consent-read-all source)))
     (unless (= (length forms) 1)
