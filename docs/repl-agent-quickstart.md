@@ -258,10 +258,14 @@ piece of Scheme, the REPL evaluates it, and the reviewer and memory roles see
 the actual evaluation facts rather than guessing from an empty prompt.
 
 First capture the planner's work breakdown in `plan`, then print it so the
-next prompt has a named value to reuse:
+next prompt has a named value to reuse. The same import block also brings in the
+generated-source loop and evaluator surfaces used below:
 
 ```scheme
-(import (scheme write))
+(import (scheme write)
+        (scheme repl)
+        (agent generated-source)
+        (consent eval))
 
 (define plan
   (model-complete
@@ -298,22 +302,13 @@ Plan:
 "
     plan)
    '((temperature 0.1) (timeout-seconds 300))))
-
-(display code)
 ```
 
-Displaying `code` prints the model's string; it does not evaluate the returned
-Scheme. Do not type `(eval code)` or `(apply code)`; `code` is a string, not a
-sequence of REPL input forms.
-
-Inspect the displayed source as a coder gate. If it contains prose, math
-notation, missing definitions, missing imports, or anything else that is not
-ready to evaluate as Scheme source, revise the `scheme-scripter` prompt and try
-again, or stop and record that this role set did not pass the tutorial.
-
-After the REPL has evaluated the model draft and the session has live `deriv`
-and `differentiator-tests` bindings, capture the facts that later model prompts
-will reuse:
+Run the model text through the generated-source loop before it can change the
+live REPL session. The sandbox evaluator appends the tutorial's expected fact
+query to the candidate source, so missing definitions and failed tests become
+diagnostics instead of partially applied session state. The repair callback gets
+one bounded retry with the generated diagnostic record.
 
 ```scheme
 (define (datum->text datum)
@@ -321,6 +316,71 @@ will reuse:
     (write datum port)
     (get-output-string port)))
 
+(define (quickstart-field record field)
+  (generated-source-record-field-value record field #f))
+
+(define quickstart-fact-query
+  "\n(list differentiator-tests
+       (deriv '(+ (* x x) (* 3 x)) 'x))")
+
+(define (quickstart-sandbox candidate)
+  (consent-eval-source-result
+   (string-append
+    (generated-source-candidate-source candidate)
+    quickstart-fact-query)))
+
+(define (quickstart-post-check candidate evaluation)
+  (equal? (quickstart-field evaluation 'value)
+          '((#t #t #t #t) (+ (+ x x) 3))))
+
+(define (quickstart-repair attempt repair-request)
+  (model-complete
+   'scheme-scripter
+   (string-append
+    "Repair this generated R7RS Scheme source.
+Return only executable R7RS Scheme source.
+Keep the symbolic differentiator scope unchanged.
+Diagnostics:
+"
+    (datum->text repair-request))
+   '((temperature 0.1) (timeout-seconds 300))))
+
+(define generated-run
+  (generated-source-run
+   code
+   (list (cons 'evaluate quickstart-sandbox)
+         (list 'required-imports '((scheme base)))
+         (cons 'post-check quickstart-post-check)
+         (cons 'repair quickstart-repair)
+         (list 'max-retries 1))))
+
+(list (generated-source-run-status generated-run)
+      (generated-source-run-diagnostics generated-run)
+      (generated-source-run-repair-prompts generated-run))
+```
+
+Only an accepted run is allowed to mutate the live REPL session. If the
+application status is not `applied`, stop and inspect the run diagnostics and
+repair prompts instead of continuing the tutorial.
+
+```scheme
+(define application
+  (generated-source-apply
+   generated-run
+   (lambda (candidate)
+     (consent-eval-source
+      (generated-source-candidate-source candidate)
+      (interaction-environment)))))
+
+(list (quickstart-field application 'status)
+      (quickstart-field application 'result))
+```
+
+After the application has produced `applied`, the session has live `deriv` and
+`differentiator-tests` bindings. Capture the facts that later model prompts will
+reuse:
+
+```scheme
 (define test-results differentiator-tests)
 (define sample-derivative
   (deriv '(+ (* x x) (* 3 x)) 'x))
@@ -334,8 +394,9 @@ The expected evaluation record is:
 ((#t #t #t #t) (+ (+ x x) 3))
 ```
 
-Do not continue to the reviewer or memory prompts until the REPL has evaluated
-Scheme and produced `test-results` and `sample-derivative`.
+Do not continue to the reviewer or memory prompts until the generated-source run
+is accepted, `generated-source-apply` reports `applied`, and the REPL has
+produced `test-results` and `sample-derivative`.
 
 Now capture the reviewer response in `review`, building its prompt from the
 actual evaluated values:

@@ -148,6 +148,7 @@ native_library_table() {
 (agent proposal)|agent/proposal.sld|consent-main:agent-proposal:
 (agent runner)|agent/runner.sld|consent-main:agent-runner:
 (agent prompt)|agent/prompt.sld|consent-main:agent-prompt:
+(agent generated-source)|agent/generated-source.sld|consent-main:agent-generated-source:
 (agent approval)|agent/approval.sld|consent-main:agent-approval:
 (agent context)|agent/context.sld|consent-main:agent-context:
 (agent helper)|agent/helper.sld|consent-main:agent-helper:
@@ -311,6 +312,7 @@ write_racket_main_common() {
         (prefix (agent proposal) consent-main:agent-proposal:)
         (prefix (agent runner) consent-main:agent-runner:)
         (prefix (agent prompt) consent-main:agent-prompt:)
+        (prefix (agent generated-source) consent-main:agent-generated-source:)
         (prefix (agent approval) consent-main:agent-approval:)
         (prefix (agent context) consent-main:agent-context:)
         (prefix (agent helper) consent-main:agent-helper:)
@@ -661,6 +663,7 @@ write_gambit_main_common() {
         (prefix (agent proposal) consent-main:agent-proposal:)
         (prefix (agent runner) consent-main:agent-runner:)
         (prefix (agent prompt) consent-main:agent-prompt:)
+        (prefix (agent generated-source) consent-main:agent-generated-source:)
         (prefix (agent approval) consent-main:agent-approval:)
         (prefix (agent context) consent-main:agent-context:)
         (prefix (agent helper) consent-main:agent-helper:)
@@ -1603,6 +1606,9 @@ compile_gambit() {
     "$scheme_dir/agent/prompt.sld" \
     "$src_dir/agent/prompt.sld"
   copy_gambit_source \
+    "$scheme_dir/agent/generated-source.sld" \
+    "$src_dir/agent/generated-source.sld"
+  copy_gambit_source \
     "$scheme_dir/cli/process-host.sld" \
     "$src_dir/cli/process-host.sld"
   copy_gambit_source \
@@ -1640,7 +1646,7 @@ compile_gambit() {
   # the per-module compiled artifacts are $src_dir/<ref>.c and $src_dir/<ref>.o.
   # (consent embedded-source) is generated into $src_dir; every other module's
   # source lives under $scheme_dir.
-  gambit_module_order='consent/version consent/reader consent/runtime consent/base consent/library consent/result consent/macro agent/approval agent/context agent/helper agent/job stdlib/and-let-star stdlib/list stdlib/generator stdlib/comparator stdlib/receive stdlib/assume stdlib/rbtree stdlib/mapping stdlib/json agent/memory agent/plan agent/redaction agent/session cli/process-host agent/models/openai agent/task agent/transcript agent/registry agent/proposal agent/runner agent/prompt consent/interpreter consent/eval cli/native-cli cli/repl-chrome cli/repl-shell cli/script consent/embedded-source'
+  gambit_module_order='consent/version consent/reader consent/runtime consent/base consent/library consent/result consent/macro agent/approval agent/context agent/helper agent/job stdlib/and-let-star stdlib/list stdlib/generator stdlib/comparator stdlib/receive stdlib/assume stdlib/rbtree stdlib/mapping stdlib/json agent/memory agent/plan agent/redaction agent/session cli/process-host agent/models/openai agent/task agent/transcript agent/registry agent/proposal agent/runner agent/prompt agent/generated-source consent/interpreter consent/eval cli/native-cli cli/repl-chrome cli/repl-shell cli/script consent/embedded-source'
 
   gambit_module_source() {
     case "$1" in
