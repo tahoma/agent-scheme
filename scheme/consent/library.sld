@@ -129,7 +129,10 @@
     ;; Cache selected source path and contents by manifest source-file/key pair.
     (define manifest-source-library-source-cache '())
 
-    ;; Cache metadata read from repo-owned collection manifests.
+    ;; Bootstrap file name for every configured manifest root.
+    (define library-manifest-index-file "manifest.sld")
+
+    ;; Cache metadata read from configured collection manifests.
     (define library-collection-manifest-cache #f)
 
     ;; Trusted runtime source libraries may import private primitive backing
@@ -266,12 +269,74 @@
                key))
           form)))
 
-    (define (collection-manifest-source-entry relative description)
-      "Return the source entry for a manifest-relative file."
+    (define (library-root-file root relative)
+      "Return ROOT-relative file path RELATIVE."
+      (path-normalize (path-join root relative)))
+
+    (define (library-read-file/maybe path)
+      "Return PATH's text, or #f when it cannot be read."
+      (guard (condition (else #f))
+        (call-with-input-file path read-port-string)))
+
+    (define (library-embedded-manifest-root-descriptor)
+      "Return the embedded system manifest root descriptor, or #f."
+      (let ((source (consent-embedded-source-ref library-manifest-index-file)))
+        (and source
+             (list
+              (list 'root #f)
+              (list 'root-id "embedded")
+              (list 'root-kind 'system)
+              (list 'manifest-source source)))))
+
+    (define (library-manifest-root-descriptors)
+      "Return configured manifest roots with readable top-level manifests."
+      (let ((inputs
+             (append
+              (map (lambda (root) (list 'system root))
+                   (consent-library-system-directory-list))
+              (map (lambda (root) (list 'user root))
+                   (consent-library-user-directory-list)))))
+        (let loop ((rest inputs) (result '()))
+          (if (null? rest)
+              (let ((embedded (library-embedded-manifest-root-descriptor)))
+                (if embedded
+                    (append (reverse result) (list embedded))
+                    (reverse result)))
+              (let* ((root-kind (car (car rest)))
+                     (root (path-normalize (cadr (car rest))))
+                     (manifest-file
+                      (library-root-file root library-manifest-index-file))
+                     (source (library-read-file/maybe manifest-file)))
+                (if source
+                    (loop
+                     (cdr rest)
+                     (cons
+                      (list
+                       (list 'root root)
+                       (list 'root-id root)
+                       (list 'root-kind root-kind)
+                       (list 'manifest-source source))
+                      result))
+                    (loop (cdr rest) result)))))))
+
+    (define (library-default-manifest-root)
+      "Return the first configured manifest root."
+      (let ((roots (library-manifest-root-descriptors)))
+        (if (pair? roots)
+            (cadr (assq 'root (car roots)))
+            (eval-error
+             "no configured manifest root contains manifest.sld"
+             library-manifest-index-file))))
+
+    (define (collection-manifest-source-entry root relative description)
+      "Return source entry for ROOT-relative manifest file RELATIVE."
       (let ((entry
-             (resolve-source-entry
-              relative
-              (list relative))))
+             (if root
+                 (let* ((path (library-root-file root relative))
+                        (source (library-read-file/maybe path)))
+                   (and source (cons path source)))
+                 (let ((source (consent-embedded-source-ref relative)))
+                   (and source (cons relative source))))))
         (if entry
             entry
             (eval-error
@@ -332,12 +397,10 @@
               => (lambda (value) value))
              (else (outer (cdr declarations))))))))
 
-    (define (library-manifest-index-value)
-      "Return the quoted top-level manifest index."
+    (define (library-manifest-index-value root-descriptor)
+      "Return ROOT-DESCRIPTOR's quoted top-level manifest index."
       (manifest-library-quoted-variable
-       (cdr (collection-manifest-source-entry
-             "manifest/index.sld"
-             "top-level manifest index"))
+       (cadr (assq 'manifest-source root-descriptor))
        '(manifest index)
        'manifest-index
        "top-level manifest index"))
@@ -363,12 +426,15 @@
            (string-append description " must be a string")
            value)))
 
-    (define (collection-manifest-index-entry entry)
+    (define (collection-manifest-index-entry root-descriptor entry)
       "Return a collection manifest descriptor parsed from index ENTRY."
       (let* ((collection
               (collection-manifest-symbol
                (collection-manifest-field entry 'collection #f)
                "manifest index collection"))
+             (root (cadr (assq 'root root-descriptor)))
+             (root-id (cadr (assq 'root-id root-descriptor)))
+             (root-kind (cadr (assq 'root-kind root-descriptor)))
              (key
               (library-name-key
                (collection-manifest-field entry 'manifest-library #f)))
@@ -396,9 +462,12 @@
          (list 'key key)
          (list 'variable variable)
          (list 'manifest-file manifest-file)
+         (list 'root root)
+         (list 'root-kind root-kind)
          (list 'category category)
          (list 'source-root source-root)
-         (list 'source-id collection))))
+         (list 'source-id
+               (string-append root-id ":" (symbol->string collection))))))
 
     (define (collection-entry-field entry field default)
       "Return FIELD from collection ENTRY, or DEFAULT."
@@ -406,15 +475,29 @@
         (if cell (cadr cell) default)))
 
     (define (library-collection-manifest-specs)
-      "Return collection manifest descriptors from the top-level index."
-      (map collection-manifest-index-entry
+      "Return collection manifest descriptors from configured manifest roots."
+      (apply
+       append
+       (map
+        (lambda (root-descriptor)
+          (map
+           (lambda (entry)
+             (collection-manifest-index-entry root-descriptor entry))
            (proper-list-elements
-            (library-manifest-index-value)
+            (library-manifest-index-value root-descriptor)
             "top-level manifest index entries")))
+        (library-manifest-root-descriptors))))
+
+    (define (library-manifest-root-cache-key)
+      "Return cache key for configured manifest root lists."
+      (list (consent-library-system-directory-list)
+            (consent-library-user-directory-list)
+            (consent-embedded-source-ref library-manifest-index-file)))
 
     (define (collection-manifest-source spec)
       "Return source text for collection manifest described by SPEC."
       (cdr (collection-manifest-source-entry
+            (collection-entry-field spec 'root #f)
             (collection-entry-field spec 'manifest-file #f)
             "collection manifest")))
 
@@ -455,25 +538,30 @@
 
     (define (collection-manifest-catalog-source-file
              spec source-kind source-file)
-      "Return seed-root-relative SOURCE-FILE for SPEC, or #f."
+      "Return manifest-root-relative SOURCE-FILE for SPEC, or #f."
       (if (and source-kind source-file)
           (string-append (collection-entry-field spec 'source-root "")
                          source-file)
           #f))
 
-    (define (manifest-source-library-source-entry source-file key)
-      "Return source entry for seed-root-relative SOURCE-FILE owned by KEY."
+    (define (manifest-source-library-source-entry source-file key root)
+      "Return source entry for ROOT-relative SOURCE-FILE owned by KEY."
       (let ((cache-key
-             (list source-file
+             (list root
+                   source-file
                    key
                    (consent-library-search-directory-list))))
         (let ((cached (assoc/equal cache-key manifest-source-library-source-cache)))
           (if cached
               (cdr cached)
               (let ((entry
-                     (resolve-source-entry
-                      source-file
-                      (list source-file))))
+                     (if root
+                         (let* ((path (library-root-file root source-file))
+                                (source (library-read-file/maybe path)))
+                           (and source (cons path source)))
+                         (resolve-source-entry
+                          source-file
+                          (list source-file)))))
                 (if entry
                     (begin
                       (set! manifest-source-library-source-cache
@@ -483,9 +571,9 @@
                     (eval-error "manifest source library file is not readable"
                                 (list key source-file))))))))
 
-    (define (manifest-source-library-source source-file key)
-      "Return source text for repo-relative SOURCE-FILE owned by KEY."
-      (cdr (manifest-source-library-source-entry source-file key)))
+    (define (manifest-source-library-source source-file key root)
+      "Return source text for ROOT-relative SOURCE-FILE owned by KEY."
+      (cdr (manifest-source-library-source-entry source-file key root)))
 
     (define (collection-manifest-entry entry spec)
       "Return catalog metadata parsed from collection manifest ENTRY and SPEC."
@@ -533,6 +621,10 @@
              (availability-condition
               (collection-manifest-field
                entry 'availability-condition #f))
+             (root
+              (collection-entry-field spec 'root #f))
+             (root-kind
+              (collection-entry-field spec 'root-kind #f))
              (target
               (collection-manifest-target
                (collection-manifest-field entry 'target #f)))
@@ -577,7 +669,10 @@
              (summary
               (collection-manifest-field entry 'summary #f)))
         (if (eq? exports exports-absent)
-            (eval-error "built-in manifest entry must declare exports" key))
+            (if (and target (eq? source-kind 'alias))
+                (set! exports '())
+                (eval-error "built-in manifest entry must declare exports"
+                            key)))
         (if (and summary (not (string? summary)))
             (eval-error "collection manifest summary must be a string or #f"
                         summary))
@@ -592,6 +687,8 @@
          (list 'layer layer)
          (list 'availability availability)
          (list 'availability-condition availability-condition)
+         (list 'root root)
+         (list 'root-kind root-kind)
          (list 'source-file source-file)
          (list 'aliases aliases)
          (list 'target target)
@@ -602,23 +699,26 @@
          (list 'summary summary))))
 
     (define (library-collection-manifest-entries)
-      "Return collection-manifest metadata for repo-owned libraries."
-      (if library-collection-manifest-cache
-          library-collection-manifest-cache
-          (let ((entries
-                 (apply
-                  append
-                  (map
-                   (lambda (spec)
-                     (map
-                      (lambda (entry)
-                        (collection-manifest-entry entry spec))
-                      (proper-list-elements
-                       (collection-manifest-library-value spec)
-                       "collection manifest entries")))
-                   (library-collection-manifest-specs)))))
-            (set! library-collection-manifest-cache entries)
-            entries)))
+      "Return collection-manifest metadata for configured manifest roots."
+      (let ((cache-key (library-manifest-root-cache-key)))
+        (if (and library-collection-manifest-cache
+                 (equal? (car library-collection-manifest-cache) cache-key))
+            (cadr library-collection-manifest-cache)
+            (let ((entries
+                   (apply
+                    append
+                    (map
+                     (lambda (spec)
+                       (map
+                        (lambda (entry)
+                          (collection-manifest-entry entry spec))
+                        (proper-list-elements
+                         (collection-manifest-library-value spec)
+                         "collection manifest entries")))
+                     (library-collection-manifest-specs)))))
+              (set! library-collection-manifest-cache
+                    (list cache-key entries))
+              entries))))
 
     (define (library-collection-manifest-entry key)
       "Return collection-manifest metadata for library KEY, or #f."
@@ -731,7 +831,8 @@
              key
              (manifest-source-library-source
               (collection-entry-field entry 'source-file #f)
-              key)
+              key
+              (collection-entry-field entry 'root #f))
              "manifest source library")
             #f)))
 
@@ -1374,8 +1475,9 @@
                    (source-library-form
                     key
                     (manifest-source-library-source
-                     (library-catalog-source-file key)
-                     key)
+                     (collection-entry-field entry 'source-file #f)
+                     key
+                     (collection-entry-field entry 'root #f))
                     "standard source library")))
             (list 'source-file (library-catalog-source-file key)))))
        (let loop ((entries (library-collection-manifest-entries))
@@ -1409,8 +1511,9 @@
                    (source-library-form
                     key
                     (manifest-source-library-source
-                     (library-catalog-source-file key)
-                     key)
+                     (collection-entry-field entry 'source-file #f)
+                     key
+                     (collection-entry-field entry 'root #f))
                     "stdlib source library")))
             (list 'source-file (library-catalog-source-file key)))))
        (let loop ((entries (library-collection-manifest-entries))
@@ -2814,6 +2917,7 @@
       "Register source library described by manifest ENTRY."
       (let ((key (collection-entry-field entry 'name #f))
             (source-file (collection-entry-field entry 'source-file #f))
+            (root (collection-entry-field entry 'root #f))
             (exports (collection-entry-field entry 'exports '()))
             (overlay-library
              (collection-entry-field entry 'primitive-overlay-library #f)))
@@ -2821,7 +2925,7 @@
             (eval-error "manifest source library has no source-file" key))
         (if (not (library-registry-ref context key))
             (register-source-library!
-             (manifest-source-library-source source-file key)
+             (manifest-source-library-source source-file key root)
              context
              environment))
         (if (and overlay-library

@@ -38,10 +38,15 @@
   (file-name-directory (or load-file-name buffer-file-name default-directory))
   "Directory containing the loaded Consent Scheme library module.")
 
-(defcustom consent-library-seed-directory
-  (expand-file-name "../scheme/" consent--library-module-directory)
-  "Root directory containing seeded Scheme library manifests and sources."
-  :type 'directory
+(defcustom consent-library-system-path
+  (list (expand-file-name "../scheme/" consent--library-module-directory))
+  "System manifest roots containing top-level `manifest.sld' files."
+  :type '(repeat directory)
+  :group 'consent)
+
+(defcustom consent-library-user-path nil
+  "User manifest roots containing top-level `manifest.sld' files."
+  :type '(repeat directory)
   :group 'consent)
 
 (defvar consent--source-library-environments (make-hash-table :test #'equal)
@@ -62,7 +67,7 @@
   "Cached manifest-backed library catalog entries.")
 
 (defvar consent--library-collection-manifest-cache nil
-  "Cached metadata read from repo-owned collection manifests.")
+  "Cached metadata read from configured collection manifests.")
 
 (defvar consent--library-catalog-ad-hoc-manifests nil
   "Ad-hoc manifest catalog sources, as (SOURCE-ID . ENTRIES).")
@@ -96,14 +101,18 @@
   name key exports value-environment syntax-environment)
 
 (defconst consent--library-manifest-index-file
-  "manifest/index.sld"
-  "Seed-root-relative top-level Scheme manifest index source file.")
+  "manifest.sld"
+  "Seed-root top-level Scheme manifest index source file.")
 
-(defun consent--manifest-source-library-form (key source-file description)
+(defun consent--manifest-source-library-form
+    (key source-file description &optional root)
   "Return the single define-library form for KEY from manifest SOURCE-FILE."
   (let ((forms
          (consent-read-all
-          (consent--manifest-source-library-source source-file key))))
+          (consent--manifest-source-library-source
+           source-file
+           key
+           root))))
     (unless (= (length forms) 1)
       (consent--eval-error
        "%s must contain exactly one form: %s"
@@ -144,15 +153,17 @@
    (lambda (manifest-entry)
      (let* ((key (plist-get manifest-entry :name))
             (source-file (plist-get manifest-entry :source-file))
+            (root (plist-get manifest-entry :root))
             (form (consent--manifest-source-library-form
                    key
                    source-file
-                   "standard source library")))
+                   "standard source library"
+                   root)))
        (list :name key
              :exports
              (consent--source-library-export-names form)
              :source-file
-             (consent--manifest-source-library-file source-file))))
+             (consent--manifest-source-library-file source-file root))))
    (seq-filter
     (lambda (entry)
       (and (eq (plist-get entry :category) 'standard)
@@ -170,9 +181,37 @@
                  :category)
       'library))
 
-(defun consent--library-manifest-source-file (relative-file)
-  "Return absolute path for seed-root-relative manifest RELATIVE-FILE."
-  (expand-file-name relative-file consent-library-seed-directory))
+(defun consent--library-normalize-root-directory (directory)
+  "Return DIRECTORY as an absolute directory name."
+  (file-name-as-directory (expand-file-name directory)))
+
+(defun consent--library-manifest-root-file (root relative-file)
+  "Return absolute path for root-relative RELATIVE-FILE under ROOT."
+  (expand-file-name relative-file root))
+
+(defun consent--library-manifest-root-descriptors ()
+  "Return configured manifest root descriptors in initial precedence order."
+  (let (roots)
+    (dolist (entry `((system . ,consent-library-system-path)
+                     (user . ,consent-library-user-path)))
+      (let ((kind (car entry)))
+        (dolist (directory (cdr entry))
+          (let* ((root (consent--library-normalize-root-directory
+                        directory))
+                 (manifest
+                  (consent--library-manifest-root-file
+                   root
+                   consent--library-manifest-index-file)))
+            (when (file-readable-p manifest)
+              (push (list :root root :root-kind kind) roots))))))
+    (nreverse roots)))
+
+(defun consent--library-default-manifest-root ()
+  "Return the first configured manifest root, or signal an error."
+  (or (plist-get (car (consent--library-manifest-root-descriptors)) :root)
+      (consent--eval-error
+       "no configured manifest root contains %s"
+       consent--library-manifest-index-file)))
 
 (defun consent--library-read-file (source-file description)
   "Return SOURCE-FILE contents, or signal DESCRIPTION."
@@ -182,17 +221,19 @@
     (insert-file-contents source-file)
     (buffer-string)))
 
-(defun consent--library-manifest-index-source ()
-  "Return the top-level Scheme manifest index source."
+(defun consent--library-manifest-index-source (root)
+  "Return ROOT's top-level Scheme manifest index source."
   (consent--library-read-file
-   (consent--library-manifest-source-file
+   (consent--library-manifest-root-file
+    root
     consent--library-manifest-index-file)
    "top-level manifest index file"))
 
 (defun consent--collection-manifest-source (spec)
   "Return source text for collection manifest described by SPEC."
   (consent--library-read-file
-   (consent--library-manifest-source-file
+   (consent--library-manifest-root-file
+    (plist-get spec :root)
     (plist-get spec :manifest-file))
    "collection manifest source file"))
 
@@ -259,10 +300,10 @@
          "%s variable is not defined: %s in %s"
          description variable key)))))
 
-(defun consent--library-manifest-index-value ()
-  "Return the quoted top-level manifest index."
+(defun consent--library-manifest-index-value (root)
+  "Return ROOT's quoted top-level manifest index."
   (consent--manifest-library-quoted-variable
-   (consent--library-manifest-index-source)
+   (consent--library-manifest-index-source root)
    "(manifest index)"
    "manifest-index"
    "top-level manifest index"))
@@ -301,12 +342,14 @@
       value
     (consent--eval-error "%s must be a string" description)))
 
-(defun consent--collection-manifest-index-entry (entry)
+(defun consent--collection-manifest-index-entry (root-descriptor entry)
   "Return a collection manifest descriptor parsed from index ENTRY."
   (let* ((collection
           (consent--collection-manifest-symbol
            (consent--collection-manifest-field entry "collection" nil)
            "manifest index collection"))
+         (root (plist-get root-descriptor :root))
+         (root-kind (plist-get root-descriptor :root-kind))
          (key
           (consent--library-name-key
            (consent--collection-manifest-field entry "manifest-library" nil)))
@@ -331,17 +374,33 @@
           :key key
           :variable (symbol-name variable)
           :manifest-file manifest-file
+          :root root
+          :root-kind root-kind
           :category category
           :source-root source-root
-          :source-id collection)))
+          :source-id (format "%s:%s" root collection))))
 
 (defun consent--library-collection-manifest-specs ()
-  "Return collection manifest descriptors from the top-level manifest index."
-  (mapcar
-   #'consent--collection-manifest-index-entry
-   (consent--proper-list-elements
-    (consent--library-manifest-index-value)
-    "top-level manifest index entries")))
+  "Return collection manifest descriptors from configured manifest roots."
+  (apply
+   #'append
+   (mapcar
+    (lambda (root-descriptor)
+      (mapcar
+       (lambda (entry)
+         (consent--collection-manifest-index-entry root-descriptor entry))
+       (consent--proper-list-elements
+        (consent--library-manifest-index-value
+         (plist-get root-descriptor :root))
+        "top-level manifest index entries")))
+    (consent--library-manifest-root-descriptors))))
+
+(defun consent--library-manifest-root-cache-key ()
+  "Return cache key for configured manifest root lists."
+  (list (mapcar #'consent--library-normalize-root-directory
+                consent-library-system-path)
+        (mapcar #'consent--library-normalize-root-directory
+                consent-library-user-path)))
 
 (defun consent--collection-manifest-catalog-source-file
     (spec source-kind source-file)
@@ -463,9 +522,11 @@
           (consent--collection-manifest-catalog-source-file
            spec source-kind source-file))
     (when (eq exports exports-absent)
-      (consent--eval-error
-       "built-in manifest entry must declare exports: %s"
-       key))
+      (if (and target (eq source-kind 'alias))
+          (setq exports nil)
+        (consent--eval-error
+         "built-in manifest entry must declare exports: %s"
+         key)))
     (when (eq summary consent-false)
       (setq summary nil))
     (unless (or (null summary) (stringp summary))
@@ -481,6 +542,8 @@
           :layer layer
           :availability availability
           :availability-condition availability-condition
+          :root (plist-get spec :root)
+          :root-kind (plist-get spec :root-kind)
           :source-file source-file
           :aliases aliases
           :target target
@@ -491,21 +554,28 @@
           :summary summary)))
 
 (defun consent--library-collection-manifest-entries ()
-  "Return collection-manifest metadata for repo-owned libraries."
-  (or consent--library-collection-manifest-cache
-      (setq
-       consent--library-collection-manifest-cache
-       (apply
-        #'append
-        (mapcar
-         (lambda (spec)
-           (mapcar
-            (lambda (entry)
-              (consent--collection-manifest-entry entry spec))
-            (consent--proper-list-elements
-             (consent--collection-manifest-library-value spec)
-             "collection manifest entries")))
-         (consent--library-collection-manifest-specs))))))
+  "Return collection-manifest metadata for configured manifest roots."
+  (let ((cache-key (consent--library-manifest-root-cache-key)))
+    (if (and consent--library-collection-manifest-cache
+             (equal (car consent--library-collection-manifest-cache)
+                    cache-key))
+        (cadr consent--library-collection-manifest-cache)
+      (cadr
+       (setq
+        consent--library-collection-manifest-cache
+        (list
+         cache-key
+         (apply
+          #'append
+          (mapcar
+           (lambda (spec)
+             (mapcar
+              (lambda (entry)
+                (consent--collection-manifest-entry entry spec))
+              (consent--proper-list-elements
+               (consent--collection-manifest-library-value spec)
+               "collection manifest entries")))
+           (consent--library-collection-manifest-specs)))))))))
 
 (defun consent--library-collection-manifest-entry (key)
   "Return collection-manifest metadata for library KEY, or nil."
@@ -1170,13 +1240,14 @@
             syntax-environment)
            registry))))))
 
-(defun consent--manifest-source-library-file (source-file)
-  "Return absolute path for seed-root-relative manifest SOURCE-FILE."
-  (expand-file-name source-file consent-library-seed-directory))
+(defun consent--manifest-source-library-file (source-file &optional root)
+  "Return absolute path for root-relative manifest SOURCE-FILE."
+  (expand-file-name source-file
+                    (or root (consent--library-default-manifest-root))))
 
-(defun consent--manifest-source-library-source (source-file key)
-  "Return source text for seed-root-relative SOURCE-FILE owned by KEY."
-  (let ((path (consent--manifest-source-library-file source-file)))
+(defun consent--manifest-source-library-source (source-file key &optional root)
+  "Return source text for root-relative SOURCE-FILE owned by KEY."
+  (let ((path (consent--manifest-source-library-file source-file root)))
     (unless (file-readable-p path)
       (consent--eval-error
        "manifest source library file is not readable for %s: %s"
@@ -1190,6 +1261,7 @@
   "Register the source library described by manifest ENTRY."
   (let ((key (plist-get entry :name))
         (source-file (plist-get entry :source-file))
+        (root (plist-get entry :root))
         (exports (plist-get entry :exports))
         (overlay-library (plist-get entry :primitive-overlay-library)))
     (unless source-file
@@ -1198,7 +1270,7 @@
        key))
     (unless (gethash key (consent--eval-context-libraries context))
       (consent--register-source-library
-       (consent--manifest-source-library-source source-file key)
+       (consent--manifest-source-library-source source-file key root)
        context
        environment)
       (when overlay-library

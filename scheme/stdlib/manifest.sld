@@ -25,7 +25,6 @@
          (visibility . alias)
          (status . alias)
          (target . (stdlib manifest))
-         (exports . (stdlib-manifest stdlib-manifest-ref))
          (import-aliases . ((srfi manifest)))
          (dependencies . ((stdlib manifest)))
          (test-status . (import-resolution)))
@@ -90,10 +89,6 @@
          (visibility . alias)
          (status . alias)
          (target . (stdlib json))
-         (exports . (json-number-of-character-limit json-nesting-depth-limit
-                     json-null? json-error? json-error-reason json-fold
-                     json-generator json-read json-lines-read
-                     json-sequence-read json-accumulator json-write))
          (import-aliases . ((consent json)))
          (dependencies . ((stdlib json)))
          (test-status . (import-resolution)))
@@ -101,10 +96,6 @@
          (visibility . alias)
          (status . alias)
          (target . (stdlib json))
-         (exports . (json-number-of-character-limit json-nesting-depth-limit
-                     json-null? json-error? json-error-reason json-fold
-                     json-generator json-read json-lines-read
-                     json-sequence-read json-accumulator json-write))
          (import-aliases . ((srfi srfi-180)))
          (dependencies . ((stdlib json)))
          (test-status . (import-resolution)))
@@ -112,10 +103,6 @@
          (visibility . alias)
          (status . alias)
          (target . (stdlib json))
-         (exports . (json-number-of-character-limit json-nesting-depth-limit
-                     json-null? json-error? json-error-reason json-fold
-                     json-generator json-read json-lines-read
-                     json-sequence-read json-accumulator json-write))
          (import-aliases . ((srfi 180)))
          (dependencies . ((stdlib json)))
          (test-status . (import-resolution)))
@@ -138,7 +125,6 @@
          (visibility . alias)
          (status . alias)
          (target . (scheme case-lambda))
-         (exports . (case-lambda))
          (import-aliases . ((srfi srfi-16)))
          (dependencies . ((scheme case-lambda)))
          (test-status . (import-resolution)))
@@ -170,7 +156,6 @@
          (visibility . alias)
          (status . alias)
          (target . (stdlib and-let-star))
-         (exports . (and-let*))
          (import-aliases . ((srfi 2)))
          (dependencies . ((stdlib and-let-star)))
          (test-status . (import-resolution)))
@@ -178,7 +163,6 @@
          (visibility . alias)
          (status . alias)
          (target . (stdlib and-let-star))
-         (exports . (and-let*))
          (import-aliases . ((srfi srfi-2)))
          (dependencies . ((stdlib and-let-star)))
          (test-status . (import-resolution)))
@@ -233,26 +217,6 @@
          (visibility . alias)
          (status . alias)
          (target . (stdlib list))
-         (exports . (xcons tree-copy list-tabulate cons* proper-list?
-                     circular-list? dotted-list? not-pair? null-list? list=
-                     circular-list length+ iota first second third fourth
-                     fifth sixth seventh eighth ninth tenth car+cdr take
-                     drop take-right drop-right take! drop-right! split-at
-                     split-at! last last-pair append! concatenate
-                     concatenate! reverse! append-reverse append-reverse!
-                     zip unzip1 unzip2 unzip3 unzip4 unzip5 count fold
-                     fold-right pair-fold pair-fold-right reduce
-                     reduce-right unfold unfold-right append-map append-map!
-                     map! pair-for-each filter-map map-in-order filter
-                     partition remove filter! partition! remove! find
-                     find-tail take-while drop-while take-while! span break
-                     span! break! any every list-index delete delete!
-                     delete-duplicates delete-duplicates! alist-cons
-                     alist-copy alist-delete alist-delete! lset<= lset=
-                     lset-adjoin lset-union lset-intersection
-                     lset-difference lset-xor lset-diff+intersection
-                     lset-union! lset-intersection! lset-difference!
-                     lset-xor! lset-diff+intersection!))
          (import-aliases . ((scheme list)))
          (dependencies . ((stdlib list)))
          (test-status . (import-resolution)))
@@ -260,26 +224,6 @@
          (visibility . alias)
          (status . alias)
          (target . (stdlib list))
-         (exports . (xcons tree-copy list-tabulate cons* proper-list?
-                     circular-list? dotted-list? not-pair? null-list? list=
-                     circular-list length+ iota first second third fourth
-                     fifth sixth seventh eighth ninth tenth car+cdr take
-                     drop take-right drop-right take! drop-right! split-at
-                     split-at! last last-pair append! concatenate
-                     concatenate! reverse! append-reverse append-reverse!
-                     zip unzip1 unzip2 unzip3 unzip4 unzip5 count fold
-                     fold-right pair-fold pair-fold-right reduce
-                     reduce-right unfold unfold-right append-map append-map!
-                     map! pair-for-each filter-map map-in-order filter
-                     partition remove filter! partition! remove! find
-                     find-tail take-while drop-while take-while! span break
-                     span! break! any every list-index delete delete!
-                     delete-duplicates delete-duplicates! alist-cons
-                     alist-copy alist-delete alist-delete! lset<= lset=
-                     lset-adjoin lset-union lset-intersection
-                     lset-difference lset-xor lset-diff+intersection
-                     lset-union! lset-intersection! lset-difference!
-                     lset-xor! lset-diff+intersection!))
          (import-aliases . ((srfi 1)))
          (dependencies . ((stdlib list)))
          (test-status . (import-resolution)))
@@ -287,26 +231,6 @@
          (visibility . alias)
          (status . alias)
          (target . (stdlib list))
-         (exports . (xcons tree-copy list-tabulate cons* proper-list?
-                     circular-list? dotted-list? not-pair? null-list? list=
-                     circular-list length+ iota first second third fourth
-                     fifth sixth seventh eighth ninth tenth car+cdr take
-                     drop take-right drop-right take! drop-right! split-at
-                     split-at! last last-pair append! concatenate
-                     concatenate! reverse! append-reverse append-reverse!
-                     zip unzip1 unzip2 unzip3 unzip4 unzip5 count fold
-                     fold-right pair-fold pair-fold-right reduce
-                     reduce-right unfold unfold-right append-map append-map!
-                     map! pair-for-each filter-map map-in-order filter
-                     partition remove filter! partition! remove! find
-                     find-tail take-while drop-while take-while! span break
-                     span! break! any every list-index delete delete!
-                     delete-duplicates delete-duplicates! alist-cons
-                     alist-copy alist-delete alist-delete! lset<= lset=
-                     lset-adjoin lset-union lset-intersection
-                     lset-difference lset-xor lset-diff+intersection
-                     lset-union! lset-intersection! lset-difference!
-                     lset-xor! lset-diff+intersection!))
          (import-aliases . ((srfi srfi-1)))
          (dependencies . ((stdlib list)))
          (test-status . (import-resolution)))
@@ -363,25 +287,6 @@
          (visibility . alias)
          (status . alias)
          (target . (stdlib generator))
-         (exports . (generator circular-generator make-iota-generator
-                     make-range-generator make-coroutine-generator
-                     list->generator vector->generator
-                     reverse-vector->generator string->generator
-                     bytevector->generator make-for-each-generator
-                     make-unfold-generator gcons* gappend gcombine gfilter
-                     gremove gtake gdrop gtake-while gdrop-while gflatten
-                     ggroup gmerge gmap gstate-filter gdelete
-                     gdelete-neighbor-dups gindex gselect generator->list
-                     generator->reverse-list generator->vector
-                     generator->vector! generator->string generator-fold
-                     generator-map->list generator-for-each generator-find
-                     generator-count generator-any generator-every
-                     generator-unfold make-accumulator count-accumulator
-                     list-accumulator reverse-list-accumulator
-                     vector-accumulator reverse-vector-accumulator
-                     vector-accumulator! string-accumulator
-                     bytevector-accumulator bytevector-accumulator!
-                     sum-accumulator product-accumulator))
          (import-aliases . ((scheme generator)))
          (dependencies . ((stdlib generator)))
          (test-status . (import-resolution)))
@@ -389,25 +294,6 @@
          (visibility . alias)
          (status . alias)
          (target . (stdlib generator))
-         (exports . (generator circular-generator make-iota-generator
-                     make-range-generator make-coroutine-generator
-                     list->generator vector->generator
-                     reverse-vector->generator string->generator
-                     bytevector->generator make-for-each-generator
-                     make-unfold-generator gcons* gappend gcombine gfilter
-                     gremove gtake gdrop gtake-while gdrop-while gflatten
-                     ggroup gmerge gmap gstate-filter gdelete
-                     gdelete-neighbor-dups gindex gselect generator->list
-                     generator->reverse-list generator->vector
-                     generator->vector! generator->string generator-fold
-                     generator-map->list generator-for-each generator-find
-                     generator-count generator-any generator-every
-                     generator-unfold make-accumulator count-accumulator
-                     list-accumulator reverse-list-accumulator
-                     vector-accumulator reverse-vector-accumulator
-                     vector-accumulator! string-accumulator
-                     bytevector-accumulator bytevector-accumulator!
-                     sum-accumulator product-accumulator))
          (import-aliases . ((srfi 158)))
          (dependencies . ((stdlib generator)))
          (test-status . (import-resolution)))
@@ -415,25 +301,6 @@
          (visibility . alias)
          (status . alias)
          (target . (stdlib generator))
-         (exports . (generator circular-generator make-iota-generator
-                     make-range-generator make-coroutine-generator
-                     list->generator vector->generator
-                     reverse-vector->generator string->generator
-                     bytevector->generator make-for-each-generator
-                     make-unfold-generator gcons* gappend gcombine gfilter
-                     gremove gtake gdrop gtake-while gdrop-while gflatten
-                     ggroup gmerge gmap gstate-filter gdelete
-                     gdelete-neighbor-dups gindex gselect generator->list
-                     generator->reverse-list generator->vector
-                     generator->vector! generator->string generator-fold
-                     generator-map->list generator-for-each generator-find
-                     generator-count generator-any generator-every
-                     generator-unfold make-accumulator count-accumulator
-                     list-accumulator reverse-list-accumulator
-                     vector-accumulator reverse-vector-accumulator
-                     vector-accumulator! string-accumulator
-                     bytevector-accumulator bytevector-accumulator!
-                     sum-accumulator product-accumulator))
          (import-aliases . ((srfi srfi-158)))
          (dependencies . ((stdlib generator)))
          (test-status . (import-resolution)))
@@ -463,7 +330,6 @@
          (visibility . alias)
          (status . alias)
          (target . (stdlib receive))
-         (exports . (receive))
          (import-aliases . ((srfi 8)))
          (dependencies . ((stdlib receive)))
          (test-status . (import-resolution)))
@@ -471,7 +337,6 @@
          (visibility . alias)
          (status . alias)
          (target . (stdlib receive))
-         (exports . (receive))
          (import-aliases . ((srfi srfi-8)))
          (dependencies . ((stdlib receive)))
          (test-status . (import-resolution)))
@@ -501,7 +366,6 @@
          (visibility . alias)
          (status . alias)
          (target . (stdlib assume))
-         (exports . (assume))
          (import-aliases . ((srfi 145)))
          (dependencies . ((stdlib assume)))
          (test-status . (import-resolution)))
@@ -509,7 +373,6 @@
          (visibility . alias)
          (status . alias)
          (target . (stdlib assume))
-         (exports . (assume))
          (import-aliases . ((srfi srfi-145)))
          (dependencies . ((stdlib assume)))
          (test-status . (import-resolution)))
@@ -697,38 +560,6 @@
          (visibility . alias)
          (status . alias)
          (target . (stdlib mapping))
-         (exports . (mapping mapping-unfold mapping/ordered
-                     mapping-unfold/ordered mapping? mapping-contains?
-                     mapping-empty? mapping-disjoint? mapping-ref
-                     mapping-ref/default mapping-key-comparator
-                     mapping-adjoin mapping-adjoin! mapping-set mapping-set!
-                     mapping-replace mapping-replace! mapping-delete
-                     mapping-delete! mapping-delete-all mapping-delete-all!
-                     mapping-intern mapping-intern! mapping-update
-                     mapping-update! mapping-update/default
-                     mapping-update!/default mapping-pop mapping-pop!
-                     mapping-search mapping-search! mapping-size
-                     mapping-find mapping-count mapping-any? mapping-every?
-                     mapping-keys mapping-values mapping-entries mapping-map
-                     mapping-map->list mapping-for-each mapping-fold
-                     mapping-filter mapping-filter! mapping-remove
-                     mapping-remove! mapping-partition mapping-partition!
-                     mapping-copy mapping->alist alist->mapping
-                     alist->mapping! alist->mapping/ordered
-                     alist->mapping/ordered! mapping=? mapping<? mapping>?
-                     mapping<=? mapping>=? mapping-union
-                     mapping-intersection mapping-difference mapping-xor
-                     mapping-union! mapping-intersection!
-                     mapping-difference! mapping-xor!
-                     make-mapping-comparator mapping-comparator
-                     mapping-min-key mapping-max-key mapping-min-value
-                     mapping-max-value mapping-key-predecessor
-                     mapping-key-successor mapping-range= mapping-range<
-                     mapping-range> mapping-range<= mapping-range>=
-                     mapping-range=! mapping-range<! mapping-range>!
-                     mapping-range<=! mapping-range>=! mapping-split
-                     mapping-catenate mapping-catenate! mapping-map/monotone
-                     mapping-map/monotone! mapping-fold/reverse comparator?))
          (import-aliases . ((scheme mapping)))
          (dependencies . ((stdlib mapping)))
          (test-status . (import-resolution)))
@@ -736,38 +567,6 @@
          (visibility . alias)
          (status . alias)
          (target . (stdlib mapping))
-         (exports . (mapping mapping-unfold mapping/ordered
-                     mapping-unfold/ordered mapping? mapping-contains?
-                     mapping-empty? mapping-disjoint? mapping-ref
-                     mapping-ref/default mapping-key-comparator
-                     mapping-adjoin mapping-adjoin! mapping-set mapping-set!
-                     mapping-replace mapping-replace! mapping-delete
-                     mapping-delete! mapping-delete-all mapping-delete-all!
-                     mapping-intern mapping-intern! mapping-update
-                     mapping-update! mapping-update/default
-                     mapping-update!/default mapping-pop mapping-pop!
-                     mapping-search mapping-search! mapping-size
-                     mapping-find mapping-count mapping-any? mapping-every?
-                     mapping-keys mapping-values mapping-entries mapping-map
-                     mapping-map->list mapping-for-each mapping-fold
-                     mapping-filter mapping-filter! mapping-remove
-                     mapping-remove! mapping-partition mapping-partition!
-                     mapping-copy mapping->alist alist->mapping
-                     alist->mapping! alist->mapping/ordered
-                     alist->mapping/ordered! mapping=? mapping<? mapping>?
-                     mapping<=? mapping>=? mapping-union
-                     mapping-intersection mapping-difference mapping-xor
-                     mapping-union! mapping-intersection!
-                     mapping-difference! mapping-xor!
-                     make-mapping-comparator mapping-comparator
-                     mapping-min-key mapping-max-key mapping-min-value
-                     mapping-max-value mapping-key-predecessor
-                     mapping-key-successor mapping-range= mapping-range<
-                     mapping-range> mapping-range<= mapping-range>=
-                     mapping-range=! mapping-range<! mapping-range>!
-                     mapping-range<=! mapping-range>=! mapping-split
-                     mapping-catenate mapping-catenate! mapping-map/monotone
-                     mapping-map/monotone! mapping-fold/reverse comparator?))
          (import-aliases . ((srfi 146)))
          (dependencies . ((stdlib mapping)))
          (test-status . (import-resolution)))
@@ -775,38 +574,6 @@
          (visibility . alias)
          (status . alias)
          (target . (stdlib mapping))
-         (exports . (mapping mapping-unfold mapping/ordered
-                     mapping-unfold/ordered mapping? mapping-contains?
-                     mapping-empty? mapping-disjoint? mapping-ref
-                     mapping-ref/default mapping-key-comparator
-                     mapping-adjoin mapping-adjoin! mapping-set mapping-set!
-                     mapping-replace mapping-replace! mapping-delete
-                     mapping-delete! mapping-delete-all mapping-delete-all!
-                     mapping-intern mapping-intern! mapping-update
-                     mapping-update! mapping-update/default
-                     mapping-update!/default mapping-pop mapping-pop!
-                     mapping-search mapping-search! mapping-size
-                     mapping-find mapping-count mapping-any? mapping-every?
-                     mapping-keys mapping-values mapping-entries mapping-map
-                     mapping-map->list mapping-for-each mapping-fold
-                     mapping-filter mapping-filter! mapping-remove
-                     mapping-remove! mapping-partition mapping-partition!
-                     mapping-copy mapping->alist alist->mapping
-                     alist->mapping! alist->mapping/ordered
-                     alist->mapping/ordered! mapping=? mapping<? mapping>?
-                     mapping<=? mapping>=? mapping-union
-                     mapping-intersection mapping-difference mapping-xor
-                     mapping-union! mapping-intersection!
-                     mapping-difference! mapping-xor!
-                     make-mapping-comparator mapping-comparator
-                     mapping-min-key mapping-max-key mapping-min-value
-                     mapping-max-value mapping-key-predecessor
-                     mapping-key-successor mapping-range= mapping-range<
-                     mapping-range> mapping-range<= mapping-range>=
-                     mapping-range=! mapping-range<! mapping-range>!
-                     mapping-range<=! mapping-range>=! mapping-split
-                     mapping-catenate mapping-catenate! mapping-map/monotone
-                     mapping-map/monotone! mapping-fold/reverse comparator?))
          (import-aliases . ((srfi srfi-146)))
          (dependencies . ((stdlib mapping)))
          (test-status . (import-resolution)))
@@ -814,20 +581,6 @@
          (visibility . alias)
          (status . alias)
          (target . (stdlib comparator))
-         (exports . (comparator? comparator-ordered? comparator-hashable?
-                     make-comparator make-pair-comparator
-                     make-list-comparator make-vector-comparator
-                     make-eq-comparator make-eqv-comparator
-                     make-equal-comparator boolean-hash char-hash
-                     char-ci-hash string-hash string-ci-hash symbol-hash
-                     number-hash make-default-comparator default-hash
-                     comparator-register-default!
-                     comparator-type-test-predicate
-                     comparator-equality-predicate
-                     comparator-ordering-predicate comparator-hash-function
-                     comparator-test-type comparator-check-type
-                     comparator-hash hash-bound hash-salt =? <? >? <=? >=?
-                     comparator-if<=>))
          (import-aliases . ((scheme comparator)))
          (dependencies . ((stdlib comparator)))
          (test-status . (import-resolution)))
@@ -835,20 +588,6 @@
          (visibility . alias)
          (status . alias)
          (target . (stdlib comparator))
-         (exports . (comparator? comparator-ordered? comparator-hashable?
-                     make-comparator make-pair-comparator
-                     make-list-comparator make-vector-comparator
-                     make-eq-comparator make-eqv-comparator
-                     make-equal-comparator boolean-hash char-hash
-                     char-ci-hash string-hash string-ci-hash symbol-hash
-                     number-hash make-default-comparator default-hash
-                     comparator-register-default!
-                     comparator-type-test-predicate
-                     comparator-equality-predicate
-                     comparator-ordering-predicate comparator-hash-function
-                     comparator-test-type comparator-check-type
-                     comparator-hash hash-bound hash-salt =? <? >? <=? >=?
-                     comparator-if<=>))
          (import-aliases . ((srfi 128)))
          (dependencies . ((stdlib comparator)))
          (test-status . (import-resolution)))
@@ -856,20 +595,6 @@
          (visibility . alias)
          (status . alias)
          (target . (stdlib comparator))
-         (exports . (comparator? comparator-ordered? comparator-hashable?
-                     make-comparator make-pair-comparator
-                     make-list-comparator make-vector-comparator
-                     make-eq-comparator make-eqv-comparator
-                     make-equal-comparator boolean-hash char-hash
-                     char-ci-hash string-hash string-ci-hash symbol-hash
-                     number-hash make-default-comparator default-hash
-                     comparator-register-default!
-                     comparator-type-test-predicate
-                     comparator-equality-predicate
-                     comparator-ordering-predicate comparator-hash-function
-                     comparator-test-type comparator-check-type
-                     comparator-hash hash-bound hash-salt =? <? >? <=? >=?
-                     comparator-if<=>))
          (import-aliases . ((srfi srfi-128)))
          (dependencies . ((stdlib comparator)))
          (test-status . (import-resolution)))))

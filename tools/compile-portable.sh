@@ -597,10 +597,10 @@ write_racket_main_common() {
       (loop (cdr chars) (cons (car chars) current) parts)))))
 
 (define (consent-main--library-search-directories)
-  ;; Host-injected runtime library search directories, highest precedence first:
+  ;; Host-injected system manifest roots, highest precedence first:
   ;; CONSENT_LIBRARY_PATH (explicit override), then the install datadir baked at
-  ;; compile time. The core resolver consults these ahead of the source tree and
-  ;; the embedded floor.
+  ;; compile time. The compatibility setter installs these as the system root
+  ;; list; user roots are layered separately by the runtime when configured.
   (let ((env (get-environment-variable "CONSENT_LIBRARY_PATH"))
         (datadir consent-main:embedded:consent-embedded-datadir))
     (append
@@ -625,9 +625,9 @@ write_racket_main() {
 ;; when relocated outside a source tree.
 (consent-main:embedded:consent-install-embedded-source!)
 
-;; Inject the host's runtime library search directories (CONSENT_LIBRARY_PATH and
-;; the baked install datadir) so an installed or overridden library tree is
-;; resolved ahead of the embedded floor.
+;; Inject the host's system manifest roots (CONSENT_LIBRARY_PATH and the baked
+;; install datadir) so an installed or overridden library tree is resolved ahead
+;; of the embedded floor.
 (consent-main:runtime:consent-set-library-search-directories!
  (consent-main--library-search-directories))
 
@@ -948,10 +948,10 @@ write_gambit_main_common() {
       (loop (cdr chars) (cons (car chars) current) parts)))))
 
 (define (consent-main--library-search-directories)
-  ;; Host-injected runtime library search directories, highest precedence first:
+  ;; Host-injected system manifest roots, highest precedence first:
   ;; CONSENT_LIBRARY_PATH (explicit override), then the install datadir baked at
-  ;; compile time. The core resolver consults these ahead of the source tree and
-  ;; the embedded floor.
+  ;; compile time. The compatibility setter installs these as the system root
+  ;; list; user roots are layered separately by the runtime when configured.
   (let ((env (get-environment-variable "CONSENT_LIBRARY_PATH"))
         (datadir consent-main:embedded:consent-embedded-datadir))
     (append
@@ -980,9 +980,9 @@ write_gambit_main() {
 ;; when relocated outside a source tree.
 (consent-main:embedded:consent-install-embedded-source!)
 
-;; Inject the host's runtime library search directories (CONSENT_LIBRARY_PATH and
-;; the baked install datadir) so an installed or overridden library tree is
-;; resolved ahead of the embedded floor.
+;; Inject the host's system manifest roots (CONSENT_LIBRARY_PATH and the baked
+;; install datadir) so an installed or overridden library tree is resolved ahead
+;; of the embedded floor.
 (consent-main:runtime:consent-set-library-search-directories!
  (consent-main--library-search-directories))
 

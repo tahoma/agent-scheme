@@ -33,7 +33,76 @@
     (and entry
          (plist-get entry :source-file)
          (consent--manifest-source-library-file
-          (plist-get entry :source-file)))))
+          (plist-get entry :source-file)
+          (plist-get entry :root)))))
+
+(defun consent-library-test--write-manifest-root
+    (root collection library value-symbol)
+  "Write a manifest ROOT for COLLECTION/LIBRARY returning VALUE-SYMBOL."
+  (let* ((manifest-file (expand-file-name "manifest.sld" root))
+         (collection-file
+          (expand-file-name
+           (format "inventory/%s.sld" collection)
+           root))
+         (source-root
+          (format "payload/%s/libraries/" collection))
+         (source-file
+          (expand-file-name
+           (format "%s%s.sld" source-root library)
+           root)))
+    (make-directory (file-name-directory collection-file) t)
+    (make-directory (file-name-directory source-file) t)
+    (write-region
+     (format
+      "(define-library (manifest index)
+  (export manifest-index)
+  (import (scheme base))
+  (begin
+    (define manifest-index
+      '(((collection . %s)
+         (category . %s)
+         (manifest-library . (%s manifest))
+         (manifest-variable . %s-manifest)
+         (manifest-file . \"inventory/%s.sld\")
+         (source-root . \"%s\"))))))
+"
+      collection collection collection collection collection source-root)
+     nil
+     manifest-file)
+    (write-region
+     (format
+      "(define-library (%s manifest)
+  (export %s-manifest)
+  (import (scheme base))
+  (begin
+    (define %s-manifest
+      '(((library . (%s %s))
+         (visibility . public)
+         (layer . %s)
+         (status . implemented)
+         (source-kind . source-library)
+         (source-file . \"%s.sld\")
+         (implementation-library . (%s %s))
+         (exports . (%s))
+         (owner . %s)
+         (provider . %s)
+         (dependencies . ((scheme base))))))))
+"
+      collection collection collection collection library collection
+      library collection library library collection collection)
+     nil
+     collection-file)
+    (write-region
+     (format
+      "(define-library (%s %s)
+  (export %s)
+  (import (scheme base))
+  (begin
+    (define (%s) '%s)))
+"
+      collection library library library value-symbol)
+     nil
+     source-file)))
 
 (defconst consent-library-test--include-options
   (list :include-directory consent-library-test--root
@@ -824,9 +893,10 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
      (member "https://github.com/scheme-requests-for-implementation/srfi-180"
              upstream-urls))))
 
-(ert-deftest consent-library-test-built-in-manifests-declare-exports ()
-  "Require every built-in collection manifest entry to spell exports."
-  (let ((missing (list 'missing-exports)))
+(ert-deftest consent-library-test-built-in-manifests-declare-owned-exports ()
+  "Require owned libraries to spell exports while pure aliases may inherit."
+  (let ((missing (list 'missing-exports))
+        omitted-pure-alias)
     (dolist (spec (consent--library-collection-manifest-specs))
       (dolist (entry (consent--proper-list-elements
                       (consent--collection-manifest-library-value spec)
@@ -834,16 +904,38 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
         (let* ((library
                 (consent--library-name-key
                  (consent--collection-manifest-field entry "library" nil)))
+               (target
+                (consent--collection-manifest-target
+                 (consent--collection-manifest-field entry "target" nil)))
                (exports
                 (consent--collection-manifest-field
                  entry "exports" missing)))
-          (should-not (eq exports missing))
-          (should (listp (consent--proper-list-elements
-                          exports
-                          (format "exports for %s" library)))))))))
+          (if (eq exports missing)
+              (if target
+                  (setq omitted-pure-alias t)
+                (ert-fail
+                 (format "owned manifest entry lacks exports: %s" library)))
+            (should (listp (consent--proper-list-elements
+                            exports
+                            (format "exports for %s" library))))))))
+    (should omitted-pure-alias)))
 
-(ert-deftest consent-library-test-top-level-manifest-references-itself ()
-  "Keep the aggregate manifest index inside the manifest graph."
+(ert-deftest consent-library-test-pure-alias-manifest-inherits-target-exports ()
+  "Treat a pure alias without manifest exports as the target's full surface."
+  (let ((entry
+         (consent--library-collection-manifest-entry "(consent json)")))
+    (should (equal (plist-get entry :target) "(stdlib json)"))
+    (should-not (plist-get entry :exports))
+    (should (member "json-write"
+                    (consent--library-catalog-export-names
+                     "(consent json)")))
+    (should (equal (consent--library-catalog-export-names
+                    "(consent json)")
+                   (consent--library-catalog-export-names
+                    "(stdlib json)")))))
+
+(ert-deftest consent-library-test-top-level-manifest-is-root-manifest ()
+  "Keep the aggregate manifest at the manifest root inside the graph."
   (let ((spec
          (cl-find-if
           (lambda (spec)
@@ -851,16 +943,93 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
           (consent--library-collection-manifest-specs))))
     (should spec)
     (should (equal (plist-get spec :key) "(manifest index)"))
-    (should (equal (plist-get spec :manifest-file) "manifest/index.sld"))
-    (should (equal (plist-get spec :source-root) "manifest/"))
+    (should (equal (plist-get spec :manifest-file) "manifest.sld"))
+    (should (equal (plist-get spec :source-root) ""))
+    (should (equal (plist-get spec :variable) "manifest-index-manifest"))
     (let ((entry
            (consent--library-collection-manifest-entry
             "(manifest index)")))
       (should entry)
       (should (eq (plist-get entry :source-kind) 'portable-source))
-      (should (equal (plist-get entry :source-file) "manifest/index.sld"))
+      (should (equal (plist-get entry :source-file) "manifest.sld"))
       (should (equal (plist-get entry :exports)
                      '("manifest-index" "manifest-index-ref"))))))
+
+(ert-deftest consent-library-test-root-manifest-drives-collections ()
+  "Bootstrap collection discovery from system/user root `manifest.sld' files."
+  (let ((system-root (make-temp-file "consent-system-manifest-seed-" t))
+        (user-root (make-temp-file "consent-user-manifest-seed-" t))
+        (ignored-root (make-temp-file "consent-empty-manifest-seed-" t)))
+    (unwind-protect
+        (progn
+          (consent-library-test--write-manifest-root
+           system-root
+           'system
+           'tool
+           'system-tool)
+          (consent-library-test--write-manifest-root
+           user-root
+           'user
+           'tool
+           'user-tool)
+          (let ((consent-library-system-path
+                 (list system-root ignored-root))
+                (consent-library-user-path
+                 (list user-root))
+                (consent--library-collection-manifest-cache nil))
+            (let* ((specs (consent--library-collection-manifest-specs))
+                   (entries
+                    (consent--library-collection-manifest-entries))
+                   (system-spec (car specs))
+                   (user-spec (cadr specs))
+                   (system-entry
+                    (consent--library-collection-manifest-entry
+                     "(system tool)"))
+                   (user-entry
+                    (consent--library-collection-manifest-entry
+                     "(user tool)"))
+                   (context (consent--new-eval-context nil))
+                   (environment (consent-make-base-environment)))
+              (should (= (length specs) 2))
+              (should (eq (plist-get system-spec :collection) 'system))
+              (should (eq (plist-get user-spec :collection) 'user))
+              (should (equal (plist-get system-spec :root-kind) 'system))
+              (should (equal (plist-get user-spec :root-kind) 'user))
+              (should (equal (plist-get system-spec :key)
+                             "(system manifest)"))
+              (should (equal (plist-get user-spec :key)
+                             "(user manifest)"))
+              (should (equal (plist-get system-spec :manifest-file)
+                             "inventory/system.sld"))
+              (should (equal (plist-get user-spec :manifest-file)
+                             "inventory/user.sld"))
+              (should (equal (plist-get system-spec :source-root)
+                             "payload/system/libraries/"))
+              (should (equal (plist-get user-spec :source-root)
+                             "payload/user/libraries/"))
+              (should (= (length entries) 2))
+              (should (equal (plist-get system-entry :source-file)
+                             "payload/system/libraries/tool.sld"))
+              (should (equal (plist-get user-entry :source-file)
+                             "payload/user/libraries/tool.sld"))
+              (consent--register-scheme-base-library context environment)
+              (consent--register-manifest-source-library
+               system-entry
+               context
+               environment)
+              (consent--register-manifest-source-library
+               user-entry
+               context
+               environment)
+              (should (gethash "(system tool)"
+                               (consent--eval-context-libraries
+                                context)))
+              (should (gethash "(user tool)"
+                               (consent--eval-context-libraries
+                                context))))))
+      (delete-directory system-root t)
+      (delete-directory user-root t)
+      (delete-directory ignored-root t))))
 
 (ert-deftest consent-library-test-source-manifest-exports-filter-library ()
   "Let source-library manifest exports narrow the source definition."

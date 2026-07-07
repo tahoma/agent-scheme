@@ -36,6 +36,8 @@
               authorize-network-capability
               consent-set-library-search-directories!
               consent-library-search-directory-list
+              consent-set-library-user-directories!
+              consent-library-user-directory-list
               consent-version
               consent-version-components
               consent-default-maximum-source-metadata
@@ -1642,6 +1644,22 @@
               (cadr (assq 'source-file json-spec)))
          "stdlib/json.sld"))
 
+(check 'user-manifest-root-path-list-import
+       (let ((user-directories (consent-library-user-directory-list)))
+         (dynamic-wind
+           (lambda ()
+             (consent-set-library-user-directories!
+              (append user-directories
+                      '("tests/fixtures/manifest-root"))))
+           (lambda ()
+             (consent-value->external
+              (consent-eval-source
+               "(import (fixture tool))
+                (fixture-tool)")))
+           (lambda ()
+             (consent-set-library-user-directories! user-directories))))
+       "fixture-tool")
+
 (check-external 'srfi-16-case-lambda-alias-import
                 "(import (scheme base) (srfi 16))
                  (define (describe . args)
@@ -2059,6 +2077,20 @@
                 "(import (scheme base) (consent json))
                  (json-null? (json-read (open-input-string \"null\")))"
                 "#t")
+
+(check-external 'consent-json-pure-alias-inherits-target-exports
+                "(import (scheme base) (stdlib manifest) (consent json))
+                 (let ((entry (stdlib-manifest-ref '(consent json)))
+                       (out (open-output-string)))
+                   (json-write '((ok . #t)) out)
+                   (let ((datum
+                          (json-read
+                           (open-input-string (get-output-string out)))))
+                     (list (if (assq 'exports entry)
+                               'exports-present
+                               'exports-omitted)
+                           (cdr (assq 'ok datum)))))"
+                "(exports-omitted #t)")
 
 (check-external 'stdlib-json-import
                 "(import (scheme base) (stdlib json))
@@ -5313,7 +5345,7 @@
                         '((internal-libraries-allowed . #t))
                         "#t")
 
-(check 'manifest-resolution-requires-seed-root
+(check 'manifest-resolution-requires-manifest-root
        (let ((directories (consent-library-search-directory-list)))
          (dynamic-wind
            (lambda ()
