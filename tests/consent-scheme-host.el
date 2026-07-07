@@ -41,6 +41,11 @@
     "tests/scheme/consent-eval-test.scm")
   "Portable Scheme test files exercised by full-suite host shards.")
 
+(defconst consent--scheme-host-compiled-test-files
+  '("tests/scheme/consent-reader-test.scm"
+    "tests/scheme/consent-manifest-smoke-test.scm")
+  "Portable Scheme test files exercised by compiled full-suite shards.")
+
 (defconst consent--scheme-host-reflect-test-files
   '("tests/scheme/consent-reflect-test.scm")
   "Portable Scheme reflection contract files exercised by dedicated shards.")
@@ -56,10 +61,10 @@
 (defun consent--scheme-host-test-files-for-host (host)
   "Return the portable Scheme test files that should run on HOST."
   ;; Compiled runners execute through --host-run and enforce host callback
-  ;; budgets. Keep expensive conformance suites on direct hosts while compact
-  ;; smoke tests still exercise the feature on every full-suite shard.
+  ;; budgets. Keep expensive conformance and nested-evaluator suites on direct
+  ;; hosts while compact smoke tests still exercise compiled manifest bootstrap.
   (if (memq host '(compiled gambit-native))
-      consent--scheme-host-test-files
+      consent--scheme-host-compiled-test-files
     (append
      consent--scheme-host-test-files
      consent--scheme-host-direct-only-test-files)))
