@@ -120,8 +120,10 @@ runtime. It is for diagnostics, adaptive helper libraries, and agent-authored
 scripts that need to understand their current authority and budget before
 choosing what to do next.
 
-For a hands-on tour of discovery workflows, see
-[Reflection Quickstart](reflection-quickstart.md).
+For a compact API tour, see [Reflection Quickstart](reflection-quickstart.md).
+For a step-by-step workflow that combines live bindings, registered libraries,
+and manifest metadata, see
+[Runtime Definition Discovery Tutorial](runtime-definition-discovery.md).
 
 Current procedures:
 
@@ -183,8 +185,11 @@ Current procedures:
   evaluation context.
 - `(libraries)` returns manifest-backed `library-info` records for repo-owned
   libraries known to the runtime. Each record includes `name`, `category`,
-  `status`, `source-kind`, `source-file`, `aliases`, `target`, `exports`,
-  `dependencies`, `origin`, `source-id`, and `summary` fields.
+  `status`, `source-kind`, `visibility`, `availability`,
+  `availability-condition`, `source-file`, `aliases`, `target`, `exports`,
+  `dependencies`, `origin`, `source-id`, and `summary` fields. The public and
+  internal visibility vocabulary is documented in
+  [Library Surface and Manifests](library-surface.md).
 - `(library-info library-name)` returns one `library-info` record or `#f` when
   the library name is not cataloged.
 - `(library-search query)` searches cataloged library names, aliases,
@@ -211,12 +216,18 @@ Current procedures:
 - `(library-documentation library-name)` resolves a cataloged library in a
   private reflection context and returns documentation records for documented
   exports without adding the library to the caller's current imports.
-- `(binding-libraries symbol-or-name)` returns cataloged libraries that export
-  the requested binding.
+- `(binding-libraries symbol-or-name)` returns cataloged or currently
+  registered libraries that export the requested binding. This includes
+  ad-hoc libraries defined in the current evaluator context without manifest
+  metadata.
 - `(documented-bindings)` returns documentation records for documented
   bindings in the current interaction environment.
-- `(apropos query)` searches current documented bindings and library catalog
-  metadata, returning `apropos-match` records.
+- `(apropos query)` searches definitions first, combining current documented
+  bindings with catalog exports and currently registered library exports, and
+  returns `apropos-match` records for matching bindings. Each match carries
+  library provenance when the catalog or current evaluator context can identify
+  exporting libraries. Library-container discovery remains the responsibility
+  of `library-search`.
 - `(reflection-field record field [default])`,
   `(documentation-field documentation field [default])`, and
   `(docstring subject [default])` are helper accessors for Scheme-readable

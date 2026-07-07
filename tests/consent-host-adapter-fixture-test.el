@@ -100,35 +100,28 @@
   "Return provided library records from ADAPTER."
   (consent-host-adapter-fixture-test--field-value adapter "provides"))
 
-(defun consent-host-adapter-fixture-test--emacs-provided-library-keys
-    (adapter)
-  "Return Emacs library keys declared by ADAPTER."
+(defun consent-host-adapter-fixture-test--provided-library-keys
+    (adapter predicate)
+  "Return library keys declared by ADAPTER whose manifest matches PREDICATE."
   (seq-filter
    (lambda (key)
-     (string-prefix-p "(emacs " key))
+     (let ((entry (consent--library-collection-manifest-entry key)))
+       (and entry (funcall predicate entry))))
    (mapcar
     #'consent-host-adapter-fixture-test--library-record-key
     (consent-host-adapter-fixture-test--adapter-provides adapter))))
 
-(defun consent-host-adapter-fixture-test--agent-provided-library-keys
-    (adapter)
-  "Return Agent library keys declared by ADAPTER."
-  (seq-filter
-   (lambda (key)
-     (string-prefix-p "(agent " key))
+(defun consent-host-adapter-fixture-test--manifest-library-keys
+    (predicate)
+  "Return manifest library keys matching PREDICATE."
+  (delq
+   nil
    (mapcar
-    #'consent-host-adapter-fixture-test--library-record-key
-    (consent-host-adapter-fixture-test--adapter-provides adapter))))
-
-(defun consent-host-adapter-fixture-test--consent-provided-library-keys
-    (adapter)
-  "Return consent core library keys declared by ADAPTER."
-  (seq-filter
-   (lambda (key)
-     (string-prefix-p "(consent " key))
-   (mapcar
-    #'consent-host-adapter-fixture-test--library-record-key
-    (consent-host-adapter-fixture-test--adapter-provides adapter))))
+    (lambda (entry)
+      (let ((name (plist-get entry :name)))
+        (and (funcall predicate entry)
+             name)))
+    (consent--library-collection-manifest-entries))))
 
 (defun consent-host-adapter-fixture-test--capabilities (manifest)
   "Return capability records from MANIFEST."
@@ -233,28 +226,46 @@
   "Declared Emacs and shared agent libraries align with registries."
   (let* ((fixture (consent-host-adapter-fixture-test--fixture))
          (adapter (consent-host-adapter-fixture-test--section
-                   fixture "adapter")))
+                   fixture "adapter"))
+         (emacs-capability-p
+          (lambda (entry)
+            (eq (plist-get entry :implementation-id)
+                'emacs-capability)))
+         (agent-provided-p
+          (lambda (entry)
+            (and (eq (plist-get entry :category) 'agent)
+                 (memq (plist-get entry :layer) '(api primitive)))))
+         (consent-provided-p
+          (lambda (entry)
+            (and (eq (plist-get entry :category) 'consent)
+                 (or (eq (plist-get entry :implementation-id)
+                         'consent-capability)
+                     (member "(consent capability primitive)"
+                             (plist-get entry :dependencies)))))))
     (should
      (equal
       (consent-host-adapter-fixture-test--sorted-strings
-       (consent-host-adapter-fixture-test--emacs-provided-library-keys
-        adapter))
+       (consent-host-adapter-fixture-test--provided-library-keys
+        adapter emacs-capability-p))
       (consent-host-adapter-fixture-test--sorted-strings
-       (consent-emacs-capability-library-keys))))
+       (consent-host-adapter-fixture-test--manifest-library-keys
+        emacs-capability-p))))
     (should
      (equal
       (consent-host-adapter-fixture-test--sorted-strings
-       (consent-host-adapter-fixture-test--agent-provided-library-keys
-        adapter))
+       (consent-host-adapter-fixture-test--provided-library-keys
+        adapter agent-provided-p))
       (consent-host-adapter-fixture-test--sorted-strings
-       consent--agent-library-keys)))
+       (consent-host-adapter-fixture-test--manifest-library-keys
+        agent-provided-p))))
     (should
      (equal
       (consent-host-adapter-fixture-test--sorted-strings
-       (consent-host-adapter-fixture-test--consent-provided-library-keys
-        adapter))
+       (consent-host-adapter-fixture-test--provided-library-keys
+        adapter consent-provided-p))
       (consent-host-adapter-fixture-test--sorted-strings
-       consent--consent-library-keys)))))
+       (consent-host-adapter-fixture-test--manifest-library-keys
+        consent-provided-p))))))
 
 (ert-deftest consent-host-adapter-fixture-test-manifest-matches-bindings ()
   "Declared host-capability records track the Emacs capability manifest."

@@ -627,7 +627,7 @@
                    (equal? before after)))")))
     (should (string-match-p
              (regexp-quote
-              "((agent reflect) agent primitive \"scheme/consent/lazy.sld\"")
+              "((agent reflect) agent primitive \"consent/lazy.sld\"")
              external))
     (should (string-match-p
              (regexp-quote
@@ -640,8 +640,29 @@
              (regexp-quote "missing #t)")
              external))))
 
+(ert-deftest consent-reflect-test-library-catalog-visibility-tiers ()
+  "Expose library visibility and availability metadata."
+  (consent-reflect-test--reset)
+  (should
+   (equal
+    (consent-reflect-test--eval-value-string
+     "(import (scheme base) (agent reflect))
+      (define (field datum name)
+        (cadr (assq name (cdr datum))))
+      (list
+       (field (library-info '(scheme base)) 'visibility)
+       (field (library-info '(consent capability)) 'visibility)
+       (field (library-info '(srfi 16)) 'visibility)
+       (field (library-info '(consent reader)) 'visibility)
+       (field (library-info '(agent memory primitive)) 'visibility)
+       (field (library-info '(emacs buffer)) 'availability)
+       (field (library-info '(emacs buffer)) 'availability-condition))")
+    (concat
+     "(public public-consent alias internal-runtime internal-agent-model "
+     "optional (host emacs))"))))
+
 (ert-deftest consent-reflect-test-documented-bindings-and-apropos-stress ()
-  "Search current binding docs and catalog docs as Scheme-readable records."
+  "Search binding definitions and keep library search separate."
   (consent-reflect-test--reset)
   (let ((external
          (consent-reflect-test--eval-value-string
@@ -656,11 +677,18 @@
               ((null? docs) #f)
               ((equal? (field (car docs) 'subject) (list 'binding name)) #t)
               (else (documented-subject? (cdr docs) name))))
+           (define (any-kind? matches kind)
+             (cond
+              ((null? matches) #f)
+              ((eq? (field (car matches) 'kind) kind) #t)
+              (else (any-kind? (cdr matches) kind))))
            (define (needle-procedure x)
              \"Return the needle value for discovery tests.\"
              x)
            (let* ((docs (documented-bindings))
-                  (matches (apropos \"needle\")))
+                  (matches (apropos \"needle\"))
+                  (reflect-matches (apropos \"reflect\"))
+                  (library-hits (library-search \"reflect\")))
              (list (if (documented-subject? docs 'needle-procedure)
                        'documented
                        'missing)
@@ -669,7 +697,9 @@
                    (map (lambda (match)
                           (list (field match 'kind)
                                 (field match 'name)))
-                        matches)))"
+                        matches)
+                   (any-kind? reflect-matches 'library)
+                   (not (null? library-hits))))"
           '(:docstring-retention full))))
     (should (string-match-p
              (regexp-quote
@@ -677,7 +707,48 @@
              external))
     (should (string-match-p
              (regexp-quote "(binding needle-procedure)")
+             external))
+    (should (string-match-p
+             (regexp-quote "#f #t)")
              external))))
+
+(ert-deftest consent-reflect-test-apropos-sees-unmanifested-libraries ()
+  "Search registered libraries that do not have manifest metadata."
+  (consent-reflect-test--reset)
+  (let ((external
+         (consent-reflect-test--eval-value-string
+          "(define-library (adhoc scratch)
+             (export adhoc-needle)
+             (import (scheme base))
+             (begin
+               (define (adhoc-needle x)
+                 \"Return X from an ad-hoc library.\"
+                 x)))
+           (import (scheme base) (agent reflect) (adhoc scratch))
+           (define (field datum name)
+             (cadr (assq name (cdr datum))))
+           (define (library-present? libraries name)
+             (cond
+              ((null? libraries) #f)
+              ((equal? (car libraries) name) #t)
+              (else (library-present? (cdr libraries) name))))
+           (define (match-libraries matches name)
+             (cond
+              ((null? matches) '())
+              ((eq? (field (car matches) 'name) name)
+               (field (car matches) 'libraries))
+              (else (match-libraries (cdr matches) name))))
+           (let ((binding-library-names
+                  (map (lambda (info) (field info 'name))
+                       (binding-libraries 'adhoc-needle)))
+                 (apropos-library-names
+                  (match-libraries (apropos \"adhoc-needle\")
+                                   'adhoc-needle)))
+             (list
+              (library-present? binding-library-names '(adhoc scratch))
+              (library-present? apropos-library-names '(adhoc scratch))))"
+          '(:docstring-retention full))))
+    (should (equal external "(#t #t)"))))
 
 (ert-deftest consent-reflect-test-manifest-input-contract ()
   "Register and remove an ad-hoc manifest through the public source record."

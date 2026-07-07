@@ -27,6 +27,14 @@
    (file-name-directory (or load-file-name buffer-file-name default-directory)))
   "Repository root for library fixture tests.")
 
+(defun consent-library-test--manifest-source-file (key)
+  "Return the absolute manifest-declared source file for library KEY."
+  (let ((entry (consent--library-collection-manifest-entry key)))
+    (and entry
+         (plist-get entry :source-file)
+         (consent--manifest-source-library-file
+          (plist-get entry :source-file)))))
+
 (defconst consent-library-test--include-options
   (list :include-directory consent-library-test--root
         :include-paths
@@ -546,7 +554,7 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
 (ert-deftest consent-library-test-agent-session-is-source-backed ()
   "Load `(agent session)' from the shared portable source library."
   (let ((source-file
-         (consent--agent-source-library-file "(agent session)")))
+         (consent-library-test--manifest-source-file "(agent session)")))
     (should source-file)
     (should (string-suffix-p "scheme/agent/session.sld" source-file))
     (should (file-readable-p source-file)))
@@ -575,7 +583,7 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
 (ert-deftest consent-library-test-agent-memory-is-source-backed ()
   "Load `(agent memory)' from the shared portable source library."
   (let ((source-file
-         (consent--agent-source-library-file "(agent memory)")))
+         (consent-library-test--manifest-source-file "(agent memory)")))
     (should source-file)
     (should (string-suffix-p "scheme/agent/memory.sld" source-file))
     (should (file-readable-p source-file)))
@@ -617,7 +625,8 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
 (ert-deftest consent-library-test-agent-models-openai-is-source-backed ()
   "Load `(agent models openai)' from the shared portable source library."
   (let ((source-file
-         (consent--agent-source-library-file "(agent models openai)")))
+         (consent-library-test--manifest-source-file
+          "(agent models openai)")))
     (should source-file)
     (should (string-suffix-p "scheme/agent/models/openai.sld" source-file))
     (should (file-readable-p source-file)))
@@ -629,10 +638,250 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
        \"{\\\"choices\\\":[{\\\"message\\\":{\\\"content\\\":\\\"source completion\\\"}}]}\")")
     "\"source completion\"")))
 
+(ert-deftest consent-library-test-public-import-and-alias-remain-available ()
+  "Keep public and alias imports stable while internal tiers are gated."
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (agent memory) (srfi 16))
+      (define store (consent-make-memory-store))
+      ((case-lambda
+         ((value) value))
+       (consent-memory-store? store))")
+    "#t")))
+
+(ert-deftest consent-library-test-internal-runtime-import-denied-by-default ()
+  "Reject runtime implementation libraries without internal posture."
+  (let ((error
+         (should-error
+          (consent-library-test--external
+           "(import (consent reader))
+            'ok")
+          :type 'consent-eval-error)))
+    (should
+     (string-match-p
+      (regexp-quote
+       "internal library import requires internal-libraries-allowed")
+      (error-message-string error)))
+    (should
+     (string-match-p
+      (regexp-quote "(consent reader)")
+      (error-message-string error)))))
+
+(ert-deftest consent-library-test-agent-primitive-backing-import-denied-by-default ()
+  "Reject primitive backing libraries without internal posture."
+  (let ((error
+         (should-error
+          (consent-library-test--external
+           "(import (agent memory primitive))
+            'ok")
+          :type 'consent-eval-error)))
+    (should
+     (string-match-p
+      (regexp-quote
+       "internal library import requires internal-libraries-allowed")
+      (error-message-string error)))
+    (should
+     (string-match-p
+      (regexp-quote "(agent memory primitive)")
+      (error-message-string error)))))
+
+(ert-deftest consent-library-test-internal-posture-imports-runtime-source ()
+  "Allow white-box runtime imports only under explicit internal posture."
+  (should
+   (equal
+    (consent-library-test--external/options
+     "(import (consent reader))
+      (string=? (consent-datum->external '(alpha beta))
+                \"(alpha beta)\")"
+     '(:internal-libraries-allowed t))
+    "#t")))
+
+(ert-deftest consent-library-test-manifest-implementation-id-routes-primitives ()
+  "Use manifest implementation ids rather than library-name namespaces."
+  (let* ((context (consent--new-eval-context nil))
+         (environment (consent-make-base-environment))
+         (entry (list :name "(custom io)"
+                      :source-kind 'primitive
+                      :implementation-id 'agent-io)))
+    (consent--register-manifest-implementation-library
+     entry context environment)
+    (let ((library
+           (gethash "(custom io)"
+                    (consent--eval-context-libraries context))))
+      (should library)
+      (should
+       (member "agent-yield"
+               (mapcar #'consent--library-binding-name
+                       (consent--library-exports library)))))))
+
+(ert-deftest consent-library-test-primitive-manifests-declare-exports ()
+  "Require primitive manifest entries to carry explicit export metadata."
+  (dolist (entry (cl-remove-if-not
+                  (lambda (entry)
+                    (eq (plist-get entry :source-kind) 'primitive))
+                  (consent--library-collection-manifest-entries)))
+    (should (consp (plist-get entry :exports))))
+  (should
+   (equal
+    (plist-get (consent--library-collection-manifest-entry "(agent io)")
+               :exports)
+    '("agent-yield"
+      "agent-log"
+      "agent-progress"
+      "agent-warn"
+      "agent-request")))
+  (should
+   (member
+    "char-alphabetic?"
+    (plist-get (consent--library-collection-manifest-entry "(scheme char)")
+               :exports))))
+
+(ert-deftest consent-library-test-obsolete-library-dispatchers-are-retired ()
+  "Keep repo-owned library surface routing out of hand-curated dispatchers."
+  (dolist (symbol '(consent--register-agent-library
+                    consent--register-consent-library
+                    consent--register-cli-library
+                    consent--register-standard-library
+                    consent--register-stdlib-library))
+    (should-not (fboundp symbol)))
+  (dolist (symbol '(consent--standard-source-library-file
+                    consent--standard-source-library-source
+                    consent--stdlib-source-library-file
+                    consent--stdlib-source-library-source
+                    consent--agent-source-library-file
+                    consent--agent-source-library-source
+                    consent--standard-source-library-form
+                    consent--standard-source-library-export-names))
+    (should-not (fboundp symbol)))
+  (should-not (boundp 'consent--cxr-library-names))
+  (let* ((entry (consent--library-collection-manifest-entry "(scheme cxr)"))
+         (exports (plist-get entry :exports))
+         (specs (consent--manifest-exported-primitive-specs entry)))
+    (should (equal (mapcar #'car specs) exports))))
+
+(ert-deftest consent-library-test-emacs-capability-keys-follow-manifest ()
+  "Derive Emacs capability library keys instead of maintaining a twin list."
+  (let ((manifest-keys
+         (sort
+          (mapcar
+           (lambda (entry)
+             (plist-get entry :name))
+           (cl-remove-if-not
+            (lambda (entry)
+              (eq (plist-get entry :implementation-id) 'emacs-capability))
+            (consent--library-collection-manifest-entries)))
+          #'string<))
+        (runtime-keys
+         (sort (copy-sequence (consent-emacs-capability-library-keys))
+               #'string<)))
+    (should-not (boundp 'consent--emacs-capability-library-keys))
+    (should (equal runtime-keys manifest-keys))))
+
+(ert-deftest consent-library-test-built-in-categories-come-from-manifests ()
+  "Keep catalog family metadata in manifests, not namespace-prefix code."
+  (dolist (entry (consent--library-collection-manifest-entries))
+    (should (plist-get entry :category)))
+  (should (eq (plist-get
+               (consent--library-collection-manifest-entry "(scheme char)")
+               :category)
+              'standard))
+  (should (eq (plist-get
+               (consent--library-collection-manifest-entry "(consent reader)")
+               :category)
+              'consent))
+  (should (eq (plist-get
+               (consent--library-collection-manifest-entry "(srfi 1)")
+               :category)
+              'stdlib))
+  (should (eq (plist-get
+               (consent--library-collection-manifest-entry "(manifest index)")
+               :category)
+              'manifest)))
+
+(ert-deftest consent-library-test-stdlib-manifests-name-upstream-source-url ()
+  "Use upstream-source-url for imported provenance metadata."
+  (dolist (spec (consent--library-collection-manifest-specs))
+    (dolist (entry (consent--proper-list-elements
+                    (consent--collection-manifest-library-value spec)
+                    "collection manifest entries"))
+      (should-not
+       (consent--collection-manifest-field entry "source-url" nil))))
+  (let (upstream-urls)
+    (dolist (entry (consent--proper-list-elements
+                    (consent--collection-manifest-library-value
+                     (cl-find-if
+                      (lambda (spec)
+                        (eq (plist-get spec :collection) 'stdlib))
+                      (consent--library-collection-manifest-specs)))
+                    "stdlib manifest entries"))
+      (let ((url (consent--collection-manifest-field
+                  entry "upstream-source-url" nil)))
+        (when url
+          (push url upstream-urls))))
+    (should upstream-urls)
+    (should
+     (member "https://github.com/scheme-requests-for-implementation/srfi-180"
+             upstream-urls))))
+
+(ert-deftest consent-library-test-built-in-manifests-declare-exports ()
+  "Require every built-in collection manifest entry to spell exports."
+  (let ((missing (list 'missing-exports)))
+    (dolist (spec (consent--library-collection-manifest-specs))
+      (dolist (entry (consent--proper-list-elements
+                      (consent--collection-manifest-library-value spec)
+                      "collection manifest entries"))
+        (let* ((library
+                (consent--library-name-key
+                 (consent--collection-manifest-field entry "library" nil)))
+               (exports
+                (consent--collection-manifest-field
+                 entry "exports" missing)))
+          (should-not (eq exports missing))
+          (should (listp (consent--proper-list-elements
+                          exports
+                          (format "exports for %s" library)))))))))
+
+(ert-deftest consent-library-test-top-level-manifest-references-itself ()
+  "Keep the aggregate manifest index inside the manifest graph."
+  (let ((spec
+         (cl-find-if
+          (lambda (spec)
+            (eq (plist-get spec :collection) 'manifest))
+          (consent--library-collection-manifest-specs))))
+    (should spec)
+    (should (equal (plist-get spec :key) "(manifest index)"))
+    (should (equal (plist-get spec :manifest-file) "manifest/index.sld"))
+    (should (equal (plist-get spec :source-root) "manifest/"))
+    (let ((entry
+           (consent--library-collection-manifest-entry
+            "(manifest index)")))
+      (should entry)
+      (should (eq (plist-get entry :source-kind) 'portable-source))
+      (should (equal (plist-get entry :source-file) "manifest/index.sld"))
+      (should (equal (plist-get entry :exports)
+                     '("manifest-index" "manifest-index-ref"))))))
+
+(ert-deftest consent-library-test-source-manifest-exports-filter-library ()
+  "Let source-library manifest exports narrow the source definition."
+  (let* ((context (consent--new-eval-context nil))
+         (environment (consent-make-base-environment))
+         (entry (list :name "(scheme lazy)"
+                      :source-kind 'portable-source
+                      :source-file "consent/lazy.sld"
+                      :exports '("force"))))
+    (consent--register-manifest-source-library entry context environment)
+    (let* ((library (gethash "(scheme lazy)"
+                             (consent--eval-context-libraries context)))
+           (exports (mapcar #'consent--library-binding-name
+                            (consent--library-exports library))))
+      (should (equal exports '("force"))))))
+
 (ert-deftest consent-library-test-agent-generated-source-is-source-backed ()
   "Load `(agent generated-source)' from the shared portable source library."
   (let ((source-file
-         (consent--agent-source-library-file "(agent generated-source)")))
+         (consent-library-test--manifest-source-file
+          "(agent generated-source)")))
     (should source-file)
     (should (string-suffix-p
              "scheme/agent/generated-source.sld"

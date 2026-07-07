@@ -414,6 +414,7 @@ base syntax prelude has already been installed."
   interrupt-reason
   interaction-environment
   base-syntax-installed
+  internal-libraries-allowed
   exception-handlers
   dynamic-winds
   docstring-retention
@@ -604,6 +605,8 @@ unchanged and uncatchable."
      :cancel-requested nil
      :interrupt-reason nil
      :base-syntax-installed nil
+     :internal-libraries-allowed
+     (consent--eval-option options :internal-libraries-allowed nil)
      :exception-handlers nil
      :dynamic-winds nil
      :output-bytes 0

@@ -40,6 +40,7 @@
      (library (emacs window))
      (library (agent io))
      (library (agent approval))
+     (library (agent approval primitive))
      (library (agent debugger))
      (library (agent helper))
      (library (agent job))

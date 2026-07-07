@@ -252,7 +252,12 @@ RACKET-COLLECTION-ROOT is accepted for API symmetry with test arguments."
             (generate-new-buffer
              (format " *consent-r7rs-%s*" display-name))))
       (unwind-protect
-          (let ((default-directory consent--test-root))
+          (let ((default-directory consent--test-root)
+                (process-environment
+                 (cons
+                  (format "CONSENT_LIBRARY_PATH=%s"
+                          library-directory-absolute)
+                  process-environment)))
             (when (eq host 'racket)
               (consent--scheme-host-racket-collection-root
                library-directory-absolute

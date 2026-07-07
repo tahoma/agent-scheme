@@ -1016,23 +1016,6 @@ TAI scale.  Hosts can update this value when leap-second policy changes."
   (cdr (assoc (cons library name)
               consent--emacs-capability-documentation-table)))
 
-(defconst consent--emacs-capability-library-keys
-  '("(emacs buffer)"
-    "(emacs buffer edit)"
-    "(emacs command)"
-    "(emacs compile)"
-    "(emacs diagnostics)"
-    "(emacs diff)"
-    "(emacs frame)"
-    "(emacs network)"
-    "(emacs process)"
-    "(emacs project)"
-    "(emacs search)"
-    "(emacs vcs)"
-    "(emacs vcs mutation)"
-    "(emacs window)")
-  "Recognized Emacs capability library keys.")
-
 (defun consent-emacs-capability-binding-specs ()
   "Return manifest metadata for Emacs capability primitive bindings."
   (mapcar
@@ -1048,7 +1031,12 @@ TAI scale.  Hosts can update this value when leap-second policy changes."
 
 (defun consent-emacs-capability-library-keys ()
   "Return importable Emacs capability library keys."
-  consent--emacs-capability-library-keys)
+  (let (keys)
+    (dolist (spec consent--emacs-capability-manifest-specs)
+      (let ((library (plist-get spec :library)))
+        (when (and library (not (member library keys)))
+          (push library keys))))
+    (nreverse keys)))
 
 (defun consent-emacs-capability-primitive-specs (library)
   "Return primitive registration specs for Emacs capability LIBRARY."

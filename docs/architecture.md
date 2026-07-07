@@ -100,6 +100,12 @@ Scheme-readable declaration, capability libraries, handle model, prompt
 behavior, and process-boundary test strategy are recorded in
 [Native CLI and Daemon Adapter Contract](native-cli-daemon-adapter.md).
 
+The public versus internal library boundary is manifest-owned. The current
+visibility vocabulary, seed manifest topology, optional host-adapter
+availability model, primitive `implementation-id` routing, and source export
+filtering semantics are recorded in
+[Library Surface and Manifests](library-surface.md).
+
 ### First-Class Portable Scheme
 
 The portable R7RS implementation under `scheme/consent/` is not a sample,
@@ -135,10 +141,9 @@ divergence. Its scope is the irreducible dual core — the layers each host must
 implement in its own language — so it explicitly excludes cases whose source
 imports a library that is single-sourced from a portable `.sld` and loaded by
 both bootstraps: such a library is one implementation, not two, and cannot
-diverge from itself. The exclusion is keyed off the single-sourced library
-registry (`consent--agent-source-library-files` and
-`consent--standard-source-library-files`), so a newly single-sourced library
-drops out of parity scope automatically as that migration proceeds.
+diverge from itself. The exclusion is keyed off the manifest-backed
+single-sourced library inventory, so a newly single-sourced library drops out of
+parity scope automatically as that migration proceeds.
 
 ### Inspectable Memory
 

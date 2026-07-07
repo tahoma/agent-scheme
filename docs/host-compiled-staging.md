@@ -29,10 +29,11 @@ the staging layer those chunks plug into, not a parallel mechanism.
 
 **The seam, made principled (in part).** A real front-end computes the
 module/dependency closure from the program; it does not hand-maintain it. The
-runtime already declares its runtime-loaded source set as data — `base.sld` owns
-`consent-base-prelude-load-paths` / `consent-base-syntax-load-paths`, and
-`library.sld` owns the `standard/agent/consent-source-library-load-paths` tables —
-and now exposes it through one accessor, `consent-runtime-source-files`. The
+runtime already declares its runtime-loaded source set as data: `base.sld`
+owns `consent-base-prelude-load-paths` /
+`consent-base-syntax-load-paths`, and `library.sld` derives source-library paths
+from the manifest-backed seed inventory, then exposes it through one accessor,
+`consent-runtime-source-files`. The
 embed/install manifest is **derived** from that accessor: `make compile`
 enumerates it through the compile host's interpreter, writes a per-host
 `runtime-source-manifest`, and both the embedded `(consent embedded-source)`
