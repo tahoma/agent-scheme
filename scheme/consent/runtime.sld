@@ -194,6 +194,7 @@
           context-file-paths
           context-internal-libraries-allowed?
           context-docstring-retention
+          context-boundary-contract-checking
           context-policy-actions
           context-policy-confirmation-function
           context-capability-grants
@@ -766,6 +767,7 @@
                          maximum-host-callbacks syntax-environment libraries
                          include-paths include-directory file-paths
                          docstring-retention
+                         boundary-contract-checking
                          policy-actions policy-confirmation-function
                          capability-grants active-capability-grants
                          event-count maximum-events maximum-event-nodes
@@ -813,6 +815,7 @@
                          set-context-include-directory!)
       (file-paths context-file-paths)
       (docstring-retention context-docstring-retention)
+      (boundary-contract-checking context-boundary-contract-checking)
       (policy-actions context-policy-actions)
       (policy-confirmation-function context-policy-confirmation-function)
       (capability-grants context-capability-grants
@@ -974,6 +977,17 @@
        (else
         (eval-error
          "docstring-retention must be full, simple, none, or #f"
+         value))))
+
+    (define (normalize-boundary-contract-checking value)
+      "Return the normalized boundary contract checking mode for VALUE."
+      (cond
+       ((eq? value #t) 'shallow)
+       ((or (eq? value #f) (eq? value 'none)) #f)
+       ((eq? value 'shallow) 'shallow)
+       (else
+        (eval-error
+         "boundary-contract-checking must be shallow, none, #t, or #f"
          value))))
 
     (define (normalize-include-directory directory)
@@ -3030,6 +3044,8 @@
         include-directory)
        (normalize-docstring-retention
         (option-ref options 'docstring-retention 'full))
+       (normalize-boundary-contract-checking
+        (option-ref options 'boundary-contract-checking #f))
        (option-ref options 'policy-actions '())
        (option-ref options 'policy-confirmation-function #f)
        (option-ref options 'capability-grants '())

@@ -397,6 +397,38 @@ vocabulary does not yet express the nonnegative integer refinement.
 The form `(forall ...)` is reserved for future polymorphic metadata, but the
 first pass does not implement relationship-aware checking.
 
+## Boundary Contract Checking
+
+Typed metadata is advisory by default: ordinary evaluation keeps the same
+untyped runtime behavior when a call passes a value that does not match a
+documented descriptor. Callers that want fail-closed boundary checks can enable
+shallow checking with the Emacs Lisp option
+`:boundary-contract-checking t` or the portable Scheme option
+`(boundary-contract-checking . #t)`.
+
+The first checking mode lowers the documented first-order vocabulary at
+compound procedure call and return boundaries. It checks `any`, literal `#f`,
+atomic value names such as `string`, `symbol`, `number`, `exact-integer`,
+`pair`, `list`, `vector`, `procedure`, ports, bytevectors, characters, and EOF
+objects, plus shallow compound forms `(or ...)`, `(list-of ...)`,
+`(vector-of ...)`, `(pair car-type cdr-type)`, `(procedure ...)`, and
+`(values ...)`. Procedure types are shallow in this pass: the value must be
+callable, but the checker does not yet wrap higher-order argument or return
+contracts. Unknown custom type names, unknown compound forms, and reserved
+forms such as `(forall ...)` remain advisory extension points.
+
+Contract failures render through the normal evaluation-result surface with a
+condition type of `boundary-contract` and a Scheme-readable `contract-failure`
+datum in the event stream and condition irritants. The datum records the
+boundary (`procedure-call` or `procedure-return`), blame (`caller` or
+`callee`), the parameter and position when applicable, the expected type form,
+and the observed value shape instead of exposing the full value.
+
+Checking requires rich metadata. When checking is enabled but docstring
+retention has stripped rich fields with `simple` or `none`, evaluation reports
+`boundary-contract-unavailable` instead of silently running unchecked. Keep
+`docstring-retention` at `full` for runs that expect boundary enforcement.
+
 ## Merge and Malformed Rules
 
 The metadata prefix is processed in source order.
@@ -480,3 +512,6 @@ representation work is left to a later reflection/metadata slice.
 - #604 adds typed parameter and return descriptors, string-fragment prose
   shorthands, space-joined docstring fragments, and the project lint requirement
   that public runtime procedures spell out type metadata.
+- #606 lowers typed metadata into opt-in shallow boundary contracts, including
+  Scheme-readable failure datums and fail-closed reporting when rich metadata is
+  stripped.

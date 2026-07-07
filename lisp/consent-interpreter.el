@@ -656,6 +656,312 @@ unchanged, preserving top-level diagnostics."
       ;; already-budgeted argument, so it creates nothing to charge.
       (consent--continue continuation (cdr outcome)))))
 
+(defun consent--contract-enabled-p (context)
+  "Return non-nil when CONTEXT enables shallow boundary contracts."
+  (eq (consent--eval-context-boundary-contract-checking-mode context)
+      'shallow))
+
+(defun consent--contract-symbol (name)
+  "Return NAME as a Scheme-readable contract symbol."
+  (consent--syntax-symbol name))
+
+(defun consent--contract-field (name &rest values)
+  "Return a Scheme-readable contract field named NAME with VALUES."
+  (cons (consent--contract-symbol name) values))
+
+(defun consent--contract-name (datum)
+  "Return DATUM's field name as a string, or nil."
+  (cond
+   ((consent-symbol-p datum)
+    (consent-symbol-name datum))
+   ((symbolp datum)
+    (symbol-name datum))
+   ((stringp datum)
+    datum)
+   (t nil)))
+
+(defun consent--contract-field-value (fields name)
+  "Return the value list for NAME in FIELDS, or nil."
+  (cdr
+   (cl-find-if
+    (lambda (field)
+      (and (consp field)
+           (equal (consent--contract-name (car field)) name)))
+    fields)))
+
+(defun consent--contract-descriptor-type (descriptor)
+  "Return DESCRIPTOR's type datum, defaulting to `any'."
+  (or (car (consent--contract-field-value descriptor "type"))
+      (consent--contract-symbol "any")))
+
+(defun consent--contract-procedure-p (value)
+  "Return non-nil when VALUE is callable by the evaluator."
+  (or (consent-procedure-p value)
+      (consent-primitive-procedure-p value)
+      (consent-parameter-p value)
+      (consent--continuation-p value)))
+
+(defun consent--contract-exact-integer-p (value)
+  "Return non-nil when VALUE is an exact integer."
+  (or (and (integerp value) (not (eq value t)))
+      (and (consent-number-p value)
+           (eq (consent-number-kind value) 'integer)
+           (eq (consent-number-exactness value) 'exact))))
+
+(defun consent--contract-integer-p (value)
+  "Return non-nil when VALUE is an integer number."
+  (or (and (integerp value) (not (eq value t)))
+      (and (consent-number-p value)
+           (eq (consent-number-kind value) 'integer))))
+
+(defun consent--contract-type-matches-p (type value)
+  "Return non-nil when VALUE satisfies shallow contract TYPE.
+Unknown type extensions remain advisory and therefore pass."
+  (cond
+   ((eq type consent-false)
+    (eq value consent-false))
+   ((consent-symbol-p type)
+    (pcase (consent-symbol-name type)
+      ("any" t)
+      ("boolean" (or (eq value consent-true) (eq value consent-false)))
+      ("symbol" (consent-symbol-p value))
+      ("string" (stringp value))
+      ("number" (or (numberp value) (consent-number-p value)))
+      ("integer" (consent--contract-integer-p value))
+      ("exact-integer" (consent--contract-exact-integer-p value))
+      ((or "char" "character") (consent-character-p value))
+      ("pair" (consp value))
+      ("list" (consent--proper-list-p value))
+      ("null" (null value))
+      ("vector" (vectorp value))
+      ("bytevector" (consent-bytevector-p value))
+      ("procedure" (consent--contract-procedure-p value))
+      ("port" (consent--port-p value))
+      ("input-port" (and (consent--port-p value)
+                         (consent--port-inputp value)))
+      ("output-port" (and (consent--port-p value)
+                          (consent--port-outputp value)))
+      ("textual-port" (and (consent--port-p value)
+                           (eq (consent--port-medium value) 'string)))
+      ("binary-port" (and (consent--port-p value)
+                          (eq (consent--port-medium value) 'bytevector)))
+      ("eof-object" (consent-eof-object-p value))
+      (_ t)))
+   ((consp type)
+    (let ((name (consent--symbol-name (car type))))
+      (pcase name
+        ("or"
+         (cl-some
+          (lambda (variant)
+            (consent--contract-type-matches-p variant value))
+          (cdr type)))
+        ("list-of"
+         (if (= (length type) 2)
+             (and (consent--proper-list-p value)
+                  (cl-every
+                   (lambda (item)
+                     (consent--contract-type-matches-p (cadr type) item))
+                   value))
+           t))
+        ("vector-of"
+         (if (= (length type) 2)
+             (and (vectorp value)
+                  (cl-loop for item across value
+                           always
+                           (consent--contract-type-matches-p
+                            (cadr type)
+                            item)))
+           t))
+        ("pair"
+         (cond
+          ((= (length type) 3)
+           (and (consp value)
+                (consent--contract-type-matches-p (cadr type) (car value))
+                (consent--contract-type-matches-p (caddr type) (cdr value))))
+          (t (consp value))))
+        ("procedure"
+         (consent--contract-procedure-p value))
+        ("values"
+         t)
+        (_ t))))
+   (t t)))
+
+(defun consent--contract-value-shape (value)
+  "Return a Scheme-readable shallow shape symbol for VALUE."
+  (consent--contract-symbol
+   (cond
+    ((eq value consent-false) "#f")
+    ((eq value consent-true) "boolean")
+    ((consent-symbol-p value) "symbol")
+    ((stringp value) "string")
+    ((or (numberp value) (consent-number-p value)) "number")
+    ((consent-character-p value) "character")
+    ((null value) "list")
+    ((and (consp value) (consent--proper-list-p value)) "list")
+    ((consp value) "pair")
+    ((vectorp value) "vector")
+    ((consent-bytevector-p value) "bytevector")
+    ((consent--contract-procedure-p value) "procedure")
+    ((consent--port-p value) "port")
+    ((consent-eof-object-p value) "eof-object")
+    (t "opaque"))))
+
+(defun consent--contract-failure-datum
+    (boundary blame expected value &rest fields)
+  "Return a Scheme-readable boundary contract failure datum."
+  (cons
+   (consent--contract-symbol "contract-failure")
+   (append
+    (list
+     (consent--contract-field "boundary"
+                              (consent--contract-symbol boundary))
+     (consent--contract-field "blame"
+                              (consent--contract-symbol blame)))
+    fields
+    (list
+     (consent--contract-field "expected" expected)
+     (consent--contract-field "value-shape"
+                              (consent--contract-value-shape value))))))
+
+(defun consent--contract-raise-failure
+    (context boundary blame expected value &rest fields)
+  "Record and raise a boundary contract failure."
+  (let ((failure
+         (apply #'consent--contract-failure-datum
+                boundary blame expected value fields)))
+    (consent--record-event! context failure)
+    (consent--eval-error "boundary contract violation" failure)))
+
+(defun consent--contract-raise-unavailable (context)
+  "Record and raise an unavailable boundary contract diagnostic."
+  (let* ((retention
+          (consent--eval-context-docstring-retention-mode context))
+         (datum
+          (list
+           (consent--contract-symbol "contract-unavailable")
+           (consent--contract-field "reason"
+                                    (consent--contract-symbol
+                                     "docstring-retention"))
+           (consent--contract-field "retention"
+                                    (consent--contract-symbol
+                                     (symbol-name retention))))))
+    (consent--record-event! context datum)
+    (consent--eval-error
+     "boundary contract checking unavailable: docstring-retention %s strips rich metadata"
+     retention
+     datum)))
+
+(defun consent--contract-parameter-descriptor (parameters name)
+  "Return parameter descriptor in PARAMETERS for NAME, or nil."
+  (cdr
+   (cl-find-if
+    (lambda (entry)
+      (equal (consent--contract-name (car-safe entry)) name))
+    parameters)))
+
+(defun consent--contract-check-argument
+    (context descriptor value name position)
+  "Check one argument VALUE against DESCRIPTOR for NAME at POSITION."
+  (when descriptor
+    (let ((type (consent--contract-descriptor-type descriptor)))
+      (unless (consent--contract-type-matches-p type value)
+        (consent--contract-raise-failure
+         context
+         "procedure-call"
+         "caller"
+         type
+         value
+         (consent--contract-field
+          "parameter"
+          (consent--contract-symbol name))
+         (consent--contract-field
+          "position"
+          (consent--make-canonical-integer position)))))))
+
+(defun consent--contract-check-arguments (procedure arguments context)
+  "Check PROCEDURE ARGUMENTS against lowered parameter metadata."
+  (let* ((metadata (consent-procedure-documentation procedure))
+         (parameters
+          (and metadata
+               (consent--contract-field-value
+                (consent--documentation-metadata-fields metadata)
+                "parameters"))))
+    (when parameters
+      (let ((required
+             (consent--formals-required
+              (consent-procedure-formals procedure)))
+            (rest
+             (consent--formals-rest
+              (consent-procedure-formals procedure)))
+            (remaining arguments)
+            (position 1))
+        (dolist (name required)
+          (consent--contract-check-argument
+           context
+           (consent--contract-parameter-descriptor parameters name)
+           (car remaining)
+           name
+           position)
+          (setq remaining (cdr remaining))
+          (setq position (1+ position)))
+        (when rest
+          (consent--contract-check-argument
+           context
+           (consent--contract-parameter-descriptor parameters rest)
+           remaining
+           rest
+           position))))))
+
+(defun consent--contract-check-return (procedure value context)
+  "Check PROCEDURE return VALUE against lowered return metadata."
+  (let* ((metadata (consent-procedure-documentation procedure))
+         (descriptor
+          (and metadata
+               (consent--contract-field-value
+                (consent--documentation-metadata-fields metadata)
+                "returns"))))
+    (when descriptor
+      (let ((type (consent--contract-descriptor-type descriptor)))
+        (if (and (consp type)
+                 (equal (consent--symbol-name (car type)) "values"))
+            (let ((values (consent--values-list value))
+                  (types (cdr type)))
+              (unless (= (length values) (length types))
+                (consent--contract-raise-failure
+                 context "procedure-return" "callee" type value))
+              (cl-loop for expected in types
+                       for actual in values
+                       do
+                       (unless
+                           (consent--contract-type-matches-p expected actual)
+                         (consent--contract-raise-failure
+                          context
+                          "procedure-return"
+                          "callee"
+                          expected
+                          actual))))
+          (let ((values (consent--values-list value)))
+            (if (not (= (length values) 1))
+                (consent--contract-raise-failure
+                 context "procedure-return" "callee" type value)
+              (let ((actual (car values)))
+                (unless (consent--contract-type-matches-p type actual)
+                  (consent--contract-raise-failure
+                   context
+                   "procedure-return"
+                   "callee"
+                   type
+                   actual))))))))))
+
+(defun consent--contract-wrap-continuation
+    (procedure context continuation)
+  "Return CONTINUATION wrapped with PROCEDURE return checking if enabled."
+  (if (consent--contract-enabled-p context)
+      (lambda (value)
+        (consent--contract-check-return procedure value context)
+        (consent--continue continuation value))
+    continuation))
+
 (defun consent--apply-procedure
     (procedure arguments context tailp &optional continuation)
   "Apply PROCEDURE to ARGUMENTS.
@@ -741,6 +1047,11 @@ any resulting bounce to preserve existing direct-call helper behavior."
         (finish
          (consent--apply-parameter/k procedure arguments context next)))
        ((consent-procedure-p procedure)
+        (when (and (consent--contract-enabled-p context)
+                   (not (eq (consent--eval-context-docstring-retention-mode
+                             context)
+                            'full)))
+          (consent--contract-raise-unavailable context))
         (let ((closure-syntax-environment
                (consent-procedure-syntax-environment procedure))
               (caller-syntax-environment
@@ -755,26 +1066,33 @@ any resulting bounce to preserve existing direct-call helper behavior."
                        (consent-procedure-formals procedure)
                        arguments
                        (consent-procedure-environment procedure)
-                       context))
-                     (body-state
+                       context)))
+                (when (consent--contract-enabled-p context)
+                  (consent--contract-check-arguments
+                   procedure arguments context))
+                (let* ((body-state
                       (consent--prepare-body-environment
                        (consent-procedure-body procedure)
                        call-environment
                        context))
                      (body-expression
                       (consent--make-sequence (cdr body-state) nil)))
-                (consent--make-bounce
-                 body-expression
-                 (car body-state)
-                 closure-syntax-environment
-                 (if tailp
-                     next
-                   (lambda (value)
-                     (consent--with-syntax-environment
-                      context
-                      caller-syntax-environment
-                      (lambda ()
-                        (consent--continue next value))))))))))))
+                  (consent--make-bounce
+                   body-expression
+                   (car body-state)
+                   closure-syntax-environment
+                   (if tailp
+                       (consent--contract-wrap-continuation
+                        procedure context next)
+                     (lambda (value)
+                       (consent--with-syntax-environment
+                        context
+                        caller-syntax-environment
+                        (lambda ()
+                          (consent--continue
+                           (consent--contract-wrap-continuation
+                            procedure context next)
+                           value)))))))))))))
        ((consent--continuation-p procedure)
         (finish
          (consent--invoke-continuation procedure arguments context)))

@@ -429,7 +429,8 @@ base syntax prelude has already been installed."
   ;; The dimension symbol that exhausted this run's budget, or nil.
   exhaustion-reason
   ;; Script invocation metadata supplied by a batch runner for `(command-line)'.
-  command-line)
+  command-line
+  boundary-contract-checking)
 
 (defconst consent--missing-cell (make-symbol "consent-missing-cell")
   "Sentinel used when looking up environment cells.")
@@ -495,6 +496,26 @@ unchanged and uncatchable."
         (consent--normalize-docstring-retention value)
       'full)))
 
+(defun consent--normalize-boundary-contract-checking (value)
+  "Return normalized boundary contract checking mode for VALUE."
+  (cond
+   ((eq value t) 'shallow)
+   ((or (null value) (eq value 'none)) nil)
+   ((eq value 'shallow) 'shallow)
+   (t
+    (consent--eval-error
+     ":boundary-contract-checking must be `shallow', `none', t, or nil"))))
+
+(defun consent--eval-context-boundary-contract-checking-mode (context)
+  "Return CONTEXT boundary contract checking mode, defaulting old contexts off."
+  (let ((value
+         (and context
+              (condition-case nil
+                  (consent--eval-context-boundary-contract-checking context)
+                (args-out-of-range nil)))))
+    (and value
+         (consent--normalize-boundary-contract-checking value))))
+
 (defun consent--new-eval-context (options)
   "Return an evaluator context using OPTIONS."
   (let ((maximum-steps
@@ -552,6 +573,9 @@ unchanged and uncatchable."
      :docstring-retention
      (consent--normalize-docstring-retention
       (consent--eval-option options :docstring-retention 'full))
+     :boundary-contract-checking
+     (consent--normalize-boundary-contract-checking
+      (consent--eval-option options :boundary-contract-checking nil))
      :policy-actions
      (consent--eval-option options :policy-actions nil)
      :policy-confirmation-function
@@ -625,6 +649,12 @@ unchanged and uncatchable."
           (setf (consent--eval-context-docstring-retention context)
                 (consent--normalize-docstring-retention
                  (plist-get options :docstring-retention)))
+        (args-out-of-range nil)))
+    (when (plist-member options :boundary-contract-checking)
+      (condition-case nil
+          (setf (consent--eval-context-boundary-contract-checking context)
+                (consent--normalize-boundary-contract-checking
+                 (plist-get options :boundary-contract-checking)))
         (args-out-of-range nil))))
   context)
 
