@@ -220,7 +220,8 @@
 (defun consent--manifest-library-quoted-variable
     (source key variable description)
   "Return quoted VARIABLE from manifest library SOURCE."
-  (let* ((forms (consent-read-all source '(:source-metadata nil))))
+  (let* ((max-lisp-eval-depth (max max-lisp-eval-depth 4096))
+         (forms (consent-read-all source '(:source-metadata nil))))
     (unless (= (length forms) 1)
       (consent--eval-error
        "%s must contain exactly one form: %s" description key))
