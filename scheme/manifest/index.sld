@@ -11,6 +11,7 @@
   (export manifest-index manifest-index-ref)
   (import (scheme base))
   (begin
+    ;; Index entries link collection-local manifests to their source roots.
     (define manifest-index
       '(((collection . manifest)
          (category . manifest)
@@ -49,6 +50,7 @@
          (manifest-file . "emacs/manifest.sld")
          (source-root . "emacs/"))))
 
+    ;; Manifest entry exposing this index as an ordinary source library.
     (define manifest-index-manifest
       '(((library . (manifest index))
          (visibility . public)

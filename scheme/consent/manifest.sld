@@ -10,6 +10,7 @@
   (export consent-library-manifest consent-library-manifest-ref)
   (import (scheme base))
   (begin
+    ;; Manifest entries describe core runtime libraries and primitive overlays.
     (define consent-library-manifest
       '(((library . (consent manifest))
          (visibility . public-consent)

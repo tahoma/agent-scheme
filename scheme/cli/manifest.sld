@@ -10,6 +10,7 @@
   (export cli-library-manifest cli-library-manifest-ref)
   (import (scheme base))
   (begin
+    ;; Manifest entries describe CLI-facing libraries and primitive overlays.
     (define cli-library-manifest
       '(((library . (cli manifest))
          (visibility . public)

@@ -10,6 +10,7 @@
   (export emacs-library-manifest emacs-library-manifest-ref)
   (import (scheme base))
   (begin
+    ;; Manifest entries describe Emacs-only host adapter libraries.
     (define emacs-library-manifest
       '(((library . (emacs manifest))
          (visibility . host-adapter)

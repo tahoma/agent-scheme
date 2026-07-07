@@ -10,6 +10,7 @@
   (export agent-library-manifest agent-library-manifest-ref)
   (import (scheme base))
   (begin
+    ;; Manifest entries describe Agent-facing libraries and primitive overlays.
     (define agent-library-manifest
       '(((library . (agent manifest))
          (visibility . public)
@@ -426,7 +427,10 @@
          (source-kind . primitive-library)
          (implementation-source . primitive-declaration)
          (implementation-id . agent-session)
-         (exports . (create-session switch-session set-default-session!
+         (exports . (session-create! session-ref session-list
+                     session-handles session-suspend! session-resume!
+                     session-snapshot! session-fork! session-retire!
+                     create-session switch-session set-default-session!
                      current-session list-sessions close-session))
          (owner . agent)
          (provider . host-adapter)
