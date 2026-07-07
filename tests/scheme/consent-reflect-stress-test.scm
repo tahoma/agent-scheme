@@ -254,12 +254,34 @@
                  "((agent reflect)
                    agent
                    primitive
-                   \"scheme/consent/lazy.sld\"
+                   \"consent/lazy.sld\"
                    (stdlib json)
                    json-read-exported
                    found-reflect
                    missing
                    #t)"))
+
+(check-external 'reflect-library-catalog-visibility-tiers
+                "(import (scheme base) (agent reflect))
+                 (define (field datum name)
+                   (cadr (assq name (cdr datum))))
+                 (list
+                  (field (library-info '(scheme base)) 'visibility)
+                  (field (library-info '(consent capability)) 'visibility)
+                  (field (library-info '(srfi 16)) 'visibility)
+                  (field (library-info '(consent reader)) 'visibility)
+                  (field (library-info '(agent memory primitive)) 'visibility)
+                  (field (library-info '(emacs buffer)) 'availability)
+                  (field (library-info '(emacs buffer))
+                         'availability-condition))"
+                (expected-datum-external
+                 "(public
+                   public-consent
+                   alias
+                   internal-runtime
+                   internal-agent-model
+                   optional
+                   (host emacs))"))
 
 (check-external/options 'reflect-documented-bindings-and-apropos
                         "(import (scheme base) (agent reflect))
@@ -275,11 +297,18 @@
                                      (list 'binding name))
                              #t)
                             (else (documented-subject? (cdr docs) name))))
+                         (define (any-kind? matches kind)
+                           (cond
+                            ((null? matches) #f)
+                            ((eq? (field (car matches) 'kind) kind) #t)
+                            (else (any-kind? (cdr matches) kind))))
                          (define (needle-procedure x)
                            \"Return the needle value for discovery tests.\"
                            x)
                          (let* ((docs (documented-bindings))
-                                (matches (apropos \"needle\")))
+                                (matches (apropos \"needle\"))
+                                (reflect-matches (apropos \"reflect\"))
+                                (library-hits (library-search \"reflect\")))
                            (list
                             (if (documented-subject? docs 'needle-procedure)
                                 'documented
@@ -292,9 +321,11 @@
                                                      (field match 'name)))
                                              matches))
                                 'found-binding
-                                'missing-binding)))"
+                                'missing-binding)
+                            (any-kind? reflect-matches 'library)
+                            (not (null? library-hits))))"
                         '((docstring-retention . full))
-                        "(documented \"Return the needle value for discovery tests.\" found-binding)")
+                        "(documented \"Return the needle value for discovery tests.\" found-binding #f #t)")
 
 (check-external 'reflect-binding-libraries-crosswalk
                 "(import (scheme base) (agent reflect))
@@ -309,12 +340,48 @@
                 (expected-datum-external
                  "(((scheme lazy))
                    ((stdlib json)
-                    (consent json)
-                    (srfi 180)
-                    (srfi srfi-180)
                     (stdlib json read)
-                    (consent json read))
+                    (consent json read)
+                    (consent json)
+                    (srfi srfi-180)
+                    (srfi 180))
                    #t)"))
+
+(check-external/options 'reflect-apropos-unmanifested-library
+                        "(define-library (adhoc scratch)
+                           (export adhoc-needle)
+                           (import (scheme base))
+                           (begin
+                             (define (adhoc-needle x)
+                               \"Return X from an ad-hoc library.\"
+                               x)))
+                         (import (scheme base) (agent reflect) (adhoc scratch))
+                         (define (field datum name)
+                           (cadr (assq name (cdr datum))))
+                         (define (library-present? libraries name)
+                           (cond
+                            ((null? libraries) #f)
+                            ((equal? (car libraries) name) #t)
+                            (else (library-present? (cdr libraries) name))))
+                         (define (match-libraries matches name)
+                           (cond
+                            ((null? matches) '())
+                            ((eq? (field (car matches) 'name) name)
+                             (field (car matches) 'libraries))
+                            (else (match-libraries (cdr matches) name))))
+                         (let ((binding-library-names
+                                (map (lambda (info) (field info 'name))
+                                     (binding-libraries 'adhoc-needle)))
+                               (apropos-library-names
+                                (match-libraries (apropos \"adhoc-needle\")
+                                                 'adhoc-needle)))
+                           (list
+                            (library-present? binding-library-names
+                                              '(adhoc scratch))
+                            (library-present? apropos-library-names
+                                              '(adhoc scratch))))"
+                        '((docstring-retention . full))
+                        "(#t #t)")
 
 (check-external 'reflect-dynamic-manifest-inputs
                 "(import (scheme base) (agent reflect))

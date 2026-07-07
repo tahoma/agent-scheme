@@ -5403,6 +5403,15 @@ cursor across sessions."
              'source-kind
              (reflect-library-catalog-value entry 'source-kind 'manifest))
             (result-field
+             'visibility
+             (reflect-library-catalog-value entry 'visibility 'public))
+            (result-field
+             'availability
+             (reflect-library-catalog-value entry 'availability 'required))
+            (result-field
+             'availability-condition
+             (reflect-library-catalog-value entry 'availability-condition #f))
+            (result-field
              'source-file
              (reflect-library-catalog-value entry 'source-file #f))
             (result-field
@@ -5426,6 +5435,65 @@ cursor across sessions."
             (result-field
              'summary
              (reflect-library-catalog-value entry 'summary #f))))
+
+    (define (reflect-registered-library-entry key library)
+      "Return reflection metadata for registered LIBRARY under KEY."
+      (list
+       (list 'name key)
+       (list 'category 'library)
+       (list 'status 'registered)
+       (list 'source-kind 'context)
+       (list 'visibility 'public)
+       (list 'availability 'required)
+       (list 'availability-condition #f)
+       (list 'source-file #f)
+       (list 'aliases '())
+       (list 'target #f)
+       (list 'exports (map library-binding-name (library-exports library)))
+       (list 'dependencies '())
+       (list 'origin 'runtime-context)
+       (list 'source-id #f)
+       (list 'summary #f)))
+
+    (define (reflect-registered-library-entries context)
+      "Return reflection entries for libraries registered in CONTEXT."
+      (let loop ((entries (context-libraries context)) (result '()))
+        (if (null? entries)
+            (reverse result)
+            (loop
+             (cdr entries)
+             (cons
+              (reflect-registered-library-entry (caar entries) (cdar entries))
+              result)))))
+
+    (define (reflect-library-entry-exports-name? entry name)
+      "Report whether reflection ENTRY exports NAME."
+      (memq name (reflect-library-catalog-field entry 'exports '())))
+
+    (define (reflect-library-entry-name-seen? key entries)
+      "Report whether ENTRIES already contains library KEY."
+      (cond
+       ((null? entries) #f)
+       ((equal? key (reflect-library-catalog-field (car entries) 'name '()))
+        #t)
+       (else (reflect-library-entry-name-seen? key (cdr entries)))))
+
+    (define (reflect-binding-library-entries name context)
+      "Return catalog and registered library entries exporting NAME."
+      (let loop ((entries
+                  (append
+                   (consent-library-catalog-entries)
+                   (reflect-registered-library-entries context)))
+                 (result '()))
+        (if (null? entries)
+            (reverse result)
+            (let ((key (reflect-library-catalog-field (car entries) 'name '())))
+              (if (and (not (reflect-library-entry-name-seen? key result))
+                       (reflect-library-entry-exports-name?
+                        (car entries)
+                        name))
+                  (loop (cdr entries) (cons (car entries) result))
+                  (loop (cdr entries) result))))))
 
     (define (reflect-libraries)
       "Return cataloged libraries as library-info records."
@@ -5484,23 +5552,14 @@ cursor across sessions."
                           (cons documentation result)
                           result)))))))
 
-    (define (reflect-binding-libraries symbol-or-name)
-      "Return cataloged libraries exporting SYMBOL-OR-NAME."
+    (define (reflect-binding-libraries symbol-or-name context)
+      "Return cataloged or registered libraries exporting SYMBOL-OR-NAME."
       (let ((name (reflect-binding-name symbol-or-name)))
         (if (not name)
             (eval-error "binding-libraries expects a symbol or string"
                         symbol-or-name))
-        (let loop ((entries (consent-library-catalog-entries)) (result '()))
-          (cond
-           ((null? entries)
-            (map reflect-library-info-record (reverse result)))
-           ((memq name
-                  (reflect-library-catalog-field
-                   (car entries)
-                   'exports
-                   '()))
-            (loop (cdr entries) (cons (car entries) result)))
-           (else (loop (cdr entries) result))))))
+        (map reflect-library-info-record
+             (reflect-binding-library-entries name context))))
 
     (define (reflect-documented-bindings context)
       "Return documentation records for documented current bindings."
@@ -5574,67 +5633,132 @@ cursor across sessions."
       "Return DOCUMENTATION's human-readable summary, or #f."
       (reflect-documentation-field documentation 'documentation #f))
 
-    (define (reflect-apropos-match kind name matched summary)
+    (define (reflect-apropos-match kind name matched summary libraries)
       "Return a compact apropos-match record."
       (list 'apropos-match
             (result-field 'kind kind)
             (result-field 'name name)
+            (result-field 'libraries libraries)
             (result-field 'matched matched)
             (result-field 'summary summary)))
 
+    (define (reflect-binding-library-names name context)
+      "Return known library names exporting binding NAME in CONTEXT."
+      (map
+       (lambda (entry)
+         (reflect-library-catalog-field entry 'name '()))
+       (reflect-binding-library-entries name context)))
+
+    (define (reflect-apropos-export-name-seen? name seen)
+      "Report whether NAME is already recorded in SEEN."
+      (and (memq name seen) #t))
+
+    (define (reflect-known-export-names context)
+      "Return unique exported binding names from the catalog and CONTEXT."
+      (let outer ((entries
+                   (append
+                    (consent-library-catalog-entries)
+                    (reflect-registered-library-entries context)))
+                  (names '()))
+        (if (null? entries)
+            (reverse names)
+            (let inner ((exports
+                         (reflect-library-catalog-field
+                          (car entries)
+                          'exports
+                          '()))
+                        (acc names))
+              (if (null? exports)
+                  (outer (cdr entries) acc)
+                  (inner
+                   (cdr exports)
+                   (if (memq (car exports) acc)
+                       acc
+                       (cons (car exports) acc))))))))
+
+    (define (reflect-apropos-documentation-match
+             documentation needle seen context)
+      "Return (MATCH . NAME) for DOCUMENTATION and NEEDLE, or #f."
+      (let* ((subject
+              (reflect-reflection-field documentation 'subject #f))
+             (name
+              (and (pair? subject)
+                   (pair? (cdr subject))
+                   (cadr subject)))
+             (summary
+              (reflect-documentation-summary documentation))
+             (name-match?
+              (and (symbol? name)
+                   (reflect-string-contains?
+                    (string-downcase (symbol->string name))
+                    needle)))
+             (summary-match?
+              (and (string? summary)
+                   (reflect-string-contains?
+                    (string-downcase summary)
+                    needle))))
+        (if (and (symbol? name) (or name-match? summary-match?))
+            (cons
+             (reflect-apropos-match
+              'binding
+              name
+              (if summary-match? '(documentation name) '(name))
+              summary
+              (reflect-binding-library-names name context))
+             name)
+            #f)))
+
+    (define (reflect-apropos-export-match name needle seen context)
+      "Return an apropos match for catalog export NAME, or #f."
+      (if (or (reflect-apropos-export-name-seen? name seen)
+              (not (reflect-string-contains?
+                    (string-downcase (symbol->string name))
+                    needle)))
+          #f
+          (reflect-apropos-match
+           'binding
+           name
+           '(name)
+           #f
+           (reflect-binding-library-names name context))))
+
     (define (reflect-apropos query context)
-      "Search current documented bindings and the library catalog for QUERY."
+      "Search binding definitions for QUERY and attach library provenance."
       (let ((needle
              (string-downcase
               (cond
                ((string? query) query)
                ((symbol? query) (symbol->string query))
                (else (consent-value->external query))))))
-        (append
-         (let loop ((documents (reflect-documented-bindings context))
-                    (result '()))
-           (if (null? documents)
-               (reverse result)
-               (let* ((documentation (car documents))
-                      (subject
-                       (reflect-reflection-field documentation 'subject #f))
-                      (name
-                       (and (pair? subject)
-                            (pair? (cdr subject))
-                            (cadr subject)))
-                      (summary
-                       (reflect-documentation-summary documentation))
-                      (name-match?
-                       (and (symbol? name)
-                            (reflect-string-contains?
-                             (string-downcase (symbol->string name))
-                             needle)))
-                      (summary-match?
-                       (and (string? summary)
-                            (reflect-string-contains?
-                             (string-downcase summary)
-                             needle))))
-                 (loop
-                  (cdr documents)
-                  (if (or name-match? summary-match?)
-                      (cons
-                       (reflect-apropos-match
-                        'binding
-                        name
-                        (if summary-match?
-                            '(documentation name)
-                            '(name))
-                        summary)
-                       result)
-                      result)))))
-         (map
-          (lambda (entry)
-             (reflect-apropos-match
-              'library
-             (reflect-library-catalog-value entry 'name '())
-             '(library)
-             (reflect-library-catalog-value entry 'source-file #f)))
-          (consent-library-catalog-search needle)))))
+        (let loop-docs ((documents (reflect-documented-bindings context))
+                        (seen '())
+                        (result '()))
+          (if (null? documents)
+              (let loop-exports ((exports (reflect-known-export-names context))
+                                 (seen seen)
+                                 (matches result))
+                (if (null? exports)
+                    (reverse matches)
+                    (let ((match
+                           (reflect-apropos-export-match
+                            (car exports)
+                            needle
+                            seen
+                            context)))
+                      (loop-exports
+                       (cdr exports)
+                       (if match (cons (car exports) seen) seen)
+                       (if match (cons match matches) matches)))))
+              (let ((match/name
+                     (reflect-apropos-documentation-match
+                      (car documents)
+                      needle
+                      seen
+                      context)))
+                (loop-docs
+                 (cdr documents)
+                 (if match/name (cons (cdr match/name) seen) seen)
+                 (if match/name (cons (car match/name) result) result)))))))
 
     (define (reflect-current-session-info context)
       "Return public session and event identity for CONTEXT."
@@ -5800,9 +5924,9 @@ cursor across sessions."
        'runtime-reflection))
 
     (define (primitive-binding-libraries arguments context)
-      "Return cataloged libraries exporting a binding name."
+      "Return known libraries exporting a binding name."
       (redaction-model:redact
-       (reflect-binding-libraries (car arguments))
+       (reflect-binding-libraries (car arguments) context)
        'runtime-reflection))
 
     (define (primitive-documented-bindings arguments context)

@@ -42,11 +42,12 @@ bindings or libraries:
      (apropos "json"))
 ```
 
-`apropos` searches two surfaces:
+`apropos` combines three discovery inputs:
 
 - documented bindings in the current interaction environment
 - library catalog metadata, including names, aliases, source paths,
   categories, and exports
+- exported binding names from libraries registered in the current context
 
 Binding matches report `(kind binding)` and library matches report
 `(kind library)`. This makes `apropos` the first tool to reach for in a REPL
@@ -151,8 +152,10 @@ libraries export it:
 ;; => ((scheme lazy))
 ```
 
-This is intentionally catalog-backed, so it can find libraries that are not
-currently imported.
+This combines catalog metadata with libraries registered in the current
+evaluation context. Catalog metadata lets it find libraries that are not
+currently imported; the context registry lets it report ad-hoc REPL libraries
+that were defined without a related manifest.
 
 When you know the library and want its exported documentation, use
 `library-documentation`:
@@ -231,16 +234,18 @@ catalog discovery:
   `documented-bindings`, `docstring`, `current-imports`, and
   `library-bindings`
 - Library catalog: `libraries`, `library-info`, `library-search`,
-  `binding-libraries`, `library-documentation`, `catalog-sources`,
-  `catalog-diagnostics`, and the manifest add/remove helpers
-- Mixed search: `apropos`, which combines current documented bindings with
-  catalog metadata
+  `library-documentation`, `catalog-sources`, `catalog-diagnostics`, and the
+  manifest add/remove helpers
+- Mixed search: `apropos` and `binding-libraries`, which combine catalog
+  metadata with current-context definition or library registry data
 
 Catalog records are metadata, not authority. Adding a manifest or manifest-root
 input does not import, load, or execute source code, and it does not grant a
 host capability. Calling a reflected host capability still goes through grants,
 policy checks, redaction, and audit.
 
+For a step-by-step workflow, see
+[Runtime Definition Discovery Tutorial](runtime-definition-discovery.md).
 For the full reference surface, see
 [Feature and Host Reflection](feature-reflection.md). For macro expansion
 records in particular, see

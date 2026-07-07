@@ -17,9 +17,9 @@
 ;; language (reader, evaluator, macro, runtime).  Libraries that are
 ;; single-sourced from a portable `.sld' and loaded by both bootstraps cannot
 ;; diverge from themselves, so cases that import them fall out of scope.  The
-;; single-sourced set is read from `consent--agent-source-library-files' and
-;; `consent--standard-source-library-files', so a newly single-sourced library
-;; drops out of the parity scope automatically as the migration proceeds.
+;; single-sourced set is read from the manifest-backed source-library inventory,
+;; so a newly single-sourced library drops out of the parity scope automatically
+;; as the migration proceeds.
 ;;
 ;; The Emacs-hosted result for each case is computed exactly as the Emacs
 ;; conformance gate computes it (`consent-test-fixture-actual').  The portable
@@ -68,9 +68,12 @@ These are excluded from parity scope: a single-sourced library cannot
 diverge from itself."
   (mapcar
    (lambda (entry)
-     (consent-test-fixture-host-datum (consent-read (car entry))))
-   (append consent--agent-source-library-files
-           consent--standard-source-library-files)))
+     (consent-test-fixture-host-datum
+      (consent-read (plist-get entry :name))))
+   (cl-remove-if-not
+    (lambda (entry)
+      (eq (plist-get entry :source-kind) 'portable-source))
+    (consent--library-collection-manifest-entries))))
 
 (defun consent-parity--dual-core-source-p (source)
   "Return non-nil when SOURCE imports no single-sourced library."
@@ -193,17 +196,23 @@ Standard error is captured separately so host startup chatter (for
 example Guile's `imported module overrides core binding' warnings) never
 pollutes the Scheme-readable record stream on standard output."
   (let ((library-directory (consent--test-target-library-directory))
+        (library-directory-absolute
+         (consent--test-target-library-directory-absolute))
         (output-buffer (generate-new-buffer " *consent-parity*"))
         (stderr-file (make-temp-file "consent-parity-stderr-"))
         (default-directory consent--test-root))
     (unwind-protect
-        (let ((status
-               (apply #'process-file runner nil
-                      (list output-buffer stderr-file) nil
-                      (consent-parity--host-arguments
-                       host-entry
-                       library-directory
-                       consent-parity-emitter-file))))
+        (let* ((process-environment
+                (cons (format "CONSENT_LIBRARY_PATH=%s"
+                              library-directory-absolute)
+                      process-environment))
+               (status
+                (apply #'process-file runner nil
+                       (list output-buffer stderr-file) nil
+                       (consent-parity--host-arguments
+                        host-entry
+                        library-directory
+                        consent-parity-emitter-file))))
           (with-current-buffer output-buffer
             (let ((output (buffer-string)))
               (unless (equal status 0)

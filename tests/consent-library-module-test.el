@@ -43,7 +43,7 @@
                             \"(scheme base)\")
                      (kill-emacs 2))
                    (unless (member \"(scheme write)\"
-                                   consent--standard-library-keys)
+                                   (consent--library-catalog-built-in-keys))
                      (kill-emacs 3))
                    (let ((spec
                           (seq-find

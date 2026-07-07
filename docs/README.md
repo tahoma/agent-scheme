@@ -34,6 +34,7 @@ project pitch and examples, see the top-level [README](../README.md).
 - [Scheme Style Guidelines](scheme-style.md) — portable Scheme source layout, docstrings, and rich metadata style.
 - [Macro Expansion Introspection](macro-introspection.md) — exposing macro expansion as Scheme-readable data.
 - [Reflection Quickstart](reflection-quickstart.md) — a user guide for apropos, library discovery, binding crosswalks, and manifest-backed reflection.
+- [Runtime Definition Discovery Tutorial](runtime-definition-discovery.md) — using `(agent reflect)` and manifests to discover live bindings, registered libraries, and cataloged definitions.
 - [Feature and Host Reflection](feature-reflection.md) — preferring capability discovery over hard-coded host assumptions.
 
 ## Runtime & Capabilities

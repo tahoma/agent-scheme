@@ -682,6 +682,15 @@ callers can distinguish unbounded from exhausted."
     "source-kind"
     (consent-reflect--symbol (plist-get entry :source-kind)))
    (consent-reflect--field
+    "visibility"
+    (consent-reflect--symbol (plist-get entry :visibility)))
+   (consent-reflect--field
+    "availability"
+    (consent-reflect--symbol (plist-get entry :availability)))
+   (consent-reflect--field
+    "availability-condition"
+    (or (plist-get entry :availability-condition) consent-false))
+   (consent-reflect--field
     "source-file"
     (or (plist-get entry :source-file) consent-false))
    (consent-reflect--field
@@ -715,6 +724,55 @@ callers can distinguish unbounded from exhausted."
    (consent-reflect--field
     "summary"
     (or (plist-get entry :summary) consent-false))))
+
+(defun consent-reflect--registered-library-entry (key library)
+  "Return reflection metadata for registered LIBRARY under KEY."
+  (list :name key
+        :category 'library
+        :status 'registered
+        :source-kind 'context
+        :visibility 'public
+        :availability 'required
+        :availability-condition nil
+        :source-file nil
+        :aliases nil
+        :target nil
+        :exports (mapcar #'consent--library-binding-name
+                         (consent--library-exports library))
+        :dependencies nil
+        :origin 'runtime-context
+        :source-id nil
+        :summary nil))
+
+(defun consent-reflect--registered-library-entries (context)
+  "Return reflection entries for libraries registered in CONTEXT."
+  (let (entries)
+    (maphash
+     (lambda (key library)
+       (push (consent-reflect--registered-library-entry key library)
+             entries))
+     (consent--eval-context-libraries context))
+    (sort entries
+          (lambda (left right)
+            (string< (plist-get left :name) (plist-get right :name))))))
+
+(defun consent-reflect--entry-exports-name-p (entry name)
+  "Return non-nil when reflection ENTRY exports NAME."
+  (member name (plist-get entry :exports)))
+
+(defun consent-reflect--binding-library-entries (name context)
+  "Return catalog and registered library entries exporting NAME."
+  (let ((seen (make-hash-table :test 'equal))
+        result)
+    (dolist (entry (append (consent--library-catalog-entries)
+                           (consent-reflect--registered-library-entries
+                            context)))
+      (let ((key (plist-get entry :name)))
+        (when (and (not (gethash key seen))
+                   (consent-reflect--entry-exports-name-p entry name))
+          (puthash key t seen)
+          (push entry result))))
+    (nreverse result)))
 
 (defun consent-reflect-libraries ()
   "Return cataloged libraries as `library-info' records."
@@ -777,15 +835,12 @@ import environment is not mutated."
          context))
       (consent--library-exports library)))))
 
-(defun consent-reflect-binding-libraries (symbol-or-name)
-  "Return cataloged libraries exporting SYMBOL-OR-NAME."
+(defun consent-reflect-binding-libraries (symbol-or-name context)
+  "Return cataloged or registered libraries exporting SYMBOL-OR-NAME."
   (let ((name (consent-reflect--binding-name symbol-or-name)))
     (mapcar
      #'consent-reflect--library-info-record
-     (seq-filter
-      (lambda (entry)
-        (member name (plist-get entry :exports)))
-      (consent--library-catalog-entries)))))
+     (consent-reflect--binding-library-entries name context))))
 
 (defun consent-reflect-documented-bindings (context)
   "Return documentation records for documented bindings in CONTEXT."
@@ -871,19 +926,90 @@ falling back to DEFAULT."
    (consent-reflect--symbol "documentation")
    consent-false))
 
-(defun consent-reflect--apropos-match (kind name matched summary)
+(defun consent-reflect--apropos-match (kind name matched summary libraries)
   "Return a compact apropos match record."
   (list
    (consent-reflect--symbol "apropos-match")
    (consent-reflect--field "kind" (consent-reflect--symbol kind))
    (consent-reflect--field "name" name)
+   (consent-reflect--field "libraries" libraries)
    (consent-reflect--field
     "matched"
     (consent-reflect--symbol-list-datum matched))
    (consent-reflect--field "summary" summary)))
 
+(defun consent-reflect--apropos-name-matches-p (name needle)
+  "Return non-nil when binding NAME matches lowercase NEEDLE."
+  (and name
+       (string-match-p (regexp-quote needle) (downcase name))))
+
+(defun consent-reflect--apropos-summary-matches-p (summary needle)
+  "Return non-nil when SUMMARY matches lowercase NEEDLE."
+  (and (stringp summary)
+       (string-match-p (regexp-quote needle) (downcase summary))))
+
+(defun consent-reflect--apropos-binding-libraries (name context)
+  "Return known library datums that export binding NAME in CONTEXT."
+  (consent-reflect--library-list-datum
+   (mapcar
+    (lambda (entry)
+      (plist-get entry :name))
+    (consent-reflect--binding-library-entries name context))))
+
+(defun consent-reflect--apropos-match-documentation
+    (documentation needle seen context)
+  "Return an apropos match for DOCUMENTATION, or nil.
+SEEN is a hash table updated for matched binding names."
+  (let* ((subject
+          (consent-reflect--field-value documentation "subject"))
+         (name
+          (and (consp subject)
+               (cadr subject)))
+         (name-text
+          (and (consent-symbol-p name)
+               (consent-symbol-name name)))
+         (summary
+          (consent-reflect--documentation-summary documentation))
+         (name-match?
+          (consent-reflect--apropos-name-matches-p name-text needle))
+         (summary-match?
+          (consent-reflect--apropos-summary-matches-p summary needle)))
+    (when (and name-text (or name-match? summary-match?))
+      (puthash name-text t seen)
+      (consent-reflect--apropos-match
+       "binding"
+       name
+       (if summary-match?
+           '("documentation" "name")
+         '("name"))
+       summary
+       (consent-reflect--apropos-binding-libraries name-text context)))))
+
+(defun consent-reflect--apropos-export-match (name needle seen context)
+  "Return an apropos match for exported NAME, or nil."
+  (when (and (not (gethash name seen))
+             (consent-reflect--apropos-name-matches-p name needle))
+    (puthash name t seen)
+    (consent-reflect--apropos-match
+     "binding"
+     (consent-reflect--symbol name)
+     '("name")
+     consent-false
+     (consent-reflect--apropos-binding-libraries name context))))
+
+(defun consent-reflect--known-export-names (context)
+  "Return sorted exported binding names from catalog and CONTEXT."
+  (let ((names nil))
+    (dolist (entry (append (consent--library-catalog-entries)
+                           (consent-reflect--registered-library-entries
+                            context)))
+      (dolist (name (plist-get entry :exports))
+        (unless (member name names)
+          (push name names))))
+    (sort names #'string<)))
+
 (defun consent-reflect-apropos (query context)
-  "Search current documented bindings and library catalog for QUERY."
+  "Search binding definitions for QUERY and attach library provenance."
   (let* ((needle
           (downcase
            (cond
@@ -891,52 +1017,30 @@ falling back to DEFAULT."
             ((symbolp query) (symbol-name query))
             ((stringp query) query)
             (t (consent-value->external query)))))
-         (binding-matches
+         (seen (make-hash-table :test 'equal))
+         (documented-matches
           (delq
            nil
            (mapcar
             (lambda (documentation)
-              (let* ((subject
-                      (consent-reflect--field-value documentation "subject"))
-                     (name
-                      (and (consp subject)
-                           (cadr subject)))
-                     (name-text
-                      (and (consent-symbol-p name)
-                           (consent-symbol-name name)))
-                     (summary
-                      (consent-reflect--documentation-summary documentation))
-                     (summary-text
-                      (and (stringp summary) summary)))
-                (when (and name-text
-                           (or (string-match-p
-                                (regexp-quote needle)
-                                (downcase name-text))
-                               (and summary-text
-                                    (string-match-p
-                                     (regexp-quote needle)
-                                     (downcase summary-text)))))
-                  (consent-reflect--apropos-match
-                   "binding"
-                   name
-                   (if (and summary-text
-                            (string-match-p
-                             (regexp-quote needle)
-                             (downcase summary-text)))
-                       '("documentation" "name")
-                     '("name"))
-                   summary))))
+              (consent-reflect--apropos-match-documentation
+               documentation
+               needle
+               seen
+               context))
             (consent-reflect-documented-bindings context))))
-         (library-matches
-          (mapcar
-           (lambda (entry)
-             (consent-reflect--apropos-match
-              "library"
-              (consent-reflect--library-datum (plist-get entry :name))
-              '("library")
-              (or (plist-get entry :source-file) consent-false)))
-           (consent--library-catalog-search needle))))
-    (append binding-matches library-matches)))
+         (catalog-matches
+          (delq
+           nil
+           (mapcar
+            (lambda (name)
+              (consent-reflect--apropos-export-match
+               name
+               needle
+               seen
+               context))
+            (consent-reflect--known-export-names context)))))
+    (append documented-matches catalog-matches)))
 
 (defun consent-reflect-current-session-info (context)
   "Return public session/job identity for CONTEXT."
@@ -1156,10 +1260,10 @@ can classify a recent error or a nested evaluation's outcome."
   (consent-reflect--redact
    (consent-reflect-library-documentation (car arguments))))
 
-(defun consent-reflect--primitive-binding-libraries (arguments _context)
+(defun consent-reflect--primitive-binding-libraries (arguments context)
   "Primitive `binding-libraries'."
   (consent-reflect--redact
-   (consent-reflect-binding-libraries (car arguments))))
+   (consent-reflect-binding-libraries (car arguments) context)))
 
 (defun consent-reflect--primitive-documented-bindings
     (_arguments context)

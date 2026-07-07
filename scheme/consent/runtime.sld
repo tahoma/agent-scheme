@@ -344,6 +344,8 @@
           parse-formals)
   (import (scheme base)
           (scheme char)
+          (only (scheme process-context)
+                get-environment-variable)
           (consent version)
           (consent reader)
           (agent redaction))
@@ -386,17 +388,46 @@
     ;; deterministic; a caller opts in by supplying `max-wall-time-ms'.
     (define consent-default-maximum-wall-time-ms #f)
 
+    (define (consent-path-list-add-segment text start end result)
+      "Cons PATH segment TEXT[START, END) to RESULT when non-empty."
+      (if (= start end)
+          result
+          (cons (substring text start end) result)))
+
+    (define (consent-split-path-list text)
+      "Split a colon-separated host path list into non-empty segments."
+      (let ((length (string-length text)))
+        (let loop ((index 0)
+                   (start 0)
+                   (result '()))
+          (cond
+           ((= index length)
+            (reverse
+             (consent-path-list-add-segment text start index result)))
+           ((char=? (string-ref text index) #\:)
+            (loop (+ index 1)
+                  (+ index 1)
+                  (consent-path-list-add-segment text start index result)))
+           (else
+            (loop (+ index 1) start result))))))
+
+    (define (consent-environment-library-search-directories)
+      "Return host-provided library search roots from CONSENT_LIBRARY_PATH."
+      (let ((value (get-environment-variable "CONSENT_LIBRARY_PATH")))
+        (if (and value (< 0 (string-length value)))
+            (consent-split-path-list value)
+            '())))
+
     ;; Host-injected library/source resolution context (host/core boundary).
     ;; The portable core reads its prelude, syntax prelude, and source-backed
     ;; libraries by trying, for each logical relative path, every configured
     ;; search-directory prefix in order, then the core's built-in cwd-relative
     ;; defaults, then embedded source. A compiled or installed host injects its
     ;; CONSENT_LIBRARY_PATH, datadir, and executable-relative directories here at
-    ;; startup, where host facilities exist; an in-repo/source run leaves this
-    ;; empty and falls through to the cwd defaults, preserving the original
-    ;; behavior. Embedded source is the zero-dependency floor, consulted only
-    ;; when no on-disk copy is found.
-    (define consent-library-search-directories '())
+    ;; startup, where host facilities exist. Embedded source is the
+    ;; zero-dependency floor, consulted only when no on-disk copy is found.
+    (define consent-library-search-directories
+      (consent-environment-library-search-directories))
 
     (define (consent-set-library-search-directories! directories)
       "Replace the host-injected library search-directory prefixes, highest"

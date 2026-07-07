@@ -34,6 +34,8 @@
               audit-network-capability-result!
               authorize-process-capability
               authorize-network-capability
+              consent-set-library-search-directories!
+              consent-library-search-directory-list
               consent-version
               consent-version-components
               consent-default-maximum-source-metadata
@@ -1550,11 +1552,11 @@
   (check 'standard-source-library-case-lambda-file
          (and case-lambda-spec
               (cadr (assq 'source-file case-lambda-spec)))
-         "scheme/consent/case-lambda.sld")
+         "consent/case-lambda.sld")
   (check 'standard-source-library-lazy-file
          (and lazy-spec
               (cadr (assq 'source-file lazy-spec)))
-         "scheme/consent/lazy.sld"))
+         "consent/lazy.sld"))
 
 (let* ((source-specs (consent-stdlib-source-library-specs))
        (manifest-spec
@@ -1602,43 +1604,43 @@
   (check 'stdlib-source-library-manifest-file
          (and manifest-spec
               (cadr (assq 'source-file manifest-spec)))
-         "scheme/stdlib/manifest.sld")
+         "stdlib/manifest.sld")
   (check 'stdlib-source-library-and-let-star-file
          (and and-let-star-spec
               (cadr (assq 'source-file and-let-star-spec)))
-         "scheme/stdlib/and-let-star.sld")
+         "stdlib/and-let-star.sld")
   (check 'stdlib-source-library-list-file
          (and list-spec
               (cadr (assq 'source-file list-spec)))
-         "scheme/stdlib/list.sld")
+         "stdlib/list.sld")
   (check 'stdlib-source-library-generator-file
          (and generator-spec
               (cadr (assq 'source-file generator-spec)))
-         "scheme/stdlib/generator.sld")
+         "stdlib/generator.sld")
   (check 'stdlib-source-library-comparator-file
          (and comparator-spec
               (cadr (assq 'source-file comparator-spec)))
-         "scheme/stdlib/comparator.sld")
+         "stdlib/comparator.sld")
   (check 'stdlib-source-library-rbtree-file
          (and rbtree-spec
               (cadr (assq 'source-file rbtree-spec)))
-         "scheme/stdlib/rbtree.sld")
+         "stdlib/rbtree.sld")
   (check 'stdlib-source-library-mapping-file
          (and mapping-spec
               (cadr (assq 'source-file mapping-spec)))
-         "scheme/stdlib/mapping.sld")
+         "stdlib/mapping.sld")
   (check 'stdlib-source-library-receive-file
          (and receive-spec
               (cadr (assq 'source-file receive-spec)))
-         "scheme/stdlib/receive.sld")
+         "stdlib/receive.sld")
   (check 'stdlib-source-library-assume-file
          (and assume-spec
               (cadr (assq 'source-file assume-spec)))
-         "scheme/stdlib/assume.sld")
+         "stdlib/assume.sld")
 (check 'stdlib-source-library-json-file
          (and json-spec
               (cadr (assq 'source-file json-spec)))
-         "scheme/stdlib/json.sld"))
+         "stdlib/json.sld"))
 
 (check-external 'srfi-16-case-lambda-alias-import
                 "(import (scheme base) (srfi 16))
@@ -3016,13 +3018,16 @@
                  external"
                 "42")
 
-(check-external 'emacs-capability-import-empty
-                "(import (emacs buffer)
-                         (emacs diff)
-                         (emacs frame)
-                         (emacs process))
-                 'ok"
-                "ok")
+(check 'emacs-capability-import-unavailable-on-portable
+       (raises?
+        (lambda ()
+          (consent-eval-source
+           "(import (emacs buffer)
+                    (emacs diff)
+                    (emacs frame)
+                    (emacs process))
+            'ok")))
+       #t)
 
 (check 'conflicting-library-imports
        (raises?
@@ -5307,6 +5312,23 @@
                           (consent-make-approval-store))"
                         '((internal-libraries-allowed . #t))
                         "#t")
+
+(check 'manifest-resolution-requires-seed-root
+       (let ((directories (consent-library-search-directory-list)))
+         (dynamic-wind
+           (lambda ()
+             (consent-set-library-search-directories! '()))
+           (lambda ()
+             (raises?
+              (lambda ()
+                (consent-eval-source
+                 "(import (consent version))
+                  (length consent-version-datum)"
+                 #f
+                 '((internal-libraries-allowed . #t))))))
+           (lambda ()
+             (consent-set-library-search-directories! directories))))
+       #t)
 
 ;; The grant only exposes libraries that actually exist as runtime source; it
 ;; does not turn every (consent ...) name into a phantom library.

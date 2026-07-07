@@ -34,15 +34,24 @@
 (require 'consent-transcript)
 (require 'consent-policy)
 
-(defconst consent--library-source-directory
+(defconst consent--library-module-directory
   (file-name-directory (or load-file-name buffer-file-name default-directory))
-  "Directory containing the loaded Consent Scheme library source.")
+  "Directory containing the loaded Consent Scheme library module.")
+
+(defcustom consent-library-seed-directory
+  (expand-file-name "../scheme/" consent--library-module-directory)
+  "Root directory containing seeded Scheme library manifests and sources."
+  :type 'directory
+  :group 'consent)
 
 (defvar consent--source-library-environments (make-hash-table :test #'equal)
   "Private evaluator environments used for source-backed adapter calls.")
 
 (defvar consent--source-library-procedures (make-hash-table :test #'equal)
   "Cached source-backed procedures keyed by library and procedure name.")
+
+(defvar consent--source-library-internal-imports-allowed nil
+  "Non-nil while loading trusted runtime source libraries.")
 
 (defconst consent--source-library-call-options
   '(:max-steps 12000000
@@ -51,6 +60,9 @@
 
 (defvar consent--library-catalog-cache nil
   "Cached manifest-backed library catalog entries.")
+
+(defvar consent--library-collection-manifest-cache nil
+  "Cached metadata read from repo-owned collection manifests.")
 
 (defvar consent--library-catalog-ad-hoc-manifests nil
   "Ad-hoc manifest catalog sources, as (SOURCE-ID . ENTRIES).")
@@ -83,308 +95,23 @@
   "Loaded Scheme library with explicit environments and exports."
   name key exports value-environment syntax-environment)
 
-(defconst consent--standard-library-keys
-  '("(scheme case-lambda)"
-    "(scheme char)"
-    "(scheme complex)"
-    "(scheme cxr)"
-    "(scheme eval)"
-    "(scheme file)"
-    "(scheme inexact)"
-    "(scheme lazy)"
-    "(scheme load)"
-    "(scheme process-context)"
-    "(scheme read)"
-    "(scheme repl)"
-    "(scheme r5rs)"
-    "(scheme time)"
-    "(scheme write)")
-  "Standard R7RS library keys with focused bootstrap support.")
+(defconst consent--library-manifest-index-file
+  "manifest/index.sld"
+  "Seed-root-relative top-level Scheme manifest index source file.")
 
-(defconst consent--stdlib-source-library-keys
-  '("(stdlib manifest)"
-    "(stdlib and-let-star)"
-    "(stdlib list)"
-    "(stdlib generator)"
-    "(stdlib comparator)"
-    "(stdlib rbtree)"
-    "(stdlib mapping)"
-    "(stdlib receive)"
-    "(stdlib assume)"
-    "(stdlib json)")
-  "Optional stdlib library keys backed by source files.")
-
-(defconst consent--stdlib-library-aliases
-  '(((:alias . "(srfi manifest)")
-     (:target . "(stdlib manifest)"))
-    ((:alias . "(srfi 16)")
-     (:target . "(scheme case-lambda)"))
-    ((:alias . "(srfi srfi-16)")
-     (:target . "(scheme case-lambda)"))
-    ((:alias . "(srfi 2)")
-     (:target . "(stdlib and-let-star)"))
-    ((:alias . "(srfi srfi-2)")
-     (:target . "(stdlib and-let-star)"))
-    ((:alias . "(scheme list)")
-     (:target . "(stdlib list)"))
-    ((:alias . "(srfi 1)")
-     (:target . "(stdlib list)"))
-    ((:alias . "(srfi srfi-1)")
-     (:target . "(stdlib list)"))
-    ((:alias . "(scheme generator)")
-     (:target . "(stdlib generator)"))
-    ((:alias . "(srfi 158)")
-     (:target . "(stdlib generator)"))
-    ((:alias . "(srfi srfi-158)")
-     (:target . "(stdlib generator)"))
-    ((:alias . "(srfi 8)")
-     (:target . "(stdlib receive)"))
-    ((:alias . "(srfi srfi-8)")
-     (:target . "(stdlib receive)"))
-    ((:alias . "(srfi 145)")
-     (:target . "(stdlib assume)"))
-    ((:alias . "(srfi srfi-145)")
-     (:target . "(stdlib assume)"))
-    ((:alias . "(consent json)")
-     (:target . "(stdlib json)"))
-    ((:alias . "(srfi 180)")
-     (:target . "(stdlib json)"))
-    ((:alias . "(srfi srfi-180)")
-     (:target . "(stdlib json)"))
-    ((:alias . "(scheme comparator)")
-     (:target . "(stdlib comparator)"))
-    ((:alias . "(srfi 128)")
-     (:target . "(stdlib comparator)"))
-    ((:alias . "(srfi srfi-128)")
-     (:target . "(stdlib comparator)"))
-    ((:alias . "(scheme mapping)")
-     (:target . "(stdlib mapping)"))
-    ((:alias . "(srfi 146)")
-     (:target . "(stdlib mapping)"))
-    ((:alias . "(srfi srfi-146)")
-     (:target . "(stdlib mapping)"))
-    ((:alias . "(stdlib json read)")
-     (:target . "(stdlib json)")
-     (:exports . ("json-number-of-character-limit"
-                  "json-nesting-depth-limit"
-                  "json-null?"
-                  "json-error?"
-                  "json-error-reason"
-                  "json-fold"
-                  "json-generator"
-                  "json-read"
-                  "json-lines-read"
-                  "json-sequence-read")))
-    ((:alias . "(consent json read)")
-     (:target . "(stdlib json)")
-     (:exports . ("json-number-of-character-limit"
-                  "json-nesting-depth-limit"
-                  "json-null?"
-                  "json-error?"
-                  "json-error-reason"
-                  "json-fold"
-                  "json-generator"
-                  "json-read"
-                  "json-lines-read"
-                  "json-sequence-read"))))
-  "Optional stdlib import aliases.")
-
-(defconst consent--stdlib-library-keys
-  (append consent--stdlib-source-library-keys
-          (mapcar (lambda (alias)
-                    (cdr (assq :alias alias)))
-                  consent--stdlib-library-aliases))
-  "Optional stdlib library keys with focused support.")
-
-(defconst consent--agent-library-keys
-  '("(agent io)"
-    "(agent approval)"
-    "(agent debugger)"
-    "(agent helper)"
-    "(agent job)"
-    "(agent test)"
-    "(agent diagnostics)"
-    "(agent diff)"
-    "(agent vcs)"
-    "(agent network)"
-    "(agent test primitive)"
-    "(agent task)"
-    "(agent memory)"
-    "(agent memory primitive)"
-    "(agent plan)"
-    "(agent models)"
-    "(agent models primitive)"
-    "(agent context)"
-    "(agent reflect)"
-    "(agent redaction)"
-    "(agent session)"
-    "(agent session primitive)"
-    "(agent registry)"
-    "(agent proposal)"
-    "(agent runner)"
-    "(agent reliability)"
-    "(agent prompt)"
-    "(agent generated-source)"
-    "(agent transcript)")
-  "Agent interaction library keys with focused bootstrap support.")
-
-(defconst consent--cli-library-keys
-  '("(cli process-host primitive)")
-  "CLI host-effect primitive library keys with focused bootstrap support.")
-
-(defconst consent--consent-library-keys
-  '("(consent capability)"
-    "(consent capability primitive)")
-  "Consent core library keys.
-The capability libraries are first-class consent primitives: a
-capability is the encoded act of consent, so it belongs in the consent
-core rather than the agent domain it governs.")
-
-(defconst consent--agent-source-library-files
-  '(("(consent capability)"
-     . "../scheme/consent/capability.sld")
-    ("(consent reader)"
-     . "../scheme/consent/reader.sld")
-    ("(agent diagnostics)"
-     . "../scheme/agent/diagnostics.sld")
-    ("(agent diff)"
-     . "../scheme/agent/diff.sld")
-    ("(agent vcs)"
-     . "../scheme/agent/vcs.sld")
-    ("(agent network)"
-     . "../scheme/agent/network.sld")
-    ("(agent models)"
-     . "../scheme/agent/models.sld")
-    ("(agent models openai)"
-     . "../scheme/agent/models/openai.sld")
-    ("(cli process-host)"
-     . "../scheme/cli/process-host.sld")
-    ("(agent registry)"
-     . "../scheme/agent/registry.sld")
-    ("(agent proposal)"
-     . "../scheme/agent/proposal.sld")
-    ("(agent runner)"
-     . "../scheme/agent/runner.sld")
-    ("(agent reliability)"
-     . "../scheme/agent/reliability.sld")
-    ("(agent prompt)"
-     . "../scheme/agent/prompt.sld")
-    ("(agent generated-source)"
-     . "../scheme/agent/generated-source.sld")
-    ("(agent task)"
-     . "../scheme/agent/task.sld")
-    ("(agent memory)"
-     . "../scheme/agent/memory.sld")
-    ("(agent test)"
-     . "../scheme/agent/test.sld")
-    ("(agent session)"
-     . "../scheme/agent/session.sld")
-    ("(agent transcript)"
-     . "../scheme/agent/transcript.sld"))
-  "Checked-in portable Consent Scheme libraries loaded as Scheme source.")
-
-;; Bootstrap libraries are registered lazily into the current evaluation
-;; context.  The required `(scheme base)' library snapshots the active base
-;; environment, while smaller standard libraries are either subsets, primitive
-;; wrappers, or source libraries expanded through the same evaluator.
-
-(defconst consent--standard-source-library-files
-  '(("(scheme case-lambda)"
-     . "../scheme/consent/case-lambda.sld")
-    ("(scheme lazy)"
-     . "../scheme/consent/lazy.sld"))
-  "Checked-in portable standard libraries loaded as Scheme source.")
-
-(defconst consent--stdlib-source-library-files
-  '(("(stdlib manifest)"
-     . "../scheme/stdlib/manifest.sld")
-    ("(stdlib and-let-star)"
-     . "../scheme/stdlib/and-let-star.sld")
-    ("(stdlib list)"
-     . "../scheme/stdlib/list.sld")
-    ("(stdlib generator)"
-     . "../scheme/stdlib/generator.sld")
-    ("(stdlib comparator)"
-     . "../scheme/stdlib/comparator.sld")
-    ("(stdlib rbtree)"
-     . "../scheme/stdlib/rbtree.sld")
-    ("(stdlib mapping)"
-     . "../scheme/stdlib/mapping.sld")
-    ("(stdlib receive)"
-     . "../scheme/stdlib/receive.sld")
-    ("(stdlib assume)"
-     . "../scheme/stdlib/assume.sld")
-    ("(stdlib json)"
-     . "../scheme/stdlib/json.sld"))
-  "Checked-in optional stdlib libraries loaded as Scheme source.")
-
-(defun consent--standard-source-library-file (key)
-  "Return the bundled source file path for standard library KEY."
-  (let ((relative-file
-         (cdr (assoc key consent--standard-source-library-files))))
-    (unless relative-file
-      (consent--eval-error
-       "standard source library is not available: %s" key))
-    (expand-file-name relative-file consent--library-source-directory)))
-
-(defun consent--standard-source-library-source (key)
-  "Return the checked-in source for standard library KEY."
-  (let ((source-file (consent--standard-source-library-file key)))
-    (unless (file-readable-p source-file)
-      (consent--eval-error
-       "standard source library file is not readable: %s" source-file))
-    (with-temp-buffer
-      (insert-file-contents source-file)
-      (buffer-string))))
-
-(defun consent--stdlib-source-library-file (key)
-  "Return the bundled source file path for stdlib library KEY."
-  (let ((relative-file
-         (cdr (assoc key consent--stdlib-source-library-files))))
-    (unless relative-file
-      (consent--eval-error
-       "stdlib source library is not available: %s" key))
-    (expand-file-name relative-file consent--library-source-directory)))
-
-(defun consent--stdlib-source-library-source (key)
-  "Return the checked-in source for stdlib library KEY."
-  (let ((source-file (consent--stdlib-source-library-file key)))
-    (unless (file-readable-p source-file)
-      (consent--eval-error
-       "stdlib source library file is not readable: %s" source-file))
-    (with-temp-buffer
-      (insert-file-contents source-file)
-      (buffer-string))))
-
-(defun consent--agent-source-library-file (key)
-  "Return the bundled source file path for Agent library KEY."
-  (let ((relative-file
-         (cdr (assoc key consent--agent-source-library-files))))
-    (unless relative-file
-      (consent--eval-error
-       "agent source library is not available: %s" key))
-    (expand-file-name relative-file consent--library-source-directory)))
-
-(defun consent--agent-source-library-source (key)
-  "Return the checked-in source for Agent library KEY."
-  (let ((source-file (consent--agent-source-library-file key)))
-    (unless (file-readable-p source-file)
-      (consent--eval-error
-       "agent source library file is not readable: %s" source-file))
-    (with-temp-buffer
-      (insert-file-contents source-file)
-      (buffer-string))))
-
-(defun consent--standard-source-library-form (key)
-  "Return the single define-library form read from KEY's source file."
-  (let ((forms (consent-read-all
-                (consent--standard-source-library-source key))))
+(defun consent--manifest-source-library-form (key source-file description)
+  "Return the single define-library form for KEY from manifest SOURCE-FILE."
+  (let ((forms
+         (consent-read-all
+          (consent--manifest-source-library-source source-file key))))
     (unless (= (length forms) 1)
       (consent--eval-error
-       "standard source library must contain exactly one form: %s" key))
+       "%s must contain exactly one form: %s"
+       description
+       key))
     (let* ((form (car forms))
            (parts (consent--proper-list-elements
-                   form "standard source library")))
+                   form description)))
       (unless (and (>= (length parts) 2)
                    (consent--symbol-named-p
                     (car parts) "define-library")
@@ -392,13 +119,13 @@ core rather than the agent domain it governs.")
                            (consent--strip-identifiers (cadr parts)))
                           key))
         (consent--eval-error
-         "standard source library name does not match registry key: %s" key))
+         "%s name does not match registry key: %s" description key))
       form)))
 
-(defun consent--standard-source-library-export-names (form)
+(defun consent--source-library-export-names (form)
   "Return external export names declared by source library FORM."
   (let ((parts (consent--proper-list-elements
-                form "standard source library"))
+                form "source library"))
         exports)
     (dolist (declaration (cddr parts))
       (when (consent--form-named-p declaration "export")
@@ -408,66 +135,438 @@ core rather than the agent domain it governs.")
                        #'cdr
                        (consent--export-specs
                         (cdr (consent--proper-list-elements
-                              declaration "standard source export"))))))))
+                              declaration "source export"))))))))
     exports))
 
 (defun consent-standard-source-library-specs ()
   "Return metadata for standard libraries loaded from portable source files."
   (mapcar
-   (lambda (entry)
-     (let* ((key (car entry))
-            (form (consent--standard-source-library-form key)))
+   (lambda (manifest-entry)
+     (let* ((key (plist-get manifest-entry :name))
+            (source-file (plist-get manifest-entry :source-file))
+            (form (consent--manifest-source-library-form
+                   key
+                   source-file
+                   "standard source library")))
        (list :name key
              :exports
-             (consent--standard-source-library-export-names form)
+             (consent--source-library-export-names form)
              :source-file
-             (consent--standard-source-library-file key))))
-   consent--standard-source-library-files))
+             (consent--manifest-source-library-file source-file))))
+   (seq-filter
+    (lambda (entry)
+      (and (eq (plist-get entry :category) 'standard)
+           (eq (plist-get entry :source-kind) 'portable-source)))
+    (consent--library-collection-manifest-entries))))
 
 (defun consent--library-catalog-source-file (key)
-  "Return catalog-safe source path for library KEY, or nil."
-  (let ((relative
-         (or (cdr (assoc key consent--standard-source-library-files))
-             (cdr (assoc key consent--stdlib-source-library-files))
-             (cdr (assoc key consent--agent-source-library-files)))))
-    (when relative
-      (if (string-prefix-p "../" relative)
-          (substring relative 3)
-        relative))))
+  "Return manifest-provided source path for library KEY, or nil."
+  (plist-get (consent--library-collection-manifest-entry key)
+             :source-file))
 
 (defun consent--library-catalog-category (key)
   "Return the public catalog category for library KEY."
+  (or (plist-get (consent--library-collection-manifest-entry key)
+                 :category)
+      'library))
+
+(defun consent--library-manifest-source-file (relative-file)
+  "Return absolute path for seed-root-relative manifest RELATIVE-FILE."
+  (expand-file-name relative-file consent-library-seed-directory))
+
+(defun consent--library-read-file (source-file description)
+  "Return SOURCE-FILE contents, or signal DESCRIPTION."
+  (unless (file-readable-p source-file)
+    (consent--eval-error "%s is not readable: %s" description source-file))
+  (with-temp-buffer
+    (insert-file-contents source-file)
+    (buffer-string)))
+
+(defun consent--library-manifest-index-source ()
+  "Return the top-level Scheme manifest index source."
+  (consent--library-read-file
+   (consent--library-manifest-source-file
+    consent--library-manifest-index-file)
+   "top-level manifest index file"))
+
+(defun consent--collection-manifest-source (spec)
+  "Return source text for collection manifest described by SPEC."
+  (consent--library-read-file
+   (consent--library-manifest-source-file
+    (plist-get spec :manifest-file))
+   "collection manifest source file"))
+
+(defun consent--collection-manifest-quoted-value (value variable key)
+  "Return quoted manifest VALUE for VARIABLE in manifest library KEY."
+  (let ((parts (and (consp value)
+                    (consent--proper-list-elements value "quoted manifest"))))
+    (unless (and (= (length parts) 2)
+                 (consent--symbol-named-p (car parts) "quote"))
+      (consent--eval-error
+       "collection manifest variable must be quoted: %s in %s"
+       variable key))
+    (cadr parts)))
+
+(defun consent--collection-manifest-define-value (form variable key)
+  "Return manifest data from DEFINE FORM for VARIABLE and KEY, or nil."
+  (when (consent--form-named-p form "define")
+    (let ((parts (consent--proper-list-elements
+                  form "collection manifest define")))
+      (when (and (= (length parts) 3)
+                 (consent--symbol-named-p (cadr parts) variable))
+        (consent--collection-manifest-quoted-value
+         (nth 2 parts) variable key)))))
+
+(defun consent--manifest-library-quoted-variable
+    (source key variable description)
+  "Return quoted VARIABLE from manifest library SOURCE."
+  (let* ((forms (consent-read-all source)))
+    (unless (= (length forms) 1)
+      (consent--eval-error
+       "%s must contain exactly one form: %s" description key))
+    (let* ((form (car forms))
+           (parts (consent--proper-list-elements
+                   form description)))
+      (unless (and (>= (length parts) 2)
+                   (consent--symbol-named-p (car parts) "define-library")
+                   (or (null key)
+                       (equal (consent-datum->external
+                               (consent--strip-identifiers (cadr parts)))
+                              key)))
+        (consent--eval-error
+         "%s library name does not match registry key: %s"
+         description key))
+      (catch 'manifest
+        (dolist (declaration (cddr parts))
+          (cond
+           ((consent--form-named-p declaration "begin")
+            (dolist (body-form (cdr (consent--proper-list-elements
+                                     declaration
+                                     "collection manifest begin")))
+              (let ((value
+                     (consent--collection-manifest-define-value
+                      body-form variable key)))
+                (when value
+                  (throw 'manifest value)))))
+           (t
+            (let ((value
+                   (consent--collection-manifest-define-value
+                    declaration variable key)))
+              (when value
+                (throw 'manifest value))))))
+        (consent--eval-error
+         "%s variable is not defined: %s in %s"
+         description variable key)))))
+
+(defun consent--library-manifest-index-value ()
+  "Return the quoted top-level manifest index."
+  (consent--manifest-library-quoted-variable
+   (consent--library-manifest-index-source)
+   "(manifest index)"
+   "manifest-index"
+   "top-level manifest index"))
+
+(defun consent--collection-manifest-library-value (spec)
+  "Return the quoted manifest data described by SPEC."
+  (consent--manifest-library-quoted-variable
+   (consent--collection-manifest-source spec)
+   (plist-get spec :key)
+   (plist-get spec :variable)
+   "collection manifest library"))
+
+(defun consent--collection-manifest-field (entry name &optional default)
+  "Return NAME from alist ENTRY, or DEFAULT when absent."
+  (let ((cell
+         (seq-find
+          (lambda (field)
+            (and (consp field)
+                 (consent--symbol-named-p (car field) name)))
+          entry)))
+    (if cell
+        (cdr cell)
+      default)))
+
+(defun consent--collection-manifest-symbol (value description &optional default)
+  "Return VALUE as an Emacs Lisp symbol, or DEFAULT when absent."
   (cond
-   ((consent--library-alias-spec key consent--stdlib-library-aliases)
-    'stdlib)
-   ((string-prefix-p "(scheme " key) 'standard)
-   ((or (string-prefix-p "(stdlib " key)
-        (string-prefix-p "(srfi " key)
-        (string-prefix-p "(consent json" key))
-    'stdlib)
-   ((string-prefix-p "(agent " key) 'agent)
-   ((string-prefix-p "(consent " key) 'consent)
-   ((string-prefix-p "(emacs " key) 'emacs)
-   (t 'library)))
+   ((or (null value) (eq value consent-false)) default)
+   ((symbolp value) value)
+   ((consent-symbol-p value) (intern (consent-symbol-name value)))
+   (t (consent--eval-error "%s must be a symbol" description))))
+
+(defun consent--collection-manifest-string (value description)
+  "Return VALUE as a string, or signal DESCRIPTION."
+  (if (stringp value)
+      value
+    (consent--eval-error "%s must be a string" description)))
+
+(defun consent--collection-manifest-index-entry (entry)
+  "Return a collection manifest descriptor parsed from index ENTRY."
+  (let* ((collection
+          (consent--collection-manifest-symbol
+           (consent--collection-manifest-field entry "collection" nil)
+           "manifest index collection"))
+         (key
+          (consent--library-name-key
+           (consent--collection-manifest-field entry "manifest-library" nil)))
+         (variable
+          (consent--collection-manifest-symbol
+           (consent--collection-manifest-field entry "manifest-variable" nil)
+           "manifest index variable"))
+         (manifest-file
+          (consent--collection-manifest-string
+           (consent--collection-manifest-field entry "manifest-file" nil)
+           "manifest index manifest-file"))
+         (source-root
+          (consent--collection-manifest-string
+           (consent--collection-manifest-field entry "source-root" nil)
+           "manifest index source-root"))
+         (category
+          (consent--collection-manifest-symbol
+           (consent--collection-manifest-field entry "category" nil)
+           "manifest index category"
+           collection)))
+    (list :collection collection
+          :key key
+          :variable (symbol-name variable)
+          :manifest-file manifest-file
+          :category category
+          :source-root source-root
+          :source-id collection)))
+
+(defun consent--library-collection-manifest-specs ()
+  "Return collection manifest descriptors from the top-level manifest index."
+  (mapcar
+   #'consent--collection-manifest-index-entry
+   (consent--proper-list-elements
+    (consent--library-manifest-index-value)
+    "top-level manifest index entries")))
+
+(defun consent--collection-manifest-catalog-source-file
+    (spec source-kind source-file)
+  "Return repository-relative SOURCE-FILE for SPEC, or nil."
+  (when (and source-kind source-file)
+    (concat (plist-get spec :source-root) source-file)))
+
+(defun consent--collection-manifest-source-kind (value)
+  "Return VALUE normalized to the catalog source-kind vocabulary."
+  (pcase (consent--collection-manifest-symbol
+          value "collection manifest source-kind" nil)
+    ('nil nil)
+    ('source-library 'portable-source)
+    ('primitive-library 'primitive)
+    (symbol symbol)))
+
+(defun consent--collection-manifest-library-list (value description)
+  "Return VALUE normalized as a list of library-name keys."
+  (if (or (null value) (eq value consent-false))
+      nil
+    (mapcar
+     #'consent--library-name-key
+     (consent--proper-list-elements value description))))
+
+(defun consent--collection-manifest-target (value)
+  "Return VALUE normalized as a library-name key, or nil."
+  (unless (or (null value) (eq value consent-false))
+    (consent--library-name-key value)))
+
+(defun consent--collection-manifest-export-list (value description)
+  "Return VALUE as a list of exported symbol names."
+  (if (or (null value) (eq value consent-false))
+      nil
+    (mapcar
+     (lambda (entry)
+       (consent--expect-symbol-name entry description))
+     (consent--proper-list-elements value description))))
+
+(defun consent--collection-manifest-default-visibility (status)
+  "Return the default visibility implied by manifest STATUS."
+  (if (eq status 'alias) 'alias 'public))
+
+(defun consent--collection-manifest-entry (entry spec)
+  "Return catalog metadata parsed from collection manifest ENTRY and SPEC."
+  (let* ((key
+          (consent--library-name-key
+           (consent--collection-manifest-field entry "library" nil)))
+         (status
+          (consent--collection-manifest-symbol
+           (consent--collection-manifest-field entry "status" nil)
+           "collection manifest status"
+           'implemented))
+         (visibility
+          (consent--collection-manifest-symbol
+           (consent--collection-manifest-field entry "visibility" nil)
+           "collection manifest visibility"
+           (consent--collection-manifest-default-visibility status)))
+         (layer
+          (consent--collection-manifest-symbol
+           (consent--collection-manifest-field entry "layer" nil)
+           "collection manifest layer"
+           nil))
+         (availability
+          (consent--collection-manifest-symbol
+           (consent--collection-manifest-field entry "availability" nil)
+           "collection manifest availability"
+           'required))
+         (category
+          (consent--collection-manifest-symbol
+           (consent--collection-manifest-field entry "category" nil)
+           "collection manifest category"
+           (plist-get spec :category)))
+         (availability-condition
+          (consent--collection-manifest-field
+           entry "availability-condition" nil))
+         (target
+          (consent--collection-manifest-target
+           (consent--collection-manifest-field entry "target" nil)))
+         (source-kind
+          (or (consent--collection-manifest-source-kind
+               (consent--collection-manifest-field entry "source-kind" nil))
+              (and target 'alias)))
+         (implementation-id
+          (consent--collection-manifest-symbol
+           (consent--collection-manifest-field entry "implementation-id" nil)
+           "collection manifest implementation-id"
+           nil))
+         (primitive-overlay-library
+          (consent--collection-manifest-target
+           (consent--collection-manifest-field
+            entry "primitive-overlay-library" nil)))
+         (exports-absent (list 'exports-absent))
+         (source-file
+          (consent--collection-manifest-field entry "source-file" nil))
+         (dependencies
+          (consent--collection-manifest-library-list
+           (consent--collection-manifest-field entry "dependencies" nil)
+           "collection manifest dependencies"))
+         (aliases
+          (consent--collection-manifest-library-list
+           (consent--collection-manifest-field entry "aliases" nil)
+           "collection manifest aliases"))
+         (exports
+          (let ((value (consent--collection-manifest-field
+                        entry "exports" exports-absent)))
+            (if (eq value exports-absent)
+                exports-absent
+              (consent--collection-manifest-export-list
+               value
+               "collection manifest exports"))))
+         (summary
+          (consent--collection-manifest-field entry "summary" nil)))
+    (when (eq source-file consent-false)
+      (setq source-file nil))
+    (unless (or (null source-file) (stringp source-file))
+      (consent--eval-error
+       "collection manifest source-file must be a string or #f"))
+    (setq source-file
+          (consent--collection-manifest-catalog-source-file
+           spec source-kind source-file))
+    (when (eq exports exports-absent)
+      (consent--eval-error
+       "built-in manifest entry must declare exports: %s"
+       key))
+    (when (eq summary consent-false)
+      (setq summary nil))
+    (unless (or (null summary) (stringp summary))
+      (consent--eval-error
+       "collection manifest summary must be a string or #f"))
+    (list :name key
+          :category category
+          :status status
+          :source-kind source-kind
+          :implementation-id implementation-id
+          :primitive-overlay-library primitive-overlay-library
+          :visibility visibility
+          :layer layer
+          :availability availability
+          :availability-condition availability-condition
+          :source-file source-file
+          :aliases aliases
+          :target target
+          :exports exports
+          :dependencies dependencies
+          :origin 'built-in-seed
+          :source-id (plist-get spec :source-id)
+          :summary summary)))
+
+(defun consent--library-collection-manifest-entries ()
+  "Return collection-manifest metadata for repo-owned libraries."
+  (or consent--library-collection-manifest-cache
+      (setq
+       consent--library-collection-manifest-cache
+       (apply
+        #'append
+        (mapcar
+         (lambda (spec)
+           (mapcar
+            (lambda (entry)
+              (consent--collection-manifest-entry entry spec))
+            (consent--proper-list-elements
+             (consent--collection-manifest-library-value spec)
+             "collection manifest entries")))
+         (consent--library-collection-manifest-specs))))))
+
+(defun consent--library-collection-manifest-entry (key)
+  "Return collection-manifest metadata for library KEY, or nil."
+  (seq-find
+   (lambda (entry)
+     (equal (plist-get entry :name) key))
+   (consent--library-collection-manifest-entries)))
+
+(defun consent--library-visibility (key)
+  "Return KEY's public/internal visibility tier from manifests."
+  (or (plist-get (consent--library-collection-manifest-entry key)
+                 :visibility)
+      'public))
+
+(defun consent--library-visibility-internal-p (visibility)
+  "Return non-nil when VISIBILITY requires internal-library posture."
+  (memq visibility '(internal-runtime internal-agent-model)))
+
+(defun consent--library-availability-condition-satisfied-p (condition)
+  "Return non-nil when manifest availability CONDITION is satisfied."
+  (cond
+   ((or (null condition) (eq condition consent-false)) t)
+   ((and (consp condition)
+         (consent--symbol-named-p (car condition) "host")
+         (consent--symbol-named-p (cadr condition) "emacs"))
+    t)
+   (t nil)))
+
+(defun consent--library-entry-available-p (entry)
+  "Return non-nil when manifest ENTRY is available on this host."
+  (and entry
+       (consent--library-availability-condition-satisfied-p
+        (plist-get entry :availability-condition))))
+
+(defun consent--library-internal-import-allowed-p (context)
+  "Return non-nil when CONTEXT or source loading may import internals."
+  (or consent--source-library-internal-imports-allowed
+      (and context
+           (condition-case nil
+               (consent--eval-context-internal-libraries-allowed context)
+             (args-out-of-range nil)))))
+
+(defun consent--ensure-library-import-allowed (key context)
+  "Signal when KEY is not importable in CONTEXT's current posture."
+  (let ((visibility (consent--library-visibility key)))
+    (when (and (consent--library-visibility-internal-p visibility)
+               (not (consent--library-internal-import-allowed-p context)))
+      (consent--eval-error
+       "internal library import requires internal-libraries-allowed: %s"
+       key))))
 
 (defun consent--library-catalog-source-kind (key)
-  "Return the implementation source kind for library KEY."
-  (cond
-   ((consent--library-catalog-source-file key) 'portable-source)
-   ((consent--library-alias-spec key consent--stdlib-library-aliases) 'alias)
-   ((equal key consent--scheme-base-library-key) 'base-snapshot)
-   ((or (member key consent--standard-library-keys)
-        (member key consent--agent-library-keys)
-        (member key consent--cli-library-keys)
-        (member key consent--consent-library-keys)
-        (member key (consent-emacs-capability-library-keys)))
-    'primitive)
-   (t 'manifest)))
+  "Return the manifest implementation source kind for library KEY."
+  (plist-get (consent--library-collection-manifest-entry key)
+             :source-kind))
 
 (defun consent--library-catalog-private-context ()
   "Return a fresh context/environment pair for catalog export discovery."
   (require 'consent-eval)
-  (let ((context (consent--new-eval-context nil))
+  (let ((context
+         (consent--new-eval-context
+          '(:internal-libraries-allowed t)))
         (environment (consent-make-base-environment)))
     (setf (consent--eval-context-interaction-environment context)
           environment)
@@ -476,47 +575,45 @@ core rather than the agent domain it governs.")
 
 (defun consent--library-catalog-export-names (key)
   "Return exported binding names for cataloged library KEY."
-  (condition-case _
-      (let* ((pair (consent--library-catalog-private-context))
-             (context (car pair))
-             (environment (cdr pair))
-             (library
-              (consent--resolve-library
-               (consent-read key)
-               context
-               environment)))
-        (mapcar #'consent--library-binding-name
-                (consent--library-exports library)))
-    (error nil)))
+  (let ((manifest-entry
+         (consent--library-collection-manifest-entry key)))
+    (or (plist-get manifest-entry :exports)
+        (and (plist-get manifest-entry :target)
+             (consent--library-catalog-export-names
+              (plist-get manifest-entry :target)))
+        (condition-case _
+            (let* ((pair (consent--library-catalog-private-context))
+                   (context (car pair))
+                   (environment (cdr pair))
+                   (library
+                    (consent--resolve-library
+                     (consent-read key)
+                     context
+                     environment)))
+              (mapcar #'consent--library-binding-name
+                      (consent--library-exports library)))
+          (error nil)))))
 
 (defun consent--library-catalog-aliases (key)
   "Return aliases that resolve to library KEY."
-  (delq
-   nil
-   (mapcar
-    (lambda (alias)
-      (when (equal key (consent--library-alias-field alias :target))
-        (consent--library-alias-field alias :alias)))
-    consent--stdlib-library-aliases)))
+  (delq nil
+        (mapcar
+         (lambda (entry)
+           (when (equal key (plist-get entry :target))
+             (plist-get entry :name)))
+         (consent--library-collection-manifest-entries))))
 
 (defun consent--library-catalog-dependencies (key)
   "Return manifest dependency names for KEY when known."
-  (cond
-   ((or (assoc key consent--standard-source-library-files)
-        (assoc key consent--stdlib-source-library-files)
-        (assoc key consent--agent-source-library-files))
-    nil)
-   ((consent--library-alias-spec key consent--stdlib-library-aliases)
-    (let ((target
-           (consent--library-alias-field
-            (consent--library-alias-spec key consent--stdlib-library-aliases)
-            :target)))
-      (and target (list target))))
-   (t nil)))
+  (let ((manifest-entry
+         (consent--library-collection-manifest-entry key)))
+    (and (plist-member manifest-entry :dependencies)
+         (plist-get manifest-entry :dependencies))))
 
 (defun consent--library-catalog-invalidate ()
   "Clear cached manifest-backed catalog entries."
-  (setq consent--library-catalog-cache nil))
+  (setq consent--library-catalog-cache nil)
+  (setq consent--library-collection-manifest-cache nil))
 
 (defun consent--library-catalog-source-id (value)
   "Return VALUE normalized as a catalog source id."
@@ -597,6 +694,11 @@ core rather than the agent domain it governs.")
              (consent--library-catalog-manifest-field
               fields "source-kind" 'manifest)
              "catalog source-kind"))
+           (visibility
+            (consent--library-catalog-require-symbol
+             (consent--library-catalog-manifest-field
+              fields "visibility" 'public)
+             "catalog visibility"))
            (source-file
             (consent--library-catalog-require-source-file
              (consent--library-catalog-manifest-field
@@ -627,6 +729,7 @@ core rather than the agent domain it governs.")
             :category category
             :status status
             :source-kind source-kind
+            :visibility visibility
             :source-file source-file
             :aliases aliases
             :target target
@@ -756,41 +859,44 @@ core rather than the agent domain it governs.")
 
 (defun consent--library-catalog-entry (key)
   "Return manifest-backed catalog metadata for library KEY."
-  (let* ((alias-spec
-          (consent--library-alias-spec key consent--stdlib-library-aliases))
+  (let* ((manifest-entry
+          (consent--library-collection-manifest-entry key))
          (source-kind (consent--library-catalog-source-kind key))
          (source-file (consent--library-catalog-source-file key)))
     (list
      :name key
-     :category (consent--library-catalog-category key)
-     :status (if alias-spec 'alias 'implemented)
+     :category (or (plist-get manifest-entry :category)
+                   (consent--library-catalog-category key))
+     :status (or (plist-get manifest-entry :status)
+                 'implemented)
      :source-kind source-kind
+     :implementation-id (plist-get manifest-entry :implementation-id)
+     :primitive-overlay-library
+     (plist-get manifest-entry :primitive-overlay-library)
+     :visibility (consent--library-visibility key)
+     :availability (or (plist-get manifest-entry :availability) 'required)
+     :availability-condition
+     (plist-get manifest-entry :availability-condition)
      :source-file source-file
-     :aliases (consent--library-catalog-aliases key)
-     :target (and alias-spec
-                  (consent--library-alias-field alias-spec :target))
+     :aliases (if (plist-member manifest-entry :aliases)
+                  (plist-get manifest-entry :aliases)
+                (consent--library-catalog-aliases key))
+     :target (plist-get manifest-entry :target)
      :exports (consent--library-catalog-export-names key)
      :dependencies (consent--library-catalog-dependencies key)
      :origin 'built-in-seed
      :source-id 'built-in-seed
-     :summary nil)))
+     :summary (plist-get manifest-entry :summary))))
 
 (defun consent--library-catalog-built-in-keys ()
-  "Return built-in catalog keys in deterministic order."
+  "Return built-in catalog keys from collection manifests."
   (let ((keys
          (delete-dups
           (copy-sequence
-           (append (list consent--scheme-base-library-key)
-                   consent--standard-library-keys
-                   consent--stdlib-source-library-keys
-                   (mapcar
-                    (lambda (alias)
-                      (consent--library-alias-field alias :alias))
-                    consent--stdlib-library-aliases)
-                   consent--agent-library-keys
-                   consent--cli-library-keys
-                   consent--consent-library-keys
-                   (consent-emacs-capability-library-keys))))))
+           (mapcar
+            (lambda (entry)
+              (plist-get entry :name))
+            (consent--library-collection-manifest-entries))))))
     (sort keys #'string<)))
 
 (defun consent--library-catalog-built-in-entries ()
@@ -909,6 +1015,7 @@ core rather than the agent domain it governs.")
                       (list (plist-get entry :name)
                             (symbol-name (plist-get entry :category))
                             (symbol-name (plist-get entry :source-kind))
+                            (symbol-name (plist-get entry :visibility))
                             (symbol-name (plist-get entry :status))
                             (plist-get entry :target)
                             (plist-get entry :source-file)
@@ -925,8 +1032,8 @@ core rather than the agent domain it governs.")
   "Return runtime source-file paths derived from the library catalog."
   (let ((files
          (append
-          '("scheme/consent/base-prelude.scm"
-            "scheme/consent/base-syntax.scm")
+          '("consent/base-prelude.scm"
+            "consent/base-syntax.scm")
           (delq nil
                 (mapcar
                  (lambda (entry)
@@ -1062,199 +1169,244 @@ core rather than the agent domain it governs.")
             syntax-environment)
            registry))))))
 
-(defun consent--register-emacs-capability-library
-    (key context)
-  "Register an Emacs capability library named by KEY."
-  (consent--register-primitive-library
-   key
-   (consent-emacs-capability-primitive-specs key)
-   context))
+(defun consent--manifest-source-library-file (source-file)
+  "Return absolute path for seed-root-relative manifest SOURCE-FILE."
+  (expand-file-name source-file consent-library-seed-directory))
 
-(defun consent--register-agent-library
-    (key context environment)
-  "Register Agent interaction library KEY in CONTEXT."
-  (pcase key
-    ("(agent io)"
-     (consent--register-primitive-library
-      key
-      (consent-agent-io-primitive-specs)
-      context))
-    ("(agent approval)"
-     (consent--register-primitive-library
-      key
-      (consent-approval-primitive-specs)
-      context))
-    ("(agent debugger)"
-     (consent--register-primitive-library
-      key
-      (consent-debugger-primitive-specs)
-      context))
-    ("(agent helper)"
-     (consent--register-primitive-library
-      key
-      (consent-helper-primitive-specs)
-      context))
-    ("(agent job)"
-     (consent--register-primitive-library
-      key
-      (consent-job-primitive-specs)
-      context))
-    ("(agent test)"
-     (unless (gethash key (consent--eval-context-libraries context))
-       (consent--register-source-library
-        (consent--agent-source-library-source key) context environment)))
-    ("(agent diagnostics)"
-     (unless (gethash key (consent--eval-context-libraries context))
-       (consent--register-source-library
-        (consent--agent-source-library-source key) context environment)))
-    ("(agent diff)"
-     (unless (gethash key (consent--eval-context-libraries context))
-       (consent--register-source-library
-        (consent--agent-source-library-source key) context environment)))
-    ("(agent vcs)"
-     (unless (gethash key (consent--eval-context-libraries context))
-       (consent--register-source-library
-        (consent--agent-source-library-source key) context environment)))
-    ("(agent network)"
-     (unless (gethash key (consent--eval-context-libraries context))
-       (consent--register-source-library
-        (consent--agent-source-library-source key) context environment)))
-    ("(agent registry)"
-     (unless (gethash key (consent--eval-context-libraries context))
-       (consent--register-source-library
-        (consent--agent-source-library-source key) context environment)))
-    ("(agent proposal)"
-     (unless (gethash key (consent--eval-context-libraries context))
-       (consent--register-source-library
-        (consent--agent-source-library-source key) context environment)))
-    ("(agent runner)"
-     (unless (gethash key (consent--eval-context-libraries context))
-       (consent--register-source-library
-        (consent--agent-source-library-source key) context environment)))
-    ("(agent reliability)"
-     (unless (gethash key (consent--eval-context-libraries context))
-       (consent--register-source-library
-        (consent--agent-source-library-source key) context environment)))
-    ("(agent prompt)"
-     (unless (gethash key (consent--eval-context-libraries context))
-       (consent--register-source-library
-        (consent--agent-source-library-source key) context environment)))
-    ("(agent generated-source)"
-     (unless (gethash key (consent--eval-context-libraries context))
-       (consent--register-source-library
-        (consent--agent-source-library-source key) context environment)))
-    ("(agent task)"
-     (unless (gethash key (consent--eval-context-libraries context))
-       (consent--register-source-library
-        (consent--agent-source-library-source key) context environment)))
-    ("(agent test primitive)"
-     (consent--register-primitive-library
-      key
-      (consent-test-primitive-specs)
-      context))
-    ("(agent memory)"
-     (unless (gethash key (consent--eval-context-libraries context))
-       (consent--register-source-library
-        (consent--agent-source-library-source key) context environment)
-       (consent--register-library-primitive-bindings
+(defun consent--manifest-source-library-source (source-file key)
+  "Return source text for seed-root-relative SOURCE-FILE owned by KEY."
+  (let ((path (consent--manifest-source-library-file source-file)))
+    (unless (file-readable-p path)
+      (consent--eval-error
+       "manifest source library file is not readable for %s: %s"
+       key path))
+    (with-temp-buffer
+      (insert-file-contents path)
+      (buffer-string))))
+
+(defun consent--register-manifest-source-library
+    (entry context environment)
+  "Register the source library described by manifest ENTRY."
+  (let ((key (plist-get entry :name))
+        (source-file (plist-get entry :source-file))
+        (exports (plist-get entry :exports))
+        (overlay-library (plist-get entry :primitive-overlay-library)))
+    (unless source-file
+      (consent--eval-error
+       "manifest source library has no source-file: %s"
+       key))
+    (unless (gethash key (consent--eval-context-libraries context))
+      (consent--register-source-library
+       (consent--manifest-source-library-source source-file key)
+       context
+       environment)
+      (when overlay-library
+        (let ((overlay-entry
+               (consent--library-collection-manifest-entry overlay-library)))
+          (unless overlay-entry
+            (consent--eval-error
+             "manifest primitive overlay library is not declared: %s"
+             overlay-library))
+         (consent--register-library-primitive-bindings
+          key
+          (consent--manifest-exported-primitive-specs overlay-entry)
+          context)))
+      (when exports
+        (let ((library (gethash key (consent--eval-context-libraries context))))
+          (unless library
+            (consent--eval-error
+             "manifest source library registered a different name: %s"
+             key))
+          (setf (consent--library-exports library)
+                (consent--filter-library-exports
+                 (consent--library-exports library)
+                 exports
+                 key)))))))
+
+(defun consent--manifest-primitive-implementation-specs (entry)
+  "Return primitive specs for manifest primitive implementation ENTRY."
+  (let ((implementation-id (plist-get entry :implementation-id)))
+    (pcase implementation-id
+      ('scheme-char
+       `(("char-alphabetic?" ,#'consent--primitive-char-alphabetic? 1 1)
+         ("char-ci<=?" ,#'consent--primitive-char-ci<=? 2 nil)
+         ("char-ci<?" ,#'consent--primitive-char-ci<? 2 nil)
+         ("char-ci=?" ,#'consent--primitive-char-ci=? 2 nil)
+         ("char-ci>=?" ,#'consent--primitive-char-ci>=? 2 nil)
+         ("char-ci>?" ,#'consent--primitive-char-ci>? 2 nil)
+         ("char-downcase" ,#'consent--primitive-char-downcase 1 1)
+         ("char-foldcase" ,#'consent--primitive-char-foldcase 1 1)
+         ("char-lower-case?" ,#'consent--primitive-char-lower-case? 1 1)
+         ("char-numeric?" ,#'consent--primitive-char-numeric? 1 1)
+         ("char-upcase" ,#'consent--primitive-char-upcase 1 1)
+         ("char-upper-case?" ,#'consent--primitive-char-upper-case? 1 1)
+         ("char-whitespace?" ,#'consent--primitive-char-whitespace? 1 1)
+         ("digit-value" ,#'consent--primitive-digit-value 1 1)
+         ("string-ci<=?" ,#'consent--primitive-string-ci<=? 2 nil)
+         ("string-ci<?" ,#'consent--primitive-string-ci<? 2 nil)
+         ("string-ci=?" ,#'consent--primitive-string-ci=? 2 nil)
+         ("string-ci>=?" ,#'consent--primitive-string-ci>=? 2 nil)
+         ("string-ci>?" ,#'consent--primitive-string-ci>? 2 nil)
+         ("string-downcase" ,#'consent--primitive-string-downcase 1 1)
+         ("string-foldcase" ,#'consent--primitive-string-foldcase 1 1)
+         ("string-upcase" ,#'consent--primitive-string-upcase 1 1)))
+      ('scheme-complex
+       `(("angle" ,#'consent--primitive-angle 1 1)
+         ("imag-part" ,#'consent--primitive-imag-part 1 1)
+         ("magnitude" ,#'consent--primitive-magnitude 1 1)
+         ("make-polar" ,#'consent--primitive-make-polar 2 2)
+         ("make-rectangular" ,#'consent--primitive-make-rectangular 2 2)
+         ("real-part" ,#'consent--primitive-real-part 1 1)))
+      ('scheme-cxr (consent--cxr-primitive-specs entry))
+      ('scheme-eval
+       `(("environment" ,#'consent--primitive-environment 1 nil)
+         ("eval" ,#'consent--primitive-eval 2 2)))
+      ('scheme-file
+       `(("call-with-input-file" ,#'consent--primitive-call-with-input-file
+          2 2)
+         ("call-with-output-file" ,#'consent--primitive-call-with-output-file
+          2 2)
+         ("delete-file" ,#'consent--primitive-delete-file 1 1)
+         ("file-exists?" ,#'consent--primitive-file-exists? 1 1)
+         ("open-binary-input-file" ,#'consent--primitive-open-binary-input-file
+          1 1)
+         ("open-binary-output-file" ,#'consent--primitive-open-binary-output-file
+          1 1)
+         ("open-input-file" ,#'consent--primitive-open-input-file 1 1)
+         ("open-output-file" ,#'consent--primitive-open-output-file 1 1)
+         ("with-input-from-file" ,#'consent--primitive-with-input-from-file
+          2 2)
+         ("with-output-to-file" ,#'consent--primitive-with-output-to-file
+          2 2)))
+      ('scheme-inexact
+       `(("acos" ,#'consent--primitive-acos 1 1)
+         ("asin" ,#'consent--primitive-asin 1 1)
+         ("atan" ,#'consent--primitive-atan 1 2)
+         ("cos" ,#'consent--primitive-cos 1 1)
+         ("exp" ,#'consent--primitive-exp 1 1)
+         ("finite?" ,#'consent--primitive-finite? 1 1)
+         ("infinite?" ,#'consent--primitive-infinite? 1 1)
+         ("log" ,#'consent--primitive-log 1 2)
+         ("nan?" ,#'consent--primitive-nan? 1 1)
+         ("sin" ,#'consent--primitive-sin 1 1)
+         ("sqrt" ,#'consent--primitive-sqrt 1 1)
+         ("tan" ,#'consent--primitive-tan 1 1)))
+      ('scheme-load
+       `(("load" ,#'consent--primitive-load 1 2)))
+      ('scheme-process-context
+       (append
+        `(("command-line" ,#'consent--primitive-command-line 0 0))
+        (mapcar #'consent--policy-denied-spec
+                '("emergency-exit" "exit"))
+        `(("get-environment-variable"
+           ,#'consent--primitive-get-environment-variable 1 1)
+          ("get-environment-variables"
+           ,#'consent--primitive-get-environment-variables 0 0))))
+      ('scheme-read
+       `(("read" ,#'consent--primitive-read 0 1)))
+      ('scheme-repl
+       `(("interaction-environment"
+          ,#'consent--primitive-interaction-environment 0 0)))
+      ('scheme-time
+       `(("current-jiffy" ,#'consent--primitive-current-jiffy 0 0)
+         ("current-second" ,#'consent--primitive-current-second 0 0)
+         ("jiffies-per-second"
+          ,#'consent--primitive-jiffies-per-second 0 0)))
+      ('scheme-write
+       `(("display" ,#'consent--primitive-display 1 2)
+         ("write" ,#'consent--primitive-write 1 2)
+         ("write-shared" ,#'consent--primitive-write-shared 1 2)
+         ("write-simple" ,#'consent--primitive-write-simple 1 2)))
+      ('agent-io (consent-agent-io-primitive-specs))
+      ('agent-approval (consent-approval-primitive-specs))
+      ('agent-debugger (consent-debugger-primitive-specs))
+      ('agent-helper (consent-helper-primitive-specs))
+      ('agent-job (consent-job-primitive-specs))
+      ('agent-test (consent-test-primitive-specs))
+      ('agent-memory (consent--memory-adapter-primitive-specs))
+      ('agent-plan (consent-plan-primitive-specs))
+      ('agent-models (consent-models-primitive-specs))
+      ('agent-context (consent-context-primitive-specs))
+      ('agent-reflect (consent-reflect-primitive-specs))
+      ('agent-redaction (consent-redaction-primitive-specs))
+      ('agent-session (consent--session-adapter-primitive-specs))
+      ('consent-capability (consent-capability-primitive-specs))
+      ('cli-process-host (consent--cli-process-host-primitive-specs))
+      ('emacs-capability
+       (consent-emacs-capability-primitive-specs
+        (plist-get entry :name)))
+      (_
+       (consent--eval-error
+        "manifest primitive library has no implementation id: %s"
+        (plist-get entry :name))))))
+
+(defun consent--manifest-filter-primitive-specs (entry primitive-specs)
+  "Return PRIMITIVE-SPECS reduced to manifest ENTRY exports."
+  (let ((exports (plist-get entry :exports)))
+    (if exports
+        (seq-filter
+         (lambda (spec)
+           (member (car spec) exports))
+         primitive-specs)
+      primitive-specs)))
+
+(defun consent--manifest-exported-primitive-specs (entry)
+  "Return primitive specs for ENTRY after applying manifest exports."
+  (consent--manifest-filter-primitive-specs
+   entry
+   (consent--manifest-primitive-implementation-specs entry)))
+
+(defun consent--manifest-implementation-routable-p (entry)
+  "Return non-nil when manifest ENTRY has an implementation route."
+  (pcase (plist-get entry :source-kind)
+    ('primitive
+     (condition-case nil
+         (progn
+           (consent--manifest-primitive-implementation-specs entry)
+           t)
+       (consent-eval-error nil)))
+    ('derived
+     (eq (plist-get entry :implementation-id) 'scheme-r5rs))
+    (_ nil)))
+
+(defun consent--register-manifest-implementation-library
+    (entry context environment)
+  "Register primitive or derived library described by manifest ENTRY."
+  (let ((key (plist-get entry :name))
+        (implementation-id (plist-get entry :implementation-id)))
+    (pcase (plist-get entry :source-kind)
+      ('primitive
+       (consent--register-primitive-library
         key
-        (consent--memory-adapter-primitive-specs)
-        context)))
-    ("(agent memory primitive)"
-     (consent--register-primitive-library
-      key
-      (consent--memory-adapter-primitive-specs)
-      context))
-    ("(agent plan)"
-     (consent--register-primitive-library
-      key
-      (consent-plan-primitive-specs)
-      context))
-    ("(agent models)"
-     (unless (gethash key (consent--eval-context-libraries context))
-       (consent--register-source-library
-        (consent--agent-source-library-source key) context environment)))
-    ("(agent models primitive)"
-     (consent--register-primitive-library
-      key
-      (consent-models-primitive-specs)
-      context))
-    ("(agent context)"
-     (consent--register-primitive-library
-      key
-      (consent-context-primitive-specs)
-      context))
-    ("(agent reflect)"
-     (consent--register-primitive-library
-      key
-      (consent-reflect-primitive-specs)
-      context))
-    ("(agent redaction)"
-     (consent--register-primitive-library
-      key
-      (consent-redaction-primitive-specs)
-      context))
-    ("(agent session)"
-     (unless (gethash key (consent--eval-context-libraries context))
-       (consent--register-source-library
-        (consent--agent-source-library-source key) context environment)
-       (consent--register-library-primitive-bindings
-        key
-        (consent--session-adapter-primitive-specs)
-        context)))
-    ("(agent session primitive)"
-     (consent--register-primitive-library
-      key
-      (consent--session-adapter-primitive-specs)
-      context))
-    ("(agent transcript)"
-     (consent--register-source-library
-      (consent--agent-source-library-source key)
-      context
-      environment))
-    (_
-     (consent--eval-error "unknown agent library: %s" key))))
+        (consent--manifest-exported-primitive-specs entry)
+        context))
+      ('derived
+       (pcase implementation-id
+         ('scheme-r5rs
+          (consent--register-r5rs-library key context environment))
+         (_
+          (consent--eval-error
+           "manifest derived library has no implementation id: %s"
+           key))))
+      (_
+       (consent--eval-error
+        "manifest library is not primitive or derived: %s"
+        key)))))
 
-(defun consent--register-consent-library
-    (key context environment)
-  "Register consent core library KEY in CONTEXT."
-  (pcase key
-    ("(consent capability)"
-     (unless (gethash key (consent--eval-context-libraries context))
-       (consent--register-source-library
-        (consent--agent-source-library-source key) context environment)))
-    ("(consent capability primitive)"
-     (consent--register-primitive-library
-      key
-      (consent-capability-primitive-specs)
-      context))
-    (_
-     (consent--eval-error "unknown consent library: %s" key))))
-
-(defun consent--register-cli-library (key context)
-  "Register CLI host-effect library KEY in CONTEXT."
-  (pcase key
-    ("(cli process-host primitive)"
-     (consent--register-primitive-library
-      key
-      (consent--cli-process-host-primitive-specs)
-      context))
-    (_
-     (consent--eval-error "unknown cli library: %s" key))))
-
-(defun consent--register-source-backed-library
-    (key context environment)
-  "Register source-backed library KEY in CONTEXT."
-  (unless (gethash key (consent--eval-context-libraries context))
-    (consent--register-source-library
-     (consent--agent-source-library-source key)
-     context
-     environment)))
+(defun consent--manifest-library-routable-p (entry)
+  "Return non-nil when manifest ENTRY describes an import route."
+  (and entry
+       (or (plist-get entry :target)
+           (plist-get entry :source-file)
+           (memq (plist-get entry :source-kind)
+                 '(base-snapshot))
+           (consent--manifest-implementation-routable-p entry))))
 
 (defun consent--register-source-library
     (source context environment)
   "Evaluate one define-library SOURCE into CONTEXT."
   (let ((max-lisp-eval-depth (max max-lisp-eval-depth 4096))
+        (consent--source-library-internal-imports-allowed t)
         (forms (consent-read-all source)))
     (unless (= (length forms) 1)
       (consent--eval-error
@@ -1384,21 +1536,12 @@ Each spec has (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY)."
                   (consent--primitive-cdr (list value) nil))))
         value))))
 
-(defconst consent--cxr-library-names
-  '("caaar" "caadr" "cadar" "caddr"
-    "cdaar" "cdadr" "cddar" "cdddr"
-    "caaaar" "caaadr" "caadar" "caaddr"
-    "cadaar" "cadadr" "caddar" "cadddr"
-    "cdaaar" "cdaadr" "cdadar" "cdaddr"
-    "cddaar" "cddadr" "cdddar" "cddddr")
-  "R7RS `(scheme cxr)' three- and four-level accessors.")
-
-(defun consent--cxr-primitive-specs ()
-  "Return primitive specs for `(scheme cxr)'."
+(defun consent--cxr-primitive-specs (entry)
+  "Return primitive specs for manifest CXR library ENTRY."
   (mapcar
    (lambda (name)
      (list name (consent--cxr-primitive name) 1 1))
-   consent--cxr-library-names))
+   (plist-get entry :exports)))
 
 (defun consent--policy-denied-spec (name)
   "Return a primitive spec for default-denied host effect NAME."
@@ -1438,170 +1581,6 @@ Each spec has (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY)."
           (consent--library-value-environment base-library)
           (consent--library-syntax-environment base-library))
          registry)))))
-
-(defun consent--register-standard-library
-    (key context environment)
-  "Register focused standard library KEY in CONTEXT."
-  (pcase key
-    ("(scheme case-lambda)"
-     (consent--register-source-library
-      (consent--standard-source-library-source key) context environment))
-    ("(scheme char)"
-     (consent--register-primitive-library
-      key
-      `(("char-alphabetic?" ,#'consent--primitive-char-alphabetic? 1 1)
-        ("char-ci<=?" ,#'consent--primitive-char-ci<=? 2 nil)
-        ("char-ci<?" ,#'consent--primitive-char-ci<? 2 nil)
-        ("char-ci=?" ,#'consent--primitive-char-ci=? 2 nil)
-        ("char-ci>=?" ,#'consent--primitive-char-ci>=? 2 nil)
-        ("char-ci>?" ,#'consent--primitive-char-ci>? 2 nil)
-        ("char-downcase" ,#'consent--primitive-char-downcase 1 1)
-        ("char-foldcase" ,#'consent--primitive-char-foldcase 1 1)
-        ("char-lower-case?" ,#'consent--primitive-char-lower-case? 1 1)
-        ("char-numeric?" ,#'consent--primitive-char-numeric? 1 1)
-        ("char-upcase" ,#'consent--primitive-char-upcase 1 1)
-        ("char-upper-case?" ,#'consent--primitive-char-upper-case? 1 1)
-        ("char-whitespace?" ,#'consent--primitive-char-whitespace? 1 1)
-        ("digit-value" ,#'consent--primitive-digit-value 1 1)
-        ("string-ci<=?" ,#'consent--primitive-string-ci<=? 2 nil)
-        ("string-ci<?" ,#'consent--primitive-string-ci<? 2 nil)
-        ("string-ci=?" ,#'consent--primitive-string-ci=? 2 nil)
-        ("string-ci>=?" ,#'consent--primitive-string-ci>=? 2 nil)
-        ("string-ci>?" ,#'consent--primitive-string-ci>? 2 nil)
-        ("string-downcase" ,#'consent--primitive-string-downcase 1 1)
-        ("string-foldcase" ,#'consent--primitive-string-foldcase 1 1)
-        ("string-upcase" ,#'consent--primitive-string-upcase 1 1))
-      context))
-    ("(scheme complex)"
-     (consent--register-primitive-library
-      key
-      `(("angle" ,#'consent--primitive-angle 1 1)
-        ("imag-part" ,#'consent--primitive-imag-part 1 1)
-        ("magnitude" ,#'consent--primitive-magnitude 1 1)
-        ("make-polar" ,#'consent--primitive-make-polar 2 2)
-        ("make-rectangular" ,#'consent--primitive-make-rectangular 2 2)
-        ("real-part" ,#'consent--primitive-real-part 1 1))
-      context))
-    ("(scheme cxr)"
-     (consent--register-primitive-library
-      key
-      (consent--cxr-primitive-specs)
-      context))
-    ("(scheme eval)"
-     (consent--register-primitive-library
-      key
-      `(("environment" ,#'consent--primitive-environment 1 nil)
-        ("eval" ,#'consent--primitive-eval 2 2))
-      context))
-    ("(scheme file)"
-     (consent--register-primitive-library
-      key
-      `(("call-with-input-file" ,#'consent--primitive-call-with-input-file
-         2 2)
-        ("call-with-output-file" ,#'consent--primitive-call-with-output-file
-         2 2)
-        ("delete-file" ,#'consent--primitive-delete-file 1 1)
-        ("file-exists?" ,#'consent--primitive-file-exists? 1 1)
-        ("open-binary-input-file" ,#'consent--primitive-open-binary-input-file
-         1 1)
-        ("open-binary-output-file" ,#'consent--primitive-open-binary-output-file
-         1 1)
-        ("open-input-file" ,#'consent--primitive-open-input-file 1 1)
-        ("open-output-file" ,#'consent--primitive-open-output-file 1 1)
-        ("with-input-from-file" ,#'consent--primitive-with-input-from-file
-         2 2)
-        ("with-output-to-file" ,#'consent--primitive-with-output-to-file
-         2 2))
-      context))
-    ("(scheme inexact)"
-     (consent--register-primitive-library
-      key
-      `(("acos" ,#'consent--primitive-acos 1 1)
-        ("asin" ,#'consent--primitive-asin 1 1)
-        ("atan" ,#'consent--primitive-atan 1 2)
-        ("cos" ,#'consent--primitive-cos 1 1)
-        ("exp" ,#'consent--primitive-exp 1 1)
-        ("finite?" ,#'consent--primitive-finite? 1 1)
-        ("infinite?" ,#'consent--primitive-infinite? 1 1)
-        ("log" ,#'consent--primitive-log 1 2)
-        ("nan?" ,#'consent--primitive-nan? 1 1)
-        ("sin" ,#'consent--primitive-sin 1 1)
-        ("sqrt" ,#'consent--primitive-sqrt 1 1)
-        ("tan" ,#'consent--primitive-tan 1 1))
-      context))
-    ("(scheme lazy)"
-     (consent--register-source-library
-      (consent--standard-source-library-source key) context environment))
-    ("(scheme load)"
-     (consent--register-primitive-library
-      key
-      `(("load" ,#'consent--primitive-load 1 2))
-      context))
-    ("(scheme process-context)"
-     (consent--register-primitive-library
-	      key
-	      (append
-	       `(("command-line" ,#'consent--primitive-command-line 0 0))
-	       (mapcar #'consent--policy-denied-spec
-	               '("emergency-exit"
-	                 "exit"))
-       ;; Environment reads are real, policy-gated primitives: denied unless the
-       ;; context carries an active process-environment capability grant.
-       `(("get-environment-variable"
-          ,#'consent--primitive-get-environment-variable 1 1)
-         ("get-environment-variables"
-          ,#'consent--primitive-get-environment-variables 0 0)))
-      context))
-    ("(scheme read)"
-     (consent--register-primitive-library
-      key
-      `(("read" ,#'consent--primitive-read 0 1))
-      context))
-    ("(scheme repl)"
-     (consent--register-primitive-library
-      key
-      `(("interaction-environment"
-         ,#'consent--primitive-interaction-environment 0 0))
-      context))
-    ("(scheme r5rs)"
-     (consent--register-r5rs-library key context environment))
-    ("(scheme time)"
-     (consent--register-primitive-library
-      key
-      `(("current-jiffy" ,#'consent--primitive-current-jiffy 0 0)
-        ("current-second" ,#'consent--primitive-current-second 0 0)
-        ("jiffies-per-second"
-         ,#'consent--primitive-jiffies-per-second 0 0))
-      context))
-    ("(scheme write)"
-     (consent--register-primitive-library
-      key
-      `(("display" ,#'consent--primitive-display 1 2)
-        ("write" ,#'consent--primitive-write 1 2)
-        ("write-shared" ,#'consent--primitive-write-shared 1 2)
-        ("write-simple" ,#'consent--primitive-write-simple 1 2))
-      context))
-    (_
-     (consent--eval-error "unknown standard library: %s" key))))
-
-(defun consent--register-stdlib-library (key context environment)
-  "Register optional stdlib library KEY in CONTEXT."
-  (let ((alias-spec
-         (consent--library-alias-spec key consent--stdlib-library-aliases)))
-    (cond
-     (alias-spec
-      (consent--register-library-alias alias-spec context environment))
-     ((assoc key consent--stdlib-source-library-files)
-      (unless (gethash key (consent--eval-context-libraries context))
-        (consent--register-source-library
-         (consent--stdlib-source-library-source key)
-         context
-         environment)))
-     ((member key consent--stdlib-library-keys)
-      (consent--eval-error
-       "stdlib library has no registration strategy: %s" key))
-     (t
-      (consent--eval-error "unknown stdlib library: %s" key)))))
 
 (defun consent--filter-library-exports (exports export-names key)
   "Return EXPORTS narrowed to EXPORT-NAMES for alias library KEY."
@@ -1645,57 +1624,63 @@ Each spec has (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY)."
         (consent--library-syntax-environment target-library))
        (consent--eval-context-libraries context))))))
 
-(defun consent--library-alias-spec (key aliases)
-  "Return KEY's alias spec from ALIASES, or nil when KEY is not an alias."
-  (cl-find key aliases
-           :key (lambda (alias)
-                  (consent--library-alias-field alias :alias))
-           :test #'equal))
+(defun consent--manifest-library-alias-spec (entry)
+  "Return alias registration metadata for manifest ENTRY."
+  (let ((key (plist-get entry :name))
+        (target (plist-get entry :target))
+        (exports (plist-get entry :exports)))
+    (unless target
+      (consent--eval-error "manifest alias has no target: %s" key))
+    (delq nil
+          (list (cons :alias key)
+                (cons :target target)
+                (and exports (cons :exports exports))))))
 
 (defun consent--library-available-p (name context _environment)
   "Return non-nil if NAME can be imported."
-  (let ((key (consent--library-name-key name)))
-    (cond
-     ((equal key consent--scheme-base-library-key)
-      t)
-     ((member key consent--standard-library-keys)
-      t)
-     ((member key consent--stdlib-library-keys)
-      t)
-     ((member key consent--agent-library-keys)
-      t)
-     ((member key consent--cli-library-keys)
-      t)
-     ((member key consent--consent-library-keys)
-      t)
-     ((member key (consent-emacs-capability-library-keys))
-      t)
-     ((assoc key consent--agent-source-library-files)
-      t)
-     (t
-      (and (gethash key (consent--eval-context-libraries context))
-           t)))))
+  (let* ((key (consent--library-name-key name))
+         (entry (consent--library-collection-manifest-entry key)))
+    (and
+     (or (not (consent--library-visibility-internal-p
+               (consent--library-visibility key)))
+         (consent--library-internal-import-allowed-p context))
+     (or (not entry)
+         (consent--library-entry-available-p entry))
+     (or (consent--manifest-library-routable-p entry)
+         (and (gethash key (consent--eval-context-libraries context))
+              t)))))
 
 (defun consent--resolve-library (name context environment)
   "Return library NAME from CONTEXT, registering builtins when needed."
-  (let ((key (consent--library-name-key name)))
-    (cond
-     ((equal key consent--scheme-base-library-key)
-      (consent--register-scheme-base-library context environment))
-     ((member key consent--standard-library-keys)
-      (consent--register-standard-library key context environment))
-     ((member key consent--stdlib-library-keys)
-      (consent--register-stdlib-library key context environment))
-     ((member key consent--agent-library-keys)
-      (consent--register-agent-library key context environment))
-     ((member key consent--cli-library-keys)
-      (consent--register-cli-library key context))
-     ((member key consent--consent-library-keys)
-      (consent--register-consent-library key context environment))
-     ((member key (consent-emacs-capability-library-keys))
-      (consent--register-emacs-capability-library key context))
-     ((assoc key consent--agent-source-library-files)
-      (consent--register-source-backed-library key context environment)))
+  (let* ((key (consent--library-name-key name))
+         (entry (consent--library-collection-manifest-entry key)))
+    (consent--ensure-library-import-allowed key context)
+    (when (and entry (not (consent--library-entry-available-p entry)))
+      (consent--eval-error
+       "optional library is unavailable on this host: %s"
+       key))
+    (unless (gethash key (consent--eval-context-libraries context))
+      (cond
+       ((null entry)
+        nil)
+       ((plist-get entry :target)
+        (consent--register-library-alias
+         (consent--manifest-library-alias-spec entry)
+         context
+         environment))
+       ((eq (plist-get entry :source-kind) 'base-snapshot)
+        (consent--register-scheme-base-library context environment))
+       ((plist-get entry :source-file)
+        (consent--register-manifest-source-library entry context environment))
+       ((memq (plist-get entry :source-kind) '(primitive derived))
+        (consent--register-manifest-implementation-library
+         entry
+         context
+         environment))
+       (t
+        (consent--eval-error
+         "library has no manifest registration strategy: %s"
+         key))))
     (or (gethash key (consent--eval-context-libraries context))
         (consent--eval-error "unknown library: %s" key))))
 

@@ -120,312 +120,22 @@
             minimum
             maximum))
 
-    ;; Bootstrap libraries are registered lazily into the current context.  The
-    ;; required base library snapshots the active base environment; smaller
-    ;; standard libraries are subsets, primitive wrappers, or source libraries.
-    (define empty-emacs-capability-library-keys
-      '((emacs buffer)
-        (emacs buffer edit)
-        (emacs command)
-        (emacs diff)
-        (emacs frame)
-        (emacs network)
-        (emacs process)
-        (emacs project)
-        (emacs vcs)
-        (emacs vcs mutation)
-        (emacs window)))
-
-    ;; Standard library keys recognized by the portable library registry.
-    (define standard-library-keys
-      '((scheme case-lambda)
-        (scheme char)
-        (scheme complex)
-        (scheme cxr)
-        (scheme eval)
-        (scheme file)
-        (scheme inexact)
-        (scheme lazy)
-        (scheme load)
-        (scheme process-context)
-        (scheme read)
-        (scheme repl)
-        (scheme r5rs)
-        (scheme time)
-        (scheme write)))
-
-    ;; stdlib library keys recognized by the portable registry.
-    (define stdlib-source-library-keys
-      '((stdlib manifest)
-        (stdlib and-let-star)
-        (stdlib list)
-        (stdlib generator)
-        (stdlib comparator)
-        (stdlib rbtree)
-        (stdlib mapping)
-        (stdlib receive)
-        (stdlib assume)
-        (stdlib json)))
-
-    ;; Registry aliases can expose a target library directly or as a subset.
-    (define stdlib-library-aliases
-      '(((alias . (srfi manifest))
-         (target . (stdlib manifest)))
-        ((alias . (srfi 16))
-         (target . (scheme case-lambda)))
-        ((alias . (srfi srfi-16))
-         (target . (scheme case-lambda)))
-        ((alias . (srfi 2))
-         (target . (stdlib and-let-star)))
-        ((alias . (srfi srfi-2))
-         (target . (stdlib and-let-star)))
-        ((alias . (scheme list))
-         (target . (stdlib list)))
-        ((alias . (srfi 1))
-         (target . (stdlib list)))
-        ((alias . (srfi srfi-1))
-         (target . (stdlib list)))
-        ((alias . (scheme generator))
-         (target . (stdlib generator)))
-        ((alias . (srfi 158))
-         (target . (stdlib generator)))
-        ((alias . (srfi srfi-158))
-         (target . (stdlib generator)))
-        ((alias . (srfi 8))
-         (target . (stdlib receive)))
-        ((alias . (srfi srfi-8))
-         (target . (stdlib receive)))
-        ((alias . (srfi 145))
-         (target . (stdlib assume)))
-        ((alias . (srfi srfi-145))
-         (target . (stdlib assume)))
-        ((alias . (consent json))
-         (target . (stdlib json)))
-        ((alias . (srfi 180))
-         (target . (stdlib json)))
-        ((alias . (srfi srfi-180))
-         (target . (stdlib json)))
-        ((alias . (scheme comparator))
-         (target . (stdlib comparator)))
-        ((alias . (srfi 128))
-         (target . (stdlib comparator)))
-        ((alias . (srfi srfi-128))
-         (target . (stdlib comparator)))
-        ((alias . (scheme mapping))
-         (target . (stdlib mapping)))
-        ((alias . (srfi 146))
-         (target . (stdlib mapping)))
-        ((alias . (srfi srfi-146))
-         (target . (stdlib mapping)))
-        ((alias . (stdlib json read))
-         (target . (stdlib json))
-         (exports json-number-of-character-limit
-                  json-nesting-depth-limit
-                  json-null?
-                  json-error?
-                  json-error-reason
-                  json-fold
-                  json-generator
-                  json-read
-                  json-lines-read
-                  json-sequence-read))
-        ((alias . (consent json read))
-         (target . (stdlib json))
-         (exports json-number-of-character-limit
-                  json-nesting-depth-limit
-                  json-null?
-                  json-error?
-                  json-error-reason
-                  json-fold
-                  json-generator
-                  json-read
-                  json-lines-read
-                  json-sequence-read))))
-
     ;; Alias specs are alists so new optional fields remain backwards-compatible.
     (define (library-alias-field spec field)
       "Return FIELD from alias SPEC, or #f when absent."
       (let ((entry (assq field spec)))
         (if entry (cdr entry) #f)))
 
-    ;; Recognized stdlib names include concrete source libraries and aliases.
-    (define stdlib-library-keys
-      (append stdlib-source-library-keys
-              (map (lambda (alias) (library-alias-field alias 'alias))
-                   stdlib-library-aliases)))
+    ;; Cache selected source path and contents by manifest source-file/key pair.
+    (define manifest-source-library-source-cache '())
 
-    ;; Agent interaction library keys recognized by the portable registry.
-    (define agent-library-keys
-      '((agent io)
-        (agent approval)
-        (agent debugger)
-        (agent helper)
-        (agent job)
-        (agent test)
-        (agent diagnostics)
-        (agent diff)
-        (agent vcs)
-        (agent network)
-        (agent test primitive)
-        (agent task)
-        (agent memory)
-        (agent memory primitive)
-        (agent plan)
-        (agent models)
-        (agent models primitive)
-        (agent context)
-        (agent reflect)
-        (agent redaction)
-        (agent session)
-        (agent registry)
-        (agent proposal)
-        (agent runner)
-        (agent reliability)
-        (agent prompt)
-        (agent generated-source)
-        (agent transcript)))
+    ;; Cache metadata read from repo-owned collection manifests.
+    (define library-collection-manifest-cache #f)
 
-    ;; Consent core library keys recognized by the portable registry.  The
-    ;; capability libraries are first-class consent primitives: a capability is
-    ;; the encoded act of consent, so it belongs in the consent core rather than
-    ;; the agent domain it governs.
-    (define consent-library-keys
-      '((consent capability)
-        (consent capability primitive)))
-
-    ;; Checked-in Consent Scheme source libraries loaded by the portable
-    ;; evaluator when a public agent library needs syntax definitions.
-    (define agent-source-library-load-paths
-      '(((agent diagnostics)
-         "scheme/agent/diagnostics.sld"
-         "agent/diagnostics.sld")
-        ((agent diff)
-         "scheme/agent/diff.sld"
-         "agent/diff.sld")
-        ((agent vcs)
-         "scheme/agent/vcs.sld"
-         "agent/vcs.sld")
-        ((agent network)
-         "scheme/agent/network.sld"
-         "agent/network.sld")
-        ((agent models)
-         "scheme/agent/models.sld"
-         "agent/models.sld")
-        ((agent registry)
-         "scheme/agent/registry.sld"
-         "agent/registry.sld")
-        ((agent proposal)
-         "scheme/agent/proposal.sld"
-         "agent/proposal.sld")
-        ((agent runner)
-         "scheme/agent/runner.sld"
-         "agent/runner.sld")
-        ((agent reliability)
-         "scheme/agent/reliability.sld"
-         "agent/reliability.sld")
-        ((agent prompt)
-         "scheme/agent/prompt.sld"
-         "agent/prompt.sld")
-        ((agent generated-source)
-         "scheme/agent/generated-source.sld"
-         "agent/generated-source.sld")
-        ((agent task)
-         "scheme/agent/task.sld"
-         "agent/task.sld")
-        ((agent memory)
-         "scheme/agent/memory.sld"
-         "agent/memory.sld")
-        ((agent test)
-         "scheme/agent/test.sld"
-         "agent/test.sld")
-        ((agent transcript)
-         "scheme/agent/transcript.sld"
-         "agent/transcript.sld")))
-
-    ;; Agent model libraries used by runtime internals. Ordinary user imports
-    ;; of the same public names resolve to primitive libraries; the source
-    ;; model is exposed only under the internal-libraries host posture.
-    (define agent-internal-source-library-load-paths
-      '(((agent approval)
-         "scheme/agent/approval.sld"
-         "agent/approval.sld")
-        ((agent context)
-         "scheme/agent/context.sld"
-         "agent/context.sld")
-        ((agent helper)
-         "scheme/agent/helper.sld"
-         "agent/helper.sld")
-        ((agent job)
-         "scheme/agent/job.sld"
-         "agent/job.sld")
-        ((agent plan)
-         "scheme/agent/plan.sld"
-         "agent/plan.sld")
-        ((agent redaction)
-         "scheme/agent/redaction.sld"
-         "agent/redaction.sld")
-        ((agent session)
-         "scheme/agent/session.sld"
-         "agent/session.sld")))
-
-    ;; Checked-in consent core source libraries loaded as portable Scheme
-    ;; source files.
-    (define consent-source-library-load-paths
-      '(((consent capability)
-         "scheme/consent/capability.sld"
-         "consent/capability.sld")))
-
-    ;; Checked-in standard libraries loaded as portable Scheme source files.
-    (define standard-source-library-load-paths
-      '(((scheme case-lambda)
-         "scheme/consent/case-lambda.sld"
-         "consent/case-lambda.sld")
-        ((scheme lazy)
-         "scheme/consent/lazy.sld"
-         "consent/lazy.sld")))
-
-    ;; Checked-in optional stdlib libraries loaded as portable
-    ;; Scheme source files.
-    (define stdlib-source-library-load-paths
-      '(((stdlib manifest)
-         "scheme/stdlib/manifest.sld"
-         "stdlib/manifest.sld")
-        ((stdlib and-let-star)
-         "scheme/stdlib/and-let-star.sld"
-         "stdlib/and-let-star.sld")
-        ((stdlib list)
-         "scheme/stdlib/list.sld"
-         "stdlib/list.sld")
-        ((stdlib generator)
-         "scheme/stdlib/generator.sld"
-         "stdlib/generator.sld")
-        ((stdlib comparator)
-         "scheme/stdlib/comparator.sld"
-         "stdlib/comparator.sld")
-        ((stdlib rbtree)
-         "scheme/stdlib/rbtree.sld"
-         "stdlib/rbtree.sld")
-        ((stdlib mapping)
-         "scheme/stdlib/mapping.sld"
-         "stdlib/mapping.sld")
-        ((stdlib receive)
-         "scheme/stdlib/receive.sld"
-         "stdlib/receive.sld")
-        ((stdlib assume)
-         "scheme/stdlib/assume.sld"
-         "stdlib/assume.sld")
-        ((stdlib json)
-         "scheme/stdlib/json.sld"
-         "stdlib/json.sld")))
-
-    ;; Cache selected source path and contents by standard library key.
-    (define standard-source-library-source-cache '())
-
-    ;; Cache selected source path and contents by stdlib library key.
-    (define stdlib-source-library-source-cache '())
-
-    ;; Cache selected source path and contents by Agent library key.
-    (define agent-source-library-source-cache '())
+    ;; Trusted runtime source libraries may import private primitive backing
+    ;; libraries while being loaded without making those libraries ordinary
+    ;; user imports.
+    (define source-library-internal-import-depth 0)
 
     ;; Cache manifest-backed catalog entries after the evaluator backend is live.
     (define library-catalog-cache #f)
@@ -494,34 +204,12 @@
        ((equal? key (caar alist)) (car alist))
        (else (assoc/equal key (cdr alist)))))
 
-    (define (standard-source-library-paths key)
-      "Return the configured path candidates for source-backed standard library KEY."
-      (let ((entry (assoc/equal key standard-source-library-load-paths)))
-        (if entry
-            (cdr entry)
-            (eval-error "standard source library is not available" key))))
-
-    (define (stdlib-source-library-paths key)
-      "Return configured path candidates for source-backed stdlib library KEY."
-      (let ((entry (assoc/equal key stdlib-source-library-load-paths)))
-        (if entry
-            (cdr entry)
-            (eval-error "stdlib source library is not available" key))))
-
     (define (source-library-relative-path paths)
       "Return the canonical datadir/embedded-relative path for a source"
       "library: the last (most-relative) configured candidate."
       (if (null? (cdr paths))
           (car paths)
           (source-library-relative-path (cdr paths))))
-
-    (define (library-catalog-runtime-load-path-entries)
-      "Return load-path entries for every source file in runtime load order."
-      (append standard-source-library-load-paths
-              stdlib-source-library-load-paths
-              agent-internal-source-library-load-paths
-              agent-source-library-load-paths
-              consent-source-library-load-paths))
 
     (define (consent-library-catalog-runtime-source-files)
       "Return runtime source files from the manifest-backed catalog seed."
@@ -534,17 +222,23 @@
       (append
        (list (source-library-relative-path consent-base-prelude-load-paths)
              (source-library-relative-path consent-base-syntax-load-paths))
-       (map (lambda (entry) (source-library-relative-path (cdr entry)))
-            (library-catalog-runtime-load-path-entries))))
+       (let loop ((entries (library-collection-manifest-entries))
+                  (seen '())
+                  (result '()))
+         (cond
+          ((null? entries) (reverse result))
+          ((collection-entry-field (car entries) 'source-file #f)
+           => (lambda (source-file)
+                (if (member source-file seen)
+                    (loop (cdr entries) seen result)
+                    (loop (cdr entries)
+                          (cons source-file seen)
+                          (cons source-file result)))))
+          (else (loop (cdr entries) seen result))))))
 
     (define (consent-runtime-source-files)
       "Return the canonical relative paths of every runtime-provided"
-      "source file the interpreter loads as data: the base prelude and"
-      "syntax prelude, then the standard, agent, and consent"
-      "source-libraries."
-      "This is the single source of truth the host-compiled staging"
-      "extracts its embed and install manifest from, so the build never"
-      "hand-maintains a parallel list."
+      "source file the interpreter loads as data."
       #((parameters)
         (returns (type list)
          (description
@@ -552,89 +246,6 @@
             "loads as data.")))
         (effects pure))
       (consent-library-catalog-runtime-source-files))
-
-    (define (load-standard-source-library-source key)
-      "Read KEY's source through the host/core resolution contract (search"
-      "dirs, source tree, embedded)."
-      (let* ((paths (standard-source-library-paths key))
-             (relative (source-library-relative-path paths))
-             (entry (resolve-source-entry relative paths)))
-        (if entry
-            entry
-            (eval-error "unable to load standard source library" key))))
-
-    (define (standard-source-library-source-entry key)
-      "Return cached source-file/source pair for source-backed standard library KEY."
-      (let ((cached (assoc/equal key standard-source-library-source-cache)))
-        (if cached
-            (cdr cached)
-            (let ((loaded (load-standard-source-library-source key)))
-              (set! standard-source-library-source-cache
-                    (cons (cons key loaded)
-                          standard-source-library-source-cache))
-              loaded))))
-
-    (define (standard-source-library-source key)
-      "Return KEY's portable source text."
-      (cdr (standard-source-library-source-entry key)))
-
-    (define (load-stdlib-source-library-source key)
-      "Read stdlib library KEY's source through the host/core resolution"
-      "contract (search dirs, source tree, embedded)."
-      (let* ((paths (stdlib-source-library-paths key))
-             (relative (source-library-relative-path paths))
-             (entry (resolve-source-entry relative paths)))
-        (if entry
-            entry
-            (eval-error "unable to load stdlib source library" key))))
-
-    (define (stdlib-source-library-source-entry key)
-      "Return cached source-file/source pair for stdlib library KEY."
-      (let ((cached (assoc/equal key stdlib-source-library-source-cache)))
-        (if cached
-            (cdr cached)
-            (let ((loaded (load-stdlib-source-library-source key)))
-              (set! stdlib-source-library-source-cache
-                    (cons (cons key loaded)
-                          stdlib-source-library-source-cache))
-              loaded))))
-
-    (define (stdlib-source-library-source key)
-      "Return KEY's stdlib library source text."
-      (cdr (stdlib-source-library-source-entry key)))
-
-    (define (agent-source-library-paths key)
-      "Return configured source path candidates for agent or consent KEY."
-      (let ((entry (or (assoc/equal key agent-source-library-load-paths)
-                       (assoc/equal key consent-source-library-load-paths))))
-        (if entry
-            (cdr entry)
-            (eval-error "source library is not available" key))))
-
-    (define (load-agent-source-library-source key)
-      "Read Agent library KEY's source through the host/core resolution"
-      "contract (search dirs, source tree, embedded)."
-      (let* ((paths (agent-source-library-paths key))
-             (relative (source-library-relative-path paths))
-             (entry (resolve-source-entry relative paths)))
-        (if entry
-            entry
-            (eval-error "unable to load agent source library" key))))
-
-    (define (agent-source-library-source-entry key)
-      "Return cached source-file/source pair for Agent library KEY."
-      (let ((cached (assoc/equal key agent-source-library-source-cache)))
-        (if cached
-            (cdr cached)
-            (let ((loaded (load-agent-source-library-source key)))
-              (set! agent-source-library-source-cache
-                    (cons (cons key loaded)
-                          agent-source-library-source-cache))
-              loaded))))
-
-    (define (agent-source-library-source key)
-      "Return KEY's Agent library source text."
-      (cdr (agent-source-library-source-entry key)))
 
     (define (source-library-form key source description)
       "Return the single define-library form read from SOURCE for KEY."
@@ -655,14 +266,370 @@
                key))
           form)))
 
-    (define (standard-source-library-form key)
-      "Return the single define-library form read from KEY's source file."
-      (source-library-form
-       key
-       (standard-source-library-source key)
-       "standard source library"))
+    (define (collection-manifest-source-entry relative description)
+      "Return the source entry for a manifest-relative file."
+      (let ((entry
+             (resolve-source-entry
+              relative
+              (list relative))))
+        (if entry
+            entry
+            (eval-error
+             (string-append description " source file is not readable")
+             relative))))
 
-    (define (standard-source-library-export-names form)
+    (define (manifest-quoted-value value variable key)
+      "Return the quoted manifest data stored in VALUE."
+      (let ((parts (proper-list-elements value "quoted manifest")))
+        (if (not (and (= (length parts) 2)
+                      (identifier-named? (car parts) 'quote)))
+            (eval-error "manifest variable must be quoted" (list key variable)))
+        (cadr parts)))
+
+    (define (collection-manifest-define-value form variable key)
+      "Return manifest data from DEFINE FORM for VARIABLE and KEY, or #f."
+      (if (form-named? form 'define)
+          (let ((parts
+                 (proper-list-elements form "collection manifest define")))
+            (if (and (= (length parts) 3)
+                     (identifier-named? (cadr parts) variable))
+                (manifest-quoted-value (car (cddr parts)) variable key)
+                #f))
+          #f))
+
+    (define (manifest-library-quoted-variable source key variable description)
+      "Return quoted VARIABLE from manifest library SOURCE."
+      (let ((forms (consent-read-all source '((source-metadata . #f)))))
+        (if (not (= (length forms) 1))
+            (eval-error
+             (string-append description " must contain exactly one form")
+             key))
+        (let* ((form (car forms))
+               (parts (proper-list-elements form description)))
+          (if (not (and (>= (length parts) 2)
+                        (identifier-named? (car parts) 'define-library)
+                        (equal? (library-name-key (second parts)) key)))
+              (eval-error
+               (string-append description
+                              " library name does not match registry key")
+               key))
+          (let outer ((declarations (cddr parts)))
+            (cond
+             ((null? declarations)
+              (eval-error "manifest variable is not defined"
+                          (list key variable)))
+             ((form-named? (car declarations) 'begin)
+              (let inner ((forms (cdr (proper-list-elements
+                                       (car declarations)
+                                       "collection manifest begin"))))
+                (cond
+                 ((null? forms) (outer (cdr declarations)))
+                 ((collection-manifest-define-value (car forms) variable key)
+                  => (lambda (value) value))
+                 (else (inner (cdr forms))))))
+             ((collection-manifest-define-value
+               (car declarations) variable key)
+              => (lambda (value) value))
+             (else (outer (cdr declarations))))))))
+
+    (define (library-manifest-index-value)
+      "Return the quoted top-level manifest index."
+      (manifest-library-quoted-variable
+       (cdr (collection-manifest-source-entry
+             "manifest/index.sld"
+             "top-level manifest index"))
+       '(manifest index)
+       'manifest-index
+       "top-level manifest index"))
+
+    (define (collection-manifest-field entry field default)
+      "Return FIELD from collection manifest ENTRY, or DEFAULT."
+      (let ((cell (assq field entry)))
+        (if cell (cdr cell) default)))
+
+    (define (collection-manifest-symbol value description)
+      "Return VALUE when it is a symbol."
+      (if (symbol? value)
+          value
+          (eval-error
+           (string-append description " must be a symbol")
+           value)))
+
+    (define (collection-manifest-string value description)
+      "Return VALUE when it is a string."
+      (if (string? value)
+          value
+          (eval-error
+           (string-append description " must be a string")
+           value)))
+
+    (define (collection-manifest-index-entry entry)
+      "Return a collection manifest descriptor parsed from index ENTRY."
+      (let* ((collection
+              (collection-manifest-symbol
+               (collection-manifest-field entry 'collection #f)
+               "manifest index collection"))
+             (key
+              (library-name-key
+               (collection-manifest-field entry 'manifest-library #f)))
+             (variable
+              (collection-manifest-symbol
+               (collection-manifest-field entry 'manifest-variable #f)
+               "manifest index variable"))
+             (manifest-file
+              (collection-manifest-string
+               (collection-manifest-field entry 'manifest-file #f)
+               "manifest index manifest-file"))
+             (source-root
+              (collection-manifest-string
+               (collection-manifest-field entry 'source-root #f)
+               "manifest index source-root"))
+             (category
+              (let ((value (collection-manifest-field entry 'category #f)))
+                (if value
+                    (collection-manifest-symbol
+                     value
+                     "manifest index category")
+                    collection))))
+        (list
+         (list 'collection collection)
+         (list 'key key)
+         (list 'variable variable)
+         (list 'manifest-file manifest-file)
+         (list 'category category)
+         (list 'source-root source-root)
+         (list 'source-id collection))))
+
+    (define (collection-entry-field entry field default)
+      "Return FIELD from collection ENTRY, or DEFAULT."
+      (let ((cell (and entry (assq field entry))))
+        (if cell (cadr cell) default)))
+
+    (define (library-collection-manifest-specs)
+      "Return collection manifest descriptors from the top-level index."
+      (map collection-manifest-index-entry
+           (proper-list-elements
+            (library-manifest-index-value)
+            "top-level manifest index entries")))
+
+    (define (collection-manifest-source spec)
+      "Return source text for collection manifest described by SPEC."
+      (cdr (collection-manifest-source-entry
+            (collection-entry-field spec 'manifest-file #f)
+            "collection manifest")))
+
+    (define (collection-manifest-library-value spec)
+      "Return the quoted manifest data described by SPEC."
+      (manifest-library-quoted-variable
+       (collection-manifest-source spec)
+       (collection-entry-field spec 'key #f)
+       (collection-entry-field spec 'variable #f)
+       "collection manifest library"))
+
+    (define (collection-manifest-source-kind value)
+      "Return VALUE normalized to the catalog source-kind vocabulary."
+      (if (not value)
+          #f
+          (let ((kind
+                 (collection-manifest-symbol
+                  value
+                  "collection manifest source-kind")))
+            (cond
+             ((eq? kind 'source-library) 'portable-source)
+             ((eq? kind 'primitive-library) 'primitive)
+             (else kind)))))
+
+    (define (collection-manifest-library-list value description)
+      "Return VALUE normalized as a list of library keys."
+      (if value
+          (map library-name-key (proper-list-elements value description))
+          '()))
+
+    (define (collection-manifest-target value)
+      "Return VALUE normalized as a library key, or #f."
+      (if value (library-name-key value) #f))
+
+    (define (collection-manifest-default-visibility status)
+      "Return the default visibility implied by STATUS."
+      (if (eq? status 'alias) 'alias 'public))
+
+    (define (collection-manifest-catalog-source-file
+             spec source-kind source-file)
+      "Return seed-root-relative SOURCE-FILE for SPEC, or #f."
+      (if (and source-kind source-file)
+          (string-append (collection-entry-field spec 'source-root "")
+                         source-file)
+          #f))
+
+    (define (manifest-source-library-source-entry source-file key)
+      "Return source entry for seed-root-relative SOURCE-FILE owned by KEY."
+      (let ((cache-key
+             (list source-file
+                   key
+                   (consent-library-search-directory-list))))
+        (let ((cached (assoc/equal cache-key manifest-source-library-source-cache)))
+          (if cached
+              (cdr cached)
+              (let ((entry
+                     (resolve-source-entry
+                      source-file
+                      (list source-file))))
+                (if entry
+                    (begin
+                      (set! manifest-source-library-source-cache
+                            (cons (cons cache-key entry)
+                                  manifest-source-library-source-cache))
+                      entry)
+                    (eval-error "manifest source library file is not readable"
+                                (list key source-file))))))))
+
+    (define (manifest-source-library-source source-file key)
+      "Return source text for repo-relative SOURCE-FILE owned by KEY."
+      (cdr (manifest-source-library-source-entry source-file key)))
+
+    (define (collection-manifest-entry entry spec)
+      "Return catalog metadata parsed from collection manifest ENTRY and SPEC."
+      (let* ((key
+              (library-name-key
+               (collection-manifest-field entry 'library #f)))
+             (status
+              (let ((value (collection-manifest-field
+                            entry 'status #f)))
+                (if value
+                    (collection-manifest-symbol
+                     value
+                     "collection manifest status")
+                    'implemented)))
+             (visibility
+              (let ((value (collection-manifest-field
+                            entry 'visibility #f)))
+                (if value
+                    (collection-manifest-symbol
+                     value
+                     "collection manifest visibility")
+                    (collection-manifest-default-visibility status))))
+             (layer
+              (let ((value (collection-manifest-field entry 'layer #f)))
+                (if value
+                    (collection-manifest-symbol
+                     value
+                     "collection manifest layer")
+                    #f)))
+             (availability
+              (let ((value (collection-manifest-field
+                            entry 'availability #f)))
+                (if value
+                    (collection-manifest-symbol
+                     value
+                     "collection manifest availability")
+                    'required)))
+             (category
+              (let ((value (collection-manifest-field entry 'category #f)))
+                (if value
+                    (collection-manifest-symbol
+                     value
+                     "collection manifest category")
+                    (collection-entry-field spec 'category #f))))
+             (availability-condition
+              (collection-manifest-field
+               entry 'availability-condition #f))
+             (target
+              (collection-manifest-target
+               (collection-manifest-field entry 'target #f)))
+             (source-kind
+              (or (collection-manifest-source-kind
+                   (collection-manifest-field entry 'source-kind #f))
+                  (and target 'alias)))
+             (implementation-id
+              (let ((value (collection-manifest-field
+                            entry 'implementation-id #f)))
+                (if value
+                    (collection-manifest-symbol
+                     value
+                     "collection manifest implementation-id")
+                    #f)))
+             (primitive-overlay-library
+              (collection-manifest-target
+               (collection-manifest-field
+                entry 'primitive-overlay-library #f)))
+             (exports-absent (list 'exports-absent))
+             (source-file
+              (collection-manifest-catalog-source-file
+               spec
+               source-kind
+               (collection-manifest-field entry 'source-file #f)))
+             (dependencies
+              (collection-manifest-library-list
+               (collection-manifest-field entry 'dependencies #f)
+               "collection manifest dependencies"))
+             (aliases
+              (collection-manifest-library-list
+               (collection-manifest-field entry 'aliases #f)
+               "collection manifest aliases"))
+             (exports
+              (let ((value (collection-manifest-field
+                            entry 'exports exports-absent)))
+                (if (eq? value exports-absent)
+                    exports-absent
+                    (library-catalog-require-symbol-list
+                     value
+                     "collection manifest exports"))))
+             (summary
+              (collection-manifest-field entry 'summary #f)))
+        (if (eq? exports exports-absent)
+            (eval-error "built-in manifest entry must declare exports" key))
+        (if (and summary (not (string? summary)))
+            (eval-error "collection manifest summary must be a string or #f"
+                        summary))
+        (list
+         (list 'name key)
+         (list 'category category)
+         (list 'status status)
+         (list 'source-kind source-kind)
+         (list 'implementation-id implementation-id)
+         (list 'primitive-overlay-library primitive-overlay-library)
+         (list 'visibility visibility)
+         (list 'layer layer)
+         (list 'availability availability)
+         (list 'availability-condition availability-condition)
+         (list 'source-file source-file)
+         (list 'aliases aliases)
+         (list 'target target)
+         (list 'exports exports)
+         (list 'dependencies dependencies)
+         (list 'origin 'built-in-seed)
+         (list 'source-id (collection-entry-field spec 'source-id #f))
+         (list 'summary summary))))
+
+    (define (library-collection-manifest-entries)
+      "Return collection-manifest metadata for repo-owned libraries."
+      (if library-collection-manifest-cache
+          library-collection-manifest-cache
+          (let ((entries
+                 (apply
+                  append
+                  (map
+                   (lambda (spec)
+                     (map
+                      (lambda (entry)
+                        (collection-manifest-entry entry spec))
+                      (proper-list-elements
+                       (collection-manifest-library-value spec)
+                       "collection manifest entries")))
+                   (library-collection-manifest-specs)))))
+            (set! library-collection-manifest-cache entries)
+            entries)))
+
+    (define (library-collection-manifest-entry key)
+      "Return collection-manifest metadata for library KEY, or #f."
+      (let loop ((entries (library-collection-manifest-entries)))
+        (cond
+         ((null? entries) #f)
+         ((equal? key (collection-entry-field (car entries) 'name '()))
+          (car entries))
+         (else (loop (cdr entries))))))
+
+    (define (source-library-export-names form)
       "Return external export names declared by source library FORM."
       (apply append
              (map
@@ -673,90 +640,105 @@
                           (cdr
                            (proper-list-elements
                             declaration
-                            "standard source export"))))
+                            "source export"))))
                     '()))
               (cddr
-               (proper-list-elements form "standard source library")))))
+               (proper-list-elements form "source library")))))
 
     (define (library-catalog-keys)
       "Return repo-owned library keys in manifest catalog order."
-      (append (list scheme-base-library-key)
-              standard-library-keys
-              stdlib-library-keys
-              agent-library-keys
-              consent-library-keys
-              empty-emacs-capability-library-keys))
+      (map
+       (lambda (entry)
+         (collection-entry-field entry 'name '()))
+       (library-collection-manifest-entries)))
 
     (define (library-catalog-source-file key)
       "Return public catalog source path for KEY, or #f."
-      (cond
-       ((assoc/equal key standard-source-library-load-paths)
-        (car (standard-source-library-source-entry key)))
-       ((assoc/equal key stdlib-source-library-load-paths)
-        (car (stdlib-source-library-source-entry key)))
-       ((or (assoc/equal key agent-source-library-load-paths)
-            (assoc/equal key consent-source-library-load-paths))
-        (car (agent-source-library-source-entry key)))
-       (else #f)))
+      (collection-entry-field
+       (library-collection-manifest-entry key)
+       'source-file
+       #f))
 
     (define (library-catalog-category key)
       "Return the public catalog category for KEY."
+      (collection-entry-field
+       (library-collection-manifest-entry key)
+       'category
+       'library))
+
+    (define (library-visibility key)
+      "Return KEY's public/internal visibility tier from manifests."
+      (or (collection-entry-field
+           (library-collection-manifest-entry key)
+           'visibility
+           #f)
+          'public))
+
+    (define (library-visibility-internal? visibility)
+      "Report whether VISIBILITY requires internal-library posture."
+      (or (eq? visibility 'internal-runtime)
+          (eq? visibility 'internal-agent-model)))
+
+    (define (library-availability-condition-satisfied? condition)
+      "Report whether manifest availability CONDITION is satisfied."
       (cond
-       ((library-alias-spec key stdlib-library-aliases) 'stdlib)
-       ((eq? (car key) 'scheme) 'standard)
-       ((or (eq? (car key) 'stdlib)
-            (eq? (car key) 'srfi))
-        'stdlib)
-       ((and (eq? (car key) 'consent)
-             (pair? (cdr key))
-             (eq? (second key) 'json))
-        'stdlib)
-       ((eq? (car key) 'agent) 'agent)
-       ((eq? (car key) 'consent) 'consent)
-       ((eq? (car key) 'emacs) 'emacs)
-       (else 'library)))
+       ((not condition) #t)
+       ((and (pair? condition)
+             (eq? (car condition) 'host)
+             (eq? (cadr condition) 'emacs))
+        #f)
+       (else #f)))
+
+    (define (library-entry-available? entry)
+      "Report whether manifest ENTRY is available on this host."
+      (and entry
+           (library-availability-condition-satisfied?
+            (collection-entry-field entry 'availability-condition #f))))
+
+    (define (source-library-internal-imports-allowed?)
+      "Report whether a trusted source library is loading dependencies."
+      (> source-library-internal-import-depth 0))
+
+    (define (library-internal-import-allowed? context)
+      "Report whether CONTEXT may import internal libraries."
+      (or (source-library-internal-imports-allowed?)
+          (context-internal-libraries-allowed? context)))
+
+    (define (ensure-library-import-allowed key context)
+      "Reject KEY when CONTEXT lacks the required internal posture."
+      (if (and (library-visibility-internal? (library-visibility key))
+               (not (library-internal-import-allowed? context)))
+          (eval-error
+           "internal library import requires internal-libraries-allowed"
+           key)))
 
     (define (library-catalog-source-kind key)
       "Return the implementation source kind for KEY."
-      (cond
-       ((library-catalog-source-file key) 'portable-source)
-       ((library-alias-spec key stdlib-library-aliases) 'alias)
-       ((equal? key scheme-base-library-key) 'base-snapshot)
-       ((or (member key standard-library-keys)
-            (member key agent-library-keys)
-            (member key consent-library-keys)
-            (member key empty-emacs-capability-library-keys))
-        'primitive)
-       (else 'manifest)))
+      (collection-entry-field
+       (library-collection-manifest-entry key)
+       'source-kind
+       #f))
 
     (define (library-catalog-source-backed? key)
       "Report whether KEY is backed by a public source library."
-      (or (assoc/equal key standard-source-library-load-paths)
-          (assoc/equal key stdlib-source-library-load-paths)
-          (assoc/equal key agent-source-library-load-paths)
-          (assoc/equal key consent-source-library-load-paths)))
+      (and (library-catalog-source-file key) #t))
 
     (define (library-catalog-source-form key)
       "Return KEY's define-library form when KEY is source-backed."
-      (cond
-       ((assoc/equal key standard-source-library-load-paths)
-        (standard-source-library-form key))
-       ((assoc/equal key stdlib-source-library-load-paths)
-        (source-library-form
-         key
-         (stdlib-source-library-source key)
-         "stdlib source library"))
-       ((or (assoc/equal key agent-source-library-load-paths)
-            (assoc/equal key consent-source-library-load-paths))
-        (source-library-form
-         key
-         (agent-source-library-source key)
-         "agent source library"))
-       (else #f)))
+      (let ((entry (library-collection-manifest-entry key)))
+        (if (collection-entry-field entry 'source-file #f)
+            (source-library-form
+             key
+             (manifest-source-library-source
+              (collection-entry-field entry 'source-file #f)
+              key)
+             "manifest source library")
+            #f)))
 
     (define (library-catalog-private-context)
       "Return a fresh context/environment pair for catalog export discovery."
-      (let ((context (new-eval-context '()))
+      (let ((context (new-eval-context
+                      '((internal-libraries-allowed . #t))))
             (environment (consent-make-base-environment)))
         (set-context-interaction-environment! context environment)
         (ensure-base-syntax! context environment)
@@ -772,44 +754,46 @@
 
     (define (library-catalog-export-names key)
       "Return exported binding names for cataloged library KEY."
-      (let ((alias-spec (library-alias-spec key stdlib-library-aliases)))
-        (cond
-         (alias-spec
-          (let ((exports (library-alias-field alias-spec 'exports))
-                (target (library-alias-field alias-spec 'target)))
-            (if exports exports (library-catalog-export-names target))))
-         ((library-catalog-source-backed? key)
-          (standard-source-library-export-names
-           (library-catalog-source-form key)))
-         ((equal? key scheme-base-library-key)
-          (map (lambda (spec) (second (assq 'name spec)))
-               (consent-base-binding-specs)))
-         (else
-          (library-catalog-resolved-export-names key)))))
+      (guard (condition (else '()))
+        (let ((manifest-entry (library-collection-manifest-entry key)))
+          (cond
+           ((not (null? (collection-entry-field manifest-entry 'exports '())))
+            (collection-entry-field manifest-entry 'exports '()))
+           ((collection-entry-field manifest-entry 'target #f)
+            (library-catalog-export-names
+             (collection-entry-field manifest-entry 'target #f)))
+           ((library-catalog-source-backed? key)
+            (source-library-export-names
+             (library-catalog-source-form key)))
+           ((equal? key scheme-base-library-key)
+            (map (lambda (spec) (second (assq 'name spec)))
+                 (consent-base-binding-specs)))
+           (else
+            (library-catalog-resolved-export-names key))))))
 
     (define (library-catalog-aliases key)
       "Return aliases that resolve to library KEY."
-      (let loop ((aliases stdlib-library-aliases) (result '()))
+      (let loop ((entries (library-collection-manifest-entries))
+                 (result '()))
         (cond
-         ((null? aliases) (reverse result))
-         ((equal? key (library-alias-field (car aliases) 'target))
-          (loop (cdr aliases)
-                (cons (library-alias-field (car aliases) 'alias) result)))
-         (else (loop (cdr aliases) result)))))
+         ((null? entries) (reverse result))
+         ((equal? key (collection-entry-field (car entries) 'target #f))
+          (loop (cdr entries)
+                (cons (collection-entry-field (car entries) 'name '())
+                      result)))
+         (else (loop (cdr entries) result)))))
 
     (define (library-catalog-dependencies key)
       "Return manifest dependency names for KEY when known."
-      (let ((alias-spec (library-alias-spec key stdlib-library-aliases)))
-        (cond
-         ((library-catalog-source-backed? key) '())
-         (alias-spec
-          (let ((target (library-alias-field alias-spec 'target)))
-            (if target (list target) '())))
-         (else '()))))
+      (let ((manifest-entry (library-collection-manifest-entry key)))
+        (if manifest-entry
+            (collection-entry-field manifest-entry 'dependencies '())
+            '())))
 
     (define (library-catalog-invalidate!)
       "Clear cached catalog entries after catalog inputs change."
       (set! library-catalog-cache #f)
+      (set! library-collection-manifest-cache #f)
       consent-unspecified)
 
     (define (library-catalog-entry-field entry field default)
@@ -877,6 +861,10 @@
                 (library-catalog-require-symbol
                  (library-catalog-manifest-field fields 'source-kind 'manifest)
                  "catalog source-kind"))
+               (visibility
+                (library-catalog-require-symbol
+                 (library-catalog-manifest-field fields 'visibility 'public)
+                 "catalog visibility"))
                (source-file
                 (library-catalog-require-source-file
                  (library-catalog-manifest-field fields 'source-file #f)))
@@ -904,6 +892,7 @@
            (list 'category category)
            (list 'status status)
            (list 'source-kind source-kind)
+           (list 'visibility visibility)
            (list 'source-file source-file)
            (list 'aliases aliases)
            (list 'target target)
@@ -1058,21 +1047,45 @@
 
     (define (library-catalog-entry key)
       "Return manifest-backed catalog metadata for library KEY."
-      (let ((alias-spec (library-alias-spec key stdlib-library-aliases)))
+      (let ((manifest-entry (library-collection-manifest-entry key)))
         (list
          (list 'name key)
-         (list 'category (library-catalog-category key))
-         (list 'status (if alias-spec 'alias 'implemented))
+         (list 'category
+               (or (collection-entry-field manifest-entry 'category #f)
+                   (library-catalog-category key)))
+         (list 'status
+               (or (collection-entry-field manifest-entry 'status #f)
+                   'implemented))
          (list 'source-kind (library-catalog-source-kind key))
+         (list 'implementation-id
+               (collection-entry-field manifest-entry 'implementation-id #f))
+         (list 'primitive-overlay-library
+               (collection-entry-field
+                manifest-entry
+                'primitive-overlay-library
+                #f))
+         (list 'visibility (library-visibility key))
+         (list 'availability
+               (collection-entry-field manifest-entry 'availability 'required))
+         (list 'availability-condition
+               (collection-entry-field
+                manifest-entry
+                'availability-condition
+                #f))
          (list 'source-file (library-catalog-source-file key))
-         (list 'aliases (library-catalog-aliases key))
+         (list 'aliases
+               (if manifest-entry
+                   (collection-entry-field manifest-entry 'aliases '())
+                   (library-catalog-aliases key)))
          (list 'target
-               (and alias-spec (library-alias-field alias-spec 'target)))
+               (or (collection-entry-field manifest-entry 'target #f)
+                   #f))
          (list 'exports (library-catalog-export-names key))
          (list 'dependencies (library-catalog-dependencies key))
          (list 'origin 'built-in-seed)
          (list 'source-id 'built-in-seed)
-         (list 'summary #f))))
+         (list 'summary
+               (collection-entry-field manifest-entry 'summary #f)))))
 
     (define (library-catalog-field entry field default)
       "Return FIELD from catalog ENTRY, or DEFAULT when absent."
@@ -1242,6 +1255,9 @@
         (symbol->string (library-catalog-field entry 'source-kind 'manifest))
         needle)
        (library-catalog-text-match?
+        (symbol->string (library-catalog-field entry 'visibility 'public))
+        needle)
+       (library-catalog-text-match?
         (symbol->string (library-catalog-field entry 'status 'implemented))
         needle)
        (library-catalog-text-match?
@@ -1350,15 +1366,30 @@
         (effects state-read state-write))
       (map
        (lambda (entry)
-         (let* ((key (car entry))
-                (source-entry (standard-source-library-source-entry key)))
+         (let ((key (collection-entry-field entry 'name '())))
            (list
             (list 'name key)
             (list 'exports
-                  (standard-source-library-export-names
-                   (standard-source-library-form key)))
-            (list 'source-file (car source-entry)))))
-       standard-source-library-load-paths))
+                  (source-library-export-names
+                   (source-library-form
+                    key
+                    (manifest-source-library-source
+                     (library-catalog-source-file key)
+                     key)
+                    "standard source library")))
+            (list 'source-file (library-catalog-source-file key)))))
+       (let loop ((entries (library-collection-manifest-entries))
+                  (result '()))
+         (cond
+          ((null? entries) (reverse result))
+          ((and (eq? (collection-entry-field
+                      (car entries) 'category #f)
+                     'standard)
+                (eq? (collection-entry-field
+                      (car entries) 'source-kind #f)
+                     'portable-source))
+           (loop (cdr entries) (cons (car entries) result)))
+          (else (loop (cdr entries) result))))))
 
     (define (consent-stdlib-source-library-specs)
       "Public metadata accessor for stdlib libraries backed by source files."
@@ -1370,18 +1401,30 @@
         (effects state-read state-write))
       (map
        (lambda (entry)
-         (let* ((key (car entry))
-                (source-entry (stdlib-source-library-source-entry key)))
+         (let ((key (collection-entry-field entry 'name '())))
            (list
             (list 'name key)
             (list 'exports
-                  (standard-source-library-export-names
+                  (source-library-export-names
                    (source-library-form
                     key
-                    (stdlib-source-library-source key)
+                    (manifest-source-library-source
+                     (library-catalog-source-file key)
+                     key)
                     "stdlib source library")))
-            (list 'source-file (car source-entry)))))
-       stdlib-source-library-load-paths))
+            (list 'source-file (library-catalog-source-file key)))))
+       (let loop ((entries (library-collection-manifest-entries))
+                  (result '()))
+         (cond
+          ((null? entries) (reverse result))
+          ((and (eq? (collection-entry-field
+                      (car entries) 'category #f)
+                     'stdlib)
+                (eq? (collection-entry-field
+                      (car entries) 'source-kind #f)
+                     'portable-source))
+           (loop (cdr entries) (cons (car entries) result)))
+          (else (loop (cdr entries) result))))))
 
     (define (library-registry-ref context key)
       "Return the registered library for KEY in CONTEXT, or #f."
@@ -1526,78 +1569,24 @@
                 base-environment
                 base-syntax-environment))))))
 
-    (define (register-empty-emacs-capability-library! key context)
-      "Register an intentionally empty capability library for KEY."
-      (if (not (library-registry-ref context key))
-          (let ((value-environment (consent-make-empty-environment))
-                (syntax-environment (library-make-empty-syntax-environment #f)))
-            (library-registry-set!
-             context
-             key
-             (make-library key key '() value-environment syntax-environment)))))
-
     (define (register-source-library! source context environment)
       "Read and evaluate a define-library form from SOURCE."
-      (let ((forms (consent-read-all source (context-reader-options context))))
-        (if (not (= (length forms) 1))
-            (eval-error "source library must contain exactly one form"))
-        (eval-define-library
-         (car forms)
-         environment
-         context)))
-
-    ;; Host posture: any internal `(consent X)' / `(cli X)' / `(agent X)'
-    ;; library can be loaded as a source library so a trusted program can
-    ;; import the runtime's own implementation. This is the capability that
-    ;; lets the compiled runtime act as a full Scheme host for the portable
-    ;; white-box tests (self-hosting). Public agent primitive libraries keep
-    ;; their ordinary grant-independent resolution paths, while the source
-    ;; model libraries used by runtime internals resolve through this gate.
-    (define (host-library-key? key)
-      "Report whether KEY names a runtime-internal source library exposable"
-      "under the host posture."
-      (and (pair? key)
-           (or (memq (car key) '(consent cli))
-               (and (eq? (car key) 'agent)
-                    (or (assoc/equal key agent-internal-source-library-load-paths)
-                        (and (not (member key agent-library-keys))
-                             (not (assoc/equal key agent-source-library-load-paths))))))
-           (not (member key consent-library-keys))
-           (not (equal? key scheme-base-library-key))))
-
-    (define (host-library-relative-path key)
-      "Return the datadir/source-relative path for host library KEY: (consent"
-      "reader) -> consent/reader.sld."
-      (let loop ((parts key) (acc ""))
-        (if (null? (cdr parts))
-            (string-append acc (symbol->string (car parts)) ".sld")
-            (loop (cdr parts)
-                  (string-append acc (symbol->string (car parts)) "/")))))
-
-    (define (host-library-source-entry key)
-      "Return the (path . text) source entry for host library KEY, or #f."
-      (let ((relative (host-library-relative-path key)))
-        (resolve-source-entry
-         relative
-         (list (string-append "scheme/" relative) relative))))
-
-    (define (host-library-available? key context)
-      "Report whether KEY is loadable under an active host-libraries grant."
-      "Requires the grant, an internal library key, and either a compiled-in"
-      "native bindings table or resolvable source, so that programs that"
-      "merely define their own (consent ...) libraries are unaffected."
-      (and (context-internal-libraries-allowed? context)
-           (host-library-key? key)
-           (or (consent-native-library-ref key)
-               (host-library-source-entry key))
-           #t))
-
-    (define (register-host-source-library! key context environment)
-      "Load and register runtime-internal library KEY from its source."
-      (let ((entry (host-library-source-entry key)))
-        (if entry
-            (register-source-library! (cdr entry) context environment)
-            (eval-error "host source library not found" key))))
+      (dynamic-wind
+        (lambda ()
+          (set! source-library-internal-import-depth
+                (+ source-library-internal-import-depth 1)))
+        (lambda ()
+          (let ((forms
+                 (consent-read-all source (context-reader-options context))))
+            (if (not (= (length forms) 1))
+                (eval-error "source library must contain exactly one form"))
+            (eval-define-library
+             (car forms)
+             environment
+             context)))
+        (lambda ()
+          (set! source-library-internal-import-depth
+                (- source-library-internal-import-depth 1)))))
 
     (define (native-callback-result value seen)
       "Convert an interpreted callback's result for native consumption."
@@ -2025,6 +2014,20 @@
                 (library-value-environment target-library)
                 (library-syntax-environment target-library)))))))
 
+    (define (manifest-library-alias-spec entry)
+      "Return alias registration metadata for manifest ENTRY."
+      (let ((key (collection-entry-field entry 'name #f))
+            (target (collection-entry-field entry 'target #f))
+            (exports (collection-entry-field entry 'exports '())))
+        (if (not target)
+            (eval-error "manifest alias has no target" key))
+        (append
+         (list (cons 'alias key)
+               (cons 'target target))
+         (if (null? exports)
+             '()
+             (list (cons 'exports exports))))))
+
     (define (library-alias-spec key aliases)
       "Return KEY's alias spec from ALIASES, or #f when KEY is not an alias."
       (cond
@@ -2122,6 +2125,34 @@
        (library-primitive-spec 'memory-select 'primitive-memory-select 4 4)
        (library-primitive-spec 'memory-yield 'primitive-memory-yield 2 2)))
 
+    (define (session-library-primitive-specs)
+      "Return primitive specs for the manifest `agent-session` implementation."
+      (list
+       (library-primitive-spec 'create-session
+                               'primitive-create-session
+                               0
+                               2)
+       (library-primitive-spec 'switch-session
+                               'primitive-switch-session
+                               1
+                               1)
+       (library-primitive-spec 'set-default-session!
+                               'primitive-switch-session
+                               1
+                               1)
+       (library-primitive-spec 'current-session
+                               'primitive-current-session
+                               0
+                               0)
+       (library-primitive-spec 'list-sessions
+                               'primitive-list-sessions
+                               0
+                               1)
+       (library-primitive-spec 'close-session
+                               'primitive-close-session
+                               1
+                               1)))
+
     (define (char-library-specs)
       "Return primitive specs for `(scheme char)'."
       (list
@@ -2148,16 +2179,6 @@
        (library-primitive-spec 'string-foldcase 'primitive-string-foldcase 1 1)
        (library-primitive-spec 'string-upcase 'primitive-string-upcase 1 1)))
 
-    ;; Base-library cxr names re-exported by `(scheme cxr)'.
-    (define cxr-library-base-names
-      '(caar cadr cdar cddr))
-
-    ;; Additional cxr names implemented directly by `(scheme cxr)'.
-    (define cxr-library-extra-names
-      '(caaar caadr cadar caddr cdaar cdadr cddar cdddr
-        caaaar caaadr caadar caaddr cadaar cadadr caddar cadddr
-        cdaaar cdaadr cdadar cdaddr cddaar cddadr cdddar cddddr))
-
     (define (primitive-cxr-function name)
       "Implement the `cxr-function` primitive with argument validation and"
       "Consent Scheme values."
@@ -2179,53 +2200,11 @@
                          (else
                           (eval-error "invalid cxr name" name))))))))))
 
-    (define (cxr-library-specs)
-      "Return primitive specs for generated cxr selectors."
+    (define (cxr-library-specs entry)
+      "Return primitive specs for manifest CXR library ENTRY."
       (map (lambda (name)
              (list name (primitive-cxr-function name) 1 1))
-           cxr-library-extra-names))
-
-    (define (register-cxr-library! key context environment)
-      "Register `(scheme cxr)' from base selectors and generated selectors."
-      (if (not (library-registry-ref context key))
-          (let* ((base-library
-                  (resolve-library scheme-base-library-key
-                                   context
-                                   environment))
-                 (base-exports (library-exports base-library))
-                 (base-bindings
-                  (map
-                   (lambda (name)
-                     (or (find-library-export name base-exports)
-                         (eval-error
-                          "standard library binding is not available"
-                          name)))
-                   cxr-library-base-names))
-                 (value-environment (consent-make-empty-environment))
-                 (syntax-environment (library-make-empty-syntax-environment #f)))
-            (for-each
-             (lambda (spec)
-               (define-primitive!
-                value-environment
-                (car spec)
-                (second spec)
-                (third spec)
-                (fourth spec)))
-             (cxr-library-specs))
-            (library-registry-set!
-             context
-             key
-             (make-library
-              key
-              key
-              (append
-               base-bindings
-               (snapshot-library-bindings
-                value-environment
-                syntax-environment
-                key))
-              value-environment
-              syntax-environment)))))
+           (collection-entry-field entry 'exports '())))
 
     (define (inexact-library-specs)
       "Return primitive specs for `(scheme inexact)'."
@@ -2281,751 +2260,625 @@
               (library-value-environment base-library)
               (library-syntax-environment base-library))))))
 
-    (define (register-standard-library! key context environment)
-      "Register a supported standard library by KEY."
-      (cond
-       ((equal? key '(scheme case-lambda))
-        (register-source-library!
-         (standard-source-library-source key)
-         context
-         environment))
-       ((equal? key '(scheme char))
-        (register-primitive-library!
-         key
-         (char-library-specs)
-         context))
-       ((equal? key '(scheme complex))
-        (register-primitive-library!
-         key
-         (list
-          (library-primitive-spec 'angle 'primitive-angle 1 1)
-          (library-primitive-spec 'imag-part 'primitive-imag-part 1 1)
-          (library-primitive-spec 'magnitude 'primitive-magnitude 1 1)
-          (library-primitive-spec 'make-polar 'primitive-make-polar 2 2)
-          (library-primitive-spec 'make-rectangular 'primitive-make-rectangular 2 2)
-          (library-primitive-spec 'real-part 'primitive-real-part 1 1))
-         context))
-       ((equal? key '(scheme cxr))
-        (register-cxr-library! key context environment))
-       ((equal? key '(scheme eval))
-        (register-primitive-library!
-         key
-         (list
-          (library-primitive-spec 'environment 'primitive-environment 1 #f)
-          (library-primitive-spec 'eval 'primitive-eval 2 2))
-         context))
-       ((equal? key '(scheme file))
-        (register-primitive-library!
-         key
-         (list
-          (library-primitive-spec 'call-with-input-file
-                                  'primitive-call-with-input-file 2 2)
-          (library-primitive-spec 'call-with-output-file
-                                  'primitive-call-with-output-file 2 2)
-          (library-primitive-spec 'delete-file 'primitive-delete-file 1 1)
-          (library-primitive-spec 'file-exists? 'primitive-file-exists? 1 1)
-          (library-primitive-spec 'open-binary-input-file
-                                  'primitive-open-binary-input-file 1 1)
-          (library-primitive-spec 'open-binary-output-file
-                                  'primitive-open-binary-output-file 1 1)
-          (library-primitive-spec 'open-input-file
-                                  'primitive-open-input-file 1 1)
-          (library-primitive-spec 'open-output-file
-                                  'primitive-open-output-file 1 1)
-          (library-primitive-spec 'with-input-from-file
-                                  'primitive-with-input-from-file 2 2)
-          (library-primitive-spec 'with-output-to-file
-                                  'primitive-with-output-to-file 2 2))
-         context))
-       ((equal? key '(scheme inexact))
-        (register-primitive-library!
-         key
-         (inexact-library-specs)
-         context))
-       ((equal? key '(scheme lazy))
-        (register-source-library!
-         (standard-source-library-source key)
-         context
-         environment))
-       ((equal? key '(scheme load))
-        (register-primitive-library!
-         key
-         (list (library-primitive-spec 'load 'primitive-load 1 2))
-         context))
-       ((equal? key '(scheme process-context))
-        (register-primitive-library!
-	         key
-	         (append
-	          (list
-	           (library-primitive-spec 'command-line
-	                                   'primitive-command-line
-	                                   0
-	                                   0))
-	          (map policy-denied-spec
-	               '(emergency-exit
-	                 exit))
-          ;; Environment reads are real, policy-gated primitives: denied unless
-          ;; the context carries an active process-environment capability grant.
+    (define (manifest-primitive-implementation-specs entry)
+      "Return primitive specs for manifest ENTRY, or #f when unavailable."
+      (let ((implementation-id
+             (collection-entry-field entry 'implementation-id #f)))
+        (cond
+         ((eq? implementation-id 'scheme-char) (char-library-specs))
+         ((eq? implementation-id 'scheme-complex)
           (list
-           (library-primitive-spec 'get-environment-variable
-                                   'primitive-get-environment-variable
+           (library-primitive-spec 'angle 'primitive-angle 1 1)
+           (library-primitive-spec 'imag-part 'primitive-imag-part 1 1)
+           (library-primitive-spec 'magnitude 'primitive-magnitude 1 1)
+           (library-primitive-spec 'make-polar 'primitive-make-polar 2 2)
+           (library-primitive-spec 'make-rectangular
+                                   'primitive-make-rectangular
+                                   2
+                                   2)
+           (library-primitive-spec 'real-part 'primitive-real-part 1 1)))
+         ((eq? implementation-id 'scheme-cxr) (cxr-library-specs entry))
+         ((eq? implementation-id 'scheme-eval)
+          (list
+           (library-primitive-spec 'environment 'primitive-environment 1 #f)
+           (library-primitive-spec 'eval 'primitive-eval 2 2)))
+         ((eq? implementation-id 'scheme-file)
+          (list
+           (library-primitive-spec 'call-with-input-file
+                                   'primitive-call-with-input-file
+                                   2
+                                   2)
+           (library-primitive-spec 'call-with-output-file
+                                   'primitive-call-with-output-file
+                                   2
+                                   2)
+           (library-primitive-spec 'delete-file 'primitive-delete-file 1 1)
+           (library-primitive-spec 'file-exists? 'primitive-file-exists? 1 1)
+           (library-primitive-spec 'open-binary-input-file
+                                   'primitive-open-binary-input-file
                                    1
                                    1)
-           (library-primitive-spec 'get-environment-variables
-                                   'primitive-get-environment-variables
+           (library-primitive-spec 'open-binary-output-file
+                                   'primitive-open-binary-output-file
+                                   1
+                                   1)
+           (library-primitive-spec 'open-input-file
+                                   'primitive-open-input-file
+                                   1
+                                   1)
+           (library-primitive-spec 'open-output-file
+                                   'primitive-open-output-file
+                                   1
+                                   1)
+           (library-primitive-spec 'with-input-from-file
+                                   'primitive-with-input-from-file
+                                   2
+                                   2)
+           (library-primitive-spec 'with-output-to-file
+                                   'primitive-with-output-to-file
+                                   2
+                                   2)))
+         ((eq? implementation-id 'scheme-inexact) (inexact-library-specs))
+         ((eq? implementation-id 'scheme-load)
+          (list (library-primitive-spec 'load 'primitive-load 1 2)))
+         ((eq? implementation-id 'scheme-process-context)
+          (append
+           (list
+            (library-primitive-spec 'command-line
+                                    'primitive-command-line
+                                    0
+                                    0))
+           (map policy-denied-spec '(emergency-exit exit))
+           (list
+            (library-primitive-spec 'get-environment-variable
+                                    'primitive-get-environment-variable
+                                    1
+                                    1)
+            (library-primitive-spec 'get-environment-variables
+                                    'primitive-get-environment-variables
+                                    0
+                                    0))))
+         ((eq? implementation-id 'scheme-read)
+          (list (library-primitive-spec 'read 'primitive-read 0 1)))
+         ((eq? implementation-id 'scheme-repl)
+          (list
+           (library-primitive-spec 'interaction-environment
+                                   'primitive-interaction-environment
                                    0
                                    0)))
-         context))
-       ((equal? key '(scheme read))
-        (register-primitive-library!
-         key
-         (list (library-primitive-spec 'read 'primitive-read 0 1))
-         context))
-       ((equal? key '(scheme repl))
-        (register-primitive-library!
-         key
-         (list
-          (library-primitive-spec 'interaction-environment
-                                  'primitive-interaction-environment 0 0))
-         context))
-       ((equal? key '(scheme r5rs))
-        (register-r5rs-library! key context environment))
-       ((equal? key '(scheme time))
-        (register-primitive-library!
-         key
-         (list
-          (library-primitive-spec 'current-jiffy
-                                  'primitive-current-jiffy
-                                  0
-                                  0)
-          (library-primitive-spec 'current-second
-                                  'primitive-current-second
-                                  0
-                                  0)
-          (library-primitive-spec 'jiffies-per-second
-                                  'primitive-jiffies-per-second
-                                  0
-                                  0))
-         context))
-       ((equal? key '(scheme write))
-        (register-primitive-library!
-         key
-         (list
-          (library-primitive-spec 'display 'primitive-display 1 2)
-          (library-primitive-spec 'write 'primitive-write 1 2)
-          (library-primitive-spec 'write-shared 'primitive-write-shared 1 2)
-          (library-primitive-spec 'write-simple 'primitive-write-simple 1 2))
-         context))
-       (else
-        (eval-error "unknown standard library" key))))
+         ((eq? implementation-id 'scheme-time)
+          (list
+           (library-primitive-spec 'current-jiffy
+                                   'primitive-current-jiffy
+                                   0
+                                   0)
+           (library-primitive-spec 'current-second
+                                   'primitive-current-second
+                                   0
+                                   0)
+           (library-primitive-spec 'jiffies-per-second
+                                   'primitive-jiffies-per-second
+                                   0
+                                   0)))
+         ((eq? implementation-id 'scheme-write)
+          (list
+           (library-primitive-spec 'display 'primitive-display 1 2)
+           (library-primitive-spec 'write 'primitive-write 1 2)
+           (library-primitive-spec 'write-shared 'primitive-write-shared 1 2)
+           (library-primitive-spec 'write-simple 'primitive-write-simple 1 2)))
+         ((eq? implementation-id 'agent-io)
+          (list
+           (library-primitive-spec 'agent-yield 'primitive-agent-yield 1 1)
+           (library-primitive-spec 'agent-log 'primitive-agent-log 2 #f)
+           (library-primitive-spec 'agent-progress
+                                   'primitive-agent-progress
+                                   2
+                                   2)
+           (library-primitive-spec 'agent-warn 'primitive-agent-warn 1 #f)
+           (library-primitive-spec 'agent-request
+                                   'primitive-agent-request
+                                   1
+                                   1)))
+         ((eq? implementation-id 'agent-approval)
+          (list
+           (library-primitive-spec 'approval-request!
+                                   'primitive-approval-request!
+                                   1
+                                   1)
+           (library-primitive-spec 'approval-status
+                                   'primitive-approval-status
+                                   1
+                                   1)
+           (library-primitive-spec 'approval-cancel!
+                                   'primitive-approval-cancel!
+                                   1
+                                   1)
+           (library-primitive-spec 'approval-yield-pending
+                                   'primitive-approval-yield-pending
+                                   0
+                                   0)
+           (library-primitive-spec 'approval-resolve!
+                                   'primitive-approval-resolve!
+                                   2
+                                   2)))
+         ((eq? implementation-id 'agent-debugger)
+          (list
+           (library-primitive-spec 'current-error 'primitive-current-error 0 0)
+           (library-primitive-spec 'condition-stack
+                                   'primitive-condition-stack
+                                   1
+                                   1)
+           (library-primitive-spec 'condition-environment
+                                   'primitive-condition-environment
+                                   2
+                                   2)
+           (library-primitive-spec 'condition-restarts
+                                   'primitive-condition-restarts
+                                   1
+                                   1)
+           (library-primitive-spec 'restart-invoke!
+                                   'primitive-restart-invoke!
+                                   2
+                                   2)
+           (library-primitive-spec 'debugger-yield
+                                   'primitive-debugger-yield
+                                   1
+                                   1)))
+         ((eq? implementation-id 'agent-helper)
+          (list
+           (library-primitive-spec 'agent-artifact
+                                   'primitive-agent-artifact
+                                   2
+                                   2)
+           (library-primitive-spec 'agent-helper-save!
+                                   'primitive-agent-helper-save!
+                                   2
+                                   3)
+           (library-primitive-spec 'agent-helper-load
+                                   'primitive-agent-helper-load
+                                   1
+                                   2)
+           (library-primitive-spec 'agent-helper-list
+                                   'primitive-agent-helper-list
+                                   1
+                                   1)
+           (library-primitive-spec 'agent-helper-ref
+                                   'primitive-agent-helper-ref
+                                   1
+                                   2)
+           (library-primitive-spec 'agent-helper-promote-to-skill
+                                   'primitive-agent-helper-promote-to-skill
+                                   1
+                                   2)))
+         ((eq? implementation-id 'agent-job)
+          (list
+           (library-primitive-spec 'job-start! 'primitive-job-start! 3 3)
+           (library-primitive-spec 'job-ref 'primitive-job-ref 1 1)
+           (library-primitive-spec 'job-list 'primitive-job-list 0 1)
+           (library-primitive-spec 'job-cancel! 'primitive-job-cancel! 1 1)
+           (library-primitive-spec 'job-interrupt!
+                                   'primitive-job-interrupt!
+                                   2
+                                   2)
+           (library-primitive-spec 'job-yields 'primitive-job-yields 1 2)
+           (library-primitive-spec 'job-status 'primitive-job-status 1 1)))
+         ((eq? implementation-id 'agent-test)
+          (list
+           (library-primitive-spec 'agent-test-eval-source-result
+                                   'primitive-agent-test-eval-source-result
+                                   1
+                                   2)))
+         ((eq? implementation-id 'agent-memory)
+          (memory-library-primitive-specs))
+         ((eq? implementation-id 'agent-plan)
+          (list
+           (library-primitive-spec 'plan-create!
+                                   'primitive-plan-create!
+                                   1
+                                   1)
+           (library-primitive-spec 'plan-ref 'primitive-plan-ref 1 1)
+           (library-primitive-spec 'plan-list 'primitive-plan-list 1 1)
+           (library-primitive-spec 'plan-step-add!
+                                   'primitive-plan-step-add!
+                                   2
+                                   2)
+           (library-primitive-spec 'plan-step-status!
+                                   'primitive-plan-step-status!
+                                   3
+                                   3)
+           (library-primitive-spec 'plan-status!
+                                   'primitive-plan-status!
+                                   2
+                                   2)
+           (library-primitive-spec 'plan-yield 'primitive-plan-yield 1 1)))
+         ((eq? implementation-id 'agent-models)
+          (list
+           (library-primitive-spec 'primitive-model-provider-register!
+                                   'primitive-model-provider-register!
+                                   1
+                                   1)
+           (library-primitive-spec 'primitive-model-providers
+                                   'primitive-model-providers
+                                   0
+                                   0)
+           (library-primitive-spec 'primitive-model-route
+                                   'primitive-model-route
+                                   1
+                                   2)
+           (library-primitive-spec 'primitive-model-complete
+                                   'primitive-model-complete
+                                   2
+                                   3)
+           (library-primitive-spec 'primitive-model-provider-diagnostics
+                                   'primitive-model-provider-diagnostics
+                                   0
+                                   1)))
+         ((eq? implementation-id 'agent-context)
+          (list
+           (library-primitive-spec 'current-request
+                                   'primitive-current-request
+                                   0
+                                   0)
+           (library-primitive-spec 'current-focus
+                                   'primitive-current-focus
+                                   0
+                                   0)
+           (library-primitive-spec 'current-region-context
+                                   'primitive-current-region-context
+                                   0
+                                   0)
+           (library-primitive-spec 'current-buffer-context
+                                   'primitive-current-buffer-context
+                                   0
+                                   0)
+           (library-primitive-spec 'current-project-context
+                                   'primitive-current-project-context
+                                   0
+                                   0)
+           (library-primitive-spec 'current-conversation-summary
+                                   'primitive-current-conversation-summary
+                                   0
+                                   0)
+           (library-primitive-spec 'context-yield
+                                   'primitive-context-yield
+                                   1
+                                   1)))
+         ((eq? implementation-id 'agent-reflect)
+          (list
+           (library-primitive-spec 'consent-version
+                                   'primitive-consent-version
+                                   0
+                                   0)
+           (library-primitive-spec 'current-capabilities
+                                   'primitive-current-capabilities
+                                   0
+                                   0)
+           (library-primitive-spec 'current-policy
+                                   'primitive-current-policy
+                                   0
+                                   0)
+           (library-primitive-spec 'current-budget
+                                   'primitive-current-budget
+                                   0
+                                   0)
+           (library-primitive-spec 'budget-remaining
+                                   'primitive-budget-remaining
+                                   0
+                                   0)
+           (library-primitive-spec 'budget-exhausted?
+                                   'primitive-budget-exhausted?
+                                   1
+                                   1)
+           (library-primitive-spec 'budget-yield
+                                   'primitive-budget-yield
+                                   0
+                                   0)
+           (library-primitive-spec 'current-imports
+                                   'primitive-current-imports
+                                   0
+                                   0)
+           (library-primitive-spec 'library-bindings
+                                   'primitive-library-bindings
+                                   1
+                                   1)
+           (library-primitive-spec 'libraries
+                                   'primitive-libraries
+                                   0
+                                   0)
+           (library-primitive-spec 'library-info
+                                   'primitive-library-info
+                                   1
+                                   1)
+           (library-primitive-spec 'library-search
+                                   'primitive-library-search
+                                   1
+                                   1)
+           (library-primitive-spec 'catalog-sources
+                                   'primitive-catalog-sources
+                                   0
+                                   0)
+           (library-primitive-spec 'catalog-diagnostics
+                                   'primitive-catalog-diagnostics
+                                   0
+                                   0)
+           (library-primitive-spec 'add-manifest!
+                                   'primitive-add-manifest!
+                                   2
+                                   2)
+           (library-primitive-spec 'remove-manifest!
+                                   'primitive-remove-manifest!
+                                   1
+                                   1)
+           (library-primitive-spec 'add-manifest-root!
+                                   'primitive-add-manifest-root!
+                                   2
+                                   2)
+           (library-primitive-spec 'remove-manifest-root!
+                                   'primitive-remove-manifest-root!
+                                   1
+                                   1)
+           (library-primitive-spec 'refresh-library-catalog!
+                                   'primitive-refresh-library-catalog!
+                                   0
+                                   0)
+           (library-primitive-spec 'library-documentation
+                                   'primitive-library-documentation
+                                   1
+                                   1)
+           (library-primitive-spec 'binding-libraries
+                                   'primitive-binding-libraries
+                                   1
+                                   1)
+           (library-primitive-spec 'documented-bindings
+                                   'primitive-documented-bindings
+                                   0
+                                   0)
+           (library-primitive-spec 'apropos
+                                   'primitive-apropos
+                                   1
+                                   1)
+           (library-primitive-spec 'reflection-field
+                                   'primitive-reflection-field
+                                   2
+                                   3)
+           (library-primitive-spec 'documentation-field
+                                   'primitive-documentation-field
+                                   2
+                                   3)
+           (library-primitive-spec 'docstring
+                                   'primitive-docstring
+                                   1
+                                   2)
+           (library-primitive-spec 'current-session-info
+                                   'primitive-current-session-info
+                                   0
+                                   0)
+           (library-primitive-spec 'recent-yields
+                                   'primitive-recent-yields
+                                   0
+                                   0)
+           (library-primitive-spec 'recent-errors
+                                   'primitive-recent-errors
+                                   0
+                                   0)
+           (library-primitive-spec 'recent-policy-decisions
+                                   'primitive-recent-policy-decisions
+                                   0
+                                   0)
+           (library-primitive-spec 'capability-info
+                                   'primitive-capability-info
+                                   1
+                                   1)
+           (library-primitive-spec 'documentation
+                                   'primitive-documentation
+                                   1
+                                   1)
+           (library-primitive-spec 'consent-doc
+                                   'primitive-consent-doc
+                                   1
+                                   1)
+           (library-primitive-spec 'consent-describe
+                                   'primitive-consent-describe
+                                   1
+                                   1)
+           (library-primitive-spec 'macroexpand
+                                   'primitive-macroexpand
+                                   1
+                                   2)
+           (library-primitive-spec 'macroexpand-1
+                                   'primitive-macroexpand-1
+                                   1
+                                   2)
+           (library-primitive-spec 'macroexpand-library
+                                   'primitive-macroexpand-library
+                                   1
+                                   2)
+           (library-primitive-spec 'macro-binding-info
+                                   'primitive-macro-binding-info
+                                   1
+                                   1)
+           (library-primitive-spec 'syntax-source
+                                   'primitive-syntax-source
+                                   1
+                                   1)
+           (library-primitive-spec 'macroexpand-yield
+                                   'primitive-macroexpand-yield
+                                   2
+                                   2)))
+         ((eq? implementation-id 'agent-redaction)
+          (list
+           (library-primitive-spec 'secret-source?
+                                   'primitive-secret-source?
+                                   1
+                                   1)
+           (library-primitive-spec 'redact 'primitive-redact 2 2)
+           (library-primitive-spec 'context-local-only!
+                                   'primitive-context-local-only!
+                                   2
+                                   2)
+           (library-primitive-spec 'redaction-log
+                                   'primitive-redaction-log
+                                   0
+                                   1)
+           (library-primitive-spec 'safe-for-provider?
+                                   'primitive-safe-for-provider?
+                                   2
+                                   2)))
+         ((eq? implementation-id 'agent-session)
+          (session-library-primitive-specs))
+         ((eq? implementation-id 'consent-capability)
+          (list
+           (library-primitive-spec 'grant-capability!
+                                   'primitive-grant-capability!
+                                   1
+                                   1)
+           (library-primitive-spec 'current-grants
+                                   'primitive-current-grants
+                                   0
+                                   0)
+           (library-primitive-spec 'grant-ref 'primitive-grant-ref 1 1)
+           (library-primitive-spec 'grant-attenuate
+                                   'primitive-grant-attenuate
+                                   2
+                                   2)
+           (library-primitive-spec 'grant-revoke!
+                                   'primitive-grant-revoke!
+                                   1
+                                   1)
+           (library-primitive-spec 'call-with-capability-grant
+                                   'primitive-call-with-capability-grant
+                                   2
+                                   2)
+           (library-primitive-spec 'handle-ref 'primitive-handle-ref 1 1)
+           (library-primitive-spec 'handle-live? 'primitive-handle-live? 1 1)
+           (library-primitive-spec 'handle-kind 'primitive-handle-kind 1 1)
+           (library-primitive-spec 'handle-revalidate
+                                   'primitive-handle-revalidate
+                                   1
+                                   1)
+           (library-primitive-spec 'handle-release!
+                                   'primitive-handle-release!
+                                   1
+                                   1)))
+         (else
+          #f))))
 
-    (define (register-agent-library! key context environment)
-      "Register a supported Consent Scheme interaction library by KEY."
-      (cond
-       ((equal? key '(agent io))
-        (register-primitive-library!
-         key
-         (list
-          (library-primitive-spec 'agent-yield 'primitive-agent-yield 1 1)
-          (library-primitive-spec 'agent-log 'primitive-agent-log 2 #f)
-          (library-primitive-spec 'agent-progress
-                                  'primitive-agent-progress
-                                  2
-                                  2)
-          (library-primitive-spec 'agent-warn 'primitive-agent-warn 1 #f)
-          (library-primitive-spec 'agent-request
-                                  'primitive-agent-request
-                                  1
-                                  1))
-         context))
-       ((equal? key '(agent approval))
-        (register-primitive-library!
-         key
-         (list
-          (library-primitive-spec 'approval-request!
-                                  'primitive-approval-request!
-                                  1
-                                  1)
-          (library-primitive-spec 'approval-status
-                                  'primitive-approval-status
-                                  1
-                                  1)
-          (library-primitive-spec 'approval-cancel!
-                                  'primitive-approval-cancel!
-                                  1
-                                  1)
-          (library-primitive-spec 'approval-yield-pending
-                                  'primitive-approval-yield-pending
-                                  0
-                                  0)
-          (library-primitive-spec 'approval-resolve!
-                                  'primitive-approval-resolve!
-                                  2
-                                  2))
-         context))
-       ((equal? key '(agent debugger))
-        (register-primitive-library!
-         key
-         (list
-          (library-primitive-spec 'current-error 'primitive-current-error 0 0)
-          (library-primitive-spec 'condition-stack
-                                  'primitive-condition-stack
-                                  1
-                                  1)
-          (library-primitive-spec 'condition-environment
-                                  'primitive-condition-environment
-                                  2
-                                  2)
-          (library-primitive-spec 'condition-restarts
-                                  'primitive-condition-restarts
-                                  1
-                                  1)
-          (library-primitive-spec 'restart-invoke!
-                                  'primitive-restart-invoke!
-                                  2
-                                  2)
-          (library-primitive-spec 'debugger-yield
-                                  'primitive-debugger-yield
-                                  1
-                                  1))
-         context))
-       ((equal? key '(agent helper))
-        (register-primitive-library!
-         key
-         (list
-          (library-primitive-spec 'agent-artifact
-                                  'primitive-agent-artifact
-                                  2
-                                  2)
-          (library-primitive-spec 'agent-helper-save!
-                                  'primitive-agent-helper-save!
-                                  2
-                                  3)
-          (library-primitive-spec 'agent-helper-load
-                                  'primitive-agent-helper-load
-                                  1
-                                  2)
-          (library-primitive-spec 'agent-helper-list
-                                  'primitive-agent-helper-list
-                                  1
-                                  1)
-          (library-primitive-spec 'agent-helper-ref
-                                  'primitive-agent-helper-ref
-                                  1
-                                  2)
-          (library-primitive-spec 'agent-helper-promote-to-skill
-                                  'primitive-agent-helper-promote-to-skill
-                                  1
-                                  2))
-         context))
-       ((equal? key '(agent job))
-        (register-primitive-library!
-         key
-         (list
-          (library-primitive-spec 'job-start! 'primitive-job-start! 3 3)
-          (library-primitive-spec 'job-ref 'primitive-job-ref 1 1)
-          (library-primitive-spec 'job-list 'primitive-job-list 0 1)
-          (library-primitive-spec 'job-cancel! 'primitive-job-cancel! 1 1)
-          (library-primitive-spec 'job-interrupt!
-                                  'primitive-job-interrupt!
-                                  2
-                                  2)
-          (library-primitive-spec 'job-yields 'primitive-job-yields 1 2)
-          (library-primitive-spec 'job-status 'primitive-job-status 1 1))
-         context))
-       ((equal? key '(agent test))
+    (define (manifest-implementation-available? entry)
+      "Report whether manifest ENTRY has an implementation on this host."
+      (let ((kind (collection-entry-field entry 'source-kind #f)))
+        (cond
+         ((consent-native-library-ref
+           (collection-entry-field entry 'name #f))
+          #t)
+         ((eq? kind 'primitive)
+          (and (manifest-primitive-implementation-specs entry) #t))
+         ((eq? kind 'derived)
+          (eq? (collection-entry-field entry 'implementation-id #f)
+               'scheme-r5rs))
+         (else #f))))
+
+    (define (manifest-filter-primitive-specs entry primitive-specs)
+      "Return PRIMITIVE-SPECS reduced to manifest ENTRY exports."
+      (let ((exports (collection-entry-field entry 'exports '())))
+        (if (null? exports)
+            primitive-specs
+            (let loop ((rest primitive-specs) (result '()))
+              (cond
+               ((null? rest) (reverse result))
+               ((memq (car (car rest)) exports)
+                (loop (cdr rest) (cons (car rest) result)))
+               (else
+                (loop (cdr rest) result)))))))
+
+    (define (manifest-exported-primitive-specs entry)
+      "Return primitive specs for ENTRY after applying manifest exports."
+      (let ((primitive-specs
+             (manifest-primitive-implementation-specs entry)))
+        (if primitive-specs
+            (manifest-filter-primitive-specs entry primitive-specs)
+            (eval-error
+             "manifest primitive library has no implementation id"
+             (collection-entry-field entry 'name #f)))))
+
+    (define (manifest-library-routable? entry)
+      "Report whether manifest ENTRY describes an import route."
+      (and entry
+           (let ((kind (collection-entry-field entry 'source-kind #f)))
+             (or (collection-entry-field entry 'target #f)
+                 (collection-entry-field entry 'source-file #f)
+                 (eq? kind 'base-snapshot)
+                 (and (memq kind '(primitive derived))
+                      (manifest-implementation-available? entry))))))
+
+    (define (register-manifest-source-library! entry context environment)
+      "Register source library described by manifest ENTRY."
+      (let ((key (collection-entry-field entry 'name #f))
+            (source-file (collection-entry-field entry 'source-file #f))
+            (exports (collection-entry-field entry 'exports '()))
+            (overlay-library
+             (collection-entry-field entry 'primitive-overlay-library #f)))
+        (if (not source-file)
+            (eval-error "manifest source library has no source-file" key))
         (if (not (library-registry-ref context key))
             (register-source-library!
-             (agent-source-library-source key)
+             (manifest-source-library-source source-file key)
              context
-             environment)))
-       ((equal? key '(agent diagnostics))
-        (if (not (library-registry-ref context key))
-            (register-source-library!
-             (agent-source-library-source key)
-             context
-             environment)))
-       ((equal? key '(agent diff))
-        (if (not (library-registry-ref context key))
-            (register-source-library!
-             (agent-source-library-source key)
-             context
-             environment)))
-       ((equal? key '(agent vcs))
-        (if (not (library-registry-ref context key))
-            (register-source-library!
-             (agent-source-library-source key)
-             context
-             environment)))
-       ((equal? key '(agent network))
-        (if (not (library-registry-ref context key))
-            (register-source-library!
-             (agent-source-library-source key)
-             context
-             environment)))
-       ((equal? key '(agent registry))
-        (if (not (library-registry-ref context key))
-            (register-source-library!
-             (agent-source-library-source key)
-             context
-             environment)))
-       ((equal? key '(agent proposal))
-        (if (not (library-registry-ref context key))
-            (register-source-library!
-             (agent-source-library-source key)
-             context
-             environment)))
-       ((equal? key '(agent runner))
-        (if (not (library-registry-ref context key))
-            (register-source-library!
-             (agent-source-library-source key)
-             context
-             environment)))
-       ((equal? key '(agent reliability))
-        (if (not (library-registry-ref context key))
-            (register-source-library!
-             (agent-source-library-source key)
-             context
-             environment)))
-       ((equal? key '(agent prompt))
-        (if (not (library-registry-ref context key))
-            (register-source-library!
-             (agent-source-library-source key)
-             context
-             environment)))
-       ((equal? key '(agent generated-source))
-        (if (not (library-registry-ref context key))
-            (register-source-library!
-             (agent-source-library-source key)
-             context
-             environment)))
-       ((equal? key '(agent task))
-        (if (not (library-registry-ref context key))
-            (register-source-library!
-             (agent-source-library-source key)
-             context
-             environment)))
-       ((equal? key '(agent test primitive))
-        (register-primitive-library!
-         key
-         (list
-          (library-primitive-spec 'agent-test-eval-source-result
-                                  'primitive-agent-test-eval-source-result
-                                  1
-                                  2))
-         context))
-       ((equal? key '(agent memory))
-        (if (not (library-registry-ref context key))
-            (begin
-              (register-source-library!
-               (agent-source-library-source key)
-               context
-               environment)
+             environment))
+        (if (and overlay-library
+                 (library-registry-ref context key))
+            (let ((overlay-entry
+                   (library-collection-manifest-entry overlay-library)))
+              (if (not overlay-entry)
+                  (eval-error
+                   "manifest primitive overlay library is not declared"
+                   overlay-library))
               (register-library-primitive-bindings!
                key
-               (memory-library-primitive-specs)
-               context))))
-       ((equal? key '(agent memory primitive))
-        (register-primitive-library!
-         key
-         (memory-library-primitive-specs)
-         context))
-       ((equal? key '(agent plan))
-        (register-primitive-library!
-         key
-         (list
-          (library-primitive-spec 'plan-create!
-                                  'primitive-plan-create!
-                                  1
-                                  1)
-          (library-primitive-spec 'plan-ref 'primitive-plan-ref 1 1)
-          (library-primitive-spec 'plan-list 'primitive-plan-list 1 1)
-          (library-primitive-spec 'plan-step-add!
-                                  'primitive-plan-step-add!
-                                  2
-                                  2)
-          (library-primitive-spec 'plan-step-status!
-                                  'primitive-plan-step-status!
-                                  3
-                                  3)
-          (library-primitive-spec 'plan-status!
-                                  'primitive-plan-status!
-                                  2
-                                  2)
-          (library-primitive-spec 'plan-yield
-                                  'primitive-plan-yield
-                                  1
-                                  1))
-         context))
-       ((equal? key '(agent models))
-        (if (not (library-registry-ref context key))
-            (register-source-library!
-             (agent-source-library-source key)
-             context
-             environment)))
-       ((equal? key '(agent models primitive))
-        (register-primitive-library!
-         key
-         (list
-          (library-primitive-spec 'primitive-model-provider-register!
-                                  'primitive-model-provider-register!
-                                  1
-                                  1)
-          (library-primitive-spec 'primitive-model-providers
-                                  'primitive-model-providers
-                                  0
-                                  0)
-          (library-primitive-spec 'primitive-model-route
-                                  'primitive-model-route
-                                  1
-                                  2)
-          (library-primitive-spec 'primitive-model-complete
-                                  'primitive-model-complete
-                                  2
-                                  3)
-          (library-primitive-spec 'primitive-model-provider-diagnostics
-                                  'primitive-model-provider-diagnostics
-                                  0
-                                  1))
-         context))
-       ((equal? key '(agent context))
-        (register-primitive-library!
-         key
-         (list
-          (library-primitive-spec 'current-request
-                                  'primitive-current-request
-                                  0
-                                  0)
-          (library-primitive-spec 'current-focus
-                                  'primitive-current-focus
-                                  0
-                                  0)
-          (library-primitive-spec 'current-region-context
-                                  'primitive-current-region-context
-                                  0
-                                  0)
-          (library-primitive-spec 'current-buffer-context
-                                  'primitive-current-buffer-context
-                                  0
-                                  0)
-          (library-primitive-spec 'current-project-context
-                                  'primitive-current-project-context
-                                  0
-                                  0)
-          (library-primitive-spec 'current-conversation-summary
-                                  'primitive-current-conversation-summary
-                                  0
-                                  0)
-          (library-primitive-spec 'context-yield
-                                  'primitive-context-yield
-                                  1
-                                  1))
-         context))
-       ((equal? key '(agent reflect))
-        (register-primitive-library!
-         key
-         (list
-          (library-primitive-spec 'consent-version
-                                  'primitive-consent-version
-                                  0
-                                  0)
-          (library-primitive-spec 'current-capabilities
-                                  'primitive-current-capabilities
-                                  0
-                                  0)
-          (library-primitive-spec 'current-policy
-                                  'primitive-current-policy
-                                  0
-                                  0)
-          (library-primitive-spec 'current-budget
-                                  'primitive-current-budget
-                                  0
-                                  0)
-          (library-primitive-spec 'budget-remaining
-                                  'primitive-budget-remaining
-                                  0
-                                  0)
-          (library-primitive-spec 'budget-exhausted?
-                                  'primitive-budget-exhausted?
-                                  1
-                                  1)
-          (library-primitive-spec 'budget-yield
-                                  'primitive-budget-yield
-                                  0
-                                  0)
-          (library-primitive-spec 'current-imports
-                                  'primitive-current-imports
-                                  0
-                                  0)
-          (library-primitive-spec 'library-bindings
-                                  'primitive-library-bindings
-                                  1
-                                  1)
-          (library-primitive-spec 'libraries
-                                  'primitive-libraries
-                                  0
-                                  0)
-          (library-primitive-spec 'library-info
-                                  'primitive-library-info
-                                  1
-                                  1)
-          (library-primitive-spec 'library-search
-                                  'primitive-library-search
-                                  1
-                                  1)
-          (library-primitive-spec 'catalog-sources
-                                  'primitive-catalog-sources
-                                  0
-                                  0)
-          (library-primitive-spec 'catalog-diagnostics
-                                  'primitive-catalog-diagnostics
-                                  0
-                                  0)
-          (library-primitive-spec 'add-manifest!
-                                  'primitive-add-manifest!
-                                  2
-                                  2)
-          (library-primitive-spec 'remove-manifest!
-                                  'primitive-remove-manifest!
-                                  1
-                                  1)
-          (library-primitive-spec 'add-manifest-root!
-                                  'primitive-add-manifest-root!
-                                  2
-                                  2)
-          (library-primitive-spec 'remove-manifest-root!
-                                  'primitive-remove-manifest-root!
-                                  1
-                                  1)
-          (library-primitive-spec 'refresh-library-catalog!
-                                  'primitive-refresh-library-catalog!
-                                  0
-                                  0)
-          (library-primitive-spec 'library-documentation
-                                  'primitive-library-documentation
-                                  1
-                                  1)
-          (library-primitive-spec 'binding-libraries
-                                  'primitive-binding-libraries
-                                  1
-                                  1)
-          (library-primitive-spec 'documented-bindings
-                                  'primitive-documented-bindings
-                                  0
-                                  0)
-          (library-primitive-spec 'apropos
-                                  'primitive-apropos
-                                  1
-                                  1)
-          (library-primitive-spec 'reflection-field
-                                  'primitive-reflection-field
-                                  2
-                                  3)
-          (library-primitive-spec 'documentation-field
-                                  'primitive-documentation-field
-                                  2
-                                  3)
-          (library-primitive-spec 'docstring
-                                  'primitive-docstring
-                                  1
-                                  2)
-          (library-primitive-spec 'current-session-info
-                                  'primitive-current-session-info
-                                  0
-                                  0)
-          (library-primitive-spec 'recent-yields
-                                  'primitive-recent-yields
-                                  0
-                                  0)
-          (library-primitive-spec 'recent-errors
-                                  'primitive-recent-errors
-                                  0
-                                  0)
-          (library-primitive-spec 'recent-policy-decisions
-                                  'primitive-recent-policy-decisions
-                                  0
-                                  0)
-          (library-primitive-spec 'capability-info
-                                  'primitive-capability-info
-                                  1
-                                  1)
-          (library-primitive-spec 'documentation
-                                  'primitive-documentation
-                                  1
-                                  1)
-          (library-primitive-spec 'consent-doc
-                                  'primitive-consent-doc
-                                  1
-                                  1)
-          (library-primitive-spec 'consent-describe
-                                  'primitive-consent-describe
-                                  1
-                                  1)
-          (library-primitive-spec 'macroexpand
-                                  'primitive-macroexpand
-                                  1
-                                  2)
-          (library-primitive-spec 'macroexpand-1
-                                  'primitive-macroexpand-1
-                                  1
-                                  2)
-          (library-primitive-spec 'macroexpand-library
-                                  'primitive-macroexpand-library
-                                  1
-                                  2)
-          (library-primitive-spec 'macro-binding-info
-                                  'primitive-macro-binding-info
-                                  1
-                                  1)
-          (library-primitive-spec 'syntax-source
-                                  'primitive-syntax-source
-                                  1
-                                  1)
-          (library-primitive-spec 'macroexpand-yield
-                                  'primitive-macroexpand-yield
-                                  2
-                                  2))
-         context))
-       ((equal? key '(agent redaction))
-        (register-primitive-library!
-         key
-         (list
-          (library-primitive-spec 'secret-source?
-                                  'primitive-secret-source?
-                                  1
-                                  1)
-          (library-primitive-spec 'redact
-                                  'primitive-redact
-                                  2
-                                  2)
-          (library-primitive-spec 'context-local-only!
-                                  'primitive-context-local-only!
-                                  2
-                                  2)
-          (library-primitive-spec 'redaction-log
-                                  'primitive-redaction-log
-                                  0
-                                  1)
-          (library-primitive-spec 'safe-for-provider?
-                                  'primitive-safe-for-provider?
-                                  2
-                                  2))
-         context))
-       ((equal? key '(agent session))
-        (register-primitive-library!
-         key
-         (list
-          (library-primitive-spec 'create-session
-                                  'primitive-create-session
-                                  0
-                                  2)
-          (library-primitive-spec 'switch-session
-                                  'primitive-switch-session
-                                  1
-                                  1)
-          (library-primitive-spec 'set-default-session!
-                                  'primitive-switch-session
-                                  1
-                                  1)
-          (library-primitive-spec 'current-session
-                                  'primitive-current-session
-                                  0
-                                  0)
-          (library-primitive-spec 'list-sessions
-                                  'primitive-list-sessions
-                                  0
-                                  1)
-          (library-primitive-spec 'close-session
-                                  'primitive-close-session
-                                  1
-                                  1))
-         context))
-       ((equal? key '(agent transcript))
-        (if (not (library-registry-ref context key))
-            (register-source-library!
-             (agent-source-library-source key)
-             context
-             environment)))
-       (else
-        (eval-error "unknown agent library" key))))
-
-    (define (register-consent-library! key context environment)
-      "Register a supported consent core library by KEY."
-      (cond
-       ((equal? key '(consent capability))
-        (if (not (library-registry-ref context key))
-            (register-source-library!
-             (agent-source-library-source key)
-             context
-             environment)))
-       ((equal? key '(consent capability primitive))
-        (register-primitive-library!
-         key
-         (list
-          (library-primitive-spec 'grant-capability!
-                                  'primitive-grant-capability!
-                                  1
-                                  1)
-          (library-primitive-spec 'current-grants
-                                  'primitive-current-grants
-                                  0
-                                  0)
-          (library-primitive-spec 'grant-ref
-                                  'primitive-grant-ref
-                                  1
-                                  1)
-          (library-primitive-spec 'grant-attenuate
-                                  'primitive-grant-attenuate
-                                  2
-                                  2)
-          (library-primitive-spec 'grant-revoke!
-                                  'primitive-grant-revoke!
-                                  1
-                                  1)
-          (library-primitive-spec 'call-with-capability-grant
-                                  'primitive-call-with-capability-grant
-                                  2
-                                  2)
-          (library-primitive-spec 'handle-ref
-                                  'primitive-handle-ref
-                                  1
-                                  1)
-          (library-primitive-spec 'handle-live?
-                                  'primitive-handle-live?
-                                  1
-                                  1)
-          (library-primitive-spec 'handle-kind
-                                  'primitive-handle-kind
-                                  1
-                                  1)
-          (library-primitive-spec 'handle-revalidate
-                                  'primitive-handle-revalidate
-                                  1
-                                  1)
-          (library-primitive-spec 'handle-release!
-                                  'primitive-handle-release!
-                                  1
-                                  1))
-         context))
-       (else
-        (eval-error "unknown consent library" key))))
-
-    (define (register-stdlib-library! key context environment)
-      "Register a supported optional stdlib library by KEY."
-      (let ((alias-spec (library-alias-spec key stdlib-library-aliases)))
-        (cond
-         (alias-spec
-          (register-library-alias! alias-spec context environment))
-         ((assoc/equal key stdlib-source-library-load-paths)
-          (if (not (library-registry-ref context key))
-              (register-source-library!
-               (stdlib-source-library-source key)
+               (manifest-exported-primitive-specs overlay-entry)
+               context)))
+        (if (not (null? exports))
+            (let ((library (library-registry-ref context key)))
+              (if (not library)
+                  (eval-error
+                   "manifest source library registered a different name"
+                   key))
+              (library-registry-set!
                context
-               environment)))
-         ((member key stdlib-library-keys)
-          (eval-error "stdlib library has no registration strategy" key))
+               key
+               (make-library
+                (library-name library)
+                (library-key library)
+                (filter-library-exports
+                 (library-exports library)
+                 exports
+                 key)
+                (library-value-environment library)
+                (library-syntax-environment library)))))))
+
+    (define (register-manifest-implementation-library! entry context environment)
+      "Register primitive or derived library described by manifest ENTRY."
+      (let ((key (collection-entry-field entry 'name #f))
+            (native-bindings
+             (consent-native-library-ref
+              (collection-entry-field entry 'name #f))))
+        (cond
+         (native-bindings
+          (register-native-library! key native-bindings context))
+         ((eq? (collection-entry-field entry 'source-kind #f)
+               'primitive)
+          (register-primitive-library!
+           key
+           (manifest-exported-primitive-specs entry)
+           context))
+         ((and (eq? (collection-entry-field entry 'source-kind #f)
+                    'derived)
+               (eq? (collection-entry-field entry 'implementation-id #f)
+                    'scheme-r5rs))
+          (register-r5rs-library! key context environment))
          (else
-          (eval-error "unknown stdlib library" key)))))
+          (eval-error
+           "manifest primitive library has no implementation id"
+           key)))))
 
     (define (library-available? name context environment)
       "Report whether NAME is a known or already registered library."
@@ -3043,15 +2896,16 @@
           ("#t when NAME names a known, registered, or host-loadable"
             "library, else #f.")))
         (effects state-read error))
-      (let ((key (library-name-key name)))
-        (or (equal? key scheme-base-library-key)
-            (member key standard-library-keys)
-            (member key stdlib-library-keys)
-            (member key agent-library-keys)
-            (member key consent-library-keys)
-            (member key empty-emacs-capability-library-keys)
-            (and (library-registry-ref context key) #t)
-            (host-library-available? key context))))
+      (let* ((key (library-name-key name))
+             (entry (library-collection-manifest-entry key)))
+        (and
+         (or (not (library-visibility-internal?
+                   (library-visibility key)))
+             (library-internal-import-allowed? context))
+         (or (not entry)
+             (library-entry-available? entry))
+         (or (manifest-library-routable? entry)
+             (and (library-registry-ref context key) #t)))))
 
     (define (resolve-library name context environment)
       "Resolve NAME to a library, registering lazy standard libraries as needed."
@@ -3067,30 +2921,34 @@
         (returns (type library)
          (description "The resolved library object for NAME."))
         (effects state-read state-write error))
-      (let ((key (library-name-key name)))
-        (cond
-         ((equal? key scheme-base-library-key)
-          (register-scheme-base-library! context environment))
-         ((member key standard-library-keys)
-          (register-standard-library! key context environment))
-         ((member key stdlib-library-keys)
-          (register-stdlib-library! key context environment))
-         ((and (not (library-registry-ref context key))
-               (host-library-available? key context))
-          ;; Prefer the compiled-in native bindings (the product serving as its
-          ;; own host runner at native speed); fall back to interpreting the
-          ;; library's source where no native table is registered (interpreted
-          ;; hosts, or libraries outside the compiled link set).
-          (let ((bindings (consent-native-library-ref key)))
-            (if bindings
-                (register-native-library! key bindings context)
-                (register-host-source-library! key context environment))))
-         ((member key agent-library-keys)
-          (register-agent-library! key context environment))
-         ((member key consent-library-keys)
-          (register-consent-library! key context environment))
-         ((member key empty-emacs-capability-library-keys)
-          (register-empty-emacs-capability-library! key context)))
+      (let* ((key (library-name-key name))
+             (entry (library-collection-manifest-entry key)))
+        (ensure-library-import-allowed key context)
+        (if (and entry (not (library-entry-available? entry)))
+            (eval-error "optional library is unavailable on this host" key))
+        (if (not (library-registry-ref context key))
+            (cond
+             ((not entry) #f)
+             ((collection-entry-field entry 'target #f)
+              (register-library-alias!
+               (manifest-library-alias-spec entry)
+               context
+               environment))
+             ((eq? (collection-entry-field entry 'source-kind #f)
+                   'base-snapshot)
+              (register-scheme-base-library! context environment))
+             ((collection-entry-field entry 'source-file #f)
+              (register-manifest-source-library! entry context environment))
+             ((memq (collection-entry-field entry 'source-kind #f)
+                    '(primitive derived))
+              (register-manifest-implementation-library!
+               entry
+               context
+               environment))
+             (else
+              (eval-error
+               "library has no manifest registration strategy"
+               key))))
         (or (library-registry-ref context key)
             (eval-error "unknown library" key))))
 
