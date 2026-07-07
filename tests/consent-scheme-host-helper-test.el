@@ -67,8 +67,16 @@
   "Keep expensive direct-only suites out of compiled host runs."
   (should
    (member
-    "tests/scheme/stdlib-mapping-test.scm"
+    "tests/scheme/consent-manifest-smoke-test.scm"
     (consent--scheme-host-test-files-for-host 'compiled)))
+  (should-not
+   (member
+    "tests/scheme/consent-fixture-test.scm"
+    (consent--scheme-host-test-files-for-host 'compiled)))
+  (should-not
+   (member
+    "tests/scheme/consent-fixture-test.scm"
+    (consent--scheme-host-test-files-for-host 'gambit-native)))
   (should-not
    (member
     "tests/scheme/stdlib-mapping-conformance-test.scm"
