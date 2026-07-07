@@ -629,6 +629,23 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
        \"{\\\"choices\\\":[{\\\"message\\\":{\\\"content\\\":\\\"source completion\\\"}}]}\")")
     "\"source completion\"")))
 
+(ert-deftest consent-library-test-agent-generated-source-is-source-backed ()
+  "Load `(agent generated-source)' from the shared portable source library."
+  (let ((source-file
+         (consent--agent-source-library-file "(agent generated-source)")))
+    (should source-file)
+    (should (string-suffix-p
+             "scheme/agent/generated-source.sld"
+             source-file))
+    (should (file-readable-p source-file)))
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (agent generated-source))
+      (generated-source-candidate-status
+       (generated-source-candidate \"(define answer 42)\\nanswer\\n\"))")
+    "ready")))
+
 (ert-deftest consent-library-test-source-backed-calls-use-adapter-budget ()
   "Source-backed adapter calls use their own evaluation budget."
   ;; Prime the source environment so the assertion only covers procedure calls.

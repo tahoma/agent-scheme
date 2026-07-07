@@ -96,17 +96,30 @@
                "Define differentiator-tests"))
       (should (string-match-p (regexp-quote needle) code-block)))))
 
-(ert-deftest consent-repl-agent-quickstart-doc-test-display-is-not-eval-gate ()
-  "The tutorial distinguishes inspecting model text from evaluating it."
+(ert-deftest consent-repl-agent-quickstart-doc-test-generated-source-gate ()
+  "The tutorial gates model text through the generated-source loop."
   (let* ((doc
           (consent-repl-agent-quickstart-doc-test--read
            "docs/repl-agent-quickstart.md"))
          (flat-doc
           (replace-regexp-in-string "[[:space:]\n]+" " " doc)))
     (dolist (needle
-             '("Displaying `code` prints the model's string; it does not evaluate the returned Scheme."
-               "Do not continue to the reviewer or memory prompts until the REPL has evaluated Scheme and produced `test-results` and `sample-derivative`."))
-      (should (string-match-p (regexp-quote needle) flat-doc)))))
+             '("(agent generated-source)"
+               "(consent eval)"
+               "(define generated-run"
+               "(generated-source-run"
+               "(list 'required-imports '((scheme base)))"
+               "(cons 'repair quickstart-repair)"
+               "(list 'max-retries 1)"
+               "(generated-source-apply"
+               "(interaction-environment)"
+               "Only an accepted run is allowed to mutate the live REPL session."
+               "Do not continue to the reviewer or memory prompts until the generated-source run is accepted"))
+      (should (string-match-p (regexp-quote needle) flat-doc)))
+    (should-not
+     (string-match-p
+      (regexp-quote "Displaying `code` prints the model's string")
+      flat-doc))))
 
 (ert-deftest consent-repl-agent-quickstart-doc-test-tutorial-imports-write-once ()
   "The tutorial avoids duplicate import prompts during the same REPL session."
@@ -120,7 +133,7 @@
     (should
      (= 1
         (consent-repl-agent-quickstart-doc-test--count
-         "(import (scheme write))"
+         "(scheme write)"
          tutorial)))))
 
 (ert-deftest consent-repl-agent-quickstart-doc-test-primary-repl-uses-default-chrome ()
@@ -201,7 +214,13 @@
              '("(define plan"
                "(display plan)"
                "(define code"
-               "(display code)"
+               "(define generated-run"
+               "(generated-source-run-status generated-run)"
+               "(generated-source-run-diagnostics generated-run)"
+               "(generated-source-run-repair-prompts generated-run)"
+               "(define application"
+               "(generated-source-apply"
+               "(quickstart-field application 'status)"
                "(define test-results"
                "(define sample-derivative"
                "(datum->text test-results)"

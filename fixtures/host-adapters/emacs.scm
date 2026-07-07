@@ -46,6 +46,7 @@
      (library (agent test))
      (library (agent diagnostics))
      (library (agent diff))
+     (library (agent generated-source))
      (library (agent vcs))
      (library (agent network))
      (library (consent capability))
