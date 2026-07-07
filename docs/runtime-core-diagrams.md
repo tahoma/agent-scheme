@@ -46,7 +46,7 @@ flowchart TD
   macro["(consent macro)<br/>syntax environments,<br/>syntax-rules, macro expansion,<br/>syntax definitions"]
   result["(consent result)<br/>stable external result datums"]
 
-  shared["Shared manifests and source libraries<br/>scheme/manifest/index.sld<br/>scheme/*/manifest.sld<br/>scheme/consent/*.sld<br/>scheme/stdlib/*.sld<br/>scheme/agent/*.sld"]
+  shared["Shared manifests and source libraries<br/>scheme/manifest.sld<br/>scheme/*/manifest.sld<br/>scheme/consent/*.sld<br/>scheme/stdlib/*.sld<br/>scheme/agent/*.sld"]
 
   user --> eval
   eval --> interpreter

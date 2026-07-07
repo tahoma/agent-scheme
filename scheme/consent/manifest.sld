@@ -403,6 +403,10 @@
                      consent-version-components consent-version
                      consent-set-library-search-directories!
                      consent-library-search-directory-list
+                     consent-set-library-system-directories!
+                     consent-library-system-directory-list
+                     consent-set-library-user-directories!
+                     consent-library-user-directory-list
                      consent-register-embedded-source!
                      consent-embedded-source-ref
                      consent-register-native-library!

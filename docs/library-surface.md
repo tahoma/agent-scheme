@@ -2,17 +2,19 @@
 
 Consent Scheme's importable library surface is owned by Scheme-readable
 manifests, not by hand-curated resolver lists. The manifests are the durable
-inventory for issue #483: they say which libraries exist in the seed runtime,
+inventory for issue #483: they say which libraries exist in the initial runtime,
 which names are ordinary public imports, which names are internal substrate, and
 which imports are host-conditional capability surfaces.
 
 ## Manifest Topology
 
-The default seed root is `scheme/`. The top-level seed index is
-`scheme/manifest/index.sld`, which defines `(manifest index)` and links the
-collection-local manifests. The index also references itself through a
-`manifest` collection entry, so the aggregate manifest library is part of
-the same manifest graph rather than a special library outside the catalog:
+The only built-in filesystem convention is that each configured manifest root is
+a directory with a top-level `manifest.sld`. The default system manifest root in
+a source checkout is `scheme/`, whose `scheme/manifest.sld` defines
+`(manifest index)` and links the collection-local manifests. The index also
+references itself through a `manifest` collection entry, so the aggregate
+manifest library is part of the same manifest graph rather than a special
+library outside the catalog:
 
 - `scheme/consent/manifest.sld` for R7RS-small, core Consent Scheme, and runtime
   implementation libraries.
@@ -22,23 +24,29 @@ the same manifest graph rather than a special library outside the catalog:
   backing libraries.
 - `scheme/cli/manifest.sld` for CLI adapter-facing libraries.
 - `scheme/emacs/manifest.sld` for Emacs host-adapter capability libraries.
-- `scheme/manifest/index.sld` for the aggregate manifest collection itself.
+- `scheme/manifest.sld` for the aggregate manifest collection itself.
 
 Collection manifests use collection-local `source-file` values. For example,
 `scheme/agent/manifest.sld` records `memory.sld`, not
 `scheme/agent/memory.sld` and not `../agent/memory.sld`. The top-level manifest
 index provides the collection's `source-root`, so a resolver configured with a
-different seed root can still aggregate the same collection without child
+different manifest root can still aggregate the same collection without child
 manifests peeking up into sibling directories.
 
-The Emacs Lisp bootstrap and portable Scheme bootstrap both consume this seed
-index. The default seed root happens to be `scheme/`, but the resolver logic is
-about a configured seed root, not a hard-coded repository path.
+The Emacs Lisp bootstrap reads ordered `consent-library-system-path` and
+`consent-library-user-path` root lists. The portable Scheme runtime exposes the
+same split as system and user directory lists, with the older combined search
+directory setter preserved as a compatibility shim for host runners. Compiled
+products also carry the embedded `manifest.sld` graph as the final system root,
+after configured filesystem roots. This issue uses system roots before user
+roots only as the minimum initial catalog bootstrap; #50 owns final resolver
+precedence, shadowing, policy gates, dynamic root loading, dependency solving,
+and versioned resolution behavior.
 
 Manifests do not become the only authority for imports. A library already
 registered in an evaluator context, including a library defined ad hoc in a REPL
 session with `define-library`, remains importable even when no manifest entry
-exists for it. Manifest records provide durable seed inventory and catalog
+exists for it. Manifest records provide durable initial inventory and catalog
 metadata; the live registry remains the authority for libraries that have
 already been defined in the current context.
 
@@ -79,7 +87,7 @@ The seed manifests currently use these source kinds:
 - `base-snapshot`: `(scheme base)` is registered from the current base
   environment snapshot.
 - `source-library`: The resolver loads a checked-in `.sld` source file from the
-  configured seed root.
+  manifest root that declared the collection.
 - `primitive-library`: The resolver asks the host for the primitive
   implementation identified by manifest `implementation-id`.
 - `derived`: The resolver derives the library from already-available libraries
@@ -96,17 +104,18 @@ removes namespace-prefix dispatch from the import path.
 
 ## Exports
 
-Repo-owned built-in collection manifest entries must declare `exports` for every
-source kind: source libraries, primitive libraries, derived libraries, facades,
-and aliases. This keeps reflection, search, public/internal enforcement, and
-future provider-owned registration on the same explicit metadata surface. For
-primitive libraries there is no source library to inspect, so the manifest is
-the only readable contract.
+Repo-owned built-in collection manifest entries that own an implementation
+surface must declare `exports`: source libraries, primitive libraries, derived
+libraries, and facades. This keeps reflection, search, public/internal
+enforcement, and future provider-owned registration on the same explicit
+metadata surface. For primitive libraries there is no source library to inspect,
+so the manifest is the only readable contract.
 
 Imported or adapted library entries use `upstream-source-url` for provenance
 links to external source material. The field is deliberately named as upstream
 metadata rather than local resolver state; local loading paths remain
-`source-file` plus the collection's manifest-index `source-root`.
+`source-file` plus the collection's manifest-index `source-root`, both relative
+to the manifest root that supplied the entry.
 
 User-provided or ad-hoc source-library manifest entries may declare `exports`,
 but they do not have to. When omitted, the catalog reads the source library's own
@@ -118,8 +127,12 @@ a primitive overlay, such as `(agent approval)`, `(agent memory)`, and
 This lets user-provided collections publish a narrow contract without forking a
 source library or making the resolver guess.
 
-Alias manifest entries may also declare `exports`; the alias exposes only the
-declared subset of the target library's exports.
+Pure alias manifest entries may omit `exports`; the alias then inherits the
+target library's full export surface. Reducing alias entries declare `exports`,
+and the alias exposes only that declared subset of the target library's exports.
+The built-in manifests use this rule to avoid repeating large SRFI and R7RS-large
+alias export lists while keeping subset aliases such as `(stdlib json read)`
+explicit.
 
 ## Availability
 
@@ -145,7 +158,7 @@ identifiers and exact non-negative integers; `define-library` declares exports;
 import sets can use `only`, `except`, `prefix`, and `rename`; and
 `cond-expand` can test `(library <library-name>)`. R7RS says implementations
 that store libraries in files should document the name-to-file mapping. Consent
-therefore layers visibility and seed-root mapping metadata on top of R7RS
+therefore layers visibility and manifest-root mapping metadata on top of R7RS
 without changing R7RS import syntax.
 
 R7RS `define-library` also does not include R6RS-style phase or version

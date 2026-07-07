@@ -80,6 +80,16 @@ find "$scheme_dir/stdlib" -name '*.sld' | sort | while IFS= read -r sld; do
   ln -s "$sld" "$alias"
 done
 
+# Root manifest files are deliberately named `manifest.sld` at the top of a
+# manifest root, while bare R7RS hosts derive `(manifest index)` lookup from the
+# library name. Mirror only the lookup path in the throwaway build tree.
+root_manifest="$scheme_dir/manifest.sld"
+if [ -r "$root_manifest" ]; then
+  root_manifest_alias="$build_dir/manifest/index.sld"
+  mkdir -p "$(dirname "$root_manifest_alias")"
+  ln -s "$root_manifest" "$root_manifest_alias"
+fi
+
 # Generate the driver: import every host-loadable project library with a unique
 # prefix (prefixing avoids export-name collisions between libraries while still
 # forcing each one to be compiled). Libraries Guile provides natively -- the

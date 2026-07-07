@@ -15,6 +15,10 @@
           consent-version
           consent-set-library-search-directories!
           consent-library-search-directory-list
+          consent-set-library-system-directories!
+          consent-library-system-directory-list
+          consent-set-library-user-directories!
+          consent-library-user-directory-list
           consent-register-embedded-source!
           consent-embedded-source-ref
           consent-register-native-library!
@@ -426,29 +430,67 @@
     ;; CONSENT_LIBRARY_PATH, datadir, and executable-relative directories here at
     ;; startup, where host facilities exist. Embedded source is the
     ;; zero-dependency floor, consulted only when no on-disk copy is found.
-    (define consent-library-search-directories
+    (define consent-library-system-directories
       (consent-environment-library-search-directories))
 
-    (define (consent-set-library-search-directories! directories)
-      "Replace the host-injected library search-directory prefixes, highest"
-      "precedence first."
+    (define consent-library-user-directories '())
+
+    (define (consent-set-library-system-directories! directories)
+      "Replace host-injected system library roots, highest precedence first."
       #((parameters
          (directories (type (list-of string))
-          (description ("List of directory path strings, highest precedence first."))))
+          (description ("List of system library root paths."))))
         (returns . "The unspecified value.")
         (effects state-write))
-      (set! consent-library-search-directories directories)
+      (set! consent-library-system-directories directories)
+      consent-unspecified)
+
+    (define (consent-library-system-directory-list)
+      "Return the host-injected system library root prefixes."
+      #((parameters)
+        (returns (type list)
+         (description ("The current list of system library root prefixes.")))
+        (effects state-read))
+      consent-library-system-directories)
+
+    (define (consent-set-library-user-directories! directories)
+      "Replace configured user library roots, highest precedence first."
+      #((parameters
+         (directories (type (list-of string))
+          (description ("List of user library root paths."))))
+        (returns . "The unspecified value.")
+        (effects state-write))
+      (set! consent-library-user-directories directories)
+      consent-unspecified)
+
+    (define (consent-library-user-directory-list)
+      "Return configured user library root prefixes."
+      #((parameters)
+        (returns (type list)
+         (description ("The current list of user library root prefixes.")))
+        (effects state-read))
+      consent-library-user-directories)
+
+    (define (consent-set-library-search-directories! directories)
+      "Replace system library roots and clear user roots."
+      #((parameters
+         (directories (type (list-of string))
+          (description ("List of system library root path strings."))))
+        (returns . "The unspecified value.")
+        (effects state-write))
+      (set! consent-library-system-directories directories)
+      (set! consent-library-user-directories '())
       consent-unspecified)
 
     (define (consent-library-search-directory-list)
-      "Return the host-injected library search-directory prefixes."
+      "Return the combined system and user library root prefixes."
       #((parameters)
         (returns (type list)
          (description
-          ("The current list of host-injected library search-directory"
-            "prefixes.")))
+          ("The current list of system and user library root prefixes.")))
         (effects state-read))
-      consent-library-search-directories)
+      (append consent-library-system-directories
+              consent-library-user-directories))
 
     ;; Embedded runtime source registered by a compiled host's linked-in
     ;; `(consent embedded-source)' module: an alist of logical-relative-path to
