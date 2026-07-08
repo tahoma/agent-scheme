@@ -58,6 +58,9 @@
 (defvar consent--source-library-internal-imports-allowed nil
   "Non-nil while loading trusted runtime source libraries.")
 
+(defconst consent--source-library-lisp-eval-depth 32768
+  "Minimum Lisp recursion depth while evaluating trusted source libraries.")
+
 (defconst consent--source-library-call-options
   '(:max-steps 12000000
     :max-host-callbacks 2000000)
@@ -261,7 +264,8 @@
 (defun consent--manifest-library-quoted-variable
     (source key variable description)
   "Return quoted VARIABLE from manifest library SOURCE."
-  (let* ((max-lisp-eval-depth (max max-lisp-eval-depth 16384))
+  (let* ((max-lisp-eval-depth
+          (max max-lisp-eval-depth consent--source-library-lisp-eval-depth))
          (forms (consent-read-all source '(:source-metadata nil))))
     (unless (= (length forms) 1)
       (consent--eval-error
@@ -1478,7 +1482,8 @@
 (defun consent--register-source-library
     (source context environment)
   "Evaluate one define-library SOURCE into CONTEXT."
-  (let ((max-lisp-eval-depth (max max-lisp-eval-depth 16384))
+  (let ((max-lisp-eval-depth
+         (max max-lisp-eval-depth consent--source-library-lisp-eval-depth))
         (consent--source-library-internal-imports-allowed t)
         (forms (consent-read-all source)))
     (unless (= (length forms) 1)
