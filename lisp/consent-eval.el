@@ -305,18 +305,22 @@ agent events, and handle references across calls."
 (cl-defstruct (consent--interaction-context
                (:constructor consent--make-interaction-context-record
                              (options environment syntax-environment
-                              program-output-port program-input-port))
+                              libraries program-output-port
+                              program-input-port))
                (:copier nil))
   "Durable state a REPL session reuses across submissions.
 OPTIONS are the evaluator options (carrying `:session-id', `:policy-actions',
 and `:capability-grants').  ENVIRONMENT is the persistent value environment and
 SYNTAX-ENVIRONMENT the persistent syntax environment, so definitions, imports,
 and macros persist across `consent-interaction-eval-form' submissions.
-PROGRAM-OUTPUT-PORT captures what each submission writes to current output,
-separated from the interaction record stream.  PROGRAM-INPUT-PORT, when present,
-is the shared stdin cursor the REPL form reader and evaluated reads both draw
-from (or nil when program input is not connected)."
-  options environment syntax-environment program-output-port program-input-port)
+LIBRARIES is the live library registry, which reflection and subsequent imports
+consult across submissions.  PROGRAM-OUTPUT-PORT captures what each submission
+writes to current output, separated from the interaction record stream.
+PROGRAM-INPUT-PORT, when present, is the shared stdin cursor the REPL form
+reader and evaluated reads both draw from (or nil when program input is not
+connected)."
+  options environment syntax-environment libraries program-output-port
+  program-input-port)
 
 ;;;###autoload
 (defun consent-make-interaction-context (&optional options)
@@ -341,6 +345,7 @@ stdin cursor.  Mirrors the portable `(consent eval)'
     (consent--make-interaction-context-record
      options environment
      (consent--eval-context-syntax-environment context)
+     (consent--eval-context-libraries context)
      (consent--primitive-open-output-string nil nil)
      input-port)))
 
@@ -398,6 +403,7 @@ session the rest of Emacs evaluates against, rather than an island."
                                 (consent--make-program-input-port grant reader)))))
       (consent--make-interaction-context-record
        merged-options environment syntax-environment
+       (consent--eval-context-libraries context)
        (consent--primitive-open-output-string nil nil)
        input-port))))
 
@@ -446,14 +452,17 @@ The buffer is cleared before each evaluation."
 ;;;###autoload
 (defun consent-interaction-eval-form (interaction form)
   "Evaluate one already-read top-level FORM in durable INTERACTION.
-Reuse INTERACTION's value and syntax environments and program-output port and
-return an `evaluation-result' datum (ok/values or captured error) like
-`consent-eval-source-result', never signaling on an evaluator error.  Mirrors
-the portable `(consent eval)' `consent-interaction-eval-form'."
+Reuse INTERACTION's value environment, syntax environment, library registry, and
+program-output port and return an `evaluation-result' datum (ok/values or
+captured error) like `consent-eval-source-result', never signaling on an
+evaluator error.  Mirrors the portable `(consent eval)'
+`consent-interaction-eval-form'."
   (let* ((options (consent--interaction-context-options interaction))
          (environment (consent--interaction-context-environment interaction))
          (syntax-environment
           (consent--interaction-context-syntax-environment interaction))
+         (libraries
+          (consent--interaction-context-libraries interaction))
          (program-output-port
           (consent--interaction-context-program-output-port interaction))
          (program-input-port
@@ -462,6 +471,8 @@ the portable `(consent eval)' `consent-interaction-eval-form'."
     (setf (consent--port-contents program-output-port) "")
     (setf (consent--eval-context-syntax-environment context)
           syntax-environment)
+    (setf (consent--eval-context-libraries context)
+          libraries)
     (setf (consent--eval-context-interaction-environment context)
           environment)
     (setf (consent--eval-context-current-output-port context)
@@ -475,9 +486,13 @@ the portable `(consent eval)' `consent-interaction-eval-form'."
                 (consent--make-sequence (list form) t)
                 environment context)))
           (consent-capability-expire-after-eval! context)
+          (setf (consent--interaction-context-libraries interaction)
+                (consent--eval-context-libraries context))
           (consent--ok-result-datum value context))
       (error
        (consent-capability-expire-after-eval! context)
+       (setf (consent--interaction-context-libraries interaction)
+             (consent--eval-context-libraries context))
        (consent--condition-result-datum condition context)))))
 
 (provide 'consent-eval)
