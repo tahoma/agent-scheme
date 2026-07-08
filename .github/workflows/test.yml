@@ -220,21 +220,22 @@ jobs:
           } >> "ci-logs/${CONSENT_CI_REFLECT_STRESS_LOG_FILE}"
           exit "$status"
 
-      # Warm the incremental Gambit build tree. The exact key changes whenever any
-      # runtime source or the compile script changes (so a content change always
-      # forces the right work); the restore-keys prefix falls back to the most
-      # recent tree so a normal push recompiles only the modules it touched -- in
-      # the common case just the version module plus the relink. Only the
-      # compiling (native) leg participates; the binary is independent of the
+      # Warm only non-runnable Gambit intermediate state. Fallback restores may
+      # come from another ref, so the cache intentionally excludes bin/consent;
+      # make compile must relink and smoke-test the product binary for the
+      # current checkout before the native shard can run it. Only the compiling
+      # (native) leg participates; the binary is independent of the
       # source-metadata/docstring matrix axes, so the key omits them.
       - name: Cache Gambit compiled build tree
         if: ${{ matrix.combo.native }}
         uses: actions/cache@v4
         with:
-          path: build/compile/gambit
-          key: ${{ runner.os }}-gambit-build-v1-${{ env.CONSENT_GAMBIT_VERSION }}-${{ hashFiles('scheme/**', 'tools/compile-portable.sh') }}
+          path: |
+            build/compile/gambit/src
+            build/compile/gambit/incremental
+          key: ${{ runner.os }}-gambit-build-v2-${{ env.CONSENT_GAMBIT_VERSION }}-${{ hashFiles('scheme/**', 'tools/compile-portable.sh') }}
           restore-keys: |
-            ${{ runner.os }}-gambit-build-v1-${{ env.CONSENT_GAMBIT_VERSION }}-
+            ${{ runner.os }}-gambit-build-v2-${{ env.CONSENT_GAMBIT_VERSION }}-
 
       - name: Run portable R7RS Gambit-compiled shard
         if: ${{ matrix.combo.native }}
@@ -400,19 +401,21 @@ jobs:
             ~/.cache/racket
           key: ${{ runner.os }}-racket-r7rs-v1
 
-      # Warm the Racket compiled build tree (collection sources plus the bytecode
-      # raco make writes under their compiled/ directories). write-if-changed
-      # generation keeps unchanged sources' timestamps stable, so a restore lets
-      # raco make recompile only the modules that actually changed before raco exe
-      # links from the reused bytecode. Only the Racket-compiled host builds it.
+      # Warm only non-runnable Racket intermediate state (collection sources plus
+      # the bytecode raco make writes under their compiled/ directories).
+      # Fallback restores intentionally exclude bin/consent, so raco exe must
+      # write the tested product binary for the current checkout. Only the
+      # Racket-compiled host builds it.
       - name: Cache Racket compiled build tree
         if: matrix.host.host == 'compiled'
         uses: actions/cache@v4
         with:
-          path: build/compile/racket
-          key: ${{ runner.os }}-racket-build-v1-${{ hashFiles('scheme/**', 'tools/compile-portable.sh') }}
+          path: |
+            build/compile/racket/src
+            build/compile/racket/collections
+          key: ${{ runner.os }}-racket-build-v2-${{ hashFiles('scheme/**', 'tools/compile-portable.sh') }}
           restore-keys: |
-            ${{ runner.os }}-racket-build-v1-
+            ${{ runner.os }}-racket-build-v2-
 
       - name: Install portable R7RS host
         uses: ./.github/actions/apt-install
@@ -1061,10 +1064,12 @@ jobs:
       - name: Cache Racket compiled build tree
         uses: actions/cache@v4
         with:
-          path: build/compile/racket
-          key: ${{ runner.os }}-racket-build-v1-${{ hashFiles('scheme/**', 'tools/compile-portable.sh') }}
+          path: |
+            build/compile/racket/src
+            build/compile/racket/collections
+          key: ${{ runner.os }}-racket-build-v2-${{ hashFiles('scheme/**', 'tools/compile-portable.sh') }}
           restore-keys: |
-            ${{ runner.os }}-racket-build-v1-
+            ${{ runner.os }}-racket-build-v2-
 
       - name: Verify Racket host
         run: |

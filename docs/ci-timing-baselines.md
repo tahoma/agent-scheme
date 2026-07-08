@@ -161,12 +161,13 @@ the same work happens:
   rebuilds only what changed, with `(consent version)` treated as a structurally
   guarded leaf so the every-branch version bump recompiles only the version
   module and relinks; `actions/cache` keeps the `build/compile/gambit` tree warm
-  with a `restore-keys` fallback.
+  with a `restore-keys` fallback over non-runnable `src/` and `incremental/`
+  state only.
 - **Racket**: generated collections, the embedded-source module, and the product
   main are written write-if-changed so unchanged sources keep their timestamps;
   `raco make -j` builds bytecode once (before enumeration and before `raco exe`)
-  so both reuse it; `actions/cache` keeps `build/compile/racket` (sources and
-  their `compiled/` bytecode) warm.
+  so both reuse it; `actions/cache` keeps non-runnable `build/compile/racket`
+  sources and `collections/` bytecode warm.
 - **Workflow**: `pull_request`-only `cancel-in-progress` retires superseded PR
   runs; pushes to `main`, scheduled runs, and dispatches are never cancelled.
 

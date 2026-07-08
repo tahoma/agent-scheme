@@ -787,6 +787,25 @@
              "if: \\${{ matrix.combo.native }}"
              workflow))))
 
+(ert-deftest consent-ci-test-compiled-caches-exclude-product-binaries ()
+  "Keep fallback compiled caches from restoring runnable product binaries."
+  (let ((workflow (consent-ci-test--repo-file-string
+                   ".github/workflows/test.yml")))
+    (dolist (needle
+             '("build/compile/gambit/src"
+               "build/compile/gambit/incremental"
+               "build/compile/racket/src"
+               "build/compile/racket/collections"
+               "gambit-build-v2-"
+               "racket-build-v2-"))
+      (should (string-match-p (regexp-quote needle) workflow)))
+    (dolist (forbidden
+             '("path: build/compile/gambit"
+               "path: build/compile/racket"
+               "gambit-build-v1-"
+               "racket-build-v1-"))
+      (should-not (string-match-p (regexp-quote forbidden) workflow)))))
+
 (ert-deftest consent-ci-test-gauche-hosts-container-avoids-docker-hub ()
   "Pull the Gauche container base image from ECR Public, not Docker Hub."
   (let ((workflow (consent-ci-test--repo-file-string
