@@ -13,6 +13,8 @@
           helper-store-save!
           helper-store-ref
           helper-store-list
+          helper-store-helpers
+          helper-store-record!
           helper-record-name
           helper-record-forms
           helper-store-artifact-save!
@@ -173,6 +175,18 @@
         (effects state-read error))
       (scope-helpers store scope))
 
+    (define (helper-store-helpers store scope)
+      "Return helper records in SCOPE from STORE."
+      #((parameters
+         (store (type consent-helper-store)
+          (description "Helper store to inspect."))
+         (scope (type symbol)
+          (description "Helper scope symbol.")))
+        (returns (type (list-of agent-helper-library))
+         (description "Helper record datums in SCOPE, newest first."))
+        (effects state-read error))
+      (helper-store-list store scope))
+
     (define (make-helper-record store scope library-name forms source existing)
       "Build a canonical helper library record."
       (let* ((sequence (next-sequence! store))
@@ -213,6 +227,23 @@
         (set-store-helpers!
          store
          (cons record (without-helper store normalized-scope name)))
+        record))
+
+    (define (helper-store-record! store record)
+      "Install canonical helper RECORD into STORE and return RECORD."
+      #((parameters
+         (store (type consent-helper-store)
+          (description "Helper store to mutate."))
+         (record (type agent-helper-library)
+          (description "Canonical helper record datum to install.")))
+        (returns (type agent-helper-library)
+         (description "The installed helper record datum."))
+        (effects state-write error))
+      (let ((scope (normalize-scope (field-value record 'scope)))
+            (name (normalize-library-name (helper-record-name record))))
+        (set-store-helpers!
+         store
+         (cons (copy-datum record) (without-helper store scope name)))
         record))
 
     (define (without-artifact store scope name)

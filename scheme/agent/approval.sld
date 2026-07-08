@@ -12,6 +12,7 @@
           approval-store-request!
           approval-store-status
           approval-store-ref
+          approval-store-records
           approval-store-resolve!
           approval-store-cancel!
           approval-store-pending)
@@ -89,7 +90,8 @@
                                 (if effect effect datum))))
          (optional-field 'operation (field-value datum 'operation))
          (optional-field 'reason (field-value datum 'reason))
-         (list (list 'status 'pending)))))
+         (list (list 'status 'pending))
+         (optional-field 'session (field-value datum 'session)))))
 
     (define (record-id record)
       "Return RECORD's id field."
@@ -134,6 +136,16 @@
          ((null? records) #f)
          ((eq? (record-id (car records)) id) (car records))
          (else (loop (cdr records))))))
+
+    (define (approval-store-records store)
+      "Return all approval records from STORE in creation order."
+      #((parameters
+         (store (type consent-approval-store)
+          (description "Approval store to inspect.")))
+        (returns (type (list-of approval-request))
+         (description "Approval request datums in creation order."))
+        (effects state-read))
+      (store-records store))
 
     (define (approval-store-request! store datum)
       "Create an approval request from DATUM in STORE and return its id."

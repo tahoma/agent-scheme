@@ -58,6 +58,17 @@
       snippets))
    (consent-helper-test--audit-strings)))
 
+(ert-deftest consent-helper-test-emacs-adapter-has-no-pure-store-twin ()
+  "Keep pure helper store semantics in the source-loaded library."
+  (dolist (helper '(consent-helper--next-sequence
+                    consent-helper--make-helper-record
+                    consent-helper--make-artifact-record
+                    consent-helper--replace-record
+                    consent-helper--find-record
+                    consent-helper--candidate-name
+                    consent-helper--candidate-resources))
+    (should-not (fboundp helper))))
+
 (ert-deftest consent-helper-test-session-save-list-load-and-isolation ()
   "Save a helper in one session, load it later, and keep sessions isolated."
   (consent-helper-test--reset)

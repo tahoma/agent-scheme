@@ -4,10 +4,10 @@
 
 ;;; Commentary:
 
-;; The `(agent helper)' library keeps reusable Scheme helper source and
-;; related artifacts as Scheme-readable datums.  Session and private project
-;; helpers stay out of tracked files by default; tracked helper and skill
-;; candidate writes route through policy.
+;; The source-loaded `(agent helper)' library owns canonical helper, artifact,
+;; and skill-candidate datums.  This host adapter keeps session/project
+;; subject mapping, persistence, policy gates, helper evaluation, memory writes,
+;; and tracked project file effects.
 
 ;;; Code:
 
@@ -25,6 +25,7 @@
 
 (declare-function consent--drain-state "consent-interpreter")
 (declare-function consent--eval-sequence "consent-interpreter")
+(declare-function consent--source-library-call "consent-library")
 
 (define-error 'consent-helper-error
   "Consent Scheme helper error"
@@ -46,34 +47,23 @@
   :type 'string
   :group 'consent-helper)
 
-(defvar consent--helper-session-records (make-hash-table :test #'equal)
-  "Hash from session id to session helper records, newest first.")
-
-(defvar consent--helper-project-private-records
-  (make-hash-table :test #'equal)
-  "Hash from project root to private project helper records, newest first.")
-
-(defvar consent--helper-project-tracked-records
-  (make-hash-table :test #'equal)
-  "Hash from project root to tracked project helper records, newest first.")
-
-(defvar consent--helper-session-artifacts (make-hash-table :test #'equal)
-  "Hash from session id to session artifact records, newest first.")
-
-(defvar consent--helper-project-private-artifacts
-  (make-hash-table :test #'equal)
-  "Hash from project root to private project artifact records, newest first.")
-
-(defvar consent--helper-project-tracked-artifacts
-  (make-hash-table :test #'equal)
-  "Hash from project root to tracked project artifact records, newest first.")
-
-(defvar consent--helper-next-id 0
-  "Next helper/artifact sequence number.")
+(defvar consent--helper-stores (make-hash-table :test #'equal)
+  "Hash from (SCOPE . SUBJECT) to source-backed helper stores.")
 
 (defconst consent-helper-scopes
   '(session project-private project-tracked)
   "Recognized helper storage scopes.")
+
+(defun consent-helper--source-call (name &rest arguments)
+  "Call source-backed helper procedure NAME with ARGUMENTS."
+  (unless (fboundp 'consent--source-library-call)
+    (require 'consent-library))
+  (apply #'consent--source-library-call
+         "(agent helper)" name arguments))
+
+(defun consent-helper--source-scope (scope)
+  "Return SCOPE as a source-library helper scope symbol."
+  (consent-helper--symbol (consent-helper--scope scope)))
 
 (defun consent-helper--symbol (name)
   "Return NAME as an Consent Scheme symbol datum."
@@ -96,10 +86,6 @@
   "Return VALUE as an exact integer datum."
   (consent--make-number
    (number-to-string value) 'exact 10 'integer value))
-
-(defun consent-helper--next-sequence ()
-  "Return the next helper sequence number."
-  (cl-incf consent--helper-next-id))
 
 (defun consent-helper--field-named-p (field name)
   "Return non-nil when FIELD is named NAME."
@@ -227,29 +213,23 @@
     ((or 'project-private 'project-tracked)
      (consent-helper--current-project-root))))
 
-(defun consent-helper--records-table (scope artifacts)
-  "Return table for SCOPE.  When ARTIFACTS is non-nil, use artifact tables."
-  (pcase scope
-    ('session
-     (if artifacts
-         consent--helper-session-artifacts
-       consent--helper-session-records))
-    ('project-private
-     (if artifacts
-         consent--helper-project-private-artifacts
-       consent--helper-project-private-records))
-    ('project-tracked
-     (if artifacts
-         consent--helper-project-tracked-artifacts
-       consent--helper-project-tracked-records))))
+(defun consent-helper--store (scope subject)
+  "Return source-backed helper store for SCOPE and SUBJECT."
+  (let* ((key (cons (consent-helper--scope scope) subject))
+         (store (gethash key consent--helper-stores)))
+    (unless store
+      (setq store
+            (consent-helper--source-call
+             "consent-make-helper-store"))
+      (puthash key store consent--helper-stores))
+    store))
 
-(defun consent-helper--records (scope subject &optional artifacts)
+(defun consent-helper--records (scope subject)
   "Return records for SCOPE and SUBJECT."
-  (gethash subject (consent-helper--records-table scope artifacts)))
-
-(defun consent-helper--set-records! (scope subject records &optional artifacts)
-  "Store RECORDS for SCOPE and SUBJECT."
-  (puthash subject records (consent-helper--records-table scope artifacts)))
+  (consent-helper--source-call
+   "helper-store-helpers"
+   (consent-helper--store scope subject)
+   (consent-helper--source-scope scope)))
 
 (defun consent-helper--valid-library-part-p (part)
   "Return non-nil if PART is valid in an R7RS library name."
@@ -361,58 +341,6 @@
     ((or 'project-private 'project-tracked)
      (list (consent-helper--symbol "project-root") subject))))
 
-(defun consent-helper--make-helper-record
-    (scope subject library-name forms &optional existing)
-  "Return canonical helper record for SCOPE, SUBJECT, LIBRARY-NAME, and FORMS."
-  (let* ((sequence (consent-helper--next-sequence))
-         (created-at (or (consent-helper-record-field existing "created-at")
-                         (consent-helper--integer sequence))))
-    (list
-     (consent-helper--symbol "agent-helper-library")
-     (consent-helper--field "name" (copy-tree library-name))
-     (consent-helper--field "scope" (consent-helper--symbol scope))
-     (consent-helper--field "forms" (copy-tree forms))
-     (consent-helper--field
-      "source"
-      (consent-helper--record-source scope subject))
-     (consent-helper--field "created-at" created-at)
-     (consent-helper--field "updated-at"
-                                 (consent-helper--integer sequence)))))
-
-(defun consent-helper--make-artifact-record
-    (scope subject name datum &optional existing)
-  "Return canonical artifact record for SCOPE, SUBJECT, NAME, and DATUM."
-  (let* ((sequence (consent-helper--next-sequence))
-         (created-at (or (consent-helper-record-field existing "created-at")
-                         (consent-helper--integer sequence))))
-    (list
-     (consent-helper--symbol "agent-artifact")
-     (consent-helper--field "name" (copy-tree name))
-     (consent-helper--field "scope" (consent-helper--symbol scope))
-     (consent-helper--field "value" (copy-tree datum))
-     (consent-helper--field
-      "source"
-      (consent-helper--record-source scope subject))
-     (consent-helper--field "created-at" created-at)
-     (consent-helper--field "updated-at"
-                                 (consent-helper--integer sequence)))))
-
-(defun consent-helper--replace-record (records record key-field key)
-  "Return RECORDS with RECORD replacing a record whose KEY-FIELD is KEY."
-  (cons record
-        (seq-remove
-         (lambda (candidate)
-           (equal (consent-helper-record-field candidate key-field)
-                  key))
-         records)))
-
-(defun consent-helper--find-record (records key-field key)
-  "Return record from RECORDS whose KEY-FIELD is KEY."
-  (seq-find
-   (lambda (record)
-     (equal (consent-helper-record-field record key-field) key))
-   records))
-
 (defun consent-helper--write-record-file (record file)
   "Write Scheme-readable RECORD to FILE."
   (make-directory (file-name-directory file) t)
@@ -440,14 +368,10 @@
           (signal 'consent-helper-error
                   (list (format "helper file does not contain a helper record: %s"
                                 file))))
-        (consent-helper--set-records!
-         scope
-         subject
-         (consent-helper--replace-record
-          (consent-helper--records scope subject)
-          record
-          "name"
-          library-name))
+        (consent-helper--source-call
+         "helper-store-record!"
+         (consent-helper--store scope subject)
+         record)
         record))))
 
 (defun consent-helper--audit (operation scope fields)
@@ -502,18 +426,18 @@ an active session id.  Project-tracked helpers require policy approval."
          (helper-forms (consent-redact
                         (consent-helper--forms forms)
                         'helper-source))
-         (records (consent-helper--records scope subject))
-         (existing (consent-helper--find-record records "name" name))
          (file (consent-helper--storage-file scope name subject)))
     (when (eq scope 'project-tracked)
       (consent-policy-authorize-helper-tracked-write
        name file context))
-    (let ((record (consent-helper--make-helper-record
-                   scope subject name helper-forms existing)))
-      (consent-helper--set-records!
-       scope
-       subject
-       (consent-helper--replace-record records record "name" name))
+    (let ((record
+           (consent-helper--source-call
+            "helper-store-save!"
+            (consent-helper--store scope subject)
+            (consent-helper--source-scope scope)
+            name
+            helper-forms
+            (consent-helper--record-source scope subject))))
       (when file
         (consent-helper--write-record-file record file))
       (consent-helper--record-memory! scope subject name record)
@@ -530,8 +454,13 @@ an active session id.  Project-tracked helpers require policy approval."
   (let* ((scope (consent-helper--scope-option options context))
          (subject (consent-helper--subject-key scope context))
          (name (consent-helper--library-name library-name))
-         (records (consent-helper--records scope subject)))
-    (or (consent-helper--find-record records "name" name)
+         (record
+          (consent-helper--source-call
+           "helper-store-ref"
+           (consent-helper--store scope subject)
+           (consent-helper--source-scope scope)
+           name)))
+    (or (unless (eq record consent-false) record)
         (consent-helper--maybe-load-file-record scope subject name))))
 
 ;;;###autoload
@@ -547,19 +476,14 @@ an active session id.  Project-tracked helpers require policy approval."
   "Save artifact NAME with DATUM and yield it when CONTEXT is active."
   (let* ((scope (consent-helper--scope-option options context))
          (subject (consent-helper--subject-key scope context))
-         (records (consent-helper--records scope subject t))
-         (existing (consent-helper--find-record records "name" name))
-         (record (consent-helper--make-artifact-record
-                  scope
-                  subject
-                  name
-                  (consent-redact datum 'helper-artifact)
-                  existing)))
-    (consent-helper--set-records!
-     scope
-     subject
-     (consent-helper--replace-record records record "name" name)
-     t)
+         (record
+          (consent-helper--source-call
+           "helper-store-artifact-save!"
+           (consent-helper--store scope subject)
+           (consent-helper--source-scope scope)
+           name
+           (consent-redact datum 'helper-artifact)
+           (consent-helper--record-source scope subject))))
     (consent-memory-add!
      (consent-helper--memory-scope scope)
      'artifact
@@ -582,31 +506,19 @@ an active session id.  Project-tracked helpers require policy approval."
        (record . ,record)))
     record))
 
-(defun consent-helper--candidate-name (library-name options)
-  "Return skill candidate name for LIBRARY-NAME using OPTIONS."
-  (or (consent-helper--option options :name nil)
-      (mapconcat
-       #'identity
-       (mapcar
-        #'consent-helper--safe-path-component
-        (consent--proper-list-elements library-name "helper library name"))
-       "-")))
-
-(defun consent-helper--candidate-resources (options)
-  "Return resource fields for skill candidate OPTIONS."
-  (let ((examples (consent-helper--option options :examples nil))
-        (references (consent-helper--option options :references nil))
-        (tests (consent-helper--option options :tests nil))
-        (resources (consent-helper--option options :resources nil)))
-    (append
-     (when examples
-       (list (consent-helper--field "examples" examples)))
-     (when references
-       (list (consent-helper--field "references" references)))
-     (when tests
-       (list (consent-helper--field "tests" tests)))
-     (when resources
-       (list (consent-helper--field "resources" resources))))))
+(defun consent-helper--source-options (options)
+  "Return OPTIONS as a Scheme association list for source helpers."
+  (let ((plist (consent-helper--options-plist options))
+        alist)
+    (while plist
+      (let ((key (pop plist))
+            (value (pop plist)))
+        (push
+         (list (consent-helper--symbol
+                (string-remove-prefix ":" (symbol-name key)))
+               value)
+         alist)))
+    (nreverse alist)))
 
 ;;;###autoload
 (defun consent-helper-promote-to-skill
@@ -622,31 +534,10 @@ HELPER-OR-LIBRARY may be a helper record or a library name."
                         (list "unknown helper library")))))
          (library-name (consent-helper-record-field helper-record "name"))
          (candidate
-          (append
-           (list
-            (consent-helper--symbol "agent-skill-candidate")
-            (consent-helper--field
-             "name"
-             (consent-helper--candidate-name library-name options))
-            (consent-helper--field "status"
-                                        (consent-helper--symbol
-                                         "candidate"))
-            (consent-helper--field "source-library"
-                                        (copy-tree library-name))
-            (consent-helper--field "helper-library"
-                                        (copy-tree helper-record)))
-           (consent-helper--candidate-resources options)
-           (list
-            (consent-helper--field
-             "skill-scm"
-             (list
-              (consent-helper--symbol "skill")
-              (consent-helper--field
-               "name"
-               (consent-helper--candidate-name library-name options))
-              (consent-helper--field
-               "helper-libraries"
-               (list (copy-tree library-name)))))))))
+          (consent-helper--source-call
+           "helper-promote-to-skill"
+           helper-record
+           (consent-helper--source-options options))))
     (consent-helper--audit
      "agent-helper-promote-to-skill"
      (consent-helper--scope
@@ -760,13 +651,7 @@ HELPER-OR-LIBRARY may be a helper record or a library name."
 ;;;###autoload
 (defun consent-helper-clear! ()
   "Clear in-memory helper and artifact state."
-  (clrhash consent--helper-session-records)
-  (clrhash consent--helper-project-private-records)
-  (clrhash consent--helper-project-tracked-records)
-  (clrhash consent--helper-session-artifacts)
-  (clrhash consent--helper-project-private-artifacts)
-  (clrhash consent--helper-project-tracked-artifacts)
-  (setq consent--helper-next-id 0)
+  (clrhash consent--helper-stores)
   consent-unspecified)
 
 (provide 'consent-helper)

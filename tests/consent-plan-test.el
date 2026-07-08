@@ -53,6 +53,18 @@
   (with-current-buffer buffer
     (buffer-substring-no-properties (point-min) (point-max))))
 
+(ert-deftest consent-plan-test-emacs-adapter-has-no-pure-store-twin ()
+  "Keep pure plan store semantics in the source-loaded library."
+  (dolist (helper '(consent--plan-find-by-id
+                    consent--plan-generated-id
+                    consent--plan-make-record
+                    consent--plan-next-sequence
+                    consent--plan-normalize-step
+                    consent--plan-normalize-steps
+                    consent--plan-replace-record
+                    consent--plan-touch))
+    (should-not (fboundp helper))))
+
 (ert-deftest consent-plan-test-crud-step-status-and-scope ()
   "Scheme code can create, inspect, list, and update scoped plans."
   (consent-plan-test--reset)

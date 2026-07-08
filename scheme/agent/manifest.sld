@@ -47,6 +47,7 @@
                      consent-make-approval-store
                      consent-approval-store? approval-store-request!
                      approval-store-status approval-store-ref
+                     approval-store-records
                      approval-store-resolve! approval-store-cancel!
                      approval-store-pending approval-request!
                      approval-status approval-cancel!
@@ -89,6 +90,7 @@
          (exports . (consent-helper-scopes consent-make-helper-store
                      consent-helper-store? helper-store-save!
                      helper-store-ref helper-store-list
+                     helper-store-helpers helper-store-record!
                      helper-record-name helper-record-forms
                      helper-store-artifact-save! helper-promote-to-skill
                      agent-artifact agent-helper-save! agent-helper-load
@@ -332,7 +334,8 @@
          (exports . (consent-plan-scopes consent-plan-statuses
                      consent-plan-step-statuses consent-make-plan-store
                      consent-plan-store? plan-store-create!
-                     plan-store-ref plan-store-list plan-store-step-add!
+                     plan-store-ref plan-store-list
+                     plan-store-replace-records! plan-store-step-add!
                      plan-store-step-status! plan-store-status!
                      plan-record-id plan-record-scope plan-record-steps
                      plan-step-id plan-step-status

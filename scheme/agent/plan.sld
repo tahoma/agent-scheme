@@ -15,6 +15,7 @@
           plan-store-create!
           plan-store-ref
           plan-store-list
+          plan-store-replace-records!
           plan-store-step-add!
           plan-store-step-status!
           plan-store-status!
@@ -235,6 +236,19 @@
        (lambda (record)
          (equal? (plan-record-id record) id))
        (store-records store)))
+
+    (define (plan-store-replace-records! store records)
+      "Replace STORE records with RECORDS and return RECORDS."
+      #((parameters
+         (store (type consent-plan-store)
+          (description "Plan store to mutate."))
+         (records (type (list-of plan))
+          (description "Canonical plan record datums.")))
+        (returns (type (list-of plan))
+         (description "The replacement plan record datums."))
+        (effects state-write))
+      (set-store-records! store records)
+      records)
 
     (define (normalize-step step generated)
       "Return STEP in canonical field order."
