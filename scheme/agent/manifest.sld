@@ -82,6 +82,25 @@
          (visibility . public)
          (layer . api)
          (status . implemented)
+         (source-kind . source-library)
+         (source-file . "helper.sld")
+         (implementation-library . (agent helper))
+         (primitive-overlay-library . (agent helper primitive))
+         (exports . (consent-helper-scopes consent-make-helper-store
+                     consent-helper-store? helper-store-save!
+                     helper-store-ref helper-store-list
+                     helper-record-name helper-record-forms
+                     helper-store-artifact-save! helper-promote-to-skill
+                     agent-artifact agent-helper-save! agent-helper-load
+                     agent-helper-list agent-helper-ref
+                     agent-helper-promote-to-skill))
+         (owner . agent)
+         (provider . repo-source)
+         (dependencies . ((scheme base) (stdlib list))))
+        ((library . (agent helper primitive))
+         (visibility . internal-agent-model)
+         (layer . primitive)
+         (status . internal)
          (source-kind . primitive-library)
          (implementation-source . primitive-declaration)
          (implementation-id . agent-helper)
@@ -95,6 +114,26 @@
          (visibility . public)
          (layer . api)
          (status . implemented)
+         (source-kind . source-library)
+         (source-file . "job.sld")
+         (implementation-library . (agent job))
+         (primitive-overlay-library . (agent job primitive))
+         (exports . (consent-job-states consent-make-job-store
+                     consent-job-store? job-store-start! job-store-ref
+                     job-store-list job-store-cancel!
+                     job-store-interrupt! job-store-yields
+                     job-store-status job-store-mark-running!
+                     job-store-record-yield! job-store-complete!
+                     job-store-fail! job-store-finish-cancelled!
+                     job-datum-id job-start! job-ref job-list job-cancel!
+                     job-interrupt! job-yields job-status))
+         (owner . agent)
+         (provider . repo-source)
+         (dependencies . ((scheme base) (stdlib list))))
+        ((library . (agent job primitive))
+         (visibility . internal-agent-model)
+         (layer . primitive)
+         (status . internal)
          (source-kind . primitive-library)
          (implementation-source . primitive-declaration)
          (implementation-id . agent-job)
@@ -286,6 +325,27 @@
          (visibility . public)
          (layer . api)
          (status . implemented)
+         (source-kind . source-library)
+         (source-file . "plan.sld")
+         (implementation-library . (agent plan))
+         (primitive-overlay-library . (agent plan primitive))
+         (exports . (consent-plan-scopes consent-plan-statuses
+                     consent-plan-step-statuses consent-make-plan-store
+                     consent-plan-store? plan-store-create!
+                     plan-store-ref plan-store-list plan-store-step-add!
+                     plan-store-step-status! plan-store-status!
+                     plan-record-id plan-record-scope plan-record-steps
+                     plan-step-id plan-step-status
+                     plan-memory-important? plan-create! plan-ref
+                     plan-list plan-step-add!
+                     plan-step-status! plan-status! plan-yield))
+         (owner . agent)
+         (provider . repo-source)
+         (dependencies . ((scheme base) (stdlib list))))
+        ((library . (agent plan primitive))
+         (visibility . internal-agent-model)
+         (layer . primitive)
+         (status . internal)
          (source-kind . primitive-library)
          (implementation-source . primitive-declaration)
          (implementation-id . agent-plan)
