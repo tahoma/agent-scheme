@@ -531,6 +531,25 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
       answer")
     "42")))
 
+(ert-deftest consent-library-test-cond-expand-consent-feature ()
+  "Recognize the Consent host feature in library-level cond-expand."
+  (should
+   (equal
+    (consent-library-test--external
+     "(define-library (consent fixture conditional-host)
+        (cond-expand
+          (consent
+           (export answer)
+           (import (scheme base))
+           (begin (define answer 'consent)))
+          (else
+           (export answer)
+           (import (scheme base))
+           (begin (define answer 'missing)))))
+      (import (consent fixture conditional-host))
+      answer")
+    "consent")))
+
 (ert-deftest consent-library-test-include-declarations-are-policy-gated ()
   "Keep library declarations that read host files behind a policy gate."
   (should-error
