@@ -32,10 +32,9 @@ source-tree layers.
 The Scheme-readable `(stdlib manifest)` library records source URLs, upstream
 revisions, licenses, local patches, import aliases, dependencies, and test
 status for stdlib libraries using the shared manifest vocabulary documented in
-[Library Surface and Manifests](library-surface.md). The historical
-`(srfi manifest)` name remains an alias. Vendored source keeps its upstream
-license and local adaptations are listed in the manifest entry, alongside
-canonical source, API/source version, provenance, and alias metadata.
+[Library Surface and Manifests](library-surface.md). Vendored source keeps its
+upstream license and local adaptations are listed in the manifest entry,
+alongside canonical source, API/source version, provenance, and alias metadata.
 
 `(scheme mapping)` and the SRFI 146 aliases expose only the ordered mapping
 interface. `(scheme mapping hash)`, `(srfi 146 hash)`, and
