@@ -2122,6 +2122,34 @@
                            (cdr (assq 'ok datum)))))"
                 "(exports-omitted #t)")
 
+(check-external 'agent-reflect-primitive-declaration-manifest
+                "(import (scheme base) (agent manifest))
+                 (define (manifest-field entry name)
+                   (let ((cell (assq name (cdr entry))))
+                     (and cell (cadr cell))))
+                 (define (manifest-field-values entry name)
+                   (let ((cell (assq name (cdr entry))))
+                     (if cell (cdr cell) '())))
+                 (define (primitive-export-ref name exports)
+                   (let loop ((rest exports))
+                     (cond
+                      ((null? rest) #f)
+                      ((eq? (cadr (assq 'name (car rest))) name)
+                       (car rest))
+                      (else (loop (cdr rest))))))
+                 (let* ((entry (agent-library-manifest-ref '(agent reflect)))
+                        (exports
+                         (manifest-field-values entry 'primitive-exports))
+                        (current-budget
+                         (primitive-export-ref 'current-budget exports)))
+                   (list (manifest-field entry 'visibility)
+                         (manifest-field entry 'layer)
+                         (cadr (assq 'primitive current-budget))
+                         (cdr (assq 'arity current-budget))
+                         (cadr (assq 'effects current-budget))
+                         (cadr (assq 'capabilities current-budget))))"
+                "(public api primitive-current-budget (0 0) (reflection) ())")
+
 (check-external 'stdlib-json-import
                 "(import (scheme base) (stdlib json))
                  (json-null? (json-read (open-input-string \"null\")))"

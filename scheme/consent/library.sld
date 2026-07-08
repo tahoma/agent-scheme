@@ -434,6 +434,20 @@
                (if (null? (cdr parts)) default (cadr parts))))
          (else (loop (cdr fields))))))
 
+    (define (collection-manifest-field-values entry field)
+      "Return every value for FIELD from tagged manifest ENTRY."
+      (let loop ((fields (collection-manifest-fields entry "manifest entry")))
+        (cond
+         ((null? fields) '())
+         ((and (pair? (car fields))
+               (let ((parts
+                      (proper-list-elements (car fields) "manifest field")))
+                 (and (pair? parts)
+                      (identifier-named? (car parts) field)
+                      parts)))
+          => cdr)
+         (else (loop (cdr fields))))))
+
     (define (collection-manifest-symbol value description)
       "Return VALUE when it is a symbol."
       (if (symbol? value)
@@ -550,6 +564,108 @@
       "Return VALUE normalized as a list of library keys."
       (if value
           (map library-name-key (proper-list-elements value description))
+          '()))
+
+    (define (primitive-library-export-field entry field description)
+      "Return FIELD from primitive export ENTRY."
+      (let ((sentinel (list 'primitive-field-absent)))
+        (let ((value
+               (let loop ((fields (proper-list-elements entry description)))
+                 (cond
+                  ((null? fields) sentinel)
+                  ((and (pair? (car fields))
+                        (let ((parts
+                               (proper-list-elements
+                                (car fields)
+                                description)))
+                          (and (pair? parts)
+                               (identifier-named? (car parts) field)
+                               parts)))
+                   => (lambda (parts)
+                        (if (null? (cdr parts))
+                            (eval-error
+                             "primitive export field must have a value"
+                             field))
+                        (if (null? (cddr parts))
+                            (cadr parts)
+                            (cdr parts))))
+                  (else (loop (cdr fields)))))))
+          (if (eq? value sentinel)
+              (eval-error "primitive export missing field" field)
+              value))))
+
+    (define (primitive-library-symbol-list value description)
+      "Return VALUE as a list of symbols for primitive metadata."
+      (let ((parts (proper-list-elements value description)))
+        (for-each
+         (lambda (part)
+           (if (not (symbol? part))
+               (eval-error
+                (string-append description " entries must be symbols")
+                part)))
+         parts)
+        parts))
+
+    (define (primitive-library-arity value description)
+      "Return primitive arity VALUE as (MINIMUM MAXIMUM)."
+      (let ((parts (proper-list-elements value description)))
+        (if (not (= (length parts) 2))
+            (eval-error "primitive arity must have minimum and maximum"
+                        value))
+        (let ((minimum
+               (manifest-nonnegative-integer
+                (car parts)
+                "primitive arity minimum"
+                #f))
+              (maximum
+               (if (cadr parts)
+                   (manifest-nonnegative-integer
+                    (cadr parts)
+                    "primitive arity maximum"
+                    #f)
+                   #f)))
+          (if (not minimum)
+              (eval-error "primitive arity minimum is required" value))
+          (if (and maximum (> minimum maximum))
+              (eval-error "primitive arity maximum is less than minimum"
+                          value))
+          (list minimum maximum))))
+
+    (define (primitive-library-normalize-export entry description)
+      "Return normalized primitive export metadata from ENTRY."
+      (let ((name
+             (primitive-library-export-field entry 'name description))
+            (primitive
+             (primitive-library-export-field entry 'primitive description))
+            (arity
+             (primitive-library-export-field entry 'arity description))
+            (effects
+             (primitive-library-export-field entry 'effects description))
+            (capabilities
+             (primitive-library-export-field
+              entry
+              'capabilities
+              description)))
+        (if (not (symbol? name))
+            (eval-error "primitive export name must be a symbol" name))
+        (if (not (symbol? primitive))
+            (eval-error "primitive export implementation must be a symbol"
+                        primitive))
+        (list
+         (list 'name name)
+         (list 'primitive primitive)
+         (list 'arity (primitive-library-arity arity description))
+         (list 'effects
+               (primitive-library-symbol-list effects description))
+         (list 'capabilities
+               (primitive-library-symbol-list capabilities description)))))
+
+    (define (primitive-library-normalize-exports value description)
+      "Return primitive export declarations from VALUE."
+      (if value
+          (map (lambda (entry)
+                 (primitive-library-normalize-export entry description))
+               (proper-list-elements value description))
           '()))
 
     ;; Manifest schema version recognized by load-light catalog readers.
@@ -823,6 +939,14 @@
               (collection-manifest-target
                (collection-manifest-field
                 entry 'primitive-overlay-library #f)))
+             (implementation-resolver
+              (collection-manifest-field-values
+               entry
+               'implementation-resolver))
+             (primitive-exports
+              (primitive-library-normalize-exports
+               (collection-manifest-field-values entry 'primitive-exports)
+               "collection manifest primitive-exports"))
              (exports-absent (list 'exports-absent))
              (source-file
               (collection-manifest-catalog-source-file
@@ -928,6 +1052,8 @@
          (list 'source-kind source-kind)
          (list 'implementation-id implementation-id)
          (list 'primitive-overlay-library primitive-overlay-library)
+         (list 'implementation-resolver implementation-resolver)
+         (list 'primitive-exports primitive-exports)
          (list 'visibility visibility)
          (list 'layer layer)
          (list 'owner owner)
@@ -1163,6 +1289,11 @@
       (let ((cell (assq field fields)))
         (if cell (cadr cell) default)))
 
+    (define (library-catalog-manifest-field-values fields field)
+      "Return every value for FIELD from manifest FIELDS."
+      (let ((cell (assq field fields)))
+        (if cell (cdr cell) '())))
+
     (define (library-catalog-require-symbol value description)
       "Return VALUE when it is a symbol, else raise a catalog diagnostic error."
       (if (symbol? value)
@@ -1258,6 +1389,24 @@
                  "catalog category"))
                (source
                 (library-catalog-manifest-field fields 'source #f))
+               (implementation-id
+                (manifest-source-implementation-id source))
+               (primitive-overlay-library
+                (library-catalog-require-target
+                 (library-catalog-manifest-field
+                  fields
+                  'primitive-overlay-library
+                  #f)))
+               (implementation-resolver
+                (library-catalog-manifest-field-values
+                 fields
+                 'implementation-resolver))
+               (primitive-exports
+                (primitive-library-normalize-exports
+                 (library-catalog-manifest-field-values
+                  fields
+                  'primitive-exports)
+                 "catalog primitive-exports"))
                (source-file
                 (manifest-source-path source))
                (exports
@@ -1320,7 +1469,11 @@
                     (manifest-source-version-default source-kind)))
           (set! source (manifest-source-with-path source source-file))
           (set! source
-                (manifest-source-default source source-file target #f))
+                (manifest-source-default
+                 source
+                 source-file
+                 target
+                 implementation-id))
           (set! provenance
                 (manifest-provenance-default provenance origin source-id))
           (list
@@ -1330,6 +1483,10 @@
            (list 'category category)
            (list 'status status)
            (list 'source-kind source-kind)
+           (list 'implementation-id implementation-id)
+           (list 'primitive-overlay-library primitive-overlay-library)
+           (list 'implementation-resolver implementation-resolver)
+           (list 'primitive-exports primitive-exports)
            (list 'visibility visibility)
            (list 'owner owner)
            (list 'provider provider)
@@ -1520,6 +1677,16 @@
                 manifest-entry
                 'primitive-overlay-library
                 #f))
+         (list 'implementation-resolver
+               (collection-entry-field
+                manifest-entry
+                'implementation-resolver
+                #f))
+         (list 'primitive-exports
+               (collection-entry-field
+                manifest-entry
+                'primitive-exports
+                '()))
          (list 'visibility (library-visibility key))
          (list 'layer (collection-entry-field manifest-entry 'layer #f))
          (list 'owner (collection-entry-field manifest-entry 'owner #f))
@@ -2704,6 +2871,191 @@
       "Return a primitive spec that always raises a policy-denied error."
       (list name (library-policy-denied-primitive (symbol->string name)) 0 #f))
 
+    (define (primitive-library-required-field entry field description)
+      "Return FIELD from ENTRY or raise DESCRIPTION."
+      (let ((cell (assq field entry)))
+        (if cell
+            (cadr cell)
+            (eval-error
+             (string-append description " missing field")
+             field))))
+
+    (define (validate-primitive-library-export export declaration)
+      "Validate primitive EXPORT metadata for DECLARATION."
+      (let ((name
+             (primitive-library-required-field
+              export
+              'name
+              "primitive export"))
+            (primitive
+             (primitive-library-required-field
+              export
+              'primitive
+              "primitive export"))
+            (arity
+             (primitive-library-required-field
+              export
+              'arity
+              "primitive export")))
+        (if (not (symbol? name))
+            (eval-error "primitive export name must be a symbol" name))
+        (if (not (symbol? primitive))
+            (eval-error
+             "primitive export implementation must be a symbol"
+             primitive))
+        (if (not (and (pair? arity)
+                      (= (length arity) 2)
+                      (integer? (car arity))
+                      (exact? (car arity))
+                      (>= (car arity) 0)
+                      (or (not (cadr arity))
+                          (and (integer? (cadr arity))
+                               (exact? (cadr arity))
+                               (>= (cadr arity) 0)))
+                      (or (not (cadr arity))
+                          (<= (car arity) (cadr arity)))))
+            (eval-error
+             "primitive export arity must be (minimum maximum)"
+             name))
+        (primitive-library-required-field
+         export
+         'effects
+         "primitive export")
+        (primitive-library-required-field
+         export
+         'capabilities
+         "primitive export")
+        (for-each
+         (lambda (effect)
+           (if (not (symbol? effect))
+               (eval-error "primitive export effects must be symbols"
+                           name)))
+         (collection-entry-field export 'effects '()))
+        (for-each
+         (lambda (capability)
+           (if (not (symbol? capability))
+               (eval-error
+                "primitive export capabilities must be symbols"
+                name)))
+         (collection-entry-field export 'capabilities '()))
+        #t))
+
+    (define (validate-primitive-library-declaration declaration)
+      "Validate and return primitive-library DECLARATION."
+      (if (not (eq? (collection-entry-field declaration 'kind #f)
+                    'primitive-library))
+          (eval-error
+           "primitive-library declaration must have kind primitive-library"
+           (collection-entry-field declaration 'name #f)))
+      (if (not (eq? (collection-entry-field declaration 'source-kind #f)
+                    'primitive))
+          (eval-error
+           "primitive-library declaration must have source-kind primitive-library"
+           (collection-entry-field declaration 'name #f)))
+      (let ((name (primitive-library-required-field
+                   declaration
+                   'name
+                   "primitive-library declaration"))
+            (owner (primitive-library-required-field
+                    declaration
+                    'owner
+                    "primitive-library declaration"))
+            (provider (primitive-library-required-field
+                       declaration
+                       'provider
+                       "primitive-library declaration"))
+            (visibility (primitive-library-required-field
+                         declaration
+                         'visibility
+                         "primitive-library declaration"))
+            (layer (primitive-library-required-field
+                    declaration
+                    'layer
+                    "primitive-library declaration"))
+            (implementation-id (primitive-library-required-field
+                                declaration
+                                'implementation-id
+                                "primitive-library declaration"))
+            (exports (primitive-library-required-field
+                      declaration
+                      'exports
+                      "primitive-library declaration"))
+            (primitive-exports
+             (primitive-library-required-field
+              declaration
+              'primitive-exports
+              "primitive-library declaration")))
+        (if (not (and (or (string? name)
+                          (proper-library-name? name))
+                      (symbol? owner)
+                      (symbol? provider)
+                      (symbol? visibility)
+                      (symbol? layer)
+                      (symbol? implementation-id)))
+            (eval-error
+             "primitive-library declaration has invalid identity metadata"
+             name))
+        (if (or (null? exports)
+                (not (let loop ((rest exports))
+                       (cond
+                        ((null? rest) #t)
+                        ((symbol? (car rest)) (loop (cdr rest)))
+                        (else #f)))))
+            (eval-error
+             "primitive-library declaration must declare exported names"
+             name))
+        (if (null? primitive-exports)
+            (eval-error
+             "primitive-library declaration must declare primitive exports"
+             name))
+        (let loop ((rest primitive-exports) (names '()))
+          (if (not (null? rest))
+              (begin
+                (validate-primitive-library-export
+                 (car rest)
+                 declaration)
+                (let ((export-name
+                       (collection-entry-field (car rest) 'name #f)))
+                  (if (memq export-name names)
+                      (eval-error
+                       "duplicate primitive export in declaration"
+                       export-name))
+                  (loop (cdr rest) (cons export-name names))))
+              (begin
+                (for-each
+                 (lambda (export)
+                   (if (not (memq export names))
+                       (eval-error
+                        "primitive-library export lacks primitive metadata"
+                        export)))
+                 exports)
+                (for-each
+                 (lambda (export)
+                   (if (not (memq export exports))
+                       (eval-error
+                        "primitive-library primitive metadata is not exported"
+                        export)))
+                 names)))))
+      declaration)
+
+    (define (primitive-library-declaration? entry)
+      "Report whether ENTRY contains provider-owned primitive metadata."
+      (not (null? (collection-entry-field entry 'primitive-exports '()))))
+
+    (define (primitive-library-declaration-specs declaration)
+      "Materialize primitive specs from primitive-library DECLARATION."
+      (let ((validated
+             (validate-primitive-library-declaration declaration)))
+        (map
+         (lambda (export)
+           (let ((arity (collection-entry-field export 'arity '())))
+             (library-primitive-spec
+              (collection-entry-field export 'name #f)
+              (collection-entry-field export 'primitive #f)
+              (car arity)
+              (cadr arity))))
+         (collection-entry-field validated 'primitive-exports '()))))
+
     (define (register-r5rs-library! key context environment)
       "Register `(scheme r5rs)' with R5RS aliases for exact/inexact conversion."
       (if (not (library-registry-ref context key))
@@ -2740,9 +3092,11 @@
 
     (define (manifest-primitive-implementation-specs entry)
       "Return primitive specs for manifest ENTRY, or #f when unavailable."
-      (let ((implementation-id
-             (collection-entry-field entry 'implementation-id #f)))
-        (cond
+      (if (primitive-library-declaration? entry)
+          (primitive-library-declaration-specs entry)
+          (let ((implementation-id
+                 (collection-entry-field entry 'implementation-id #f)))
+            (cond
          ((eq? implementation-id 'scheme-char) (char-library-specs))
          ((eq? implementation-id 'scheme-complex)
           (list
@@ -3021,168 +3375,6 @@
                                    'primitive-context-yield
                                    1
                                    1)))
-         ((eq? implementation-id 'agent-reflect)
-          (list
-           (library-primitive-spec 'consent-version
-                                   'primitive-consent-version
-                                   0
-                                   0)
-           (library-primitive-spec 'current-capabilities
-                                   'primitive-current-capabilities
-                                   0
-                                   0)
-           (library-primitive-spec 'current-policy
-                                   'primitive-current-policy
-                                   0
-                                   0)
-           (library-primitive-spec 'current-budget
-                                   'primitive-current-budget
-                                   0
-                                   0)
-           (library-primitive-spec 'budget-remaining
-                                   'primitive-budget-remaining
-                                   0
-                                   0)
-           (library-primitive-spec 'budget-exhausted?
-                                   'primitive-budget-exhausted?
-                                   1
-                                   1)
-           (library-primitive-spec 'budget-yield
-                                   'primitive-budget-yield
-                                   0
-                                   0)
-           (library-primitive-spec 'current-imports
-                                   'primitive-current-imports
-                                   0
-                                   0)
-           (library-primitive-spec 'library-bindings
-                                   'primitive-library-bindings
-                                   1
-                                   1)
-           (library-primitive-spec 'libraries
-                                   'primitive-libraries
-                                   0
-                                   0)
-           (library-primitive-spec 'library-info
-                                   'primitive-library-info
-                                   1
-                                   1)
-           (library-primitive-spec 'library-search
-                                   'primitive-library-search
-                                   1
-                                   1)
-           (library-primitive-spec 'catalog-sources
-                                   'primitive-catalog-sources
-                                   0
-                                   0)
-           (library-primitive-spec 'catalog-diagnostics
-                                   'primitive-catalog-diagnostics
-                                   0
-                                   0)
-           (library-primitive-spec 'add-manifest!
-                                   'primitive-add-manifest!
-                                   2
-                                   2)
-           (library-primitive-spec 'remove-manifest!
-                                   'primitive-remove-manifest!
-                                   1
-                                   1)
-           (library-primitive-spec 'add-manifest-root!
-                                   'primitive-add-manifest-root!
-                                   2
-                                   2)
-           (library-primitive-spec 'remove-manifest-root!
-                                   'primitive-remove-manifest-root!
-                                   1
-                                   1)
-           (library-primitive-spec 'refresh-library-catalog!
-                                   'primitive-refresh-library-catalog!
-                                   0
-                                   0)
-           (library-primitive-spec 'library-documentation
-                                   'primitive-library-documentation
-                                   1
-                                   1)
-           (library-primitive-spec 'binding-libraries
-                                   'primitive-binding-libraries
-                                   1
-                                   1)
-           (library-primitive-spec 'documented-bindings
-                                   'primitive-documented-bindings
-                                   0
-                                   0)
-           (library-primitive-spec 'apropos
-                                   'primitive-apropos
-                                   1
-                                   1)
-           (library-primitive-spec 'reflection-field
-                                   'primitive-reflection-field
-                                   2
-                                   3)
-           (library-primitive-spec 'documentation-field
-                                   'primitive-documentation-field
-                                   2
-                                   3)
-           (library-primitive-spec 'docstring
-                                   'primitive-docstring
-                                   1
-                                   2)
-           (library-primitive-spec 'current-session-info
-                                   'primitive-current-session-info
-                                   0
-                                   0)
-           (library-primitive-spec 'recent-yields
-                                   'primitive-recent-yields
-                                   0
-                                   0)
-           (library-primitive-spec 'recent-errors
-                                   'primitive-recent-errors
-                                   0
-                                   0)
-           (library-primitive-spec 'recent-policy-decisions
-                                   'primitive-recent-policy-decisions
-                                   0
-                                   0)
-           (library-primitive-spec 'capability-info
-                                   'primitive-capability-info
-                                   1
-                                   1)
-           (library-primitive-spec 'documentation
-                                   'primitive-documentation
-                                   1
-                                   1)
-           (library-primitive-spec 'consent-doc
-                                   'primitive-consent-doc
-                                   1
-                                   1)
-           (library-primitive-spec 'consent-describe
-                                   'primitive-consent-describe
-                                   1
-                                   1)
-           (library-primitive-spec 'macroexpand
-                                   'primitive-macroexpand
-                                   1
-                                   2)
-           (library-primitive-spec 'macroexpand-1
-                                   'primitive-macroexpand-1
-                                   1
-                                   2)
-           (library-primitive-spec 'macroexpand-library
-                                   'primitive-macroexpand-library
-                                   1
-                                   2)
-           (library-primitive-spec 'macro-binding-info
-                                   'primitive-macro-binding-info
-                                   1
-                                   1)
-           (library-primitive-spec 'syntax-source
-                                   'primitive-syntax-source
-                                   1
-                                   1)
-           (library-primitive-spec 'macroexpand-yield
-                                   'primitive-macroexpand-yield
-                                   2
-                                   2)))
          ((eq? implementation-id 'agent-redaction)
           (list
            (library-primitive-spec 'secret-source?
@@ -3239,7 +3431,7 @@
                                    1
                                    1)))
          (else
-          #f))))
+          #f)))))
 
     (define (manifest-implementation-available? entry)
       "Report whether manifest ENTRY has an implementation on this host."
@@ -3249,7 +3441,9 @@
            (collection-entry-field entry 'name #f))
           #t)
          ((eq? kind 'primitive)
-          (and (manifest-primitive-implementation-specs entry) #t))
+          (if (primitive-library-declaration? entry)
+              (and (validate-primitive-library-declaration entry) #t)
+              (and (manifest-primitive-implementation-specs entry) #t)))
          ((eq? kind 'derived)
           (eq? (collection-entry-field entry 'implementation-id #f)
                'scheme-r5rs))

@@ -67,6 +67,9 @@
 (defvar consent--library-catalog-diagnostics nil
   "Diagnostics from the most recent manifest-backed catalog build.")
 
+(defvar consent--primitive-library-provider-declarations nil
+  "Provider-contributed primitive-library declarations.")
+
 (declare-function consent--apply-procedure "consent-interpreter")
 (declare-function consent--make-empty-syntax-environment "consent-macro")
 (declare-function consent--memory-adapter-primitive-specs "consent-memory")
@@ -84,6 +87,7 @@
 (declare-function consent-models-primitive-specs "consent-models")
 (declare-function consent-plan-primitive-specs "consent-plan")
 (declare-function consent-redaction-primitive-specs "consent-redaction")
+(declare-function consent-reflect-primitive-implementation "consent-reflect")
 (declare-function consent-reflect-primitive-specs "consent-reflect")
 (declare-function consent-test-primitive-specs "consent-test")
 
@@ -348,6 +352,21 @@
           (if (cdr parts) (cadr parts) default))
       default)))
 
+(defun consent--collection-manifest-field-values (entry name)
+  "Return all values for NAME from tagged manifest ENTRY."
+  (let ((cell
+         (seq-find
+          (lambda (field)
+            (let ((parts
+                   (and (consp field)
+                        (consent--proper-list-elements-maybe field))))
+              (and parts
+                   (consent--symbol-named-p (car parts) name))))
+          (consent--collection-manifest-fields entry "manifest entry"))))
+    (if cell
+        (cdr (consent--proper-list-elements cell "manifest field"))
+      nil)))
+
 (defun consent--collection-manifest-symbol (value description &optional default)
   "Return VALUE as an Emacs Lisp symbol, or DEFAULT when absent."
   (cond
@@ -457,6 +476,98 @@
     (mapcar
      (lambda (entry)
        (consent--expect-symbol-name entry description))
+     (consent--proper-list-elements value description))))
+
+(defun consent--primitive-library-export-field (entry field description)
+  "Return FIELD from primitive export ENTRY, or signal DESCRIPTION."
+  (let ((sentinel (list 'primitive-field-absent)))
+    (let ((value (catch 'field
+                   (dolist (candidate
+                            (consent--proper-list-elements entry description))
+                     (let ((parts
+                            (and (consp candidate)
+                                 (consent--proper-list-elements
+                                  candidate description))))
+                       (when (and parts
+                                  (consent--symbol-named-p (car parts) field))
+                         (unless (cdr parts)
+                           (consent--eval-error
+                            "%s field %s must have a value"
+                            description field))
+                         (throw 'field
+                                (if (cddr parts) (cdr parts) (cadr parts))))))
+                   sentinel)))
+      (if (eq value sentinel)
+          (consent--eval-error "%s missing field: %s" description field)
+        value))))
+
+(defun consent--primitive-library-symbol-list (value description)
+  "Return VALUE as a list of symbols for primitive export DESCRIPTION."
+  (mapcar
+   (lambda (entry)
+     (consent--collection-manifest-symbol entry description))
+   (consent--proper-list-elements value description)))
+
+(defun consent--primitive-library-arity (value description)
+  "Return primitive arity VALUE as (MINIMUM MAXIMUM)."
+  (let ((parts (consent--proper-list-elements value description)))
+    (unless (= (length parts) 2)
+      (consent--eval-error "%s must have minimum and maximum" description))
+    (let ((minimum
+           (consent--manifest-nonnegative-integer
+            (car parts) (format "%s minimum" description)))
+          (maximum
+           (if (eq (cadr parts) consent-false)
+               nil
+             (consent--manifest-nonnegative-integer
+              (cadr parts) (format "%s maximum" description)))))
+      (unless minimum
+        (consent--eval-error "%s minimum is required" description))
+      (when (and maximum (> minimum maximum))
+        (consent--eval-error
+         "%s maximum must be greater than or equal to minimum"
+         description))
+      (list minimum maximum))))
+
+(defun consent--primitive-library-normalize-export (entry description)
+  "Return normalized primitive export ENTRY for DESCRIPTION."
+  (let* ((name
+          (consent--expect-symbol-name
+           (consent--primitive-library-export-field entry "name" description)
+           (format "%s name" description)))
+         (primitive
+          (consent--collection-manifest-symbol
+           (consent--primitive-library-export-field
+            entry "primitive" description)
+           (format "%s primitive" description)))
+         (arity
+          (consent--primitive-library-arity
+           (consent--primitive-library-export-field
+            entry "arity" description)
+           (format "%s arity" description)))
+         (effects
+          (consent--primitive-library-symbol-list
+           (consent--primitive-library-export-field
+            entry "effects" description)
+           (format "%s effects" description)))
+         (capabilities
+          (consent--primitive-library-symbol-list
+           (consent--primitive-library-export-field
+            entry "capabilities" description)
+           (format "%s capabilities" description))))
+    (list :name name
+          :primitive primitive
+          :arity arity
+          :effects effects
+          :capabilities capabilities)))
+
+(defun consent--primitive-library-normalize-exports (value description)
+  "Return primitive export declarations from VALUE for DESCRIPTION."
+  (if (or (null value) (eq value consent-false))
+      nil
+    (mapcar
+     (lambda (entry)
+       (consent--primitive-library-normalize-export entry description))
      (consent--proper-list-elements value description))))
 
 (defconst consent--manifest-schema-version 1
@@ -685,6 +796,14 @@ Use SOURCE-FILE, TARGET, or IMPLEMENTATION-ID when SOURCE is absent."
           (consent--collection-manifest-target
            (consent--collection-manifest-field
             entry "primitive-overlay-library" nil)))
+         (implementation-resolver
+          (consent--collection-manifest-field-values
+           entry "implementation-resolver"))
+         (primitive-exports
+          (consent--primitive-library-normalize-exports
+           (consent--collection-manifest-field-values
+            entry "primitive-exports")
+           "collection manifest primitive-exports"))
          (exports-absent (list 'exports-absent))
          (source-file
           (consent--manifest-source-path source))
@@ -793,6 +912,8 @@ Use SOURCE-FILE, TARGET, or IMPLEMENTATION-ID when SOURCE is absent."
           :source-kind source-kind
           :implementation-id implementation-id
           :primitive-overlay-library primitive-overlay-library
+          :implementation-resolver implementation-resolver
+          :primitive-exports primitive-exports
           :visibility visibility
           :layer layer
           :owner owner
@@ -975,6 +1096,11 @@ Use SOURCE-FILE, TARGET, or IMPLEMENTATION-ID when SOURCE is absent."
         (cadr field)
       default)))
 
+(defun consent--library-catalog-manifest-field-values (fields name)
+  "Return every value for NAME from manifest FIELDS."
+  (let ((field (consent--library-catalog-field-form fields name)))
+    (and field (cdr field))))
+
 (defun consent--library-catalog-require-symbol (value description)
   "Return VALUE as an Emacs Lisp symbol, or signal DESCRIPTION."
   (cond
@@ -1080,6 +1206,20 @@ Use SOURCE-FILE, TARGET, or IMPLEMENTATION-ID when SOURCE is absent."
              "catalog category"))
            (source
             (consent--library-catalog-manifest-field fields "source" nil))
+           (implementation-id
+            (consent--manifest-source-implementation-id source))
+           (primitive-overlay-library
+            (consent--library-catalog-require-target
+             (consent--library-catalog-manifest-field
+              fields "primitive-overlay-library" nil)))
+           (implementation-resolver
+            (consent--library-catalog-manifest-field-values
+             fields "implementation-resolver"))
+           (primitive-exports
+            (consent--primitive-library-normalize-exports
+             (consent--library-catalog-manifest-field-values
+              fields "primitive-exports")
+             "catalog primitive-exports"))
            (source-file
             (consent--manifest-source-path source))
            (exports
@@ -1159,7 +1299,7 @@ Use SOURCE-FILE, TARGET, or IMPLEMENTATION-ID when SOURCE is absent."
             (consent--manifest-source-with-path source source-file))
       (setq source
             (consent--manifest-source-default
-             source source-file target nil))
+             source source-file target implementation-id))
       (setq provenance
             (consent--manifest-provenance-default
              provenance origin source-id))
@@ -1169,6 +1309,10 @@ Use SOURCE-FILE, TARGET, or IMPLEMENTATION-ID when SOURCE is absent."
             :category category
             :status status
             :source-kind source-kind
+            :implementation-id implementation-id
+            :primitive-overlay-library primitive-overlay-library
+            :implementation-resolver implementation-resolver
+            :primitive-exports primitive-exports
             :visibility visibility
             :owner owner
             :provider provider
@@ -1327,6 +1471,9 @@ Use SOURCE-FILE, TARGET, or IMPLEMENTATION-ID when SOURCE is absent."
      :implementation-id (plist-get manifest-entry :implementation-id)
      :primitive-overlay-library
      (plist-get manifest-entry :primitive-overlay-library)
+     :implementation-resolver
+     (plist-get manifest-entry :implementation-resolver)
+     :primitive-exports (plist-get manifest-entry :primitive-exports)
      :visibility (consent--library-visibility key)
      :layer (plist-get manifest-entry :layer)
      :owner (plist-get manifest-entry :owner)
@@ -1691,10 +1838,260 @@ Use SOURCE-FILE, TARGET, or IMPLEMENTATION-ID when SOURCE is absent."
                  exports
                  key)))))))
 
+(defun consent--primitive-library-require-property (entry property)
+  "Return ENTRY PROPERTY, requiring that the key is present."
+  (unless (plist-member entry property)
+    (consent--eval-error
+     "primitive-library declaration missing property: %s"
+     property))
+  (plist-get entry property))
+
+(defun consent--primitive-library-validate-export (export declaration)
+  "Validate primitive EXPORT metadata for DECLARATION."
+  (let ((name
+         (consent--primitive-library-require-property export :name))
+        (primitive
+         (consent--primitive-library-require-property export :primitive))
+        (arity
+         (consent--primitive-library-require-property export :arity)))
+    (unless (stringp name)
+      (consent--eval-error
+       "primitive export name must be a string: %s"
+       (plist-get declaration :name)))
+    (unless (symbolp primitive)
+      (consent--eval-error
+       "primitive export implementation must be a symbol: %s"
+       name))
+    (unless (and (consp arity)
+                 (= (length arity) 2)
+                 (integerp (car arity))
+                 (>= (car arity) 0)
+                 (or (null (cadr arity))
+                     (and (integerp (cadr arity))
+                          (>= (cadr arity) 0)))
+                 (or (null (cadr arity))
+                     (<= (car arity) (cadr arity))))
+      (consent--eval-error
+       "primitive export arity must be (minimum maximum): %s"
+       name))
+    (unless (plist-member export :effects)
+      (consent--eval-error
+       "primitive export missing effects metadata: %s"
+       name))
+    (unless (plist-member export :capabilities)
+      (consent--eval-error
+       "primitive export missing capabilities metadata: %s"
+       name))
+    (dolist (effect (plist-get export :effects))
+      (unless (symbolp effect)
+        (consent--eval-error
+         "primitive export effects must be symbols: %s"
+         name)))
+    (dolist (capability (plist-get export :capabilities))
+      (unless (symbolp capability)
+        (consent--eval-error
+         "primitive export capabilities must be symbols: %s"
+         name)))
+    t))
+
+(defun consent--primitive-library-validate-declaration (declaration)
+  "Validate and return primitive-library DECLARATION metadata."
+  (unless (eq (plist-get declaration :kind) 'primitive-library)
+    (consent--eval-error
+     "primitive-library declaration must have kind primitive-library: %s"
+     (plist-get declaration :name)))
+  (unless (eq (plist-get declaration :source-kind) 'primitive)
+    (consent--eval-error
+     "primitive-library declaration must have source-kind primitive-library: %s"
+     (plist-get declaration :name)))
+  (dolist (property '(:name :owner :provider :visibility :layer
+                      :implementation-id :exports :primitive-exports))
+    (consent--primitive-library-require-property declaration property))
+  (let ((exports (plist-get declaration :exports))
+        (primitive-exports (plist-get declaration :primitive-exports))
+        (names nil))
+    (unless (and (stringp (plist-get declaration :name))
+                 (symbolp (plist-get declaration :owner))
+                 (symbolp (plist-get declaration :provider))
+                 (symbolp (plist-get declaration :visibility))
+                 (symbolp (plist-get declaration :layer))
+                 (symbolp (plist-get declaration :implementation-id)))
+      (consent--eval-error
+       "primitive-library declaration has invalid identity metadata: %s"
+       (plist-get declaration :name)))
+    (unless (and (consp exports)
+                 (cl-every #'stringp exports))
+      (consent--eval-error
+       "primitive-library declaration must declare exported names: %s"
+       (plist-get declaration :name)))
+    (unless (consp primitive-exports)
+      (consent--eval-error
+       "primitive-library declaration must declare primitive exports: %s"
+       (plist-get declaration :name)))
+    (dolist (export primitive-exports)
+      (consent--primitive-library-validate-export export declaration)
+      (let ((name (plist-get export :name)))
+        (when (member name names)
+          (consent--eval-error
+           "duplicate primitive export in declaration: %s"
+           name))
+        (push name names)))
+    (dolist (name exports)
+      (unless (member name names)
+        (consent--eval-error
+         "primitive-library export lacks primitive metadata: %s"
+         name)))
+    (dolist (name names)
+      (unless (member name exports)
+        (consent--eval-error
+         "primitive-library primitive metadata is not exported: %s"
+         name))))
+  declaration)
+
+(defun consent--primitive-library-declaration-for-entry (entry)
+  "Return validated primitive-library declaration for manifest ENTRY, or nil."
+  (when (and entry (plist-get entry :primitive-exports))
+    (consent--primitive-library-validate-declaration entry)))
+
+(defun consent--primitive-library-declaration-key (name)
+  "Return primitive declaration key for NAME."
+  (if (stringp name)
+      name
+    (consent--library-name-key name)))
+
+(defun consent--primitive-library-declaration-for-name (name)
+  "Return provider-owned primitive-library declaration named NAME, or nil."
+  (let* ((key (consent--primitive-library-declaration-key name))
+         (registered
+          (seq-find
+           (lambda (declaration)
+             (equal key (plist-get declaration :name)))
+           consent--primitive-library-provider-declarations)))
+    (or registered
+        (consent--primitive-library-declaration-for-entry
+         (consent--library-collection-manifest-entry key)))))
+
+(defun consent--primitive-library-register-declaration
+    (declaration &optional replace)
+  "Register provider-owned primitive-library DECLARATION.
+When REPLACE is non-nil, replace an existing declaration from the same provider."
+  (let* ((validated
+          (consent--primitive-library-validate-declaration declaration))
+         (name (plist-get validated :name))
+         (provider (plist-get validated :provider))
+         (existing
+          (seq-find
+           (lambda (candidate)
+             (equal name (plist-get candidate :name)))
+           consent--primitive-library-provider-declarations)))
+    (cond
+     ((null existing)
+      (push validated consent--primitive-library-provider-declarations)
+      t)
+     ((not (eq provider (plist-get existing :provider)))
+      (consent--eval-error
+       "primitive-library declaration provider conflict: %s"
+       name))
+     ((equal validated existing) t)
+     (replace
+      (setq consent--primitive-library-provider-declarations
+            (cons validated
+                  (seq-remove
+                   (lambda (candidate)
+                     (and (equal name (plist-get candidate :name))
+                          (eq provider (plist-get candidate :provider))))
+                   consent--primitive-library-provider-declarations)))
+      t)
+     (t
+      (consent--eval-error
+       "primitive-library declaration duplicate differs: %s"
+       name)))))
+
+(defun consent--primitive-library-remove-declaration (name provider)
+  "Remove provider-owned primitive-library declaration NAME from PROVIDER."
+  (let* ((key (consent--primitive-library-declaration-key name))
+         (removed nil))
+    (setq consent--primitive-library-provider-declarations
+          (seq-remove
+           (lambda (declaration)
+             (let ((match
+                    (and (equal key (plist-get declaration :name))
+                         (eq provider
+                             (plist-get declaration :provider)))))
+               (when match
+                 (setq removed t))
+               match))
+           consent--primitive-library-provider-declarations))
+    removed))
+
+(defun consent--primitive-library-resolver-field (resolver field)
+  "Return FIELD from primitive implementation RESOLVER metadata."
+  (catch 'field
+    (dolist (candidate
+             (consent--proper-list-elements
+              resolver
+              "primitive implementation resolver"))
+      (let ((parts
+             (and (consp candidate)
+                  (consent--proper-list-elements
+                   candidate
+                   "primitive implementation resolver field"))))
+        (when (and parts
+                   (consent--symbol-named-p (car parts) field)
+                   (= (length parts) 2))
+          (throw 'field (cadr parts)))))
+    (consent--eval-error
+     "primitive implementation resolver missing field: %s"
+     field)))
+
+(defun consent--primitive-library-implementation-resolver (declaration)
+  "Return implementation resolver function for primitive DECLARATION."
+  (let* ((resolver
+          (consent--primitive-library-require-property
+           declaration :implementation-resolver))
+         (module
+          (consent--collection-manifest-symbol
+           (consent--primitive-library-resolver-field resolver "module")
+           "primitive implementation resolver module"))
+         (procedure
+          (consent--collection-manifest-symbol
+           (consent--primitive-library-resolver-field resolver "procedure")
+           "primitive implementation resolver procedure")))
+    (require module)
+    (unless (fboundp procedure)
+      (consent--eval-error
+       "primitive implementation resolver is not defined: %s"
+       procedure))
+    (symbol-function procedure)))
+
+(defun consent--primitive-library-declaration-specs (declaration)
+  "Materialize primitive specs from provider-owned DECLARATION."
+  (let ((resolver
+         (consent--primitive-library-implementation-resolver
+          (consent--primitive-library-validate-declaration declaration))))
+    (mapcar
+     (lambda (export)
+       (let* ((arity (plist-get export :arity))
+              (implementation
+               (funcall resolver (plist-get export :primitive))))
+         (unless (functionp implementation)
+           (consent--eval-error
+            "primitive resolver returned non-function: %s"
+            (plist-get export :primitive)))
+         (list (plist-get export :name)
+               implementation
+               (car arity)
+               (cadr arity))))
+     (plist-get declaration :primitive-exports))))
+
 (defun consent--manifest-primitive-implementation-specs (entry)
   "Return primitive specs for manifest primitive implementation ENTRY."
-  (let ((implementation-id (plist-get entry :implementation-id)))
-    (pcase implementation-id
+  (let ((declaration
+         (consent--primitive-library-declaration-for-entry entry)))
+    (if declaration
+        (consent--primitive-library-declaration-specs declaration)
+      (let ((implementation-id (plist-get entry :implementation-id)))
+        (pcase implementation-id
       ('scheme-char
        `(("char-alphabetic?" ,#'consent--primitive-char-alphabetic? 1 1)
          ("char-ci<=?" ,#'consent--primitive-char-ci<=? 2 nil)
@@ -1815,9 +2212,6 @@ Use SOURCE-FILE, TARGET, or IMPLEMENTATION-ID when SOURCE is absent."
       ('agent-context
        (require 'consent-context)
        (consent-context-primitive-specs))
-      ('agent-reflect
-       (require 'consent-reflect)
-       (consent-reflect-primitive-specs))
       ('agent-redaction
        (require 'consent-redaction)
        (consent-redaction-primitive-specs))
@@ -1832,7 +2226,7 @@ Use SOURCE-FILE, TARGET, or IMPLEMENTATION-ID when SOURCE is absent."
       (_
        (consent--eval-error
         "manifest primitive library has no implementation id: %s"
-        (plist-get entry :name))))))
+        (plist-get entry :name))))))))
 
 (defun consent--manifest-filter-primitive-specs (entry primitive-specs)
   "Return PRIMITIVE-SPECS reduced to manifest ENTRY exports."
@@ -1855,9 +2249,11 @@ Use SOURCE-FILE, TARGET, or IMPLEMENTATION-ID when SOURCE is absent."
   (pcase (plist-get entry :source-kind)
     ('primitive
      (condition-case nil
-         (progn
-           (consent--manifest-primitive-implementation-specs entry)
-           t)
+         (if (consent--primitive-library-declaration-for-entry entry)
+             t
+           (progn
+             (consent--manifest-primitive-implementation-specs entry)
+             t))
        (consent-eval-error nil)))
     ('derived
      (eq (plist-get entry :implementation-id) 'scheme-r5rs))

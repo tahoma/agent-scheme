@@ -52,8 +52,14 @@
 
 ;; Return the single value of field NAME in tagged list DATUM, or #f.
 (define (field datum name)
-  (let ((entry (assq name (cdr datum))))
-    (and entry (pair? (cdr entry)) (cadr entry))))
+  (let loop ((fields (if (pair? datum) (cdr datum) '())))
+    (cond
+     ((null? fields) #f)
+     ((and (pair? (car fields))
+           (eq? (caar fields) name)
+           (pair? (cdar fields)))
+      (car (cdar fields)))
+     (else (loop (cdr fields))))))
 
 ;; Return the record kind (the leading tag symbol) of RECORD.
 (define (kind record)
