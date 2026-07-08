@@ -36,12 +36,12 @@
 
 ;; Return NAME's field from manifest ENTRY, or #f when absent.
 (define (field entry name)
-  (let ((pair (assq name entry)))
-    (if pair (cdr pair) #f)))
+  (let ((pair (assq name (cdr entry))))
+    (if pair (cadr pair) #f)))
 
 ;; Report whether ENTRY explicitly carries field NAME.
 (define (field-present? entry name)
-  (if (assq name entry) #t #f))
+  (if (assq name (cdr entry)) #t #f))
 
 ;; Manifest entry for the pure `(consent json)' alias.
 (define consent-json-entry (stdlib-manifest-ref '(consent json)))
@@ -50,6 +50,10 @@
 (define json-output (open-output-string))
 
 (json-write '((ok . #t)) json-output)
+
+(check 'manifest-smoke-consent-json-entry-kind
+       (car consent-json-entry)
+       'manifest-index-entry)
 
 (check 'manifest-smoke-consent-json-target
        (field consent-json-entry 'target)
