@@ -194,8 +194,12 @@ Serializing through the consent writer makes the compare representation-stable."
     ;; Per-kind record counts must match exactly: an extra, missing, or
     ;; mis-kinded record is a divergence.
     (dolist (k (consent-repl-parity-test--union-kinds expect actual))
-      (should (= (consent-repl-parity-test--count actual k)
-                 (consent-repl-parity-test--count expect k))))
+      (let ((actual-count (consent-repl-parity-test--count actual k))
+            (expect-count (consent-repl-parity-test--count expect k)))
+        (unless (= actual-count expect-count)
+          (ert-fail
+           (format "case %s record %s count: expected %S, got %S\nexpected: %S\nactual: %S"
+                   id k expect-count actual-count expect actual)))))
     ;; Positional queues for non-correlated kinds (prompt, submission, exit).
     (dolist (k (consent-repl-parity-test--union-kinds actual))
       (puthash k (consent-repl-parity-test--of actual k) queues))
