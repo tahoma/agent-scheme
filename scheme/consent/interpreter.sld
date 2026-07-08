@@ -10087,21 +10087,25 @@ cursor across sessions."
     ;; A durable interaction context bundles the persistent state a REPL session
     ;; reuses across submissions: the evaluator options (carrying `session-id',
     ;; policy actions, and capability grants), the mutable value environment, and
-    ;; the syntax environment.  Each submission still runs in a fresh evaluation
-    ;; context with its own step/host-callback/event budget -- exactly as
-    ;; `consent-eval-source-result' does -- but that context reuses the persisted
-    ;; value and syntax environments.  Value definitions and imports persist
-    ;; because they mutate the shared value environment; macros and imported
-    ;; syntax persist because the shared syntax environment is threaded through
-    ;; instead of being rebuilt per call.  This is the portable peer of the Emacs
-    ;; session evaluator that drives `consent-repl-eval-source'.
+    ;; the syntax environment and library registry.  Each submission still runs
+    ;; in a fresh evaluation context with its own step/host-callback/event budget
+    ;; -- exactly as `consent-eval-source-result' does -- but that context reuses
+    ;; the persisted value and syntax environments plus the live registry that
+    ;; reflection and later imports consult.  Value definitions and imports
+    ;; persist because they mutate the shared value environment; macros and
+    ;; imported syntax persist because the shared syntax environment is threaded
+    ;; through instead of being rebuilt per call.  This is the portable peer of
+    ;; the Emacs session evaluator that drives `consent-repl-eval-source'.
     (define-record-type <consent-interaction-context>
       (make-consent-interaction-context options environment syntax-environment
-                                        program-output-port program-input-port)
+                                        libraries program-output-port
+                                        program-input-port)
       consent-interaction-context?
       (options interaction-context-options)
       (environment interaction-context-environment)
       (syntax-environment interaction-context-syntax-environment)
+      (libraries interaction-context-libraries
+                 set-interaction-context-libraries!)
       (program-output-port interaction-context-program-output-port)
       ;; The session program-input port, shared as the single stdin cursor between
       ;; the REPL form reader and evaluated reads, or #f when program input is not
@@ -10164,6 +10168,7 @@ cursor across sessions."
         (ensure-base-syntax! context environment)
         (make-consent-interaction-context
          options environment (context-syntax-environment context)
+         (context-libraries context)
          (make-interaction-program-output-port)
          input-port)))
 
@@ -10304,14 +10309,14 @@ cursor across sessions."
 
     (define (consent-interaction-eval-form interaction form)
       "Evaluate one already-read top-level FORM in durable INTERACTION, reusing"
-      "its value/syntax environments and program-output port, and return an"
-      "`evaluation-result' datum (ok/values or captured error) like"
-      "`consent-eval-source-result'."
+      "its value/syntax environments, library registry, and program-output"
+      "port, and return an `evaluation-result' datum (ok/values or captured"
+      "error) like `consent-eval-source-result'."
       #((parameters
          (interaction (type consent-interaction-context)
           (description
            ("Durable interaction context supplying persistent"
-             "environments and ports.")))
+             "environments, registry, and ports.")))
          (form . "Already-read top-level datum to evaluate."))
         (returns (type evaluation-result)
          (description
@@ -10322,6 +10327,7 @@ cursor across sessions."
              (environment (interaction-context-environment interaction))
              (syntax-environment
               (interaction-context-syntax-environment interaction))
+             (libraries (interaction-context-libraries interaction))
              (program-output-port
               (interaction-context-program-output-port interaction))
              (program-input-port
@@ -10329,15 +10335,22 @@ cursor across sessions."
              (context (new-eval-context options)))
         (set-consent-port-contents! program-output-port "")
         (set-context-syntax-environment! context syntax-environment)
+        (set-context-libraries! context libraries)
         (set-context-interaction-environment! context environment)
         (set-context-current-output-port! context program-output-port)
         (if program-input-port
             (set-context-current-input-port! context program-input-port))
-        (call-with-result-condition-handler
-         context
-         (lambda ()
-           (ok-result-datum
-            (trampoline (make-sequence (list form) #t) environment context)
-            context)))))
+        (let ((result
+               (call-with-result-condition-handler
+                context
+                (lambda ()
+                  (ok-result-datum
+                   (trampoline (make-sequence (list form) #t)
+                               environment
+                               context)
+                   context)))))
+          (set-interaction-context-libraries! interaction
+                                              (context-libraries context))
+          result)))
 
     ))

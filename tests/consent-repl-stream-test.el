@@ -125,6 +125,29 @@ OPTIONS are evaluator options.  Return the ordered contract records."
                    "21"))
     (should (= (consent-repl-stream-test--count records "repl-condition") 0))))
 
+(ert-deftest consent-repl-stream-reflection-tutorial-import-registry ()
+  "Reflection tutorial imports persist in the live library registry."
+  (let* ((records
+          (consent-repl-stream-test--drive
+           (concat
+            "(import (scheme base) (agent reflect))\n"
+            "(current-imports)\n"
+            "(map (lambda (binding)\n"
+            "       (list (reflection-field binding 'name)\n"
+            "             (reflection-field binding 'kind)\n"
+            "             (reflection-field binding 'library)))\n"
+            "     (library-bindings '(agent reflect)))\n")))
+         (results (consent-repl-stream-test--of records "repl-result")))
+    (should (= (length results) 3))
+    (let ((imports (consent-repl-stream-test--field (nth 1 results) "display"))
+          (bindings (consent-repl-stream-test--field (nth 2 results) "display")))
+      (should (string-match-p (regexp-quote "(agent reflect)") imports))
+      (should (string-match-p (regexp-quote "(scheme base)") imports))
+      (should (string-match-p
+               (regexp-quote "(apropos value (agent reflect))")
+               bindings)))
+    (should (= (consent-repl-stream-test--count records "repl-condition") 0))))
+
 ;;;; Session-gated interaction-environment resolves inside the session
 
 (ert-deftest consent-repl-stream-interaction-environment ()
