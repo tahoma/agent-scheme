@@ -4,10 +4,9 @@
 
 ;;; Commentary:
 
-;; The `(agent approval)' library stores approval requests as Scheme-readable
-;; datums.  Host-side UX and indexes are views over these records; Scheme code
-;; can create requests and observe decisions but cannot approve restricted
-;; effects unless policy explicitly grants host-side automation.
+;; The source-loaded `(agent approval)' library owns canonical approval request
+;; store helpers.  This host adapter keeps current-session ownership checks,
+;; policy authorization, audit emission, and native Emacs views.
 
 ;;; Code:
 
@@ -17,6 +16,7 @@
 (require 'consent-audit)
 (require 'consent-runtime)
 
+(declare-function consent--source-library-call "consent-library")
 (declare-function consent-policy-authorize "consent-policy")
 
 (define-error 'consent-approval-error
@@ -31,14 +31,25 @@
   '(pending approved denied canceled)
   "Recognized approval request statuses.")
 
-(defvar consent--approval-records nil
-  "Approval request records in creation order.")
-
-(defvar consent--approval-next-id 0
-  "Next approval request numeric suffix.")
+(defvar consent--approval-store nil
+  "Source-backed approval request store.")
 
 (defvar consent--approval-current-session nil
   "Dynamically bound session id for approval requests made in a session.")
+
+(defun consent-approval--source-call (name &rest arguments)
+  "Call source-backed approval procedure NAME with ARGUMENTS."
+  (unless (fboundp 'consent--source-library-call)
+    (require 'consent-library))
+  (apply #'consent--source-library-call
+         "(agent approval)" name arguments))
+
+(defun consent-approval--store ()
+  "Return the source-backed approval store."
+  (or consent--approval-store
+      (setq consent--approval-store
+            (consent-approval--source-call
+             "consent-make-approval-store"))))
 
 (defun consent-approval--symbol (name)
   "Return NAME as an Consent Scheme symbol datum."
@@ -84,10 +95,9 @@
     (signal 'consent-approval-error
             (list "approval id must be a symbol or string")))))
 
-(defun consent-approval--generated-id ()
-  "Return a fresh approval id symbol."
-  (consent-approval--symbol
-   (format "a-%d" (cl-incf consent--approval-next-id))))
+(defun consent-approval--id-symbol (id)
+  "Return ID as a source-library approval id symbol."
+  (consent-approval--symbol (consent-approval--id-name id)))
 
 (defun consent-approval--status (status)
   "Return normalized STATUS or signal an approval error."
@@ -113,14 +123,6 @@
       (cdr datum)
     nil))
 
-(defun consent-approval--payload-field (datum name)
-  "Return field NAME from approval request DATUM, or nil."
-  (cadr
-   (seq-find
-    (lambda (field)
-      (consent-approval--field-named-p field name))
-    (consent-approval--request-fields datum))))
-
 (defun consent-approval--session-field ()
   "Return the current session field, or nil outside session evaluation."
   (when consent--approval-current-session
@@ -128,49 +130,17 @@
      "session"
      (consent-approval--symbol consent--approval-current-session))))
 
-(defun consent-approval--make-record (datum &optional id status)
-  "Return normalized approval request record for DATUM."
-  (let ((request-id (or id (consent-approval--generated-id)))
-        (request-status (or status 'pending)))
-    (append
-     (list
-      (consent-approval--symbol "approval-request")
-      (consent-approval--field "id" request-id)
-      (consent-approval--field
-       "policy"
-       (or (consent-approval--payload-field datum "policy")
-           (consent-approval--symbol "manual")))
-      (consent-approval--field
-       "effect"
-       (or (consent-approval--payload-field datum "effect")
-           datum)))
-     (when-let ((operation
-                 (consent-approval--payload-field datum "operation")))
-       (list (consent-approval--field "operation" operation)))
-     (when-let ((reason
-                 (consent-approval--payload-field datum "reason")))
-       (list (consent-approval--field "reason" reason)))
-     (list
-      (consent-approval--field
-       "status"
-       (consent-approval--symbol request-status)))
-     (when-let ((session (or (cadr (consent-approval--session-field))
-                             (consent-approval--payload-field
-                              datum "session"))))
-       (list
-        (consent-approval--field
-         "session"
-         (consent-approval--symbol session)))))))
-
-(defun consent-approval--record-id-name (record)
-  "Return RECORD id as a string."
-  (consent-approval--id-name
-   (consent-approval--record-field record "id")))
-
-(defun consent-approval--same-id-p (record id)
-  "Return non-nil when RECORD has ID."
-  (equal (consent-approval--record-id-name record)
-         (consent-approval--id-name id)))
+(defun consent-approval--request-datum (datum)
+  "Return DATUM with host current-session ownership attached when present."
+  (if-let ((session-field (consent-approval--session-field)))
+      (if (consent-approval--request-fields datum)
+          (append
+           (list (car datum) session-field)
+           (cdr datum))
+        (list
+         (consent-approval--field "effect" datum)
+         session-field))
+    datum))
 
 (defun consent-approval--record-in-current-session-p (record)
   "Return non-nil when RECORD belongs to the current Scheme session."
@@ -193,36 +163,6 @@
               (list (format "%s cannot access approval outside current session"
                             operation))))
     record))
-
-(defun consent-approval--replace-field (record name value)
-  "Return RECORD with field NAME replaced by VALUE."
-  (let ((seen nil)
-        (name-symbol (consent-approval--symbol name)))
-    (append
-     (list (car record))
-     (mapcar
-      (lambda (field)
-        (if (consent-approval--field-named-p field name)
-            (progn
-              (setq seen t)
-              (list name-symbol value))
-          field))
-      (cdr record))
-     (unless seen
-       (list (list name-symbol value))))))
-
-(defun consent-approval--set-record! (record)
-  "Store RECORD, replacing any existing record with the same id."
-  (setq consent--approval-records
-        (append
-         (seq-remove
-          (lambda (candidate)
-            (consent-approval--same-id-p
-             candidate
-             (consent-approval--record-field record "id")))
-          consent--approval-records)
-         (list record)))
-  record)
 
 (defun consent-approval--audit-request (record)
   "Audit approval request RECORD."
@@ -253,10 +193,15 @@
 ;;;###autoload
 (defun consent-approval-request! (datum)
   "Create an approval request from DATUM and return its id."
-  (let ((record (consent-approval--make-record datum)))
-    (consent-approval--set-record! record)
+  (let* ((request (consent-approval--request-datum datum))
+         (id
+          (consent-approval--source-call
+           "approval-store-request!"
+           (consent-approval--store)
+           request))
+         (record (consent-approval-ref id)))
     (consent-approval--audit-request record)
-    (consent-approval--record-field record "id")))
+    id))
 
 ;;;###autoload
 (defun consent-approval-request-from-policy!
@@ -280,17 +225,24 @@ request passed to confirmation hooks and stored as the proposed effect."
 ;;;###autoload
 (defun consent-approval-ref (id)
   "Return approval request record ID, or nil when unknown."
-  (seq-find
-   (lambda (record)
-     (consent-approval--same-id-p record id))
-   consent--approval-records))
+  (let ((record
+         (consent-approval--source-call
+          "approval-store-ref"
+          (consent-approval--store)
+          (consent-approval--id-symbol id))))
+    (unless (eq record consent-false)
+      record)))
 
 ;;;###autoload
 (defun consent-approval-status (id)
   "Return approval request ID status, or nil when unknown."
-  (when-let ((record (consent-approval-ref id)))
-    (consent-approval--status
-     (consent-approval--record-field record "status"))))
+  (let ((status
+         (consent-approval--source-call
+          "approval-store-status"
+          (consent-approval--store)
+          (consent-approval--id-symbol id))))
+    (unless (eq status consent-false)
+      (consent-approval--status status))))
 
 ;;;###autoload
 (defun consent-approval-records (&optional session status)
@@ -308,7 +260,9 @@ request passed to confirmation hooks and stored as the proposed effect."
         (or (not status-symbol)
             (equal (consent-approval--record-field record "status")
                    status-symbol))))
-     consent--approval-records)))
+     (consent-approval--source-call
+      "approval-store-records"
+      (consent-approval--store)))))
 
 ;;;###autoload
 (defun consent-approval-pending-records (&optional session)
@@ -328,11 +282,14 @@ request passed to confirmation hooks and stored as the proposed effect."
       (signal 'consent-approval-error
               (list "approval decisions must be approved or denied")))
     (let ((updated
-           (consent-approval--replace-field
-            record
-            "status"
-            (consent-approval--symbol normalized-decision))))
-      (consent-approval--set-record! updated)
+           (condition-case err
+               (consent-approval--source-call
+                "approval-store-resolve!"
+                (consent-approval--store)
+                (consent-approval--record-field record "id")
+                (consent-approval--symbol normalized-decision))
+             (consent-eval-error
+              (signal 'consent-approval-error (cdr err))))))
       (consent-approval--audit-decision updated normalized-decision)
       updated)))
 
@@ -350,11 +307,13 @@ request passed to confirmation hooks and stored as the proposed effect."
       (signal 'consent-approval-error
               (list "only pending approvals can be canceled")))
     (let ((updated
-           (consent-approval--replace-field
-            record
-            "status"
-            (consent-approval--symbol "canceled"))))
-      (consent-approval--set-record! updated)
+           (condition-case err
+               (consent-approval--source-call
+                "approval-store-cancel!"
+                (consent-approval--store)
+                (consent-approval--record-field record "id"))
+             (consent-eval-error
+              (signal 'consent-approval-error (cdr err))))))
       (consent-approval--audit-decision updated 'canceled)
       updated)))
 
@@ -381,8 +340,7 @@ request passed to confirmation hooks and stored as the proposed effect."
 ;;;###autoload
 (defun consent-approval-clear! ()
   "Clear in-memory approval request records."
-  (setq consent--approval-records nil)
-  (setq consent--approval-next-id 0)
+  (setq consent--approval-store nil)
   consent-unspecified)
 
 (defun consent-approval--primitive-request (arguments _context)

@@ -4,9 +4,9 @@
 
 ;;; Commentary:
 
-;; The `(agent plan)' library stores agent plans as inspectable Scheme-readable
-;; datums.  Host-side buffers and memory summaries are views over those records;
-;; the records themselves remain the editable planning source of truth.
+;; The source-loaded `(agent plan)' library owns canonical plan store helpers.
+;; This host adapter keeps Emacs session/project scoping, audit emission,
+;; buffers, memory summaries, and the primitive bridge.
 
 ;;; Code:
 
@@ -21,6 +21,8 @@
 (require 'consent-result)
 (require 'consent-runtime)
 (require 'consent-session)
+
+(declare-function consent--source-library-call "consent-library")
 
 (define-error 'consent-plan-error
   "Consent Scheme plan error"
@@ -38,17 +40,14 @@
   '(pending active blocked done skipped cancelled failed)
   "Public Consent Scheme plan step statuses.")
 
-(defvar consent--plan-fresh-records nil
-  "Canonical fresh-scope plan records, newest first.")
+(defvar consent--plan-fresh-store nil
+  "Source-backed fresh-scope plan store.")
 
-(defvar consent--plan-session-records (make-hash-table :test #'equal)
-  "Hash from session id to canonical session-scope plan records.")
+(defvar consent--plan-session-stores (make-hash-table :test #'equal)
+  "Hash from session id to source-backed plan stores.")
 
-(defvar consent--plan-project-records (make-hash-table :test #'equal)
-  "Hash from project root to canonical project-scope plan records.")
-
-(defvar consent--plan-next-id 0
-  "Next plan record sequence number.")
+(defvar consent--plan-project-stores (make-hash-table :test #'equal)
+  "Hash from project root to source-backed plan stores.")
 
 (defvar-local consent--plan-buffer-scope nil
   "Plan scope represented by the current editable plan buffer.")
@@ -58,6 +57,22 @@
 
 (define-derived-mode consent-plan-mode prog-mode "Consent Plans"
   "Major mode for editable Consent Scheme plan datum buffers.")
+
+(defun consent--plan-source-call (name &rest arguments)
+  "Call source-backed plan procedure NAME with ARGUMENTS."
+  (unless (fboundp 'consent--source-library-call)
+    (require 'consent-library))
+  (apply #'consent--source-library-call
+         "(agent plan)" name arguments))
+
+(defun consent--plan-source-make-store (&optional records)
+  "Return a source-backed plan store, optionally initialized with RECORDS."
+  (let ((store (consent--plan-source-call
+                "consent-make-plan-store")))
+    (when records
+      (consent--plan-source-call
+       "plan-store-replace-records!" store records))
+    store))
 
 (defun consent--plan-name (value)
   "Return VALUE's stable symbolic name, or nil."
@@ -81,10 +96,6 @@
 (defun consent--plan-field (name value)
   "Return a Scheme-readable plan field named NAME with VALUE."
   (list (consent--plan-symbol name) value))
-
-(defun consent--plan-integer (value)
-  "Return VALUE as an exact integer datum."
-  (consent--make-canonical-integer value))
 
 (defun consent--plan-field-named-p (field name)
   "Return non-nil when FIELD is named NAME."
@@ -151,23 +162,6 @@
       'session
     'fresh))
 
-(defun consent--plan-status (status allowed description)
-  "Return STATUS as a normalized public plan status."
-  (let* ((name (consent--plan-name status))
-         (normalized (and name (intern name))))
-    (unless (memq normalized allowed)
-      (signal 'consent-plan-error
-              (list (format "unknown %s: %S" description status))))
-    normalized))
-
-(defun consent--plan-next-sequence ()
-  "Return the next plan sequence number."
-  (cl-incf consent--plan-next-id))
-
-(defun consent--plan-generated-id (prefix sequence)
-  "Return a generated plan symbol with PREFIX and SEQUENCE."
-  (consent--plan-symbol (format "%s-%d" prefix sequence)))
-
 (defun consent--plan-current-project-root ()
   "Return the active project root, or `default-directory'."
   (file-name-as-directory
@@ -197,121 +191,74 @@
      (consent--plan-project-key
       (and subject (file-directory-p subject) subject)))))
 
+(defun consent--plan-source-scope (scope)
+  "Return SCOPE as a source-library scope symbol."
+  (consent--plan-symbol (consent--plan-scope scope)))
+
+(defun consent--plan-session-store (context subject)
+  "Return source-backed plan store for session CONTEXT or SUBJECT."
+  (let* ((session-id (consent--plan-context-session-id context subject))
+         (store (gethash session-id consent--plan-session-stores)))
+    (unless store
+      (setq store (consent--plan-source-make-store))
+      (puthash session-id store consent--plan-session-stores))
+    store))
+
+(defun consent--plan-project-store (subject)
+  "Return source-backed plan store for project SUBJECT."
+  (let* ((project-key
+          (consent--plan-project-key
+           (and subject (file-directory-p subject) subject)))
+         (store (gethash project-key consent--plan-project-stores)))
+    (unless store
+      (setq store (consent--plan-source-make-store))
+      (puthash project-key store consent--plan-project-stores))
+    store))
+
+(defun consent--plan-store (scope &optional context subject)
+  "Return source-backed plan store for SCOPE in CONTEXT and SUBJECT."
+  (pcase (consent--plan-scope scope)
+    ('fresh
+     (or consent--plan-fresh-store
+         (setq consent--plan-fresh-store
+               (consent--plan-source-make-store))))
+    ('session
+     (consent--plan-session-store context subject))
+    ('project
+     (consent--plan-project-store subject))))
+
 (defun consent--plan-records (scope &optional context subject)
   "Return records for SCOPE in CONTEXT and optional SUBJECT."
-  (pcase (consent--plan-scope scope)
-    ('fresh consent--plan-fresh-records)
-    ('session
-     (gethash (consent--plan-subject-key 'session context subject)
-              consent--plan-session-records))
-    ('project
-     (gethash (consent--plan-subject-key 'project context subject)
-              consent--plan-project-records))))
+  (let ((normalized-scope (consent--plan-scope scope)))
+    (consent--plan-source-call
+     "plan-store-list"
+     (consent--plan-store normalized-scope context subject)
+     (consent--plan-source-scope normalized-scope))))
 
 (defun consent--plan-set-records! (scope records &optional context subject)
   "Replace records for SCOPE in CONTEXT and optional SUBJECT with RECORDS."
-  (pcase (consent--plan-scope scope)
-    ('fresh
-     (setq consent--plan-fresh-records records))
-    ('session
-     (puthash (consent--plan-subject-key 'session context subject)
-              records
-              consent--plan-session-records))
-    ('project
-     (puthash (consent--plan-subject-key 'project context subject)
-              records
-              consent--plan-project-records))))
-
-(defun consent--plan-find-by-id (records id)
-  "Return plan record with ID from RECORDS."
-  (seq-find
-   (lambda (record)
-     (equal (consent--plan-field-value record "id") id))
+  (consent--plan-source-call
+   "plan-store-replace-records!"
+   (consent--plan-store scope context subject)
    records))
 
-(defun consent--plan-replace-record (records record)
-  "Return RECORDS with RECORD replacing any plan with the same id."
-  (cons record
-        (seq-remove
-         (lambda (candidate)
-           (equal (consent--plan-field-value candidate "id")
-                  (consent--plan-field-value record "id")))
-         records)))
+(defun consent--plan-datum-with-default-scope (datum scope)
+  "Return DATUM with SCOPE supplied when DATUM omits a scope field."
+  (let ((fields (consent--plan-payload-fields datum)))
+    (if (consent--plan-payload-field fields "scope")
+        datum
+      (append fields
+              (list
+               (consent--plan-field "scope"
+                                    (consent--plan-source-scope scope)))))))
 
-(defun consent--plan-step-id (step)
-  "Return STEP's id field."
-  (consent--plan-payload-field step "id"))
+(defun consent--plan-record-steps (record)
+  "Return RECORD's step list."
+  (or (consent--plan-field-value record "steps") nil))
 
-(defun consent--plan-normalize-step (step &optional generated-id)
-  "Return STEP in canonical field order."
-  (let* ((fields (consent--plan-payload-fields step))
-         (id (consent--plan-datum-key
-              (or (consent--plan-payload-field fields "id")
-                  generated-id)
-              "plan step id"))
-         (status (consent--plan-status
-                  (or (consent--plan-payload-field fields "status")
-                      'pending)
-                  consent-plan-step-statuses
-                  "plan step status"))
-         (extras
-          (seq-remove
-           (lambda (field)
-             (or (consent--plan-field-named-p field "id")
-                 (consent--plan-field-named-p field "status")))
-           fields)))
-    (append
-     (list
-      (consent--plan-field "id" id)
-      (consent--plan-field "status"
-                                (consent--plan-symbol status)))
-     extras)))
-
-(defun consent--plan-normalize-steps (steps)
-  "Return STEPS as a canonical proper list of step datums."
-  (mapcar #'consent--plan-normalize-step
-          (consent--proper-list-elements
-           (or steps nil)
-           "plan steps")))
-
-(defun consent--plan-make-record (datum context &optional existing)
-  "Return a canonical plan record for DATUM in CONTEXT.
-When EXISTING is non-nil, preserve its id and creation sequence."
-  (let* ((sequence (consent--plan-next-sequence))
-         (id (or (consent--plan-payload-field datum "id")
-                 (consent--plan-field-value existing "id")
-                 (consent--plan-generated-id "p" sequence)))
-         (scope (consent--plan-scope
-                 (or (consent--plan-payload-field datum "scope")
-                     (consent--plan-field-value existing "scope")
-                     (consent--plan-default-scope context))))
-         (status (consent--plan-status
-                  (or (consent--plan-payload-field datum "status")
-                      (consent--plan-field-value existing "status")
-                      'pending)
-                  consent-plan-statuses
-                  "plan status"))
-         (goal (or (consent--plan-payload-field datum "goal")
-                   (consent--plan-field-value existing "goal")
-                   ""))
-         (steps (consent--plan-normalize-steps
-                 (or (consent--plan-payload-field datum "steps")
-                     (consent--plan-field-value existing "steps")
-                     nil)))
-         (created-at (or (consent--plan-field-value existing
-                                                         "created-at")
-                         (consent--plan-integer sequence))))
-    (list
-     (consent--plan-symbol "plan")
-     (consent--plan-field "id"
-                               (consent--plan-datum-key id "plan id"))
-     (consent--plan-field "scope" (consent--plan-symbol scope))
-     (consent--plan-field "status" (consent--plan-symbol status))
-     (consent--plan-field "goal" goal)
-     (consent--plan-field "steps" steps)
-     (consent--plan-field "created-at" created-at)
-     (consent--plan-field "updated-at"
-                               (consent--plan-integer sequence)))))
+(defun consent--plan-last-step (record)
+  "Return the last step in RECORD, or nil."
+  (car (last (consent--plan-record-steps record))))
 
 (defun consent--plan-audit (operation record &optional fields)
   "Record plan OPERATION for RECORD with FIELDS."
@@ -328,9 +275,9 @@ When EXISTING is non-nil, preserve its id and creation sequence."
 
 (defun consent--plan-memory-important-p (datum)
   "Return non-nil when DATUM requests memory summarization."
-  (let ((memory (consent--plan-payload-field datum "memory")))
-    (member (consent--plan-name memory)
-            '("important" "persist" "summary"))))
+  (not
+   (eq (consent--plan-source-call "plan-memory-important?" datum)
+       consent-false)))
 
 (defun consent--plan-memory-scope (scope)
   "Return memory scope corresponding to plan SCOPE."
@@ -367,27 +314,23 @@ When EXISTING is non-nil, preserve its id and creation sequence."
 ;;;###autoload
 (defun consent-plan-create! (datum &optional context)
   "Create or replace a plan from DATUM and return its canonical record."
-  (let* ((existing-id (consent--plan-payload-field datum "id"))
-         (scope (consent--plan-scope
+  (let* ((scope (consent--plan-scope
                  (or (consent--plan-payload-field datum "scope")
                      (consent--plan-default-scope context))))
-         (records (consent--plan-records scope context))
-         (existing (and existing-id
-                        (consent--plan-find-by-id records existing-id)))
          (redacted-datum (consent-redact datum 'context-event))
-         (record (consent--plan-make-record redacted-datum
-                                                 context
-                                                 existing)))
-    (consent--plan-set-records!
-     scope
-     (consent--plan-replace-record records record)
-     context)
+         (scoped-datum
+          (consent--plan-datum-with-default-scope redacted-datum scope))
+         (record
+          (consent--plan-source-call
+           "plan-store-create!"
+           (consent--plan-store scope context)
+           scoped-datum)))
     (consent--plan-maybe-write-memory! redacted-datum record context)
     (consent--plan-audit "plan-create!" record `((record . ,record)))
     record))
 
 (defun consent--plan-locate (id &optional context)
-  "Return (SCOPE SUBJECT RECORD) for plan ID in CONTEXT, or nil."
+  "Return (SCOPE SUBJECT STORE RECORD) for plan ID in CONTEXT, or nil."
   (let ((normalized-id (consent--plan-datum-key id "plan id"))
         found)
     (dolist (scope '(fresh session project))
@@ -401,58 +344,27 @@ When EXISTING is non-nil, preserve its id and creation sequence."
                             (consent--eval-context-session-id context)))
                       ('project
                        (consent--plan-subject-key 'project context nil))))
-                   (records
+                   (store
                     (and (or (not (eq scope 'session)) subject)
-                         (consent--plan-records scope context subject)))
+                         (consent--plan-store scope context subject)))
                    (record
-                    (and records
-                         (consent--plan-find-by-id records
-                                                        normalized-id))))
-              (when record
-                (setq found (list scope subject record))))
+                    (and store
+                         (consent--plan-source-call
+                          "plan-store-ref" store normalized-id))))
+              (when (and record (not (eq record consent-false)))
+                (setq found (list scope subject store record))))
           (consent-plan-error nil))))
     found))
 
 ;;;###autoload
 (defun consent-plan-ref (id &optional context)
   "Return plan ID in CONTEXT, or nil when unknown."
-  (caddr (consent--plan-locate id context)))
+  (cadddr (consent--plan-locate id context)))
 
 ;;;###autoload
 (defun consent-plan-list (scope &optional context subject)
   "Return known plans in SCOPE for CONTEXT and optional SUBJECT."
   (consent--plan-records scope context subject))
-
-(defun consent--plan-store-updated (located record context)
-  "Replace LOCATED plan with RECORD in CONTEXT and return RECORD."
-  (let ((scope (car located))
-        (subject (cadr located)))
-    (consent--plan-set-records!
-     scope
-     (consent--plan-replace-record
-      (consent--plan-records scope context subject)
-      record)
-     context
-     subject)
-    record))
-
-(defun consent--plan-replace-field (record name value)
-  "Return RECORD with field NAME replaced by VALUE."
-  (cons
-   (car record)
-   (mapcar
-    (lambda (field)
-      (if (consent--plan-field-named-p field name)
-          (consent--plan-field name value)
-        field))
-    (cdr record))))
-
-(defun consent--plan-touch (record)
-  "Return RECORD with a refreshed updated-at sequence."
-  (consent--plan-replace-field
-   record
-   "updated-at"
-   (consent--plan-integer (consent--plan-next-sequence))))
 
 ;;;###autoload
 (defun consent-plan-step-add! (id step-datum &optional context)
@@ -460,21 +372,17 @@ When EXISTING is non-nil, preserve its id and creation sequence."
   (let* ((located (or (consent--plan-locate id context)
                       (signal 'consent-plan-error
                               (list (format "unknown plan: %S" id)))))
-         (record (caddr located))
-         (step (consent--plan-normalize-step
-                (consent-redact step-datum 'context-event)
-                (consent--plan-generated-id
-                 "step"
-                 (1+ consent--plan-next-id))))
-         (steps (consent--plan-field-value record "steps"))
+         (store (caddr located))
          (updated
-          (consent--plan-touch
-           (consent--plan-replace-field
-            record "steps" (append steps (list step))))))
-    (consent--plan-store-updated located updated context)
+          (consent--plan-source-call
+           "plan-store-step-add!"
+           store
+           (consent--plan-datum-key id "plan id")
+           (consent-redact step-datum 'context-event)))
+         (step (consent--plan-last-step updated)))
     (consent--plan-audit
      "plan-step-add!" updated
-     `((step . ,(consent--plan-step-id step))
+     `((step . ,(consent--plan-field-value step "id"))
        (record . ,updated)))
     updated))
 
@@ -484,40 +392,22 @@ When EXISTING is non-nil, preserve its id and creation sequence."
   (let* ((located (or (consent--plan-locate id context)
                       (signal 'consent-plan-error
                               (list (format "unknown plan: %S" id)))))
-         (record (caddr located))
+         (store (caddr located))
          (normalized-step-id
           (consent--plan-datum-key step-id "plan step id"))
-         (normalized-status
-          (consent--plan-status status
-                                     consent-plan-step-statuses
-                                     "plan step status"))
-         (found nil)
-         (steps
-          (mapcar
-           (lambda (step)
-             (if (equal (consent--plan-step-id step)
-                        normalized-step-id)
-                 (progn
-                   (setq found t)
-                   (consent--plan-normalize-step
-                    (consent--plan-replace-field
-                     step "status"
-                     (consent--plan-symbol normalized-status))))
-               step))
-           (consent--plan-field-value record "steps"))))
-    (unless found
-      (signal 'consent-plan-error
-              (list (format "unknown plan step: %S" step-id))))
-    (let ((updated
-           (consent--plan-touch
-            (consent--plan-replace-field record "steps" steps))))
-      (consent--plan-store-updated located updated context)
-      (consent--plan-audit
-       "plan-step-status!" updated
-       `((step . ,normalized-step-id)
-         (status . ,normalized-status)
-         (record . ,updated)))
-      updated)))
+         (updated
+          (consent--plan-source-call
+           "plan-store-step-status!"
+           store
+           (consent--plan-datum-key id "plan id")
+           normalized-step-id
+           (consent--plan-symbol status))))
+    (consent--plan-audit
+     "plan-step-status!" updated
+     `((step . ,normalized-step-id)
+       (status . ,(intern (consent--plan-name status)))
+       (record . ,updated)))
+    updated))
 
 ;;;###autoload
 (defun consent-plan-status! (id status &optional context)
@@ -525,16 +415,16 @@ When EXISTING is non-nil, preserve its id and creation sequence."
   (let* ((located (or (consent--plan-locate id context)
                       (signal 'consent-plan-error
                               (list (format "unknown plan: %S" id)))))
-         (record (caddr located))
-         (normalized-status
-          (consent--plan-status status
-                                     consent-plan-statuses
-                                     "plan status"))
+         (store (caddr located))
          (updated
-          (consent--plan-touch
-           (consent--plan-replace-field
-            record "status" (consent--plan-symbol normalized-status)))))
-    (consent--plan-store-updated located updated context)
+          (consent--plan-source-call
+           "plan-store-status!"
+           store
+           (consent--plan-datum-key id "plan id")
+           (consent--plan-symbol status)))
+         (normalized-status
+          (intern (consent--plan-name
+                   (consent--plan-field-value updated "status")))))
     (consent--plan-audit
      "plan-status!" updated
      `((status . ,normalized-status)
@@ -559,21 +449,20 @@ When EXISTING is non-nil, preserve its id and creation sequence."
   (if scope
       (pcase (consent--plan-scope scope)
         ('fresh
-         (setq consent--plan-fresh-records nil))
+         (setq consent--plan-fresh-store nil))
         ('session
          (if subject
              (remhash (consent--plan-name subject)
-                      consent--plan-session-records)
-           (clrhash consent--plan-session-records)))
+                      consent--plan-session-stores)
+           (clrhash consent--plan-session-stores)))
         ('project
          (if subject
              (remhash (consent--plan-project-key subject)
-                      consent--plan-project-records)
-           (clrhash consent--plan-project-records))))
-    (setq consent--plan-fresh-records nil)
-    (clrhash consent--plan-session-records)
-    (clrhash consent--plan-project-records)
-    (setq consent--plan-next-id 0))
+                      consent--plan-project-stores)
+           (clrhash consent--plan-project-stores))))
+    (setq consent--plan-fresh-store nil)
+    (clrhash consent--plan-session-stores)
+    (clrhash consent--plan-project-stores))
   consent-unspecified)
 
 ;;;###autoload

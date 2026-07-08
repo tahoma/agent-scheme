@@ -62,6 +62,15 @@
   (with-current-buffer buffer
     (buffer-substring-no-properties (point-min) (point-max))))
 
+(ert-deftest consent-approval-test-emacs-adapter-has-no-pure-store-twin ()
+  "Keep pure approval store semantics in the source-loaded library."
+  (dolist (helper '(consent-approval--generated-id
+                    consent-approval--make-record
+                    consent-approval--replace-field
+                    consent-approval--set-record!
+                    consent-approval--same-id-p))
+    (should-not (fboundp helper))))
+
 (ert-deftest consent-approval-test-request-status-and-audit ()
   "Scheme code can request approval and observe the pending status."
   (consent-approval-test--reset)
