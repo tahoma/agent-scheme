@@ -596,7 +596,7 @@
 
 (defun consent--library-visibility-internal-p (visibility)
   "Return non-nil when VISIBILITY requires internal-library posture."
-  (memq visibility '(internal-runtime internal-agent-model)))
+  (memq visibility '(internal-runtime internal-agent-primitive)))
 
 (defun consent--library-availability-condition-satisfied-p (condition)
   "Return non-nil when manifest availability CONDITION is satisfied."

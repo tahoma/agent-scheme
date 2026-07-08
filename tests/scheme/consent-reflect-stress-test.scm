@@ -279,7 +279,7 @@
                    public-consent
                    alias
                    internal-runtime
-                   internal-agent-model
+                   internal-agent-primitive
                    optional
                    (host emacs))"))
 

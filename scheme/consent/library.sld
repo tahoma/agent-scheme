@@ -777,7 +777,7 @@
     (define (library-visibility-internal? visibility)
       "Report whether VISIBILITY requires internal-library posture."
       (or (eq? visibility 'internal-runtime)
-          (eq? visibility 'internal-agent-model)))
+          (eq? visibility 'internal-agent-primitive)))
 
     (define (library-availability-condition-satisfied? condition)
       "Report whether manifest availability CONDITION is satisfied."

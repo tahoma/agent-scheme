@@ -774,6 +774,25 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
       (regexp-quote "(agent memory primitive)")
       (error-message-string error)))))
 
+(ert-deftest consent-library-test-agent-primitive-backing-is-not-model-tier ()
+  "Classify agent primitive overlays separately from model-provider layers."
+  (let ((entry
+         (consent--library-collection-manifest-entry
+          "(agent memory primitive)"))
+        (provider-entry
+         (consent--library-collection-manifest-entry
+          "(agent models openai)")))
+    (should entry)
+    (should (eq (plist-get entry :visibility)
+                'internal-agent-primitive))
+    (should (eq (plist-get entry :layer) 'primitive))
+    (should provider-entry)
+    (should (eq (plist-get provider-entry :layer) 'provider))
+    (dolist (manifest-entry (consent--library-collection-manifest-entries))
+      (should-not
+       (string-match-p "\\`(agent model\\(\\s-\\|)\\)"
+                       (plist-get manifest-entry :name))))))
+
 (ert-deftest consent-library-test-internal-posture-imports-runtime-source ()
   "Allow white-box runtime imports only under explicit internal posture."
   (should

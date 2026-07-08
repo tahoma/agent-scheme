@@ -68,8 +68,8 @@ Manifest entries use the following visibility vocabulary:
   runtime internals.
 - `internal-runtime`: Reader, evaluator, macro, runtime, bootstrap, resolver,
   primitive backing, and pass libraries that are implementation substrate.
-- `internal-agent-model`: Agent primitive or model backing libraries used to
-  implement public `(agent ...)` APIs.
+- `internal-agent-primitive`: Agent primitive backing libraries used to attach
+  host-provided effects to public `(agent ...)` APIs.
 - `host-adapter`: Host-specific capability-adapter libraries whose availability
   depends on host posture, capability policy, or adapter support.
 - `alias`: A compatibility spelling that resolves to a target library and does
@@ -79,6 +79,27 @@ Ordinary user imports of internal visibility tiers fail deterministically. Tests
 bootstraps, and host adapters use an explicit internal posture
 (`internal-libraries-allowed`) rather than a separate resolver bypass. Public
 imports and public aliases continue to work without that posture.
+
+## Agent Domain Layers
+
+Public agent-domain APIs live at `(agent <domain>)`. When the domain has
+host-neutral records, constructors, stores, predicates, selectors, or pure
+transformations, the portable source library at that public name owns them
+directly. Do not introduce a private `(agent model <domain>)` tier merely to
+hide the backing implementation behind a public veneer.
+
+Host effects for an agent domain live behind explicit primitive backing
+libraries such as `(agent memory primitive)` or `(agent session primitive)`.
+Those entries use `visibility . internal-agent-primitive`, `layer . primitive`,
+and `source-kind . primitive-library`; ordinary user imports are denied unless a
+bootstrap, test, or host adapter opts into `internal-libraries-allowed`.
+
+Model-provider routing is a different layer. The public model protocol lives at
+`(agent models)`, provider-specific portable adapters live under
+`(agent models <provider>)`, and host-owned routing or live transport effects
+remain behind `(agent models primitive)`. The `models` plural is intentional:
+it names backend model providers and should not be confused with agent-domain
+record/model data.
 
 ## Source Kinds
 
@@ -228,7 +249,8 @@ work can consume.
 
 #483 owns the current visibility vocabulary, seed manifest inventory, and
 ordinary import enforcement for public versus internal libraries. #484 owns the
-agent model/API namespace cleanup. #682 owns the full shared manifest schema and
-load-light aggregation contract. #681 owns provider-owned primitive-library
-registration. #50 owns package roots, dependency solving, version selection,
-conflict records, and versioned resolution behavior.
+agent-domain, primitive-backing, and model-provider layer rule. #682 owns the
+full shared manifest schema and load-light aggregation contract. #681 owns
+provider-owned primitive-library registration. #50 owns package roots,
+dependency solving, version selection, conflict records, and versioned
+resolution behavior.
