@@ -18,20 +18,6 @@
 (require 'consent-result)
 (require 'consent-base)
 (require 'consent-capability)
-(require 'consent-agent-io)
-(require 'consent-approval)
-(require 'consent-context)
-(require 'consent-debugger)
-(require 'consent-helper)
-(require 'consent-job)
-(require 'consent-memory)
-(require 'consent-models)
-(require 'consent-plan)
-(require 'consent-redaction)
-(require 'consent-reflect)
-(require 'consent-session)
-(require 'consent-test)
-(require 'consent-transcript)
 (require 'consent-policy)
 
 (defconst consent--library-module-directory
@@ -83,10 +69,23 @@
 
 (declare-function consent--apply-procedure "consent-interpreter")
 (declare-function consent--make-empty-syntax-environment "consent-macro")
+(declare-function consent--memory-adapter-primitive-specs "consent-memory")
 (declare-function consent--policy-denied "consent-interpreter")
+(declare-function consent--session-adapter-primitive-specs "consent-session")
 (declare-function consent--syntax-environment-ref "consent-macro")
 (declare-function consent--trampoline "consent-interpreter")
 (declare-function consent--with-syntax-environment "consent-macro")
+(declare-function consent-agent-io-primitive-specs "consent-agent-io")
+(declare-function consent-approval-primitive-specs "consent-approval")
+(declare-function consent-context-primitive-specs "consent-context")
+(declare-function consent-debugger-primitive-specs "consent-debugger")
+(declare-function consent-helper-primitive-specs "consent-helper")
+(declare-function consent-job-primitive-specs "consent-job")
+(declare-function consent-models-primitive-specs "consent-models")
+(declare-function consent-plan-primitive-specs "consent-plan")
+(declare-function consent-redaction-primitive-specs "consent-redaction")
+(declare-function consent-reflect-primitive-specs "consent-reflect")
+(declare-function consent-test-primitive-specs "consent-test")
 
 (cl-defstruct (consent--library-binding
                (:constructor consent--make-library-binding
@@ -320,16 +319,33 @@
    (plist-get spec :variable)
    "collection manifest library"))
 
+(defun consent--collection-manifest-fields (entry description)
+  "Return tagged manifest ENTRY fields, or signal DESCRIPTION."
+  (let ((parts (consent--proper-list-elements entry description)))
+    (unless (and parts
+                 (or (consent--symbol-named-p (car parts) "manifest-entry")
+                     (consent--symbol-named-p
+                      (car parts)
+                      "manifest-index-entry")))
+      (consent--eval-error
+       "%s must begin with manifest-entry or manifest-index-entry"
+       description))
+    (cdr parts)))
+
 (defun consent--collection-manifest-field (entry name &optional default)
-  "Return NAME from alist ENTRY, or DEFAULT when absent."
+  "Return NAME from tagged manifest ENTRY, or DEFAULT when absent."
   (let ((cell
          (seq-find
           (lambda (field)
-            (and (consp field)
-                 (consent--symbol-named-p (car field) name)))
-          entry)))
+            (let ((parts
+                   (and (consp field)
+                        (consent--proper-list-elements-maybe field))))
+              (and parts
+                   (consent--symbol-named-p (car parts) name))))
+          (consent--collection-manifest-fields entry "manifest entry"))))
     (if cell
-        (cdr cell)
+        (let ((parts (consent--proper-list-elements cell "manifest field")))
+          (if (cdr parts) (cadr parts) default))
       default)))
 
 (defun consent--collection-manifest-symbol (value description &optional default)
@@ -443,6 +459,170 @@
        (consent--expect-symbol-name entry description))
      (consent--proper-list-elements value description))))
 
+(defconst consent--manifest-schema-version 1
+  "Current shared manifest schema version.")
+
+(defun consent--manifest-nonnegative-integer (value description &optional default)
+  "Return VALUE as an exact non-negative integer, or DEFAULT when absent."
+  (cond
+   ((or (null value) (eq value consent-false)) default)
+   ((and (integerp value) (>= value 0)) value)
+   ((let ((integer (and (fboundp 'consent--exact-integer-value)
+                        (consent--exact-integer-value value))))
+      (and integer (>= integer 0) integer)))
+   (t
+    (consent--eval-error
+     "%s must be an exact non-negative integer" description))))
+
+(defun consent--manifest-boolean (value description &optional default)
+  "Return VALUE as a boolean, or DEFAULT when absent."
+  (cond
+   ((null value) default)
+   ((eq value consent-false) nil)
+   ((eq value t) t)
+   ((consent-boolean-p value) (consent-boolean-value value))
+   (t (consent--eval-error "%s must be a boolean" description))))
+
+(defun consent--manifest-symbol-datum (symbol)
+  "Return SYMBOL as a Consent Scheme symbol datum."
+  (consent--syntax-symbol (symbol-name symbol)))
+
+(defun consent--manifest-kind-default (source-kind target)
+  "Return default manifest kind for SOURCE-KIND and TARGET."
+  (cond
+   ((or target (eq source-kind 'alias)) 'library-alias)
+   ((eq source-kind 'primitive) 'primitive-library)
+   (t 'library)))
+
+(defun consent--manifest-api-version-default (visibility target)
+  "Return default api-version metadata for VISIBILITY and TARGET."
+  (cond
+   (target
+    (consent-read (format "(inherits %s)" target)))
+   ((memq visibility '(internal-runtime internal-agent-primitive host-adapter))
+    'internal)
+   (t
+    (consent-read "(compat 0)"))))
+
+(defun consent--manifest-source-version-default (source-kind)
+  "Return default source-version metadata for SOURCE-KIND."
+  (if (memq source-kind '(base-snapshot primitive derived))
+      'runtime
+    'unknown))
+
+(defun consent--manifest-realization-default (source-kind)
+  "Return default realization metadata for SOURCE-KIND."
+  (pcase source-kind
+    ('portable-source 'portable-source)
+    ('primitive 'host-primitive)
+    ('alias 'alias)
+    ('base-snapshot 'runtime-snapshot)
+    ('derived 'derived)
+    ('facade 'shim)
+    (_ (or source-kind 'unknown))))
+
+(defun consent--manifest-source-path (source)
+  "Return path from manifest SOURCE metadata, or nil."
+  (when (consp source)
+    (let ((parts (consent--proper-list-elements source "manifest source")))
+      (when (and (= (length parts) 2)
+                 (consent--symbol-named-p (car parts) "path")
+                 (stringp (cadr parts)))
+        (cadr parts)))))
+
+(defun consent--manifest-source-implementation-id (source)
+  "Return implementation id from manifest SOURCE metadata, or nil."
+  (when (consp source)
+    (let ((parts (consent--proper-list-elements source "manifest source")))
+      (when (and (= (length parts) 2)
+                 (consent--symbol-named-p (car parts) "implementation-id"))
+        (consent--collection-manifest-symbol
+         (cadr parts)
+         "manifest source implementation-id")))))
+
+(defun consent--manifest-source-with-path (source path)
+  "Return SOURCE normalized to resolved PATH when SOURCE is a path datum."
+  (if (and path (consp source))
+      (let ((parts (consent--proper-list-elements source "manifest source")))
+        (if (and (= (length parts) 2)
+                 (consent--symbol-named-p (car parts) "path"))
+            (list (consent--manifest-symbol-datum 'path) path)
+          source))
+    source))
+
+(defun consent--manifest-source-default (source source-file target implementation-id)
+  "Return normalized source metadata.
+Use SOURCE-FILE, TARGET, or IMPLEMENTATION-ID when SOURCE is absent."
+  (cond
+   ((and source (not (eq source consent-false))) source)
+   (source-file
+    (list (consent--manifest-symbol-datum 'path) source-file))
+   (target
+    (list (consent--manifest-symbol-datum 'target)
+          (consent-read target)))
+   (implementation-id
+    (list (consent--manifest-symbol-datum 'implementation-id)
+          (consent--manifest-symbol-datum implementation-id)))
+   (t (consent--manifest-symbol-datum 'unknown))))
+
+(defun consent--manifest-documentation-summary (documentation)
+  "Return summary text from DOCUMENTATION metadata, or nil."
+  (catch 'summary
+    (dolist (entry (and (consp documentation)
+                        (consent--proper-list-elements
+                         documentation
+                         "manifest documentation")))
+      (when (consp entry)
+        (let ((parts (consent--proper-list-elements
+                      entry
+                      "manifest documentation entry")))
+          (when (and (= (length parts) 2)
+                     (consent--symbol-named-p (car parts) "summary")
+                     (stringp (cadr parts)))
+            (throw 'summary (cadr parts))))))
+    nil))
+
+(defun consent--manifest-documentation-default (documentation summary)
+  "Return DOCUMENTATION or summary-derived documentation metadata."
+  (cond
+   ((and documentation (not (eq documentation consent-false))) documentation)
+   (summary
+    (list (list (consent--manifest-symbol-datum 'summary) summary)))
+   (t nil)))
+
+(defun consent--manifest-provenance-default (provenance origin source-id)
+  "Return PROVENANCE or a minimal origin/source-id record."
+  (if (and provenance (not (eq provenance consent-false)))
+      provenance
+    (delq nil
+          (list
+           (list (consent--manifest-symbol-datum 'origin)
+                 (consent--manifest-symbol-datum origin))
+           (and source-id
+                (list (consent--manifest-symbol-datum 'source-id)
+                      (if (symbolp source-id)
+                          (consent--manifest-symbol-datum source-id)
+                        source-id)))))))
+
+(defun consent--manifest-normalized-dependency (entry)
+  "Return dependency ENTRY as a normalized library key."
+  (let ((parts (and (consp entry)
+                    (consent--proper-list-elements-maybe entry))))
+    (if (and parts
+             (consent--symbol-named-p (car parts) "library")
+             (cadr parts))
+        (consent--library-name-key (cadr parts))
+      (consent--library-name-key entry))))
+
+(defun consent--manifest-library-list (value description)
+  "Return VALUE normalized as a list of dependency library-name keys."
+  (if (or (null value) (eq value consent-false))
+      nil
+    (mapcar
+     (lambda (entry)
+       (consent--manifest-normalized-dependency entry))
+     (consent--proper-list-elements value description))))
+
 (defun consent--collection-manifest-default-visibility (status)
   "Return the default visibility implied by manifest STATUS."
   (if (eq status 'alias) 'alias 'public))
@@ -451,7 +631,7 @@
   "Return catalog metadata parsed from collection manifest ENTRY and SPEC."
   (let* ((key
           (consent--library-name-key
-           (consent--collection-manifest-field entry "library" nil)))
+           (consent--collection-manifest-field entry "name" nil)))
          (status
           (consent--collection-manifest-symbol
            (consent--collection-manifest-field entry "status" nil)
@@ -487,24 +667,33 @@
           (or (consent--collection-manifest-source-kind
                (consent--collection-manifest-field entry "source-kind" nil))
               (and target 'alias)))
-         (implementation-id
+         (schema-version
+          (consent--manifest-nonnegative-integer
+           (consent--collection-manifest-field entry "schema-version" nil)
+           "collection manifest schema-version"
+           consent--manifest-schema-version))
+         (kind
           (consent--collection-manifest-symbol
-           (consent--collection-manifest-field entry "implementation-id" nil)
-           "collection manifest implementation-id"
-           nil))
+           (consent--collection-manifest-field entry "kind" nil)
+           "collection manifest kind"
+           (consent--manifest-kind-default source-kind target)))
+         (source
+          (consent--collection-manifest-field entry "source" nil))
+         (implementation-id
+          (consent--manifest-source-implementation-id source))
          (primitive-overlay-library
           (consent--collection-manifest-target
            (consent--collection-manifest-field
             entry "primitive-overlay-library" nil)))
          (exports-absent (list 'exports-absent))
          (source-file
-          (consent--collection-manifest-field entry "source-file" nil))
+          (consent--manifest-source-path source))
          (dependencies
-          (consent--collection-manifest-library-list
+          (consent--manifest-library-list
            (consent--collection-manifest-field entry "dependencies" nil)
            "collection manifest dependencies"))
          (aliases
-          (consent--collection-manifest-library-list
+          (consent--manifest-library-list
            (consent--collection-manifest-field entry "aliases" nil)
            "collection manifest aliases"))
          (exports
@@ -516,7 +705,41 @@
                value
                "collection manifest exports"))))
          (summary
-          (consent--collection-manifest-field entry "summary" nil)))
+          (consent--collection-manifest-field entry "summary" nil))
+         (owner
+          (consent--collection-manifest-symbol
+           (consent--collection-manifest-field entry "owner" nil)
+           "collection manifest owner"
+           (plist-get spec :category)))
+         (provider
+          (consent--collection-manifest-symbol
+           (consent--collection-manifest-field entry "provider" nil)
+           "collection manifest provider"
+           'repo-source))
+         (api-version
+          (consent--manifest-metadata-value
+           (consent--collection-manifest-field entry "api-version" nil)))
+         (source-version
+          (consent--manifest-metadata-value
+           (consent--collection-manifest-field entry "source-version" nil)))
+         (realization
+          (consent--collection-manifest-symbol
+           (consent--collection-manifest-field entry "realization" nil)
+           "collection manifest realization"
+           nil))
+         (effects
+          (consent--collection-manifest-field entry "effects" nil))
+         (capabilities
+          (consent--collection-manifest-field entry "capabilities" nil))
+         (documentation
+          (consent--collection-manifest-field entry "documentation" nil))
+         (provenance
+          (consent--collection-manifest-field entry "provenance" nil))
+         (canonical
+          (consent--manifest-boolean
+           (consent--collection-manifest-field entry "canonical" nil)
+           "collection manifest canonical"
+           (not (and target (eq source-kind 'alias))))))
     (when (eq source-file consent-false)
       (setq source-file nil))
     (unless (or (null source-file) (stringp source-file))
@@ -525,6 +748,12 @@
     (setq source-file
           (consent--collection-manifest-catalog-source-file
            spec source-kind source-file))
+    (setq source
+          (consent--manifest-source-with-path source source-file))
+    (unless (= schema-version consent--manifest-schema-version)
+      (consent--eval-error
+       "unsupported collection manifest schema-version: %s"
+       schema-version))
     (when (eq exports exports-absent)
       (if (and target (eq source-kind 'alias))
           (setq exports nil)
@@ -536,7 +765,29 @@
     (unless (or (null summary) (stringp summary))
       (consent--eval-error
        "collection manifest summary must be a string or #f"))
+    (setq documentation
+          (consent--manifest-documentation-default documentation summary))
+    (unless summary
+      (setq summary
+            (consent--manifest-documentation-summary documentation)))
+    (unless api-version
+      (setq api-version
+            (consent--manifest-api-version-default visibility target)))
+    (unless source-version
+      (setq source-version
+            (consent--manifest-source-version-default source-kind)))
+    (unless realization
+      (setq realization
+            (consent--manifest-realization-default source-kind)))
+    (setq source
+          (consent--manifest-source-default
+           source source-file target implementation-id))
+    (setq provenance
+          (consent--manifest-provenance-default
+           provenance 'repo (plist-get spec :source-id)))
     (list :name key
+          :schema-version schema-version
+          :kind kind
           :category category
           :status status
           :source-kind source-kind
@@ -544,8 +795,14 @@
           :primitive-overlay-library primitive-overlay-library
           :visibility visibility
           :layer layer
+          :owner owner
+          :provider provider
           :availability availability
           :availability-condition availability-condition
+          :api-version api-version
+          :source-version source-version
+          :realization realization
+          :source source
           :root (plist-get spec :root)
           :root-kind (plist-get spec :root-kind)
           :source-file source-file
@@ -553,6 +810,11 @@
           :target target
           :exports exports
           :dependencies dependencies
+          :effects effects
+          :capabilities capabilities
+          :documentation documentation
+          :provenance provenance
+          :canonical canonical
           :origin 'built-in-seed
           :source-id (plist-get spec :source-id)
           :summary summary)))
@@ -720,6 +982,17 @@
    ((consent-symbol-p value) (intern (consent-symbol-name value)))
    (t (consent--eval-error "%s must be a symbol" description))))
 
+(defun consent--library-catalog-optional-symbol (value description)
+  "Return VALUE as an Emacs Lisp symbol, or nil when absent."
+  (unless (or (null value) (eq value consent-false))
+    (consent--library-catalog-require-symbol value description)))
+
+(defun consent--manifest-metadata-value (value)
+  "Return VALUE with plain Consent symbols normalized for catalog metadata."
+  (if (consent-symbol-p value)
+      (intern (consent-symbol-name value))
+    value))
+
 (defun consent--library-catalog-require-source-file (value)
   "Return VALUE when it is nil, Scheme #f, or a string."
   (cond
@@ -736,48 +1009,45 @@
 
 (defun consent--library-catalog-require-library-list (value description)
   "Return VALUE as a list of normalized library-name keys."
-  (mapcar
-   #'consent--library-name-key
-   (consent--proper-list-elements value description)))
+  (consent--manifest-library-list value description))
 
 (defun consent--library-catalog-require-target (value)
   "Return VALUE as a normalized library-name key, or nil."
   (unless (or (null value) (eq value consent-false))
     (consent--library-name-key value)))
 
+(defun consent--library-catalog-normalized-source-kind (value target)
+  "Return catalog SOURCE-KIND from manifest VALUE and TARGET."
+  (or (consent--collection-manifest-source-kind value)
+      (and target 'alias)
+      'manifest))
+
 (defun consent--library-catalog-manifest-library (form origin source-id)
   "Validate manifest library FORM under ORIGIN and SOURCE-ID."
   (let ((parts (consent--proper-list-elements form "catalog library entry")))
-    (unless (and parts (consent--symbol-named-p (car parts) "library"))
-      (consent--eval-error "catalog entry must begin with library"))
+    (unless (and parts
+                 (or (consent--symbol-named-p (car parts) "manifest-entry")
+                     (consent--symbol-named-p
+                      (car parts)
+                      "manifest-index-entry")))
+      (consent--eval-error
+       "catalog entry must begin with manifest-entry or manifest-index-entry"))
     (let* ((fields (cdr parts))
+           (index-entry
+            (consent--symbol-named-p (car parts) "manifest-index-entry"))
            (name
             (consent--library-name-key
              (consent--library-catalog-manifest-field fields "name" nil)))
-           (category
-            (consent--library-catalog-require-symbol
-             (consent--library-catalog-manifest-field
-              fields "category" 'library)
-             "catalog category"))
            (status
             (consent--library-catalog-require-symbol
              (consent--library-catalog-manifest-field
               fields "status" 'available)
              "catalog status"))
-           (source-kind
-            (consent--library-catalog-require-symbol
-             (consent--library-catalog-manifest-field
-              fields "source-kind" 'manifest)
-             "catalog source-kind"))
            (visibility
             (consent--library-catalog-require-symbol
              (consent--library-catalog-manifest-field
               fields "visibility" 'public)
              "catalog visibility"))
-           (source-file
-            (consent--library-catalog-require-source-file
-             (consent--library-catalog-manifest-field
-              fields "source-file" nil)))
            (aliases
             (consent--library-catalog-require-library-list
              (consent--library-catalog-manifest-field fields "aliases" nil)
@@ -785,6 +1055,33 @@
            (target
             (consent--library-catalog-require-target
              (consent--library-catalog-manifest-field fields "target" nil)))
+           (source-kind
+            (consent--library-catalog-normalized-source-kind
+             (consent--library-catalog-manifest-field
+              fields "source-kind" nil)
+             target))
+           (schema-version
+            (consent--manifest-nonnegative-integer
+             (consent--library-catalog-manifest-field
+              fields "schema-version" nil)
+             "catalog schema-version"
+             consent--manifest-schema-version))
+           (kind
+            (consent--library-catalog-require-symbol
+             (consent--library-catalog-manifest-field
+              fields
+              "kind"
+              (consent--manifest-kind-default source-kind target))
+             "catalog kind"))
+           (category
+            (consent--library-catalog-require-symbol
+             (consent--library-catalog-manifest-field
+              fields "category" (if index-entry 'alias 'library))
+             "catalog category"))
+           (source
+            (consent--library-catalog-manifest-field fields "source" nil))
+           (source-file
+            (consent--manifest-source-path source))
            (exports
             (consent--library-catalog-require-symbol-list
              (consent--library-catalog-manifest-field fields "exports" nil)
@@ -795,21 +1092,101 @@
               fields "dependencies" nil)
              "catalog dependencies"))
            (summary
-            (consent--library-catalog-manifest-field fields "summary" nil)))
+            (consent--library-catalog-manifest-field fields "summary" nil))
+           (owner
+            (consent--library-catalog-require-symbol
+             (consent--library-catalog-manifest-field fields "owner" 'project)
+             "catalog owner"))
+           (provider
+            (consent--library-catalog-require-symbol
+             (consent--library-catalog-manifest-field
+              fields "provider" origin)
+             "catalog provider"))
+           (layer
+            (consent--library-catalog-optional-symbol
+             (consent--library-catalog-manifest-field fields "layer" nil)
+             "catalog layer"))
+           (api-version
+            (consent--manifest-metadata-value
+             (consent--library-catalog-manifest-field
+              fields "api-version" nil)))
+           (source-version
+            (consent--manifest-metadata-value
+             (consent--library-catalog-manifest-field
+              fields "source-version" nil)))
+           (realization
+            (consent--library-catalog-require-symbol
+             (consent--library-catalog-manifest-field
+              fields
+              "realization"
+              (consent--manifest-realization-default source-kind))
+             "catalog realization"))
+           (effects
+            (consent--library-catalog-manifest-field fields "effects" nil))
+           (capabilities
+            (consent--library-catalog-manifest-field
+             fields "capabilities" nil))
+           (documentation
+            (consent--library-catalog-manifest-field
+             fields "documentation" nil))
+           (provenance
+            (consent--library-catalog-manifest-field
+             fields "provenance" nil))
+           (canonical
+            (consent--manifest-boolean
+             (consent--library-catalog-manifest-field fields "canonical" nil)
+             "catalog canonical"
+             (not (and target (eq source-kind 'alias))))))
+      (unless (= schema-version consent--manifest-schema-version)
+        (consent--eval-error
+         "unsupported catalog schema-version: %s" schema-version))
       (when (eq summary consent-false)
         (setq summary nil))
       (unless (or (null summary) (stringp summary))
         (consent--eval-error "catalog summary must be a string or #f"))
+      (setq documentation
+            (consent--manifest-documentation-default documentation summary))
+      (unless summary
+        (setq summary
+              (consent--manifest-documentation-summary documentation)))
+      (unless api-version
+        (setq api-version
+              (consent--manifest-api-version-default visibility target)))
+      (unless source-version
+        (setq source-version
+              (consent--manifest-source-version-default source-kind)))
+      (setq source
+            (consent--manifest-source-with-path source source-file))
+      (setq source
+            (consent--manifest-source-default
+             source source-file target nil))
+      (setq provenance
+            (consent--manifest-provenance-default
+             provenance origin source-id))
       (list :name name
+            :schema-version schema-version
+            :kind kind
             :category category
             :status status
             :source-kind source-kind
             :visibility visibility
+            :owner owner
+            :provider provider
+            :layer layer
+            :api-version api-version
+            :source-version source-version
+            :realization realization
+            :source source
             :source-file source-file
             :aliases aliases
             :target target
             :exports exports
             :dependencies dependencies
+            :effects effects
+            :capabilities capabilities
+            :documentation documentation
+            :provenance provenance
+            :canonical canonical
             :origin origin
             :source-id source-id
             :summary summary))))
@@ -940,6 +1317,8 @@
          (source-file (consent--library-catalog-source-file key)))
     (list
      :name key
+     :schema-version (plist-get manifest-entry :schema-version)
+     :kind (plist-get manifest-entry :kind)
      :category (or (plist-get manifest-entry :category)
                    (consent--library-catalog-category key))
      :status (or (plist-get manifest-entry :status)
@@ -949,9 +1328,16 @@
      :primitive-overlay-library
      (plist-get manifest-entry :primitive-overlay-library)
      :visibility (consent--library-visibility key)
+     :layer (plist-get manifest-entry :layer)
+     :owner (plist-get manifest-entry :owner)
+     :provider (plist-get manifest-entry :provider)
      :availability (or (plist-get manifest-entry :availability) 'required)
      :availability-condition
      (plist-get manifest-entry :availability-condition)
+     :api-version (plist-get manifest-entry :api-version)
+     :source-version (plist-get manifest-entry :source-version)
+     :realization (plist-get manifest-entry :realization)
+     :source (plist-get manifest-entry :source)
      :source-file source-file
      :aliases (if (plist-member manifest-entry :aliases)
                   (plist-get manifest-entry :aliases)
@@ -959,6 +1345,11 @@
      :target (plist-get manifest-entry :target)
      :exports (consent--library-catalog-export-names key)
      :dependencies (consent--library-catalog-dependencies key)
+     :effects (plist-get manifest-entry :effects)
+     :capabilities (plist-get manifest-entry :capabilities)
+     :documentation (plist-get manifest-entry :documentation)
+     :provenance (plist-get manifest-entry :provenance)
+     :canonical (plist-get manifest-entry :canonical)
      :origin 'built-in-seed
      :source-id 'built-in-seed
      :summary (plist-get manifest-entry :summary))))
@@ -1394,19 +1785,45 @@
          ("write" ,#'consent--primitive-write 1 2)
          ("write-shared" ,#'consent--primitive-write-shared 1 2)
          ("write-simple" ,#'consent--primitive-write-simple 1 2)))
-      ('agent-io (consent-agent-io-primitive-specs))
-      ('agent-approval (consent-approval-primitive-specs))
-      ('agent-debugger (consent-debugger-primitive-specs))
-      ('agent-helper (consent-helper-primitive-specs))
-      ('agent-job (consent-job-primitive-specs))
-      ('agent-test (consent-test-primitive-specs))
-      ('agent-memory (consent--memory-adapter-primitive-specs))
-      ('agent-plan (consent-plan-primitive-specs))
-      ('agent-models (consent-models-primitive-specs))
-      ('agent-context (consent-context-primitive-specs))
-      ('agent-reflect (consent-reflect-primitive-specs))
-      ('agent-redaction (consent-redaction-primitive-specs))
-      ('agent-session (consent--session-adapter-primitive-specs))
+      ('agent-io
+       (require 'consent-agent-io)
+       (consent-agent-io-primitive-specs))
+      ('agent-approval
+       (require 'consent-approval)
+       (consent-approval-primitive-specs))
+      ('agent-debugger
+       (require 'consent-debugger)
+       (consent-debugger-primitive-specs))
+      ('agent-helper
+       (require 'consent-helper)
+       (consent-helper-primitive-specs))
+      ('agent-job
+       (require 'consent-job)
+       (consent-job-primitive-specs))
+      ('agent-test
+       (require 'consent-test)
+       (consent-test-primitive-specs))
+      ('agent-memory
+       (require 'consent-memory)
+       (consent--memory-adapter-primitive-specs))
+      ('agent-plan
+       (require 'consent-plan)
+       (consent-plan-primitive-specs))
+      ('agent-models
+       (require 'consent-models)
+       (consent-models-primitive-specs))
+      ('agent-context
+       (require 'consent-context)
+       (consent-context-primitive-specs))
+      ('agent-reflect
+       (require 'consent-reflect)
+       (consent-reflect-primitive-specs))
+      ('agent-redaction
+       (require 'consent-redaction)
+       (consent-redaction-primitive-specs))
+      ('agent-session
+       (require 'consent-session)
+       (consent--session-adapter-primitive-specs))
       ('consent-capability (consent-capability-primitive-specs))
       ('cli-process-host (consent--cli-process-host-primitive-specs))
       ('emacs-capability

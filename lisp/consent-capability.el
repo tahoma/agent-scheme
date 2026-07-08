@@ -5740,6 +5740,7 @@ creates undo boundaries around the atomic change group."
 
 (defun consent--primitive-vcs-yield (arguments context)
   "Primitive vcs-yield over ARGUMENTS."
+  (require 'consent-agent-io)
   (consent--authorize-emacs-capability "vcs-yield" arguments context)
   (consent--add-emacs-capability-result-fields
    `((adapter . emacs-vcs)
@@ -6510,6 +6511,7 @@ creates undo boundaries around the atomic change group."
          (authorization (car authorized))
          (object (cadr authorized))
          (datum (consent--compile-output-datum handle object nil)))
+    (require 'consent-agent-io)
     (consent-capability-audit-process-result authorization datum)
     (consent--add-emacs-capability-result-fields
      `((adapter . emacs-compile)

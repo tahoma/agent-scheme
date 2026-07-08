@@ -31,6 +31,8 @@
                 "-L"
                 (expand-file-name "lisp" consent--test-root)
                 "--eval"
+                "(setq load-prefer-newer t)"
+                "--eval"
                 "(progn
                    (require 'seq)
                    (require 'consent-reader)

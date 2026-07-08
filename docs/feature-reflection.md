@@ -204,7 +204,8 @@ Current procedures:
 - `(add-manifest! source-id manifest)` and
   `(remove-manifest! source-id)` add, replace, and remove explicit ad-hoc
   manifest datums. A manifest is a `(library-catalog ...)` datum containing
-  `(library ...)` entries; it is validated before it affects discovery.
+  `manifest-entry` and `manifest-index-entry` records; it is validated before
+  it affects discovery.
 - `(add-manifest-root! root manifest)` and
   `(remove-manifest-root! root)` add, replace, and remove explicit
   manifest-root inputs supplied as Scheme-readable manifest datums. These

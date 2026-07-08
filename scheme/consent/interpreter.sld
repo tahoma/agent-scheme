@@ -5394,6 +5394,12 @@ cursor across sessions."
              'name
              (reflect-library-catalog-value entry 'name '()))
             (result-field
+             'schema-version
+             (reflect-library-catalog-value entry 'schema-version 1))
+            (result-field
+             'kind
+             (reflect-library-catalog-value entry 'kind 'library))
+            (result-field
              'category
              (reflect-library-catalog-value entry 'category 'library))
             (result-field
@@ -5406,11 +5412,32 @@ cursor across sessions."
              'visibility
              (reflect-library-catalog-value entry 'visibility 'public))
             (result-field
+             'layer
+             (reflect-library-catalog-value entry 'layer #f))
+            (result-field
+             'owner
+             (reflect-library-catalog-value entry 'owner #f))
+            (result-field
+             'provider
+             (reflect-library-catalog-value entry 'provider #f))
+            (result-field
              'availability
              (reflect-library-catalog-value entry 'availability 'required))
             (result-field
              'availability-condition
              (reflect-library-catalog-value entry 'availability-condition #f))
+            (result-field
+             'api-version
+             (reflect-library-catalog-value entry 'api-version #f))
+            (result-field
+             'source-version
+             (reflect-library-catalog-value entry 'source-version #f))
+            (result-field
+             'realization
+             (reflect-library-catalog-value entry 'realization #f))
+            (result-field
+             'source
+             (reflect-library-catalog-value entry 'source #f))
             (result-field
              'source-file
              (reflect-library-catalog-value entry 'source-file #f))
@@ -5426,6 +5453,21 @@ cursor across sessions."
             (result-field
              'dependencies
              (reflect-library-catalog-value entry 'dependencies '()))
+            (result-field
+             'effects
+             (reflect-library-catalog-value entry 'effects #f))
+            (result-field
+             'capabilities
+             (reflect-library-catalog-value entry 'capabilities #f))
+            (result-field
+             'documentation
+             (reflect-library-catalog-value entry 'documentation #f))
+            (result-field
+             'provenance
+             (reflect-library-catalog-value entry 'provenance #f))
+            (result-field
+             'canonical
+             (reflect-library-catalog-value entry 'canonical #f))
             (result-field
              'origin
              (reflect-library-catalog-value entry 'origin 'built-in-seed))

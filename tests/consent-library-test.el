@@ -21,6 +21,21 @@
   (consent-value->external
    (consent-eval-source source environment)))
 
+(defun consent-library-test--stdlib-manifest-external (source)
+  "Evaluate SOURCE with stdlib manifest field helpers in scope."
+  (consent-library-test--external
+   (concat
+    "(import (scheme base) (stdlib manifest))
+     (define (manifest-field entry name)
+       (let ((cell (assq name (cdr entry))))
+         (and cell (cadr cell))))
+     (define (manifest-subfield entry group name)
+       (let ((fields (manifest-field entry group)))
+         (let ((cell (and fields (assq name fields))))
+           (and cell (cadr cell)))))
+     "
+    source)))
+
 (defconst consent-library-test--root
   (expand-file-name
    ".."
@@ -59,14 +74,26 @@
   (import (scheme base))
   (begin
     (define manifest-index
-      '(((collection . %s)
-         (category . %s)
-         (manifest-library . (%s manifest))
-         (manifest-variable . %s-manifest)
-         (manifest-file . \"inventory/%s.sld\")
-         (source-root . \"%s\"))))))
+      '((manifest-index-entry
+         (schema-version 1)
+         (kind manifest-collection)
+         (name %s)
+         (owner project)
+         (provider test)
+         (collection %s)
+         (category %s)
+         (manifest-library (%s manifest))
+         (manifest-variable %s-manifest)
+         (manifest-file \"inventory/%s.sld\")
+         (source-root \"%s\")
+         (source-kind manifest)
+         (api-version internal)
+         (source-version runtime)
+         (realization manifest)
+         (status available)
+         (canonical #t))))))
 "
-      collection collection collection collection collection source-root)
+      collection collection collection collection collection collection source-root)
      nil
      manifest-file)
     (write-region
@@ -76,20 +103,27 @@
   (import (scheme base))
   (begin
     (define %s-manifest
-      '(((library . (%s %s))
-         (visibility . public)
-         (layer . %s)
-         (status . implemented)
-         (source-kind . source-library)
-         (source-file . \"%s.sld\")
-         (implementation-library . (%s %s))
-         (exports . (%s))
-         (owner . %s)
-         (provider . %s)
-         (dependencies . ((scheme base))))))))
+      '((manifest-entry
+         (schema-version 1)
+         (kind library)
+         (name (%s %s))
+         (owner project)
+         (provider test)
+         (visibility public)
+         (layer %s)
+         (source-kind source-library)
+         (source (path \"%s.sld\"))
+         (api-version (compat 0))
+         (source-version unknown)
+         (realization portable-source)
+         (exports (%s))
+         (dependencies ((library (scheme base))))
+         (provenance ((origin test-fixture)))
+         (status implemented)
+         (canonical #t))))))
 "
       collection collection collection collection library collection
-      library collection library library collection collection)
+      library library)
      nil
      collection-file)
     (write-region
@@ -923,7 +957,14 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
                       (consent--library-collection-manifest-specs)))
                     "stdlib manifest entries"))
       (let ((url (consent--collection-manifest-field
-                  entry "upstream-source-url" nil)))
+                  entry "source-url" nil)))
+        (should-not url))
+      (let* ((provenance
+              (consent--collection-manifest-field entry "provenance" nil))
+             (url
+              (and provenance
+                   (consent--library-catalog-manifest-field
+                    provenance "upstream-source-url" nil))))
         (when url
           (push url upstream-urls))))
     (should upstream-urls)
@@ -941,7 +982,7 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
                       "collection manifest entries"))
         (let* ((library
                 (consent--library-name-key
-                 (consent--collection-manifest-field entry "library" nil)))
+                 (consent--collection-manifest-field entry "name" nil)))
                (target
                 (consent--collection-manifest-target
                  (consent--collection-manifest-field entry "target" nil)))
@@ -971,6 +1012,148 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
                     "(consent json)")
                    (consent--library-catalog-export-names
                     "(stdlib json)")))))
+
+(ert-deftest consent-library-test-built-in-manifests-use-shared-schema ()
+  "Read built-in collection manifests through the shared manifest schema."
+  (let ((task (consent--library-collection-manifest-entry "(agent task)"))
+        (primitive
+         (consent--library-collection-manifest-entry
+          "(agent memory primitive)"))
+        (alias (consent--library-collection-manifest-entry "(consent json)"))
+        (index (consent--library-collection-manifest-entry "(manifest index)")))
+    (should (= (plist-get task :schema-version) 1))
+    (should (eq (plist-get task :kind) 'library))
+    (should (eq (plist-get task :owner) 'agent))
+    (should (eq (plist-get task :provider) 'repo-source))
+    (should (eq (plist-get task :canonical) t))
+    (should (equal (consent-datum->external (plist-get task :source))
+                   "(path \"agent/task.sld\")"))
+    (should (equal (consent-datum->external (plist-get task :api-version))
+                   "(compat 0)"))
+    (should (eq (plist-get task :source-version) 'unknown))
+    (should (eq (plist-get task :realization) 'portable-source))
+
+    (should (eq (plist-get primitive :kind) 'primitive-library))
+    (should (eq (plist-get primitive :source-version) 'runtime))
+    (should (eq (plist-get primitive :realization) 'host-primitive))
+    (should (eq (plist-get primitive :canonical) t))
+
+    (should (eq (plist-get alias :kind) 'library-alias))
+    (should-not (plist-get alias :canonical))
+    (should (equal (consent-datum->external (plist-get alias :api-version))
+                   "(inherits (stdlib json))"))
+    (should (eq (plist-get alias :realization) 'alias))
+
+    (should (= (plist-get index :schema-version) 1))
+    (should (eq (plist-get index :kind) 'library))
+    (should (equal (consent-datum->external (plist-get index :source))
+                   "(path \"manifest.sld\")"))))
+
+(ert-deftest consent-library-test-catalog-accepts-shared-manifest-entry ()
+  "Accept tagged manifest-entry records in ad-hoc catalogs."
+  (unwind-protect
+      (progn
+        (consent--library-catalog-add-manifest
+         'schema-fixture
+         (consent-read
+          "(library-catalog
+             (manifest-entry
+              (schema-version 1)
+              (kind library)
+              (name (project schema))
+              (owner project)
+              (provider repo-source)
+              (visibility public)
+              (layer package)
+              (source-kind source-library)
+              (source (path \"project/schema.sld\"))
+              (api-version (compat 2))
+              (source-version unknown)
+              (realization portable-source)
+              (exports (schema-run))
+              (dependencies ((library (scheme base))))
+              (documentation ((summary \"Project schema.\")))
+              (provenance ((origin project)))
+              (status experimental)
+              (canonical #t)
+              (future-field ignored))
+             (manifest-entry
+              (schema-version 1)
+              (kind library)
+              (name (agent model session))
+              (owner agent-domain)
+              (provider repo-source)
+              (visibility internal-agent-model)
+              (layer model)
+              (source-kind source-library)
+              (source (path \"agent/model/session.sld\"))
+              (api-version internal)
+              (source-version unknown)
+              (realization portable-source)
+              (status internal)
+              (canonical #t))
+             (manifest-index-entry
+              (schema-version 1)
+              (kind library-alias)
+              (name (project schema alias))
+              (target (project schema))
+              (derived-from schema-fixture)
+              (visibility public)
+              (layer alias)
+              (source-kind alias)
+              (api-version (inherits (project schema)))
+              (canonical #f)))"))
+        (let ((entry
+               (consent--library-catalog-lookup
+                (consent-read "(project schema)")))
+              (model
+               (consent--library-catalog-lookup
+                (consent-read "(agent model session)")))
+              (alias
+               (consent--library-catalog-lookup
+                (consent-read "(project schema alias)"))))
+          (should (= (plist-get entry :schema-version) 1))
+          (should (eq (plist-get entry :kind) 'library))
+          (should (eq (plist-get entry :owner) 'project))
+          (should (eq (plist-get entry :provider) 'repo-source))
+          (should (equal (plist-get entry :source-file)
+                         "project/schema.sld"))
+          (should (equal (consent-datum->external
+                          (plist-get entry :api-version))
+                         "(compat 2)"))
+          (should (equal (plist-get entry :dependencies)
+                         '("(scheme base)")))
+          (should (equal (plist-get entry :summary) "Project schema."))
+          (should (eq (plist-get entry :canonical) t))
+          (should (eq (plist-get model :owner) 'agent-domain))
+          (should (eq (plist-get model :visibility) 'internal-agent-model))
+          (should (eq (plist-get model :layer) 'model))
+          (should (eq (plist-get model :api-version) 'internal))
+          (should (eq (plist-get model :source-version) 'unknown))
+          (should (eq (plist-get alias :kind) 'library-alias))
+          (should-not (plist-get alias :canonical))
+          (should (equal (plist-get alias :target) "(project schema)"))))
+    (consent--library-catalog-remove-manifest 'schema-fixture)))
+
+(ert-deftest consent-library-test-load-light-avoids-agent-implementation-requires ()
+  "Keep manifest aggregation from requiring agent implementations at module load."
+  (let ((source
+         (with-temp-buffer
+           (insert-file-contents
+            (expand-file-name "lisp/consent-library.el"
+                              consent-library-test--root))
+           (buffer-string))))
+    (dolist (feature '("consent-agent-io" "consent-approval"
+                       "consent-context" "consent-debugger"
+                       "consent-helper" "consent-job"
+                       "consent-memory" "consent-models"
+                       "consent-plan" "consent-redaction"
+                       "consent-reflect" "consent-session"
+                       "consent-test" "consent-transcript"))
+      (should-not
+       (string-match-p
+        (format "^(require '%s)" (regexp-quote feature))
+        source)))))
 
 (ert-deftest consent-library-test-top-level-manifest-is-root-manifest ()
   "Keep the aggregate manifest at the manifest root inside the graph."
@@ -1357,41 +1540,52 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
   "Expose SRFI 8 support status through the stdlib manifest."
   (should
    (equal
-    (consent-library-test--external
-     "(import (scheme base) (stdlib manifest))
-      (let ((entry (stdlib-manifest-ref '(stdlib receive)))
+    (consent-library-test--stdlib-manifest-external
+     "(let ((entry (stdlib-manifest-ref '(stdlib receive)))
             (alias (stdlib-manifest-ref '(srfi 8)))
             (portable-alias (stdlib-manifest-ref '(srfi srfi-8))))
-        (list (cdr (assq 'status entry))
-              (cdr (assq 'source entry))
-              (cdr (assq 'implementation-library entry))
-              (cdr (assq 'upstream-license entry))
-              (cdr (assq 'local-license entry))
-              (cdr (assq 'vendored? entry))
-              (cdr (assq 'import-aliases entry))
-              (cdr (assq 'dependencies entry))
-              (cdr (assq 'target alias))
-              (cdr (assq 'target portable-alias))))")
-    "(built-in-shim built-in-shim (stdlib receive) \"MIT\" \"Apache-2.0\" #f ((stdlib receive) (srfi 8) (srfi srfi-8)) ((scheme base)) (stdlib receive) (stdlib receive))")))
+        (and (eq? (car entry) 'manifest-entry)
+             (equal? (manifest-field entry 'name) '(stdlib receive))
+             (equal? (manifest-field entry 'status) 'built-in-shim)
+             (equal? (manifest-field entry 'source) '(path \"receive.sld\"))
+             (equal? (manifest-subfield entry 'provenance 'upstream-license)
+                     \"MIT\")
+             (equal? (manifest-subfield entry 'provenance 'local-license)
+                     \"Apache-2.0\")
+             (eq? (manifest-subfield entry 'provenance 'vendored?) #f)
+             (equal? (manifest-field entry 'aliases)
+                     '((srfi 8) (srfi srfi-8)))
+             (equal? (manifest-field entry 'dependencies)
+                     '((library (scheme base))))
+             (equal? (manifest-field alias 'target) '(stdlib receive))
+             (equal? (manifest-field portable-alias 'target)
+                     '(stdlib receive))))")
+    "#t")))
 
 (ert-deftest consent-library-test-stdlib-manifest-documents-srfi-2 ()
   "Expose SRFI 2 support status through the stdlib manifest."
   (should
    (equal
-    (consent-library-test--external
-     "(import (scheme base) (stdlib manifest))
-      (let ((entry (stdlib-manifest-ref '(stdlib and-let-star)))
+    (consent-library-test--stdlib-manifest-external
+     "(let ((entry (stdlib-manifest-ref '(stdlib and-let-star)))
             (alias (stdlib-manifest-ref '(srfi 2)))
             (portable-alias (stdlib-manifest-ref '(srfi srfi-2))))
-        (list (cdr (assq 'status entry))
-              (cdr (assq 'implementation-library entry))
-              (cdr (assq 'upstream-license entry))
-              (cdr (assq 'local-license entry))
-              (cdr (assq 'import-aliases entry))
-              (cdr (assq 'dependencies entry))
-              (cdr (assq 'target alias))
-              (cdr (assq 'target portable-alias))))")
-    "(vendored-adapted-implementation (stdlib and-let-star) \"MIT\" \"MIT\" ((stdlib and-let-star) (srfi 2) (srfi srfi-2)) ((scheme base)) (stdlib and-let-star) (stdlib and-let-star))")))
+        (and (eq? (car entry) 'manifest-entry)
+             (equal? (manifest-field entry 'name) '(stdlib and-let-star))
+             (equal? (manifest-field entry 'status)
+                     'vendored-adapted-implementation)
+             (equal? (manifest-subfield entry 'provenance 'upstream-license)
+                     \"MIT\")
+             (equal? (manifest-subfield entry 'provenance 'local-license)
+                     \"MIT\")
+             (equal? (manifest-field entry 'aliases)
+                     '((srfi 2) (srfi srfi-2)))
+             (equal? (manifest-field entry 'dependencies)
+                     '((library (scheme base))))
+             (equal? (manifest-field alias 'target) '(stdlib and-let-star))
+             (equal? (manifest-field portable-alias 'target)
+                     '(stdlib and-let-star))))")
+    "#t")))
 
 (ert-deftest consent-library-test-srfi-158-imports-and-uses-generators ()
   "Import SRFI 158 aliases and exercise representative generator behavior."
@@ -1448,23 +1642,31 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
   "Expose SRFI 158 support status through the stdlib manifest."
   (should
    (equal
-    (consent-library-test--external
-     "(import (scheme base) (stdlib manifest))
-      (let ((entry (stdlib-manifest-ref '(stdlib generator)))
+    (consent-library-test--stdlib-manifest-external
+     "(let ((entry (stdlib-manifest-ref '(stdlib generator)))
             (scheme-alias (stdlib-manifest-ref '(scheme generator)))
             (alias (stdlib-manifest-ref '(srfi 158)))
             (portable-alias (stdlib-manifest-ref '(srfi srfi-158))))
-        (list (cdr (assq 'status entry))
-              (cdr (assq 'implementation-library entry))
-              (cdr (assq 'upstream-license entry))
-              (cdr (assq 'local-license entry))
-              (cdr (assq 'vendored? entry))
-              (cdr (assq 'import-aliases entry))
-              (cdr (assq 'dependencies entry))
-              (cdr (assq 'target scheme-alias))
-              (cdr (assq 'target alias))
-              (cdr (assq 'target portable-alias))))")
-    "(vendored-adapted-implementation (stdlib generator) \"MIT\" \"MIT\" #t ((stdlib generator) (scheme generator) (srfi 158) (srfi srfi-158)) ((scheme base) (scheme case-lambda)) (stdlib generator) (stdlib generator) (stdlib generator))")))
+        (and (eq? (car entry) 'manifest-entry)
+             (equal? (manifest-field entry 'name) '(stdlib generator))
+             (equal? (manifest-field entry 'status)
+                     'vendored-adapted-implementation)
+             (equal? (manifest-subfield entry 'provenance 'upstream-license)
+                     \"MIT\")
+             (equal? (manifest-subfield entry 'provenance 'local-license)
+                     \"MIT\")
+             (eq? (manifest-subfield entry 'provenance 'vendored?) #t)
+             (equal? (manifest-field entry 'aliases)
+                     '((scheme generator) (srfi 158) (srfi srfi-158)))
+             (equal? (manifest-field entry 'dependencies)
+                     '((library (scheme base))
+                       (library (scheme case-lambda))))
+             (equal? (manifest-field scheme-alias 'target)
+                     '(stdlib generator))
+             (equal? (manifest-field alias 'target) '(stdlib generator))
+             (equal? (manifest-field portable-alias 'target)
+                     '(stdlib generator))))")
+    "#t")))
 
 (ert-deftest consent-library-test-srfi-180-imports-and-round-trips-json ()
   "Import `(srfi 180)' through the library registry and use JSON."
@@ -1546,16 +1748,24 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
   "Expose stdlib JSON support status through a Scheme-readable manifest."
   (should
    (equal
-    (consent-library-test--external
-     "(import (scheme base) (stdlib manifest))
-      (let ((entry (stdlib-manifest-ref '(stdlib json))))
-        (list (cdr (assq 'status entry))
-              (cdr (assq 'implementation-library entry))
-              (cdr (assq 'upstream-license entry))
-              (cdr (assq 'import-aliases entry))
-              (cdr (assq 'dependencies entry))
-              (cdr (assq 'test-status entry))))")
-    "(direct-portable-implementation (stdlib json) \"MIT\" ((stdlib json) (consent json) (srfi 180) (srfi srfi-180)) ((stdlib and-let-star)) (import-resolution representative-read-write emacs-json-oracle portable-host-suite imported-reference-corpus json-lines json-text-sequences))")))
+    (consent-library-test--stdlib-manifest-external
+     "(let ((entry (stdlib-manifest-ref '(stdlib json))))
+        (and (eq? (car entry) 'manifest-entry)
+             (equal? (manifest-field entry 'name) '(stdlib json))
+             (equal? (manifest-field entry 'status)
+                     'direct-portable-implementation)
+             (equal? (manifest-subfield entry 'provenance 'upstream-license)
+                     \"MIT\")
+             (equal? (manifest-field entry 'aliases)
+                     '((consent json) (srfi 180) (srfi srfi-180)))
+             (equal? (manifest-field entry 'dependencies)
+                     '((library (stdlib and-let-star))))
+             (equal? (manifest-subfield entry 'verification 'test-status)
+                     '(import-resolution representative-read-write
+                       emacs-json-oracle portable-host-suite
+                       imported-reference-corpus json-lines
+                       json-text-sequences))))")
+    "#t")))
 
 (ert-deftest consent-library-test-srfi-180-emacs-json-oracle ()
   "Cross-check portable SRFI 180 behavior against Emacs json.el."
@@ -1790,22 +2000,28 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
   "Expose SRFI 1 support status through the stdlib manifest."
   (should
    (equal
-    (consent-library-test--external
-     "(import (scheme base) (stdlib manifest))
-      (let ((entry (stdlib-manifest-ref '(stdlib list)))
+    (consent-library-test--stdlib-manifest-external
+     "(let ((entry (stdlib-manifest-ref '(stdlib list)))
             (scheme-alias (stdlib-manifest-ref '(scheme list)))
             (alias (stdlib-manifest-ref '(srfi 1)))
             (portable-alias (stdlib-manifest-ref '(srfi srfi-1))))
-        (list (cdr (assq 'status entry))
-              (cdr (assq 'implementation-library entry))
-              (cdr (assq 'upstream-license entry))
-              (cdr (assq 'local-license entry))
-              (cdr (assq 'import-aliases entry))
-              (cdr (assq 'dependencies entry))
-              (cdr (assq 'target scheme-alias))
-              (cdr (assq 'target alias))
-              (cdr (assq 'target portable-alias))))")
-    "(vendored-adapted-implementation (stdlib list) \"MIT\" \"MIT\" ((stdlib list) (scheme list) (srfi 1) (srfi srfi-1)) ((scheme base) (scheme cxr)) (stdlib list) (stdlib list) (stdlib list))")))
+        (and (eq? (car entry) 'manifest-entry)
+             (equal? (manifest-field entry 'name) '(stdlib list))
+             (equal? (manifest-field entry 'status)
+                     'vendored-adapted-implementation)
+             (equal? (manifest-subfield entry 'provenance 'upstream-license)
+                     \"MIT\")
+             (equal? (manifest-subfield entry 'provenance 'local-license)
+                     \"MIT\")
+             (equal? (manifest-field entry 'aliases)
+                     '((scheme list) (srfi 1) (srfi srfi-1)))
+             (equal? (manifest-field entry 'dependencies)
+                     '((library (scheme base)) (library (scheme cxr))))
+             (equal? (manifest-field scheme-alias 'target) '(stdlib list))
+             (equal? (manifest-field alias 'target) '(stdlib list))
+             (equal? (manifest-field portable-alias 'target)
+                     '(stdlib list))))")
+    "#t")))
 
 (ert-deftest consent-library-test-srfi-128-comparator-behavior ()
   "Import primary `(stdlib comparator)' and exercise SRFI 128 behavior."
@@ -1883,22 +2099,34 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
   "Expose stdlib comparator support status through a Scheme-readable manifest."
   (should
    (equal
-    (consent-library-test--external
-     "(import (scheme base) (stdlib manifest))
-      (let ((entry (stdlib-manifest-ref '(stdlib comparator)))
+    (consent-library-test--stdlib-manifest-external
+     "(let ((entry (stdlib-manifest-ref '(stdlib comparator)))
             (scheme-alias (stdlib-manifest-ref '(scheme comparator)))
             (alias (stdlib-manifest-ref '(srfi 128)))
             (portable-alias (stdlib-manifest-ref '(srfi srfi-128))))
-        (list (cdr (assq 'status entry))
-              (cdr (assq 'implementation-library entry))
-              (cdr (assq 'upstream-license entry))
-              (cdr (assq 'local-license entry))
-              (cdr (assq 'import-aliases entry))
-              (cdr (assq 'dependencies entry))
-              (cdr (assq 'target scheme-alias))
-              (cdr (assq 'target alias))
-              (cdr (assq 'target portable-alias))))")
-    "(vendored-adapted-implementation (stdlib comparator) \"MIT\" \"MIT\" ((stdlib comparator) (scheme comparator) (srfi 128) (srfi srfi-128)) ((scheme base) (scheme case-lambda) (scheme char) (scheme inexact) (scheme complex)) (stdlib comparator) (stdlib comparator) (stdlib comparator))")))
+        (and (eq? (car entry) 'manifest-entry)
+             (equal? (manifest-field entry 'name) '(stdlib comparator))
+             (equal? (manifest-field entry 'status)
+                     'vendored-adapted-implementation)
+             (equal? (manifest-subfield entry 'provenance 'upstream-license)
+                     \"MIT\")
+             (equal? (manifest-subfield entry 'provenance 'local-license)
+                     \"MIT\")
+             (equal? (manifest-field entry 'aliases)
+                     '((scheme comparator) (srfi 128) (srfi srfi-128)))
+             (equal?
+              (manifest-field entry 'dependencies)
+              '((library (scheme base))
+                (library (scheme case-lambda))
+                (library (scheme char))
+                (library (scheme inexact))
+                (library (scheme complex))))
+             (equal? (manifest-field scheme-alias 'target)
+                     '(stdlib comparator))
+             (equal? (manifest-field alias 'target) '(stdlib comparator))
+             (equal? (manifest-field portable-alias 'target)
+                     '(stdlib comparator))))")
+    "#t")))
 
 (ert-deftest consent-library-test-stdlib-rbtree-import ()
   "Import internal `(stdlib rbtree)' and exercise representative tree behavior."
@@ -1961,16 +2189,26 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
   "Expose rbtree helper support status through the stdlib manifest."
   (should
    (equal
-    (consent-library-test--external
-     "(import (scheme base) (stdlib manifest))
-      (let ((entry (stdlib-manifest-ref '(stdlib rbtree))))
-        (list (cdr (assq 'status entry))
-              (cdr (assq 'implementation-library entry))
-              (cdr (assq 'upstream-license entry))
-              (cdr (assq 'local-license entry))
-              (cdr (assq 'import-aliases entry))
-              (cdr (assq 'dependencies entry))))")
-    "(vendored-adapted-implementation (stdlib rbtree) \"MIT\" \"MIT\" ((stdlib rbtree)) ((scheme base) (scheme case-lambda) (stdlib and-let-star) (stdlib receive) (stdlib generator) (stdlib comparator)))")))
+    (consent-library-test--stdlib-manifest-external
+     "(let ((entry (stdlib-manifest-ref '(stdlib rbtree))))
+        (and (eq? (car entry) 'manifest-entry)
+             (equal? (manifest-field entry 'name) '(stdlib rbtree))
+             (equal? (manifest-field entry 'status)
+                     'vendored-adapted-implementation)
+             (equal? (manifest-subfield entry 'provenance 'upstream-license)
+                     \"MIT\")
+             (equal? (manifest-subfield entry 'provenance 'local-license)
+                     \"MIT\")
+             (not (manifest-field entry 'aliases))
+             (equal?
+              (manifest-field entry 'dependencies)
+              '((library (scheme base))
+                (library (scheme case-lambda))
+                (library (stdlib and-let-star))
+                (library (stdlib receive))
+                (library (stdlib generator))
+                (library (stdlib comparator))))))")
+    "#t")))
 
 (ert-deftest consent-library-test-srfi-146-mapping-behavior ()
   "Import primary `(scheme mapping)' and exercise ordered SRFI 146 behavior."
@@ -2097,41 +2335,56 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
   "Expose ordered SRFI 146 mapping status through the stdlib manifest."
   (should
    (equal
-    (consent-library-test--external
-     "(import (scheme base) (stdlib manifest))
-      (let ((entry (stdlib-manifest-ref '(stdlib mapping)))
+    (consent-library-test--stdlib-manifest-external
+     "(let ((entry (stdlib-manifest-ref '(stdlib mapping)))
             (scheme-alias (stdlib-manifest-ref '(scheme mapping)))
             (alias (stdlib-manifest-ref '(srfi 146)))
             (portable-alias (stdlib-manifest-ref '(srfi srfi-146)))
             (hash-alias (stdlib-manifest-ref '(srfi 146 hash))))
-        (list (cdr (assq 'status entry))
-              (cdr (assq 'implementation-library entry))
-              (cdr (assq 'upstream-license entry))
-              (cdr (assq 'local-license entry))
-              (cdr (assq 'import-aliases entry))
-              (cdr (assq 'dependencies entry))
-              (cdr (assq 'target scheme-alias))
-              (cdr (assq 'target alias))
-              (cdr (assq 'target portable-alias))
-              hash-alias))")
-    "(vendored-adapted-implementation (stdlib mapping) \"MIT\" \"MIT\" ((stdlib mapping) (scheme mapping) (srfi 146) (srfi srfi-146)) ((scheme base) (scheme case-lambda) (stdlib list) (stdlib receive) (stdlib comparator) (stdlib assume) (stdlib rbtree)) (stdlib mapping) (stdlib mapping) (stdlib mapping) #f)")))
+        (and (eq? (car entry) 'manifest-entry)
+             (equal? (manifest-field entry 'name) '(stdlib mapping))
+             (equal? (manifest-field entry 'status)
+                     'vendored-adapted-implementation)
+             (equal? (manifest-subfield entry 'provenance 'upstream-license)
+                     \"MIT\")
+             (equal? (manifest-subfield entry 'provenance 'local-license)
+                     \"MIT\")
+             (equal? (manifest-field entry 'aliases)
+                     '((scheme mapping) (srfi 146) (srfi srfi-146)))
+             (equal?
+              (manifest-field entry 'dependencies)
+              '((library (scheme base))
+                (library (scheme case-lambda))
+                (library (stdlib list))
+                (library (stdlib receive))
+                (library (stdlib comparator))
+                (library (stdlib assume))
+                (library (stdlib rbtree))))
+             (equal? (manifest-field scheme-alias 'target)
+                     '(stdlib mapping))
+             (equal? (manifest-field alias 'target) '(stdlib mapping))
+             (equal? (manifest-field portable-alias 'target)
+                     '(stdlib mapping))
+             (not hash-alias)))")
+    "#t")))
 
 (ert-deftest consent-library-test-stdlib-manifest-documents-srfi-16-shim ()
   "Expose SRFI 16 shim status through the stdlib manifest."
   (should
    (equal
-    (consent-library-test--external
-     "(import (scheme base) (stdlib manifest))
-      (let ((entry (stdlib-manifest-ref '(srfi 16)))
+    (consent-library-test--stdlib-manifest-external
+     "(let ((entry (stdlib-manifest-ref '(srfi 16)))
             (portable-alias (stdlib-manifest-ref '(srfi srfi-16))))
-        (list (cdr (assq 'status entry))
-              (cdr (assq 'source entry))
-              (cdr (assq 'target entry))
-              (cdr (assq 'implementation-library entry))
-              (cdr (assq 'import-aliases entry))
-              (cdr (assq 'dependencies entry))
-              (cdr (assq 'target portable-alias))))")
-    "(built-in-shim built-in-shim (scheme case-lambda) (scheme case-lambda) ((srfi 16) (srfi srfi-16)) ((scheme case-lambda)) (scheme case-lambda))")))
+        (and (eq? (car entry) 'manifest-index-entry)
+             (equal? (manifest-field entry 'status) 'built-in-shim)
+             (equal? (manifest-field entry 'source) 'built-in-shim)
+             (equal? (manifest-field entry 'target) '(scheme case-lambda))
+             (equal? (manifest-field entry 'aliases) '((srfi srfi-16)))
+             (equal? (manifest-field entry 'dependencies)
+                     '((library (scheme case-lambda))))
+             (equal? (manifest-field portable-alias 'target)
+                     '(scheme case-lambda))))")
+    "#t")))
 
 (ert-deftest consent-library-test-standard-char-and-cxr-imports ()
   "Import `(scheme char)' and `(scheme cxr)' bindings."
