@@ -342,8 +342,23 @@ nesting depth."
     (nreverse chunks)))
 
 (defun consent-repl-stream--blank-p (string)
-  "Return non-nil when STRING is empty or only whitespace."
-  (string-empty-p (string-trim string)))
+  "Return non-nil when STRING is only whitespace or line comments."
+  (let ((length (length string))
+        (index 0)
+        (blank t))
+    (while (and blank (< index length))
+      (let ((char (aref string index)))
+        (cond
+         ((memq char '(?\s ?\t ?\n ?\r))
+          (setq index (1+ index)))
+         ((eq char ?\;)
+          (setq index (1+ index))
+          (while (and (< index length)
+                      (not (memq (aref string index) '(?\n ?\r))))
+            (setq index (1+ index))))
+         (t
+          (setq blank nil)))))
+    blank))
 
 (defun consent-repl-stream--ends-with-newline-p (string)
   "Return non-nil when STRING is non-empty and ends with a newline."

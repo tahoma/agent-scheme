@@ -211,6 +211,33 @@
          (field (car (records-of records 'repl-result)) 'display)
          "3"))
 
+(let ((records (drive "  ;; comment\n(+ 1 2)\n")))
+  (let ((prompts (records-of records 'repl-prompt)))
+    (check 'line-comment-ready-prompt-count (length prompts) 3)
+    (check 'line-comment-ready-first-state
+           (field (list-ref prompts 0) 'state) 'ready)
+    (check 'line-comment-ready-second-state
+           (field (list-ref prompts 1) 'state) 'ready)
+    (check 'line-comment-ready-third-state
+           (field (list-ref prompts 2) 'state) 'ready)
+    (check 'line-comment-ready-first-ordinal
+           (consent-number-value (field (list-ref prompts 0) 'ordinal))
+           (portable-host-number 1))
+    (check 'line-comment-ready-second-ordinal
+           (consent-number-value (field (list-ref prompts 1) 'ordinal))
+           (portable-host-number 1))
+    (check 'line-comment-ready-third-ordinal
+           (consent-number-value (field (list-ref prompts 2) 'ordinal))
+           (portable-host-number 2)))
+  (check 'line-comment-ready-submission-count
+         (count-of records 'repl-submission) 1)
+  (check 'line-comment-ready-submission-source
+         (field (car (records-of records 'repl-submission)) 'source)
+         "(+ 1 2)")
+  (check 'line-comment-ready-result
+         (field (car (records-of records 'repl-result)) 'display)
+         "3"))
+
 ;;;; The continuation prompt carries the reader's pending-nesting indicator
 
 ;; The depth narrows as constructs close (two open lists, then one), the kind
@@ -579,6 +606,10 @@
 (check 'comment-echoed-blank-ready-reprompts
        (cli-repl-rendered-from-string "\n(+ 1 2)\n" "repl-main" 'comment #f #t)
        "#| 1 |# #| 1 |# ;;   => 3\n;;\n#| 2 |# ;;   __ exit closed-ok\n")
+(check 'comment-echoed-line-comment-ready-reprompts
+       (cli-repl-rendered-from-string
+        "  ;; comment\n(+ 1 2)\n" "repl-main" 'comment #f #t)
+       "#| 1 |# #| 1 |# ;;   => 3\n;;\n#| 2 |# ;;   __ exit closed-ok\n")
 ;; A named session grows a `<session>:<ordinal>' body, and the markers align to
 ;; that wider gutter so the value still lands under the echoed form.
 (check 'comment-named-session-prompt
@@ -611,6 +642,10 @@
 ;; terminal echo, so it shows the repeated ready prompts next to each other.
 (check 'classic-echoed-blank-ready-reprompts
        (cli-repl-rendered-from-string "\n(+ 1 2)\n" "repl-main" 'classic #f #t)
+       "> > = 3\n\n> _ exit closed-ok\n")
+(check 'classic-echoed-line-comment-ready-reprompts
+       (cli-repl-rendered-from-string
+        "  ;; comment\n(+ 1 2)\n" "repl-main" 'classic #f #t)
        "> > = 3\n\n> _ exit closed-ok\n")
 ;; A condition is marked `! ' (not `- '), so it pops in a colorless capture.  The
 ;; diagnostic text is now cross-host identical for an error whose wording agrees

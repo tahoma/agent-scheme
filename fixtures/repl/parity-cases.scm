@@ -42,11 +42,12 @@
 ;; same record stream -- every input chunk became a complete submission, so the
 ;; transcript round-trips byte for byte on each host.  `(replay (partial (reason
 ;; R)))' marks the cases replay cannot reproduce, because some input is not a
-;; replayable submission: a bare reader condition (no `repl-submission' is
-;; emitted) or an EOF-truncated incomplete form (`(complete #f)').  Those carry
-;; their submissions forward but drop the unreplayable artifact, so replay is a
-;; strict subset, not an equal stream.  The reproduced/partial split is exactly
-;; what replay can and cannot reproduce, and the runners assert both directions.
+;; replayable submission: a ready-input reprompt, a bare reader condition (no
+;; `repl-submission' is emitted), an EOF-truncated incomplete form (`(complete
+;; #f)'), or program input consumed by an evaluated read.  Those carry their
+;; submissions forward but drop the unreplayable artifact, so replay is a strict
+;; subset, not an equal stream.  The reproduced/partial split is exactly what
+;; replay can and cannot reproduce, and the runners assert both directions.
 
 (consent-fixture-suite
   (kind repl-parity)
@@ -66,6 +67,22 @@
      (input "(+ 1 2)\n")
      (expect
        ((repl-prompt (ordinal 1) (state ready) (pending #f))
+        (repl-submission (id sub-1) (ordinal 1) (source "(+ 1 2)") (complete #t) (eof #f))
+        (repl-result (id res-1) (submission sub-1) (ordinal 1)
+                     (evaluation-result (evaluation-result (status ok)))
+                     (display "3"))
+        (repl-prompt (ordinal 2) (state ready) (pending #f))
+        (repl-exit (reason eof) (status closed-ok) (count 1) (detail #f)))))
+
+    ((id repl-line-comment-ready-reprompt)
+     (description "A line-comment-only ready input line redraws the same ordinal prompt before the next form.")
+     (replay (partial (reason "ready-input comments are not replayable submissions")))
+     (session "project-main")
+     (options ())
+     (input "  ;; comment\n(+ 1 2)\n")
+     (expect
+       ((repl-prompt (ordinal 1) (state ready) (pending #f))
+        (repl-prompt (ordinal 1) (state ready) (pending #f))
         (repl-submission (id sub-1) (ordinal 1) (source "(+ 1 2)") (complete #t) (eof #f))
         (repl-result (id res-1) (submission sub-1) (ordinal 1)
                      (evaluation-result (evaluation-result (status ok)))
