@@ -301,6 +301,19 @@
    (consent-read (apply string-append fragments)
                  '((source-metadata . #f)))))
 
+(define (stdlib-manifest-source body)
+  (string-append
+   "(import (scheme base) (stdlib manifest))
+    (define (manifest-field entry name)
+      (let ((cell (assq name (cdr entry))))
+        (and cell (cadr cell))))
+    (define (manifest-subfield entry group name)
+      (let ((fields (manifest-field entry group)))
+        (let ((cell (and fields (assq name fields))))
+          (and cell (cadr cell)))))
+    "
+   body))
+
 (check 'expected-datum-external-normalizes-whitespace
        (expected-datum-external
         "(alpha
@@ -1689,25 +1702,24 @@
        #t)
 
 (check-external 'stdlib-srfi-16-manifest
-                "(import (scheme base) (stdlib manifest))
-                 (let ((entry (stdlib-manifest-ref '(srfi 16)))
+                (stdlib-manifest-source
+                 "(let ((entry (stdlib-manifest-ref '(srfi 16)))
                        (portable-alias
                         (stdlib-manifest-ref '(srfi srfi-16))))
-                   (list (cdr (assq 'status entry))
-                         (cdr (assq 'source entry))
-                         (cdr (assq 'target entry))
-                         (cdr (assq 'implementation-library entry))
-                         (cdr (assq 'import-aliases entry))
-                         (cdr (assq 'dependencies entry))
-                         (cdr (assq 'target portable-alias))))"
-               (expected-datum-external
-                "(built-in-shim
-                  built-in-shim
-                  (scheme case-lambda)
-                  (scheme case-lambda)
-                  ((srfi 16) (srfi srfi-16))
-                  ((scheme case-lambda))
-                  (scheme case-lambda))"))
+                   (and (eq? (car entry) 'manifest-index-entry)
+                        (equal? (manifest-field entry 'status)
+                                'built-in-shim)
+                        (equal? (manifest-field entry 'source)
+                                'built-in-shim)
+                        (equal? (manifest-field entry 'target)
+                                '(scheme case-lambda))
+                        (equal? (manifest-field entry 'aliases)
+                                '((srfi srfi-16)))
+                        (equal? (manifest-field entry 'dependencies)
+                                '((library (scheme case-lambda))))
+                        (equal? (manifest-field portable-alias 'target)
+                                '(scheme case-lambda))))")
+                "#t")
 
 (check-external 'srfi-2-and-let-star-behavior
                 "(import (scheme base) (srfi 2))
@@ -1741,28 +1753,31 @@
                 "primary")
 
 (check-external 'stdlib-srfi-2-manifest
-                "(import (scheme base) (stdlib manifest))
-                 (let ((entry (stdlib-manifest-ref '(stdlib and-let-star)))
+                (stdlib-manifest-source
+                 "(let ((entry (stdlib-manifest-ref '(stdlib and-let-star)))
                        (alias (stdlib-manifest-ref '(srfi 2)))
                        (portable-alias
                         (stdlib-manifest-ref '(srfi srfi-2))))
-                   (list (cdr (assq 'status entry))
-                         (cdr (assq 'implementation-library entry))
-                         (cdr (assq 'upstream-license entry))
-                         (cdr (assq 'local-license entry))
-                         (cdr (assq 'import-aliases entry))
-                         (cdr (assq 'dependencies entry))
-                         (cdr (assq 'target alias))
-                         (cdr (assq 'target portable-alias))))"
-               (expected-datum-external
-                "(vendored-adapted-implementation
-                  (stdlib and-let-star)
-                  \"MIT\"
-                  \"MIT\"
-                  ((stdlib and-let-star) (srfi 2) (srfi srfi-2))
-                  ((scheme base))
-                  (stdlib and-let-star)
-                  (stdlib and-let-star))"))
+                   (and (eq? (car entry) 'manifest-entry)
+                        (equal? (manifest-field entry 'name)
+                                '(stdlib and-let-star))
+                        (equal? (manifest-field entry 'status)
+                                'vendored-adapted-implementation)
+                        (equal? (manifest-subfield
+                                 entry 'provenance 'upstream-license)
+                                \"MIT\")
+                        (equal? (manifest-subfield
+                                 entry 'provenance 'local-license)
+                                \"MIT\")
+                        (equal? (manifest-field entry 'aliases)
+                                '((srfi 2) (srfi srfi-2)))
+                        (equal? (manifest-field entry 'dependencies)
+                                '((library (scheme base))))
+                        (equal? (manifest-field alias 'target)
+                                '(stdlib and-let-star))
+                        (equal? (manifest-field portable-alias 'target)
+                                '(stdlib and-let-star))))")
+                "#t")
 
 (check-external 'srfi-145-assume-behavior
                 "(import (scheme base) (srfi 145))
@@ -1805,32 +1820,36 @@
        #t)
 
 (check-external 'stdlib-srfi-145-manifest
-                "(import (scheme base) (stdlib manifest))
-                 (let ((entry (stdlib-manifest-ref '(stdlib assume)))
+                (stdlib-manifest-source
+                 "(let ((entry (stdlib-manifest-ref '(stdlib assume)))
                        (alias (stdlib-manifest-ref '(srfi 145)))
                        (portable-alias
                         (stdlib-manifest-ref '(srfi srfi-145))))
-                   (list (cdr (assq 'status entry))
-                         (cdr (assq 'source entry))
-                         (cdr (assq 'implementation-library entry))
-                         (cdr (assq 'upstream-license entry))
-                         (cdr (assq 'local-license entry))
-                         (cdr (assq 'vendored? entry))
-                         (cdr (assq 'import-aliases entry))
-                         (cdr (assq 'dependencies entry))
-                         (cdr (assq 'target alias))
-                         (cdr (assq 'target portable-alias))))"
-               (expected-datum-external
-                "(built-in-shim
-                  built-in-shim
-                  (stdlib assume)
-                  \"MIT\"
-                  \"Apache-2.0\"
-                  #f
-                  ((stdlib assume) (srfi 145) (srfi srfi-145))
-	                  ((scheme base))
-                  (stdlib assume)
-                  (stdlib assume))"))
+                   (and (eq? (car entry) 'manifest-entry)
+                        (equal? (manifest-field entry 'name)
+                                '(stdlib assume))
+                        (equal? (manifest-field entry 'status)
+                                'built-in-shim)
+                        (equal? (manifest-field entry 'source)
+                                '(path \"assume.sld\"))
+                        (equal? (manifest-subfield
+                                 entry 'provenance 'upstream-license)
+                                \"MIT\")
+                        (equal? (manifest-subfield
+                                 entry 'provenance 'local-license)
+                                \"Apache-2.0\")
+                        (eq? (manifest-subfield
+                              entry 'provenance 'vendored?)
+                             #f)
+                        (equal? (manifest-field entry 'aliases)
+                                '((srfi 145) (srfi srfi-145)))
+                        (equal? (manifest-field entry 'dependencies)
+                                '((library (scheme base))))
+                        (equal? (manifest-field alias 'target)
+                                '(stdlib assume))
+                        (equal? (manifest-field portable-alias 'target)
+                                '(stdlib assume))))")
+                "#t")
 
 (check-external 'srfi-1-list-library-behavior
                 "(import (scheme base)
@@ -1879,32 +1898,36 @@
        #t)
 
 (check-external 'stdlib-srfi-1-manifest
-                "(import (scheme base) (stdlib manifest))
-                 (let ((entry (stdlib-manifest-ref '(stdlib list)))
+                (stdlib-manifest-source
+                 "(let ((entry (stdlib-manifest-ref '(stdlib list)))
                        (scheme-alias
                         (stdlib-manifest-ref '(scheme list)))
                        (alias (stdlib-manifest-ref '(srfi 1)))
                        (portable-alias
                         (stdlib-manifest-ref '(srfi srfi-1))))
-                   (list (cdr (assq 'status entry))
-                         (cdr (assq 'implementation-library entry))
-                         (cdr (assq 'upstream-license entry))
-                         (cdr (assq 'local-license entry))
-                         (cdr (assq 'import-aliases entry))
-                         (cdr (assq 'dependencies entry))
-                         (cdr (assq 'target scheme-alias))
-                         (cdr (assq 'target alias))
-                         (cdr (assq 'target portable-alias))))"
-               (expected-datum-external
-                "(vendored-adapted-implementation
-                  (stdlib list)
-                  \"MIT\"
-                  \"MIT\"
-                  ((stdlib list) (scheme list) (srfi 1) (srfi srfi-1))
-                  ((scheme base) (scheme cxr))
-                  (stdlib list)
-                  (stdlib list)
-                  (stdlib list))"))
+                   (and (eq? (car entry) 'manifest-entry)
+                        (equal? (manifest-field entry 'name)
+                                '(stdlib list))
+                        (equal? (manifest-field entry 'status)
+                                'vendored-adapted-implementation)
+                        (equal? (manifest-subfield
+                                 entry 'provenance 'upstream-license)
+                                \"MIT\")
+                        (equal? (manifest-subfield
+                                 entry 'provenance 'local-license)
+                                \"MIT\")
+                        (equal? (manifest-field entry 'aliases)
+                                '((scheme list) (srfi 1) (srfi srfi-1)))
+                        (equal? (manifest-field entry 'dependencies)
+                                '((library (scheme base))
+                                  (library (scheme cxr))))
+                        (equal? (manifest-field scheme-alias 'target)
+                                '(stdlib list))
+                        (equal? (manifest-field alias 'target)
+                                '(stdlib list))
+                        (equal? (manifest-field portable-alias 'target)
+                                '(stdlib list))))")
+                "#t")
 
 (check-external 'srfi-158-generator-behavior
                 "(import (scheme base) (scheme generator))
@@ -1943,37 +1966,41 @@
        #t)
 
 (check-external 'stdlib-srfi-158-manifest
-                "(import (scheme base) (stdlib manifest))
-                 (let ((entry (stdlib-manifest-ref '(stdlib generator)))
+                (stdlib-manifest-source
+                 "(let ((entry (stdlib-manifest-ref '(stdlib generator)))
                        (scheme-alias
                         (stdlib-manifest-ref '(scheme generator)))
                        (alias (stdlib-manifest-ref '(srfi 158)))
                        (portable-alias
                         (stdlib-manifest-ref '(srfi srfi-158))))
-                   (list (cdr (assq 'status entry))
-                         (cdr (assq 'implementation-library entry))
-                         (cdr (assq 'upstream-license entry))
-                         (cdr (assq 'local-license entry))
-                         (cdr (assq 'vendored? entry))
-                         (cdr (assq 'import-aliases entry))
-                         (cdr (assq 'dependencies entry))
-                         (cdr (assq 'target scheme-alias))
-                         (cdr (assq 'target alias))
-                         (cdr (assq 'target portable-alias))))"
-               (expected-datum-external
-                "(vendored-adapted-implementation
-                  (stdlib generator)
-                  \"MIT\"
-                  \"MIT\"
-                  #t
-                  ((stdlib generator)
-                   (scheme generator)
-                   (srfi 158)
-                   (srfi srfi-158))
-                  ((scheme base) (scheme case-lambda))
-                  (stdlib generator)
-                  (stdlib generator)
-                  (stdlib generator))"))
+                   (and (eq? (car entry) 'manifest-entry)
+                        (equal? (manifest-field entry 'name)
+                                '(stdlib generator))
+                        (equal? (manifest-field entry 'status)
+                                'vendored-adapted-implementation)
+                        (equal? (manifest-subfield
+                                 entry 'provenance 'upstream-license)
+                                \"MIT\")
+                        (equal? (manifest-subfield
+                                 entry 'provenance 'local-license)
+                                \"MIT\")
+                        (eq? (manifest-subfield
+                              entry 'provenance 'vendored?)
+                             #t)
+                        (equal? (manifest-field entry 'aliases)
+                                '((scheme generator)
+                                  (srfi 158)
+                                  (srfi srfi-158)))
+                        (equal? (manifest-field entry 'dependencies)
+                                '((library (scheme base))
+                                  (library (scheme case-lambda))))
+                        (equal? (manifest-field scheme-alias 'target)
+                                '(stdlib generator))
+                        (equal? (manifest-field alias 'target)
+                                '(stdlib generator))
+                        (equal? (manifest-field portable-alias 'target)
+                                '(stdlib generator))))")
+                "#t")
 
 (check-external 'srfi-180-json-read
                 (string-append
@@ -2080,13 +2107,16 @@
 
 (check-external 'consent-json-pure-alias-inherits-target-exports
                 "(import (scheme base) (stdlib manifest) (consent json))
+                 (define (manifest-field entry name)
+                   (let ((cell (assq name (cdr entry))))
+                     (and cell (cadr cell))))
                  (let ((entry (stdlib-manifest-ref '(consent json)))
                        (out (open-output-string)))
                    (json-write '((ok . #t)) out)
                    (let ((datum
                           (json-read
                            (open-input-string (get-output-string out)))))
-                     (list (if (assq 'exports entry)
+                     (list (if (manifest-field entry 'exports)
                                'exports-present
                                'exports-omitted)
                            (cdr (assq 'ok datum)))))"
@@ -2103,19 +2133,20 @@
                 "#t")
 
 (check-external 'stdlib-json-manifest
-                "(import (scheme base) (stdlib manifest))
-                 (let ((entry (stdlib-manifest-ref '(stdlib json))))
-                   (list (cdr (assq 'status entry))
-                         (cdr (assq 'implementation-library entry))
-                         (cdr (assq 'upstream-license entry))
-                         (cdr (assq 'import-aliases entry))
-                         (cdr (assq 'dependencies entry))))"
-               (expected-datum-external
-                "(direct-portable-implementation
-                  (stdlib json)
-                  \"MIT\"
-                  ((stdlib json) (consent json) (srfi 180) (srfi srfi-180))
-                  ((stdlib and-let-star)))"))
+                (stdlib-manifest-source
+                 "(let ((entry (stdlib-manifest-ref '(stdlib json))))
+                   (and (eq? (car entry) 'manifest-entry)
+                        (equal? (manifest-field entry 'name) '(stdlib json))
+                        (equal? (manifest-field entry 'status)
+                                'direct-portable-implementation)
+                        (equal? (manifest-subfield
+                                 entry 'provenance 'upstream-license)
+                                \"MIT\")
+                        (equal? (manifest-field entry 'aliases)
+                                '((consent json) (srfi 180) (srfi srfi-180)))
+                        (equal? (manifest-field entry 'dependencies)
+                                '((library (stdlib and-let-star))))))")
+                "#t")
 
 (check-external 'srfi-128-comparator-behavior
                 "(import (scheme base) (stdlib comparator))
@@ -2163,39 +2194,42 @@
                 "(#t #t)")
 
 (check-external 'stdlib-comparator-manifest
-                "(import (scheme base) (stdlib manifest))
-                 (let ((entry (stdlib-manifest-ref '(stdlib comparator)))
+                (stdlib-manifest-source
+                 "(let ((entry (stdlib-manifest-ref '(stdlib comparator)))
                        (scheme-alias
                         (stdlib-manifest-ref '(scheme comparator)))
                        (alias (stdlib-manifest-ref '(srfi 128)))
                        (portable-alias
                         (stdlib-manifest-ref '(srfi srfi-128))))
-                   (list (cdr (assq 'status entry))
-                         (cdr (assq 'implementation-library entry))
-                         (cdr (assq 'upstream-license entry))
-                         (cdr (assq 'local-license entry))
-                         (cdr (assq 'import-aliases entry))
-                         (cdr (assq 'dependencies entry))
-                         (cdr (assq 'target scheme-alias))
-                         (cdr (assq 'target alias))
-                         (cdr (assq 'target portable-alias))))"
-               (expected-datum-external
-                "(vendored-adapted-implementation
-                  (stdlib comparator)
-                  \"MIT\"
-                  \"MIT\"
-                  ((stdlib comparator)
-                   (scheme comparator)
-                   (srfi 128)
-                   (srfi srfi-128))
-                  ((scheme base)
-                   (scheme case-lambda)
-                   (scheme char)
-                   (scheme inexact)
-                   (scheme complex))
-                  (stdlib comparator)
-                  (stdlib comparator)
-                  (stdlib comparator))"))
+                   (and (eq? (car entry) 'manifest-entry)
+                        (equal? (manifest-field entry 'name)
+                                '(stdlib comparator))
+                        (equal? (manifest-field entry 'status)
+                                'vendored-adapted-implementation)
+                        (equal? (manifest-subfield
+                                 entry 'provenance 'upstream-license)
+                                \"MIT\")
+                        (equal? (manifest-subfield
+                                 entry 'provenance 'local-license)
+                                \"MIT\")
+                        (equal? (manifest-field entry 'aliases)
+                                '((scheme comparator)
+                                  (srfi 128)
+                                  (srfi srfi-128)))
+                        (equal?
+                         (manifest-field entry 'dependencies)
+                         '((library (scheme base))
+                           (library (scheme case-lambda))
+                           (library (scheme char))
+                           (library (scheme inexact))
+                           (library (scheme complex))))
+                        (equal? (manifest-field scheme-alias 'target)
+                                '(stdlib comparator))
+                        (equal? (manifest-field alias 'target)
+                                '(stdlib comparator))
+                        (equal? (manifest-field portable-alias 'target)
+                                '(stdlib comparator))))")
+                "#t")
 
 (check-external 'stdlib-rbtree-helper
                 "(import (scheme base)
@@ -2236,30 +2270,33 @@
                  "(((1 . one) (2 . two) (3 . three)) 2 2)"))
 
 (check-external 'stdlib-rbtree-manifest
-                "(import (scheme base) (stdlib manifest))
-                 (let ((entry (stdlib-manifest-ref '(stdlib rbtree))))
-                   (list (cdr (assq 'status entry))
-                         (cdr (assq 'implementation-library entry))
-                         (cdr (assq 'upstream-license entry))
-                         (cdr (assq 'local-license entry))
-                         (cdr (assq 'import-aliases entry))
-                         (cdr (assq 'dependencies entry))))"
-                (expected-datum-external
-                 "(vendored-adapted-implementation
-                   (stdlib rbtree)
-                   \"MIT\"
-                   \"MIT\"
-                   ((stdlib rbtree))
-                   ((scheme base)
-                    (scheme case-lambda)
-                    (stdlib and-let-star)
-                    (stdlib receive)
-                    (stdlib generator)
-                    (stdlib comparator)))"))
+                (stdlib-manifest-source
+                 "(let ((entry (stdlib-manifest-ref '(stdlib rbtree))))
+                   (and (eq? (car entry) 'manifest-entry)
+                        (equal? (manifest-field entry 'name)
+                                '(stdlib rbtree))
+                        (equal? (manifest-field entry 'status)
+                                'vendored-adapted-implementation)
+                        (equal? (manifest-subfield
+                                 entry 'provenance 'upstream-license)
+                                \"MIT\")
+                        (equal? (manifest-subfield
+                                 entry 'provenance 'local-license)
+                                \"MIT\")
+                        (not (manifest-field entry 'aliases))
+                        (equal?
+                         (manifest-field entry 'dependencies)
+                         '((library (scheme base))
+                           (library (scheme case-lambda))
+                           (library (stdlib and-let-star))
+                           (library (stdlib receive))
+                           (library (stdlib generator))
+                           (library (stdlib comparator))))))")
+                "#t")
 
 (check-external 'stdlib-mapping-manifest
-                "(import (scheme base) (stdlib manifest))
-                 (let ((entry (stdlib-manifest-ref '(stdlib mapping)))
+                (stdlib-manifest-source
+                 "(let ((entry (stdlib-manifest-ref '(stdlib mapping)))
                        (scheme-alias
                         (stdlib-manifest-ref '(scheme mapping)))
                        (alias (stdlib-manifest-ref '(srfi 146)))
@@ -2267,36 +2304,38 @@
                         (stdlib-manifest-ref '(srfi srfi-146)))
                        (hash-alias
                         (stdlib-manifest-ref '(srfi 146 hash))))
-                   (list (cdr (assq 'status entry))
-                         (cdr (assq 'implementation-library entry))
-                         (cdr (assq 'upstream-license entry))
-                         (cdr (assq 'local-license entry))
-                         (cdr (assq 'import-aliases entry))
-                         (cdr (assq 'dependencies entry))
-                         (cdr (assq 'target scheme-alias))
-                         (cdr (assq 'target alias))
-                         (cdr (assq 'target portable-alias))
-                         hash-alias))"
-                (expected-datum-external
-                 "(vendored-adapted-implementation
-                   (stdlib mapping)
-                   \"MIT\"
-                   \"MIT\"
-                   ((stdlib mapping)
-                    (scheme mapping)
-                    (srfi 146)
-                    (srfi srfi-146))
-                   ((scheme base)
-                    (scheme case-lambda)
-                    (stdlib list)
-                    (stdlib receive)
-                    (stdlib comparator)
-                    (stdlib assume)
-                    (stdlib rbtree))
-                   (stdlib mapping)
-                   (stdlib mapping)
-                   (stdlib mapping)
-                   #f)"))
+                   (and (eq? (car entry) 'manifest-entry)
+                        (equal? (manifest-field entry 'name)
+                                '(stdlib mapping))
+                        (equal? (manifest-field entry 'status)
+                                'vendored-adapted-implementation)
+                        (equal? (manifest-subfield
+                                 entry 'provenance 'upstream-license)
+                                \"MIT\")
+                        (equal? (manifest-subfield
+                                 entry 'provenance 'local-license)
+                                \"MIT\")
+                        (equal? (manifest-field entry 'aliases)
+                                '((scheme mapping)
+                                  (srfi 146)
+                                  (srfi srfi-146)))
+                        (equal?
+                         (manifest-field entry 'dependencies)
+                         '((library (scheme base))
+                           (library (scheme case-lambda))
+                           (library (stdlib list))
+                           (library (stdlib receive))
+                           (library (stdlib comparator))
+                           (library (stdlib assume))
+                           (library (stdlib rbtree))))
+                        (equal? (manifest-field scheme-alias 'target)
+                                '(stdlib mapping))
+                        (equal? (manifest-field alias 'target)
+                                '(stdlib mapping))
+                        (equal? (manifest-field portable-alias 'target)
+                                '(stdlib mapping))
+                        (not hash-alias)))")
+                "#t")
 
 (check-external 'base-list-helpers
                 "(list (length (append '(1 2) '(3 4)))

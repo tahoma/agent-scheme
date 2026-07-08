@@ -228,13 +228,22 @@
                    (add-manifest!
                     'reflect-contract
                     '(library-catalog
-                      (library
+                      (manifest-entry
+                       (schema-version 1)
+                       (kind library)
                        (name (project contract))
+                       (owner project)
+                       (provider reflect-contract)
+                       (visibility public)
                        (category project)
                        (status experimental)
                        (source-kind ad-hoc)
+                       (realization manifest)
                        (exports (contract-run))
-                       (summary \"Contract manifest library.\")))))
+                       (documentation
+                        ((summary \"Contract manifest library.\")))
+                       (provenance ((origin ad-hoc)))
+                       (canonical #t)))))
                  (define visible-before-remove
                    (source-has? (catalog-sources)
                                 'reflect-contract

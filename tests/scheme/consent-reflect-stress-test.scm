@@ -398,16 +398,30 @@
                  (remove-manifest-root! \"reflect-test-root\")
                  (add-manifest!
                   'reflect-test-session
-                  '(library-catalog
-                    (library
+                 '(library-catalog
+                    (manifest-entry
+                     (schema-version 1)
+                     (kind library)
                      (name (project generated))
+                     (owner project)
+                     (provider repo-source)
+                     (visibility public)
+                     (layer package)
                      (category project)
                      (status experimental)
-                     (source-kind ad-hoc)
+                     (source-kind source-library)
+                     (source (path \"project/generated.sld\"))
+                     (api-version (compat 2))
+                     (source-version unknown)
+                     (realization portable-source)
                      (aliases ((project generated alias)))
                      (exports (generated-run))
-                     (dependencies ((scheme base)))
-                     (summary \"Generated project library.\"))))
+                     (dependencies ((library (scheme base))))
+                     (documentation
+                      ((summary \"Generated project library.\")))
+                     (provenance ((origin project)))
+                     (canonical #t)
+                     (future-field ignored))))
                  (define ad-hoc-info (library-info '(project generated)))
                  (define ad-hoc-libraries
                    (map (lambda (info) (field info 'name))
@@ -421,13 +435,22 @@
                  (add-manifest-root!
                   \"reflect-test-root\"
                   '(library-catalog
-                    (library
+                    (manifest-entry
+                     (schema-version 1)
+                     (kind library)
                      (name (project rooted))
+                     (owner project)
+                     (provider reflect-test-root)
+                     (visibility public)
                      (category project)
                      (status available)
                      (source-kind manifest-root)
+                     (realization manifest-root)
                      (exports (rooted-run))
-                     (summary \"Root manifest library.\"))))
+                     (documentation
+                      ((summary \"Root manifest library.\")))
+                     (provenance ((origin manifest-root)))
+                     (canonical #t))))
                  (define root-info (library-info '(project rooted)))
                  (define root-libraries
                    (map (lambda (info) (field info 'name))
@@ -438,7 +461,16 @@
                                 '(project rooted)))
                  (define removed-root
                    (remove-manifest-root! \"reflect-test-root\"))
-                 (list (field ad-hoc-info 'origin)
+                 (list (field ad-hoc-info 'schema-version)
+                       (field ad-hoc-info 'kind)
+                       (field ad-hoc-info 'owner)
+                       (field ad-hoc-info 'provider)
+                       (field ad-hoc-info 'source)
+                       (field ad-hoc-info 'api-version)
+                       (field ad-hoc-info 'source-version)
+                       (field ad-hoc-info 'realization)
+                       (field ad-hoc-info 'canonical)
+                       (field ad-hoc-info 'origin)
                        (field ad-hoc-info 'source-id)
                        (field ad-hoc-info 'summary)
                        ad-hoc-libraries
@@ -456,10 +488,19 @@
                            'bad
                            'root-removed))"
                 (expected-datum-external
-                 "(ad-hoc-manifest
-                   reflect-test-session
-                   \"Generated project library.\"
-                   ((project generated))
+                "(1
+                  library
+                  project
+                  repo-source
+                  (path \"project/generated.sld\")
+                  (compat 2)
+                  unknown
+                  portable-source
+                  #t
+                  ad-hoc-manifest
+                  reflect-test-session
+                  \"Generated project library.\"
+                  ((project generated))
                    #t
                    #t
                    removed

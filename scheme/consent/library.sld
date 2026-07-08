@@ -405,10 +405,34 @@
        'manifest-index
        "top-level manifest index"))
 
+    (define (collection-manifest-fields entry description)
+      "Return tagged manifest ENTRY fields, or raise DESCRIPTION."
+      (let ((parts (proper-list-elements entry description)))
+        (if (not (and (pair? parts)
+                      (or (identifier-named? (car parts) 'manifest-entry)
+                          (identifier-named? (car parts)
+                                             'manifest-index-entry))))
+            (eval-error
+             (string-append
+              description
+              " must begin with manifest-entry or manifest-index-entry")
+             entry))
+        (cdr parts)))
+
     (define (collection-manifest-field entry field default)
-      "Return FIELD from collection manifest ENTRY, or DEFAULT."
-      (let ((cell (assq field entry)))
-        (if cell (cdr cell) default)))
+      "Return FIELD from tagged manifest ENTRY, or DEFAULT."
+      (let loop ((fields (collection-manifest-fields entry "manifest entry")))
+        (cond
+         ((null? fields) default)
+         ((and (pair? (car fields))
+               (let ((parts
+                      (proper-list-elements (car fields) "manifest field")))
+                 (and (pair? parts)
+                      (identifier-named? (car parts) field)
+                      parts)))
+          => (lambda (parts)
+               (if (null? (cdr parts)) default (cadr parts))))
+         (else (loop (cdr fields))))))
 
     (define (collection-manifest-symbol value description)
       "Return VALUE when it is a symbol."
@@ -528,6 +552,153 @@
           (map library-name-key (proper-list-elements value description))
           '()))
 
+    ;; Manifest schema version recognized by load-light catalog readers.
+    (define manifest-schema-version 1)
+
+    (define (manifest-nonnegative-integer value description default)
+      "Return VALUE as an exact non-negative integer, or DEFAULT when absent."
+      (cond
+       ((not value) default)
+       ((and (integer? value) (exact? value) (>= value 0)) value)
+       ((and (consent-number? value)
+             (eq? (consent-number-kind value) 'integer)
+             (eq? (consent-number-exactness value) 'exact)
+             (>= (consent-number-value value) 0))
+        (consent-number-value value))
+       (else
+        (eval-error
+         (string-append description
+                        " must be an exact non-negative integer")
+         value))))
+
+    (define (manifest-kind-default source-kind target)
+      "Return the default manifest kind for SOURCE-KIND and TARGET."
+      (cond
+       ((or target (eq? source-kind 'alias)) 'library-alias)
+       ((eq? source-kind 'primitive) 'primitive-library)
+       (else 'library)))
+
+    (define (manifest-api-version-default visibility target)
+      "Return default api-version metadata for VISIBILITY and TARGET."
+      (cond
+       (target (list 'inherits target))
+       ((or (eq? visibility 'internal-runtime)
+            (eq? visibility 'internal-agent-primitive)
+            (eq? visibility 'host-adapter))
+        'internal)
+       (else '(compat 0))))
+
+    (define (manifest-source-version-default source-kind)
+      "Return default source-version metadata for SOURCE-KIND."
+      (if (or (eq? source-kind 'base-snapshot)
+              (eq? source-kind 'primitive)
+              (eq? source-kind 'derived))
+          'runtime
+          'unknown))
+
+    (define (manifest-realization-default source-kind)
+      "Return default realization metadata for SOURCE-KIND."
+      (cond
+       ((eq? source-kind 'portable-source) 'portable-source)
+       ((eq? source-kind 'primitive) 'host-primitive)
+       ((eq? source-kind 'alias) 'alias)
+       ((eq? source-kind 'base-snapshot) 'runtime-snapshot)
+       ((eq? source-kind 'derived) 'derived)
+       ((eq? source-kind 'facade) 'shim)
+       (source-kind source-kind)
+       (else 'unknown)))
+
+    (define (manifest-source-path source)
+      "Return path from manifest SOURCE metadata, or #f."
+      (and source
+           (pair? source)
+           (let ((parts (proper-list-elements source "manifest source")))
+             (and (= (length parts) 2)
+                  (eq? (car parts) 'path)
+                  (string? (cadr parts))
+                  (cadr parts)))))
+
+    (define (manifest-source-implementation-id source)
+      "Return implementation id from manifest SOURCE metadata, or #f."
+      (and source
+           (pair? source)
+           (let ((parts (proper-list-elements source "manifest source")))
+             (and (= (length parts) 2)
+                  (eq? (car parts) 'implementation-id)
+                  (collection-manifest-symbol
+                   (cadr parts)
+                   "manifest source implementation-id")))))
+
+    (define (manifest-source-with-path source path)
+      "Return SOURCE normalized to resolved PATH when SOURCE is a path datum."
+      (if (and source path (pair? source))
+          (let ((parts (proper-list-elements source "manifest source")))
+            (if (and (= (length parts) 2) (eq? (car parts) 'path))
+                (list 'path path)
+                source))
+          source))
+
+    (define (manifest-source-default source source-file target implementation-id)
+      "Return normalized source metadata."
+      (cond
+       (source source)
+       (source-file (list 'path source-file))
+       (target (list 'target target))
+       (implementation-id (list 'implementation-id implementation-id))
+       (else 'unknown)))
+
+    (define (manifest-documentation-summary documentation)
+      "Return summary text from DOCUMENTATION metadata, or #f."
+      (let loop ((rest (if documentation
+                           (proper-list-elements
+                            documentation
+                            "manifest documentation")
+                           '())))
+        (cond
+         ((null? rest) #f)
+         ((pair? (car rest))
+          (let ((parts
+                 (proper-list-elements
+                  (car rest)
+                  "manifest documentation entry")))
+            (if (and (= (length parts) 2)
+                     (eq? (car parts) 'summary)
+                     (string? (cadr parts)))
+                (cadr parts)
+                (loop (cdr rest)))))
+         (else (loop (cdr rest))))))
+
+    (define (manifest-documentation-default documentation summary)
+      "Return DOCUMENTATION or summary-derived documentation metadata."
+      (cond
+       (documentation documentation)
+       (summary (list (list 'summary summary)))
+       (else #f)))
+
+    (define (manifest-provenance-default provenance origin source-id)
+      "Return PROVENANCE or a minimal origin/source-id record."
+      (if provenance
+          provenance
+          (if source-id
+              (list (list 'origin origin) (list 'source-id source-id))
+              (list (list 'origin origin)))))
+
+    (define (manifest-normalized-dependency entry description)
+      "Return dependency ENTRY as a normalized library key."
+      (let ((parts (and (pair? entry) (proper-list-elements/maybe entry))))
+        (if (and parts (eq? (car parts) 'library) (pair? (cdr parts)))
+            (library-name-key (cadr parts))
+            (library-name-key entry))))
+
+    (define (manifest-library-list value description)
+      "Return VALUE normalized as a list of dependency library-name keys."
+      (if value
+          (map
+           (lambda (entry)
+             (manifest-normalized-dependency entry description))
+           (proper-list-elements value description))
+          '()))
+
     (define (collection-manifest-target value)
       "Return VALUE normalized as a library key, or #f."
       (if value (library-name-key value) #f))
@@ -579,7 +750,7 @@
       "Return catalog metadata parsed from collection manifest ENTRY and SPEC."
       (let* ((key
               (library-name-key
-               (collection-manifest-field entry 'library #f)))
+               (collection-manifest-field entry 'name #f)))
              (status
               (let ((value (collection-manifest-field
                             entry 'status #f)))
@@ -632,14 +803,22 @@
               (or (collection-manifest-source-kind
                    (collection-manifest-field entry 'source-kind #f))
                   (and target 'alias)))
-             (implementation-id
-              (let ((value (collection-manifest-field
-                            entry 'implementation-id #f)))
+             (schema-version
+              (manifest-nonnegative-integer
+               (collection-manifest-field entry 'schema-version #f)
+               "collection manifest schema-version"
+               manifest-schema-version))
+             (kind
+              (let ((value (collection-manifest-field entry 'kind #f)))
                 (if value
                     (collection-manifest-symbol
                      value
-                     "collection manifest implementation-id")
-                    #f)))
+                     "collection manifest kind")
+                    (manifest-kind-default source-kind target))))
+             (source
+              (collection-manifest-field entry 'source #f))
+             (implementation-id
+              (manifest-source-implementation-id source))
              (primitive-overlay-library
               (collection-manifest-target
                (collection-manifest-field
@@ -649,13 +828,13 @@
               (collection-manifest-catalog-source-file
                spec
                source-kind
-               (collection-manifest-field entry 'source-file #f)))
+               (manifest-source-path source)))
              (dependencies
-              (collection-manifest-library-list
+              (manifest-library-list
                (collection-manifest-field entry 'dependencies #f)
                "collection manifest dependencies"))
              (aliases
-              (collection-manifest-library-list
+              (manifest-library-list
                (collection-manifest-field entry 'aliases #f)
                "collection manifest aliases"))
              (exports
@@ -667,7 +846,49 @@
                      value
                      "collection manifest exports"))))
              (summary
-              (collection-manifest-field entry 'summary #f)))
+              (collection-manifest-field entry 'summary #f))
+             (owner
+              (let ((value (collection-manifest-field entry 'owner #f)))
+                (if value
+                    (collection-manifest-symbol
+                     value
+                     "collection manifest owner")
+                    (collection-entry-field spec 'category #f))))
+             (provider
+              (let ((value (collection-manifest-field entry 'provider #f)))
+                (if value
+                    (collection-manifest-symbol
+                     value
+                     "collection manifest provider")
+                    'repo-source)))
+             (api-version
+              (collection-manifest-field entry 'api-version #f))
+             (source-version
+              (collection-manifest-field entry 'source-version #f))
+             (realization
+              (let ((value (collection-manifest-field entry 'realization #f)))
+                (if value
+                    (collection-manifest-symbol
+                     value
+                     "collection manifest realization")
+                    #f)))
+             (effects
+              (collection-manifest-field entry 'effects #f))
+             (capabilities
+              (collection-manifest-field entry 'capabilities #f))
+             (documentation
+              (collection-manifest-field entry 'documentation #f))
+             (provenance
+              (collection-manifest-field entry 'provenance #f))
+             (canonical
+              (collection-manifest-field
+               entry
+               'canonical
+               (not (and target (eq? source-kind 'alias))))))
+        (if (not (= schema-version manifest-schema-version))
+            (eval-error
+             "unsupported collection manifest schema-version"
+             schema-version))
         (if (eq? exports exports-absent)
             (if (and target (eq? source-kind 'alias))
                 (set! exports '())
@@ -676,8 +897,32 @@
         (if (and summary (not (string? summary)))
             (eval-error "collection manifest summary must be a string or #f"
                         summary))
+        (set! documentation
+              (manifest-documentation-default documentation summary))
+        (if (not summary)
+            (set! summary (manifest-documentation-summary documentation)))
+        (if (not api-version)
+            (set! api-version
+                  (manifest-api-version-default visibility target)))
+        (if (not source-version)
+            (set! source-version
+                  (manifest-source-version-default source-kind)))
+        (if (not realization)
+            (set! realization
+                  (manifest-realization-default source-kind)))
+        (set! source (manifest-source-with-path source source-file))
+        (set! source
+              (manifest-source-default
+               source source-file target implementation-id))
+        (set! provenance
+              (manifest-provenance-default
+               provenance
+               'repo
+               (collection-entry-field spec 'source-id #f)))
         (list
          (list 'name key)
+         (list 'schema-version schema-version)
+         (list 'kind kind)
          (list 'category category)
          (list 'status status)
          (list 'source-kind source-kind)
@@ -685,8 +930,14 @@
          (list 'primitive-overlay-library primitive-overlay-library)
          (list 'visibility visibility)
          (list 'layer layer)
+         (list 'owner owner)
+         (list 'provider provider)
          (list 'availability availability)
          (list 'availability-condition availability-condition)
+         (list 'api-version api-version)
+         (list 'source-version source-version)
+         (list 'realization realization)
+         (list 'source source)
          (list 'root root)
          (list 'root-kind root-kind)
          (list 'source-file source-file)
@@ -694,6 +945,11 @@
          (list 'target target)
          (list 'exports exports)
          (list 'dependencies dependencies)
+         (list 'effects effects)
+         (list 'capabilities capabilities)
+         (list 'documentation documentation)
+         (list 'provenance provenance)
+         (list 'canonical canonical)
          (list 'origin 'built-in-seed)
          (list 'source-id (collection-entry-field spec 'source-id #f))
          (list 'summary summary))))
@@ -935,40 +1191,41 @@
 
     (define (library-catalog-require-library-list value description)
       "Return VALUE normalized as a list of library keys."
-      (map library-name-key (proper-list-elements value description)))
+      (manifest-library-list value description))
 
     (define (library-catalog-require-target value)
       "Return VALUE normalized as a library key, or #f."
       (if value (library-name-key value) #f))
 
+    (define (library-catalog-normalized-source-kind value target)
+      "Return catalog source-kind from manifest VALUE and TARGET."
+      (or (collection-manifest-source-kind value)
+          (and target 'alias)
+          'manifest))
+
     (define (library-catalog-manifest-library form origin source-id)
       "Validate one manifest library FORM for ORIGIN and SOURCE-ID."
       (let ((parts (proper-list-elements form "catalog library entry")))
         (if (or (null? parts)
-                (not (identifier-named? (car parts) 'library)))
-            (eval-error "catalog entry must begin with library" form))
+                (not (or (identifier-named? (car parts) 'manifest-entry)
+                         (identifier-named? (car parts)
+                                            'manifest-index-entry))))
+            (eval-error
+             "catalog entry must begin with manifest-entry or manifest-index-entry"
+             form))
         (let* ((fields (cdr parts))
+               (index-entry?
+                (identifier-named? (car parts) 'manifest-index-entry))
                (name (library-name-key
                       (library-catalog-manifest-field fields 'name #f)))
-               (category
-                (library-catalog-require-symbol
-                 (library-catalog-manifest-field fields 'category 'library)
-                 "catalog category"))
                (status
                 (library-catalog-require-symbol
                  (library-catalog-manifest-field fields 'status 'available)
                  "catalog status"))
-               (source-kind
-                (library-catalog-require-symbol
-                 (library-catalog-manifest-field fields 'source-kind 'manifest)
-                 "catalog source-kind"))
                (visibility
                 (library-catalog-require-symbol
                  (library-catalog-manifest-field fields 'visibility 'public)
                  "catalog visibility"))
-               (source-file
-                (library-catalog-require-source-file
-                 (library-catalog-manifest-field fields 'source-file #f)))
                (aliases
                 (library-catalog-require-library-list
                  (library-catalog-manifest-field fields 'aliases '())
@@ -976,6 +1233,33 @@
                (target
                 (library-catalog-require-target
                  (library-catalog-manifest-field fields 'target #f)))
+               (source-kind
+                (library-catalog-normalized-source-kind
+                 (library-catalog-manifest-field fields 'source-kind #f)
+                 target))
+               (schema-version
+                (manifest-nonnegative-integer
+                 (library-catalog-manifest-field fields 'schema-version #f)
+                 "catalog schema-version"
+                 manifest-schema-version))
+               (kind
+                (library-catalog-require-symbol
+                 (library-catalog-manifest-field
+                  fields
+                  'kind
+                  (manifest-kind-default source-kind target))
+                 "catalog kind"))
+               (category
+                (library-catalog-require-symbol
+                 (library-catalog-manifest-field
+                  fields
+                  'category
+                  (if index-entry? 'alias 'library))
+                 "catalog category"))
+               (source
+                (library-catalog-manifest-field fields 'source #f))
+               (source-file
+                (manifest-source-path source))
                (exports
                 (library-catalog-require-symbol-list
                  (library-catalog-manifest-field fields 'exports '())
@@ -985,20 +1269,85 @@
                  (library-catalog-manifest-field fields 'dependencies '())
                  "catalog dependencies"))
                (summary
-                (library-catalog-manifest-field fields 'summary #f)))
+                (library-catalog-manifest-field fields 'summary #f))
+               (owner
+                (library-catalog-require-symbol
+                 (library-catalog-manifest-field fields 'owner 'project)
+                 "catalog owner"))
+               (provider
+                (library-catalog-require-symbol
+                 (library-catalog-manifest-field fields 'provider origin)
+                 "catalog provider"))
+               (api-version
+                (library-catalog-manifest-field fields 'api-version #f))
+               (source-version
+                (library-catalog-manifest-field fields 'source-version #f))
+               (realization
+                (library-catalog-require-symbol
+                 (library-catalog-manifest-field
+                  fields
+                  'realization
+                  (manifest-realization-default source-kind))
+                 "catalog realization"))
+               (effects
+                (library-catalog-manifest-field fields 'effects #f))
+               (capabilities
+                (library-catalog-manifest-field fields 'capabilities #f))
+               (documentation
+                (library-catalog-manifest-field fields 'documentation #f))
+               (provenance
+                (library-catalog-manifest-field fields 'provenance #f))
+               (canonical
+                (library-catalog-manifest-field
+                 fields
+                 'canonical
+                 (not (and target (eq? source-kind 'alias))))))
+          (if (not (= schema-version manifest-schema-version))
+              (eval-error
+               "unsupported catalog schema-version"
+               schema-version))
           (if (and summary (not (string? summary)))
               (eval-error "catalog summary must be a string or #f" summary))
+          (set! documentation
+                (manifest-documentation-default documentation summary))
+          (if (not summary)
+              (set! summary (manifest-documentation-summary documentation)))
+          (if (not api-version)
+              (set! api-version
+                    (manifest-api-version-default visibility target)))
+          (if (not source-version)
+              (set! source-version
+                    (manifest-source-version-default source-kind)))
+          (set! source (manifest-source-with-path source source-file))
+          (set! source
+                (manifest-source-default source source-file target #f))
+          (set! provenance
+                (manifest-provenance-default provenance origin source-id))
           (list
            (list 'name name)
+           (list 'schema-version schema-version)
+           (list 'kind kind)
            (list 'category category)
            (list 'status status)
            (list 'source-kind source-kind)
            (list 'visibility visibility)
+           (list 'owner owner)
+           (list 'provider provider)
+           (list 'layer (library-catalog-manifest-field fields 'layer #f))
+           (list 'api-version api-version)
+           (list 'source-version source-version)
+           (list 'realization realization)
+           (list 'source source)
            (list 'source-file source-file)
            (list 'aliases aliases)
            (list 'target target)
            (list 'exports exports)
            (list 'dependencies dependencies)
+           (list 'effects effects)
+           (list 'capabilities capabilities)
+           (list 'documentation documentation)
+           (list 'provenance provenance)
+           (list 'canonical canonical)
            (list 'origin origin)
            (list 'source-id source-id)
            (list 'summary summary)))))
@@ -1151,6 +1500,12 @@
       (let ((manifest-entry (library-collection-manifest-entry key)))
         (list
          (list 'name key)
+         (list 'schema-version
+               (collection-entry-field manifest-entry
+                                       'schema-version
+                                       manifest-schema-version))
+         (list 'kind
+               (collection-entry-field manifest-entry 'kind 'library))
          (list 'category
                (or (collection-entry-field manifest-entry 'category #f)
                    (library-catalog-category key)))
@@ -1166,6 +1521,10 @@
                 'primitive-overlay-library
                 #f))
          (list 'visibility (library-visibility key))
+         (list 'layer (collection-entry-field manifest-entry 'layer #f))
+         (list 'owner (collection-entry-field manifest-entry 'owner #f))
+         (list 'provider
+               (collection-entry-field manifest-entry 'provider #f))
          (list 'availability
                (collection-entry-field manifest-entry 'availability 'required))
          (list 'availability-condition
@@ -1173,6 +1532,13 @@
                 manifest-entry
                 'availability-condition
                 #f))
+         (list 'api-version
+               (collection-entry-field manifest-entry 'api-version #f))
+         (list 'source-version
+               (collection-entry-field manifest-entry 'source-version #f))
+         (list 'realization
+               (collection-entry-field manifest-entry 'realization #f))
+         (list 'source (collection-entry-field manifest-entry 'source #f))
          (list 'source-file (library-catalog-source-file key))
          (list 'aliases
                (if manifest-entry
@@ -1183,6 +1549,15 @@
                    #f))
          (list 'exports (library-catalog-export-names key))
          (list 'dependencies (library-catalog-dependencies key))
+         (list 'effects (collection-entry-field manifest-entry 'effects #f))
+         (list 'capabilities
+               (collection-entry-field manifest-entry 'capabilities #f))
+         (list 'documentation
+               (collection-entry-field manifest-entry 'documentation #f))
+         (list 'provenance
+               (collection-entry-field manifest-entry 'provenance #f))
+         (list 'canonical
+               (collection-entry-field manifest-entry 'canonical #f))
          (list 'origin 'built-in-seed)
          (list 'source-id 'built-in-seed)
          (list 'summary

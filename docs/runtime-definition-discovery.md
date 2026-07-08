@@ -204,13 +204,26 @@ without changing import authority:
 (add-manifest!
  'scratch-session
  '(library-catalog
-   (library
+   (manifest-entry
+    (schema-version 1)
+    (kind library)
     (name (scratch live))
+    (owner project)
+    (provider scratch-session)
+    (visibility public)
+    (layer package)
     (category scratch)
     (status experimental)
-    (source-kind ad-hoc)
+    (source-kind source-library)
+    (source (path "scratch/live.sld"))
+    (api-version (compat 0))
+    (source-version unknown)
+    (realization portable-source)
     (exports (scratch-run))
-    (summary "Live scratch library from this session."))))
+    (documentation
+     ((summary "Live scratch library from this session.")))
+    (provenance ((origin repl-session)))
+    (canonical #t))))
 ```
 
 Now library-container discovery can see it too:

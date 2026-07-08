@@ -127,16 +127,23 @@ exports.
 Useful fields on `library-info` records include:
 
 - `name`: the library name datum, such as `(agent reflect)`
+- `schema-version`: shared manifest schema version
+- `kind`: metadata subject category, such as `library` or `library-alias`
 - `category`: broad library family, such as `agent`, `scheme`, or `stdlib`
 - `status`: implementation status
 - `source-kind`: implementation source kind, such as `portable-source`,
   `base-snapshot`, `primitive`, `alias`, `manifest`, `ad-hoc`, or
   `manifest-root`
+- `owner` and `provider`: semantic owner and declaration provider
+- `api-version`, `source-version`, and `realization`: separated version and
+  implementation metadata
+- `source`: load-light source metadata
 - `source-file`: repo-relative source path when known
 - `aliases`: alternate library names
 - `target`: target library for aliases
 - `exports`: exported binding names
 - `dependencies`: declared dependencies when known
+- `documentation`, `provenance`, and `canonical`: shared manifest metadata
 - `origin` and `source-id`: the catalog source that supplied the record
 - `summary`: a short library summary when the manifest supplies one
 
@@ -179,15 +186,27 @@ project-local libraries before they are checked into the built-in catalog:
 (add-manifest!
  'scratch
  '(library-catalog
-   (library
+   (manifest-entry
+    (schema-version 1)
+    (kind library)
     (name (project generated))
+    (owner project)
+    (provider scratch)
+    (visibility public)
+    (layer package)
     (category project)
     (status experimental)
-    (source-kind ad-hoc)
+    (source-kind source-library)
+    (source (path "project/generated.sld"))
+    (api-version (compat 0))
+    (source-version unknown)
+    (realization portable-source)
     (aliases ((project generated alias)))
     (exports (generated-run))
-    (dependencies ((scheme base)))
-    (summary "Generated project library."))))
+    (dependencies ((library (scheme base))))
+    (documentation ((summary "Generated project library.")))
+    (provenance ((origin project)))
+    (canonical #t))))
 
 (reflection-field (library-info '(project generated)) 'summary)
 ;; => "Generated project library."
@@ -207,13 +226,21 @@ source identity is a root string:
 (add-manifest-root!
  "project-reflection"
  '(library-catalog
-   (library
+   (manifest-entry
+    (schema-version 1)
+    (kind library)
     (name (project rooted))
+    (owner project)
+    (provider project-reflection)
+    (visibility public)
     (category project)
     (status available)
     (source-kind manifest-root)
+    (realization manifest-root)
     (exports (rooted-run))
-    (summary "Root manifest library."))))
+    (documentation ((summary "Root manifest library.")))
+    (provenance ((origin manifest-root)))
+    (canonical #t))))
 
 (catalog-sources)
 (catalog-diagnostics)

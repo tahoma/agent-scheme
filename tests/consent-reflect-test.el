@@ -770,13 +770,22 @@
              (add-manifest!
               'reflect-contract
               '(library-catalog
-                (library
+                (manifest-entry
+                 (schema-version 1)
+                 (kind library)
                  (name (project contract))
+                 (owner project)
+                 (provider reflect-contract)
+                 (visibility public)
                  (category project)
                  (status experimental)
                  (source-kind ad-hoc)
+                 (realization manifest)
                  (exports (contract-run))
-                 (summary \"Contract manifest library.\")))))
+                 (documentation
+                  ((summary \"Contract manifest library.\")))
+                 (provenance ((origin ad-hoc)))
+                 (canonical #t)))))
            (define visible-before-remove
              (source-has? (catalog-sources)
                           'reflect-contract
@@ -858,15 +867,24 @@
            (add-manifest!
             'reflect-test-session
             '(library-catalog
-              (library
+              (manifest-entry
+               (schema-version 1)
+               (kind library)
                (name (project generated))
+               (owner project)
+               (provider reflect-test-session)
+               (visibility public)
+               (layer package)
                (category project)
                (status experimental)
                (source-kind ad-hoc)
+               (realization manifest)
                (aliases ((project generated alias)))
                (exports (generated-run))
-               (dependencies ((scheme base)))
-               (summary \"Generated project library.\"))))
+               (dependencies ((library (scheme base))))
+               (documentation ((summary \"Generated project library.\")))
+               (provenance ((origin ad-hoc)))
+               (canonical #t))))
            (define ad-hoc-info (library-info '(project generated)))
            (define ad-hoc-libraries
              (map (lambda (info) (field info 'name))
@@ -879,13 +897,21 @@
            (add-manifest-root!
             \"reflect-test-root\"
             '(library-catalog
-              (library
+              (manifest-entry
+               (schema-version 1)
+               (kind library)
                (name (project rooted))
+               (owner project)
+               (provider reflect-test-root)
+               (visibility public)
                (category project)
                (status available)
                (source-kind manifest-root)
+               (realization manifest-root)
                (exports (rooted-run))
-               (summary \"Root manifest library.\"))))
+               (documentation ((summary \"Root manifest library.\")))
+               (provenance ((origin manifest-root)))
+               (canonical #t))))
            (define root-info (library-info '(project rooted)))
            (define root-libraries
              (map (lambda (info) (field info 'name))

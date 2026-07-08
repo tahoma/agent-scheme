@@ -283,6 +283,11 @@ These are non-Scheme (or Scheme-adjacent) systems whose designs recur as prior a
 for the content-addressed library store / inter-agent exchange work
 ([design note](content-addressed-library-store.md)).
 
+- [Library Surface and Manifests](library-surface.md) records the current
+  manifest-schema prior-art boundary for R7RS/R6RS/SRFI library metadata,
+  Guile/Racket/CHICKEN/ASDF package metadata, and Guix/Nix provenance. It is the
+  repository reference for what belongs in manifest metadata versus #50 resolver
+  behavior.
 - [GNU Guix](https://guix.gnu.org/) is a functional package manager written in
   **Guile Scheme**, with a hash-addressed immutable store, profiles/generations as
   a mutable name→store indirection, and atomic rollback. The closest OS-level
