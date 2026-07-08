@@ -405,6 +405,11 @@ Generated outputs stay under `build/compile/<host>/` by default:
 - `manifest.scm`: Scheme-readable artifact manifest
 - `logs/`: compiler, compile-timing, and smoke-test logs
 
+CI caches only the non-runnable intermediate subdirectories that speed up a
+rebuild (`src/`, `incremental/`, and Racket `collections/` as applicable). It
+does not cache `bin/consent`; every compiled shard relinks and smoke-tests the
+product binary from the current checkout before running tests.
+
 Use `CONSENT_COMPILE_BUILD_DIR` to place those generated files elsewhere:
 
 ```sh
@@ -900,6 +905,10 @@ same full-suite file list through
 `CONSENT_COMPILE_HOST=gambit make compile`, emits the build tree's
 `logs/compile.log` and `logs/smoke.log` timing datums, and executes the same
 file list through `build/compile/gambit/bin/consent --script`.
+Compiled-build CI caches are intentionally intermediate-only: fallback restores
+may warm generated sources, compiled objects, incremental hashes, or Racket
+bytecode, but they must not restore a runnable `bin/consent` for the shard to
+test.
 CI builds and caches Gambit 4.9.7 because Ubuntu 24.04's `gambc` package is
 4.9.3 and does not accept the `-:r7rs` runtime option needed for the portable
 library search path. The Racket, Racket-compiled, and Guile extra-host shards
