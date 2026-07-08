@@ -243,6 +243,36 @@ OPTIONS are evaluator options.  Return the ordered contract records."
               "display")
              "3"))))
 
+(ert-deftest consent-repl-stream-line-comment-ready-prompt-reprompts ()
+  "Line-comment-only ready input redraws a ready prompt without a submission."
+  (let* ((records (consent-repl-stream-test--drive "  ;; comment\n(+ 1 2)\n"))
+         (prompts (consent-repl-stream-test--of records "repl-prompt"))
+         (submissions
+          (consent-repl-stream-test--of records "repl-submission")))
+    (should (= (length prompts) 3))
+    (dolist (prompt prompts)
+      (should (equal (consent-repl-stream-test--sym
+                      (consent-repl-stream-test--field prompt "state"))
+                     "ready")))
+    (should (= (consent-repl-stream-test--int
+                (consent-repl-stream-test--field (nth 0 prompts) "ordinal"))
+               1))
+    (should (= (consent-repl-stream-test--int
+                (consent-repl-stream-test--field (nth 1 prompts) "ordinal"))
+               1))
+    (should (= (consent-repl-stream-test--int
+                (consent-repl-stream-test--field (nth 2 prompts) "ordinal"))
+               2))
+    (should (= (length submissions) 1))
+    (should (equal (consent-repl-stream-test--field
+                    (car submissions) "source")
+                   "(+ 1 2)"))
+    (should (equal
+             (consent-repl-stream-test--field
+              (car (consent-repl-stream-test--of records "repl-result"))
+              "display")
+             "3"))))
+
 ;;;; The continuation prompt carries the reader's pending-nesting indicator
 
 (ert-deftest consent-repl-stream-continuation-carries-nesting ()
@@ -593,6 +623,12 @@ flag exists for model symmetry and is exercised here through the rendered hook."
                  "#| 1 |# #| 1 |# ;;   => 3\n;;\n#| 2 |# ;;   __ exit closed-ok\n"))
   (should (equal (consent-repl-stream-rendered-from-string
                   "\n(+ 1 2)\n" "repl-main" 'classic nil nil t)
+                 "> > = 3\n\n> _ exit closed-ok\n"))
+  (should (equal (consent-repl-stream-rendered-from-string
+                  "  ;; comment\n(+ 1 2)\n" "repl-main" 'comment nil nil t)
+                 "#| 1 |# #| 1 |# ;;   => 3\n;;\n#| 2 |# ;;   __ exit closed-ok\n"))
+  (should (equal (consent-repl-stream-rendered-from-string
+                  "  ;; comment\n(+ 1 2)\n" "repl-main" 'classic nil nil t)
                  "> > = 3\n\n> _ exit closed-ok\n")))
 
 (ert-deftest consent-repl-stream-chrome-classic-quiet-silent ()

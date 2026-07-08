@@ -130,12 +130,20 @@
           (char=? char #\return)))
 
     (define (repl--blank? string)
-      "Return #t when STRING is empty or contains only whitespace."
+      "Return #t when STRING contains only whitespace or line comments."
       (let ((length (string-length string)))
         (let loop ((index 0))
           (cond
            ((>= index length) #t)
            ((repl--whitespace? (string-ref string index)) (loop (+ index 1)))
+           ((char=? (string-ref string index) #\;)
+            (let skip-comment ((comment-index (+ index 1)))
+              (cond
+               ((>= comment-index length) #t)
+               ((or (char=? (string-ref string comment-index) #\newline)
+                    (char=? (string-ref string comment-index) #\return))
+                (loop comment-index))
+               (else (skip-comment (+ comment-index 1))))))
            (else #f)))))
 
     (define (repl--ends-with-newline? string)
