@@ -856,6 +856,163 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
                (mapcar #'consent--library-binding-name
                        (consent--library-exports library)))))))
 
+(defun consent-library-test--primitive-declaration-entry
+    (&optional primitive-exports provider)
+  "Return a parsed primitive declaration fixture catalog entry."
+  (car
+   (consent--library-catalog-parse-manifest
+    (consent-read
+     (format
+      "(library-catalog
+        (manifest-entry
+         (schema-version 1)
+         (kind primitive-library)
+         (name (fixture reflect))
+         (owner agent)
+         (provider %s)
+         (visibility public)
+         (layer api)
+         (source-kind primitive-library)
+         (source (implementation-id fixture-reflect))
+         (api-version (compat 0))
+         (source-version runtime)
+         (realization host-primitive)
+         (exports (fixture-current))
+         (primitive-exports
+          %s)
+         (dependencies ((library (scheme base))))
+         (effects (reflection))
+         (capabilities ())
+         (provenance ((origin test)))
+         (status implemented)
+         (canonical #t)))"
+      (or provider 'fixture-provider)
+      (or primitive-exports
+          "((name fixture-current)
+            (primitive primitive-fixture-current)
+            (arity 0 0)
+            (effects (reflection))
+            (capabilities ()))")))
+    'primitive-declaration-fixture
+    'primitive-declaration-fixture)))
+
+(ert-deftest consent-library-test-agent-reflect-declares-provider-primitives ()
+  "Represent `(agent reflect)' primitive exports as provider-owned metadata."
+  (let* ((entry
+          (consent--library-collection-manifest-entry "(agent reflect)"))
+         (declaration
+          (consent--primitive-library-declaration-for-entry entry))
+         (current-budget
+          (cl-find "current-budget"
+                   (plist-get declaration :primitive-exports)
+                   :key (lambda (export)
+                          (plist-get export :name))
+                   :test #'equal)))
+    (should declaration)
+    (should (eq (plist-get declaration :kind) 'primitive-library))
+    (should (eq (plist-get declaration :visibility) 'public))
+    (should (eq (plist-get declaration :layer) 'api))
+    (should (eq (plist-get declaration :owner) 'agent))
+    (should (eq (plist-get declaration :provider) 'host-adapter))
+    (should current-budget)
+    (should (eq (plist-get current-budget :primitive)
+                'primitive-current-budget))
+    (should (equal (plist-get current-budget :arity) '(0 0)))
+    (should (equal (plist-get current-budget :effects)
+                   '(reflection)))
+    (should (equal (plist-get current-budget :capabilities) '()))))
+
+(ert-deftest consent-library-test-agent-reflect-materializes-from-declaration ()
+  "Use provider declarations instead of the old reflect primitive-spec list."
+  (require 'consent-reflect)
+  (let* ((context (consent--new-eval-context nil))
+         (environment (consent-make-base-environment))
+         (entry
+          (consent--library-collection-manifest-entry "(agent reflect)")))
+    (cl-letf (((symbol-function 'consent-reflect-primitive-specs)
+               (lambda ()
+                 (error "legacy reflect spec list should not be used"))))
+      (consent--register-manifest-implementation-library
+       entry context environment))
+    (let* ((library
+            (gethash "(agent reflect)"
+                     (consent--eval-context-libraries context)))
+           (exports
+            (mapcar #'consent--library-binding-name
+                    (consent--library-exports library))))
+      (should library)
+      (should (member "current-budget" exports))
+      (should (member "library-info" exports)))))
+
+(ert-deftest consent-library-test-primitive-declaration-registry-conflicts ()
+  "Validate deterministic duplicate and conflicting provider declarations."
+  (let ((consent--primitive-library-provider-declarations nil))
+    (let ((entry (consent-library-test--primitive-declaration-entry)))
+      (should (consent--primitive-library-register-declaration entry))
+      (should (consent--primitive-library-register-declaration entry))
+      (should-error
+       (consent--primitive-library-register-declaration
+        (consent-library-test--primitive-declaration-entry
+         "((name fixture-current)
+           (primitive primitive-fixture-current)
+           (arity 0 0)
+           (effects (state-read reflection))
+           (capabilities ()))"))
+       :type 'consent-eval-error)
+      (should-error
+       (consent--primitive-library-register-declaration
+        (consent-library-test--primitive-declaration-entry nil 'other-provider))
+       :type 'consent-eval-error)
+      (should
+       (consent--primitive-library-register-declaration
+        (consent-library-test--primitive-declaration-entry
+         "((name fixture-current)
+           (primitive primitive-fixture-current)
+           (arity 0 0)
+           (effects (state-read reflection))
+           (capabilities ()))")
+        t))
+      (should
+       (consent--primitive-library-remove-declaration
+        "(fixture reflect)"
+        'fixture-provider))
+      (should-not
+       (consent--primitive-library-declaration-for-name
+        "(fixture reflect)")))))
+
+(ert-deftest consent-library-test-primitive-declaration-validates-metadata ()
+  "Reject primitive declarations that omit required export metadata."
+  (should-error
+   (consent--primitive-library-validate-declaration
+    (consent-library-test--primitive-declaration-entry
+     "((name fixture-current)
+       (primitive primitive-fixture-current)
+       (effects (reflection))
+       (capabilities ()))"))
+   :type 'consent-eval-error)
+  (should-error
+   (consent--primitive-library-validate-declaration
+    (consent-library-test--primitive-declaration-entry
+     "((name fixture-current)
+       (primitive primitive-fixture-current)
+       (arity 0 0)
+       (capabilities ()))"))
+   :type 'consent-eval-error)
+  (should-error
+   (consent--primitive-library-validate-declaration
+    (consent-library-test--primitive-declaration-entry
+     "((name fixture-current)
+       (primitive primitive-fixture-current)
+       (arity 0 0)
+       (effects (reflection))
+       (capabilities ()))
+      ((name fixture-current)
+       (primitive primitive-fixture-current-again)
+       (arity 0 0)
+       (effects (reflection))
+       (capabilities ()))"))
+   :type 'consent-eval-error))
+
 (ert-deftest consent-library-test-primitive-manifests-declare-exports ()
   "Require primitive manifest entries to carry explicit export metadata."
   (dolist (entry (cl-remove-if-not

@@ -1396,6 +1396,99 @@ can classify a recent error or a nested evaluation's outcome."
      (list (consent-reflect--symbol "macroexpand") result))
     result))
 
+(defconst consent-reflect--primitive-implementation-table
+  `((primitive-consent-version
+     . ,#'consent-reflect--primitive-consent-version)
+    (primitive-current-capabilities
+     . ,#'consent-reflect--primitive-current-capabilities)
+    (primitive-current-policy
+     . ,#'consent-reflect--primitive-current-policy)
+    (primitive-current-budget
+     . ,#'consent-reflect--primitive-current-budget)
+    (primitive-budget-remaining
+     . ,#'consent-reflect--primitive-budget-remaining)
+    (primitive-budget-exhausted?
+     . ,#'consent-reflect--primitive-budget-exhausted-p)
+    (primitive-budget-yield
+     . ,#'consent-reflect--primitive-budget-yield)
+    (primitive-current-imports
+     . ,#'consent-reflect--primitive-current-imports)
+    (primitive-library-bindings
+     . ,#'consent-reflect--primitive-library-bindings)
+    (primitive-libraries
+     . ,#'consent-reflect--primitive-libraries)
+    (primitive-library-info
+     . ,#'consent-reflect--primitive-library-info)
+    (primitive-library-search
+     . ,#'consent-reflect--primitive-library-search)
+    (primitive-catalog-sources
+     . ,#'consent-reflect--primitive-catalog-sources)
+    (primitive-catalog-diagnostics
+     . ,#'consent-reflect--primitive-catalog-diagnostics)
+    (primitive-add-manifest!
+     . ,#'consent-reflect--primitive-add-manifest!)
+    (primitive-remove-manifest!
+     . ,#'consent-reflect--primitive-remove-manifest!)
+    (primitive-add-manifest-root!
+     . ,#'consent-reflect--primitive-add-manifest-root!)
+    (primitive-remove-manifest-root!
+     . ,#'consent-reflect--primitive-remove-manifest-root!)
+    (primitive-refresh-library-catalog!
+     . ,#'consent-reflect--primitive-refresh-library-catalog!)
+    (primitive-library-documentation
+     . ,#'consent-reflect--primitive-library-documentation)
+    (primitive-binding-libraries
+     . ,#'consent-reflect--primitive-binding-libraries)
+    (primitive-documented-bindings
+     . ,#'consent-reflect--primitive-documented-bindings)
+    (primitive-apropos
+     . ,#'consent-reflect--primitive-apropos)
+    (primitive-reflection-field
+     . ,#'consent-reflect--primitive-reflection-field)
+    (primitive-documentation-field
+     . ,#'consent-reflect--primitive-documentation-field)
+    (primitive-docstring
+     . ,#'consent-reflect--primitive-docstring)
+    (primitive-current-session-info
+     . ,#'consent-reflect--primitive-current-session-info)
+    (primitive-recent-yields
+     . ,#'consent-reflect--primitive-recent-yields)
+    (primitive-recent-errors
+     . ,#'consent-reflect--primitive-recent-errors)
+    (primitive-recent-policy-decisions
+     . ,#'consent-reflect--primitive-recent-policy-decisions)
+    (primitive-capability-info
+     . ,#'consent-reflect--primitive-capability-info)
+    (primitive-documentation
+     . ,#'consent-reflect--primitive-documentation)
+    (primitive-consent-doc
+     . ,#'consent-reflect--primitive-consent-doc)
+    (primitive-consent-describe
+     . ,#'consent-reflect--primitive-consent-describe)
+    (primitive-macroexpand
+     . ,#'consent-reflect--primitive-macroexpand)
+    (primitive-macroexpand-1
+     . ,#'consent-reflect--primitive-macroexpand-1)
+    (primitive-macroexpand-library
+     . ,#'consent-reflect--primitive-macroexpand-library)
+    (primitive-macro-binding-info
+     . ,#'consent-reflect--primitive-macro-binding-info)
+    (primitive-syntax-source
+     . ,#'consent-reflect--primitive-syntax-source)
+    (primitive-macroexpand-yield
+     . ,#'consent-reflect--primitive-macroexpand-yield))
+  "Provider-owned primitive implementation table for `(agent reflect)'.")
+
+(defun consent-reflect-primitive-implementation (primitive)
+  "Return implementation function for provider-owned PRIMITIVE."
+  (let ((entry
+         (assq primitive consent-reflect--primitive-implementation-table)))
+    (if entry
+        (cdr entry)
+      (consent--eval-error
+       "unknown `(agent reflect)' primitive implementation: %s"
+       primitive))))
+
 ;;;###autoload
 (defun consent-reflect-primitive-specs ()
   "Return primitive specs for the `(agent reflect)' library."

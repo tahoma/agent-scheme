@@ -295,6 +295,39 @@ and `(emacs buffer)` from being special cases in resolver code. #681 owns the
 provider-owned primitive declaration registry; this shared schema is the
 metadata vocabulary that registry consumes.
 
+## Provider-Owned Primitive Declarations
+
+Primitive libraries may add provider-owned export metadata without making the
+resolver enumerate the provider's primitive surface. The manifest keeps the
+existing flat `exports` list as the catalog-visible binding list and adds
+`primitive-exports` for per-binding primitive metadata:
+
+```scheme
+(primitive-exports
+ ((name current-budget)
+  (primitive primitive-current-budget)
+  (arity 0 0)
+  (effects (reflection))
+  (capabilities ()))
+ ((name budget-yield)
+  (primitive primitive-budget-yield)
+  (arity 0 0)
+  (effects (state-write reflection))
+  (capabilities ())))
+```
+
+Each primitive export must declare its Scheme-visible `name`, primitive
+implementation identifier, exact arity range, effect metadata, and capability
+requirements. The resolver validates declarations, checks duplicate and
+conflicting provider entries, and preserves metadata inspection without loading
+the implementation module. Host implementation functions are materialized only
+when the selected primitive library is imported.
+
+The `(agent reflect)` library is the pilot provider-owned primitive declaration.
+Remaining primitive libraries still use the legacy `implementation-id` routing
+table until package/root resolution (#50), realization/parity metadata (#486),
+or a dedicated migration issue moves them to the same declaration path.
+
 ## Exports
 
 Repo-owned built-in collection manifest entries that own an implementation
