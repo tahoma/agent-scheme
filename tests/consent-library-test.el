@@ -1043,6 +1043,7 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
     (should (equal (consent-datum->external (plist-get alias :api-version))
                    "(inherits (stdlib json))"))
     (should (eq (plist-get alias :realization) 'alias))
+    (should-not (consent--library-collection-manifest-entry "(srfi manifest)"))
 
     (should (= (plist-get index :schema-version) 1))
     (should (eq (plist-get index :kind) 'library))
