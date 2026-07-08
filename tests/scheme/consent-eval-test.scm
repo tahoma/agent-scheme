@@ -5341,10 +5341,10 @@
                         '((internal-libraries-allowed . #t))
                         "4")
 
-;; Agent model libraries with public primitive counterparts still need to
+;; Public agent-domain libraries with primitive counterparts still need to
 ;; self-host under the internal-libraries grant so runtime internals can import
-;; their portable store helpers.
-(check-external/options 'internal-agent-model-library-self-hosts-from-source
+;; their portable store helpers while attaching host effects.
+(check-external/options 'internal-agent-primitive-library-self-hosts-from-source
                         "(import (agent approval))
                          (consent-approval-store?
                           (consent-make-approval-store))"

@@ -560,6 +560,15 @@ Agent interaction libraries live under `agent`:
 (agent context)
 ```
 
+Agent-domain libraries are real public APIs, not veneers over private model
+libraries. Their host-neutral records, stores, predicates, and pure
+transformations live in the public `(agent <domain>)` source library. Host
+effects for those domains are attached through internal primitive backing
+libraries such as `(agent memory primitive)`. Backend model providers use the
+separate `(agent models)` family: `(agent models)` is the public routing and
+tool-protocol API, `(agent models <provider>)` names provider adapters, and
+`(agent models primitive)` supplies host-owned routing or live transport effects.
+
 Standard Scheme bindings, host capabilities, and agent interaction bindings
 should remain discoverable as separate categories.
 

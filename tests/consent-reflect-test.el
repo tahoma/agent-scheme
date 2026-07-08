@@ -658,7 +658,7 @@
        (field (library-info '(emacs buffer)) 'availability)
        (field (library-info '(emacs buffer)) 'availability-condition))")
     (concat
-     "(public public-consent alias internal-runtime internal-agent-model "
+     "(public public-consent alias internal-runtime internal-agent-primitive "
      "optional (host emacs))"))))
 
 (ert-deftest consent-reflect-test-documented-bindings-and-apropos-stress ()
