@@ -2777,6 +2777,12 @@
                     (else 'missing)))"
                 "(ok base)")
 
+(check-external 'cond-expand-selects-consent-feature
+                "(cond-expand
+                   (consent 'ok)
+                   (else 'missing))"
+                "ok")
+
 (check-result-contains 'macroexpand-one-step-record
                        "(import (scheme base) (agent reflect))
                         (define-syntax my-unless

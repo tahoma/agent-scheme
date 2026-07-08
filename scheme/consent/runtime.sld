@@ -348,25 +348,11 @@
           parse-formals)
   (import (scheme base)
           (scheme char)
+          (only (scheme process-context)
+                get-environment-variable)
           (consent version)
           (consent reader)
           (agent redaction))
-  (cond-expand
-   (consent
-    (begin
-      (define (consent-environment-library-search-directories)
-        "Return the host-injected library search roots available at import time."
-        '())))
-   (else
-    (import (only (scheme process-context)
-                  get-environment-variable))
-    (begin
-      (define (consent-environment-library-search-directories)
-        "Return host-provided library search roots from CONSENT_LIBRARY_PATH."
-        (let ((value (get-environment-variable "CONSENT_LIBRARY_PATH")))
-          (if (and value (< 0 (string-length value)))
-              (consent-split-path-list value)
-              '()))))))
   (begin
     ;; Default evaluator step budget for one expansion or evaluation run.
     (define consent-default-maximum-steps 100000)
@@ -428,6 +414,17 @@
                   (consent-path-list-add-segment text start index result)))
            (else
             (loop (+ index 1) start result))))))
+
+    (define (consent-environment-library-search-directories)
+      "Return host-provided library search roots from CONSENT_LIBRARY_PATH."
+      (cond-expand
+       (consent
+        '())
+       (else
+        (let ((value (get-environment-variable "CONSENT_LIBRARY_PATH")))
+          (if (and value (< 0 (string-length value)))
+              (consent-split-path-list value)
+              '())))))
 
     ;; Host-injected library/source resolution context (host/core boundary).
     ;; The portable core reads its prelude, syntax prelude, and source-backed
