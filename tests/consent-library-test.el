@@ -923,15 +923,18 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
     (should (equal (plist-get current-budget :capabilities) '()))))
 
 (ert-deftest consent-library-test-agent-reflect-materializes-from-declaration ()
-  "Use provider declarations instead of the old reflect primitive-spec list."
+  "Use provider declarations and the reflect implementation resolver."
   (require 'consent-reflect)
   (let* ((context (consent--new-eval-context nil))
          (environment (consent-make-base-environment))
          (entry
-          (consent--library-collection-manifest-entry "(agent reflect)")))
-    (cl-letf (((symbol-function 'consent-reflect-primitive-specs)
-               (lambda ()
-                 (error "legacy reflect spec list should not be used"))))
+          (consent--library-collection-manifest-entry "(agent reflect)"))
+         (resolver (symbol-function 'consent-reflect-primitive-implementation))
+         (resolved nil))
+    (cl-letf (((symbol-function 'consent-reflect-primitive-implementation)
+               (lambda (primitive)
+                 (push primitive resolved)
+                 (funcall resolver primitive))))
       (consent--register-manifest-implementation-library
        entry context environment))
     (let* ((library
@@ -942,7 +945,13 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
                     (consent--library-exports library))))
       (should library)
       (should (member "current-budget" exports))
-      (should (member "library-info" exports)))))
+      (should (member "library-info" exports))
+      (should (memq 'primitive-current-budget resolved)))))
+
+(ert-deftest consent-library-test-agent-reflect-retires-legacy-primitive-specs ()
+  "Do not keep a second source of truth for `(agent reflect)' primitives."
+  (require 'consent-reflect)
+  (should-not (fboundp 'consent-reflect-primitive-specs)))
 
 (ert-deftest consent-library-test-primitive-declaration-registry-conflicts ()
   "Validate deterministic duplicate and conflicting provider declarations."
