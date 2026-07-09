@@ -88,7 +88,6 @@
 (declare-function consent-plan-primitive-specs "consent-plan")
 (declare-function consent-redaction-primitive-specs "consent-redaction")
 (declare-function consent-reflect-primitive-implementation "consent-reflect")
-(declare-function consent-reflect-primitive-specs "consent-reflect")
 (declare-function consent-test-primitive-specs "consent-test")
 
 (cl-defstruct (consent--library-binding
