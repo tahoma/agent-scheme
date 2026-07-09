@@ -3414,26 +3414,6 @@ DESCRIPTION names the primitive for errors."
      (consent--equal-p left right (make-hash-table :test #'eq)))
    "assoc"))
 
-(defun consent--primitive-caar (arguments _context)
-  "Primitive caar over ARGUMENTS."
-  (consent--primitive-car
-   (list (consent--primitive-car arguments nil)) nil))
-
-(defun consent--primitive-cadr (arguments _context)
-  "Primitive cadr over ARGUMENTS."
-  (consent--primitive-car
-   (list (consent--primitive-cdr arguments nil)) nil))
-
-(defun consent--primitive-cdar (arguments _context)
-  "Primitive cdar over ARGUMENTS."
-  (consent--primitive-cdr
-   (list (consent--primitive-car arguments nil)) nil))
-
-(defun consent--primitive-cddr (arguments _context)
-  "Primitive cddr over ARGUMENTS."
-  (consent--primitive-cdr
-   (list (consent--primitive-cdr arguments nil)) nil))
-
 (defun consent--primitive-boolean=? (arguments _context)
   "Primitive boolean=? over ARGUMENTS."
   (let ((first (car arguments))

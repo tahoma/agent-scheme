@@ -1548,6 +1548,8 @@
 (let* ((source-specs (consent-standard-source-library-specs))
        (case-lambda-spec
         (find-source-library-spec '(scheme case-lambda) source-specs))
+       (cxr-spec
+        (find-source-library-spec '(scheme cxr) source-specs))
        (lazy-spec
         (find-source-library-spec '(scheme lazy) source-specs)))
   (check 'standard-source-library-case-lambda-exports
@@ -1558,16 +1560,28 @@
          (and lazy-spec
               (cadr (assq 'exports lazy-spec)))
          '(delay delay-force force make-promise promise?))
+  (check 'standard-source-library-cxr-exports
+         (and cxr-spec
+              (cadr (assq 'exports cxr-spec)))
+         '(caaar caadr cadar caddr cdaar cdadr cddar cdddr
+           caaaar caaadr caadar caaddr cadaar cadadr caddar cadddr
+           cdaaar cdaadr cdadar cdaddr cddaar cddadr cdddar cddddr))
   (check 'standard-source-library-files
          (and case-lambda-spec
+              cxr-spec
               lazy-spec
               (string? (cadr (assq 'source-file case-lambda-spec)))
+              (string? (cadr (assq 'source-file cxr-spec)))
               (string? (cadr (assq 'source-file lazy-spec))))
          #t)
   (check 'standard-source-library-case-lambda-file
          (and case-lambda-spec
               (cadr (assq 'source-file case-lambda-spec)))
          "consent/case-lambda.sld")
+  (check 'standard-source-library-cxr-file
+         (and cxr-spec
+              (cadr (assq 'source-file cxr-spec)))
+         "consent/cxr.sld")
   (check 'standard-source-library-lazy-file
          (and lazy-spec
               (cadr (assq 'source-file lazy-spec)))

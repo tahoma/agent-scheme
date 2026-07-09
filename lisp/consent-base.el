@@ -1286,28 +1286,6 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
                (plist-get spec :name)))))
    consent--standard-primitive-manifest-specs))
 
-(defun consent--standard-cxr-primitive-p (primitive)
-  "Return non-nil when PRIMITIVE names a generated CXR accessor."
-  (string-match-p "\\`primitive-c[ad][ad]+r\\'" (symbol-name primitive)))
-
-(defun consent--standard-cxr-primitive-name (primitive)
-  "Return Scheme-visible CXR name for PRIMITIVE."
-  (substring (symbol-name primitive) (length "primitive-")))
-
-(defun consent--standard-cxr-primitive (primitive)
-  "Return generated CXR implementation for PRIMITIVE."
-  (let* ((name (consent--standard-cxr-primitive-name primitive))
-         (steps (reverse (string-to-list
-                          (substring name 1 (1- (length name)))))))
-    (lambda (arguments _context)
-      (let ((value (car arguments)))
-        (dolist (step steps)
-          (setq value
-                (if (= step ?a)
-                    (consent--primitive-car (list value) nil)
-                  (consent--primitive-cdr (list value) nil))))
-        value))))
-
 (defun consent--standard-policy-denied-primitive (name)
   "Return a default-denied process primitive for NAME."
   (lambda (_arguments context)
@@ -1331,14 +1309,12 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
     ('primitive-exit
      (consent--standard-policy-denied-primitive "exit"))
     (_
-     (if (consent--standard-cxr-primitive-p primitive)
-         (consent--standard-cxr-primitive primitive)
-       (let ((function (consent--standard-primitive-function-symbol primitive)))
-         (unless (fboundp function)
-           (consent--eval-error
-            "unknown standard primitive implementation: %s"
-            primitive))
-         function)))))
+     (let ((function (consent--standard-primitive-function-symbol primitive)))
+       (unless (fboundp function)
+         (consent--eval-error
+          "unknown standard primitive implementation: %s"
+          primitive))
+       function))))
 
 (defun consent--prelude-manifest-spec (spec)
   "Return manifest metadata for portable prelude SPEC."
