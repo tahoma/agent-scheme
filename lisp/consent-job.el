@@ -611,16 +611,23 @@ OPTIONS may contain `:after' with the number of already-observed events."
       (consent-job--symbol status)
     consent-false))
 
+(defconst consent-job--primitive-implementation-table
+  `((primitive-job-start! . ,#'consent-job--primitive-start)
+    (primitive-job-ref . ,#'consent-job--primitive-ref)
+    (primitive-job-list . ,#'consent-job--primitive-list)
+    (primitive-job-cancel! . ,#'consent-job--primitive-cancel)
+    (primitive-job-interrupt! . ,#'consent-job--primitive-interrupt)
+    (primitive-job-yields . ,#'consent-job--primitive-yields)
+    (primitive-job-status . ,#'consent-job--primitive-status))
+  "Provider-owned primitive implementations for `(agent job)'.")
+
 ;;;###autoload
-(defun consent-job-primitive-specs ()
-  "Return primitive specs for the `(agent job)' library."
-  `(("job-start!" ,#'consent-job--primitive-start 3 3)
-    ("job-ref" ,#'consent-job--primitive-ref 1 1)
-    ("job-list" ,#'consent-job--primitive-list 0 1)
-    ("job-cancel!" ,#'consent-job--primitive-cancel 1 1)
-    ("job-interrupt!" ,#'consent-job--primitive-interrupt 2 2)
-    ("job-yields" ,#'consent-job--primitive-yields 1 2)
-    ("job-status" ,#'consent-job--primitive-status 1 1)))
+(defun consent-job-primitive-implementation (primitive)
+  "Return `(agent job)' implementation for PRIMITIVE."
+  (consent--primitive-implementation-from-table
+   primitive
+   consent-job--primitive-implementation-table
+   "`(agent job)'"))
 
 (provide 'consent-job)
 

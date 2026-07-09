@@ -2755,122 +2755,6 @@
             value-environment
             (library-syntax-environment library))))))
 
-    (define (memory-library-primitive-specs)
-      "Return host adapter primitive specs layered over `(agent memory)'."
-      (list
-       (library-primitive-spec 'memory-put! 'primitive-memory-put! 3 3)
-       (library-primitive-spec 'memory-ref 'primitive-memory-ref 2 2)
-       (library-primitive-spec 'memory-delete! 'primitive-memory-delete! 2 2)
-       (library-primitive-spec 'memory-add! 'primitive-memory-add! 3 3)
-       (library-primitive-spec 'memory-find 'primitive-memory-find 2 2)
-       (library-primitive-spec 'memory-by-tag 'primitive-memory-by-tag 2 2)
-       (library-primitive-spec 'memory-recent 'primitive-memory-recent 2 2)
-       (library-primitive-spec 'memory-access! 'primitive-memory-access! 3 3)
-       (library-primitive-spec 'memory-reflect! 'primitive-memory-reflect! 6 6)
-       (library-primitive-spec 'memory-select 'primitive-memory-select 4 4)
-       (library-primitive-spec 'memory-yield 'primitive-memory-yield 2 2)))
-
-    (define (session-library-primitive-specs)
-      "Return primitive specs for the manifest `agent-session` implementation."
-      (list
-       (library-primitive-spec 'create-session
-                               'primitive-create-session
-                               0
-                               2)
-       (library-primitive-spec 'switch-session
-                               'primitive-switch-session
-                               1
-                               1)
-       (library-primitive-spec 'set-default-session!
-                               'primitive-switch-session
-                               1
-                               1)
-       (library-primitive-spec 'current-session
-                               'primitive-current-session
-                               0
-                               0)
-       (library-primitive-spec 'list-sessions
-                               'primitive-list-sessions
-                               0
-                               1)
-       (library-primitive-spec 'close-session
-                               'primitive-close-session
-                               1
-                               1)))
-
-    (define (char-library-specs)
-      "Return primitive specs for `(scheme char)'."
-      (list
-       (library-primitive-spec 'char-alphabetic? 'primitive-char-alphabetic? 1 1)
-       (library-primitive-spec 'char-ci<=? 'primitive-char-ci<=? 2 #f)
-       (library-primitive-spec 'char-ci<? 'primitive-char-ci<? 2 #f)
-       (library-primitive-spec 'char-ci=? 'primitive-char-ci=? 2 #f)
-       (library-primitive-spec 'char-ci>=? 'primitive-char-ci>=? 2 #f)
-       (library-primitive-spec 'char-ci>? 'primitive-char-ci>? 2 #f)
-       (library-primitive-spec 'char-downcase 'primitive-char-downcase 1 1)
-       (library-primitive-spec 'char-foldcase 'primitive-char-foldcase 1 1)
-       (library-primitive-spec 'char-lower-case? 'primitive-char-lower-case? 1 1)
-       (library-primitive-spec 'char-numeric? 'primitive-char-numeric? 1 1)
-       (library-primitive-spec 'char-upcase 'primitive-char-upcase 1 1)
-       (library-primitive-spec 'char-upper-case? 'primitive-char-upper-case? 1 1)
-       (library-primitive-spec 'char-whitespace? 'primitive-char-whitespace? 1 1)
-       (library-primitive-spec 'digit-value 'primitive-digit-value 1 1)
-       (library-primitive-spec 'string-ci<=? 'primitive-string-ci<=? 2 #f)
-       (library-primitive-spec 'string-ci<? 'primitive-string-ci<? 2 #f)
-       (library-primitive-spec 'string-ci=? 'primitive-string-ci=? 2 #f)
-       (library-primitive-spec 'string-ci>=? 'primitive-string-ci>=? 2 #f)
-       (library-primitive-spec 'string-ci>? 'primitive-string-ci>? 2 #f)
-       (library-primitive-spec 'string-downcase 'primitive-string-downcase 1 1)
-       (library-primitive-spec 'string-foldcase 'primitive-string-foldcase 1 1)
-       (library-primitive-spec 'string-upcase 'primitive-string-upcase 1 1)))
-
-    (define (primitive-cxr-function name)
-      "Implement the `cxr-function` primitive with argument validation and"
-      "Consent Scheme values."
-      (let ((text (symbol->string name)))
-        (lambda (arguments context)
-          (let loop ((index (- (string-length text) 2))
-                     (value (car arguments)))
-            (if (= index 0)
-                value
-                (let ((step (string-ref text index)))
-                  (loop (- index 1)
-                        (cond
-                         ((char=? step #\a)
-                          ((library-primitive-implementation 'primitive-car)
-                           (list value) context))
-                         ((char=? step #\d)
-                          ((library-primitive-implementation 'primitive-cdr)
-                           (list value) context))
-                         (else
-                          (eval-error "invalid cxr name" name))))))))))
-
-    (define (cxr-library-specs entry)
-      "Return primitive specs for manifest CXR library ENTRY."
-      (map (lambda (name)
-             (list name (primitive-cxr-function name) 1 1))
-           (collection-entry-field entry 'exports '())))
-
-    (define (inexact-library-specs)
-      "Return primitive specs for `(scheme inexact)'."
-      (list
-       (library-primitive-spec 'acos 'primitive-acos 1 1)
-       (library-primitive-spec 'asin 'primitive-asin 1 1)
-       (library-primitive-spec 'atan 'primitive-atan 1 2)
-       (library-primitive-spec 'cos 'primitive-cos 1 1)
-       (library-primitive-spec 'exp 'primitive-exp 1 1)
-       (library-primitive-spec 'finite? 'primitive-finite? 1 1)
-       (library-primitive-spec 'infinite? 'primitive-infinite? 1 1)
-       (library-primitive-spec 'log 'primitive-log 1 2)
-       (library-primitive-spec 'nan? 'primitive-nan? 1 1)
-       (library-primitive-spec 'sin 'primitive-sin 1 1)
-       (library-primitive-spec 'sqrt 'primitive-sqrt 1 1)
-       (library-primitive-spec 'tan 'primitive-tan 1 1)))
-
-    (define (policy-denied-spec name)
-      "Return a primitive spec that always raises a policy-denied error."
-      (list name (library-policy-denied-primitive (symbol->string name)) 0 #f))
-
     (define (primitive-library-required-field entry field description)
       "Return FIELD from ENTRY or raise DESCRIPTION."
       (let ((cell (assq field entry)))
@@ -2976,6 +2860,11 @@
                                 declaration
                                 'implementation-id
                                 "primitive-library declaration"))
+            (implementation-resolver
+             (primitive-library-required-field
+              declaration
+              'implementation-resolver
+              "primitive-library declaration"))
             (exports (primitive-library-required-field
                       declaration
                       'exports
@@ -2991,7 +2880,8 @@
                       (symbol? provider)
                       (symbol? visibility)
                       (symbol? layer)
-                      (symbol? implementation-id)))
+                      (symbol? implementation-id)
+                      (not (null? implementation-resolver))))
             (eval-error
              "primitive-library declaration has invalid identity metadata"
              name))
@@ -3094,344 +2984,7 @@
       "Return primitive specs for manifest ENTRY, or #f when unavailable."
       (if (primitive-library-declaration? entry)
           (primitive-library-declaration-specs entry)
-          (let ((implementation-id
-                 (collection-entry-field entry 'implementation-id #f)))
-            (cond
-         ((eq? implementation-id 'scheme-char) (char-library-specs))
-         ((eq? implementation-id 'scheme-complex)
-          (list
-           (library-primitive-spec 'angle 'primitive-angle 1 1)
-           (library-primitive-spec 'imag-part 'primitive-imag-part 1 1)
-           (library-primitive-spec 'magnitude 'primitive-magnitude 1 1)
-           (library-primitive-spec 'make-polar 'primitive-make-polar 2 2)
-           (library-primitive-spec 'make-rectangular
-                                   'primitive-make-rectangular
-                                   2
-                                   2)
-           (library-primitive-spec 'real-part 'primitive-real-part 1 1)))
-         ((eq? implementation-id 'scheme-cxr) (cxr-library-specs entry))
-         ((eq? implementation-id 'scheme-eval)
-          (list
-           (library-primitive-spec 'environment 'primitive-environment 1 #f)
-           (library-primitive-spec 'eval 'primitive-eval 2 2)))
-         ((eq? implementation-id 'scheme-file)
-          (list
-           (library-primitive-spec 'call-with-input-file
-                                   'primitive-call-with-input-file
-                                   2
-                                   2)
-           (library-primitive-spec 'call-with-output-file
-                                   'primitive-call-with-output-file
-                                   2
-                                   2)
-           (library-primitive-spec 'delete-file 'primitive-delete-file 1 1)
-           (library-primitive-spec 'file-exists? 'primitive-file-exists? 1 1)
-           (library-primitive-spec 'open-binary-input-file
-                                   'primitive-open-binary-input-file
-                                   1
-                                   1)
-           (library-primitive-spec 'open-binary-output-file
-                                   'primitive-open-binary-output-file
-                                   1
-                                   1)
-           (library-primitive-spec 'open-input-file
-                                   'primitive-open-input-file
-                                   1
-                                   1)
-           (library-primitive-spec 'open-output-file
-                                   'primitive-open-output-file
-                                   1
-                                   1)
-           (library-primitive-spec 'with-input-from-file
-                                   'primitive-with-input-from-file
-                                   2
-                                   2)
-           (library-primitive-spec 'with-output-to-file
-                                   'primitive-with-output-to-file
-                                   2
-                                   2)))
-         ((eq? implementation-id 'scheme-inexact) (inexact-library-specs))
-         ((eq? implementation-id 'scheme-load)
-          (list (library-primitive-spec 'load 'primitive-load 1 2)))
-         ((eq? implementation-id 'scheme-process-context)
-          (append
-           (list
-            (library-primitive-spec 'command-line
-                                    'primitive-command-line
-                                    0
-                                    0))
-           (map policy-denied-spec '(emergency-exit exit))
-           (list
-            (library-primitive-spec 'get-environment-variable
-                                    'primitive-get-environment-variable
-                                    1
-                                    1)
-            (library-primitive-spec 'get-environment-variables
-                                    'primitive-get-environment-variables
-                                    0
-                                    0))))
-         ((eq? implementation-id 'scheme-read)
-          (list (library-primitive-spec 'read 'primitive-read 0 1)))
-         ((eq? implementation-id 'scheme-repl)
-          (list
-           (library-primitive-spec 'interaction-environment
-                                   'primitive-interaction-environment
-                                   0
-                                   0)))
-         ((eq? implementation-id 'scheme-time)
-          (list
-           (library-primitive-spec 'current-jiffy
-                                   'primitive-current-jiffy
-                                   0
-                                   0)
-           (library-primitive-spec 'current-second
-                                   'primitive-current-second
-                                   0
-                                   0)
-           (library-primitive-spec 'jiffies-per-second
-                                   'primitive-jiffies-per-second
-                                   0
-                                   0)))
-         ((eq? implementation-id 'scheme-write)
-          (list
-           (library-primitive-spec 'display 'primitive-display 1 2)
-           (library-primitive-spec 'write 'primitive-write 1 2)
-           (library-primitive-spec 'write-shared 'primitive-write-shared 1 2)
-           (library-primitive-spec 'write-simple 'primitive-write-simple 1 2)))
-         ((eq? implementation-id 'agent-io)
-          (list
-           (library-primitive-spec 'agent-yield 'primitive-agent-yield 1 1)
-           (library-primitive-spec 'agent-log 'primitive-agent-log 2 #f)
-           (library-primitive-spec 'agent-progress
-                                   'primitive-agent-progress
-                                   2
-                                   2)
-           (library-primitive-spec 'agent-warn 'primitive-agent-warn 1 #f)
-           (library-primitive-spec 'agent-request
-                                   'primitive-agent-request
-                                   1
-                                   1)))
-         ((eq? implementation-id 'agent-approval)
-          (list
-           (library-primitive-spec 'approval-request!
-                                   'primitive-approval-request!
-                                   1
-                                   1)
-           (library-primitive-spec 'approval-status
-                                   'primitive-approval-status
-                                   1
-                                   1)
-           (library-primitive-spec 'approval-cancel!
-                                   'primitive-approval-cancel!
-                                   1
-                                   1)
-           (library-primitive-spec 'approval-yield-pending
-                                   'primitive-approval-yield-pending
-                                   0
-                                   0)
-           (library-primitive-spec 'approval-resolve!
-                                   'primitive-approval-resolve!
-                                   2
-                                   2)))
-         ((eq? implementation-id 'agent-debugger)
-          (list
-           (library-primitive-spec 'current-error 'primitive-current-error 0 0)
-           (library-primitive-spec 'condition-stack
-                                   'primitive-condition-stack
-                                   1
-                                   1)
-           (library-primitive-spec 'condition-environment
-                                   'primitive-condition-environment
-                                   2
-                                   2)
-           (library-primitive-spec 'condition-restarts
-                                   'primitive-condition-restarts
-                                   1
-                                   1)
-           (library-primitive-spec 'restart-invoke!
-                                   'primitive-restart-invoke!
-                                   2
-                                   2)
-           (library-primitive-spec 'debugger-yield
-                                   'primitive-debugger-yield
-                                   1
-                                   1)))
-         ((eq? implementation-id 'agent-helper)
-          (list
-           (library-primitive-spec 'agent-artifact
-                                   'primitive-agent-artifact
-                                   2
-                                   2)
-           (library-primitive-spec 'agent-helper-save!
-                                   'primitive-agent-helper-save!
-                                   2
-                                   3)
-           (library-primitive-spec 'agent-helper-load
-                                   'primitive-agent-helper-load
-                                   1
-                                   2)
-           (library-primitive-spec 'agent-helper-list
-                                   'primitive-agent-helper-list
-                                   1
-                                   1)
-           (library-primitive-spec 'agent-helper-ref
-                                   'primitive-agent-helper-ref
-                                   1
-                                   2)
-           (library-primitive-spec 'agent-helper-promote-to-skill
-                                   'primitive-agent-helper-promote-to-skill
-                                   1
-                                   2)))
-         ((eq? implementation-id 'agent-job)
-          (list
-           (library-primitive-spec 'job-start! 'primitive-job-start! 3 3)
-           (library-primitive-spec 'job-ref 'primitive-job-ref 1 1)
-           (library-primitive-spec 'job-list 'primitive-job-list 0 1)
-           (library-primitive-spec 'job-cancel! 'primitive-job-cancel! 1 1)
-           (library-primitive-spec 'job-interrupt!
-                                   'primitive-job-interrupt!
-                                   2
-                                   2)
-           (library-primitive-spec 'job-yields 'primitive-job-yields 1 2)
-           (library-primitive-spec 'job-status 'primitive-job-status 1 1)))
-         ((eq? implementation-id 'agent-test)
-          (list
-           (library-primitive-spec 'agent-test-eval-source-result
-                                   'primitive-agent-test-eval-source-result
-                                   1
-                                   2)))
-         ((eq? implementation-id 'agent-memory)
-          (memory-library-primitive-specs))
-         ((eq? implementation-id 'agent-plan)
-          (list
-           (library-primitive-spec 'plan-create!
-                                   'primitive-plan-create!
-                                   1
-                                   1)
-           (library-primitive-spec 'plan-ref 'primitive-plan-ref 1 1)
-           (library-primitive-spec 'plan-list 'primitive-plan-list 1 1)
-           (library-primitive-spec 'plan-step-add!
-                                   'primitive-plan-step-add!
-                                   2
-                                   2)
-           (library-primitive-spec 'plan-step-status!
-                                   'primitive-plan-step-status!
-                                   3
-                                   3)
-           (library-primitive-spec 'plan-status!
-                                   'primitive-plan-status!
-                                   2
-                                   2)
-           (library-primitive-spec 'plan-yield 'primitive-plan-yield 1 1)))
-         ((eq? implementation-id 'agent-models)
-          (list
-           (library-primitive-spec 'primitive-model-provider-register!
-                                   'primitive-model-provider-register!
-                                   1
-                                   1)
-           (library-primitive-spec 'primitive-model-providers
-                                   'primitive-model-providers
-                                   0
-                                   0)
-           (library-primitive-spec 'primitive-model-route
-                                   'primitive-model-route
-                                   1
-                                   2)
-           (library-primitive-spec 'primitive-model-complete
-                                   'primitive-model-complete
-                                   2
-                                   3)
-           (library-primitive-spec 'primitive-model-provider-diagnostics
-                                   'primitive-model-provider-diagnostics
-                                   0
-                                   1)))
-         ((eq? implementation-id 'agent-context)
-          (list
-           (library-primitive-spec 'current-request
-                                   'primitive-current-request
-                                   0
-                                   0)
-           (library-primitive-spec 'current-focus
-                                   'primitive-current-focus
-                                   0
-                                   0)
-           (library-primitive-spec 'current-region-context
-                                   'primitive-current-region-context
-                                   0
-                                   0)
-           (library-primitive-spec 'current-buffer-context
-                                   'primitive-current-buffer-context
-                                   0
-                                   0)
-           (library-primitive-spec 'current-project-context
-                                   'primitive-current-project-context
-                                   0
-                                   0)
-           (library-primitive-spec 'current-conversation-summary
-                                   'primitive-current-conversation-summary
-                                   0
-                                   0)
-           (library-primitive-spec 'context-yield
-                                   'primitive-context-yield
-                                   1
-                                   1)))
-         ((eq? implementation-id 'agent-redaction)
-          (list
-           (library-primitive-spec 'secret-source?
-                                   'primitive-secret-source?
-                                   1
-                                   1)
-           (library-primitive-spec 'redact 'primitive-redact 2 2)
-           (library-primitive-spec 'context-local-only!
-                                   'primitive-context-local-only!
-                                   2
-                                   2)
-           (library-primitive-spec 'redaction-log
-                                   'primitive-redaction-log
-                                   0
-                                   1)
-           (library-primitive-spec 'safe-for-provider?
-                                   'primitive-safe-for-provider?
-                                   2
-                                   2)))
-         ((eq? implementation-id 'agent-session)
-          (session-library-primitive-specs))
-         ((eq? implementation-id 'consent-capability)
-          (list
-           (library-primitive-spec 'grant-capability!
-                                   'primitive-grant-capability!
-                                   1
-                                   1)
-           (library-primitive-spec 'current-grants
-                                   'primitive-current-grants
-                                   0
-                                   0)
-           (library-primitive-spec 'grant-ref 'primitive-grant-ref 1 1)
-           (library-primitive-spec 'grant-attenuate
-                                   'primitive-grant-attenuate
-                                   2
-                                   2)
-           (library-primitive-spec 'grant-revoke!
-                                   'primitive-grant-revoke!
-                                   1
-                                   1)
-           (library-primitive-spec 'call-with-capability-grant
-                                   'primitive-call-with-capability-grant
-                                   2
-                                   2)
-           (library-primitive-spec 'handle-ref 'primitive-handle-ref 1 1)
-           (library-primitive-spec 'handle-live? 'primitive-handle-live? 1 1)
-           (library-primitive-spec 'handle-kind 'primitive-handle-kind 1 1)
-           (library-primitive-spec 'handle-revalidate
-                                   'primitive-handle-revalidate
-                                   1
-                                   1)
-           (library-primitive-spec 'handle-release!
-                                   'primitive-handle-release!
-                                   1
-                                   1)))
-         (else
-          #f)))))
+          #f))
 
     (define (manifest-implementation-available? entry)
       "Report whether manifest ENTRY has an implementation on this host."
@@ -3441,9 +2994,8 @@
            (collection-entry-field entry 'name #f))
           #t)
          ((eq? kind 'primitive)
-          (if (primitive-library-declaration? entry)
-              (and (validate-primitive-library-declaration entry) #t)
-              (and (manifest-primitive-implementation-specs entry) #t)))
+          (guard (condition (else #f))
+            (and (manifest-primitive-implementation-specs entry) #t)))
          ((eq? kind 'derived)
           (eq? (collection-entry-field entry 'implementation-id #f)
                'scheme-r5rs))
@@ -3469,7 +3021,7 @@
         (if primitive-specs
             (manifest-filter-primitive-specs entry primitive-specs)
             (eval-error
-             "manifest primitive library has no implementation id"
+             "manifest primitive library lacks provider declaration"
              (collection-entry-field entry 'name #f)))))
 
     (define (manifest-library-routable? entry)
@@ -3548,9 +3100,9 @@
                (eq? (collection-entry-field entry 'implementation-id #f)
                     'scheme-r5rs))
           (register-r5rs-library! key context environment))
-         (else
+        (else
           (eval-error
-           "manifest primitive library has no implementation id"
+           "manifest library has no provider declaration or derived route"
            key)))))
 
     (define (library-available? name context environment)

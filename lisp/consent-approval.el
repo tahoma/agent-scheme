@@ -385,15 +385,22 @@ request passed to confirmation hooks and stored as the proposed effect."
    'approval-policy)
   (consent-approval-resolve! (car arguments) (cadr arguments)))
 
+(defconst consent-approval--primitive-implementation-table
+  `((primitive-approval-request! . ,#'consent-approval--primitive-request)
+    (primitive-approval-status . ,#'consent-approval--primitive-status)
+    (primitive-approval-cancel! . ,#'consent-approval--primitive-cancel)
+    (primitive-approval-yield-pending
+     . ,#'consent-approval--primitive-yield-pending)
+    (primitive-approval-resolve! . ,#'consent-approval--primitive-resolve))
+  "Provider-owned primitive implementations for `(agent approval)'.")
+
 ;;;###autoload
-(defun consent-approval-primitive-specs ()
-  "Return primitive specs for the `(agent approval)' library."
-  `(("approval-request!" ,#'consent-approval--primitive-request 1 1)
-    ("approval-status" ,#'consent-approval--primitive-status 1 1)
-    ("approval-cancel!" ,#'consent-approval--primitive-cancel 1 1)
-    ("approval-yield-pending"
-     ,#'consent-approval--primitive-yield-pending 0 0)
-    ("approval-resolve!" ,#'consent-approval--primitive-resolve 2 2)))
+(defun consent-approval-primitive-implementation (primitive)
+  "Return `(agent approval)' implementation for PRIMITIVE."
+  (consent--primitive-implementation-from-table
+   primitive
+   consent-approval--primitive-implementation-table
+   "`(agent approval)'"))
 
 (provide 'consent-approval)
 

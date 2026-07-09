@@ -281,19 +281,21 @@ The seed manifests currently use these source kinds:
   environment snapshot.
 - `source-library`: The resolver loads a checked-in `.sld` source file from the
   manifest root that declared the collection.
-- `primitive-library`: The resolver asks the host for the primitive
-  implementation identified by manifest `implementation-id`.
+- `primitive-library`: The resolver materializes provider-declared primitive
+  exports through the host resolver named by manifest `implementation-resolver`.
 - `derived`: The resolver derives the library from already-available libraries
   or runtime facilities; `(scheme r5rs)` is the current example.
 - `facade`: A public or documented facade whose availability may vary by host.
 - `alias`: The entry points at a target library and may optionally reduce the
   target's exported identifiers.
 
-Primitive routing is by manifest `implementation-id`, not by library-name
-prefix. This keeps names such as `(agent io)`, `(cli process-host primitive)`,
-and `(emacs buffer)` from being special cases in resolver code. #681 owns the
-provider-owned primitive declaration registry; this shared schema is the
-metadata vocabulary that registry consumes.
+Primitive routing is by provider-owned manifest declarations, not by library-name
+prefix or resolver-owned `implementation-id` switches. This keeps names such as
+`(agent io)`, `(cli process-host primitive)`, and `(emacs buffer)` from being
+special cases in resolver code. `implementation-id` remains provider identity
+metadata; `implementation-resolver` names the host module/procedure that
+materializes primitive implementations, and `primitive-exports` declares the
+binding surface.
 
 ## Provider-Owned Primitive Declarations
 
@@ -323,10 +325,11 @@ conflicting provider entries, and preserves metadata inspection without loading
 the implementation module. Host implementation functions are materialized only
 when the selected primitive library is imported.
 
-The `(agent reflect)` library is the pilot provider-owned primitive declaration.
-Remaining primitive libraries still use the legacy `implementation-id` routing
-table until package/root resolution (#50), realization/parity metadata (#486),
-or a dedicated migration issue moves them to the same declaration path.
+Repo-owned primitive libraries use provider-owned declarations instead of a
+resolver-owned routing table. Package/root precedence (#50), realization/parity
+reporting (#486), and generalized foreign-import schema work (#379) consume this
+data plane; they do not require the resolver to relearn each provider's exported
+primitive surface.
 
 ## Exports
 

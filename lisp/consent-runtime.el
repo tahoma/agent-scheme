@@ -447,6 +447,17 @@ base syntax prelude has already been installed."
 MESSAGE and ARGS are passed to `format'."
   (signal 'consent-eval-error (list (apply #'format message args))))
 
+(defun consent--primitive-implementation-from-table
+    (primitive table description)
+  "Return PRIMITIVE implementation from TABLE for DESCRIPTION."
+  (let ((entry (assq primitive table)))
+    (if entry
+        (cdr entry)
+      (consent--eval-error
+       "unknown %s primitive implementation: %s"
+       description
+       primitive))))
+
 (defun consent--budget-error (message &rest args)
   "Signal an Consent Scheme budget error.
 MESSAGE and ARGS are passed to `format'."

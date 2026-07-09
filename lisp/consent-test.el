@@ -101,13 +101,18 @@
      nil
      (consent-test--options-plist options))))
 
+(defconst consent-test--primitive-implementation-table
+  `((primitive-agent-test-eval-source-result
+     . ,#'consent-test--primitive-eval-source-result))
+  "Provider-owned primitive implementations for `(agent test primitive)'.")
+
 ;;;###autoload
-(defun consent-test-primitive-specs ()
-  "Return primitive specs for the `(agent test primitive)' library."
-  `(("agent-test-eval-source-result"
-     ,#'consent-test--primitive-eval-source-result
-     1
-     2)))
+(defun consent-test-primitive-implementation (primitive)
+  "Return `(agent test primitive)' implementation for PRIMITIVE."
+  (consent--primitive-implementation-from-table
+   primitive
+   consent-test--primitive-implementation-table
+   "`(agent test primitive)'"))
 
 (provide 'consent-test)
 

@@ -1260,23 +1260,29 @@ Retires the named session and clears the default session when it was current."
       (setq consent-session-current-id nil))
     datum))
 
-(defun consent--session-adapter-primitive-specs ()
-  "Return host adapter primitive specs layered over `(agent session)'."
-  `(("session-create!" ,#'consent-session--primitive-create 1 2)
-    ("session-ref" ,#'consent-session--primitive-ref 1 1)
-    ("session-list" ,#'consent-session--primitive-list 0 1)
-    ("session-handles" ,#'consent-session--primitive-handles 1 1)
-    ("session-suspend!" ,#'consent-session--primitive-suspend 1 1)
-    ("session-resume!" ,#'consent-session--primitive-resume 1 1)
-    ("session-snapshot!" ,#'consent-session--primitive-snapshot 1 2)
-    ("session-fork!" ,#'consent-session--primitive-fork 1 2)
-    ("session-retire!" ,#'consent-session--primitive-retire 1 1)
-    ("create-session" ,#'consent-session--primitive-create-session 0 2)
-    ("switch-session" ,#'consent-session--primitive-switch-session 1 1)
-    ("set-default-session!" ,#'consent-session--primitive-switch-session 1 1)
-    ("current-session" ,#'consent-session--primitive-current-session 0 0)
-    ("list-sessions" ,#'consent-session--primitive-list-sessions 0 1)
-    ("close-session" ,#'consent-session--primitive-close-session 1 1)))
+(defconst consent-session--primitive-implementation-table
+  `((primitive-session-create! . ,#'consent-session--primitive-create)
+    (primitive-session-ref . ,#'consent-session--primitive-ref)
+    (primitive-session-list . ,#'consent-session--primitive-list)
+    (primitive-session-handles . ,#'consent-session--primitive-handles)
+    (primitive-session-suspend! . ,#'consent-session--primitive-suspend)
+    (primitive-session-resume! . ,#'consent-session--primitive-resume)
+    (primitive-session-snapshot! . ,#'consent-session--primitive-snapshot)
+    (primitive-session-fork! . ,#'consent-session--primitive-fork)
+    (primitive-session-retire! . ,#'consent-session--primitive-retire)
+    (primitive-create-session . ,#'consent-session--primitive-create-session)
+    (primitive-switch-session . ,#'consent-session--primitive-switch-session)
+    (primitive-current-session . ,#'consent-session--primitive-current-session)
+    (primitive-list-sessions . ,#'consent-session--primitive-list-sessions)
+    (primitive-close-session . ,#'consent-session--primitive-close-session))
+  "Provider-owned primitive implementations for `(agent session)'.")
+
+(defun consent-session-primitive-implementation (primitive)
+  "Return `(agent session)' implementation for PRIMITIVE."
+  (consent--primitive-implementation-from-table
+   primitive
+   consent-session--primitive-implementation-table
+   "`(agent session)'"))
 
 (provide 'consent-session)
 

@@ -838,23 +838,17 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
      '(:internal-libraries-allowed t))
     "#t")))
 
-(ert-deftest consent-library-test-manifest-implementation-id-routes-primitives ()
-  "Use manifest implementation ids rather than library-name namespaces."
+(ert-deftest consent-library-test-primitive-library-requires-provider-declaration ()
+  "Reject primitive registration that relies only on implementation ids."
   (let* ((context (consent--new-eval-context nil))
          (environment (consent-make-base-environment))
          (entry (list :name "(custom io)"
                       :source-kind 'primitive
                       :implementation-id 'agent-io)))
-    (consent--register-manifest-implementation-library
-     entry context environment)
-    (let ((library
-           (gethash "(custom io)"
-                    (consent--eval-context-libraries context))))
-      (should library)
-      (should
-       (member "agent-yield"
-               (mapcar #'consent--library-binding-name
-                       (consent--library-exports library)))))))
+    (should-error
+     (consent--register-manifest-implementation-library
+      entry context environment)
+     :type 'consent-eval-error)))
 
 (defun consent-library-test--primitive-declaration-entry
     (&optional primitive-exports provider)
@@ -952,6 +946,38 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
   "Do not keep a second source of truth for `(agent reflect)' primitives."
   (require 'consent-reflect)
   (should-not (fboundp 'consent-reflect-primitive-specs)))
+
+(ert-deftest consent-library-test-primitive-libraries-declare-provider-exports ()
+  "All built-in primitive libraries should be declared by their providers."
+  (let (missing)
+    (dolist (entry (consent--library-collection-manifest-entries))
+      (when (eq (plist-get entry :kind) 'primitive-library)
+        (unless (and (plist-get entry :implementation-resolver)
+                     (plist-get entry :primitive-exports)
+                     (consent--primitive-library-declaration-for-entry entry))
+          (push (plist-get entry :name) missing))))
+    (should (equal (nreverse missing) nil))))
+
+(ert-deftest consent-library-test-manifest-file-primitives-keep-cps-dispatch ()
+  "Keep manifest-routed file callbacks on the evaluator's CPS primitive path."
+  (let* ((entry (consent--library-collection-manifest-entry "(scheme file)"))
+         (specs (consent--manifest-primitive-implementation-specs entry))
+         (spec (cl-find "call-with-input-file" specs
+                        :key #'car
+                        :test #'equal)))
+    (should (eq (cadr spec) 'consent--primitive-call-with-input-file)))
+  (should
+   (equal
+    (consent-library-test--srfi-180-eval
+     "(guard (condition
+              ((json-error? condition)
+               (list 'caught (json-error-reason condition)))
+              (else (list 'wrong condition)))
+        (call-with-input-file
+         \"fixtures/srfi-180/files/n_array_1_true_without_comma.json\"
+         (lambda (port) (json-read port)))
+        'no-error)")
+    "(caught \"Expected comma or close bracket in JSON array.\")")))
 
 (ert-deftest consent-library-test-primitive-declaration-registry-conflicts ()
   "Validate deterministic duplicate and conflicting provider declarations."

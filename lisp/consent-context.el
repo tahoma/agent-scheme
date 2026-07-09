@@ -371,17 +371,28 @@
   "Primitive context-yield over ARGUMENTS."
   (consent-context-yield (car arguments) context))
 
+(defconst consent-context--primitive-implementation-table
+  `((primitive-current-request
+     . ,#'consent-context--primitive-current-request)
+    (primitive-current-focus . ,#'consent-context--primitive-current-focus)
+    (primitive-current-region-context
+     . ,#'consent-context--primitive-current-region-context)
+    (primitive-current-buffer-context
+     . ,#'consent-context--primitive-current-buffer-context)
+    (primitive-current-project-context
+     . ,#'consent-context--primitive-current-project-context)
+    (primitive-current-conversation-summary
+     . ,#'consent-context--primitive-current-conversation-summary)
+    (primitive-context-yield . ,#'consent-context--primitive-context-yield))
+  "Provider-owned primitive implementations for `(agent context)'.")
+
 ;;;###autoload
-(defun consent-context-primitive-specs ()
-  "Return primitive specs for the `(agent context)' library."
-  `(("current-request" ,#'consent-context--primitive-current-request 0 0)
-    ("current-focus" ,#'consent-context--primitive-current-focus 0 0)
-    ("current-region-context" ,#'consent-context--primitive-current-region-context 0 0)
-    ("current-buffer-context" ,#'consent-context--primitive-current-buffer-context 0 0)
-    ("current-project-context" ,#'consent-context--primitive-current-project-context 0 0)
-    ("current-conversation-summary"
-     ,#'consent-context--primitive-current-conversation-summary 0 0)
-    ("context-yield" ,#'consent-context--primitive-context-yield 1 1)))
+(defun consent-context-primitive-implementation (primitive)
+  "Return `(agent context)' implementation for PRIMITIVE."
+  (consent--primitive-implementation-from-table
+   primitive
+   consent-context--primitive-implementation-table
+   "`(agent context)'"))
 
 (provide 'consent-context)
 

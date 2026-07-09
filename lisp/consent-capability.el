@@ -1038,21 +1038,28 @@ TAI scale.  Hosts can update this value when leap-second policy changes."
           (push library keys))))
     (nreverse keys)))
 
-(defun consent-emacs-capability-primitive-specs (library)
-  "Return primitive registration specs for Emacs capability LIBRARY."
-  (mapcar
-   (lambda (spec)
-     (let ((name (plist-get spec :name)))
-       (list name
-             (consent--wrap-emacs-capability
-              name
-              (plist-get spec :emacs-hook))
-             (plist-get spec :minimum-arity)
-             (plist-get spec :maximum-arity))))
-   (seq-filter
-    (lambda (spec)
-      (equal (plist-get spec :library) library))
-    consent--emacs-capability-manifest-specs)))
+(defun consent--emacs-capability-primitive-id (spec)
+  "Return provider primitive identifier for Emacs capability SPEC."
+  (intern
+   (replace-regexp-in-string
+    "\\`consent--primitive-"
+    "primitive-"
+    (symbol-name (plist-get spec :emacs-hook)))))
+
+(defun consent-emacs-capability-primitive-implementation (primitive)
+  "Return Emacs capability implementation for PRIMITIVE."
+  (if-let ((spec
+            (seq-find
+             (lambda (candidate)
+               (eq primitive
+                   (consent--emacs-capability-primitive-id candidate)))
+             consent--emacs-capability-manifest-specs)))
+      (consent--wrap-emacs-capability
+       (plist-get spec :name)
+       (plist-get spec :emacs-hook))
+    (consent--eval-error
+     "unknown Emacs capability primitive implementation: %s"
+     primitive)))
 
 (defun consent--emacs-capability-manifest-spec (name)
   "Return manifest metadata for Emacs capability NAME."
@@ -2509,16 +2516,18 @@ OPERATION defaults to BINDING and may be a symbol or string."
                  (file-exists-p stderr-file))
         (delete-file stderr-file)))))
 
-(defun consent--cli-process-host-primitive-specs ()
-  "Return primitive specs for the `(cli process-host primitive)' library."
-  `(("primitive-cli-host-available?"
-     ,(lambda (arguments context)
-        (consent--primitive-cli-host-available? arguments context))
-     0 0)
-    ("primitive-cli-host-run"
-     ,(lambda (arguments context)
-        (consent--primitive-cli-host-run arguments context))
-     6 6)))
+(defconst consent--cli-process-host-primitive-implementation-table
+  `((primitive-cli-host-available?
+     . ,#'consent--primitive-cli-host-available?)
+    (primitive-cli-host-run . ,#'consent--primitive-cli-host-run))
+  "Provider-owned primitive implementations for `(cli process-host primitive)'.")
+
+(defun consent-cli-process-host-primitive-implementation (primitive)
+  "Return `(cli process-host primitive)' implementation for PRIMITIVE."
+  (consent--primitive-implementation-from-table
+   primitive
+   consent--cli-process-host-primitive-implementation-table
+   "`(cli process-host primitive)'"))
 
 (defun consent--process-environment-names (environment)
   "Return variable names from normalized process ENVIRONMENT."
@@ -4300,20 +4309,27 @@ synthetic file grant so existing callers share the capability vocabulary."
   (or (consent-capability-release-handle-datum (car arguments))
       consent-false))
 
-(defun consent-capability-primitive-specs ()
-  "Return primitive specs for the private `(consent capability primitive)' library."
-  `(("grant-capability!" ,#'consent--primitive-grant-capability 1 1)
-    ("current-grants" ,#'consent--primitive-current-grants 0 0)
-    ("grant-ref" ,#'consent--primitive-grant-ref 1 1)
-    ("grant-attenuate" ,#'consent--primitive-grant-attenuate 2 2)
-    ("grant-revoke!" ,#'consent--primitive-grant-revoke 1 1)
-    ("call-with-capability-grant"
-     ,#'consent--primitive-call-with-capability-grant 2 2)
-    ("handle-ref" ,#'consent--primitive-handle-ref 1 1)
-    ("handle-live?" ,#'consent--primitive-handle-live? 1 1)
-    ("handle-kind" ,#'consent--primitive-handle-kind 1 1)
-    ("handle-revalidate" ,#'consent--primitive-handle-revalidate 1 1)
-    ("handle-release!" ,#'consent--primitive-handle-release! 1 1)))
+(defconst consent-capability--primitive-implementation-table
+  `((primitive-grant-capability! . ,#'consent--primitive-grant-capability)
+    (primitive-current-grants . ,#'consent--primitive-current-grants)
+    (primitive-grant-ref . ,#'consent--primitive-grant-ref)
+    (primitive-grant-attenuate . ,#'consent--primitive-grant-attenuate)
+    (primitive-grant-revoke! . ,#'consent--primitive-grant-revoke)
+    (primitive-call-with-capability-grant
+     . ,#'consent--primitive-call-with-capability-grant)
+    (primitive-handle-ref . ,#'consent--primitive-handle-ref)
+    (primitive-handle-live? . ,#'consent--primitive-handle-live?)
+    (primitive-handle-kind . ,#'consent--primitive-handle-kind)
+    (primitive-handle-revalidate . ,#'consent--primitive-handle-revalidate)
+    (primitive-handle-release! . ,#'consent--primitive-handle-release!))
+  "Provider-owned primitive implementations for `(consent capability primitive)'.")
+
+(defun consent-capability-primitive-implementation (primitive)
+  "Return `(consent capability primitive)' implementation for PRIMITIVE."
+  (consent--primitive-implementation-from-table
+   primitive
+   consent-capability--primitive-implementation-table
+   "`(consent capability primitive)'"))
 
 (defun consent--authorize-emacs-capability
     (name arguments context)

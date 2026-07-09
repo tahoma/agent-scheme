@@ -83,14 +83,21 @@
    `((request . ,(car arguments)))
    context))
 
+(defconst consent-agent-io--primitive-implementation-table
+  `((primitive-agent-yield . ,#'consent-agent-io--primitive-yield)
+    (primitive-agent-log . ,#'consent-agent-io--primitive-log)
+    (primitive-agent-progress . ,#'consent-agent-io--primitive-progress)
+    (primitive-agent-warn . ,#'consent-agent-io--primitive-warn)
+    (primitive-agent-request . ,#'consent-agent-io--primitive-request))
+  "Provider-owned primitive implementations for `(agent io)'.")
+
 ;;;###autoload
-(defun consent-agent-io-primitive-specs ()
-  "Return primitive specs for the `(agent io)' library."
-  `(("agent-yield" ,#'consent-agent-io--primitive-yield 1 1)
-    ("agent-log" ,#'consent-agent-io--primitive-log 2 nil)
-    ("agent-progress" ,#'consent-agent-io--primitive-progress 2 2)
-    ("agent-warn" ,#'consent-agent-io--primitive-warn 1 nil)
-    ("agent-request" ,#'consent-agent-io--primitive-request 1 1)))
+(defun consent-agent-io-primitive-implementation (primitive)
+  "Return `(agent io)' implementation for PRIMITIVE."
+  (consent--primitive-implementation-from-table
+   primitive
+   consent-agent-io--primitive-implementation-table
+   "`(agent io)'"))
 
 (provide 'consent-agent-io)
 
