@@ -3563,40 +3563,6 @@ cursor across sessions."
             (consent-make-canonical-integer value)
             #f)))
 
-    (define (primitive-char-ci-compare arguments predicate description)
-      "Implement the `char-ci-compare` primitive with argument validation and"
-      "Consent Scheme values."
-      (primitive-char-compare
-       arguments
-       (lambda (left right)
-         (predicate (char-foldcase left) (char-foldcase right)))
-       description))
-
-    (define (primitive-char-ci=? arguments context)
-      "Implement the `char-ci=?` primitive with argument validation and Consent"
-      "Scheme values."
-      (primitive-char-ci-compare arguments char=? "char-ci=?"))
-
-    (define (primitive-char-ci<? arguments context)
-      "Implement the `char-ci<?` primitive with argument validation and Consent"
-      "Scheme values."
-      (primitive-char-ci-compare arguments char<? "char-ci<?"))
-
-    (define (primitive-char-ci>? arguments context)
-      "Implement the `char-ci>?` primitive with argument validation and Consent"
-      "Scheme values."
-      (primitive-char-ci-compare arguments char>? "char-ci>?"))
-
-    (define (primitive-char-ci<=? arguments context)
-      "Implement the `char-ci<=?` primitive with argument validation and"
-      "Consent Scheme values."
-      (primitive-char-ci-compare arguments char<=? "char-ci<=?"))
-
-    (define (primitive-char-ci>=? arguments context)
-      "Implement the `char-ci>=?` primitive with argument validation and"
-      "Consent Scheme values."
-      (primitive-char-ci-compare arguments char>=? "char-ci>=?"))
-
     (define (primitive-string-upcase arguments context)
       "Implement the `string-upcase` primitive with argument validation and"
       "Consent Scheme values."
@@ -3611,40 +3577,6 @@ cursor across sessions."
       "Implement the `string-foldcase` primitive with argument validation and"
       "Consent Scheme values."
       (string-foldcase (expect-string (car arguments) "string-foldcase")))
-
-    (define (primitive-string-ci-compare arguments predicate description)
-      "Implement the `string-ci-compare` primitive with argument validation and"
-      "Consent Scheme values."
-      (primitive-string-compare
-       arguments
-       (lambda (left right)
-         (predicate (string-foldcase left) (string-foldcase right)))
-       description))
-
-    (define (primitive-string-ci=? arguments context)
-      "Implement the `string-ci=?` primitive with argument validation and"
-      "Consent Scheme values."
-      (primitive-string-ci-compare arguments string=? "string-ci=?"))
-
-    (define (primitive-string-ci<? arguments context)
-      "Implement the `string-ci<?` primitive with argument validation and"
-      "Consent Scheme values."
-      (primitive-string-ci-compare arguments string<? "string-ci<?"))
-
-    (define (primitive-string-ci>? arguments context)
-      "Implement the `string-ci>?` primitive with argument validation and"
-      "Consent Scheme values."
-      (primitive-string-ci-compare arguments string>? "string-ci>?"))
-
-    (define (primitive-string-ci<=? arguments context)
-      "Implement the `string-ci<=?` primitive with argument validation and"
-      "Consent Scheme values."
-      (primitive-string-ci-compare arguments string<=? "string-ci<=?"))
-
-    (define (primitive-string-ci>=? arguments context)
-      "Implement the `string-ci>=?` primitive with argument validation and"
-      "Consent Scheme values."
-      (primitive-string-ci-compare arguments string>=? "string-ci>=?"))
 
     (define (display-string value)
       "Render VALUE for display output rather than write output."
@@ -9087,11 +9019,6 @@ cursor across sessions."
     (define library-primitive-implementation-table
       (list
        (cons 'primitive-char-alphabetic? primitive-char-alphabetic?)
-       (cons 'primitive-char-ci<=? primitive-char-ci<=?)
-       (cons 'primitive-char-ci<? primitive-char-ci<?)
-       (cons 'primitive-char-ci=? primitive-char-ci=?)
-       (cons 'primitive-char-ci>=? primitive-char-ci>=?)
-       (cons 'primitive-char-ci>? primitive-char-ci>?)
        (cons 'primitive-char-downcase primitive-char-downcase)
        (cons 'primitive-char-foldcase primitive-char-foldcase)
        (cons 'primitive-char-lower-case? primitive-char-lower-case?)
@@ -9100,11 +9027,6 @@ cursor across sessions."
        (cons 'primitive-char-upper-case? primitive-char-upper-case?)
        (cons 'primitive-char-whitespace? primitive-char-whitespace?)
        (cons 'primitive-digit-value primitive-digit-value)
-       (cons 'primitive-string-ci<=? primitive-string-ci<=?)
-       (cons 'primitive-string-ci<? primitive-string-ci<?)
-       (cons 'primitive-string-ci=? primitive-string-ci=?)
-       (cons 'primitive-string-ci>=? primitive-string-ci>=?)
-       (cons 'primitive-string-ci>? primitive-string-ci>?)
        (cons 'primitive-string-downcase primitive-string-downcase)
        (cons 'primitive-string-foldcase primitive-string-foldcase)
        (cons 'primitive-string-upcase primitive-string-upcase)
