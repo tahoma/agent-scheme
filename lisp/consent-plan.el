@@ -585,16 +585,23 @@
   "Primitive plan-yield over ARGUMENTS."
   (consent-plan-yield (car arguments) context))
 
+(defconst consent-plan--primitive-implementation-table
+  `((primitive-plan-create! . ,#'consent--plan-primitive-create)
+    (primitive-plan-ref . ,#'consent--plan-primitive-ref)
+    (primitive-plan-list . ,#'consent--plan-primitive-list)
+    (primitive-plan-step-add! . ,#'consent--plan-primitive-step-add)
+    (primitive-plan-step-status! . ,#'consent--plan-primitive-step-status)
+    (primitive-plan-status! . ,#'consent--plan-primitive-status)
+    (primitive-plan-yield . ,#'consent--plan-primitive-yield))
+  "Provider-owned primitive implementations for `(agent plan)'.")
+
 ;;;###autoload
-(defun consent-plan-primitive-specs ()
-  "Return primitive specs for the `(agent plan)' library."
-  `(("plan-create!" ,#'consent--plan-primitive-create 1 1)
-    ("plan-ref" ,#'consent--plan-primitive-ref 1 1)
-    ("plan-list" ,#'consent--plan-primitive-list 1 1)
-    ("plan-step-add!" ,#'consent--plan-primitive-step-add 2 2)
-    ("plan-step-status!" ,#'consent--plan-primitive-step-status 3 3)
-    ("plan-status!" ,#'consent--plan-primitive-status 2 2)
-    ("plan-yield" ,#'consent--plan-primitive-yield 1 1)))
+(defun consent-plan-primitive-implementation (primitive)
+  "Return `(agent plan)' implementation for PRIMITIVE."
+  (consent--primitive-implementation-from-table
+   primitive
+   consent-plan--primitive-implementation-table
+   "`(agent plan)'"))
 
 (provide 'consent-plan)
 

@@ -35,6 +35,9 @@
   "Registry key for the required R7RS `(scheme base)' library.")
 
 (declare-function consent--eval-define-syntax "consent-macro")
+(declare-function consent--policy-denied "consent-interpreter")
+(declare-function consent--primitive-car "consent-interpreter")
+(declare-function consent--primitive-cdr "consent-interpreter")
 (declare-function consent--trampoline "consent-interpreter")
 
 (defconst consent--base-primitive-registry
@@ -1282,6 +1285,60 @@ Each entry is (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY).")
                (plist-get spec :library)
                (plist-get spec :name)))))
    consent--standard-primitive-manifest-specs))
+
+(defun consent--standard-cxr-primitive-p (primitive)
+  "Return non-nil when PRIMITIVE names a generated CXR accessor."
+  (string-match-p "\\`primitive-c[ad][ad]+r\\'" (symbol-name primitive)))
+
+(defun consent--standard-cxr-primitive-name (primitive)
+  "Return Scheme-visible CXR name for PRIMITIVE."
+  (substring (symbol-name primitive) (length "primitive-")))
+
+(defun consent--standard-cxr-primitive (primitive)
+  "Return generated CXR implementation for PRIMITIVE."
+  (let* ((name (consent--standard-cxr-primitive-name primitive))
+         (steps (reverse (string-to-list
+                          (substring name 1 (1- (length name)))))))
+    (lambda (arguments _context)
+      (let ((value (car arguments)))
+        (dolist (step steps)
+          (setq value
+                (if (= step ?a)
+                    (consent--primitive-car (list value) nil)
+                  (consent--primitive-cdr (list value) nil))))
+        value))))
+
+(defun consent--standard-policy-denied-primitive (name)
+  "Return a default-denied process primitive for NAME."
+  (lambda (_arguments context)
+    (consent--policy-denied name context)))
+
+(defun consent--standard-primitive-function-symbol (primitive)
+  "Return Emacs Lisp function symbol for standard PRIMITIVE."
+  (let ((name (symbol-name primitive)))
+    (unless (string-match-p "\\`primitive-" name)
+      (consent--eval-error
+       "standard primitive implementation id must start with primitive-: %s"
+       primitive))
+    (intern (concat "consent--primitive-"
+                    (substring name (length "primitive-"))))))
+
+(defun consent-standard-primitive-implementation (primitive)
+  "Return standard-library implementation for PRIMITIVE."
+  (pcase primitive
+    ('primitive-emergency-exit
+     (consent--standard-policy-denied-primitive "emergency-exit"))
+    ('primitive-exit
+     (consent--standard-policy-denied-primitive "exit"))
+    (_
+     (if (consent--standard-cxr-primitive-p primitive)
+         (consent--standard-cxr-primitive primitive)
+       (let ((function (consent--standard-primitive-function-symbol primitive)))
+         (unless (fboundp function)
+           (consent--eval-error
+            "unknown standard primitive implementation: %s"
+            primitive))
+         function)))))
 
 (defun consent--prelude-manifest-spec (spec)
   "Return manifest metadata for portable prelude SPEC."

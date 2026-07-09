@@ -880,17 +880,24 @@ datum before `consent-debugger-restart-action-function' is called."
        (record . ,event)))
     consent-unspecified))
 
+(defconst consent-debugger--primitive-implementation-table
+  `((primitive-current-error . ,#'consent-debugger--primitive-current-error)
+    (primitive-condition-stack . ,#'consent-debugger--primitive-condition-stack)
+    (primitive-condition-environment
+     . ,#'consent-debugger--primitive-condition-environment)
+    (primitive-condition-restarts
+     . ,#'consent-debugger--primitive-condition-restarts)
+    (primitive-restart-invoke! . ,#'consent-debugger--primitive-restart-invoke!)
+    (primitive-debugger-yield . ,#'consent-debugger--primitive-debugger-yield))
+  "Provider-owned primitive implementations for `(agent debugger)'.")
+
 ;;;###autoload
-(defun consent-debugger-primitive-specs ()
-  "Return primitive specs for the `(agent debugger)' library."
-  `(("current-error" ,#'consent-debugger--primitive-current-error 0 0)
-    ("condition-stack" ,#'consent-debugger--primitive-condition-stack 1 1)
-    ("condition-environment"
-     ,#'consent-debugger--primitive-condition-environment 2 2)
-    ("condition-restarts"
-     ,#'consent-debugger--primitive-condition-restarts 1 1)
-    ("restart-invoke!" ,#'consent-debugger--primitive-restart-invoke! 2 2)
-    ("debugger-yield" ,#'consent-debugger--primitive-debugger-yield 1 1)))
+(defun consent-debugger-primitive-implementation (primitive)
+  "Return `(agent debugger)' implementation for PRIMITIVE."
+  (consent--primitive-implementation-from-table
+   primitive
+   consent-debugger--primitive-implementation-table
+   "`(agent debugger)'"))
 
 (provide 'consent-debugger)
 

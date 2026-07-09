@@ -6056,6 +6056,73 @@ cursor across sessions."
        (list (result-field 'operation operation)
              (result-field 'session id))))
 
+    (define (primitive-session-source-call procedure arguments context)
+      "Apply host-neutral `(agent session)' PROCEDURE as a primitive."
+      (apply portable-library-call procedure context arguments))
+
+    (define (primitive-session-create! arguments context)
+      "Create a default-store session through `(agent session)'."
+      (primitive-session-source-call
+       session-model:session-create!
+       arguments
+       context))
+
+    (define (primitive-session-ref arguments context)
+      "Return a default-store session through `(agent session)'."
+      (primitive-session-source-call
+       session-model:session-ref
+       arguments
+       context))
+
+    (define (primitive-session-list arguments context)
+      "List default-store sessions through `(agent session)'."
+      (primitive-session-source-call
+       session-model:session-list
+       arguments
+       context))
+
+    (define (primitive-session-handles arguments context)
+      "Return default-store session handles through `(agent session)'."
+      (primitive-session-source-call
+       session-model:session-handles
+       arguments
+       context))
+
+    (define (primitive-session-suspend! arguments context)
+      "Suspend a default-store session through `(agent session)'."
+      (primitive-session-source-call
+       session-model:session-suspend!
+       arguments
+       context))
+
+    (define (primitive-session-resume! arguments context)
+      "Resume a default-store session through `(agent session)'."
+      (primitive-session-source-call
+       session-model:session-resume!
+       arguments
+       context))
+
+    (define (primitive-session-snapshot! arguments context)
+      "Snapshot a default-store session through `(agent session)'."
+      (primitive-session-source-call
+       session-model:session-snapshot!
+       arguments
+       context))
+
+    (define (primitive-session-fork! arguments context)
+      "Fork a default-store session through `(agent session)'."
+      (primitive-session-source-call
+       session-model:session-fork!
+       arguments
+       context))
+
+    (define (primitive-session-retire! arguments context)
+      "Retire a default-store session through `(agent session)'."
+      (primitive-session-source-call
+       session-model:session-retire!
+       arguments
+       context))
+
     (define (primitive-create-session arguments context)
       "Create a session with its own sandbox environment and return its datum."
       "Optional ARGUMENTS are a scope symbol (default `named') and an options"
@@ -9032,6 +9099,46 @@ cursor across sessions."
           (car cursor))
          (else (loop (cdr cursor))))))
 
+    (define (library-cxr-primitive-id? name)
+      "Return #t when NAME is a generated CXR primitive identifier."
+      (let* ((text (symbol->string name))
+             (prefix "primitive-")
+             (prefix-length (string-length prefix))
+             (length (string-length text)))
+        (and (> length (+ prefix-length 2))
+             (string=? (substring text 0 prefix-length) prefix)
+             (char=? (string-ref text prefix-length) #\c)
+             (char=? (string-ref text (- length 1)) #\r)
+             (let loop ((index (+ prefix-length 1)))
+               (cond
+                ((= index (- length 1)) #t)
+                ((or (char=? (string-ref text index) #\a)
+                     (char=? (string-ref text index) #\d))
+                 (loop (+ index 1)))
+                (else #f))))))
+
+    (define (library-cxr-primitive-function name)
+      "Return generated CXR implementation for primitive identifier NAME."
+      (let ((text
+             (substring
+              (symbol->string name)
+              (string-length "primitive-")
+              (string-length (symbol->string name)))))
+        (lambda (arguments context)
+          (let loop ((index (- (string-length text) 2))
+                     (value (car arguments)))
+            (if (= index 0)
+                value
+                (let ((step (string-ref text index)))
+                  (loop (- index 1)
+                        (cond
+                         ((char=? step #\a)
+                          (primitive-car (list value) context))
+                         ((char=? step #\d)
+                          (primitive-cdr (list value) context))
+                         (else
+                          (eval-error "invalid cxr primitive" name))))))))))
+
     ;; Map library resolver implementation names to interpreter procedures.
     (define library-primitive-implementation-table
       (list
@@ -9099,6 +9206,9 @@ cursor across sessions."
        (cons 'primitive-current-jiffy primitive-current-jiffy)
        (cons 'primitive-jiffies-per-second primitive-jiffies-per-second)
        (cons 'primitive-command-line primitive-command-line)
+       (cons 'primitive-emergency-exit
+             (policy-denied-primitive "emergency-exit"))
+       (cons 'primitive-exit (policy-denied-primitive "exit"))
        (cons 'primitive-get-environment-variable
              primitive-get-environment-variable)
        (cons 'primitive-get-environment-variables
@@ -9143,6 +9253,15 @@ cursor across sessions."
        (cons 'primitive-documentation-field primitive-documentation-field)
        (cons 'primitive-docstring primitive-docstring)
        (cons 'primitive-current-session-info primitive-current-session-info)
+       (cons 'primitive-session-create! primitive-session-create!)
+       (cons 'primitive-session-ref primitive-session-ref)
+       (cons 'primitive-session-list primitive-session-list)
+       (cons 'primitive-session-handles primitive-session-handles)
+       (cons 'primitive-session-suspend! primitive-session-suspend!)
+       (cons 'primitive-session-resume! primitive-session-resume!)
+       (cons 'primitive-session-snapshot! primitive-session-snapshot!)
+       (cons 'primitive-session-fork! primitive-session-fork!)
+       (cons 'primitive-session-retire! primitive-session-retire!)
        (cons 'primitive-create-session primitive-create-session)
        (cons 'primitive-switch-session primitive-switch-session)
        (cons 'primitive-current-session primitive-current-session)
@@ -9250,9 +9369,12 @@ cursor across sessions."
     (define (library-primitive-implementation-for-name name)
       "Resolve primitive implementations requested by the library module."
       (let ((entry (assq name library-primitive-implementation-table)))
-        (if entry
-            (cdr entry)
-            (eval-error "unknown library primitive implementation" name))))
+        (cond
+         (entry (cdr entry))
+         ((library-cxr-primitive-id? name)
+          (library-cxr-primitive-function name))
+         (else
+          (eval-error "unknown library primitive implementation" name)))))
 
     ;; Install this interpreter and macro expander for library resolution.
     (define library-backend-installed

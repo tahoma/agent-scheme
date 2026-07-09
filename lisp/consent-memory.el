@@ -633,19 +633,26 @@ the user or project opts in explicitly."
   "Primitive memory-yield over ARGUMENTS."
   (consent-memory-yield (car arguments) (cadr arguments) context))
 
-(defun consent--memory-adapter-primitive-specs ()
-  "Return host adapter primitive specs layered over `(agent memory)'."
-  `(("memory-put!" ,#'consent--memory-primitive-put 3 3)
-    ("memory-ref" ,#'consent--memory-primitive-ref 2 2)
-    ("memory-delete!" ,#'consent--memory-primitive-delete 2 2)
-    ("memory-add!" ,#'consent--memory-primitive-add 3 3)
-    ("memory-find" ,#'consent--memory-primitive-find 2 2)
-    ("memory-by-tag" ,#'consent--memory-primitive-by-tag 2 2)
-    ("memory-recent" ,#'consent--memory-primitive-recent 2 2)
-    ("memory-access!" ,#'consent--memory-primitive-access 3 3)
-    ("memory-reflect!" ,#'consent--memory-primitive-reflect 6 6)
-    ("memory-select" ,#'consent--memory-primitive-select 4 4)
-    ("memory-yield" ,#'consent--memory-primitive-yield 2 2)))
+(defconst consent-memory--primitive-implementation-table
+  `((primitive-memory-put! . ,#'consent--memory-primitive-put)
+    (primitive-memory-ref . ,#'consent--memory-primitive-ref)
+    (primitive-memory-delete! . ,#'consent--memory-primitive-delete)
+    (primitive-memory-add! . ,#'consent--memory-primitive-add)
+    (primitive-memory-find . ,#'consent--memory-primitive-find)
+    (primitive-memory-by-tag . ,#'consent--memory-primitive-by-tag)
+    (primitive-memory-recent . ,#'consent--memory-primitive-recent)
+    (primitive-memory-access! . ,#'consent--memory-primitive-access)
+    (primitive-memory-reflect! . ,#'consent--memory-primitive-reflect)
+    (primitive-memory-select . ,#'consent--memory-primitive-select)
+    (primitive-memory-yield . ,#'consent--memory-primitive-yield))
+  "Provider-owned primitive implementations for `(agent memory)'.")
+
+(defun consent-memory-primitive-implementation (primitive)
+  "Return `(agent memory)' implementation for PRIMITIVE."
+  (consent--primitive-implementation-from-table
+   primitive
+   consent-memory--primitive-implementation-table
+   "`(agent memory)'"))
 
 (provide 'consent-memory)
 

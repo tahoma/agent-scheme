@@ -72,23 +72,9 @@
 
 (declare-function consent--apply-procedure "consent-interpreter")
 (declare-function consent--make-empty-syntax-environment "consent-macro")
-(declare-function consent--memory-adapter-primitive-specs "consent-memory")
-(declare-function consent--policy-denied "consent-interpreter")
-(declare-function consent--session-adapter-primitive-specs "consent-session")
 (declare-function consent--syntax-environment-ref "consent-macro")
 (declare-function consent--trampoline "consent-interpreter")
 (declare-function consent--with-syntax-environment "consent-macro")
-(declare-function consent-agent-io-primitive-specs "consent-agent-io")
-(declare-function consent-approval-primitive-specs "consent-approval")
-(declare-function consent-context-primitive-specs "consent-context")
-(declare-function consent-debugger-primitive-specs "consent-debugger")
-(declare-function consent-helper-primitive-specs "consent-helper")
-(declare-function consent-job-primitive-specs "consent-job")
-(declare-function consent-models-primitive-specs "consent-models")
-(declare-function consent-plan-primitive-specs "consent-plan")
-(declare-function consent-redaction-primitive-specs "consent-redaction")
-(declare-function consent-reflect-primitive-implementation "consent-reflect")
-(declare-function consent-test-primitive-specs "consent-test")
 
 (cl-defstruct (consent--library-binding
                (:constructor consent--make-library-binding
@@ -1904,7 +1890,8 @@ Use SOURCE-FILE, TARGET, or IMPLEMENTATION-ID when SOURCE is absent."
      "primitive-library declaration must have source-kind primitive-library: %s"
      (plist-get declaration :name)))
   (dolist (property '(:name :owner :provider :visibility :layer
-                      :implementation-id :exports :primitive-exports))
+                      :implementation-id :implementation-resolver
+                      :exports :primitive-exports))
     (consent--primitive-library-require-property declaration property))
   (let ((exports (plist-get declaration :exports))
         (primitive-exports (plist-get declaration :primitive-exports))
@@ -2073,7 +2060,9 @@ When REPLACE is non-nil, replace an existing declaration from the same provider.
        (let* ((arity (plist-get export :arity))
               (implementation
                (funcall resolver (plist-get export :primitive))))
-         (unless (functionp implementation)
+         (unless (or (functionp implementation)
+                     (and (symbolp implementation)
+                          (fboundp implementation)))
            (consent--eval-error
             "primitive resolver returned non-function: %s"
             (plist-get export :primitive)))
@@ -2089,143 +2078,9 @@ When REPLACE is non-nil, replace an existing declaration from the same provider.
          (consent--primitive-library-declaration-for-entry entry)))
     (if declaration
         (consent--primitive-library-declaration-specs declaration)
-      (let ((implementation-id (plist-get entry :implementation-id)))
-        (pcase implementation-id
-      ('scheme-char
-       `(("char-alphabetic?" ,#'consent--primitive-char-alphabetic? 1 1)
-         ("char-ci<=?" ,#'consent--primitive-char-ci<=? 2 nil)
-         ("char-ci<?" ,#'consent--primitive-char-ci<? 2 nil)
-         ("char-ci=?" ,#'consent--primitive-char-ci=? 2 nil)
-         ("char-ci>=?" ,#'consent--primitive-char-ci>=? 2 nil)
-         ("char-ci>?" ,#'consent--primitive-char-ci>? 2 nil)
-         ("char-downcase" ,#'consent--primitive-char-downcase 1 1)
-         ("char-foldcase" ,#'consent--primitive-char-foldcase 1 1)
-         ("char-lower-case?" ,#'consent--primitive-char-lower-case? 1 1)
-         ("char-numeric?" ,#'consent--primitive-char-numeric? 1 1)
-         ("char-upcase" ,#'consent--primitive-char-upcase 1 1)
-         ("char-upper-case?" ,#'consent--primitive-char-upper-case? 1 1)
-         ("char-whitespace?" ,#'consent--primitive-char-whitespace? 1 1)
-         ("digit-value" ,#'consent--primitive-digit-value 1 1)
-         ("string-ci<=?" ,#'consent--primitive-string-ci<=? 2 nil)
-         ("string-ci<?" ,#'consent--primitive-string-ci<? 2 nil)
-         ("string-ci=?" ,#'consent--primitive-string-ci=? 2 nil)
-         ("string-ci>=?" ,#'consent--primitive-string-ci>=? 2 nil)
-         ("string-ci>?" ,#'consent--primitive-string-ci>? 2 nil)
-         ("string-downcase" ,#'consent--primitive-string-downcase 1 1)
-         ("string-foldcase" ,#'consent--primitive-string-foldcase 1 1)
-         ("string-upcase" ,#'consent--primitive-string-upcase 1 1)))
-      ('scheme-complex
-       `(("angle" ,#'consent--primitive-angle 1 1)
-         ("imag-part" ,#'consent--primitive-imag-part 1 1)
-         ("magnitude" ,#'consent--primitive-magnitude 1 1)
-         ("make-polar" ,#'consent--primitive-make-polar 2 2)
-         ("make-rectangular" ,#'consent--primitive-make-rectangular 2 2)
-         ("real-part" ,#'consent--primitive-real-part 1 1)))
-      ('scheme-cxr (consent--cxr-primitive-specs entry))
-      ('scheme-eval
-       `(("environment" ,#'consent--primitive-environment 1 nil)
-         ("eval" ,#'consent--primitive-eval 2 2)))
-      ('scheme-file
-       `(("call-with-input-file" ,#'consent--primitive-call-with-input-file
-          2 2)
-         ("call-with-output-file" ,#'consent--primitive-call-with-output-file
-          2 2)
-         ("delete-file" ,#'consent--primitive-delete-file 1 1)
-         ("file-exists?" ,#'consent--primitive-file-exists? 1 1)
-         ("open-binary-input-file" ,#'consent--primitive-open-binary-input-file
-          1 1)
-         ("open-binary-output-file" ,#'consent--primitive-open-binary-output-file
-          1 1)
-         ("open-input-file" ,#'consent--primitive-open-input-file 1 1)
-         ("open-output-file" ,#'consent--primitive-open-output-file 1 1)
-         ("with-input-from-file" ,#'consent--primitive-with-input-from-file
-          2 2)
-         ("with-output-to-file" ,#'consent--primitive-with-output-to-file
-          2 2)))
-      ('scheme-inexact
-       `(("acos" ,#'consent--primitive-acos 1 1)
-         ("asin" ,#'consent--primitive-asin 1 1)
-         ("atan" ,#'consent--primitive-atan 1 2)
-         ("cos" ,#'consent--primitive-cos 1 1)
-         ("exp" ,#'consent--primitive-exp 1 1)
-         ("finite?" ,#'consent--primitive-finite? 1 1)
-         ("infinite?" ,#'consent--primitive-infinite? 1 1)
-         ("log" ,#'consent--primitive-log 1 2)
-         ("nan?" ,#'consent--primitive-nan? 1 1)
-         ("sin" ,#'consent--primitive-sin 1 1)
-         ("sqrt" ,#'consent--primitive-sqrt 1 1)
-         ("tan" ,#'consent--primitive-tan 1 1)))
-      ('scheme-load
-       `(("load" ,#'consent--primitive-load 1 2)))
-      ('scheme-process-context
-       (append
-        `(("command-line" ,#'consent--primitive-command-line 0 0))
-        (mapcar #'consent--policy-denied-spec
-                '("emergency-exit" "exit"))
-        `(("get-environment-variable"
-           ,#'consent--primitive-get-environment-variable 1 1)
-          ("get-environment-variables"
-           ,#'consent--primitive-get-environment-variables 0 0))))
-      ('scheme-read
-       `(("read" ,#'consent--primitive-read 0 1)))
-      ('scheme-repl
-       `(("interaction-environment"
-          ,#'consent--primitive-interaction-environment 0 0)))
-      ('scheme-time
-       `(("current-jiffy" ,#'consent--primitive-current-jiffy 0 0)
-         ("current-second" ,#'consent--primitive-current-second 0 0)
-         ("jiffies-per-second"
-          ,#'consent--primitive-jiffies-per-second 0 0)))
-      ('scheme-write
-       `(("display" ,#'consent--primitive-display 1 2)
-         ("write" ,#'consent--primitive-write 1 2)
-         ("write-shared" ,#'consent--primitive-write-shared 1 2)
-         ("write-simple" ,#'consent--primitive-write-simple 1 2)))
-      ('agent-io
-       (require 'consent-agent-io)
-       (consent-agent-io-primitive-specs))
-      ('agent-approval
-       (require 'consent-approval)
-       (consent-approval-primitive-specs))
-      ('agent-debugger
-       (require 'consent-debugger)
-       (consent-debugger-primitive-specs))
-      ('agent-helper
-       (require 'consent-helper)
-       (consent-helper-primitive-specs))
-      ('agent-job
-       (require 'consent-job)
-       (consent-job-primitive-specs))
-      ('agent-test
-       (require 'consent-test)
-       (consent-test-primitive-specs))
-      ('agent-memory
-       (require 'consent-memory)
-       (consent--memory-adapter-primitive-specs))
-      ('agent-plan
-       (require 'consent-plan)
-       (consent-plan-primitive-specs))
-      ('agent-models
-       (require 'consent-models)
-       (consent-models-primitive-specs))
-      ('agent-context
-       (require 'consent-context)
-       (consent-context-primitive-specs))
-      ('agent-redaction
-       (require 'consent-redaction)
-       (consent-redaction-primitive-specs))
-      ('agent-session
-       (require 'consent-session)
-       (consent--session-adapter-primitive-specs))
-      ('consent-capability (consent-capability-primitive-specs))
-      ('cli-process-host (consent--cli-process-host-primitive-specs))
-      ('emacs-capability
-       (consent-emacs-capability-primitive-specs
-        (plist-get entry :name)))
-      (_
-       (consent--eval-error
-        "manifest primitive library has no implementation id: %s"
-        (plist-get entry :name))))))))
+      (consent--eval-error
+       "manifest primitive library lacks provider declaration: %s"
+       (plist-get entry :name)))))
 
 (defun consent--manifest-filter-primitive-specs (entry primitive-specs)
   "Return PRIMITIVE-SPECS reduced to manifest ENTRY exports."
@@ -2248,11 +2103,7 @@ When REPLACE is non-nil, replace an existing declaration from the same provider.
   (pcase (plist-get entry :source-kind)
     ('primitive
      (condition-case nil
-         (if (consent--primitive-library-declaration-for-entry entry)
-             t
-           (progn
-             (consent--manifest-primitive-implementation-specs entry)
-             t))
+         (and (consent--manifest-primitive-implementation-specs entry) t)
        (consent-eval-error nil)))
     ('derived
      (eq (plist-get entry :implementation-id) 'scheme-r5rs))
@@ -2412,34 +2263,6 @@ Each spec has (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY)."
                   (consent--environment-cell value-environment name)
                   key)))))
       (setf (consent--library-exports library) exports))))
-
-(defun consent--cxr-primitive (name)
-  "Return a primitive procedure implementation for composed accessor NAME."
-  (let ((steps (reverse (string-to-list
-                         (substring name 1 (1- (length name)))))))
-    (lambda (arguments _context)
-      (let ((value (car arguments)))
-        (dolist (step steps)
-          (setq value
-                (if (= step ?a)
-                    (consent--primitive-car (list value) nil)
-                  (consent--primitive-cdr (list value) nil))))
-        value))))
-
-(defun consent--cxr-primitive-specs (entry)
-  "Return primitive specs for manifest CXR library ENTRY."
-  (mapcar
-   (lambda (name)
-     (list name (consent--cxr-primitive name) 1 1))
-   (plist-get entry :exports)))
-
-(defun consent--policy-denied-spec (name)
-  "Return a primitive spec for default-denied host effect NAME."
-  (list name
-        (lambda (_arguments context)
-          (consent--policy-denied name context))
-        0
-        nil))
 
 (defun consent--register-r5rs-library (key context environment)
   "Register the practical `(scheme r5rs)' compatibility library KEY."

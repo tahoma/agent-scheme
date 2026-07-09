@@ -715,16 +715,23 @@
   "Primitive model-provider-diagnostics over ARGUMENTS."
   (consent-models-diagnostics (car arguments)))
 
+(defconst consent-models--primitive-implementation-table
+  `((primitive-model-provider-register!
+     . ,#'consent-models--primitive-register-provider)
+    (primitive-model-providers . ,#'consent-models--primitive-providers)
+    (primitive-model-route . ,#'consent-models--primitive-route)
+    (primitive-model-complete . ,#'consent-models--primitive-complete)
+    (primitive-model-provider-diagnostics
+     . ,#'consent-models--primitive-diagnostics))
+  "Provider-owned primitive implementations for `(agent models primitive)'.")
+
 ;;;###autoload
-(defun consent-models-primitive-specs ()
-  "Return primitive specs for the `(agent models primitive)' library."
-  `(("primitive-model-provider-register!"
-     ,#'consent-models--primitive-register-provider 1 1)
-    ("primitive-model-providers" ,#'consent-models--primitive-providers 0 0)
-    ("primitive-model-route" ,#'consent-models--primitive-route 1 2)
-    ("primitive-model-complete" ,#'consent-models--primitive-complete 2 3)
-    ("primitive-model-provider-diagnostics"
-     ,#'consent-models--primitive-diagnostics 0 1)))
+(defun consent-models-primitive-implementation (primitive)
+  "Return `(agent models primitive)' implementation for PRIMITIVE."
+  (consent--primitive-implementation-from-table
+   primitive
+   consent-models--primitive-implementation-table
+   "`(agent models primitive)'"))
 
 (provide 'consent-models)
 

@@ -637,16 +637,23 @@ HELPER-OR-LIBRARY may be a helper record or a library name."
    (cadr arguments)
    context))
 
+(defconst consent-helper--primitive-implementation-table
+  `((primitive-agent-artifact . ,#'consent-helper--primitive-artifact)
+    (primitive-agent-helper-save! . ,#'consent-helper--primitive-save)
+    (primitive-agent-helper-load . ,#'consent-helper--primitive-load)
+    (primitive-agent-helper-list . ,#'consent-helper--primitive-list)
+    (primitive-agent-helper-ref . ,#'consent-helper--primitive-ref)
+    (primitive-agent-helper-promote-to-skill
+     . ,#'consent-helper--primitive-promote))
+  "Provider-owned primitive implementations for `(agent helper)'.")
+
 ;;;###autoload
-(defun consent-helper-primitive-specs ()
-  "Return primitive specs for the `(agent helper)' library."
-  `(("agent-artifact" ,#'consent-helper--primitive-artifact 2 2)
-    ("agent-helper-save!" ,#'consent-helper--primitive-save 2 3)
-    ("agent-helper-load" ,#'consent-helper--primitive-load 1 2)
-    ("agent-helper-list" ,#'consent-helper--primitive-list 1 1)
-    ("agent-helper-ref" ,#'consent-helper--primitive-ref 1 2)
-    ("agent-helper-promote-to-skill"
-     ,#'consent-helper--primitive-promote 1 2)))
+(defun consent-helper-primitive-implementation (primitive)
+  "Return `(agent helper)' implementation for PRIMITIVE."
+  (consent--primitive-implementation-from-table
+   primitive
+   consent-helper--primitive-implementation-table
+   "`(agent helper)'"))
 
 ;;;###autoload
 (defun consent-helper-clear! ()

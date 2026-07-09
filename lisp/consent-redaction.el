@@ -447,14 +447,24 @@ default."
   (consent-redaction--boolean
    (consent-safe-for-provider-p (car arguments) (cadr arguments))))
 
+(defconst consent-redaction--primitive-implementation-table
+  `((primitive-secret-source?
+     . ,#'consent-redaction--primitive-secret-source-p)
+    (primitive-redact . ,#'consent-redaction--primitive-redact)
+    (primitive-context-local-only!
+     . ,#'consent-redaction--primitive-context-local-only)
+    (primitive-redaction-log . ,#'consent-redaction--primitive-redaction-log)
+    (primitive-safe-for-provider?
+     . ,#'consent-redaction--primitive-safe-for-provider-p))
+  "Provider-owned primitive implementations for `(agent redaction)'.")
+
 ;;;###autoload
-(defun consent-redaction-primitive-specs ()
-  "Return primitive specs for the `(agent redaction)' library."
-  `(("secret-source?" ,#'consent-redaction--primitive-secret-source-p 1 1)
-    ("redact" ,#'consent-redaction--primitive-redact 2 2)
-    ("context-local-only!" ,#'consent-redaction--primitive-context-local-only 2 2)
-    ("redaction-log" ,#'consent-redaction--primitive-redaction-log 0 1)
-    ("safe-for-provider?" ,#'consent-redaction--primitive-safe-for-provider-p 2 2)))
+(defun consent-redaction-primitive-implementation (primitive)
+  "Return `(agent redaction)' implementation for PRIMITIVE."
+  (consent--primitive-implementation-from-table
+   primitive
+   consent-redaction--primitive-implementation-table
+   "`(agent redaction)'"))
 
 (provide 'consent-redaction)
 
