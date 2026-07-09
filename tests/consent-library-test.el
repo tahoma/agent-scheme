@@ -641,6 +641,14 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
     (dolist (case '(("(scheme case-lambda)"
                      ("case-lambda")
                      "scheme/consent/case-lambda.sld")
+                   ("(scheme cxr)"
+                    ("caaar" "caadr" "cadar" "caddr"
+                     "cdaar" "cdadr" "cddar" "cdddr"
+                     "caaaar" "caaadr" "caadar" "caaddr"
+                     "cadaar" "cadadr" "caddar" "cadddr"
+                     "cdaaar" "cdaadr" "cdadar" "cdaddr"
+                     "cddaar" "cddadr" "cdddar" "cddddr")
+                    "scheme/consent/cxr.sld")
                    ("(scheme lazy)"
                     ("delay" "delay-force" "force" "make-promise"
                      "promise?")
@@ -1088,10 +1096,11 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
                     consent--standard-source-library-export-names))
     (should-not (fboundp symbol)))
   (should-not (boundp 'consent--cxr-library-names))
-  (let* ((entry (consent--library-collection-manifest-entry "(scheme cxr)"))
-         (exports (plist-get entry :exports))
-         (specs (consent--manifest-exported-primitive-specs entry)))
-    (should (equal (mapcar #'car specs) exports))))
+  (let ((entry (consent--library-collection-manifest-entry "(scheme cxr)")))
+    (should (eq (plist-get entry :kind) 'library))
+    (should (eq (plist-get entry :source-kind) 'portable-source))
+    (should (equal (plist-get entry :source-file) "consent/cxr.sld"))
+    (should-not (plist-get entry :primitive-exports))))
 
 (ert-deftest consent-library-test-emacs-capability-keys-follow-manifest ()
   "Derive Emacs capability library keys instead of maintaining a twin list."

@@ -3237,22 +3237,6 @@ cursor across sessions."
       "Scheme values."
       (copy-list (car arguments)))
 
-    (define (primitive-caar arguments context)
-      "Implement the `caar` primitive with argument validation and Consent Scheme values."
-      (primitive-car (list (primitive-car arguments context)) context))
-
-    (define (primitive-cadr arguments context)
-      "Implement the `cadr` primitive with argument validation and Consent Scheme values."
-      (primitive-car (list (primitive-cdr arguments context)) context))
-
-    (define (primitive-cdar arguments context)
-      "Implement the `cdar` primitive with argument validation and Consent Scheme values."
-      (primitive-cdr (list (primitive-car arguments context)) context))
-
-    (define (primitive-cddr arguments context)
-      "Implement the `cddr` primitive with argument validation and Consent Scheme values."
-      (primitive-cdr (list (primitive-cdr arguments context)) context))
-
     (define (primitive-null? arguments context)
       "Implement the `null?` primitive with argument validation and Consent"
       "Scheme values."
@@ -9099,46 +9083,6 @@ cursor across sessions."
           (car cursor))
          (else (loop (cdr cursor))))))
 
-    (define (library-cxr-primitive-id? name)
-      "Return #t when NAME is a generated CXR primitive identifier."
-      (let* ((text (symbol->string name))
-             (prefix "primitive-")
-             (prefix-length (string-length prefix))
-             (length (string-length text)))
-        (and (> length (+ prefix-length 2))
-             (string=? (substring text 0 prefix-length) prefix)
-             (char=? (string-ref text prefix-length) #\c)
-             (char=? (string-ref text (- length 1)) #\r)
-             (let loop ((index (+ prefix-length 1)))
-               (cond
-                ((= index (- length 1)) #t)
-                ((or (char=? (string-ref text index) #\a)
-                     (char=? (string-ref text index) #\d))
-                 (loop (+ index 1)))
-                (else #f))))))
-
-    (define (library-cxr-primitive-function name)
-      "Return generated CXR implementation for primitive identifier NAME."
-      (let ((text
-             (substring
-              (symbol->string name)
-              (string-length "primitive-")
-              (string-length (symbol->string name)))))
-        (lambda (arguments context)
-          (let loop ((index (- (string-length text) 2))
-                     (value (car arguments)))
-            (if (= index 0)
-                value
-                (let ((step (string-ref text index)))
-                  (loop (- index 1)
-                        (cond
-                         ((char=? step #\a)
-                          (primitive-car (list value) context))
-                         ((char=? step #\d)
-                          (primitive-cdr (list value) context))
-                         (else
-                          (eval-error "invalid cxr primitive" name))))))))))
-
     ;; Map library resolver implementation names to interpreter procedures.
     (define library-primitive-implementation-table
       (list
@@ -9369,12 +9313,9 @@ cursor across sessions."
     (define (library-primitive-implementation-for-name name)
       "Resolve primitive implementations requested by the library module."
       (let ((entry (assq name library-primitive-implementation-table)))
-        (cond
-         (entry (cdr entry))
-         ((library-cxr-primitive-id? name)
-          (library-cxr-primitive-function name))
-         (else
-          (eval-error "unknown library primitive implementation" name)))))
+        (if entry
+            (cdr entry)
+            (eval-error "unknown library primitive implementation" name))))
 
     ;; Install this interpreter and macro expander for library resolution.
     (define library-backend-installed
