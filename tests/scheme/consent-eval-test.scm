@@ -1550,12 +1550,19 @@
         (find-source-library-spec '(scheme case-lambda) source-specs))
        (cxr-spec
         (find-source-library-spec '(scheme cxr) source-specs))
+       (char-spec
+        (find-source-library-spec '(scheme char) source-specs))
        (lazy-spec
         (find-source-library-spec '(scheme lazy) source-specs)))
   (check 'standard-source-library-case-lambda-exports
          (and case-lambda-spec
               (cadr (assq 'exports case-lambda-spec)))
          '(case-lambda))
+  (check 'standard-source-library-char-exports
+         (and char-spec
+              (cadr (assq 'exports char-spec)))
+         '(char-ci<=? char-ci<? char-ci=? char-ci>=? char-ci>?
+           string-ci<=? string-ci<? string-ci=? string-ci>=? string-ci>?))
   (check 'standard-source-library-lazy-exports
          (and lazy-spec
               (cadr (assq 'exports lazy-spec)))
@@ -1568,9 +1575,11 @@
            cdaaar cdaadr cdadar cdaddr cddaar cddadr cdddar cddddr))
   (check 'standard-source-library-files
          (and case-lambda-spec
+              char-spec
               cxr-spec
               lazy-spec
               (string? (cadr (assq 'source-file case-lambda-spec)))
+              (string? (cadr (assq 'source-file char-spec)))
               (string? (cadr (assq 'source-file cxr-spec)))
               (string? (cadr (assq 'source-file lazy-spec))))
          #t)
@@ -1578,6 +1587,10 @@
          (and case-lambda-spec
               (cadr (assq 'source-file case-lambda-spec)))
          "consent/case-lambda.sld")
+  (check 'standard-source-library-char-file
+         (and char-spec
+              (cadr (assq 'source-file char-spec)))
+         "consent/char.sld")
   (check 'standard-source-library-cxr-file
          (and cxr-spec
               (cadr (assq 'source-file cxr-spec)))

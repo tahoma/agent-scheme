@@ -3691,44 +3691,6 @@ DESCRIPTION names the primitive for errors."
         (consent--make-canonical-integer (- code ?0))
       consent-false)))
 
-(defun consent--char-fold-code (value description)
-  "Return folded character code for VALUE using DESCRIPTION."
-  (downcase
-   (upcase
-    (consent--expect-character value description))))
-
-(defun consent--primitive-char-ci-compare
-    (arguments predicate description)
-  "Return Scheme boolean for folded character PREDICATE over ARGUMENTS."
-  (consent--primitive-char-compare
-   (mapcar
-    (lambda (argument)
-      (consent--make-character
-       (consent--char-fold-code argument description)))
-    arguments)
-   predicate
-   description))
-
-(defun consent--primitive-char-ci=? (arguments _context)
-  "Primitive char-ci=? over ARGUMENTS."
-  (consent--primitive-char-ci-compare arguments #'= "char-ci=?"))
-
-(defun consent--primitive-char-ci<? (arguments _context)
-  "Primitive char-ci<? over ARGUMENTS."
-  (consent--primitive-char-ci-compare arguments #'< "char-ci<?"))
-
-(defun consent--primitive-char-ci>? (arguments _context)
-  "Primitive char-ci>? over ARGUMENTS."
-  (consent--primitive-char-ci-compare arguments #'> "char-ci>?"))
-
-(defun consent--primitive-char-ci<=? (arguments _context)
-  "Primitive char-ci<=? over ARGUMENTS."
-  (consent--primitive-char-ci-compare arguments #'<= "char-ci<=?"))
-
-(defun consent--primitive-char-ci>=? (arguments _context)
-  "Primitive char-ci>=? over ARGUMENTS."
-  (consent--primitive-char-ci-compare arguments #'>= "char-ci>=?"))
-
 (defun consent--display-string (value)
   "Return a focused display representation for VALUE."
   (consent-datum->external value 'write t))
@@ -5787,40 +5749,6 @@ Return (FORMS DIRECTORY AUTHORIZATION)."
   "Primitive string-foldcase over ARGUMENTS."
   (downcase (upcase (consent--expect-string
                      (car arguments) "string-foldcase"))))
-
-(defun consent--primitive-string-ci-compare
-    (arguments predicate description)
-  "Return Scheme boolean for folded string PREDICATE over ARGUMENTS."
-  (consent--primitive-string-compare
-   (mapcar
-    (lambda (argument)
-      (downcase (upcase (consent--expect-string argument description))))
-    arguments)
-   predicate
-   description))
-
-(defun consent--primitive-string-ci=? (arguments _context)
-  "Primitive string-ci=? over ARGUMENTS."
-  (consent--primitive-string-ci-compare arguments #'string= "string-ci=?"))
-
-(defun consent--primitive-string-ci<? (arguments _context)
-  "Primitive string-ci<? over ARGUMENTS."
-  (consent--primitive-string-ci-compare arguments #'string< "string-ci<?"))
-
-(defun consent--primitive-string-ci>? (arguments _context)
-  "Primitive string-ci>? over ARGUMENTS."
-  (consent--primitive-string-ci-compare
-   arguments (lambda (left right) (string< right left)) "string-ci>?"))
-
-(defun consent--primitive-string-ci<=? (arguments _context)
-  "Primitive string-ci<=? over ARGUMENTS."
-  (consent--primitive-string-ci-compare
-   arguments (lambda (left right) (not (string< right left))) "string-ci<=?"))
-
-(defun consent--primitive-string-ci>=? (arguments _context)
-  "Primitive string-ci>=? over ARGUMENTS."
-  (consent--primitive-string-ci-compare
-   arguments (lambda (left right) (not (string< left right))) "string-ci>=?"))
 
 (defun consent--map-over-lists (procedure lists context keep-results)
   "Map PROCEDURE over LISTS in CONTEXT.
