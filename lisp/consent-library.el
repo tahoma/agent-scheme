@@ -837,6 +837,8 @@ Use SOURCE-FILE, TARGET, or IMPLEMENTATION-ID when SOURCE is absent."
           (consent--collection-manifest-field entry "capabilities" nil))
          (documentation
           (consent--collection-manifest-field entry "documentation" nil))
+         (verification
+          (consent--collection-manifest-field entry "verification" nil))
          (provenance
           (consent--collection-manifest-field entry "provenance" nil))
          (canonical
@@ -919,6 +921,7 @@ Use SOURCE-FILE, TARGET, or IMPLEMENTATION-ID when SOURCE is absent."
           :effects effects
           :capabilities capabilities
           :documentation documentation
+          :verification verification
           :provenance provenance
           :canonical canonical
           :origin 'built-in-seed
@@ -1264,6 +1267,9 @@ Use SOURCE-FILE, TARGET, or IMPLEMENTATION-ID when SOURCE is absent."
            (documentation
             (consent--library-catalog-manifest-field
              fields "documentation" nil))
+           (verification
+            (consent--library-catalog-manifest-field
+             fields "verification" nil))
            (provenance
             (consent--library-catalog-manifest-field
              fields "provenance" nil))
@@ -1326,6 +1332,7 @@ Use SOURCE-FILE, TARGET, or IMPLEMENTATION-ID when SOURCE is absent."
             :effects effects
             :capabilities capabilities
             :documentation documentation
+            :verification verification
             :provenance provenance
             :canonical canonical
             :origin origin
@@ -1504,6 +1511,7 @@ Use SOURCE-FILE, TARGET, or IMPLEMENTATION-ID when SOURCE is absent."
      :effects (plist-get manifest-entry :effects)
      :capabilities (plist-get manifest-entry :capabilities)
      :documentation (plist-get manifest-entry :documentation)
+     :verification (plist-get manifest-entry :verification)
      :provenance (plist-get manifest-entry :provenance)
      :canonical (plist-get manifest-entry :canonical)
      :origin 'built-in-seed
@@ -1904,42 +1912,71 @@ Use SOURCE-FILE, TARGET, or IMPLEMENTATION-ID when SOURCE is absent."
   "Return direct manifest dependency keys from ENTRY."
   (or (plist-get entry :dependencies) nil))
 
+(defun consent--library-dependency-solution (name)
+  "Return dependency closure and missing edges for library NAME."
+  (let ((seen nil)
+        result
+        missing)
+    (cl-labels
+        ((visit
+          (key)
+          (unless (member key seen)
+            (push key seen)
+            (let ((entry (consent--library-catalog-lookup key)))
+              (if entry
+                  (dolist (dependency
+                           (consent--library-direct-dependencies entry))
+                    (unless (member dependency result)
+                      (push dependency result))
+                    (visit dependency))
+                (unless (member key missing)
+                  (push key missing)))))))
+      (let ((entry
+             (consent--library-catalog-lookup
+              (if (stringp name) name (consent--library-name-key name)))))
+        (dolist (dependency (consent--library-direct-dependencies entry))
+          (unless (member dependency result)
+            (push dependency result))
+          (visit dependency))))
+    (list :dependencies (nreverse result)
+          :missing-dependencies (nreverse missing))))
+
 (defun consent--library-dependency-closure (name)
   "Return transitive dependency keys for NAME in deterministic order."
-  (let ((seen nil)
-        result)
-    (cl-labels ((visit
-                 (key)
-                 (unless (member key seen)
-                   (push key seen)
-                   (let ((entry (consent--library-catalog-lookup key)))
-                     (dolist (dependency
-                              (and
-                               entry
-                               (consent--library-direct-dependencies entry)))
-                       (unless (member dependency result)
-                         (push dependency result))
-                       (visit dependency))))))
-      (visit (if (stringp name) name (consent--library-name-key name))))
-    (nreverse result)))
+  (plist-get (consent--library-dependency-solution name) :dependencies))
 
 (defun consent--library-solve-dependencies-record (name)
   "Return a Scheme-readable dependency solution record for NAME."
   (let* ((key (if (stringp name) name (consent--library-name-key name)))
          (entry (consent--library-catalog-lookup key)))
     (if entry
-        (list
-         (consent--syntax-symbol "library-dependencies")
-         (consent--library-record-field
-          "name"
-          (consent--library-record-library-name key))
-         (consent--library-record-field
-          "status"
-          (consent--syntax-symbol "resolved"))
-         (consent--library-record-field
-          "dependencies"
-          (mapcar #'consent-read
-                  (consent--library-dependency-closure key))))
+        (let* ((solution (consent--library-dependency-solution key))
+               (dependencies (plist-get solution :dependencies))
+               (missing-dependencies
+                (plist-get solution :missing-dependencies)))
+          (append
+           (list
+            (consent--syntax-symbol "library-dependencies")
+            (consent--library-record-field
+             "name"
+             (consent--library-record-library-name key))
+            (consent--library-record-field
+             "status"
+             (consent--syntax-symbol
+              (if missing-dependencies
+                  "unsatisfied-dependency"
+                "resolved")))
+            (consent--library-record-field
+             "dependencies"
+             (mapcar #'consent-read dependencies)))
+           (when missing-dependencies
+             (list
+              (consent--library-record-field
+               "reason"
+               (consent--syntax-symbol "missing-dependency"))
+              (consent--library-record-field
+               "missing-dependencies"
+               (mapcar #'consent-read missing-dependencies))))))
       (list
        (consent--syntax-symbol "library-dependencies")
        (consent--library-record-field

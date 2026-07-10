@@ -54,6 +54,9 @@
 (declare-function consent--library-srfi-name "consent-library")
 (declare-function consent--library-srfi-aliases "consent-library")
 (declare-function consent--library-vendored-srfi-entry "consent-library")
+(declare-function consent--source-library-call "consent-library")
+
+(defvar consent--source-library-internal-imports-allowed)
 
 (defconst consent-reflect--omitted-manifest-fields
   '(:emacs-hook :portable-hook :emitter-hook :test-categories)
@@ -845,12 +848,74 @@ callers can distinguish unbounded from exhausted."
   "Return known library aliases for SRFI NUMBER."
   (consent--library-srfi-aliases number))
 
+(defun consent-reflect--library-name-datum (key)
+  "Return catalog KEY as a Scheme library name datum."
+  (if key (consent-read key) consent-false))
+
+(defun consent-reflect--library-name-list (keys)
+  "Return catalog KEYS as Scheme library name data."
+  (mapcar #'consent-read (or keys nil)))
+
+(defun consent-reflect--vendored-srfi-catalog-entry (entry)
+  "Return ENTRY as a portable catalog field record."
+  (if (not entry)
+      consent-false
+    (list
+     (consent-reflect--field
+      "name"
+      (consent-reflect--library-name-datum (plist-get entry :name)))
+     (consent-reflect--field
+      "target"
+      (consent-reflect--library-name-datum (plist-get entry :target)))
+     (consent-reflect--field
+      "aliases"
+      (consent-reflect--library-name-list (plist-get entry :aliases)))
+     (consent-reflect--field
+      "dependencies"
+      (consent-reflect--library-name-list (plist-get entry :dependencies)))
+     (consent-reflect--field
+      "source"
+      (or (plist-get entry :source) consent-false))
+     (consent-reflect--field
+      "source-version"
+      (or (plist-get entry :source-version) consent-false))
+     (consent-reflect--field
+      "provenance"
+      (or (plist-get entry :provenance) nil))
+     (consent-reflect--field
+      "verification"
+      (or (plist-get entry :verification) nil))
+     (consent-reflect--field
+      "status"
+      (if (plist-get entry :status)
+          (consent-reflect--symbol (plist-get entry :status))
+        consent-false))
+     (consent-reflect--field
+      "realization"
+      (if (plist-get entry :realization)
+          (consent-reflect--symbol (plist-get entry :realization))
+        consent-false)))))
+
+(defun consent-reflect--vendored-srfi-implementation-entry (entry)
+  "Return the implementation catalog entry represented by ENTRY."
+  (let ((target (and entry (plist-get entry :target))))
+    (if (and target (eq (plist-get entry :status) 'alias))
+        (or (consent--library-catalog-lookup target) entry)
+      entry)))
+
 (defun consent-reflect-vendored-srfi-manifest (number)
-  "Return manifest metadata for vendored SRFI NUMBER, or #f."
-  (let ((entry (consent--library-vendored-srfi-entry number)))
-    (if entry
-        (consent-reflect--library-info-record entry)
-      consent-false)))
+  "Return SRFI vendor-intake metadata for NUMBER."
+  (let* ((entry (consent--library-vendored-srfi-entry number))
+         (implementation-entry
+          (consent-reflect--vendored-srfi-implementation-entry entry))
+         (consent--source-library-internal-imports-allowed t))
+    (consent--source-library-call
+     "(consent library)"
+     "vendored-srfi-record"
+     number
+     (consent--library-srfi-name number)
+     (consent-reflect--vendored-srfi-catalog-entry entry)
+     (consent-reflect--vendored-srfi-catalog-entry implementation-entry))))
 
 (defun consent-reflect--catalog-private-library (library-name)
   "Return (LIBRARY . CONTEXT) for LIBRARY-NAME in a private catalog context."

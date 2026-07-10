@@ -270,6 +270,13 @@ Resolver inspection is separate from catalog listing:
 resolved target, root category, source kind, visibility, owner/provider, trust,
 and status. Missing, denied, unavailable, and duplicate-conflict cases are
 reported as data so tools can explain resolution without parsing import errors.
+`library-solve-dependencies` returns `unsatisfied-dependency` with
+`missing-dependencies` when a manifest edge cannot be resolved.
+`vendored-srfi-manifest` returns a `vendored-srfi` intake record for SRFI-backed
+stdlib entries, including the implementation library, import names, source URL,
+upstream revision or tag, license/local-license fields, local patches,
+dependencies, status, and tests. Shims report `classification` as `shim` with a
+target library, while unknown SRFI numbers report `status` as `missing`.
 
 ## Keep The Surfaces Straight
 

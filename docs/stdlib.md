@@ -35,6 +35,18 @@ status for stdlib libraries using the shared manifest vocabulary documented in
 [Library Surface and Manifests](library-surface.md). Vendored source keeps its
 upstream license and local adaptations are listed in the manifest entry,
 alongside canonical source, API/source version, provenance, and alias metadata.
+`(agent reflect)` exposes the SRFI-facing intake view through
+`(vendored-srfi-manifest number)`, which returns a `vendored-srfi` record with
+the implementation library, import names, source URL, upstream revision or tag,
+license and local-license fields, local patches, dependencies, status, and test
+status. Shim records, such as `(srfi 16)`, point at their target library instead
+of claiming vendored source; missing SRFIs return a missing record. Child SRFI
+implementations remain tracked in their own issues, so this manifest contract
+does not imply that the full SRFI-backed stdlib backlog has shipped.
+
+Vendored code and adapted upstream test material keep their recorded upstream
+license in `scheme/stdlib/manifest.sld`; repository license files and REUSE
+annotations preserve the corresponding notices for the proving slice.
 
 `(scheme mapping)` and the SRFI 146 aliases expose only the ordered mapping
 interface. `(scheme mapping hash)`, `(srfi 146 hash)`, and

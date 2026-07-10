@@ -5525,11 +5525,8 @@ cursor across sessions."
       (reflect-datumize (consent-srfi-library-aliases number)))
 
     (define (reflect-vendored-srfi-manifest number)
-      "Return manifest metadata for vendored SRFI NUMBER."
-      (let ((entry (consent-vendored-srfi-entry number)))
-        (if entry
-            (reflect-library-info-record entry)
-            #f)))
+      "Return SRFI vendor-intake metadata for NUMBER."
+      (reflect-datumize (consent-vendored-srfi-record number)))
 
     (define (reflect-catalog-private-library library-name)
       "Return (LIBRARY . CONTEXT) for LIBRARY-NAME in a private context."

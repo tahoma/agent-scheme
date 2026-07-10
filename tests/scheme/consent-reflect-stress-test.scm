@@ -577,7 +577,26 @@
                      (source-version runtime)
                      (realization alias)
                      (status available)
-                     (canonical #f))))
+                     (canonical #f))
+                    (manifest-entry
+                     (schema-version 1)
+                     (kind library)
+                     (name (project needs-missing))
+                     (owner project)
+                     (provider repo-source)
+                     (visibility public)
+                     (layer package)
+                     (category project)
+                     (source-kind source-library)
+                     (source (path \"project/needs-missing.sld\"))
+                     (api-version (compat 0))
+                     (source-version unknown)
+                     (realization portable-source)
+                     (exports (run))
+                     (dependencies ((library (project absent))))
+                     (provenance ((origin test-fixture)))
+                     (status available)
+                     (canonical #t))))
                  (define result
                    (let* ((base (library-resolve '(scheme base)))
                           (alias (library-resolve '(srfi 16)))
@@ -588,11 +607,15 @@
                           (loaded (library-load '(srfi 16)))
                           (dependencies
                            (library-solve-dependencies '(scheme lazy)))
+                          (dependency-failure
+                           (library-solve-dependencies
+                            '(project needs-missing)))
                           (conflict
                            (car (library-conflicts '(project duplicated))))
                           (paths (library-paths))
                           (snapshot (library-snapshot '(srfi 16)))
-                          (vendored (vendored-srfi-manifest 16)))
+                          (vendored (vendored-srfi-manifest 16))
+                          (vendored-missing (vendored-srfi-manifest 99999)))
                      (list
                       (list 'base
                             (field base 'status)
@@ -628,6 +651,12 @@
                             (field dependencies 'status)
                             (has-name? (field dependencies 'dependencies)
                                        '(scheme base)))
+                      (list 'dependency-failure
+                            (field dependency-failure 'status)
+                            (field dependency-failure 'reason)
+                            (has-name?
+                             (field dependency-failure 'missing-dependencies)
+                             '(project absent)))
                       (list 'paths
                             (not (null? paths))
                             (field (car paths) 'kind))
@@ -638,7 +667,13 @@
                                              '(srfi 16)))
                       (list 'srfi-name (srfi-library-name 16))
                       (list 'srfi-aliases (srfi-library-aliases 16))
-                      (list 'vendored (field vendored 'name)))))
+                      (list 'vendored
+                            (field vendored 'classification)
+                            (field vendored 'library)
+                            (field vendored 'target))
+                      (list 'vendored-missing
+                            (field vendored-missing 'status)
+                            (field vendored-missing 'reason)))))
                  (remove-manifest! 'reflect-resolution-fixture)
                  result"
                 (expected-datum-external
@@ -653,11 +688,14 @@
                    (conflict conflict (project duplicated) 2)
                    (loaded resolved #t)
                    (dependencies resolved #t)
+                   (dependency-failure unsatisfied-dependency
+                                       missing-dependency #t)
                    (paths #t ad-hoc-manifest)
                    (snapshot resolved (srfi 16) #t)
                    (srfi-name (srfi 16))
                    (srfi-aliases ((srfi 16) (srfi srfi-16)))
-                   (vendored (srfi 16)))"))
+                   (vendored shim (srfi 16) (scheme case-lambda))
+                   (vendored-missing missing missing-srfi))"))
 
 (if (= failures 0)
     (begin
