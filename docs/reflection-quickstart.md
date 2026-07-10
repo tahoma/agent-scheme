@@ -252,6 +252,25 @@ Use `refresh-library-catalog!` after changing catalog inputs outside the normal
 add/remove helpers. `catalog-diagnostics` reports Scheme-readable issues such
 as lower-precedence duplicate libraries shadowed by a higher-precedence source.
 
+Resolver inspection is separate from catalog listing:
+
+```scheme
+(library-resolve '(srfi 16))
+(library-load '(srfi 16))
+(library-solve-dependencies '(scheme lazy))
+(library-paths)
+(library-conflicts '(project duplicated))
+(library-snapshot '(srfi 16))
+(srfi-library-name 16)
+(srfi-library-aliases 16)
+(vendored-srfi-manifest 16)
+```
+
+`library-resolve` returns a `library-resolution` record with the requested name,
+resolved target, root category, source kind, visibility, owner/provider, trust,
+and status. Missing, denied, unavailable, and duplicate-conflict cases are
+reported as data so tools can explain resolution without parsing import errors.
+
 ## Keep The Surfaces Straight
 
 Reflection intentionally separates live environment discovery from library
@@ -261,8 +280,10 @@ catalog discovery:
   `documented-bindings`, `docstring`, `current-imports`, and
   `library-bindings`
 - Library catalog: `libraries`, `library-info`, `library-search`,
-  `library-documentation`, `catalog-sources`, `catalog-diagnostics`, and the
-  manifest add/remove helpers
+  `library-documentation`, `catalog-sources`, `catalog-diagnostics`,
+  `library-resolve`, `library-load`, `library-solve-dependencies`,
+  `library-paths`, `library-conflicts`, `library-snapshot`, the SRFI helpers,
+  and the manifest add/remove helpers
 - Mixed search: `apropos` and `binding-libraries`, which combine catalog
   metadata with current-context definition or library registry data
 

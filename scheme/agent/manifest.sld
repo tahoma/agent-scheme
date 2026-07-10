@@ -902,7 +902,10 @@
          (consent-version current-capabilities current-policy current-budget budget-remaining
                            budget-exhausted? budget-yield current-imports library-bindings libraries
                            library-info library-search catalog-sources catalog-diagnostics add-manifest!
-                           remove-manifest! add-manifest-root! remove-manifest-root! refresh-library-catalog!
+                           library-resolve library-load library-solve-dependencies library-paths
+                           library-conflicts library-snapshot srfi-library-name srfi-library-aliases
+                           vendored-srfi-manifest remove-manifest! add-manifest-root!
+                           remove-manifest-root! refresh-library-catalog!
                            library-documentation binding-libraries documented-bindings apropos
                            reflection-field documentation-field docstring current-session-info recent-yields
                            recent-errors recent-policy-decisions capability-info documentation consent-doc
@@ -977,6 +980,51 @@
          ((name catalog-diagnostics)
           (primitive primitive-catalog-diagnostics)
           (arity 0 0)
+          (effects (reflection))
+          (capabilities ()))
+         ((name library-resolve)
+          (primitive primitive-library-resolve)
+          (arity 1 1)
+          (effects (reflection))
+          (capabilities ()))
+         ((name library-load)
+          (primitive primitive-library-load)
+          (arity 1 1)
+          (effects (state-write reflection))
+          (capabilities ()))
+         ((name library-solve-dependencies)
+          (primitive primitive-library-solve-dependencies)
+          (arity 1 1)
+          (effects (reflection))
+          (capabilities ()))
+         ((name library-paths)
+          (primitive primitive-library-paths)
+          (arity 0 0)
+          (effects (reflection))
+          (capabilities ()))
+         ((name library-conflicts)
+          (primitive primitive-library-conflicts)
+          (arity 0 1)
+          (effects (reflection))
+          (capabilities ()))
+         ((name library-snapshot)
+          (primitive primitive-library-snapshot)
+          (arity 1 1)
+          (effects (reflection))
+          (capabilities ()))
+         ((name srfi-library-name)
+          (primitive primitive-srfi-library-name)
+          (arity 1 1)
+          (effects (reflection))
+          (capabilities ()))
+         ((name srfi-library-aliases)
+          (primitive primitive-srfi-library-aliases)
+          (arity 1 1)
+          (effects (reflection))
+          (capabilities ()))
+         ((name vendored-srfi-manifest)
+          (primitive primitive-vendored-srfi-manifest)
+          (arity 1 1)
           (effects (reflection))
           (capabilities ()))
          ((name add-manifest!)

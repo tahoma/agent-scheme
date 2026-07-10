@@ -45,6 +45,15 @@
 (declare-function consent--library-catalog-add-root "consent-library")
 (declare-function consent--library-catalog-remove-root "consent-library")
 (declare-function consent--library-catalog-refresh "consent-library")
+(declare-function consent--library-resolve-record "consent-library")
+(declare-function consent--library-load-record "consent-library")
+(declare-function consent--library-solve-dependencies-record "consent-library")
+(declare-function consent--library-paths "consent-library")
+(declare-function consent--library-conflict-records "consent-library")
+(declare-function consent--library-snapshot-record "consent-library")
+(declare-function consent--library-srfi-name "consent-library")
+(declare-function consent--library-srfi-aliases "consent-library")
+(declare-function consent--library-vendored-srfi-entry "consent-library")
 
 (defconst consent-reflect--omitted-manifest-fields
   '(:emacs-hook :portable-hook :emitter-hook :test-categories)
@@ -804,6 +813,45 @@ callers can distinguish unbounded from exhausted."
   "Return manifest catalog diagnostics."
   (consent--library-catalog-diagnostics))
 
+(defun consent-reflect-library-resolve (library-name context)
+  "Return deterministic resolution metadata for LIBRARY-NAME."
+  (consent--library-resolve-record library-name context))
+
+(defun consent-reflect-library-load (library-name context environment)
+  "Load LIBRARY-NAME into CONTEXT and return resolution metadata."
+  (consent--library-load-record library-name context environment))
+
+(defun consent-reflect-library-solve-dependencies (library-name)
+  "Return a dependency solution record for LIBRARY-NAME."
+  (consent--library-solve-dependencies-record library-name))
+
+(defun consent-reflect-library-paths ()
+  "Return active library resolution path records."
+  (consent--library-paths))
+
+(defun consent-reflect-library-conflicts (&optional library-name)
+  "Return deterministic catalog conflict records."
+  (consent--library-conflict-records library-name))
+
+(defun consent-reflect-library-snapshot (library-name context)
+  "Return a reproducible library resolution snapshot for LIBRARY-NAME."
+  (consent--library-snapshot-record library-name context))
+
+(defun consent-reflect-srfi-library-name (number)
+  "Return canonical SRFI library name for NUMBER."
+  (consent--library-srfi-name number))
+
+(defun consent-reflect-srfi-library-aliases (number)
+  "Return known library aliases for SRFI NUMBER."
+  (consent--library-srfi-aliases number))
+
+(defun consent-reflect-vendored-srfi-manifest (number)
+  "Return manifest metadata for vendored SRFI NUMBER, or #f."
+  (let ((entry (consent--library-vendored-srfi-entry number)))
+    (if entry
+        (consent-reflect--library-info-record entry)
+      consent-false)))
+
 (defun consent-reflect--catalog-private-library (library-name)
   "Return (LIBRARY . CONTEXT) for LIBRARY-NAME in a private catalog context."
   (let* ((pair (consent--library-catalog-private-context))
@@ -1228,6 +1276,57 @@ can classify a recent error or a nested evaluation's outcome."
   (consent-reflect--redact
    (consent-reflect-catalog-diagnostics)))
 
+(defun consent-reflect--primitive-library-resolve (arguments context)
+  "Primitive `library-resolve'."
+  (consent-reflect--redact
+   (consent-reflect-library-resolve (car arguments) context)))
+
+(defun consent-reflect--primitive-library-load (arguments context)
+  "Primitive `library-load'."
+  (consent-reflect--redact
+   (consent-reflect-library-load
+    (car arguments)
+    context
+    (consent--eval-context-interaction-environment context))))
+
+(defun consent-reflect--primitive-library-solve-dependencies
+    (arguments _context)
+  "Primitive `library-solve-dependencies'."
+  (consent-reflect--redact
+   (consent-reflect-library-solve-dependencies (car arguments))))
+
+(defun consent-reflect--primitive-library-paths (_arguments _context)
+  "Primitive `library-paths'."
+  (consent-reflect--redact
+   (consent-reflect-library-paths)))
+
+(defun consent-reflect--primitive-library-conflicts (arguments _context)
+  "Primitive `library-conflicts'."
+  (consent-reflect--redact
+   (consent-reflect-library-conflicts (car arguments))))
+
+(defun consent-reflect--primitive-library-snapshot (arguments context)
+  "Primitive `library-snapshot'."
+  (consent-reflect--redact
+   (consent-reflect-library-snapshot (car arguments) context)))
+
+(defun consent-reflect--primitive-srfi-library-name (arguments _context)
+  "Primitive `srfi-library-name'."
+  (consent-reflect--redact
+   (consent-reflect-srfi-library-name (car arguments))))
+
+(defun consent-reflect--primitive-srfi-library-aliases
+    (arguments _context)
+  "Primitive `srfi-library-aliases'."
+  (consent-reflect--redact
+   (consent-reflect-srfi-library-aliases (car arguments))))
+
+(defun consent-reflect--primitive-vendored-srfi-manifest
+    (arguments _context)
+  "Primitive `vendored-srfi-manifest'."
+  (consent-reflect--redact
+   (consent-reflect-vendored-srfi-manifest (car arguments))))
+
 (defun consent-reflect--primitive-add-manifest! (arguments _context)
   "Primitive `add-manifest!'."
   (consent-reflect--redact
@@ -1425,6 +1524,24 @@ can classify a recent error or a nested evaluation's outcome."
      . ,#'consent-reflect--primitive-catalog-sources)
     (primitive-catalog-diagnostics
      . ,#'consent-reflect--primitive-catalog-diagnostics)
+    (primitive-library-resolve
+     . ,#'consent-reflect--primitive-library-resolve)
+    (primitive-library-load
+     . ,#'consent-reflect--primitive-library-load)
+    (primitive-library-solve-dependencies
+     . ,#'consent-reflect--primitive-library-solve-dependencies)
+    (primitive-library-paths
+     . ,#'consent-reflect--primitive-library-paths)
+    (primitive-library-conflicts
+     . ,#'consent-reflect--primitive-library-conflicts)
+    (primitive-library-snapshot
+     . ,#'consent-reflect--primitive-library-snapshot)
+    (primitive-srfi-library-name
+     . ,#'consent-reflect--primitive-srfi-library-name)
+    (primitive-srfi-library-aliases
+     . ,#'consent-reflect--primitive-srfi-library-aliases)
+    (primitive-vendored-srfi-manifest
+     . ,#'consent-reflect--primitive-vendored-srfi-manifest)
     (primitive-add-manifest!
      . ,#'consent-reflect--primitive-add-manifest!)
     (primitive-remove-manifest!

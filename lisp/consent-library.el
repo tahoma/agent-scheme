@@ -964,7 +964,8 @@ Use SOURCE-FILE, TARGET, or IMPLEMENTATION-ID when SOURCE is absent."
 
 (defun consent--library-visibility-internal-p (visibility)
   "Return non-nil when VISIBILITY requires internal-library posture."
-  (memq visibility '(internal-runtime internal-agent-primitive)))
+  (memq visibility
+        '(internal-runtime internal-agent-primitive internal-agent-model)))
 
 (defun consent--library-availability-condition-satisfied-p (condition)
   "Return non-nil when manifest availability CONDITION is satisfied."
@@ -990,9 +991,10 @@ Use SOURCE-FILE, TARGET, or IMPLEMENTATION-ID when SOURCE is absent."
                (consent--eval-context-internal-libraries-allowed context)
              (args-out-of-range nil)))))
 
-(defun consent--ensure-library-import-allowed (key context)
+(defun consent--ensure-library-import-allowed (key context &optional entry)
   "Signal when KEY is not importable in CONTEXT's current posture."
-  (let ((visibility (consent--library-visibility key)))
+  (let ((visibility (or (plist-get entry :visibility)
+                        (consent--library-visibility key))))
     (when (and (consent--library-visibility-internal-p visibility)
                (not (consent--library-internal-import-allowed-p context)))
       (consent--eval-error
@@ -1171,6 +1173,14 @@ Use SOURCE-FILE, TARGET, or IMPLEMENTATION-ID when SOURCE is absent."
              (consent--library-catalog-manifest-field
               fields "source-kind" nil)
              target))
+           (availability
+            (consent--library-catalog-require-symbol
+             (consent--library-catalog-manifest-field
+              fields "availability" 'required)
+             "catalog availability"))
+           (availability-condition
+            (consent--library-catalog-manifest-field
+             fields "availability-condition" nil))
            (schema-version
             (consent--manifest-nonnegative-integer
              (consent--library-catalog-manifest-field
@@ -1302,6 +1312,8 @@ Use SOURCE-FILE, TARGET, or IMPLEMENTATION-ID when SOURCE is absent."
             :owner owner
             :provider provider
             :layer layer
+            :availability availability
+            :availability-condition availability-condition
             :api-version api-version
             :source-version source-version
             :realization realization
@@ -1409,9 +1421,19 @@ Use SOURCE-FILE, TARGET, or IMPLEMENTATION-ID when SOURCE is absent."
   "Add or replace explicit manifest ROOT with MANIFEST."
   (unless (stringp root)
     (consent--eval-error "catalog root must be a string"))
-  (let ((entries
-         (consent--library-catalog-parse-manifest
-          manifest 'manifest-root root)))
+  (let* ((root-directory
+          (and (file-directory-p root)
+               (consent--library-normalize-root-directory root)))
+         (entries
+          (mapcar
+           (lambda (entry)
+             (append entry
+                     (delq nil
+                           (list (and root-directory :root)
+                                 root-directory
+                                 :root-kind 'manifest-root))))
+           (consent--library-catalog-parse-manifest
+            manifest 'manifest-root root))))
     (setq consent--library-catalog-root-manifests
           (consent--library-catalog-replace-source
            consent--library-catalog-root-manifests
@@ -1459,7 +1481,7 @@ Use SOURCE-FILE, TARGET, or IMPLEMENTATION-ID when SOURCE is absent."
      :implementation-resolver
      (plist-get manifest-entry :implementation-resolver)
      :primitive-exports (plist-get manifest-entry :primitive-exports)
-     :visibility (consent--library-visibility key)
+     :visibility (or (plist-get manifest-entry :visibility) 'public)
      :layer (plist-get manifest-entry :layer)
      :owner (plist-get manifest-entry :owner)
      :provider (plist-get manifest-entry :provider)
@@ -1470,6 +1492,8 @@ Use SOURCE-FILE, TARGET, or IMPLEMENTATION-ID when SOURCE is absent."
      :source-version (plist-get manifest-entry :source-version)
      :realization (plist-get manifest-entry :realization)
      :source (plist-get manifest-entry :source)
+     :root (plist-get manifest-entry :root)
+     :root-kind (plist-get manifest-entry :root-kind)
      :source-file source-file
      :aliases (if (plist-member manifest-entry :aliases)
                   (plist-get manifest-entry :aliases)
@@ -1550,11 +1574,16 @@ Use SOURCE-FILE, TARGET, or IMPLEMENTATION-ID when SOURCE is absent."
 
 (defun consent--library-catalog-entries ()
   "Return manifest-backed catalog metadata for repo-owned libraries."
-  (or consent--library-catalog-cache
-      (setq
-       consent--library-catalog-cache
-       (consent--library-catalog-deduplicate
-        (consent--library-catalog-candidate-entries)))))
+  (let ((cache-key (consent--library-manifest-root-cache-key)))
+    (if (and consent--library-catalog-cache
+             (equal (car consent--library-catalog-cache) cache-key))
+        (cadr consent--library-catalog-cache)
+      (let ((entries
+             (consent--library-catalog-deduplicate
+              (consent--library-catalog-candidate-entries))))
+        (setq consent--library-catalog-cache
+              (list cache-key entries))
+        entries))))
 
 (defun consent--library-catalog-sources ()
   "Return Scheme-readable catalog source records."
@@ -1582,8 +1611,7 @@ Use SOURCE-FILE, TARGET, or IMPLEMENTATION-ID when SOURCE is absent."
 
 (defun consent--library-catalog-diagnostics ()
   "Return diagnostics from the most recent catalog build."
-  (unless consent--library-catalog-cache
-    (consent--library-catalog-entries))
+  (consent--library-catalog-entries)
   consent--library-catalog-diagnostics)
 
 (defun consent--library-catalog-lookup (library-name)
@@ -1625,6 +1653,435 @@ Use SOURCE-FILE, TARGET, or IMPLEMENTATION-ID when SOURCE is absent."
                " ")))
          (string-match-p (regexp-quote needle) (downcase haystack))))
      (consent--library-catalog-entries))))
+
+(defun consent--library-catalog-candidates (library-name)
+  "Return all catalog candidates for LIBRARY-NAME in precedence order."
+  (let ((key (if (stringp library-name)
+                 library-name
+               (consent--library-name-key library-name))))
+    (seq-filter
+     (lambda (entry)
+       (equal (plist-get entry :name) key))
+     (consent--library-catalog-candidate-entries))))
+
+(defun consent--library-record-symbol (symbol)
+  "Return SYMBOL as a Scheme-readable symbol."
+  (consent--syntax-symbol (symbol-name symbol)))
+
+(defun consent--library-record-field (name value)
+  "Return a Scheme-readable library resolver field."
+  (list (consent--syntax-symbol name) value))
+
+(defun consent--library-record-library-name (key)
+  "Return library KEY as a Scheme-readable library-name datum."
+  (if key
+      (consent-read key)
+    consent-false))
+
+(defun consent--library-record-symbol-or-false (value)
+  "Return symbol VALUE as a datum, or #f when absent."
+  (if value
+      (consent--library-record-symbol value)
+    consent-false))
+
+(defun consent--library-record-source-id (source-id)
+  "Return SOURCE-ID as a Scheme-readable value."
+  (cond
+   ((stringp source-id) source-id)
+   ((symbolp source-id) (consent--library-record-symbol source-id))
+   ((consent-symbol-p source-id) source-id)
+   ((null source-id) consent-false)
+   (t source-id)))
+
+(defun consent--library-record-root (entry)
+  "Return ENTRY's root category."
+  (let ((origin (plist-get entry :origin))
+        (root-kind (plist-get entry :root-kind))
+        (source-kind (plist-get entry :source-kind))
+        (category (plist-get entry :category))
+        (owner (plist-get entry :owner))
+        (name (plist-get entry :name)))
+    (cond
+     ((eq origin 'ad-hoc-manifest) 'ad-hoc-manifest)
+     ((eq origin 'manifest-root) 'manifest-root)
+     ((eq root-kind 'user) 'user)
+     ((eq source-kind 'base-snapshot) 'builtin)
+     ((or (eq category 'standard)
+          (eq category 'stdlib)
+          (eq owner 'stdlib)
+          (and (stringp name)
+               (or (string-prefix-p "(srfi " name)
+                   (string-prefix-p "(stdlib " name))))
+      'stdlib-vendored)
+     ((eq source-kind 'primitive) 'host-adapter)
+     ((eq root-kind 'system) 'builtin)
+     (t 'builtin))))
+
+(defun consent--library-record-trust (root)
+  "Return trust label for resolver ROOT."
+  (pcase root
+    ('ad-hoc-manifest 'ad-hoc)
+    ('manifest-root 'explicit)
+    ('user 'user)
+    ('host-adapter 'host)
+    ((or 'stdlib-vendored 'builtin) 'bundled)
+    (_ 'unknown)))
+
+(defun consent--library-entry-resolved-name (entry &optional seen)
+  "Return ENTRY's final target key after alias expansion."
+  (let ((key (plist-get entry :name))
+        (target (plist-get entry :target)))
+    (if (or (null target) (member key seen))
+        key
+      (let ((target-entry (consent--library-catalog-lookup target)))
+        (if target-entry
+            (consent--library-entry-resolved-name
+             target-entry
+             (cons key seen))
+          target)))))
+
+(defun consent--library-candidate-record (entry)
+  "Return ENTRY as a Scheme-readable library-candidate record."
+  (let* ((root (consent--library-record-root entry))
+         (trust (consent--library-record-trust root)))
+    (list
+     (consent--syntax-symbol "library-candidate")
+     (consent--library-record-field
+      "name"
+      (consent--library-record-library-name (plist-get entry :name)))
+     (consent--library-record-field
+      "root"
+      (consent--library-record-symbol root))
+     (consent--library-record-field
+      "source-id"
+      (consent--library-record-source-id (plist-get entry :source-id)))
+     (consent--library-record-field
+      "source-kind"
+      (consent--library-record-symbol
+       (or (plist-get entry :source-kind) 'manifest)))
+     (consent--library-record-field
+      "provider"
+      (consent--library-record-symbol-or-false
+       (plist-get entry :provider)))
+     (consent--library-record-field
+      "trust"
+      (consent--library-record-symbol trust)))))
+
+(cl-defun consent--library-resolution-record
+    (name &key entry status reason loaded candidates)
+  "Return a Scheme-readable resolution record for NAME."
+  (let* ((key (if (stringp name) name (consent--library-name-key name)))
+         (resolved-key (and entry (consent--library-entry-resolved-name entry)))
+         (root (and entry (consent--library-record-root entry)))
+         (trust (and root (consent--library-record-trust root)))
+         (availability-condition
+          (and entry (plist-get entry :availability-condition))))
+    (append
+     (list
+      (consent--syntax-symbol "library-resolution")
+      (consent--library-record-field
+       "name"
+       (consent--library-record-library-name key))
+      (consent--library-record-field
+       "resolved-name"
+       (consent--library-record-library-name (or resolved-key key)))
+      (consent--library-record-field
+       "root"
+       (consent--library-record-symbol-or-false root))
+      (consent--library-record-field
+       "source-kind"
+       (consent--library-record-symbol-or-false
+        (and entry (plist-get entry :source-kind))))
+      (consent--library-record-field
+       "source"
+       (or (and entry (plist-get entry :source)) consent-false))
+      (consent--library-record-field
+       "source-file"
+       (or (and entry (plist-get entry :source-file)) consent-false))
+      (consent--library-record-field
+       "visibility"
+       (consent--library-record-symbol-or-false
+        (and entry (plist-get entry :visibility))))
+      (consent--library-record-field
+       "layer"
+       (consent--library-record-symbol-or-false
+        (and entry (plist-get entry :layer))))
+      (consent--library-record-field
+       "owner"
+       (consent--library-record-symbol-or-false
+        (and entry (plist-get entry :owner))))
+      (consent--library-record-field
+       "provider"
+       (consent--library-record-symbol-or-false
+        (and entry (plist-get entry :provider))))
+      (consent--library-record-field
+       "trust"
+       (consent--library-record-symbol-or-false trust))
+      (consent--library-record-field
+       "target"
+       (consent--library-record-library-name
+        (and entry (plist-get entry :target))))
+      (consent--library-record-field
+       "availability"
+       (consent--library-record-symbol-or-false
+        (and entry (plist-get entry :availability))))
+      (consent--library-record-field
+       "availability-condition"
+       (or availability-condition consent-false))
+      (consent--library-record-field
+       "status"
+       (consent--library-record-symbol status)))
+     (delq
+      nil
+      (list
+       (and reason
+            (consent--library-record-field
+             "reason"
+             (consent--library-record-symbol reason)))
+       (and loaded
+            (consent--library-record-field
+             "loaded?"
+             consent-true))
+       (and candidates
+            (consent--library-record-field
+             "candidates"
+             (mapcar #'consent--library-candidate-record
+                     candidates))))))))
+
+(defun consent--library-resolve-record (name context)
+  "Return NAME's deterministic library-resolution record in CONTEXT."
+  (let* ((key (if (stringp name) name (consent--library-name-key name)))
+         (entry (consent--library-catalog-lookup key)))
+    (cond
+     ((null entry)
+      (consent--library-resolution-record
+       key
+       :status 'missing
+       :reason 'missing-library))
+     ((and (consent--library-visibility-internal-p
+            (plist-get entry :visibility))
+           (not (consent--library-internal-import-allowed-p context)))
+      (append
+       (consent--library-resolution-record
+        key
+        :entry entry
+        :status 'denied
+        :reason 'internal-library)
+       (list
+        (consent--library-record-field
+         "required-posture"
+         (consent--syntax-symbol "internal-libraries-allowed")))))
+     ((not (consent--library-entry-available-p entry))
+      (consent--library-resolution-record
+       key
+       :entry entry
+       :status 'unavailable
+       :reason 'availability-condition))
+     (t
+      (consent--library-resolution-record
+       key
+       :entry entry
+       :status 'resolved)))))
+
+(defun consent--library-load-record (name context environment)
+  "Resolve and load NAME in CONTEXT, returning a resolution record."
+  (let* ((key (if (stringp name) name (consent--library-name-key name)))
+         (entry (consent--library-catalog-lookup key)))
+    (if (null entry)
+        (consent--library-resolution-record
+         key
+         :status 'missing
+         :reason 'missing-library)
+      (progn
+        (consent--resolve-library (consent-read key) context environment)
+        (consent--library-resolution-record
+         key
+         :entry entry
+         :status 'resolved
+         :loaded t)))))
+
+(defun consent--library-direct-dependencies (entry)
+  "Return direct manifest dependency keys from ENTRY."
+  (or (plist-get entry :dependencies) nil))
+
+(defun consent--library-dependency-closure (name)
+  "Return transitive dependency keys for NAME in deterministic order."
+  (let ((seen nil)
+        result)
+    (cl-labels ((visit
+                 (key)
+                 (unless (member key seen)
+                   (push key seen)
+                   (let ((entry (consent--library-catalog-lookup key)))
+                     (dolist (dependency
+                              (and
+                               entry
+                               (consent--library-direct-dependencies entry)))
+                       (unless (member dependency result)
+                         (push dependency result))
+                       (visit dependency))))))
+      (visit (if (stringp name) name (consent--library-name-key name))))
+    (nreverse result)))
+
+(defun consent--library-solve-dependencies-record (name)
+  "Return a Scheme-readable dependency solution record for NAME."
+  (let* ((key (if (stringp name) name (consent--library-name-key name)))
+         (entry (consent--library-catalog-lookup key)))
+    (if entry
+        (list
+         (consent--syntax-symbol "library-dependencies")
+         (consent--library-record-field
+          "name"
+          (consent--library-record-library-name key))
+         (consent--library-record-field
+          "status"
+          (consent--syntax-symbol "resolved"))
+         (consent--library-record-field
+          "dependencies"
+          (mapcar #'consent-read
+                  (consent--library-dependency-closure key))))
+      (list
+       (consent--syntax-symbol "library-dependencies")
+       (consent--library-record-field
+        "name"
+        (consent--library-record-library-name key))
+       (consent--library-record-field
+        "status"
+        (consent--syntax-symbol "missing"))
+       (consent--library-record-field
+        "reason"
+        (consent--syntax-symbol "missing-library"))
+       (consent--library-record-field "dependencies" nil)))))
+
+(defun consent--library-path-record (kind source-id entries precedence)
+  "Return a Scheme-readable library-path record."
+  (list
+   (consent--syntax-symbol "library-path")
+   (consent--library-record-field
+    "kind"
+    (consent--library-record-symbol kind))
+   (consent--library-record-field
+    "id"
+    (consent--library-record-source-id source-id))
+   (consent--library-record-field
+    "precedence"
+    (consent--make-canonical-integer precedence))
+   (consent--library-record-field
+    "libraries"
+    (mapcar
+     (lambda (entry)
+       (consent-read (plist-get entry :name)))
+     entries))))
+
+(defun consent--library-paths ()
+  "Return Scheme-readable active library resolution paths."
+  (let ((precedence 0)
+        result)
+    (dolist (source consent--library-catalog-ad-hoc-manifests)
+      (push (consent--library-path-record
+             'ad-hoc-manifest (car source) (cdr source) precedence)
+            result)
+      (setq precedence (1+ precedence)))
+    (dolist (source consent--library-catalog-root-manifests)
+      (push (consent--library-path-record
+             'manifest-root (car source) (cdr source) precedence)
+            result)
+      (setq precedence (1+ precedence)))
+    (push (consent--library-path-record
+           'built-in-seed
+           'built-in-seed
+           (consent--library-catalog-built-in-entries)
+           precedence)
+          result)
+    (nreverse result)))
+
+(defun consent--library-conflict-records (&optional library-name)
+  "Return conflict resolution records, optionally limited to LIBRARY-NAME."
+  (let ((entries (consent--library-catalog-candidate-entries))
+        (table (make-hash-table :test #'equal))
+        result)
+    (dolist (entry entries)
+      (push entry (gethash (plist-get entry :name) table)))
+    (maphash
+     (lambda (key candidates)
+       (let ((ordered (nreverse candidates)))
+         (when (and (cdr ordered)
+                    (or (null library-name)
+                        (equal key
+                               (if (stringp library-name)
+                                   library-name
+                                 (consent--library-name-key library-name)))))
+           (push
+            (consent--library-resolution-record
+             key
+             :entry (car ordered)
+             :status 'conflict
+             :reason 'duplicate-library
+             :candidates ordered)
+            result))))
+     table)
+    (sort result
+          (lambda (left right)
+            (string<
+             (consent-datum->external
+              (cadr (assoc (consent--syntax-symbol "name") (cdr left))))
+             (consent-datum->external
+              (cadr (assoc (consent--syntax-symbol "name") (cdr right)))))))))
+
+(defun consent--library-snapshot-record (name context)
+  "Return a reproducible resolution snapshot for NAME."
+  (let* ((key (if (stringp name) name (consent--library-name-key name)))
+         (dependencies (consent--library-dependency-closure key))
+         (keys (cons key dependencies)))
+    (list
+     (consent--syntax-symbol "library-snapshot")
+     (consent--library-record-field
+      "name"
+      (consent--library-record-library-name key))
+     (consent--library-record-field
+      "status"
+      (consent--syntax-symbol "resolved"))
+     (consent--library-record-field
+      "resolved"
+      (mapcar
+       (lambda (entry-key)
+         (consent--library-resolve-record entry-key context))
+       keys)))))
+
+(defun consent--library-srfi-number (value)
+  "Return VALUE as a non-negative SRFI number."
+  (cond
+   ((and (integerp value) (>= value 0)) value)
+   ((and (consent-number-p value)
+         (eq (consent-number-kind value) 'integer)
+         (eq (consent-number-exactness value) 'exact)
+         (>= (consent-number-value value) 0))
+    (consent-number-value value))
+   (t
+    (consent--eval-error "SRFI number must be a non-negative exact integer"))))
+
+(defun consent--library-srfi-key (number)
+  "Return canonical SRFI library key for NUMBER."
+  (format "(srfi %d)" (consent--library-srfi-number number)))
+
+(defun consent--library-srfi-name (number)
+  "Return canonical SRFI library name for NUMBER."
+  (consent-read (consent--library-srfi-key number)))
+
+(defun consent--library-srfi-aliases (number)
+  "Return known SRFI aliases for NUMBER."
+  (let* ((key (consent--library-srfi-key number))
+         (entry (consent--library-catalog-lookup key))
+         (aliases
+          (delete-dups
+           (copy-sequence
+            (cons key (or (plist-get entry :aliases) nil))))))
+    (mapcar #'consent-read aliases)))
+
+(defun consent--library-vendored-srfi-entry (number)
+  "Return catalog entry for vendored SRFI NUMBER, or nil."
+  (consent--library-catalog-lookup
+   (consent--library-srfi-key number)))
 
 (defun consent--library-catalog-runtime-source-files ()
   "Return runtime source-file paths derived from the library catalog."
@@ -2352,10 +2809,11 @@ Each spec has (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY)."
 (defun consent--library-available-p (name context _environment)
   "Return non-nil if NAME can be imported."
   (let* ((key (consent--library-name-key name))
-         (entry (consent--library-collection-manifest-entry key)))
+         (entry (consent--library-catalog-lookup key)))
     (and
      (or (not (consent--library-visibility-internal-p
-               (consent--library-visibility key)))
+               (or (plist-get entry :visibility)
+                   (consent--library-visibility key))))
          (consent--library-internal-import-allowed-p context))
      (or (not entry)
          (consent--library-entry-available-p entry))
@@ -2366,8 +2824,8 @@ Each spec has (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY)."
 (defun consent--resolve-library (name context environment)
   "Return library NAME from CONTEXT, registering builtins when needed."
   (let* ((key (consent--library-name-key name))
-         (entry (consent--library-collection-manifest-entry key)))
-    (consent--ensure-library-import-allowed key context)
+         (entry (consent--library-catalog-lookup key)))
+    (consent--ensure-library-import-allowed key context entry)
     (when (and entry (not (consent--library-entry-available-p entry)))
       (consent--eval-error
        "optional library is unavailable on this host: %s"

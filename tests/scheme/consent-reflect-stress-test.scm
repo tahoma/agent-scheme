@@ -511,6 +511,154 @@
                    #t
                    root-removed)"))
 
+(check-external 'reflect-library-resolution-api
+                "(import (scheme base) (agent reflect))
+                 (define (field datum name)
+                   (cadr (assq name (cdr datum))))
+                 (define (has-name? names name)
+                   (cond
+                    ((null? names) #f)
+                    ((equal? (car names) name) #t)
+                    (else (has-name? (cdr names) name))))
+                 (define (has-resolution? records name)
+                   (cond
+                    ((null? records) #f)
+                    ((equal? (field (car records) 'name) name) #t)
+                    (else (has-resolution? (cdr records) name))))
+                 (remove-manifest! 'reflect-resolution-fixture)
+                 (add-manifest!
+                  'reflect-resolution-fixture
+                  '(library-catalog
+                    (manifest-entry
+                     (schema-version 1)
+                     (kind library)
+                     (name (project unavailable))
+                     (owner project)
+                     (provider reflect-resolution-fixture)
+                     (visibility public)
+                     (category project)
+                     (status available)
+                     (source-kind source-library)
+                     (source (path \"missing/unavailable.sld\"))
+                     (availability optional)
+                     (availability-condition (host missing-host))
+                     (api-version (compat 0))
+                     (source-version unknown)
+                     (realization portable-source)
+                     (exports (unavailable-run))
+                     (dependencies ((library (scheme base))))
+                     (canonical #t))
+                    (manifest-index-entry
+                     (schema-version 1)
+                     (kind library-alias)
+                     (name (project duplicated))
+                     (target (scheme base))
+                     (owner project)
+                     (provider first-duplicate)
+                     (visibility public)
+                     (category project)
+                     (source-kind alias)
+                     (api-version (inherits (scheme base)))
+                     (source-version runtime)
+                     (realization alias)
+                     (status available)
+                     (canonical #f))
+                    (manifest-index-entry
+                     (schema-version 1)
+                     (kind library-alias)
+                     (name (project duplicated))
+                     (target (scheme base))
+                     (owner project)
+                     (provider second-duplicate)
+                     (visibility public)
+                     (category project)
+                     (source-kind alias)
+                     (api-version (inherits (scheme base)))
+                     (source-version runtime)
+                     (realization alias)
+                     (status available)
+                     (canonical #f))))
+                 (define result
+                   (let* ((base (library-resolve '(scheme base)))
+                          (alias (library-resolve '(srfi 16)))
+                          (missing (library-resolve '(missing library)))
+                          (denied (library-resolve '(consent reader)))
+                          (unavailable
+                           (library-resolve '(project unavailable)))
+                          (loaded (library-load '(srfi 16)))
+                          (dependencies
+                           (library-solve-dependencies '(scheme lazy)))
+                          (conflict
+                           (car (library-conflicts '(project duplicated))))
+                          (paths (library-paths))
+                          (snapshot (library-snapshot '(srfi 16)))
+                          (vendored (vendored-srfi-manifest 16)))
+                     (list
+                      (list 'base
+                            (field base 'status)
+                            (field base 'name)
+                            (field base 'resolved-name)
+                            (field base 'root)
+                            (field base 'source-kind)
+                            (field base 'visibility))
+                      (list 'alias
+                            (field alias 'status)
+                            (field alias 'name)
+                            (field alias 'resolved-name)
+                            (field alias 'target)
+                            (field alias 'source-kind))
+                      (list 'missing
+                            (field missing 'status)
+                            (field missing 'reason))
+                      (list 'denied
+                            (field denied 'status)
+                            (field denied 'reason))
+                      (list 'unavailable
+                            (field unavailable 'status)
+                            (field unavailable 'reason)
+                            (field unavailable 'availability-condition))
+                      (list 'conflict
+                            (field conflict 'status)
+                            (field conflict 'name)
+                            (length (field conflict 'candidates)))
+                      (list 'loaded
+                            (field loaded 'status)
+                            (field loaded 'loaded?))
+                      (list 'dependencies
+                            (field dependencies 'status)
+                            (has-name? (field dependencies 'dependencies)
+                                       '(scheme base)))
+                      (list 'paths
+                            (not (null? paths))
+                            (field (car paths) 'kind))
+                      (list 'snapshot
+                            (field snapshot 'status)
+                            (field snapshot 'name)
+                            (has-resolution? (field snapshot 'resolved)
+                                             '(srfi 16)))
+                      (list 'srfi-name (srfi-library-name 16))
+                      (list 'srfi-aliases (srfi-library-aliases 16))
+                      (list 'vendored (field vendored 'name)))))
+                 (remove-manifest! 'reflect-resolution-fixture)
+                 result"
+                (expected-datum-external
+                 "((base resolved (scheme base) (scheme base)
+                         builtin base-snapshot public)
+                   (alias resolved (srfi 16) (scheme case-lambda)
+                          (scheme case-lambda) alias)
+                   (missing missing missing-library)
+                   (denied denied internal-library)
+                   (unavailable unavailable availability-condition
+                                (host missing-host))
+                   (conflict conflict (project duplicated) 2)
+                   (loaded resolved #t)
+                   (dependencies resolved #t)
+                   (paths #t ad-hoc-manifest)
+                   (snapshot resolved (srfi 16) #t)
+                   (srfi-name (srfi 16))
+                   (srfi-aliases ((srfi 16) (srfi srfi-16)))
+                   (vendored (srfi 16)))"))
+
 (if (= failures 0)
     (begin
       (display "Portable reflection catalog stress tests passed")
