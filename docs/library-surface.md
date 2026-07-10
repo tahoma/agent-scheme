@@ -235,6 +235,12 @@ source kind, source identity, visibility, layer, owner, provider, trust, status,
 and denial or availability reason when applicable. `library-conflicts` reports
 the candidate set behind a duplicate name; `library-snapshot` records the
 selected library and dependency closure in resolver order.
+`library-solve-dependencies` reports `unsatisfied-dependency` and
+`missing-dependencies` when a transitive manifest edge is absent. The SRFI
+intake helper `vendored-srfi-manifest` derives a `vendored-srfi` record from the
+same catalog, preserving implementation library, import aliases, source URL,
+upstream revision or tag, license/local-license fields, local patches,
+dependencies, status, tests, and shim classification.
 
 ## Visibility Tiers
 

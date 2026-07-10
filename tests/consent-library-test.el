@@ -221,6 +221,21 @@
            :key (lambda (spec) (plist-get spec :name))
            :test #'equal))
 
+(defun consent-library-test--record-field (record field)
+  "Return FIELD from Scheme-readable RECORD."
+  (cadr (assoc (consent--syntax-symbol (symbol-name field)) (cdr record))))
+
+(defun consent-library-test--record-field-external (record field)
+  "Return FIELD from Scheme-readable RECORD rendered as external Scheme."
+  (consent-datum->external
+   (consent-library-test--record-field record field)))
+
+(defun consent-library-test--vendored-srfi-record (number)
+  "Return vendored SRFI NUMBER's source-backed intake record."
+  (require 'consent-reflect)
+  (consent-reflect-vendored-srfi-manifest
+   (consent--make-canonical-integer number)))
+
 (defun consent-library-test--scheme-string-literal (text)
   "Return TEXT rendered as a Scheme string literal."
   (prin1-to-string text))
@@ -2642,6 +2657,133 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
              (equal? (manifest-field portable-alias 'target)
                      '(scheme case-lambda))))")
     "#t")))
+
+(ert-deftest consent-library-test-vendored-srfi-records-cover-intake-contract ()
+  "Expose SRFI bundle intake metadata as Scheme-readable records."
+  (let ((vendored (consent-library-test--vendored-srfi-record 1))
+        (shim (consent-library-test--vendored-srfi-record 16))
+        (missing (consent-library-test--vendored-srfi-record 99999)))
+    (should (eq (car vendored) (consent--syntax-symbol "vendored-srfi")))
+    (should (equal (consent-library-test--record-field-external
+                    vendored 'number)
+                   "1"))
+    (should (equal (consent-library-test--record-field-external
+                    vendored 'name)
+                   "list"))
+    (should (equal (consent-library-test--record-field-external
+                    vendored 'library)
+                   "(stdlib list)"))
+    (should (equal (consent-library-test--record-field-external
+                    vendored 'classification)
+                   "vendored-library"))
+    (should (equal (consent-library-test--record-field-external
+                    vendored 'status)
+                   "vendored-adapted-implementation"))
+    (should (equal (consent-library-test--record-field
+                    vendored 'source-url)
+                   "https://github.com/scheme-requests-for-implementation/srfi-1"))
+    (should (equal (consent-library-test--record-field
+                    vendored 'license)
+                   "MIT"))
+    (should (equal (consent-library-test--record-field
+                    vendored 'local-license)
+                   "MIT"))
+    (should (member "(srfi 1)"
+                    (mapcar #'consent-datum->external
+                            (consent-library-test--record-field
+                             vendored 'import-names))))
+    (should (member "(srfi srfi-1)"
+                    (mapcar #'consent-datum->external
+                            (consent-library-test--record-field
+                             vendored 'import-names))))
+    (should (member "(scheme list)"
+                    (mapcar #'consent-datum->external
+                            (consent-library-test--record-field
+                             vendored 'import-names))))
+    (should (member "(stdlib list)"
+                    (mapcar #'consent-datum->external
+                            (consent-library-test--record-field
+                             vendored 'import-names))))
+    (should (member "(library (scheme base))"
+                    (mapcar #'consent-datum->external
+                            (consent-library-test--record-field
+                             vendored 'dependencies))))
+    (should-not (equal (consent-library-test--record-field-external
+                        vendored 'local-patches)
+                       "()"))
+    (should (member "portable-host-suite"
+                    (mapcar #'consent-datum->external
+                            (consent-library-test--record-field
+                             vendored 'tests))))
+
+    (should (equal (consent-library-test--record-field-external
+                    shim 'number)
+                   "16"))
+    (should (equal (consent-library-test--record-field-external
+                    shim 'classification)
+                   "shim"))
+    (should (equal (consent-library-test--record-field-external
+                    shim 'library)
+                   "(srfi 16)"))
+    (should (equal (consent-library-test--record-field-external
+                    shim 'target)
+                   "(scheme case-lambda)"))
+    (should (equal (consent-library-test--record-field-external
+                    shim 'status)
+                   "built-in-shim"))
+
+    (should (equal (consent-library-test--record-field-external
+                    missing 'number)
+                   "99999"))
+    (should (equal (consent-library-test--record-field-external
+                    missing 'status)
+                   "missing"))
+    (should (equal (consent-library-test--record-field-external
+                    missing 'reason)
+                   "missing-srfi"))))
+
+(ert-deftest consent-library-test-dependency-solve-reports-missing-dependency ()
+  "Report an unsatisfied dependency instead of returning a false solution."
+  (unwind-protect
+      (progn
+        (consent--library-catalog-add-manifest
+         'dependency-failure-fixture
+         (consent-read
+          "(library-catalog
+             (manifest-entry
+              (schema-version 1)
+              (kind library)
+              (name (project needs-missing))
+              (owner project)
+              (provider repo-source)
+              (visibility public)
+              (layer package)
+              (category project)
+              (source-kind source-library)
+              (source (path \"project/needs-missing.sld\"))
+              (api-version (compat 0))
+              (source-version unknown)
+              (realization portable-source)
+              (exports (run))
+              (dependencies ((library (scheme base))
+                             (library (project absent))))
+              (provenance ((origin test-fixture)))
+              (status available)
+              (canonical #t)))"))
+        (let ((record
+               (consent--library-solve-dependencies-record
+                (consent-read "(project needs-missing)"))))
+          (should (equal (consent-library-test--record-field-external
+                          record 'status)
+                         "unsatisfied-dependency"))
+          (should (equal (consent-library-test--record-field-external
+                          record 'reason)
+                         "missing-dependency"))
+          (should (member "(project absent)"
+                          (mapcar #'consent-datum->external
+                                  (consent-library-test--record-field
+                                   record 'missing-dependencies))))))
+    (consent--library-catalog-remove-manifest 'dependency-failure-fixture)))
 
 (ert-deftest consent-library-test-standard-char-and-cxr-imports ()
   "Import `(scheme char)' and `(scheme cxr)' bindings."

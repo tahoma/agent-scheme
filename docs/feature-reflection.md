@@ -208,8 +208,9 @@ Current procedures:
   root, source kind, resolved target, visibility, owner/provider, trust, status,
   and failure reason for missing, denied, unavailable, or conflicted names.
 - `(srfi-library-name number)`, `(srfi-library-aliases number)`, and
-  `(vendored-srfi-manifest number)` expose the canonical SRFI-facing alias
-  metadata for resolver-aware tools.
+  `(vendored-srfi-manifest number)` expose canonical SRFI-facing names and the
+  SRFI-backed stdlib intake record for resolver-aware tools. The intake record
+  distinguishes vendored libraries, shims, aliases, and missing SRFIs.
 - `(add-manifest! source-id manifest)` and
   `(remove-manifest! source-id)` add, replace, and remove explicit ad-hoc
   manifest datums. A manifest is a `(library-catalog ...)` datum containing

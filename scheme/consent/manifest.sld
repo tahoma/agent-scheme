@@ -1079,7 +1079,7 @@
                            consent-library-solve-dependencies consent-library-paths
                            consent-library-conflicts consent-library-snapshot
                            consent-srfi-library-name consent-srfi-library-aliases
-                           consent-vendored-srfi-entry
+                           consent-vendored-srfi-entry consent-vendored-srfi-record
                            consent-install-library-backend! consent-native-argument-value
                            consent-apply-callable import-form? define-library-form? eval-import
                            eval-define-library resolve-library library-available? library-name-key

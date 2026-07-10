@@ -29,6 +29,7 @@
           consent-srfi-library-name
           consent-srfi-library-aliases
           consent-vendored-srfi-entry
+          consent-vendored-srfi-record
           consent-install-library-backend!
           consent-native-argument-value
           consent-apply-callable
@@ -1011,6 +1012,8 @@
               (collection-manifest-field entry 'capabilities #f))
              (documentation
               (collection-manifest-field entry 'documentation #f))
+             (verification
+              (collection-manifest-field entry 'verification #f))
              (provenance
               (collection-manifest-field entry 'provenance #f))
              (canonical
@@ -1083,6 +1086,7 @@
          (list 'effects effects)
          (list 'capabilities capabilities)
          (list 'documentation documentation)
+         (list 'verification verification)
          (list 'provenance provenance)
          (list 'canonical canonical)
          (list 'origin 'built-in-seed)
@@ -1475,6 +1479,8 @@
                 (library-catalog-manifest-field fields 'capabilities #f))
                (documentation
                 (library-catalog-manifest-field fields 'documentation #f))
+               (verification
+                (library-catalog-manifest-field fields 'verification #f))
                (provenance
                 (library-catalog-manifest-field fields 'provenance #f))
                (canonical
@@ -1536,6 +1542,7 @@
            (list 'effects effects)
            (list 'capabilities capabilities)
            (list 'documentation documentation)
+           (list 'verification verification)
            (list 'provenance provenance)
            (list 'canonical canonical)
            (list 'origin origin)
@@ -1763,6 +1770,8 @@
                (collection-entry-field manifest-entry 'capabilities #f))
          (list 'documentation
                (collection-entry-field manifest-entry 'documentation #f))
+         (list 'verification
+               (collection-entry-field manifest-entry 'verification #f))
          (list 'provenance
                (collection-entry-field manifest-entry 'provenance #f))
          (list 'canonical
@@ -2268,30 +2277,40 @@
                #t
                #f)))))
 
+    (define (library-dependency-solution name)
+      "Return dependency closure and missing edges for NAME."
+      (let ((seen '())
+            (result '())
+            (missing '()))
+        (define (record-missing! key)
+          (if (not (member key missing))
+              (set! missing (cons key missing))))
+        (define (record-dependency! dependency)
+          (if (not (member dependency result))
+              (set! result (cons dependency result)))
+          (visit dependency))
+        (define (visit key)
+          (if (not (member key seen))
+              (begin
+                (set! seen (cons key seen))
+                (let ((entry (consent-library-catalog-entry key)))
+                  (if entry
+                      (for-each
+                       record-dependency!
+                       (library-catalog-field entry 'dependencies '()))
+                      (record-missing! key))))))
+        (let ((entry (consent-library-catalog-entry (library-name-key name))))
+          (for-each
+           record-dependency!
+           (if entry
+               (library-catalog-field entry 'dependencies '())
+               '())))
+        (list (cons 'dependencies (reverse result))
+              (cons 'missing-dependencies (reverse missing)))))
+
     (define (library-dependency-closure name)
       "Return transitive dependency keys for NAME in deterministic order."
-      (let ((seen '())
-            (result '()))
-        (letrec
-            ((visit
-              (lambda (key)
-                (if (not (member key seen))
-                    (begin
-                      (set! seen (cons key seen))
-                      (let ((entry (consent-library-catalog-entry key)))
-                        (for-each
-                         (lambda (dependency)
-                           (if (not (member dependency result))
-                               (set! result (cons dependency result)))
-                           (visit dependency))
-                         (if entry
-                             (library-catalog-field
-                              entry
-                              'dependencies
-                              '())
-                             '()))))))))
-          (visit (library-name-key name)))
-        (reverse result)))
+      (cdr (assq 'dependencies (library-dependency-solution name))))
 
     (define (consent-library-solve-dependencies name)
       "Return a Scheme-readable dependency solution record for NAME."
@@ -2304,12 +2323,29 @@
       (let* ((key (library-name-key name))
              (entry (consent-library-catalog-entry key)))
         (if entry
-            (list 'library-dependencies
-                  (library-resolution-field 'name key)
-                  (library-resolution-field 'status 'resolved)
-                  (library-resolution-field
-                   'dependencies
-                   (library-dependency-closure key)))
+            (let* ((solution (library-dependency-solution key))
+                   (dependencies
+                    (cdr (assq 'dependencies solution)))
+                   (missing-dependencies
+                    (cdr (assq 'missing-dependencies solution))))
+              (append
+               (list 'library-dependencies
+                     (library-resolution-field 'name key)
+                     (library-resolution-field
+                      'status
+                      (if (null? missing-dependencies)
+                          'resolved
+                          'unsatisfied-dependency))
+                     (library-resolution-field
+                      'dependencies
+                      dependencies))
+               (if (null? missing-dependencies)
+                   '()
+                   (list
+                    (library-resolution-field 'reason 'missing-dependency)
+                    (library-resolution-field
+                     'missing-dependencies
+                     missing-dependencies)))))
             (list 'library-dependencies
                   (library-resolution-field 'name key)
                   (library-resolution-field 'status 'missing)
@@ -2488,6 +2524,212 @@
         (effects state-read state-write allocation host-eval error))
       (consent-library-catalog-entry
        (consent-srfi-library-name number)))
+
+    (define (vendored-srfi-implementation-entry entry)
+      "Return the implementation manifest ENTRY represents."
+      (let ((target (library-catalog-field entry 'target #f)))
+        (if (and target
+                 (eq? (library-catalog-field entry 'status #f) 'alias))
+            (or (consent-library-catalog-entry target) entry)
+            entry)))
+
+    (define (vendored-srfi-import-names
+             srfi-name
+             entry
+             implementation-entry)
+      "Return import names for SRFI-NAME and its implementation ENTRY."
+      (let loop ((rest
+                  (append
+                   (list srfi-name)
+                   (library-catalog-field entry 'aliases '())
+                   (library-catalog-field
+                    implementation-entry
+                    'aliases
+                    '())
+                   (list (library-catalog-field
+                          implementation-entry
+                          'name
+                          #f))))
+                 (seen '())
+                 (result '()))
+        (cond
+         ((null? rest) (reverse result))
+         ((not (car rest)) (loop (cdr rest) seen result))
+         ((member (car rest) seen) (loop (cdr rest) seen result))
+         (else
+          (loop (cdr rest)
+                (cons (car rest) seen)
+                (cons (car rest) result))))))
+
+    (define (vendored-srfi-name entry)
+      "Return a compact SRFI record name derived from ENTRY."
+      (let ((source-name
+             (or (library-catalog-field entry 'target #f)
+                 (library-catalog-field entry 'name #f))))
+        (if (and (pair? source-name) (pair? (cdr source-name)))
+            (cadr source-name)
+            #f)))
+
+    (define (vendored-srfi-provenance-field entry field)
+      "Return FIELD from ENTRY provenance metadata."
+      (library-catalog-manifest-field
+       (library-catalog-field entry 'provenance '())
+       field
+       #f))
+
+    (define (vendored-srfi-source-version-field entry field)
+      "Return FIELD from ENTRY source-version metadata."
+      (let ((source-version
+             (library-catalog-field entry 'source-version #f)))
+        (if (and (pair? source-version)
+                 (eq? (car source-version) field)
+                 (pair? (cdr source-version)))
+            (cadr source-version)
+            #f)))
+
+    (define (vendored-srfi-tests entry)
+      "Return test-status metadata from ENTRY verification."
+      (or (library-catalog-manifest-field
+           (library-catalog-field entry 'verification '())
+           'test-status
+           #f)
+          '()))
+
+    (define (vendored-srfi-classification entry implementation-entry)
+      "Return bundle classification for ENTRY and IMPLEMENTATION-ENTRY."
+      (let ((status (library-catalog-field entry 'status #f))
+            (implementation-status
+             (library-catalog-field implementation-entry 'status #f)))
+        (cond
+         ((or (eq? status 'built-in-shim)
+              (eq? implementation-status 'built-in-shim)
+              (eq? (library-catalog-field
+                    implementation-entry
+                    'realization
+                    #f)
+                   'shim))
+          'shim)
+         ((or (eq? implementation-status 'vendored-adapted-implementation)
+              (eq? (vendored-srfi-provenance-field
+                    implementation-entry
+                    'vendored?)
+                   #t))
+          'vendored-library)
+         ((library-catalog-field entry 'target #f) 'alias)
+         (else 'portable-library))))
+
+    (define (vendored-srfi-record number srfi-name entry implementation-entry)
+      "Return a vendored-srfi record from explicit catalog entries."
+      (let ((srfi-number (consent-srfi-number number)))
+        (if (not entry)
+            (list 'vendored-srfi
+                  (library-resolution-field 'number srfi-number)
+                  (library-resolution-field 'name #f)
+                  (library-resolution-field
+                   'import-names
+                   (list srfi-name))
+                  (library-resolution-field 'status 'missing)
+                  (library-resolution-field 'reason 'missing-srfi))
+            (let* ((implementation-entry
+                    (or implementation-entry entry))
+                   (target (library-catalog-field entry 'target #f))
+                   (dependencies
+                    (library-catalog-field
+                     implementation-entry
+                     'dependencies
+                     '()))
+                   (upstream-revision
+                    (or
+                     (vendored-srfi-provenance-field
+                      implementation-entry
+                      'upstream-revision)
+                     (vendored-srfi-source-version-field
+                      implementation-entry
+                      'upstream-revision))))
+              (list
+               'vendored-srfi
+               (library-resolution-field 'number srfi-number)
+               (library-resolution-field
+                'name
+                (vendored-srfi-name implementation-entry))
+               (library-resolution-field
+                'library
+                (library-catalog-field implementation-entry 'name #f))
+               (library-resolution-field 'target (or target #f))
+               (library-resolution-field
+                'classification
+                (vendored-srfi-classification
+                 entry
+                 implementation-entry))
+               (library-resolution-field
+                'import-names
+                (vendored-srfi-import-names
+                 srfi-name
+                 entry
+                 implementation-entry))
+               (library-resolution-field
+                'source
+                (or (library-catalog-field
+                     implementation-entry
+                     'source
+                     #f)
+                    #f))
+               (library-resolution-field
+                'source-url
+                (or (vendored-srfi-provenance-field
+                     implementation-entry
+                     'upstream-source-url)
+                    #f))
+               (library-resolution-field
+                'upstream-revision
+                (or upstream-revision #f))
+               (library-resolution-field
+                'license
+                (or (vendored-srfi-provenance-field
+                     implementation-entry
+                     'upstream-license)
+                    #f))
+               (library-resolution-field
+                'local-license
+                (or (vendored-srfi-provenance-field
+                     implementation-entry
+                     'local-license)
+                    #f))
+               (library-resolution-field
+                'local-patches
+                (or (vendored-srfi-provenance-field
+                     implementation-entry
+                     'local-patches)
+                    '()))
+               (library-resolution-field
+                'dependencies
+                (map
+                 (lambda (dependency)
+                   (list 'library dependency))
+                 dependencies))
+               (library-resolution-field
+                'status
+                (library-catalog-field implementation-entry 'status #f))
+               (library-resolution-field
+                'tests
+                (vendored-srfi-tests implementation-entry)))))))
+
+    (define (consent-vendored-srfi-record number)
+      "Return the Scheme-readable SRFI vendor manifest record for NUMBER."
+      #((parameters
+         (number (type exact-integer)
+          (description "Non-negative SRFI number.")))
+        (returns (type list)
+         (description "A vendored-srfi intake record."))
+        (effects state-read state-write allocation host-eval error))
+      (let* ((srfi-number (consent-srfi-number number))
+             (srfi-name (consent-srfi-library-name srfi-number))
+             (entry (consent-vendored-srfi-entry srfi-number)))
+        (vendored-srfi-record
+         srfi-number
+         srfi-name
+         entry
+         (and entry (vendored-srfi-implementation-entry entry)))))
 
     (define (consent-standard-source-library-specs)
       "Public metadata accessor for standard libraries backed by source files."
