@@ -201,6 +201,15 @@ Current procedures:
 - `(catalog-diagnostics)` returns Scheme-readable diagnostics from the most
   recent catalog build, including duplicate-library diagnostics when a higher
   precedence source shadows a later source.
+- `(library-resolve library-name)`, `(library-load library-name)`,
+  `(library-solve-dependencies library-name)`, `(library-paths)`,
+  `(library-conflicts library-name)`, and `(library-snapshot library-name)`
+  expose resolver decisions as data. Resolution records include the selected
+  root, source kind, resolved target, visibility, owner/provider, trust, status,
+  and failure reason for missing, denied, unavailable, or conflicted names.
+- `(srfi-library-name number)`, `(srfi-library-aliases number)`, and
+  `(vendored-srfi-manifest number)` expose the canonical SRFI-facing alias
+  metadata for resolver-aware tools.
 - `(add-manifest! source-id manifest)` and
   `(remove-manifest! source-id)` add, replace, and remove explicit ad-hoc
   manifest datums. A manifest is a `(library-catalog ...)` datum containing

@@ -1075,6 +1075,11 @@
                            consent-library-catalog-diagnostics consent-library-catalog-add-manifest!
                            consent-library-catalog-remove-manifest! consent-library-catalog-add-root!
                            consent-library-catalog-remove-root! consent-library-catalog-refresh!
+                           consent-library-resolve-record consent-library-load-record
+                           consent-library-solve-dependencies consent-library-paths
+                           consent-library-conflicts consent-library-snapshot
+                           consent-srfi-library-name consent-srfi-library-aliases
+                           consent-vendored-srfi-entry
                            consent-install-library-backend! consent-native-argument-value
                            consent-apply-callable import-form? define-library-form? eval-import
                            eval-define-library resolve-library library-available? library-name-key

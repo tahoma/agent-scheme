@@ -38,10 +38,11 @@ The Emacs Lisp bootstrap reads ordered `consent-library-system-path` and
 same split as system and user directory lists, with the older combined search
 directory setter preserved as a compatibility shim for host runners. Compiled
 products also carry the embedded `manifest.sld` graph as the final system root,
-after configured filesystem roots. This issue uses system roots before user
-roots only as the minimum initial catalog bootstrap; #50 owns final resolver
-precedence, shadowing, policy gates, dynamic root loading, dependency solving,
-and versioned resolution behavior.
+after configured filesystem roots. Catalog resolution uses a deterministic
+precedence order: ad-hoc manifests added at runtime, explicit manifest-root
+inputs added at runtime, then the built-in manifest seed assembled from the
+configured system/user roots. Duplicate names are first-wins and produce
+conflict records and catalog diagnostics rather than silently disappearing.
 
 Manifests do not become the only authority for imports. A library already
 registered in an evaluator context, including a library defined ad hoc in a REPL
@@ -218,16 +219,22 @@ Root index records use these fields:
 - `source-root`: root-relative directory prefix applied to collection-local
   `(source (path ...))` values.
 - Root identity fields such as root kind, provider, trust tier, provenance,
-  source revision, or source hash may be represented as manifest data when #50
-  needs them for system/user/project/skill roots.
+  source revision, or source hash may be represented as manifest data for
+  system, user, project, skill, or explicit manifest roots.
 
 The only built-in filesystem convention is that top-level `manifest.sld` file.
 Collection manifest paths and library source paths are relative to the root that
 declared them. A manifest entry must not require a resolver to know that the
 root is named `scheme`, peek above the configured root, or hard-code sibling
-collection directories. #50 owns root-list precedence, trust gates, dynamic
-loading, shadowing, conflict behavior, version selection, dependency solving,
-and snapshot or lockfile output.
+collection directories.
+
+The reflected resolver surface includes `library-resolve`, `library-load`,
+`library-solve-dependencies`, `library-paths`, `library-conflicts`, and
+`library-snapshot`. Resolution records report name, resolved target, root,
+source kind, source identity, visibility, layer, owner, provider, trust, status,
+and denial or availability reason when applicable. `library-conflicts` reports
+the candidate set behind a duplicate name; `library-snapshot` records the
+selected library and dependency closure in resolver order.
 
 ## Visibility Tiers
 
@@ -326,7 +333,7 @@ the implementation module. Host implementation functions are materialized only
 when the selected primitive library is imported.
 
 Repo-owned primitive libraries use provider-owned declarations instead of a
-resolver-owned routing table. Package/root precedence (#50), realization/parity
+resolver-owned routing table. Package/root precedence, realization/parity
 reporting (#486), and generalized foreign-import schema work (#379) consume this
 data plane; they do not require the resolver to relearn each provider's exported
 primitive surface.
@@ -518,6 +525,6 @@ ordinary import enforcement for public versus internal libraries. #484 owns the
 agent-domain, primitive-backing, and model-provider layer rule. #682 owns the
 shared manifest schema and load-light aggregation contract documented here.
 #681 owns provider-owned primitive-library registration using this schema. #50
-owns package roots, dependency solving, version selection, conflict records,
-trust gates, and versioned resolution behavior. #486 owns realization and parity
-content using this schema rather than a second metadata envelope.
+adds package roots, dependency solving, conflict records, trust gates, and
+snapshot-oriented resolution behavior. #486 owns realization and parity content
+using this schema rather than a second metadata envelope.

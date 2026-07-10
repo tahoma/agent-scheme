@@ -1361,6 +1361,37 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
           (should (equal (plist-get alias :target) "(project schema)"))))
     (consent--library-catalog-remove-manifest 'schema-fixture)))
 
+(ert-deftest consent-library-test-ad-hoc-catalog-alias-imports ()
+  "Resolve imports from the same catalog graph exposed by reflection."
+  (unwind-protect
+      (progn
+        (consent--library-catalog-add-manifest
+         'resolver-alias-fixture
+         (consent-read
+          "(library-catalog
+             (manifest-index-entry
+              (schema-version 1)
+              (kind library-alias)
+              (name (project base-alias))
+              (target (scheme base))
+              (derived-from resolver-alias-fixture)
+              (visibility public)
+              (layer alias)
+              (category project)
+              (source-kind alias)
+              (api-version (inherits (scheme base)))
+              (source-version runtime)
+              (realization alias)
+              (status available)
+              (canonical #f)))"))
+        (should
+         (equal
+          (consent-library-test--external
+           "(import (project base-alias))
+            (+ 19 23)")
+          "42")))
+    (consent--library-catalog-remove-manifest 'resolver-alias-fixture)))
+
 (ert-deftest consent-library-test-load-light-avoids-agent-implementation-requires ()
   "Keep manifest aggregation from requiring agent implementations at module load."
   (let ((source

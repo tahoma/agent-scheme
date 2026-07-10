@@ -20,6 +20,15 @@
           consent-library-catalog-add-root!
           consent-library-catalog-remove-root!
           consent-library-catalog-refresh!
+          consent-library-resolve-record
+          consent-library-load-record
+          consent-library-solve-dependencies
+          consent-library-paths
+          consent-library-conflicts
+          consent-library-snapshot
+          consent-srfi-library-name
+          consent-srfi-library-aliases
+          consent-vendored-srfi-entry
           consent-install-library-backend!
           consent-native-argument-value
           consent-apply-callable
@@ -1159,7 +1168,8 @@
     (define (library-visibility-internal? visibility)
       "Report whether VISIBILITY requires internal-library posture."
       (or (eq? visibility 'internal-runtime)
-          (eq? visibility 'internal-agent-primitive)))
+          (eq? visibility 'internal-agent-primitive)
+          (eq? visibility 'internal-agent-model)))
 
     (define (library-availability-condition-satisfied? condition)
       "Report whether manifest availability CONDITION is satisfied."
@@ -1193,6 +1203,18 @@
           (eval-error
            "internal library import requires internal-libraries-allowed"
            key)))
+
+    (define (ensure-library-entry-import-allowed key entry context)
+      "Reject catalog ENTRY when CONTEXT lacks its required import posture."
+      (let ((visibility
+             (if entry
+                 (library-catalog-field entry 'visibility (library-visibility key))
+                 (library-visibility key))))
+        (if (and (library-visibility-internal? visibility)
+                 (not (library-internal-import-allowed? context)))
+            (eval-error
+             "internal library import requires internal-libraries-allowed"
+             key))))
 
     (define (library-catalog-source-kind key)
       "Return the implementation source kind for KEY."
@@ -1368,6 +1390,15 @@
                 (library-catalog-normalized-source-kind
                  (library-catalog-manifest-field fields 'source-kind #f)
                  target))
+               (availability
+                (library-catalog-require-symbol
+                 (library-catalog-manifest-field fields 'availability 'required)
+                 "catalog availability"))
+               (availability-condition
+                (library-catalog-manifest-field
+                 fields
+                 'availability-condition
+                 #f))
                (schema-version
                 (manifest-nonnegative-integer
                  (library-catalog-manifest-field fields 'schema-version #f)
@@ -1491,6 +1522,8 @@
            (list 'owner owner)
            (list 'provider provider)
            (list 'layer (library-catalog-manifest-field fields 'layer #f))
+           (list 'availability availability)
+           (list 'availability-condition availability-condition)
            (list 'api-version api-version)
            (list 'source-version source-version)
            (list 'realization realization)
@@ -1614,10 +1647,15 @@
       (if (not (string? root))
           (eval-error "catalog root must be a string" root))
       (let ((entries
-             (library-catalog-parse-manifest
-              manifest
-              'manifest-root
-              root)))
+             (map
+              (lambda (entry)
+                (append entry
+                        (list (list 'root root)
+                              (list 'root-kind 'manifest-root))))
+              (library-catalog-parse-manifest
+               manifest
+               'manifest-root
+               root))))
         (set! library-catalog-root-manifests
               (library-catalog-replace-source
                library-catalog-root-manifests
@@ -1687,7 +1725,8 @@
                 manifest-entry
                 'primitive-exports
                 '()))
-         (list 'visibility (library-visibility key))
+         (list 'visibility
+               (collection-entry-field manifest-entry 'visibility 'public))
          (list 'layer (collection-entry-field manifest-entry 'layer #f))
          (list 'owner (collection-entry-field manifest-entry 'owner #f))
          (list 'provider
@@ -1706,6 +1745,9 @@
          (list 'realization
                (collection-entry-field manifest-entry 'realization #f))
          (list 'source (collection-entry-field manifest-entry 'source #f))
+         (list 'root (collection-entry-field manifest-entry 'root #f))
+         (list 'root-kind
+               (collection-entry-field manifest-entry 'root-kind #f))
          (list 'source-file (library-catalog-source-file key))
          (list 'aliases
                (if manifest-entry
@@ -1813,8 +1855,7 @@
         (returns (type list)
          (description "Scheme-readable catalog diagnostics."))
         (effects state-read state-write allocation host-eval error))
-      (if (not library-catalog-cache)
-          (consent-library-catalog-entries))
+      (consent-library-catalog-entries)
       library-catalog-diagnostics)
 
     (define (library-catalog-name-part-text part)
@@ -1954,13 +1995,16 @@
           ("A list of library catalog field records for every repo-owned"
             "library known to the runtime manifest.")))
         (effects state-read state-write allocation host-eval error))
-      (if library-catalog-cache
-          library-catalog-cache
-          (let ((entries
-                 (library-catalog-deduplicate
-                  (library-catalog-candidate-entries))))
-            (set! library-catalog-cache entries)
-            entries)))
+      (let ((cache-key (library-manifest-root-cache-key)))
+        (if (and library-catalog-cache
+                 (equal? (car library-catalog-cache) cache-key))
+            (cadr library-catalog-cache)
+            (let ((entries
+                   (library-catalog-deduplicate
+                    (library-catalog-candidate-entries))))
+              (set! library-catalog-cache
+                    (list cache-key entries))
+              entries))))
 
     (define (consent-library-catalog-entry library-name)
       "Return catalog metadata for LIBRARY-NAME, or #f when absent."
@@ -1998,6 +2042,452 @@
            ((library-catalog-entry-match? (car entries) needle)
             (loop (cdr entries) (cons (car entries) result)))
            (else (loop (cdr entries) result))))))
+
+    (define (library-catalog-candidates library-name)
+      "Return all catalog candidates for LIBRARY-NAME in precedence order."
+      (let ((key (library-name-key library-name)))
+        (let loop ((entries (library-catalog-candidate-entries))
+                   (result '()))
+          (cond
+           ((null? entries) (reverse result))
+           ((equal? key (library-catalog-field (car entries) 'name '()))
+            (loop (cdr entries) (cons (car entries) result)))
+           (else (loop (cdr entries) result))))))
+
+    (define (library-resolution-field name value)
+      "Return one Scheme-readable resolver field."
+      (list name value))
+
+    (define (library-record-root entry)
+      "Return ENTRY's root category."
+      (let ((origin (library-catalog-field entry 'origin #f))
+            (root-kind (library-catalog-field entry 'root-kind #f))
+            (source-kind (library-catalog-field entry 'source-kind #f))
+            (category (library-catalog-field entry 'category #f))
+            (owner (library-catalog-field entry 'owner #f))
+            (name (library-catalog-field entry 'name '())))
+        (cond
+         ((eq? origin 'ad-hoc-manifest) 'ad-hoc-manifest)
+         ((eq? origin 'manifest-root) 'manifest-root)
+         ((eq? root-kind 'user) 'user)
+         ((eq? source-kind 'base-snapshot) 'builtin)
+         ((or (eq? category 'standard)
+              (eq? category 'stdlib)
+              (eq? owner 'stdlib)
+              (and (pair? name)
+                   (or (eq? (car name) 'srfi)
+                       (eq? (car name) 'stdlib))))
+          'stdlib-vendored)
+         ((eq? source-kind 'primitive) 'host-adapter)
+         ((eq? root-kind 'system) 'builtin)
+         (else 'builtin))))
+
+    (define (library-record-trust root)
+      "Return trust label for ROOT."
+      (cond
+       ((eq? root 'ad-hoc-manifest) 'ad-hoc)
+       ((eq? root 'manifest-root) 'explicit)
+       ((eq? root 'user) 'user)
+       ((eq? root 'host-adapter) 'host)
+       ((or (eq? root 'stdlib-vendored) (eq? root 'builtin)) 'bundled)
+       (else 'unknown)))
+
+    (define (library-entry-resolved-name entry seen)
+      "Return ENTRY's final target key after alias expansion."
+      (let ((key (library-catalog-field entry 'name '()))
+            (target (library-catalog-field entry 'target #f)))
+        (if (or (not target) (member key seen))
+            key
+            (let ((target-entry (consent-library-catalog-entry target)))
+              (if target-entry
+                  (library-entry-resolved-name
+                   target-entry
+                   (cons key seen))
+                  target)))))
+
+    (define (library-candidate-record entry)
+      "Return ENTRY as a Scheme-readable library-candidate record."
+      (let* ((root (library-record-root entry))
+             (trust (library-record-trust root)))
+        (list 'library-candidate
+              (library-resolution-field
+               'name
+               (library-catalog-field entry 'name '()))
+              (library-resolution-field 'root root)
+              (library-resolution-field
+               'source-id
+               (library-catalog-field entry 'source-id #f))
+              (library-resolution-field
+               'source-kind
+               (library-catalog-field entry 'source-kind 'manifest))
+              (library-resolution-field
+               'provider
+               (library-catalog-field entry 'provider #f))
+              (library-resolution-field 'trust trust))))
+
+    (define (library-resolution-record name entry status reason loaded candidates)
+      "Return a Scheme-readable library-resolution record."
+      (let* ((key (library-name-key name))
+             (resolved-key
+              (if entry (library-entry-resolved-name entry '()) key))
+             (root (and entry (library-record-root entry)))
+             (trust (and root (library-record-trust root))))
+        (append
+         (list
+          'library-resolution
+          (library-resolution-field 'name key)
+          (library-resolution-field 'resolved-name resolved-key)
+          (library-resolution-field 'root root)
+          (library-resolution-field
+           'source-kind
+           (and entry (library-catalog-field entry 'source-kind #f)))
+          (library-resolution-field
+           'source
+           (and entry (library-catalog-field entry 'source #f)))
+          (library-resolution-field
+           'source-file
+           (and entry (library-catalog-field entry 'source-file #f)))
+          (library-resolution-field
+           'visibility
+           (and entry (library-catalog-field entry 'visibility #f)))
+          (library-resolution-field
+           'layer
+           (and entry (library-catalog-field entry 'layer #f)))
+          (library-resolution-field
+           'owner
+           (and entry (library-catalog-field entry 'owner #f)))
+          (library-resolution-field
+           'provider
+           (and entry (library-catalog-field entry 'provider #f)))
+          (library-resolution-field 'trust trust)
+          (library-resolution-field
+           'target
+           (and entry (library-catalog-field entry 'target #f)))
+          (library-resolution-field
+           'availability
+           (and entry (library-catalog-field entry 'availability #f)))
+          (library-resolution-field
+           'availability-condition
+           (and entry (library-catalog-field
+                       entry
+                       'availability-condition
+                       #f)))
+          (library-resolution-field 'status status))
+         (append
+          (if reason (list (library-resolution-field 'reason reason)) '())
+          (if loaded (list (library-resolution-field 'loaded? #t)) '())
+          (if candidates
+              (list
+               (library-resolution-field
+                'candidates
+                (map library-candidate-record candidates)))
+              '())))))
+
+    (define (consent-library-resolve-record name context)
+      "Return NAME's deterministic library-resolution record in CONTEXT."
+      #((parameters
+         (name (type (list-of (or symbol exact-integer)))
+          (description "Library name to resolve."))
+         (context (type eval-context)
+          (description "Context whose internal-library posture is consulted.")))
+        (returns (type list)
+         (description "A library-resolution record."))
+        (effects state-read state-write allocation error))
+      (let* ((key (library-name-key name))
+             (entry (consent-library-catalog-entry key)))
+        (cond
+         ((not entry)
+          (library-resolution-record
+           key
+           #f
+           'missing
+           'missing-library
+           #f
+           #f))
+         ((and (library-visibility-internal?
+                (library-catalog-field entry 'visibility #f))
+               (not (library-internal-import-allowed? context)))
+          (append
+           (library-resolution-record
+            key
+            entry
+            'denied
+            'internal-library
+            #f
+            #f)
+           (list
+            (library-resolution-field
+             'required-posture
+             'internal-libraries-allowed))))
+         ((not (library-entry-available? entry))
+          (library-resolution-record
+           key
+           entry
+           'unavailable
+           'availability-condition
+           #f
+           #f))
+         (else
+          (library-resolution-record
+           key
+           entry
+           'resolved
+           #f
+           #f
+           #f)))))
+
+    (define (consent-library-load-record name context environment)
+      "Load NAME into CONTEXT and return a resolution record."
+      #((parameters
+         (name (type (list-of (or symbol exact-integer)))
+          (description "Library name to load."))
+         (context (type eval-context)
+          (description "Context whose registry receives the library."))
+         (environment (type environment)
+          (description "Environment used for loading source libraries.")))
+        (returns (type list)
+         (description "A library-resolution record."))
+        (effects state-read state-write allocation error))
+      (let* ((key (library-name-key name))
+             (entry (consent-library-catalog-entry key)))
+        (if (not entry)
+            (library-resolution-record
+             key
+             #f
+             'missing
+             'missing-library
+             #f
+             #f)
+            (begin
+              (resolve-library key context environment)
+              (library-resolution-record
+               key
+               entry
+               'resolved
+               #f
+               #t
+               #f)))))
+
+    (define (library-dependency-closure name)
+      "Return transitive dependency keys for NAME in deterministic order."
+      (let ((seen '())
+            (result '()))
+        (letrec
+            ((visit
+              (lambda (key)
+                (if (not (member key seen))
+                    (begin
+                      (set! seen (cons key seen))
+                      (let ((entry (consent-library-catalog-entry key)))
+                        (for-each
+                         (lambda (dependency)
+                           (if (not (member dependency result))
+                               (set! result (cons dependency result)))
+                           (visit dependency))
+                         (if entry
+                             (library-catalog-field
+                              entry
+                              'dependencies
+                              '())
+                             '()))))))))
+          (visit (library-name-key name)))
+        (reverse result)))
+
+    (define (consent-library-solve-dependencies name)
+      "Return a Scheme-readable dependency solution record for NAME."
+      #((parameters
+         (name (type (list-of (or symbol exact-integer)))
+          (description "Library name whose dependencies should be solved.")))
+        (returns (type list)
+         (description "A library-dependencies record."))
+        (effects state-read state-write allocation error))
+      (let* ((key (library-name-key name))
+             (entry (consent-library-catalog-entry key)))
+        (if entry
+            (list 'library-dependencies
+                  (library-resolution-field 'name key)
+                  (library-resolution-field 'status 'resolved)
+                  (library-resolution-field
+                   'dependencies
+                   (library-dependency-closure key)))
+            (list 'library-dependencies
+                  (library-resolution-field 'name key)
+                  (library-resolution-field 'status 'missing)
+                  (library-resolution-field 'reason 'missing-library)
+                  (library-resolution-field 'dependencies '())))))
+
+    (define (library-path-record kind source-id entries precedence)
+      "Return a Scheme-readable library-path record."
+      (list 'library-path
+            (library-resolution-field 'kind kind)
+            (library-resolution-field 'id source-id)
+            (library-resolution-field 'precedence precedence)
+            (library-resolution-field
+             'libraries
+             (map
+              (lambda (entry)
+                (library-catalog-field entry 'name '()))
+              entries))))
+
+    (define (consent-library-paths)
+      "Return active library path records in precedence order."
+      #((parameters)
+        (returns (type list)
+         (description "Library path records."))
+        (effects state-read state-write allocation host-eval error))
+      (let ((precedence 0)
+            (result '()))
+        (for-each
+         (lambda (source)
+           (set! result
+                 (cons
+                  (library-path-record
+                   'ad-hoc-manifest
+                   (car source)
+                   (cdr source)
+                   precedence)
+                  result))
+           (set! precedence (+ precedence 1)))
+         library-catalog-ad-hoc-manifests)
+        (for-each
+         (lambda (source)
+           (set! result
+                 (cons
+                  (library-path-record
+                   'manifest-root
+                   (car source)
+                   (cdr source)
+                   precedence)
+                  result))
+           (set! precedence (+ precedence 1)))
+         library-catalog-root-manifests)
+        (set! result
+              (cons
+               (library-path-record
+                'built-in-seed
+                'built-in-seed
+                (library-catalog-built-in-entries)
+                precedence)
+               result))
+        (reverse result)))
+
+    (define (library-candidate-names)
+      "Return candidate names in first-seen order."
+      (let loop ((entries (library-catalog-candidate-entries))
+                 (seen '())
+                 (result '()))
+        (cond
+         ((null? entries) (reverse result))
+         ((member (library-catalog-field (car entries) 'name '()) seen)
+          (loop (cdr entries) seen result))
+         (else
+          (let ((name (library-catalog-field (car entries) 'name '())))
+            (loop (cdr entries)
+                  (cons name seen)
+                  (cons name result)))))))
+
+    (define (library-conflict-record name)
+      "Return conflict record for NAME, or #f when not conflicted."
+      (let ((candidates (library-catalog-candidates name)))
+        (if (and (pair? candidates) (pair? (cdr candidates)))
+            (library-resolution-record
+             name
+             (car candidates)
+             'conflict
+             'duplicate-library
+             #f
+             candidates)
+            #f)))
+
+    (define (consent-library-conflicts . maybe-name)
+      "Return catalog conflict records."
+      #((parameters
+         (maybe-name (type list)
+          (description "Optional library name filter.")))
+        (returns (type list)
+         (description "Library-resolution records with status conflict."))
+        (effects state-read state-write allocation host-eval error))
+      (if (null? maybe-name)
+          (let loop ((names (library-candidate-names)) (result '()))
+            (if (null? names)
+                (reverse result)
+                (let ((record (library-conflict-record (car names))))
+                  (loop (cdr names)
+                        (if record (cons record result) result)))))
+          (let ((record (library-conflict-record (car maybe-name))))
+            (if record (list record) '()))))
+
+    (define (consent-library-snapshot name context)
+      "Return a reproducible resolution snapshot for NAME."
+      #((parameters
+         (name (type (list-of (or symbol exact-integer)))
+          (description "Root library name for the snapshot."))
+         (context (type eval-context)
+          (description "Context whose internal posture is consulted.")))
+        (returns (type list)
+         (description "A library-snapshot record."))
+        (effects state-read state-write allocation host-eval error))
+      (let* ((key (library-name-key name))
+             (keys (cons key (library-dependency-closure key))))
+        (list 'library-snapshot
+              (library-resolution-field 'name key)
+              (library-resolution-field 'status 'resolved)
+              (library-resolution-field
+               'resolved
+               (map
+                (lambda (entry-key)
+                  (consent-library-resolve-record entry-key context))
+                keys)))))
+
+    (define (consent-srfi-number value)
+      "Return VALUE as a non-negative SRFI number."
+      (cond
+       ((and (integer? value) (>= value 0)) value)
+       ((and (consent-number? value)
+             (eq? (consent-number-kind value) 'integer)
+             (eq? (consent-number-exactness value) 'exact)
+             (>= (consent-number-value value) 0))
+        (consent-number-value value))
+       (else
+        (eval-error
+         "SRFI number must be a non-negative exact integer"
+         value))))
+
+    (define (consent-srfi-library-name number)
+      "Return canonical SRFI library name for NUMBER."
+      #((parameters
+         (number (type exact-integer)
+          (description "Non-negative SRFI number.")))
+        (returns (type list)
+         (description "Canonical `(srfi N)' library name."))
+        (effects error))
+      (list 'srfi (consent-srfi-number number)))
+
+    (define (consent-srfi-library-aliases number)
+      "Return known aliases for SRFI NUMBER."
+      #((parameters
+         (number (type exact-integer)
+          (description "Non-negative SRFI number.")))
+        (returns (type list)
+         (description "Known SRFI library aliases."))
+        (effects state-read state-write allocation host-eval error))
+      (let* ((name (consent-srfi-library-name number))
+             (entry (consent-library-catalog-entry name)))
+        (cons name
+              (if entry
+                  (library-catalog-field entry 'aliases '())
+                  '()))))
+
+    (define (consent-vendored-srfi-entry number)
+      "Return catalog entry for vendored SRFI NUMBER, or #f."
+      #((parameters
+         (number (type exact-integer)
+          (description "Non-negative SRFI number.")))
+        (returns (type (or list boolean))
+         (description "Catalog entry for the SRFI alias, or #f."))
+        (effects state-read state-write allocation host-eval error))
+      (consent-library-catalog-entry
+       (consent-srfi-library-name number)))
 
     (define (consent-standard-source-library-specs)
       "Public metadata accessor for standard libraries backed by source files."
@@ -3122,10 +3612,15 @@
             "library, else #f.")))
         (effects state-read error))
       (let* ((key (library-name-key name))
-             (entry (library-collection-manifest-entry key)))
+             (entry (consent-library-catalog-entry key)))
         (and
          (or (not (library-visibility-internal?
-                   (library-visibility key)))
+                   (if entry
+                       (library-catalog-field
+                        entry
+                        'visibility
+                        (library-visibility key))
+                       (library-visibility key))))
              (library-internal-import-allowed? context))
          (or (not entry)
              (library-entry-available? entry))
@@ -3147,8 +3642,8 @@
          (description "The resolved library object for NAME."))
         (effects state-read state-write error))
       (let* ((key (library-name-key name))
-             (entry (library-collection-manifest-entry key)))
-        (ensure-library-import-allowed key context)
+             (entry (consent-library-catalog-entry key)))
+        (ensure-library-entry-import-allowed key entry context)
         (if (and entry (not (library-entry-available? entry)))
             (eval-error "optional library is unavailable on this host" key))
         (if (not (library-registry-ref context key))

@@ -5482,6 +5482,55 @@ cursor across sessions."
       "Return manifest catalog diagnostics."
       (reflect-datumize (consent-library-catalog-diagnostics)))
 
+    (define (reflect-library-resolve library-name context)
+      "Return deterministic resolution metadata for LIBRARY-NAME."
+      (reflect-datumize
+       (consent-library-resolve-record library-name context)))
+
+    (define (reflect-library-load library-name context)
+      "Load LIBRARY-NAME into CONTEXT and return resolution metadata."
+      (reflect-datumize
+       (consent-library-load-record
+        library-name
+        context
+        (context-interaction-environment context))))
+
+    (define (reflect-library-solve-dependencies library-name)
+      "Return dependency solution metadata for LIBRARY-NAME."
+      (reflect-datumize
+       (consent-library-solve-dependencies library-name)))
+
+    (define (reflect-library-paths)
+      "Return active library resolution path records."
+      (reflect-datumize (consent-library-paths)))
+
+    (define (reflect-library-conflicts library-name)
+      "Return catalog conflict records, optionally filtered by LIBRARY-NAME."
+      (reflect-datumize
+       (if library-name
+           (consent-library-conflicts library-name)
+           (consent-library-conflicts))))
+
+    (define (reflect-library-snapshot library-name context)
+      "Return reproducible resolution snapshot for LIBRARY-NAME."
+      (reflect-datumize
+       (consent-library-snapshot library-name context)))
+
+    (define (reflect-srfi-library-name number)
+      "Return canonical SRFI library name for NUMBER."
+      (reflect-datumize (consent-srfi-library-name number)))
+
+    (define (reflect-srfi-library-aliases number)
+      "Return known aliases for SRFI NUMBER."
+      (reflect-datumize (consent-srfi-library-aliases number)))
+
+    (define (reflect-vendored-srfi-manifest number)
+      "Return manifest metadata for vendored SRFI NUMBER."
+      (let ((entry (consent-vendored-srfi-entry number)))
+        (if entry
+            (reflect-library-info-record entry)
+            #f)))
+
     (define (reflect-catalog-private-library library-name)
       "Return (LIBRARY . CONTEXT) for LIBRARY-NAME in a private context."
       (let* ((context (new-eval-context '()))
@@ -5845,6 +5894,61 @@ cursor across sessions."
       "Return manifest catalog diagnostics."
       (redaction-model:redact
        (reflect-catalog-diagnostics)
+       'runtime-reflection))
+
+    (define (primitive-library-resolve arguments context)
+      "Return resolution metadata for a library name."
+      (redaction-model:redact
+       (reflect-library-resolve (car arguments) context)
+       'runtime-reflection))
+
+    (define (primitive-library-load arguments context)
+      "Load a library and return resolution metadata."
+      (redaction-model:redact
+       (reflect-library-load (car arguments) context)
+       'runtime-reflection))
+
+    (define (primitive-library-solve-dependencies arguments context)
+      "Return dependency solution metadata for a library name."
+      (redaction-model:redact
+       (reflect-library-solve-dependencies (car arguments))
+       'runtime-reflection))
+
+    (define (primitive-library-paths arguments context)
+      "Return active library path records."
+      (redaction-model:redact
+       (reflect-library-paths)
+       'runtime-reflection))
+
+    (define (primitive-library-conflicts arguments context)
+      "Return catalog conflict records for a library name."
+      (redaction-model:redact
+       (reflect-library-conflicts
+        (if (null? arguments) #f (car arguments)))
+       'runtime-reflection))
+
+    (define (primitive-library-snapshot arguments context)
+      "Return a reproducible library resolution snapshot."
+      (redaction-model:redact
+       (reflect-library-snapshot (car arguments) context)
+       'runtime-reflection))
+
+    (define (primitive-srfi-library-name arguments context)
+      "Return canonical SRFI library name."
+      (redaction-model:redact
+       (reflect-srfi-library-name (car arguments))
+       'runtime-reflection))
+
+    (define (primitive-srfi-library-aliases arguments context)
+      "Return known SRFI library aliases."
+      (redaction-model:redact
+       (reflect-srfi-library-aliases (car arguments))
+       'runtime-reflection))
+
+    (define (primitive-vendored-srfi-manifest arguments context)
+      "Return vendored SRFI manifest metadata."
+      (redaction-model:redact
+       (reflect-vendored-srfi-manifest (car arguments))
        'runtime-reflection))
 
     (define (primitive-add-manifest! arguments context)
@@ -9103,6 +9207,18 @@ cursor across sessions."
        (cons 'primitive-library-search primitive-library-search)
        (cons 'primitive-catalog-sources primitive-catalog-sources)
        (cons 'primitive-catalog-diagnostics primitive-catalog-diagnostics)
+       (cons 'primitive-library-resolve primitive-library-resolve)
+       (cons 'primitive-library-load primitive-library-load)
+       (cons 'primitive-library-solve-dependencies
+             primitive-library-solve-dependencies)
+       (cons 'primitive-library-paths primitive-library-paths)
+       (cons 'primitive-library-conflicts primitive-library-conflicts)
+       (cons 'primitive-library-snapshot primitive-library-snapshot)
+       (cons 'primitive-srfi-library-name primitive-srfi-library-name)
+       (cons 'primitive-srfi-library-aliases
+             primitive-srfi-library-aliases)
+       (cons 'primitive-vendored-srfi-manifest
+             primitive-vendored-srfi-manifest)
        (cons 'primitive-add-manifest! primitive-add-manifest!)
        (cons 'primitive-remove-manifest! primitive-remove-manifest!)
        (cons 'primitive-add-manifest-root! primitive-add-manifest-root!)
