@@ -2639,10 +2639,10 @@ When REPLACE is non-nil, replace an existing declaration from the same provider.
 (defun consent--register-source-library
     (source context environment)
   "Evaluate one define-library SOURCE into CONTEXT."
-  (let ((max-lisp-eval-depth
-         (max max-lisp-eval-depth consent--source-library-lisp-eval-depth))
-        (consent--source-library-internal-imports-allowed t)
-        (forms (consent-read-all source '(:source-metadata nil))))
+  (let* ((max-lisp-eval-depth
+          (max max-lisp-eval-depth consent--source-library-lisp-eval-depth))
+         (consent--source-library-internal-imports-allowed t)
+         (forms (consent-read-all source '(:source-metadata nil))))
     (unless (= (length forms) 1)
       (consent--eval-error
        "source library must contain exactly one form"))
