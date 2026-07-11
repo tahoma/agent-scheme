@@ -89,7 +89,7 @@
   "SRFI 97 library references keyed by SRFI number.")
 
 (defconst consent-library-test--srfi-261-omitted-srfis
-  '(4 7 10 30 34 35 36 49 55 58 62 70 72 88 89 90 94 96 97
+  '(0 4 7 10 30 34 35 36 49 55 58 62 70 72 88 89 90 94 96 97
       105 106 107 108 109 110 118 119 120 123 124 135 144 147
       148 149 150 160 161 164 169 185 188 207)
   "SRFI 261 omitted SRFIs that cannot be plain SRFI libraries.")
@@ -297,6 +297,8 @@
 (defun consent-library-test--non-library-feature-entry-p (entry)
   "Return non-nil when ENTRY is not just a plain binding library."
   (or (null (plist-get entry :exports))
+      (eq (plist-get entry :kind) 'library-alias)
+      (eq (plist-get entry :source-kind) 'alias)
       (eq (plist-get entry :source-kind) 'primitive-library)
       (plist-get entry :implementation-resolver)
       (plist-get entry :primitive-overlay-library)
