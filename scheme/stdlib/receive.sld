@@ -3,8 +3,9 @@
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 ;;;
 ;;; Implements `(stdlib receive)` as a portable shim over R7RS
-;;; `call-with-values` and lambda formals.  The public `(srfi 8)` and
-;;; `(srfi srfi-8)` imports are registry aliases over this implementation.
+;;; `call-with-values` and lambda formals.  The public `(srfi 8)`,
+;;; `(srfi srfi-8)`, `(srfi :8)`, and `(srfi :8 receive)` imports are registry
+;;; aliases over this implementation.
 
 (define-library (stdlib receive)
   (export receive)

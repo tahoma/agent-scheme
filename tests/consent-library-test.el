@@ -36,6 +36,64 @@
      "
     source)))
 
+(defconst consent-library-test--srfi-97-library-references
+  '((1 "(srfi :1)" "(srfi :1 lists)")
+    (2 "(srfi :2)" "(srfi :2 and-let*)")
+    (5 "(srfi :5)" "(srfi :5 let)")
+    (6 "(srfi :6)" "(srfi :6 basic-string-ports)")
+    (8 "(srfi :8)" "(srfi :8 receive)")
+    (9 "(srfi :9)" "(srfi :9 records)")
+    (11 "(srfi :11)" "(srfi :11 let-values)")
+    (13 "(srfi :13)" "(srfi :13 strings)")
+    (14 "(srfi :14)" "(srfi :14 char-sets)")
+    (16 "(srfi :16)" "(srfi :16 case-lambda)")
+    (17 "(srfi :17)" "(srfi :17 generalized-set!)")
+    (18 "(srfi :18)" "(srfi :18 multithreading)")
+    (19 "(srfi :19)" "(srfi :19 time)")
+    (21 "(srfi :21)" "(srfi :21 real-time-multithreading)")
+    (23 "(srfi :23)" "(srfi :23 error)")
+    (25 "(srfi :25)" "(srfi :25 multi-dimensional-arrays)")
+    (26 "(srfi :26)" "(srfi :26 cut)")
+    (27 "(srfi :27)" "(srfi :27 random-bits)")
+    (28 "(srfi :28)" "(srfi :28 basic-format-strings)")
+    (29 "(srfi :29)" "(srfi :29 localization)")
+    (31 "(srfi :31)" "(srfi :31 rec)")
+    (38 "(srfi :38)" "(srfi :38 with-shared-structure)")
+    (39 "(srfi :39)" "(srfi :39 parameters)")
+    (41 "(srfi :41)" "(srfi :41 streams)"
+        "(srfi :41 streams primitive)" "(srfi :41 streams derived)")
+    (42 "(srfi :42)" "(srfi :42 eager-comprehensions)")
+    (43 "(srfi :43)" "(srfi :43 vectors)")
+    (44 "(srfi :44)" "(srfi :44 collections)")
+    (45 "(srfi :45)" "(srfi :45 lazy)")
+    (46 "(srfi :46)" "(srfi :46 syntax-rules)")
+    (47 "(srfi :47)" "(srfi :47 arrays)")
+    (48 "(srfi :48)" "(srfi :48 intermediate-format-strings)")
+    (51 "(srfi :51)" "(srfi :51 rest-values)")
+    (54 "(srfi :54)" "(srfi :54 cat)")
+    (57 "(srfi :57)" "(srfi :57 records)")
+    (59 "(srfi :59)" "(srfi :59 vicinities)")
+    (60 "(srfi :60)" "(srfi :60 integer-bits)")
+    (61 "(srfi :61)" "(srfi :61 cond)")
+    (63 "(srfi :63)" "(srfi :63 arrays)")
+    (64 "(srfi :64)" "(srfi :64 testing)")
+    (66 "(srfi :66)" "(srfi :66 octet-vectors)")
+    (67 "(srfi :67)" "(srfi :67 compare-procedures)")
+    (69 "(srfi :69)" "(srfi :69 basic-hash-tables)")
+    (71 "(srfi :71)" "(srfi :71 let)")
+    (74 "(srfi :74)" "(srfi :74 blobs)")
+    (78 "(srfi :78)" "(srfi :78 lightweight-testing)")
+    (86 "(srfi :86)" "(srfi :86 mu-and-nu)")
+    (87 "(srfi :87)" "(srfi :87 case=>)")
+    (95 "(srfi :95)" "(srfi :95 sorting-and-merging)"))
+  "SRFI 97 library references keyed by SRFI number.")
+
+(defconst consent-library-test--srfi-261-omitted-srfis
+  '(0 4 7 10 30 34 35 36 49 55 58 62 70 72 88 89 90 94 96 97
+      105 106 107 108 109 110 118 119 120 123 124 135 144 147
+      148 149 150 160 161 164 169 185 188 207)
+  "SRFI 261 omitted SRFIs that cannot be plain SRFI libraries.")
+
 (defconst consent-library-test--root
   (expand-file-name
    ".."
@@ -235,6 +293,16 @@
   (require 'consent-reflect)
   (consent-reflect-vendored-srfi-manifest
    (consent--make-canonical-integer number)))
+
+(defun consent-library-test--non-library-feature-entry-p (entry)
+  "Return non-nil when ENTRY is not just a plain binding library."
+  (or (null (plist-get entry :exports))
+      (eq (plist-get entry :source-kind) 'primitive-library)
+      (plist-get entry :implementation-resolver)
+      (plist-get entry :primitive-overlay-library)
+      (plist-get entry :primitive-exports)
+      (plist-get entry :effects)
+      (plist-get entry :capabilities)))
 
 (defun consent-library-test--scheme-string-literal (text)
   "Return TEXT rendered as a Scheme string literal."
@@ -1700,6 +1768,110 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
       (regexp-quote "srfi-261-binding")
       (error-message-string error)))))
 
+(ert-deftest consent-library-test-srfi-261-aliases-cover-supported-srfi-libraries ()
+  "Require SRFI 261 portable aliases for every supported numeric SRFI."
+  (let ((checked 0))
+    (dolist (entry (consent--library-collection-manifest-entries))
+      (let ((primary-key (plist-get entry :name)))
+        (when (string-match "\\`(srfi \\([0-9]+\\))\\'" primary-key)
+          (cl-incf checked)
+          (let* ((number (match-string 1 primary-key))
+                 (alias-key (format "(srfi srfi-%s)" number))
+                 (target (or (plist-get entry :target) primary-key))
+                 (alias-entry
+                  (consent--library-collection-manifest-entry alias-key)))
+            (should alias-entry)
+            (should (eq (plist-get alias-entry :kind) 'library-alias))
+                (should (equal (plist-get alias-entry :target) target))))))
+    (should (> checked 0))))
+
+(ert-deftest consent-library-test-srfi-261-omitted-srfis-are-not-plain-libraries ()
+  "Require SRFI 261 omitted SRFIs to avoid plain binding-library manifests."
+  (let ((checked 0))
+    (dolist (number consent-library-test--srfi-261-omitted-srfis)
+      (let* ((key (format "(srfi %d)" number))
+             (entry (consent--library-catalog-lookup key)))
+        (when entry
+          (cl-incf checked)
+          (should (consent-library-test--non-library-feature-entry-p entry)))))
+    (should (> checked 0))))
+
+(ert-deftest consent-library-test-srfi-97-library-reference-alias-imports ()
+  "Import SRFI 97 library-reference aliases for supported SRFI libraries."
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (srfi :1 lists))
+      (iota 4)")
+    "(0 1 2 3)"))
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (srfi :1))
+      (iota 3)")
+    "(0 1 2)"))
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (srfi :16 case-lambda))
+      ((case-lambda
+         ((x y) (+ x y)))
+       2 5)")
+    "7"))
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (srfi :16))
+      ((case-lambda
+         ((x y) (* x y)))
+       2 5)")
+    "10"))
+  (should
+   (equal
+    (consent-library-test--external
+     "(define-library (consent fixture srfi-97-library-reference)
+        (cond-expand
+          ((library (srfi :97 srfi-libraries))
+           (export answer)
+           (import (scheme base))
+           (begin (define answer 'srfi-97-reference)))
+          (else
+           (export answer)
+           (import (scheme base))
+           (begin (define answer 'missing)))))
+      (import (scheme base)
+              (srfi 97)
+              (srfi srfi-97)
+              (srfi :97)
+              (srfi :97 srfi-libraries)
+              (consent fixture srfi-97-library-reference))
+      answer")
+    "srfi-97-reference"))
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (agent reflect) (srfi :97 srfi-libraries))
+      (library-bindings '(srfi :97 srfi-libraries))")
+    "()")))
+
+(ert-deftest consent-library-test-srfi-97-missing-export-diagnostic ()
+  "Report missing SRFI 97 alias exports through the resolver diagnostic."
+  (let ((error
+         (should-error
+          (consent-library-test--external
+           "(import (scheme base)
+                    (only (srfi :1 lists) missing-list-binding))
+            missing-list-binding")
+          :type 'consent-eval-error)))
+    (should
+     (string-match-p
+      (regexp-quote "only import name not found")
+      (error-message-string error)))
+    (should
+     (string-match-p
+      (regexp-quote "missing-list-binding")
+      (error-message-string error)))))
+
 (ert-deftest consent-library-test-srfi-2-and-let-star-behavior ()
   "Import SRFI 2 aliases and exercise `and-let*' behavior."
   (should
@@ -1877,7 +2049,10 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
                      \"Apache-2.0\")
              (eq? (manifest-subfield entry 'provenance 'vendored?) #f)
              (equal? (manifest-field entry 'aliases)
-                     '((srfi 8) (srfi srfi-8)))
+                     '((srfi 8)
+                       (srfi srfi-8)
+                       (srfi :8)
+                       (srfi :8 receive)))
              (equal? (manifest-field entry 'dependencies)
                      '((library (scheme base))))
              (equal? (manifest-field alias 'target) '(stdlib receive))
@@ -1902,7 +2077,10 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
              (equal? (manifest-subfield entry 'provenance 'local-license)
                      \"MIT\")
              (equal? (manifest-field entry 'aliases)
-                     '((srfi 2) (srfi srfi-2)))
+                     '((srfi 2)
+                       (srfi srfi-2)
+                       (srfi :2)
+                       (srfi :2 and-let*)))
              (equal? (manifest-field entry 'dependencies)
                      '((library (scheme base))))
              (equal? (manifest-field alias 'target) '(stdlib and-let-star))
@@ -2337,7 +2515,11 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
              (equal? (manifest-subfield entry 'provenance 'local-license)
                      \"MIT\")
              (equal? (manifest-field entry 'aliases)
-                     '((scheme list) (srfi 1) (srfi srfi-1)))
+                     '((scheme list)
+                       (srfi 1)
+                       (srfi srfi-1)
+                       (srfi :1)
+                       (srfi :1 lists)))
              (equal? (manifest-field entry 'dependencies)
                      '((library (scheme base)) (library (scheme cxr))))
              (equal? (manifest-field scheme-alias 'target) '(stdlib list))
@@ -2702,7 +2884,10 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
              (equal? (manifest-field entry 'status) 'built-in-shim)
              (equal? (manifest-field entry 'source) 'built-in-shim)
              (equal? (manifest-field entry 'target) '(scheme case-lambda))
-             (equal? (manifest-field entry 'aliases) '((srfi srfi-16)))
+             (equal? (manifest-field entry 'aliases)
+                     '((srfi srfi-16)
+                       (srfi :16)
+                       (srfi :16 case-lambda)))
              (equal? (manifest-field entry 'dependencies)
                      '((library (scheme case-lambda))))
              (equal? (manifest-field portable-alias 'target)
@@ -2735,10 +2920,74 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
                      '(stdlib srfi-reference))))")
     "#t")))
 
+(ert-deftest consent-library-test-stdlib-manifest-documents-srfi-97-aliases ()
+  "Expose SRFI 97 library-reference alias status through the stdlib manifest."
+  (should
+   (equal
+    (consent-library-test--stdlib-manifest-external
+     "(let ((entry (stdlib-manifest-ref '(stdlib srfi-libraries)))
+            (alias (stdlib-manifest-ref '(srfi 97)))
+            (portable-alias (stdlib-manifest-ref '(srfi srfi-97)))
+            (legacy-number-alias (stdlib-manifest-ref '(srfi :97)))
+            (legacy-alias (stdlib-manifest-ref '(srfi :97 srfi-libraries)))
+            (legacy-list-number (stdlib-manifest-ref '(srfi :1)))
+            (legacy-list (stdlib-manifest-ref '(srfi :1 lists)))
+            (legacy-case-lambda
+             (stdlib-manifest-ref '(srfi :16 case-lambda))))
+        (and (eq? (car entry) 'manifest-entry)
+             (equal? (manifest-field entry 'status) 'built-in-shim)
+             (equal? (manifest-field entry 'aliases)
+                     '((srfi 97)
+                       (srfi srfi-97)
+                       (srfi :97)
+                       (srfi :97 srfi-libraries)))
+             (equal? (manifest-field entry 'exports) '())
+             (equal? (manifest-subfield entry 'provenance 'upstream-source-url)
+                     \"https://srfi.schemers.org/srfi-97/\")
+             (equal? (manifest-field alias 'target)
+                     '(stdlib srfi-libraries))
+             (equal? (manifest-field alias 'aliases)
+                     '((srfi srfi-97)
+                       (srfi :97)
+                       (srfi :97 srfi-libraries)))
+             (equal? (manifest-field portable-alias 'target)
+                     '(stdlib srfi-libraries))
+             (equal? (manifest-field legacy-number-alias 'target)
+                     '(stdlib srfi-libraries))
+             (equal? (manifest-field legacy-alias 'target)
+                     '(stdlib srfi-libraries))
+             (equal? (manifest-field legacy-list-number 'target)
+                     '(stdlib list))
+             (equal? (manifest-field legacy-list 'target)
+                     '(stdlib list))
+             (equal? (manifest-field legacy-case-lambda 'target)
+                     '(scheme case-lambda))))")
+    "#t")))
+
+(ert-deftest consent-library-test-srfi-97-aliases-cover-supported-subset ()
+  "Require SRFI 97 aliases for supported SRFIs in its fixed library set."
+  (let ((checked 0))
+    (dolist (spec consent-library-test--srfi-97-library-references)
+      (let* ((number (car spec))
+             (primary-key (format "(srfi %d)" number))
+             (primary-entry
+              (consent--library-collection-manifest-entry primary-key)))
+        (when primary-entry
+          (cl-incf checked)
+          (let ((target (or (plist-get primary-entry :target) primary-key)))
+            (dolist (alias-key (cdr spec))
+              (let ((alias-entry
+                     (consent--library-collection-manifest-entry alias-key)))
+                (should alias-entry)
+                (should (eq (plist-get alias-entry :kind) 'library-alias))
+                (should (equal (plist-get alias-entry :target) target))))))))
+    (should (> checked 0))))
+
 (ert-deftest consent-library-test-vendored-srfi-records-cover-intake-contract ()
   "Expose SRFI bundle intake metadata as Scheme-readable records."
   (let ((vendored (consent-library-test--vendored-srfi-record 1))
         (shim (consent-library-test--vendored-srfi-record 16))
+        (libraries (consent-library-test--vendored-srfi-record 97))
         (reference (consent-library-test--vendored-srfi-record 261))
         (missing (consent-library-test--vendored-srfi-record 99999)))
     (should (eq (car vendored) (consent--syntax-symbol "vendored-srfi")))
@@ -2771,6 +3020,10 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
                             (consent-library-test--record-field
                              vendored 'import-names))))
     (should (member "(srfi srfi-1)"
+                    (mapcar #'consent-datum->external
+                            (consent-library-test--record-field
+                             vendored 'import-names))))
+    (should (member "(srfi :1 lists)"
                     (mapcar #'consent-datum->external
                             (consent-library-test--record-field
                              vendored 'import-names))))
@@ -2809,6 +3062,43 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
     (should (equal (consent-library-test--record-field-external
                     shim 'status)
                    "built-in-shim"))
+    (should (member "(srfi :16 case-lambda)"
+                    (mapcar #'consent-datum->external
+                            (consent-library-test--record-field
+                             shim 'import-names))))
+    (should (member "(srfi :16)"
+                    (mapcar #'consent-datum->external
+                            (consent-library-test--record-field
+                             shim 'import-names))))
+
+    (should (equal (consent-library-test--record-field-external
+                    libraries 'number)
+                   "97"))
+    (should (equal (consent-library-test--record-field-external
+                    libraries 'classification)
+                   "shim"))
+    (should (equal (consent-library-test--record-field-external
+                    libraries 'library)
+                   "(srfi 97)"))
+    (should (equal (consent-library-test--record-field-external
+                    libraries 'target)
+                   "(stdlib srfi-libraries)"))
+    (should (member "(srfi 97)"
+                    (mapcar #'consent-datum->external
+                            (consent-library-test--record-field
+                             libraries 'import-names))))
+    (should (member "(srfi srfi-97)"
+                    (mapcar #'consent-datum->external
+                            (consent-library-test--record-field
+                             libraries 'import-names))))
+    (should (member "(srfi :97 srfi-libraries)"
+                    (mapcar #'consent-datum->external
+                            (consent-library-test--record-field
+                             libraries 'import-names))))
+    (should (member "(srfi :97)"
+                    (mapcar #'consent-datum->external
+                            (consent-library-test--record-field
+                             libraries 'import-names))))
 
     (should (equal (consent-library-test--record-field-external
                     reference 'number)

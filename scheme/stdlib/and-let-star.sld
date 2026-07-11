@@ -5,8 +5,8 @@
 ;;;
 ;;; Implements `(stdlib and-let-star)` using the official SRFI 2 sample macro
 ;;; from https://okmij.org/ftp/Scheme/lib/myenv-chez.scm.  Local patches wrap
-;;; the macro in an R7RS `define-library` form and expose `(srfi 2)` and
-;;; `(srfi srfi-2)` as registry aliases.
+;;; the macro in an R7RS `define-library` form and expose `(srfi 2)`,
+;;; `(srfi srfi-2)`, `(srfi :2)`, and `(srfi :2 and-let*)` as registry aliases.
 
 (define-library (stdlib and-let-star)
   (export and-let*)

@@ -693,7 +693,8 @@
                    (paths #t ad-hoc-manifest)
                    (snapshot resolved (srfi 16) #t)
                    (srfi-name (srfi 16))
-                   (srfi-aliases ((srfi 16) (srfi srfi-16)))
+                   (srfi-aliases ((srfi 16) (srfi srfi-16)
+                                  (srfi :16) (srfi :16 case-lambda)))
                    (vendored shim (srfi 16) (scheme case-lambda))
                    (vendored-missing missing missing-srfi))"))
 
