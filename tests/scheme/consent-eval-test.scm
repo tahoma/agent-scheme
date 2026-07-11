@@ -1750,39 +1750,85 @@
                                 '(scheme case-lambda))))")
                 "#t")
 
-(check-external 'srfi-261-aliases-cover-supported-srfi-libraries
+(check-external 'srfi-0-cond-expand-import
+                "(import (scheme base) (srfi 0))
+                 (cond-expand
+                  (srfi-0 'srfi-0-imported)
+                  (else 'missing))"
+                "srfi-0-imported")
+
+(check-external 'srfi-0-cond-expand-library-feature
+                "(define-library (consent fixture srfi-0-cond-expand)
+                  (cond-expand
+                   ((and srfi-0 (library (srfi srfi-0)))
+                    (export answer)
+                    (import (scheme base))
+                    (begin (define answer 'srfi-0-library-feature)))
+                   (else
+                    (export answer)
+                    (import (scheme base))
+                    (begin (define answer 'missing)))))
+                (import (scheme base)
+                        (srfi srfi-0)
+                        (consent fixture srfi-0-cond-expand))
+                answer"
+                "srfi-0-library-feature")
+
+(check-external 'stdlib-srfi-0-manifest
                 (stdlib-manifest-source
-                 "(define (numeric-srfi-name? name)
-                    (and (pair? name)
-                         (eq? (car name) 'srfi)
-                         (pair? (cdr name))
-                         (integer? (cadr name))
-                         (null? (cddr name))))
-                  (define (entry-target entry)
-                    (let ((target (manifest-field entry 'target)))
-                      (if target target (manifest-field entry 'name))))
-                  (define (srfi-261-alias-name number)
-                    (list 'srfi
-                          (string->symbol
-                           (string-append \"srfi-\"
-                                          (number->string number)))))
-                  (let loop ((entries stdlib-manifest) (checked 0))
-                    (if (null? entries)
-                        (> checked 0)
-                        (let* ((entry (car entries))
-                               (name (manifest-field entry 'name)))
-                          (if (numeric-srfi-name? name)
-                              (let ((alias
-                                     (stdlib-manifest-ref
-                                      (srfi-261-alias-name (cadr name)))))
-                                (and alias
-                                     (eq? (manifest-field alias 'kind)
-                                          'library-alias)
-                                     (equal? (entry-target alias)
-                                             (entry-target entry))
-                                     (loop (cdr entries) (+ checked 1))))
-                              (loop (cdr entries) checked)))))")
+                 "(let ((entry (stdlib-manifest-ref '(srfi 0)))
+                       (portable-alias
+                        (stdlib-manifest-ref '(srfi srfi-0))))
+                   (and (eq? (car entry) 'manifest-index-entry)
+                        (equal? (manifest-field entry 'status)
+                                'built-in-shim)
+                        (equal? (manifest-field entry 'source)
+                                'built-in-shim)
+                        (equal? (manifest-field entry 'exports)
+                                '(cond-expand))
+                        (equal? (manifest-field entry 'target)
+                                '(scheme base))
+                        (equal? (manifest-field entry 'aliases)
+                                '((srfi srfi-0)))
+                        (equal? (manifest-field portable-alias 'target)
+                                '(scheme base))))")
                 "#t")
+
+(check-external/options
+ 'srfi-261-aliases-cover-supported-srfi-libraries
+ (stdlib-manifest-source
+  "(define (numeric-srfi-name? name)
+     (and (pair? name)
+          (eq? (car name) 'srfi)
+          (pair? (cdr name))
+          (integer? (cadr name))
+          (null? (cddr name))))
+   (define (entry-target entry)
+     (let ((target (manifest-field entry 'target)))
+       (if target target (manifest-field entry 'name))))
+   (define (srfi-261-alias-name number)
+     (list 'srfi
+           (string->symbol
+            (string-append \"srfi-\"
+                           (number->string number)))))
+   (let loop ((entries stdlib-manifest) (checked 0))
+     (if (null? entries)
+         (> checked 0)
+         (let* ((entry (car entries))
+                (name (manifest-field entry 'name)))
+           (if (numeric-srfi-name? name)
+               (let ((alias
+                      (stdlib-manifest-ref
+                       (srfi-261-alias-name (cadr name)))))
+                 (and alias
+                      (eq? (manifest-field alias 'kind)
+                           'library-alias)
+                      (equal? (entry-target alias)
+                              (entry-target entry))
+                      (loop (cdr entries) (+ checked 1))))
+               (loop (cdr entries) checked)))))")
+ '((max-host-callbacks . 30000))
+ "#t")
 
 (check-external 'srfi-97-library-reference-alias-import
                 "(import (scheme base) (srfi :1 lists))
@@ -2666,6 +2712,7 @@
                        (setting (make-parameter 'outer)))
                    (let ((bytes (string->utf8 \"agent\")))
                      (list (pair? (memq 'r7rs available))
+                           (pair? (memq 'srfi-0 available))
                            (pair? (memq 'consent available))
                            (setting)
                            (parameterize ((setting 'inner))
@@ -2674,7 +2721,7 @@
                            bytes
                            (utf8->string bytes)
                            (utf8->string bytes 1 4))))"
-                "(#t #t outer inner outer #u8(97 103 101 110 116) \"agent\" \"gen\")")
+                "(#t #t #t outer inner outer #u8(97 103 101 110 116) \"agent\" \"gen\")")
 
 (check-external 'call/cc-escape
                 "(call/cc (lambda (escape) (+ 1 (escape 42))))"

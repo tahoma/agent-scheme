@@ -176,10 +176,10 @@
             (set! active-value swap-value))))))))
 
 ;; Runtime feature checks are intentionally tiny during bootstrap: `r7rs',
-;; `consent', and `(library (scheme base))' are known, while other features
-;; fall through.
+;; `srfi-0', `consent', and `(library (scheme base))' are known, while other
+;; features fall through.
 (define-syntax cond-expand
-  (syntax-rules (and or not else r7rs consent library scheme base)
+  (syntax-rules (and or not else r7rs srfi-0 consent library scheme base)
     ((cond-expand)
      (syntax-error "Unfulfilled cond-expand"))
     ((cond-expand (else body ...))
@@ -210,6 +210,8 @@
         (cond-expand more-clauses ...))
        (else body ...)))
     ((cond-expand (r7rs body ...) more-clauses ...)
+     (begin body ...))
+    ((cond-expand (srfi-0 body ...) more-clauses ...)
      (begin body ...))
     ((cond-expand (consent body ...) more-clauses ...)
      (begin body ...))
