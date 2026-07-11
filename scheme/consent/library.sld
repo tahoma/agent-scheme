@@ -4223,7 +4223,7 @@
       "Report whether a cond-expand feature requirement is satisfied."
       (cond
        ((identifier-datum? requirement)
-        (memq (identifier-datum-name requirement) '(r7rs consent)))
+        (memq (identifier-datum-name requirement) '(r7rs srfi-0 consent)))
        ((pair? requirement)
         (let* ((parts (proper-list-elements requirement "feature requirement"))
                (operator (car parts)))

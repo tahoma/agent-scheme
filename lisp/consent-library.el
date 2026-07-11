@@ -3229,7 +3229,8 @@ Each spec has (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY)."
   "Return non-nil when cond-expand REQUIREMENT is satisfied."
   (cond
    ((consent--identifier-datum-p requirement)
-    (member (consent--symbol-name requirement) '("r7rs" "consent")))
+    (member (consent--symbol-name requirement)
+            '("r7rs" "srfi-0" "consent")))
    ((consp requirement)
     (let* ((parts (consent--proper-list-elements
                    requirement "feature requirement"))

@@ -39,7 +39,7 @@ Use `(features)` for implementation and language features, not host identity.
 Consent Scheme may report features such as:
 
 ```scheme
-(r7rs ratios exact-complex ieee-float consent)
+(r7rs srfi-0 ratios exact-complex ieee-float consent)
 ```
 
 The feature list answers questions such as "does this implementation advertise
@@ -316,7 +316,7 @@ Current implemented pieces:
 - R7RS `cond-expand` library requirements are available for implemented
   libraries.
 - `(features)` reports implementation-level feature identifiers, including
-  `consent`.
+  `srfi-0` and `consent`.
 - Emacs capability libraries are registered under `(emacs ...)` names.
 - The Emacs host-adapter declaration and capability manifest fixture is checked
   in as `fixtures/host-adapters/emacs.scm`.

@@ -4950,7 +4950,7 @@ Advance when ADVANCEP is non-nil.  Signal errors using DESCRIPTION."
   "Primitive features."
   (mapcar
    #'consent--syntax-symbol
-   '("r7rs" "ratios" "exact-complex" "ieee-float" "consent")))
+   '("r7rs" "srfi-0" "ratios" "exact-complex" "ieee-float" "consent")))
 
 (defun consent--policy-denied (description &optional context)
   "Signal a default-denied host policy error for DESCRIPTION."

@@ -13,6 +13,8 @@
         (scheme write)
         (stdlib manifest)
         (consent json)
+        (srfi 0)
+        (srfi srfi-0)
         (srfi 1)
         (srfi :1 lists)
         (srfi 97)
@@ -86,6 +88,12 @@
 ;; Manifest entry for the pure `(consent json)' alias.
 (define consent-json-entry (stdlib-manifest-ref '(consent json)))
 
+;; Manifest entry for the SRFI 0 cond-expand shim.
+(define srfi-0-entry (stdlib-manifest-ref '(srfi 0)))
+
+;; Manifest entry for the SRFI 0 portable SRFI reference alias.
+(define srfi-0-portable-entry (stdlib-manifest-ref '(srfi srfi-0)))
+
 ;; Manifest entry for the SRFI 261 reference-name shim.
 (define srfi-261-entry (stdlib-manifest-ref '(srfi 261)))
 
@@ -123,6 +131,28 @@
 (check 'manifest-smoke-srfi-1-alias-import
        (iota 4)
        '(0 1 2 3))
+
+(check 'manifest-smoke-srfi-0-entry-kind
+       (car srfi-0-entry)
+       'manifest-index-entry)
+
+(check 'manifest-smoke-srfi-0-target
+       (field srfi-0-entry 'target)
+       '(scheme base))
+
+(check 'manifest-smoke-srfi-0-aliases
+       (field srfi-0-entry 'aliases)
+       '((srfi srfi-0)))
+
+(check 'manifest-smoke-srfi-0-portable-alias-target
+       (field srfi-0-portable-entry 'target)
+       '(scheme base))
+
+(check 'manifest-smoke-srfi-0-cond-expand-import
+       (cond-expand
+        (srfi-0 'srfi-0-imported)
+        (else 'missing))
+       'srfi-0-imported)
 
 (check 'manifest-smoke-srfi-97-entry-kind
        (car srfi-97-entry)

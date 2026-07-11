@@ -4664,7 +4664,7 @@ cursor across sessions."
     (define (primitive-features arguments context)
       "Implement the `features` primitive with argument validation and Consent"
       "Scheme values."
-      '(r7rs ratios exact-complex ieee-float consent))
+      '(r7rs srfi-0 ratios exact-complex ieee-float consent))
 
     (define (primitive-agent-yield arguments context)
       "Emit a primary structured observation event into the current context."
