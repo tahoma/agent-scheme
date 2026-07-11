@@ -15,6 +15,7 @@ source-tree layers.
 | --- | --- | --- | --- | --- |
 | `(stdlib json)` | implemented | Local portable implementation, recorded in `(stdlib manifest)` | `(stdlib json)`, `(consent json)`, `(srfi 180)`, `(srfi srfi-180)` | JSON boundary codec used by tool-calling and protocol edges; historical Consent and SRFI spellings are compatibility aliases. |
 | `(srfi 16)` | shimmed | Built-in shim over R7RS `(scheme case-lambda)`, recorded in `(stdlib manifest)` | `(srfi 16)`, `(srfi srfi-16)` | Optional SRFI compatibility for `case-lambda`; the implementation remains the R7RS-small library and is not vendored stdlib source. |
+| `(stdlib srfi-reference)` | shimmed | Zero-export SRFI 261 reference-name shim, recorded in `(stdlib manifest)` | `(stdlib srfi-reference)`, `(srfi 261)`, `(srfi srfi-261)` | Optional SRFI 261 portable SRFI library-reference support; imports resolve for feature checks without adding bindings or vendored code. |
 | `(stdlib and-let-star)` | implemented | Vendored adapted SRFI 2 sample macro, recorded in `(stdlib manifest)` | `(stdlib and-let-star)`, `(srfi 2)`, `(srfi srfi-2)` | Optional SRFI 2 `and-let*` syntax for guarded sequential bindings; not part of the R7RS-small baseline. |
 | `(stdlib list)` | implemented | Vendored adapted SRFI 1 reference implementation, recorded in `(stdlib manifest)` | `(stdlib list)`, `(scheme list)`, `(srfi 1)`, `(srfi srfi-1)` | Primary stdlib spelling owns the source; R7RS-large and SRFI spellings are compatibility aliases. |
 | `(stdlib generator)` | implemented | Vendored adapted SRFI 158 sample implementation, recorded in `(stdlib manifest)` | `(stdlib generator)`, `(scheme generator)`, `(srfi 158)`, `(srfi srfi-158)` | Primary stdlib spelling owns generators and accumulators; R7RS-large and SRFI spellings are compatibility aliases. |
@@ -43,6 +44,8 @@ status. Shim records, such as `(srfi 16)`, point at their target library instead
 of claiming vendored source; missing SRFIs return a missing record. Child SRFI
 implementations remain tracked in their own issues, so this manifest contract
 does not imply that the full SRFI-backed stdlib backlog has shipped.
+SRFI 261 is represented as a zero-export shim because the SRFI specifies
+portable SRFI library-reference names rather than implementation bindings.
 
 Vendored code and adapted upstream test material keep their recorded upstream
 license in `scheme/stdlib/manifest.sld`; repository license files and REUSE

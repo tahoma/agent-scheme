@@ -13,7 +13,9 @@
         (scheme write)
         (stdlib manifest)
         (consent json)
-        (srfi 1))
+        (srfi 1)
+        (srfi 261)
+        (srfi srfi-261))
 
 ;; Number of manifest smoke failures seen so far.
 (define failures 0)
@@ -46,6 +48,12 @@
 ;; Manifest entry for the pure `(consent json)' alias.
 (define consent-json-entry (stdlib-manifest-ref '(consent json)))
 
+;; Manifest entry for the SRFI 261 reference-name shim.
+(define srfi-261-entry (stdlib-manifest-ref '(srfi 261)))
+
+;; Manifest entry for the SRFI 261 portable SRFI reference alias.
+(define srfi-261-portable-entry (stdlib-manifest-ref '(srfi srfi-261)))
+
 ;; Output string used to verify that pure alias exports include json-write.
 (define json-output (open-output-string))
 
@@ -71,6 +79,18 @@
 (check 'manifest-smoke-srfi-1-alias-import
        (iota 4)
        '(0 1 2 3))
+
+(check 'manifest-smoke-srfi-261-entry-kind
+       (car srfi-261-entry)
+       'manifest-index-entry)
+
+(check 'manifest-smoke-srfi-261-target
+       (field srfi-261-entry 'target)
+       '(stdlib srfi-reference))
+
+(check 'manifest-smoke-srfi-261-portable-alias-target
+       (field srfi-261-portable-entry 'target)
+       '(stdlib srfi-reference))
 
 (if (= failures 0)
     (begin

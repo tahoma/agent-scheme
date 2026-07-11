@@ -352,6 +352,17 @@
         (cdr (consent--proper-list-elements cell "manifest field"))
       nil)))
 
+(defun consent--collection-manifest-field-present-p (entry name)
+  "Return non-nil when tagged manifest ENTRY contains NAME."
+  (seq-some
+   (lambda (field)
+     (let ((parts
+            (and (consp field)
+                 (consent--proper-list-elements-maybe field))))
+       (and parts
+            (consent--symbol-named-p (car parts) name))))
+   (consent--collection-manifest-fields entry "manifest entry")))
+
 (defun consent--collection-manifest-symbol (value description &optional default)
   "Return VALUE as an Emacs Lisp symbol, or DEFAULT when absent."
   (cond
@@ -800,6 +811,8 @@ Use SOURCE-FILE, TARGET, or IMPLEMENTATION-ID when SOURCE is absent."
           (consent--manifest-library-list
            (consent--collection-manifest-field entry "aliases" nil)
            "collection manifest aliases"))
+         (exports-declared
+          (consent--collection-manifest-field-present-p entry "exports"))
          (exports
           (let ((value (consent--collection-manifest-field
                         entry "exports" exports-absent)))
@@ -860,7 +873,7 @@ Use SOURCE-FILE, TARGET, or IMPLEMENTATION-ID when SOURCE is absent."
       (consent--eval-error
        "unsupported collection manifest schema-version: %s"
        schema-version))
-    (when (eq exports exports-absent)
+    (unless exports-declared
       (if (and target (eq source-kind 'alias))
           (setq exports nil)
         (consent--eval-error
@@ -916,6 +929,7 @@ Use SOURCE-FILE, TARGET, or IMPLEMENTATION-ID when SOURCE is absent."
           :source-file source-file
           :aliases aliases
           :target target
+          :exports-declared exports-declared
           :exports exports
           :dependencies dependencies
           :effects effects
@@ -1025,22 +1039,25 @@ Use SOURCE-FILE, TARGET, or IMPLEMENTATION-ID when SOURCE is absent."
   "Return exported binding names for cataloged library KEY."
   (let ((manifest-entry
          (consent--library-collection-manifest-entry key)))
-    (or (plist-get manifest-entry :exports)
-        (and (plist-get manifest-entry :target)
-             (consent--library-catalog-export-names
-              (plist-get manifest-entry :target)))
-        (condition-case _
-            (let* ((pair (consent--library-catalog-private-context))
-                   (context (car pair))
-                   (environment (cdr pair))
-                   (library
-                    (consent--resolve-library
-                     (consent-read key)
-                     context
-                     environment)))
-              (mapcar #'consent--library-binding-name
-                      (consent--library-exports library)))
-          (error nil)))))
+    (cond
+     ((plist-get manifest-entry :exports-declared)
+      (plist-get manifest-entry :exports))
+     ((plist-get manifest-entry :target)
+      (consent--library-catalog-export-names
+       (plist-get manifest-entry :target)))
+     (t
+      (condition-case _
+          (let* ((pair (consent--library-catalog-private-context))
+                 (context (car pair))
+                 (environment (cdr pair))
+                 (library
+                  (consent--resolve-library
+                   (consent-read key)
+                   context
+                   environment)))
+            (mapcar #'consent--library-binding-name
+                    (consent--library-exports library)))
+        (error nil))))))
 
 (defun consent--library-catalog-aliases (key)
   "Return aliases that resolve to library KEY."
@@ -1090,6 +1107,10 @@ Use SOURCE-FILE, TARGET, or IMPLEMENTATION-ID when SOURCE is absent."
   "Return every value for NAME from manifest FIELDS."
   (let ((field (consent--library-catalog-field-form fields name)))
     (and field (cdr field))))
+
+(defun consent--library-catalog-manifest-field-present-p (fields name)
+  "Return non-nil when manifest FIELDS contains NAME."
+  (and (consent--library-catalog-field-form fields name) t))
 
 (defun consent--library-catalog-require-symbol (value description)
   "Return VALUE as an Emacs Lisp symbol, or signal DESCRIPTION."
@@ -1220,6 +1241,9 @@ Use SOURCE-FILE, TARGET, or IMPLEMENTATION-ID when SOURCE is absent."
              "catalog primitive-exports"))
            (source-file
             (consent--manifest-source-path source))
+           (exports-declared
+            (consent--library-catalog-manifest-field-present-p
+             fields "exports"))
            (exports
             (consent--library-catalog-require-symbol-list
              (consent--library-catalog-manifest-field fields "exports" nil)
@@ -1327,6 +1351,7 @@ Use SOURCE-FILE, TARGET, or IMPLEMENTATION-ID when SOURCE is absent."
             :source-file source-file
             :aliases aliases
             :target target
+            :exports-declared exports-declared
             :exports exports
             :dependencies dependencies
             :effects effects
@@ -1506,6 +1531,7 @@ Use SOURCE-FILE, TARGET, or IMPLEMENTATION-ID when SOURCE is absent."
                   (plist-get manifest-entry :aliases)
                 (consent--library-catalog-aliases key))
      :target (plist-get manifest-entry :target)
+     :exports-declared (plist-get manifest-entry :exports-declared)
      :exports (consent--library-catalog-export-names key)
      :dependencies (consent--library-catalog-dependencies key)
      :effects (plist-get manifest-entry :effects)
@@ -2305,7 +2331,7 @@ Use SOURCE-FILE, TARGET, or IMPLEMENTATION-ID when SOURCE is absent."
           key
           (consent--manifest-exported-primitive-specs overlay-entry)
           context)))
-      (when exports
+      (when (consent--manifest-entry-exports-declared-p entry)
         (let ((library (gethash key (consent--eval-context-libraries context))))
           (unless library
             (consent--eval-error
@@ -2316,6 +2342,15 @@ Use SOURCE-FILE, TARGET, or IMPLEMENTATION-ID when SOURCE is absent."
                  (consent--library-exports library)
                  exports
                  key)))))))
+
+(defun consent--manifest-entry-exports-declared-p (entry)
+  "Return non-nil when manifest ENTRY explicitly declares exports.
+Current catalog entries carry `:exports-declared'; older direct plist fixtures
+only carry `:exports', so absence of the marker preserves that legacy signal."
+  (or (plist-get entry :exports-declared)
+      (and (not (plist-member entry :exports-declared))
+           (plist-member entry :exports)
+           t)))
 
 (defun consent--primitive-library-require-property (entry property)
   "Return ENTRY PROPERTY, requiring that the key is present."
@@ -2841,7 +2876,8 @@ Each spec has (NAME FUNCTION MINIMUM-ARITY MAXIMUM-ARITY)."
     (delq nil
           (list (cons :alias key)
                 (cons :target target)
-                (and exports (cons :exports exports))))))
+                (and (consent--manifest-entry-exports-declared-p entry)
+                     (cons :exports exports))))))
 
 (defun consent--library-available-p (name context _environment)
   "Return non-nil if NAME can be imported."
