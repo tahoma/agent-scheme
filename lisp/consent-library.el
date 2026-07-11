@@ -2642,7 +2642,7 @@ When REPLACE is non-nil, replace an existing declaration from the same provider.
   (let ((max-lisp-eval-depth
          (max max-lisp-eval-depth consent--source-library-lisp-eval-depth))
         (consent--source-library-internal-imports-allowed t)
-        (forms (consent-read-all source)))
+        (forms (consent-read-all source '(:source-metadata nil))))
     (unless (= (length forms) 1)
       (consent--eval-error
        "source library must contain exactly one form"))
