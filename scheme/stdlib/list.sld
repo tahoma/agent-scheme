@@ -7,9 +7,10 @@
 ;;; https://github.com/scheme-requests-for-implementation/srfi-1.
 ;;; The upstream reference implementation is MIT-licensed and descends from
 ;;; Olin Shivers' public reference code.  Local changes wrap the procedures in
-;;; a Consent Scheme source library, keep `(scheme list)', `(srfi 1)', and
-;;; `(srfi srfi-1)' as registry aliases, and use small portable helpers instead
-;;; of upstream implementation-specific optional-argument macros.
+;;; a Consent Scheme source library, keep `(scheme list)', `(srfi 1)',
+;;; `(srfi srfi-1)', `(srfi :1)', and `(srfi :1 lists)' as registry aliases,
+;;; and use small portable helpers instead of upstream implementation-specific
+;;; optional-argument macros.
 
 (define-library (stdlib list)
   (export xcons tree-copy list-tabulate cons*

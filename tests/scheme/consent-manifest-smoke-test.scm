@@ -14,6 +14,9 @@
         (stdlib manifest)
         (consent json)
         (srfi 1)
+        (srfi :1 lists)
+        (srfi 97)
+        (srfi :97 srfi-libraries)
         (srfi 261)
         (srfi srfi-261))
 
@@ -45,11 +48,52 @@
 (define (field-present? entry name)
   (if (assq name (cdr entry)) #t #f))
 
+;; Return #t when NAME is a numeric SRFI library name.
+(define (numeric-srfi-name? name)
+  (and (pair? name)
+       (eq? (car name) 'srfi)
+       (pair? (cdr name))
+       (integer? (cadr name))
+       (null? (cddr name))))
+
+;; Return ENTRY's effective implementation target.
+(define (entry-target entry)
+  (let ((target (field entry 'target)))
+    (if target target (field entry 'name))))
+
+;; Return SRFI 261's portable alias name for SRFI NUMBER.
+(define (srfi-261-alias-name number)
+  (list 'srfi
+        (string->symbol
+         (string-append "srfi-" (number->string number)))))
+
+;; Return #t when every numeric SRFI entry has its SRFI 261 portable alias.
+(define (srfi-261-alias-contract? entries)
+  (let loop ((rest entries) (checked 0))
+    (if (null? rest)
+        (> checked 0)
+        (let* ((entry (car rest))
+               (name (field entry 'name)))
+          (if (numeric-srfi-name? name)
+              (let ((alias (stdlib-manifest-ref
+                            (srfi-261-alias-name (cadr name)))))
+                (and alias
+                     (eq? (field alias 'kind) 'library-alias)
+                     (equal? (entry-target alias) (entry-target entry))
+                     (loop (cdr rest) (+ checked 1))))
+              (loop (cdr rest) checked))))))
+
 ;; Manifest entry for the pure `(consent json)' alias.
 (define consent-json-entry (stdlib-manifest-ref '(consent json)))
 
 ;; Manifest entry for the SRFI 261 reference-name shim.
 (define srfi-261-entry (stdlib-manifest-ref '(srfi 261)))
+
+;; Manifest entry for the SRFI 97 library-reference shim.
+(define srfi-97-entry (stdlib-manifest-ref '(srfi 97)))
+
+;; Manifest entry for a SRFI 97 legacy list-library alias.
+(define srfi-97-list-entry (stdlib-manifest-ref '(srfi :1 lists)))
 
 ;; Manifest entry for the SRFI 261 portable SRFI reference alias.
 (define srfi-261-portable-entry (stdlib-manifest-ref '(srfi srfi-261)))
@@ -80,6 +124,18 @@
        (iota 4)
        '(0 1 2 3))
 
+(check 'manifest-smoke-srfi-97-entry-kind
+       (car srfi-97-entry)
+       'manifest-index-entry)
+
+(check 'manifest-smoke-srfi-97-target
+       (field srfi-97-entry 'target)
+       '(stdlib srfi-libraries))
+
+(check 'manifest-smoke-srfi-97-list-target
+       (field srfi-97-list-entry 'target)
+       '(stdlib list))
+
 (check 'manifest-smoke-srfi-261-entry-kind
        (car srfi-261-entry)
        'manifest-index-entry)
@@ -87,6 +143,14 @@
 (check 'manifest-smoke-srfi-261-target
        (field srfi-261-entry 'target)
        '(stdlib srfi-reference))
+
+(check 'manifest-smoke-srfi-261-aliases
+       (field srfi-261-entry 'aliases)
+       '((srfi srfi-261)))
+
+(check 'manifest-smoke-srfi-261-portable-alias-contract
+       (srfi-261-alias-contract? stdlib-manifest)
+       #t)
 
 (check 'manifest-smoke-srfi-261-portable-alias-target
        (field srfi-261-portable-entry 'target)

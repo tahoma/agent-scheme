@@ -1741,10 +1741,97 @@
                         (equal? (manifest-field entry 'target)
                                 '(scheme case-lambda))
                         (equal? (manifest-field entry 'aliases)
-                                '((srfi srfi-16)))
+                                '((srfi srfi-16)
+                                  (srfi :16)
+                                  (srfi :16 case-lambda)))
                         (equal? (manifest-field entry 'dependencies)
                                 '((library (scheme case-lambda))))
                         (equal? (manifest-field portable-alias 'target)
+                                '(scheme case-lambda))))")
+                "#t")
+
+(check-external 'srfi-261-aliases-cover-supported-srfi-libraries
+                (stdlib-manifest-source
+                 "(define (numeric-srfi-name? name)
+                    (and (pair? name)
+                         (eq? (car name) 'srfi)
+                         (pair? (cdr name))
+                         (integer? (cadr name))
+                         (null? (cddr name))))
+                  (define (entry-target entry)
+                    (let ((target (manifest-field entry 'target)))
+                      (if target target (manifest-field entry 'name))))
+                  (define (srfi-261-alias-name number)
+                    (list 'srfi
+                          (string->symbol
+                           (string-append \"srfi-\"
+                                          (number->string number)))))
+                  (let loop ((entries stdlib-manifest) (checked 0))
+                    (if (null? entries)
+                        (> checked 0)
+                        (let* ((entry (car entries))
+                               (name (manifest-field entry 'name)))
+                          (if (numeric-srfi-name? name)
+                              (let ((alias
+                                     (stdlib-manifest-ref
+                                      (srfi-261-alias-name (cadr name)))))
+                                (and alias
+                                     (eq? (manifest-field alias 'kind)
+                                          'library-alias)
+                                     (equal? (entry-target alias)
+                                             (entry-target entry))
+                                     (loop (cdr entries) (+ checked 1))))
+                              (loop (cdr entries) checked)))))")
+                "#t")
+
+(check-external 'srfi-97-library-reference-alias-import
+                "(import (scheme base) (srfi :1 lists))
+                 (iota 4)"
+                "(0 1 2 3)")
+
+(check-external 'srfi-97-number-only-library-reference-alias-import
+                "(import (scheme base) (srfi :16))
+                 ((case-lambda
+                    ((x y) (+ x y)))
+                  2 5)"
+                "7")
+
+(check-external 'srfi-97-library-reference-shim-import
+                "(define-library (consent fixture srfi-97-library-reference)
+                   (cond-expand
+                    ((library (srfi :97 srfi-libraries))
+                     (export answer)
+                     (import (scheme base))
+                     (begin (define answer 'srfi-97-reference)))
+                    (else
+                     (export answer)
+                     (import (scheme base))
+                     (begin (define answer 'missing)))))
+                 (import (scheme base)
+                         (srfi 97)
+                         (srfi srfi-97)
+                         (srfi :97)
+                         (srfi :97 srfi-libraries)
+                         (consent fixture srfi-97-library-reference))
+                 answer"
+                "srfi-97-reference")
+
+(check-external 'stdlib-srfi-97-manifest
+                (stdlib-manifest-source
+                 "(let ((entry (stdlib-manifest-ref '(stdlib srfi-libraries)))
+                       (alias (stdlib-manifest-ref '(srfi 97)))
+                       (legacy-list (stdlib-manifest-ref '(srfi :1 lists)))
+                       (legacy-case-lambda
+                        (stdlib-manifest-ref '(srfi :16 case-lambda))))
+                   (and (eq? (car entry) 'manifest-entry)
+                        (equal? (manifest-field entry 'status)
+                                'built-in-shim)
+                        (equal? (manifest-field entry 'exports) '())
+                        (equal? (manifest-field alias 'target)
+                                '(stdlib srfi-libraries))
+                        (equal? (manifest-field legacy-list 'target)
+                                '(stdlib list))
+                        (equal? (manifest-field legacy-case-lambda 'target)
                                 '(scheme case-lambda))))")
                 "#t")
 
@@ -1797,7 +1884,10 @@
                                  entry 'provenance 'local-license)
                                 \"MIT\")
                         (equal? (manifest-field entry 'aliases)
-                                '((srfi 2) (srfi srfi-2)))
+                                '((srfi 2)
+                                  (srfi srfi-2)
+                                  (srfi :2)
+                                  (srfi :2 and-let*)))
                         (equal? (manifest-field entry 'dependencies)
                                 '((library (scheme base))))
                         (equal? (manifest-field alias 'target)
@@ -1944,7 +2034,11 @@
                                  entry 'provenance 'local-license)
                                 \"MIT\")
                         (equal? (manifest-field entry 'aliases)
-                                '((scheme list) (srfi 1) (srfi srfi-1)))
+                                '((scheme list)
+                                  (srfi 1)
+                                  (srfi srfi-1)
+                                  (srfi :1)
+                                  (srfi :1 lists)))
                         (equal? (manifest-field entry 'dependencies)
                                 '((library (scheme base))
                                   (library (scheme cxr))))
