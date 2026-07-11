@@ -1649,6 +1649,57 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
       (regexp-quote "missing-case-lambda")
       (error-message-string error)))))
 
+(ert-deftest consent-library-test-srfi-261-reference-alias-imports ()
+  "Import SRFI 261 reference aliases without inventing bindings."
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (srfi 261))
+      'srfi-261-imported")
+    "srfi-261-imported"))
+  (should
+   (equal
+    (consent-library-test--external
+     "(define-library (consent fixture srfi-261-reference)
+        (cond-expand
+          ((library (srfi srfi-261))
+           (export answer)
+           (import (scheme base))
+           (begin (define answer 'portable-srfi-reference)))
+          (else
+           (export answer)
+           (import (scheme base))
+           (begin (define answer 'missing)))))
+      (import (scheme base)
+              (srfi srfi-261)
+              (consent fixture srfi-261-reference))
+      answer")
+    "portable-srfi-reference"))
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (agent reflect) (srfi 261))
+      (library-bindings '(srfi 261))")
+    "()")))
+
+(ert-deftest consent-library-test-srfi-261-missing-export-diagnostic ()
+  "Report missing SRFI 261 exports through the resolver diagnostic."
+  (let ((error
+         (should-error
+          (consent-library-test--external
+           "(import (scheme base)
+                    (only (srfi 261) srfi-261-binding))
+            srfi-261-binding")
+          :type 'consent-eval-error)))
+    (should
+     (string-match-p
+      (regexp-quote "only import name not found")
+      (error-message-string error)))
+    (should
+     (string-match-p
+      (regexp-quote "srfi-261-binding")
+      (error-message-string error)))))
+
 (ert-deftest consent-library-test-srfi-2-and-let-star-behavior ()
   "Import SRFI 2 aliases and exercise `and-let*' behavior."
   (should
@@ -2658,10 +2709,37 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
                      '(scheme case-lambda))))")
     "#t")))
 
+(ert-deftest consent-library-test-stdlib-manifest-documents-srfi-261-reference-shim ()
+  "Expose SRFI 261 reference-name shim status through the stdlib manifest."
+  (should
+   (equal
+    (consent-library-test--stdlib-manifest-external
+     "(let ((entry (stdlib-manifest-ref '(stdlib srfi-reference)))
+            (alias (stdlib-manifest-ref '(srfi 261)))
+            (portable-alias (stdlib-manifest-ref '(srfi srfi-261))))
+        (and (eq? (car entry) 'manifest-entry)
+             (equal? (manifest-field entry 'status) 'built-in-shim)
+             (equal? (manifest-field entry 'aliases)
+                     '((srfi 261) (srfi srfi-261)))
+             (equal? (manifest-field entry 'exports) '())
+             (equal? (manifest-field entry 'dependencies)
+                     '((library (scheme base))))
+             (equal? (manifest-subfield entry 'provenance 'upstream-source-url)
+                     \"https://srfi.schemers.org/srfi-261/\")
+             (equal? (manifest-field alias 'status) 'built-in-shim)
+             (equal? (manifest-field alias 'target)
+                     '(stdlib srfi-reference))
+             (equal? (manifest-field alias 'aliases)
+                     '((srfi srfi-261)))
+             (equal? (manifest-field portable-alias 'target)
+                     '(stdlib srfi-reference))))")
+    "#t")))
+
 (ert-deftest consent-library-test-vendored-srfi-records-cover-intake-contract ()
   "Expose SRFI bundle intake metadata as Scheme-readable records."
   (let ((vendored (consent-library-test--vendored-srfi-record 1))
         (shim (consent-library-test--vendored-srfi-record 16))
+        (reference (consent-library-test--vendored-srfi-record 261))
         (missing (consent-library-test--vendored-srfi-record 99999)))
     (should (eq (car vendored) (consent--syntax-symbol "vendored-srfi")))
     (should (equal (consent-library-test--record-field-external
@@ -2731,6 +2809,30 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
     (should (equal (consent-library-test--record-field-external
                     shim 'status)
                    "built-in-shim"))
+
+    (should (equal (consent-library-test--record-field-external
+                    reference 'number)
+                   "261"))
+    (should (equal (consent-library-test--record-field-external
+                    reference 'classification)
+                   "shim"))
+    (should (equal (consent-library-test--record-field-external
+                    reference 'library)
+                   "(srfi 261)"))
+    (should (equal (consent-library-test--record-field-external
+                    reference 'target)
+                   "(stdlib srfi-reference)"))
+    (should (equal (consent-library-test--record-field-external
+                    reference 'status)
+                   "built-in-shim"))
+    (should (member "(srfi 261)"
+                    (mapcar #'consent-datum->external
+                            (consent-library-test--record-field
+                             reference 'import-names))))
+    (should (member "(srfi srfi-261)"
+                    (mapcar #'consent-datum->external
+                            (consent-library-test--record-field
+                             reference 'import-names))))
 
     (should (equal (consent-library-test--record-field-external
                     missing 'number)

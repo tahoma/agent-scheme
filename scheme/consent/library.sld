@@ -458,6 +458,19 @@
           => cdr)
          (else (loop (cdr fields))))))
 
+    (define (collection-manifest-field-present? entry field)
+      "Report whether tagged manifest ENTRY contains FIELD."
+      (let loop ((fields (collection-manifest-fields entry "manifest entry")))
+        (cond
+         ((null? fields) #f)
+         ((and (pair? (car fields))
+               (let ((parts
+                      (proper-list-elements (car fields) "manifest field")))
+                 (and (pair? parts)
+                      (identifier-named? (car parts) field))))
+          #t)
+         (else (loop (cdr fields))))))
+
     (define (collection-manifest-symbol value description)
       "Return VALUE when it is a symbol."
       (if (symbol? value)
@@ -971,6 +984,8 @@
               (manifest-library-list
                (collection-manifest-field entry 'aliases #f)
                "collection manifest aliases"))
+             (exports-declared?
+              (collection-manifest-field-present? entry 'exports))
              (exports
               (let ((value (collection-manifest-field
                             entry 'exports exports-absent)))
@@ -1025,7 +1040,7 @@
             (eval-error
              "unsupported collection manifest schema-version"
              schema-version))
-        (if (eq? exports exports-absent)
+        (if (not exports-declared?)
             (if (and target (eq? source-kind 'alias))
                 (set! exports '())
                 (eval-error "built-in manifest entry must declare exports"
@@ -1081,6 +1096,7 @@
          (list 'source-file source-file)
          (list 'aliases aliases)
          (list 'target target)
+         (list 'exports-declared? exports-declared?)
          (list 'exports exports)
          (list 'dependencies dependencies)
          (list 'effects effects)
@@ -1266,7 +1282,7 @@
       (guard (condition (else '()))
         (let ((manifest-entry (library-collection-manifest-entry key)))
           (cond
-           ((not (null? (collection-entry-field manifest-entry 'exports '())))
+           ((collection-entry-field manifest-entry 'exports-declared? #f)
             (collection-entry-field manifest-entry 'exports '()))
            ((collection-entry-field manifest-entry 'target #f)
             (library-catalog-export-names
@@ -1319,6 +1335,10 @@
       "Return every value for FIELD from manifest FIELDS."
       (let ((cell (assq field fields)))
         (if cell (cdr cell) '())))
+
+    (define (library-catalog-manifest-field-present? fields field)
+      "Report whether manifest FIELDS contains FIELD."
+      (and (assq field fields) #t))
 
     (define (library-catalog-require-symbol value description)
       "Return VALUE when it is a symbol, else raise a catalog diagnostic error."
@@ -1444,6 +1464,8 @@
                  "catalog primitive-exports"))
                (source-file
                 (manifest-source-path source))
+               (exports-declared?
+                (library-catalog-manifest-field-present? fields 'exports))
                (exports
                 (library-catalog-require-symbol-list
                  (library-catalog-manifest-field fields 'exports '())
@@ -1537,6 +1559,7 @@
            (list 'source-file source-file)
            (list 'aliases aliases)
            (list 'target target)
+           (list 'exports-declared? exports-declared?)
            (list 'exports exports)
            (list 'dependencies dependencies)
            (list 'effects effects)
@@ -1763,6 +1786,11 @@
          (list 'target
                (or (collection-entry-field manifest-entry 'target #f)
                    #f))
+         (list 'exports-declared?
+               (collection-entry-field
+                manifest-entry
+                'exports-declared?
+                #f))
          (list 'exports (library-catalog-export-names key))
          (list 'dependencies (library-catalog-dependencies key))
          (list 'effects (collection-entry-field manifest-entry 'effects #f))
@@ -3391,17 +3419,25 @@
                 (library-value-environment target-library)
                 (library-syntax-environment target-library)))))))
 
+    (define (manifest-entry-exports-declared? entry)
+      "Report whether manifest ENTRY explicitly declares exports."
+      (or (collection-entry-field entry 'exports-declared? #f)
+          (and (not (assq 'exports-declared? entry))
+               (assq 'exports entry)
+               #t)))
+
     (define (manifest-library-alias-spec entry)
       "Return alias registration metadata for manifest ENTRY."
       (let ((key (collection-entry-field entry 'name #f))
             (target (collection-entry-field entry 'target #f))
+            (exports-declared? (manifest-entry-exports-declared? entry))
             (exports (collection-entry-field entry 'exports '())))
         (if (not target)
             (eval-error "manifest alias has no target" key))
         (append
          (list (cons 'alias key)
                (cons 'target target))
-         (if (null? exports)
+         (if (not exports-declared?)
              '()
              (list (cons 'exports exports))))))
 
@@ -3771,6 +3807,7 @@
       (let ((key (collection-entry-field entry 'name #f))
             (source-file (collection-entry-field entry 'source-file #f))
             (root (collection-entry-field entry 'root #f))
+            (exports-declared? (manifest-entry-exports-declared? entry))
             (exports (collection-entry-field entry 'exports '()))
             (overlay-library
              (collection-entry-field entry 'primitive-overlay-library #f)))
@@ -3793,7 +3830,7 @@
                key
                (manifest-exported-primitive-specs overlay-entry)
                context)))
-        (if (not (null? exports))
+        (if exports-declared?
             (let ((library (library-registry-ref context key)))
               (if (not library)
                   (eval-error
