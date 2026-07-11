@@ -294,17 +294,23 @@
   (consent-reflect-vendored-srfi-manifest
    (consent--make-canonical-integer number)))
 
-(defun consent-library-test--non-library-feature-entry-p (entry)
-  "Return non-nil when ENTRY is not just a plain binding library."
-  (or (null (plist-get entry :exports))
-      (eq (plist-get entry :kind) 'library-alias)
-      (eq (plist-get entry :source-kind) 'alias)
-      (eq (plist-get entry :source-kind) 'primitive-library)
-      (plist-get entry :implementation-resolver)
-      (plist-get entry :primitive-overlay-library)
-      (plist-get entry :primitive-exports)
-      (plist-get entry :effects)
-      (plist-get entry :capabilities)))
+(defun consent-library-test--srfi-261-pure-library-entry-p (entry)
+  "Return non-nil when ENTRY resolves to a source-backed SRFI library."
+  (let* ((resolved-key (consent--library-entry-resolved-name entry))
+         (resolved-entry
+          (and resolved-key (consent--library-catalog-lookup resolved-key))))
+    (and resolved-entry
+         (eq (plist-get resolved-entry :category) 'stdlib)
+         (eq (plist-get resolved-entry :kind) 'library)
+         (eq (plist-get resolved-entry :source-kind) 'portable-source)
+         (eq (plist-get resolved-entry :realization) 'portable-source)
+         (plist-get resolved-entry :source-file)
+         (not (plist-get resolved-entry :target))
+         (not (plist-get resolved-entry :implementation-resolver))
+         (not (plist-get resolved-entry :primitive-overlay-library))
+         (not (plist-get resolved-entry :primitive-exports))
+         (not (plist-get resolved-entry :effects))
+         (not (plist-get resolved-entry :capabilities)))))
 
 (defun consent-library-test--scheme-string-literal (text)
   "Return TEXT rendered as a Scheme string literal."
@@ -1834,6 +1840,18 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
                 (should (equal (plist-get alias-entry :target) target))))))
     (should (> checked 0))))
 
+(ert-deftest consent-library-test-srfi-261-pure-library-predicate-resolves-aliases ()
+  "Classify SRFI 261 pure libraries by resolved implementation entries."
+  (should
+   (consent-library-test--srfi-261-pure-library-entry-p
+    (consent--library-catalog-lookup "(srfi 1)")))
+  (should-not
+   (consent-library-test--srfi-261-pure-library-entry-p
+    (consent--library-catalog-lookup "(srfi 0)")))
+  (should-not
+   (consent-library-test--srfi-261-pure-library-entry-p
+    (consent--library-catalog-lookup "(srfi 97)"))))
+
 (ert-deftest consent-library-test-srfi-261-omitted-srfis-are-not-plain-libraries ()
   "Require SRFI 261 omitted SRFIs to avoid plain binding-library manifests."
   (let ((checked 0))
@@ -1842,7 +1860,8 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
              (entry (consent--library-catalog-lookup key)))
         (when entry
           (cl-incf checked)
-          (should (consent-library-test--non-library-feature-entry-p entry)))))
+          (should-not
+           (consent-library-test--srfi-261-pure-library-entry-p entry)))))
     (should (> checked 0))))
 
 (ert-deftest consent-library-test-srfi-97-library-reference-alias-imports ()
