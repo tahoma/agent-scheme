@@ -27,6 +27,14 @@
         (srfi srfi-252)
         (srfi 42)
         (srfi srfi-42)
+        (only (srfi 78) check-set-mode! check-reset! check-passed?)
+        (except (srfi srfi-78)
+                check
+                check-ec
+                check-report
+                check-set-mode!
+                check-reset!
+                check-passed?)
         (srfi 97)
         (srfi :97 srfi-libraries)
         (srfi 261)
@@ -140,6 +148,12 @@
 
 ;; Manifest entry for the SRFI 42 portable SRFI reference alias.
 (define srfi-42-portable-entry (stdlib-manifest-ref '(srfi srfi-42)))
+
+;; Manifest entry for the SRFI 78 lightweight-testing alias.
+(define srfi-78-entry (stdlib-manifest-ref '(srfi 78)))
+
+;; Manifest entry for the SRFI 78 portable SRFI reference alias.
+(define srfi-78-portable-entry (stdlib-manifest-ref '(srfi srfi-78)))
 
 ;; Manifest entry for the SRFI 261 portable SRFI reference alias.
 (define srfi-261-portable-entry (stdlib-manifest-ref '(srfi srfi-261)))
@@ -256,6 +270,21 @@
 (check 'manifest-smoke-srfi-42-import
        (list-ec (:range i 5) (* i i))
        '(0 1 4 9 16))
+
+(check 'manifest-smoke-srfi-78-target
+       (field srfi-78-entry 'target)
+       '(stdlib lightweight-testing))
+
+(check 'manifest-smoke-srfi-78-portable-target
+       (field srfi-78-portable-entry 'target)
+       '(stdlib lightweight-testing))
+
+(check 'manifest-smoke-srfi-78-import
+       (begin
+         (check-set-mode! 'summary)
+         (check-reset!)
+         (check-passed? 0))
+       #t)
 
 (check 'manifest-smoke-srfi-97-entry-kind
        (car srfi-97-entry)

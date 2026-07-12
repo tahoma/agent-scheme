@@ -1621,6 +1621,8 @@
         (find-source-library-spec '(stdlib assume) source-specs))
        (eager-comprehensions-spec
         (find-source-library-spec '(stdlib eager-comprehensions) source-specs))
+       (lightweight-testing-spec
+        (find-source-library-spec '(stdlib lightweight-testing) source-specs))
        (json-spec
         (find-source-library-spec '(stdlib json) source-specs)))
   (check 'stdlib-source-library-files
@@ -1634,6 +1636,7 @@
               receive-spec
               assume-spec
               eager-comprehensions-spec
+              lightweight-testing-spec
               json-spec
               (string? (cadr (assq 'source-file manifest-spec)))
               (string? (cadr (assq 'source-file and-let-star-spec)))
@@ -1645,6 +1648,7 @@
               (string? (cadr (assq 'source-file receive-spec)))
               (string? (cadr (assq 'source-file assume-spec)))
               (string? (cadr (assq 'source-file eager-comprehensions-spec)))
+              (string? (cadr (assq 'source-file lightweight-testing-spec)))
               (string? (cadr (assq 'source-file json-spec))))
          #t)
   (check 'stdlib-source-library-manifest-file
@@ -1687,6 +1691,10 @@
          (and eager-comprehensions-spec
               (cadr (assq 'source-file eager-comprehensions-spec)))
          "stdlib/eager-comprehensions.sld")
+  (check 'stdlib-source-library-lightweight-testing-file
+         (and lightweight-testing-spec
+              (cadr (assq 'source-file lightweight-testing-spec)))
+         "stdlib/lightweight-testing.sld")
 (check 'stdlib-source-library-json-file
          (and json-spec
               (cadr (assq 'source-file json-spec)))
@@ -1835,7 +1843,8 @@
                               (entry-target entry))
                       (loop (cdr entries) (+ checked 1))))
                (loop (cdr entries) checked)))))")
- '((max-host-callbacks . 30000))
+ '((max-steps . 200000)
+   (max-host-callbacks . 30000))
  "#t")
 
 (check-external 'srfi-97-library-reference-alias-import
@@ -2004,6 +2013,71 @@
                                 '(stdlib eager-comprehensions))
                         (equal? (manifest-field legacy-alias 'target)
                                 '(stdlib eager-comprehensions))))")
+                "#t")
+
+(check-external 'srfi-78-lightweight-testing-behavior
+                "(import (scheme base) (srfi 78))
+                 (check-set-mode! 'summary)
+                 (check-reset!)
+                 (check (+ 1 1) => 2)
+                 (let ((first (check-passed? 1)))
+                   (check (+ 1 1) => 3)
+                   (list first (check-passed? 2)))"
+                "(#t #f)")
+
+(check-external 'srfi-78-check-ec-behavior
+                "(import (scheme base) (srfi 42) (srfi srfi-78))
+                 (check-set-mode! 'summary)
+                 (check-reset!)
+                 (check-ec (:range i 5) (< i 5) => #t (i))
+                 (check-passed? 1)"
+                "#t")
+
+(check-external 'srfi-78-library-reference-alias-import
+                "(import (scheme base) (srfi :78 lightweight-testing))
+                 (check-set-mode! 'summary)
+                 (check-reset!)
+                 (check (vector 1) => (vector 1))
+                 (check-passed? 1)"
+                "#t")
+
+(check-external 'stdlib-srfi-78-manifest
+                (stdlib-manifest-source
+                 "(let ((entry (stdlib-manifest-ref
+                                '(stdlib lightweight-testing)))
+                       (alias (stdlib-manifest-ref '(srfi 78)))
+                       (portable-alias
+                        (stdlib-manifest-ref '(srfi srfi-78)))
+                       (legacy-alias
+                        (stdlib-manifest-ref
+                         '(srfi :78 lightweight-testing))))
+                   (and (eq? (car entry) 'manifest-entry)
+                        (equal? (manifest-field entry 'name)
+                                '(stdlib lightweight-testing))
+                        (equal? (manifest-field entry 'status)
+                                'vendored-adapted-implementation)
+                        (equal? (manifest-subfield
+                                 entry 'provenance 'upstream-license)
+                                \"MIT\")
+                        (equal? (manifest-subfield
+                                 entry 'provenance 'upstream-status)
+                                'final)
+                        (equal? (manifest-field entry 'aliases)
+                                '((srfi 78)
+                                  (srfi srfi-78)
+                                  (srfi :78)
+                                  (srfi :78 lightweight-testing)))
+                        (equal? (manifest-field entry 'dependencies)
+                                '((library (scheme base))
+                                  (library (scheme cxr))
+                                  (library (scheme write))
+                                  (library (stdlib eager-comprehensions))))
+                        (equal? (manifest-field alias 'target)
+                                '(stdlib lightweight-testing))
+                        (equal? (manifest-field portable-alias 'target)
+                                '(stdlib lightweight-testing))
+                        (equal? (manifest-field legacy-alias 'target)
+                                '(stdlib lightweight-testing))))")
                 "#t")
 
 (check-external 'srfi-145-assume-behavior
