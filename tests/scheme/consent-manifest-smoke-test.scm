@@ -17,6 +17,8 @@
         (srfi srfi-0)
         (srfi 1)
         (srfi :1 lists)
+        (srfi 27)
+        (srfi :27 random-bits)
         (srfi 97)
         (srfi :97 srfi-libraries)
         (srfi 261)
@@ -103,6 +105,12 @@
 ;; Manifest entry for a SRFI 97 legacy list-library alias.
 (define srfi-97-list-entry (stdlib-manifest-ref '(srfi :1 lists)))
 
+;; Manifest entry for the SRFI 27 random-bits alias.
+(define srfi-27-entry (stdlib-manifest-ref '(srfi 27)))
+
+;; Manifest entry for the SRFI 27 legacy random-bits alias.
+(define srfi-27-legacy-entry (stdlib-manifest-ref '(srfi :27 random-bits)))
+
 ;; Manifest entry for the SRFI 261 portable SRFI reference alias.
 (define srfi-261-portable-entry (stdlib-manifest-ref '(srfi srfi-261)))
 
@@ -153,6 +161,22 @@
         (srfi-0 'srfi-0-imported)
         (else 'missing))
        'srfi-0-imported)
+
+(check 'manifest-smoke-srfi-27-entry-kind
+       (car srfi-27-entry)
+       'manifest-index-entry)
+
+(check 'manifest-smoke-srfi-27-target
+       (field srfi-27-entry 'target)
+       '(stdlib random-bits))
+
+(check 'manifest-smoke-srfi-27-legacy-target
+       (field srfi-27-legacy-entry 'target)
+       '(stdlib random-bits))
+
+(check 'manifest-smoke-srfi-27-random-source
+       (random-source? (make-random-source))
+       #t)
 
 (check 'manifest-smoke-srfi-97-entry-kind
        (car srfi-97-entry)
