@@ -215,11 +215,11 @@ the feature can be expressed through R7RS libraries and data alone.
 
 Current examples:
 
-- `tests/consent-scheme-full-host-test.el` runs the shared portable file list
+- `tools/run-portable-tests.sh` runs the shared portable file list
   (including `tests/scheme/consent-reader-test.scm` and
   `tests/scheme/consent-eval-test.scm`) with the configured external Scheme host
-  for the selected portable shard, via `consent--scheme-host-run-suite`. Every
-  host, Chibi included, goes through this one aggregate loop.
+  for the selected portable shard. Every host, Chibi included, goes through
+  this one aggregate loop without entering ERT.
 - `tests/consent-scheme-eval-test.el` guards a host-independent bootstrap
   invariant around explicit continuations in the portable evaluator source.
 - `tests/consent-conformance-test.el` validates the fixture suite and runs
@@ -262,7 +262,8 @@ without exposing raw host VCS objects or granting mutation by default.
 - Put reusable portable testing facilities under `scheme/testing/` and
   register them in the testing collection manifest.
 - Put Emacs adapter code in `lisp/consent-*.el`.
-- Put portable Scheme tests in `tests/scheme/` and bridge them through ERT.
+- Put portable Scheme tests in `tests/scheme/` and run them through the
+  Scheme-native testing facilities plus the thin portable host launcher.
 - Put host adapter tests in focused `tests/consent-*-test.el` files.
 - Keep capability libraries visibly separate from standard Scheme libraries.
 - Keep host performance caches rebuildable from canonical Scheme-readable data.

@@ -52,24 +52,9 @@ CONSENT_GAMBIT_COMPILER ?= gsc
 CONSENT_TEST_RUNNER = $(EMACS) -Q --batch --load tests/consent-test-runner.el
 CONSENT_TEST_ENV = $(if $(strip $(CONSENT_TEST_TARGET_ROOT)),CONSENT_TEST_TARGET_ROOT='$(CONSENT_TEST_TARGET_ROOT)',)
 CONSENT_TEST_RUNNER_COMMAND = $(CONSENT_TEST_ENV) $(CONSENT_TEST_RUNNER)
+CONSENT_PORTABLE_RUNNER = tools/run-portable-tests.sh
 CONSENT_PARALLEL_MAKE = $(MAKE) --no-print-directory
 CONSENT_ELISP_SOURCES := $(sort $(wildcard lisp/*.el))
-CONSENT_PORTABLE_TEST_SELECTOR ?= "consent-scheme-.*"
-CONSENT_PORTABLE_GAMBIT_TEST_SELECTOR ?= "^consent-scheme-gambit-host-test-r7rs-suite$$"
-CONSENT_PORTABLE_GAMBIT_NATIVE_TEST_SELECTOR ?= "^consent-scheme-gambit-native-host-test-r7rs-suite$$"
-CONSENT_PORTABLE_RACKET_TEST_SELECTOR ?= "^consent-scheme-racket-host-test-r7rs-suite$$"
-CONSENT_PORTABLE_COMPILED_TEST_SELECTOR ?= "^consent-scheme-compiled-host-test-r7rs-suite$$"
-CONSENT_PORTABLE_GUILE_TEST_SELECTOR ?= "^consent-scheme-guile-host-test-r7rs-suite$$"
-CONSENT_PORTABLE_GAUCHE_TEST_SELECTOR ?= "^consent-scheme-gauche-host-test-r7rs-suite$$"
-CONSENT_PORTABLE_CHIBI_TEST_SELECTOR ?= "^consent-scheme-chibi-host-test-r7rs-suite$$"
-CONSENT_PORTABLE_GAMBIT_REFLECT_TEST_SELECTOR ?= "^consent-scheme-gambit-host-test-r7rs-reflect$$"
-CONSENT_PORTABLE_RACKET_REFLECT_TEST_SELECTOR ?= "^consent-scheme-racket-host-test-r7rs-reflect$$"
-CONSENT_PORTABLE_GUILE_REFLECT_TEST_SELECTOR ?= "^consent-scheme-guile-host-test-r7rs-reflect$$"
-CONSENT_PORTABLE_GAUCHE_REFLECT_TEST_SELECTOR ?= "^consent-scheme-gauche-host-test-r7rs-reflect$$"
-CONSENT_PORTABLE_GAMBIT_REFLECT_STRESS_TEST_SELECTOR ?= "^consent-scheme-gambit-host-test-r7rs-reflect-stress$$"
-CONSENT_PORTABLE_RACKET_REFLECT_STRESS_TEST_SELECTOR ?= "^consent-scheme-racket-host-test-r7rs-reflect-stress$$"
-CONSENT_PORTABLE_GUILE_REFLECT_STRESS_TEST_SELECTOR ?= "^consent-scheme-guile-host-test-r7rs-reflect-stress$$"
-CONSENT_PORTABLE_GAUCHE_REFLECT_STRESS_TEST_SELECTOR ?= "^consent-scheme-gauche-host-test-r7rs-reflect-stress$$"
 CONSENT_EMACS_HOSTED_TEST_SELECTOR ?= (not "consent-scheme-.*")
 CONSENT_EMACS_CORE_TEST_SELECTOR ?= (or "consent-base.*" "consent-budget.*" "consent-eval.*" "consent-interpreter-module.*" "consent-macro.*" "consent-reader.*" "consent-result.*" "consent-runtime.*")
 CONSENT_EMACS_LIBRARY_TEST_SELECTOR ?= (and (or "consent-conformance.*" "consent-fixture.*" "consent-host-adapter-fixture.*" "consent-library.*" "consent-oracle.*") (not "consent-library-test-srfi-180-reference-.*"))
@@ -239,22 +224,7 @@ help:
 	@printf '  %-50s %s\n' 'CONSENT_TEST_SHARD_TARGETS=a b' 'Trimmed default shard targets run by make test.'
 	@printf '  %-50s %s\n' 'CONSENT_FULL_TEST_SHARD_TARGETS=a b' 'Exhaustive shard targets run by make test-full.'
 	@printf '  %-50s %s\n' 'CONSENT_TEST_SELECTOR=SEL' 'Optional ERT selector for make test.'
-	@printf '  %-50s %s\n' 'CONSENT_PORTABLE_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable.'
-	@printf '  %-50s %s\n' 'CONSENT_PORTABLE_CHIBI_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-chibi.'
-	@printf '  %-50s %s\n' 'CONSENT_PORTABLE_GAMBIT_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-gambit.'
-	@printf '  %-50s %s\n' 'CONSENT_PORTABLE_GAMBIT_NATIVE_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-gambit-native.'
-	@printf '  %-50s %s\n' 'CONSENT_PORTABLE_GAMBIT_REFLECT_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-gambit-reflect.'
-	@printf '  %-50s %s\n' 'CONSENT_PORTABLE_RACKET_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-racket.'
-	@printf '  %-50s %s\n' 'CONSENT_PORTABLE_RACKET_REFLECT_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-racket-reflect.'
-	@printf '  %-50s %s\n' 'CONSENT_PORTABLE_RACKET_REFLECT_STRESS_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-racket-reflect-stress.'
-	@printf '  %-50s %s\n' 'CONSENT_PORTABLE_COMPILED_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-compiled.'
-	@printf '  %-50s %s\n' 'CONSENT_PORTABLE_GUILE_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-guile.'
-	@printf '  %-50s %s\n' 'CONSENT_PORTABLE_GUILE_REFLECT_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-guile-reflect.'
-	@printf '  %-50s %s\n' 'CONSENT_PORTABLE_GUILE_REFLECT_STRESS_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-guile-reflect-stress.'
-	@printf '  %-50s %s\n' 'CONSENT_PORTABLE_GAUCHE_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-gauche.'
-	@printf '  %-50s %s\n' 'CONSENT_PORTABLE_GAUCHE_REFLECT_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-gauche-reflect.'
-	@printf '  %-50s %s\n' 'CONSENT_PORTABLE_GAUCHE_REFLECT_STRESS_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-gauche-reflect-stress.'
-	@printf '  %-50s %s\n' 'CONSENT_PORTABLE_GAMBIT_REFLECT_STRESS_TEST_SELECTOR=SEL' 'ERT selector used by make test-portable-gambit-reflect-stress.'
+	@printf '  %-50s %s\n' 'TESTING_RUNNER_ARGUMENTS=DATUM' 'Scheme string-list arguments for registered portable suites.'
 	@printf '  %-50s %s\n' 'CONSENT_EMACS_HOSTED_TEST_SELECTOR=SEL' 'ERT selector used by make test-emacs-hosted.'
 	@printf '  %-50s %s\n' 'CONSENT_EMACS_CORE_TEST_SELECTOR=SEL' 'ERT selector used by make test-emacs-core.'
 	@printf '  %-50s %s\n' 'CONSENT_EMACS_LIBRARY_TEST_SELECTOR=SEL' 'ERT selector used by make test-emacs-library.'
@@ -478,25 +448,20 @@ endif
 test-full:
 	$(CONSENT_PARALLEL_MAKE) -j$(CONSENT_FULL_TEST_JOBS) $(CONSENT_FULL_TEST_SHARD_TARGETS)
 
-ifneq ($(filter environment command line override,$(origin CONSENT_PORTABLE_TEST_SELECTOR)),)
-test-portable:
-	CONSENT_TEST_SELECTOR='$(CONSENT_PORTABLE_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
-else
 test-portable:
 	$(CONSENT_PARALLEL_MAKE) -j$(CONSENT_PORTABLE_TEST_JOBS) $(CONSENT_PORTABLE_TEST_SHARD_TARGETS)
-endif
 
 test-portable-chibi:
-	CONSENT_TEST_SELECTOR='$(CONSENT_PORTABLE_CHIBI_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
+	CONSENT_PORTABLE_HOST=chibi CONSENT_PORTABLE_GROUP=full $(CONSENT_PORTABLE_RUNNER)
 
 test-portable-gambit:
-	CONSENT_TEST_SELECTOR='$(CONSENT_PORTABLE_GAMBIT_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
+	CONSENT_PORTABLE_HOST=gambit CONSENT_PORTABLE_GROUP=full $(CONSENT_PORTABLE_RUNNER)
 
 test-portable-gambit-reflect:
-	CONSENT_TEST_SELECTOR='$(CONSENT_PORTABLE_GAMBIT_REFLECT_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
+	CONSENT_PORTABLE_HOST=gambit CONSENT_PORTABLE_GROUP=reflect $(CONSENT_PORTABLE_RUNNER)
 
 test-portable-gambit-reflect-stress:
-	CONSENT_TEST_SELECTOR='$(CONSENT_PORTABLE_GAMBIT_REFLECT_STRESS_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
+	CONSENT_PORTABLE_HOST=gambit CONSENT_PORTABLE_GROUP=reflect-stress $(CONSENT_PORTABLE_RUNNER)
 
 test-portable-gambit-native:
 	@if command -v '$(CONSENT_GAMBIT)' >/dev/null 2>&1 && command -v '$(CONSENT_GAMBIT_COMPILER)' >/dev/null 2>&1; then \
@@ -506,16 +471,16 @@ test-portable-gambit-native:
 	fi
 	@if [ -f '$(CONSENT_COMPILE_BUILD_DIR)/gambit/logs/compile.log' ]; then cat '$(CONSENT_COMPILE_BUILD_DIR)/gambit/logs/compile.log'; fi
 	@if [ -f '$(CONSENT_COMPILE_BUILD_DIR)/gambit/logs/smoke.log' ]; then cat '$(CONSENT_COMPILE_BUILD_DIR)/gambit/logs/smoke.log'; fi
-	CONSENT_GAMBIT_NATIVE='$(abspath $(CONSENT_COMPILE_BUILD_DIR)/gambit/bin/consent)' CONSENT_TEST_SELECTOR='$(CONSENT_PORTABLE_GAMBIT_NATIVE_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
+	CONSENT_GAMBIT_NATIVE='$(abspath $(CONSENT_COMPILE_BUILD_DIR)/gambit/bin/consent)' CONSENT_PORTABLE_HOST=gambit-native CONSENT_PORTABLE_GROUP=compiled $(CONSENT_PORTABLE_RUNNER)
 
 test-portable-racket:
-	CONSENT_TEST_SELECTOR='$(CONSENT_PORTABLE_RACKET_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
+	CONSENT_PORTABLE_HOST=racket CONSENT_PORTABLE_GROUP=full $(CONSENT_PORTABLE_RUNNER)
 
 test-portable-racket-reflect:
-	CONSENT_TEST_SELECTOR='$(CONSENT_PORTABLE_RACKET_REFLECT_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
+	CONSENT_PORTABLE_HOST=racket CONSENT_PORTABLE_GROUP=reflect $(CONSENT_PORTABLE_RUNNER)
 
 test-portable-racket-reflect-stress:
-	CONSENT_TEST_SELECTOR='$(CONSENT_PORTABLE_RACKET_REFLECT_STRESS_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
+	CONSENT_PORTABLE_HOST=racket CONSENT_PORTABLE_GROUP=reflect-stress $(CONSENT_PORTABLE_RUNNER)
 
 test-portable-compiled:
 	@if command -v '$(CONSENT_RACKET)' >/dev/null 2>&1 && command -v '$(CONSENT_RACO)' >/dev/null 2>&1; then \
@@ -523,25 +488,25 @@ test-portable-compiled:
 	else \
 		printf '%s\n' 'Racket compile prerequisites are not available; compiled host shard will skip if no runner exists.'; \
 	fi
-	CONSENT_COMPILED='$(abspath $(CONSENT_COMPILE_BUILD_DIR)/racket/bin/consent)' CONSENT_TEST_SELECTOR='$(CONSENT_PORTABLE_COMPILED_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
+	CONSENT_COMPILED='$(abspath $(CONSENT_COMPILE_BUILD_DIR)/racket/bin/consent)' CONSENT_PORTABLE_HOST=compiled CONSENT_PORTABLE_GROUP=compiled $(CONSENT_PORTABLE_RUNNER)
 
 test-portable-guile:
-	CONSENT_TEST_SELECTOR='$(CONSENT_PORTABLE_GUILE_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
+	CONSENT_PORTABLE_HOST=guile CONSENT_PORTABLE_GROUP=full $(CONSENT_PORTABLE_RUNNER)
 
 test-portable-guile-reflect:
-	CONSENT_TEST_SELECTOR='$(CONSENT_PORTABLE_GUILE_REFLECT_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
+	CONSENT_PORTABLE_HOST=guile CONSENT_PORTABLE_GROUP=reflect $(CONSENT_PORTABLE_RUNNER)
 
 test-portable-guile-reflect-stress:
-	CONSENT_TEST_SELECTOR='$(CONSENT_PORTABLE_GUILE_REFLECT_STRESS_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
+	CONSENT_PORTABLE_HOST=guile CONSENT_PORTABLE_GROUP=reflect-stress $(CONSENT_PORTABLE_RUNNER)
 
 test-portable-gauche:
-	CONSENT_TEST_SELECTOR='$(CONSENT_PORTABLE_GAUCHE_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
+	CONSENT_PORTABLE_HOST=gauche CONSENT_PORTABLE_GROUP=full $(CONSENT_PORTABLE_RUNNER)
 
 test-portable-gauche-reflect:
-	CONSENT_TEST_SELECTOR='$(CONSENT_PORTABLE_GAUCHE_REFLECT_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
+	CONSENT_PORTABLE_HOST=gauche CONSENT_PORTABLE_GROUP=reflect $(CONSENT_PORTABLE_RUNNER)
 
 test-portable-gauche-reflect-stress:
-	CONSENT_TEST_SELECTOR='$(CONSENT_PORTABLE_GAUCHE_REFLECT_STRESS_TEST_SELECTOR)' $(CONSENT_TEST_RUNNER_COMMAND)
+	CONSENT_PORTABLE_HOST=gauche CONSENT_PORTABLE_GROUP=reflect-stress $(CONSENT_PORTABLE_RUNNER)
 
 ifneq ($(filter environment command line override,$(origin CONSENT_EMACS_HOSTED_TEST_SELECTOR)),)
 test-emacs-hosted:

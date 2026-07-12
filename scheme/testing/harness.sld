@@ -67,5 +67,5 @@
              (write summary)
              (newline)
              (if (testing-harness-runner-failed? runner)
-                 (error "Consent test suite failed" summary)
+                 (error "test suite failed" summary)
                  summary))))))))

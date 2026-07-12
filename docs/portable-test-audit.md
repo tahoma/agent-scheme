@@ -31,8 +31,9 @@ does; retaining an ERT test does not make it the semantic source of truth.
 - Emacs capability adapters retain ERT checks for live buffers, filesystem and
   process callbacks, persistence, approval UI, and native Emacs object
   translation. Portable tests own their Scheme-readable records and pure logic.
-- ERT bridge tests for portable hosts remain responsible for tool discovery,
-  invoking each `tests/scheme/` file, and attaching host/file names to failures.
+- `tools/run-portable-tests.sh` remains responsible only for tool discovery,
+  invoking each `tests/scheme/` file, and attaching host/file names to failures;
+  the Scheme libraries own assertion, selection, result, and exit semantics.
 
 The audit groups the remaining ERT files by the boundary they exercise:
 
@@ -46,8 +47,8 @@ The audit groups the remaining ERT files by the boundary they exercise:
 
 Portable files predating this issue may still contain local failure counters.
 That is a Scheme-harness consistency concern rather than missing portable
-semantic coverage. New and migrated semantic suites use SRFI 64 and
-`(testing harness)`; #883 tracks mechanical conversion of those
+semantic coverage. New and migrated semantic suites use SRFI 64 plus the
+`(testing registry)` and `(testing runner)` path; #883 tracks conversion of those
 older portable files without moving their assertions back through ERT.
 
 New host-neutral ERT-only tests must state the blocking host boundary in their
@@ -56,10 +57,10 @@ Scheme.
 
 ## ERT capability comparison
 
-The portable stack is feature-compatible with ERT for semantic assertions,
-but it is not yet feature-compatible as a complete developer-facing runner.
-The distinction keeps test semantics portable without overstating the current
-command-line experience.
+The portable stack now provides the semantic assertions and the complete batch
+runner workflow that ERT supplied. Remaining gaps are native stack rendering,
+an interactive result browser, and conversion of older portable files whose
+checks still execute through file-local counters instead of registered cases.
 
 | Capability | Portable facility | Status versus ERT |
 | --- | --- | --- |
@@ -69,11 +70,13 @@ command-line experience.
 | generated/property assertions | SRFI 252 plus SRFI 158/194 generators | exceeds ERT core |
 | table/comprehension assertions | SRFI 78 plus SRFI 42 | exceeds ERT core |
 | actual/expected values and arbitrary result properties | SRFI 64 result alists | parity |
-| deterministic batch failure and summary receipts | `(testing harness)` over SRFI 64 | parity for CI; Scheme-readable receipts exceed ERT's text-only batch contract |
-| test discovery, selectors, tags, and selective reruns | `(testing registry)` | parity; selectors are composable Scheme predicates |
-| source locations and per-test timing | registry case metadata and injectable clock | parity without relying on implementation-specific syntax objects or clocks |
-| backtraces and host diagnostics | registry diagnostic hook and result records | parity substrate; each host supplies its native stack capture |
-| interactive failed-test inspection and rerun | Scheme-readable reports plus `testing-registry-rerun-failed` | parity substrate for Emacs, CLI, and other host UIs |
+| deterministic batch failure and summary receipts | `(testing harness)` and `(testing runner)` over SRFI 64 | parity; runner exits distinguish test and configuration failures |
+| named cases, selectors, tags, listing, and selective reruns | `(testing registry)` plus `(testing runner)` | parity for registered suites; selectors are composable Scheme data |
+| source locations and per-test timing | registry case metadata and runner jiffy clock | parity, with explicit portable source metadata |
+| assertion details and arbitrary result properties | assertion alists retained in each case report | parity |
+| persisted failed-test inspection and rerun | `--report` and `--rerun-failed` | batch parity through Scheme-readable reports |
+| backtraces and host diagnostics | rendered portable conditions plus registry diagnostic hook | partial; native stack capture remains a host adapter responsibility |
+| interactive result browser | reports contain the required data, but no portable terminal UI | not yet parity |
 
 `(testing harness)` is a test-only orchestration extension, not another
 assertion framework. `testing-harness-run` supplies the repeated SRFI 64 lifecycle,
@@ -91,3 +94,11 @@ status, and host diagnostics without replacing SRFI 64 assertions. R7RS does
 not standardize stack capture or an interactive UI, so the registry exposes a
 diagnostic hook and Scheme-readable reports that host adapters can render and
 augment rather than embedding one host's debugger in the portable layer.
+
+`(testing runner)` turns those facilities into a complete batch entry point.
+It parses portable selector data, lists cases, installs the clock and diagnostic
+adapters, preserves full assertion result alists, writes reports, reruns failed
+case names from a prior report, and owns process exit status. The Context, Plan,
+Redaction, Task, and VCS semantic suites use this path directly; remaining
+legacy portable files still need conversion from file-local counters before
+their individual checks become registry-visible.

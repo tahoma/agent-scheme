@@ -4,7 +4,7 @@
 
 ;;; Commentary:
 
-;; Helpers for parsing Consent Scheme ERT shard logs and rendering the GitHub
+;; Helpers for parsing Consent Scheme test shard logs and rendering the GitHub
 ;; Actions step summary used by the repository test workflow.  The same parsed
 ;; shard data also feeds a structured, append-only per-run record (#465) for
 ;; longitudinal analysis; see the "Structured per-run record" section below and
@@ -23,6 +23,10 @@
 (defconst consent-ci--summary-line-regexp
   "^Ran \\([0-9]+\\) tests, \\([0-9]+\\) results as expected, \\([0-9]+\\) unexpected\\(?:, \\([0-9]+\\) skipped\\)? .*, \\([0-9.]+\\) sec)"
   "Regexp matching the final ERT batch summary line.")
+
+(defconst consent-ci--portable-summary-line-regexp
+  "^CONSENT_CI_PORTABLE_SUMMARY=\\([0-9]+\\)[[:space:]]+\\([0-9]+\\)[[:space:]]+\\([0-9]+\\)[[:space:]]+\\([0-9]+\\)[[:space:]]+\\([0-9.]+\\)$"
+  "Regexp matching a portable Scheme batch summary line.")
 
 (defconst consent-ci--check-timing-regexp
   "^CONSENT_CI_CHECK_SECONDS=\\([^[:space:]]+\\)[[:space:]]+\\([+-]?\\(?:[0-9]+\\(?:\\.[0-9]*\\)?\\|\\.[0-9]+\\)\\(?:[eE][+-]?[0-9]+\\)?\\)$"
@@ -130,13 +134,20 @@ Markers use the shell-friendly shape KEY=value on their own line."
           :seconds (string-to-number (match-string 5 line)))))
 
 (defun consent-ci--parse-summary-line (line)
-  "Parse LINE as the final ERT summary plist, or nil."
-  (when (string-match consent-ci--summary-line-regexp line)
+  "Parse LINE as the final ERT or portable summary plist, or nil."
+  (cond
+   ((string-match consent-ci--summary-line-regexp line)
     (list :ran (string-to-number (match-string 1 line))
           :expected (string-to-number (match-string 2 line))
           :unexpected (string-to-number (match-string 3 line))
           :skipped (consent-ci--number-or-zero (match-string 4 line))
-          :ert-seconds (string-to-number (match-string 5 line)))))
+          :ert-seconds (string-to-number (match-string 5 line))))
+   ((string-match consent-ci--portable-summary-line-regexp line)
+    (list :ran (string-to-number (match-string 1 line))
+          :expected (string-to-number (match-string 2 line))
+          :unexpected (string-to-number (match-string 3 line))
+          :skipped (string-to-number (match-string 4 line))
+          :ert-seconds (string-to-number (match-string 5 line))))))
 
 (defun consent-ci--parse-check-timing-line (line)
   "Parse LINE as one portable Scheme check timing plist, or nil."

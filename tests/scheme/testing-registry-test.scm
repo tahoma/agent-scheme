@@ -99,23 +99,21 @@
 (testing-registry-case 'broken '(fast failure) ("registry-test.scm" 90)
   (error "expected registry failure"))
 
-;; A batch failure remains catchable by an embedding test or interactive host.
-(define registered-failure-raised?
-  (guard (condition (else #t))
-    (parameterize
-        ((testing-registry-diagnostic-hook
-          (lambda (case condition)
-            (set! captured-diagnostic
-                  (list (testing-registry-case-name case)
-                        (if condition 'condition 'missing-condition))))))
-      (testing-registry-run-registered
-       "registered diagnostic case"
-       (testing-registry-select-name 'broken)))
-    #f))
+;; A batch failure remains inspectable by an embedding test or interactive host.
+(define registered-failure-report
+  (parameterize
+      ((testing-registry-diagnostic-hook
+        (lambda (case condition)
+          (set! captured-diagnostic
+                (list (testing-registry-case-name case)
+                      (if condition 'condition 'missing-condition))))))
+    (testing-registry-run-registered
+     "registered diagnostic case"
+     (testing-registry-select-name 'broken))))
 
 (testing-harness-run "Testing registry diagnostics"
-  (test-assert "registered failures signal batch failure"
-               registered-failure-raised?)
+  (test-assert "registered failures remain inspectable"
+               (testing-registry-report-failed? registered-failure-report))
   (test-equal "host diagnostic hook receives case and condition"
               '(broken condition)
               captured-diagnostic))

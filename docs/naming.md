@@ -93,7 +93,7 @@ their library names:
 Reusable non-Consent feature libraries prefix public bindings with their
 library namespace rather than `consent-`; for example, `(testing harness)`
 exports `testing-harness-*` and `(testing registry)` exports
-`testing-registry-*`.
+`testing-registry-*`; `(testing runner)` exports `testing-runner-*`.
 
 Here "mirror" means naming and pass-ownership parity, not subordination. Core
 semantic changes should update the corresponding Emacs Lisp and portable R7RS
