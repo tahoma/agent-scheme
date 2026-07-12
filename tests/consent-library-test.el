@@ -1288,6 +1288,58 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
      (member "https://github.com/scheme-requests-for-implementation/srfi-180"
              upstream-urls))))
 
+(defconst consent-library-test--stdlib-external-reference-entries
+  '("(stdlib json)"
+    "(srfi 0)"
+    "(srfi 16)"
+    "(stdlib srfi-reference)"
+    "(stdlib srfi-libraries)"
+    "(stdlib and-let-star)"
+    "(stdlib list)"
+    "(stdlib generator)"
+    "(stdlib testing)"
+    "(stdlib random-bits)"
+    "(stdlib random-distributions)"
+    "(stdlib receive)"
+    "(stdlib assume)"
+    "(stdlib comparator)"
+    "(stdlib rbtree)"
+    "(stdlib mapping)")
+  "Canonical stdlib entries whose external specs are vendored locally.")
+
+(defun consent-library-test--reference-documents (documents)
+  "Return DOCUMENTS as a list of local reference document records."
+  (if (consent--library-catalog-manifest-field documents "path" nil)
+      (list documents)
+    (consent--proper-list-elements documents "local reference documents")))
+
+(ert-deftest consent-library-test-stdlib-manifests-link-local-reference-documents ()
+  "Link implemented externally defined stdlib entries to local references."
+  (let (missing)
+    (dolist (key consent-library-test--stdlib-external-reference-entries)
+      (let* ((entry (consent--library-collection-manifest-entry key))
+             (provenance (plist-get entry :provenance))
+             (documents
+              (and provenance
+                   (consent--library-catalog-manifest-field
+                    provenance "local-reference-documents" nil))))
+        (if (not documents)
+            (push (format "%s missing local-reference-documents" key)
+                  missing)
+          (dolist (document
+                   (consent-library-test--reference-documents documents))
+            (let ((path (consent--library-catalog-manifest-field
+                         document "path" nil)))
+              (cond
+               ((not path)
+                (push (format "%s reference document lacks path" key)
+                      missing))
+               ((not (file-exists-p
+                      (expand-file-name path consent-library-test--root)))
+                (push (format "%s missing reference file %s" key path)
+                      missing))))))))
+    (should-not (nreverse missing))))
+
 (ert-deftest consent-library-test-built-in-manifests-declare-owned-exports ()
   "Require owned libraries to spell exports while pure aliases may inherit."
   (let ((missing (list 'missing-exports))

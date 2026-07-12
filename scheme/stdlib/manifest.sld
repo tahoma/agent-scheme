@@ -51,6 +51,10 @@
         (provenance
          ((origin repo)
                               (upstream-source-url "https://github.com/scheme-requests-for-implementation/srfi-180")
+                              (local-reference-documents
+                               ((path "docs/stdlib/reference/srfi-180/srfi-180.html")
+                                (role specification)
+                                (source srfi)))
                               (upstream-revision "671857bac55c53e3190a24ec53b457321a1d8f12")
                               (upstream-license "MIT") (local-license "Apache-2.0") (vendored? #f)
                               (local-patches ())))
@@ -169,6 +173,10 @@
         (dependencies ((library (scheme base))))
         (provenance
          ((origin repo) (upstream-source-url "https://srfi.schemers.org/srfi-0/")
+                        (local-reference-documents
+                         ((path "docs/stdlib/reference/srfi-0/srfi-0.html")
+                          (role specification)
+                          (source srfi)))
                         (upstream-license "MIT") (local-license "Apache-2.0")
                         (vendored? #f)))
         (verification
@@ -213,6 +221,10 @@
         (dependencies ((library (scheme case-lambda))))
         (provenance
          ((origin repo) (upstream-source-url "https://srfi.schemers.org/srfi-16/") (upstream-license "MIT")
+                              (local-reference-documents
+                               ((path "docs/stdlib/reference/srfi-16/srfi-16.html")
+                                (role specification)
+                                (source srfi)))
                               (local-license "Apache-2.0") (vendored? #f)))
         (verification
          ((test-status
@@ -288,6 +300,10 @@
         (dependencies ((library (scheme base))))
         (provenance
          ((origin repo) (upstream-source-url "https://srfi.schemers.org/srfi-261/")
+                        (local-reference-documents
+                         ((path "docs/stdlib/reference/srfi-261/srfi-261.html")
+                          (role specification)
+                          (source srfi)))
                         (upstream-license "MIT") (local-license "Apache-2.0")
                         (vendored? #f) (local-patches ())))
         (verification
@@ -353,6 +369,10 @@
         (dependencies ((library (scheme base))))
         (provenance
          ((origin repo) (upstream-source-url "https://srfi.schemers.org/srfi-97/")
+                        (local-reference-documents
+                         ((path "docs/stdlib/reference/srfi-97/srfi-97.html")
+                          (role specification)
+                          (source srfi)))
                         (upstream-license "MIT") (local-license "Apache-2.0")
                         (vendored? #f) (local-patches ())))
         (verification
@@ -452,6 +472,10 @@
         (dependencies ((library (scheme base))))
         (provenance
          ((origin repo) (upstream-source-url "https://okmij.org/ftp/Scheme/lib/myenv-chez.scm")
+                              (local-reference-documents
+                               ((path "docs/stdlib/reference/srfi-2/srfi-2.html")
+                                (role specification)
+                                (source srfi)))
                               (source-test-url "https://okmij.org/ftp/Scheme/tests/vland.scm")
                               (upstream-revision "myenv-chez.scm,v 1.7 2006/01/19 02:14:07")
                               (upstream-license "MIT") (local-license "MIT") (vendored? #t)
@@ -567,6 +591,13 @@
         (dependencies ((library (scheme base)) (library (scheme cxr))))
         (provenance
          ((origin repo) (upstream-source-url "https://github.com/scheme-requests-for-implementation/srfi-1")
+                              (local-reference-documents
+                               ((path "docs/stdlib/reference/srfi-1/srfi-1.html")
+                                (role specification)
+                                (source srfi))
+                               ((path "docs/stdlib/reference/r7rs-large/2016-07-red-edition-report.md")
+                                (role docket-report)
+                                (source r7rs-large)))
                               (upstream-source-file "srfi-1-reference.scm")
                               (upstream-revision "d502ec3832de709f00f7ae5488a334a25da8a9f9")
                               (upstream-source-blob "56a7175d0feeddb07609937f8c59bac8eadab0d8")
@@ -700,6 +731,13 @@
         (provenance
          ((origin repo)
                               (upstream-source-url "https://github.com/scheme-requests-for-implementation/srfi-158")
+                              (local-reference-documents
+                               ((path "docs/stdlib/reference/srfi-158/srfi-158.html")
+                                (role specification)
+                                (source srfi))
+                               ((path "docs/stdlib/reference/r7rs-large/2019-02-tangerine-edition-report.md")
+                                (role docket-report)
+                                (source r7rs-large)))
                               (upstream-source-file "srfi-158-impl.scm")
                               (upstream-revision "ffd5bac4caf70167d0b57f701a6c43aa07701158")
                               (upstream-license "MIT") (local-license "MIT") (vendored? #t)
@@ -814,6 +852,10 @@
         (provenance
          ((origin repo)
                               (upstream-source-url "https://github.com/scheme-requests-for-implementation/srfi-64")
+                              (local-reference-documents
+                               ((path "docs/stdlib/reference/srfi-64/srfi-64.html")
+                                (role specification)
+                                (source srfi)))
                               (upstream-source-files ("testing.scm" "srfi-64-test.scm"))
                               (upstream-revision "2d6a9fc514050f75802ef0003cfbf4846602a3ee")
                               (upstream-source-blobs
@@ -929,6 +971,10 @@
         (provenance
          ((origin repo)
                               (upstream-source-url "https://github.com/scheme-requests-for-implementation/srfi-27")
+                              (local-reference-documents
+                               ((path "docs/stdlib/reference/srfi-27/srfi-27.html")
+                                (role specification)
+                                (source srfi)))
                               (upstream-source-files ("reference/srfi-27-a.scm" "reference/mrg32k3a-a.scm"
                                                       "reference/mrg32k3a.scm"))
                               (upstream-revision "a547c5508d648c61e73bebed2bcd2283fba5abaa")
@@ -1052,6 +1098,10 @@
         (provenance
          ((origin repo)
           (upstream-source-url "https://srfi.schemers.org/srfi-27/srfi-27.html")
+          (local-reference-documents
+           ((path "docs/stdlib/reference/srfi-27/srfi-27.html")
+            (role specification)
+            (source srfi)))
           (upstream-source-section "Recommended Usage Patterns")
           (upstream-revision "a547c5508d648c61e73bebed2bcd2283fba5abaa")
           (upstream-reference
@@ -1088,6 +1138,13 @@
         (dependencies ((library (scheme base))))
         (provenance
          ((origin repo) (upstream-source-url "https://srfi.schemers.org/srfi-8/") (upstream-license "MIT")
+                              (local-reference-documents
+                               ((path "docs/stdlib/reference/srfi-8/srfi-8.html")
+                                (role specification)
+                                (source srfi))
+                               ((path "docs/stdlib/reference/r7rs-large/2022-02-yellow-edition-report.txt")
+                                (role docket-report)
+                                (source r7rs-large)))
                               (local-license "Apache-2.0") (vendored? #f)
                               (local-patches
                                ((define-library-wrapper (library (stdlib receive)))
@@ -1187,6 +1244,10 @@
         (dependencies ((library (scheme base))))
         (provenance
          ((origin repo) (upstream-source-url "https://srfi.schemers.org/srfi-145/") (upstream-license "MIT")
+                              (local-reference-documents
+                               ((path "docs/stdlib/reference/srfi-145/srfi-145.html")
+                                (role specification)
+                                (source srfi)))
                               (local-license "Apache-2.0") (vendored? #f)
                               (local-patches
                                ((define-library-wrapper (library (stdlib assume)))
@@ -1260,6 +1321,13 @@
         (provenance
          ((origin repo)
                               (upstream-source-url "https://github.com/scheme-requests-for-implementation/srfi-128")
+                              (local-reference-documents
+                               ((path "docs/stdlib/reference/srfi-128/srfi-128.html")
+                                (role specification)
+                                (source srfi))
+                               ((path "docs/stdlib/reference/r7rs-large/2016-07-red-edition-report.md")
+                                (role docket-report)
+                                (source r7rs-large)))
                               (upstream-revision "3ec333638e787d75a16de83fcf9645c998e4d976")
                               (upstream-license "MIT") (local-license "MIT") (vendored? #t)
                               (local-patches
@@ -1297,6 +1365,10 @@
         (provenance
          ((origin repo)
                               (upstream-source-url "https://github.com/scheme-requests-for-implementation/srfi-146")
+                              (local-reference-documents
+                               ((path "docs/stdlib/reference/srfi-146/srfi-146.html")
+                                (role specification)
+                                (source srfi)))
                               (upstream-source-path "nieper")
                               (upstream-source-files ("nieper/rbtree.sld" "nieper/rbtree.scm"))
                               (upstream-revision "28bd72ed4d8445d8a91f84d919630d0f3a7564fb")
@@ -1362,6 +1434,13 @@
         (provenance
          ((origin repo)
                               (upstream-source-url "https://github.com/scheme-requests-for-implementation/srfi-146")
+                              (local-reference-documents
+                               ((path "docs/stdlib/reference/srfi-146/srfi-146.html")
+                                (role specification)
+                                (source srfi))
+                               ((path "docs/stdlib/reference/r7rs-large/2019-02-tangerine-edition-report.md")
+                                (role docket-report)
+                                (source r7rs-large)))
                               (upstream-source-files ("srfi/146.sld" "srfi/146.scm"))
                               (upstream-source-test-file "srfi/146/test.sld")
                               (upstream-revision "28bd72ed4d8445d8a91f84d919630d0f3a7564fb")

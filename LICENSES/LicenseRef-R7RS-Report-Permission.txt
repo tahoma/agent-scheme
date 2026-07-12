@@ -1,0 +1,20 @@
+The texts of Scheme reports are a mish-mash of contributions by
+different authors, none of whom (to our knowledge) signed any
+paperwork explicitly agreeing to any particular licence. However, all
+Scheme reports since the RRRS (1985, a.k.a. R2RS), the first Scheme
+report which could be called a specification rather than a research
+report, have included the following statement verbatim:
+
+We intend this report to belong to the entire Scheme community, and
+so we grant permission to copy it in whole or in part without fee.
+In particular, we encourage implementors of Scheme to use this
+report as a starting point for manuals and other documentation,
+modifying it as necessary.
+
+All direct contributors to the Scheme reports since 1985 have
+contributed text in the knowledge that their contributions would
+appear in the report with this text.
+
+Text within the Scheme reports which originates within the SRFI
+process generally carries an MIT licence. See the SRFI process
+document at <https://srfi.schemers.org/srfi-process.html#license>.

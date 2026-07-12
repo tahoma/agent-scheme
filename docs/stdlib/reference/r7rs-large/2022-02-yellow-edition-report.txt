@@ -1,0 +1,18 @@
+Voted in:
+- R6RS-compatible syntax-case
+- R6RS identifier syntax
+- SRFI 139 syntax parameters
+- SRFI 188 splicing let(rec)-syntax
+- SRFI 212 identifier splicing
+- SRFI 213 identifier properties
+- SRFI 61 generalized `cond`
+- SRFI 8 `receive`
+- SRFI 31 `rec`
+- SRFI 26 `cut`
+- SRFI 219 nested `define`
+- SRFI 210 multiple-value library
+
+Rejected:
+- Explicit renaming macros
+- SRFI 5 `let` with signatures and rest args
+- SRFI 156 Syntactic combiners for binary predicates
