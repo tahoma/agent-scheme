@@ -34,6 +34,7 @@ as reference documents under the report-copying permission recorded in
 | SRFI 146 | `srfi-146/srfi-146.html` | `https://srfi.schemers.org/srfi-146/srfi-146.html` | `70ed5d8e30f7eb4d8bfdbf56e51943ee1dfaf1404392e175551819531fc9eab0` |
 | SRFI 158 | `srfi-158/srfi-158.html` | `https://srfi.schemers.org/srfi-158/srfi-158.html` | `c4bb02803ddf8000e93ac9ab766bc0a1cd86cc8810e55ae87e8b5aa593802b69` |
 | SRFI 180 | `srfi-180/srfi-180.html` | `https://srfi.schemers.org/srfi-180/srfi-180.html` | `a92f2442382c1074895814385ef5314f62ae85e698d93ffad840f92dbfe23c1d` |
+| SRFI 194 | `srfi-194/srfi-194.html` | `https://srfi.schemers.org/srfi-194/srfi-194.html` | `fb4a4b5e853ded8e69612c79e55763156d1bccf312657c47b9c5610892894f98` |
 | SRFI 261 | `srfi-261/srfi-261.html` | `https://srfi.schemers.org/srfi-261/srfi-261.html` | `2ecbd1d99a844410c1954b3459be19d7a4fb4841e065831f908cadd945373e9f` |
 | R7RS-large Red Edition report | `r7rs-large/2016-07-red-edition-report.md` | `https://codeberg.org/scheme/r7rs/src/branch/main/ballot-results/jcowan/edition/2016-07-red-edition-report.md` | `f7c035f969d4b4883765ebcdbd339db6316f6f71a6ee23aa7d1dd0a12bd38066` |
 | R7RS-large Tangerine Edition report | `r7rs-large/2019-02-tangerine-edition-report.md` | `https://codeberg.org/scheme/r7rs/src/branch/main/ballot-results/jcowan/edition/2019-02-tangerine-edition-report.md` | `7efd3915d2c28bdf76ed4bdb12c96e7d37992211f86cee5d2d98505fbbb66a7a` |

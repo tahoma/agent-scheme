@@ -20,6 +20,8 @@
         (srfi 27)
         (srfi :27 random-bits)
         (stdlib random-distributions)
+        (srfi 194)
+        (srfi srfi-194)
         (srfi 97)
         (srfi :97 srfi-libraries)
         (srfi 261)
@@ -116,6 +118,12 @@
 (define random-distributions-entry
   (stdlib-manifest-ref '(stdlib random-distributions)))
 
+;; Manifest entry for the SRFI 194 random-data-generator alias.
+(define srfi-194-entry (stdlib-manifest-ref '(srfi 194)))
+
+;; Manifest entry for the SRFI 194 portable SRFI reference alias.
+(define srfi-194-portable-entry (stdlib-manifest-ref '(srfi srfi-194)))
+
 ;; Manifest entry for the SRFI 261 portable SRFI reference alias.
 (define srfi-261-portable-entry (stdlib-manifest-ref '(srfi srfi-261)))
 
@@ -190,6 +198,18 @@
 (check 'manifest-smoke-random-distribution-import
        (vector-length (random-permutation 4))
        4)
+
+(check 'manifest-smoke-srfi-194-target
+       (field srfi-194-entry 'target)
+       '(stdlib random-data-generators))
+
+(check 'manifest-smoke-srfi-194-portable-target
+       (field srfi-194-portable-entry 'target)
+       '(stdlib random-data-generators))
+
+(check 'manifest-smoke-srfi-194-bernoulli-import
+       ((make-bernoulli-generator 1))
+       1)
 
 (check 'manifest-smoke-srfi-97-entry-kind
        (car srfi-97-entry)
