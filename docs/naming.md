@@ -87,6 +87,8 @@ their library names:
 - `scheme/agent/job.sld` defines `(agent job)`
 - `scheme/agent/context.sld` defines `(agent context)`
 - `scheme/agent/redaction.sld` defines `(agent redaction)`
+- `scheme/development/testing/harness.sld` defines
+  `(development testing harness)`
 
 Here "mirror" means naming and pass-ownership parity, not subordination. Core
 semantic changes should update the corresponding Emacs Lisp and portable R7RS

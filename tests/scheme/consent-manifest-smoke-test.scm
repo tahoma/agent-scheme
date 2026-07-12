@@ -11,6 +11,8 @@
 
 (import (scheme base)
         (scheme write)
+        (development manifest)
+        (development testing harness)
         (stdlib manifest)
         (consent json)
         (srfi 0)
@@ -158,6 +160,10 @@
 ;; Manifest entry for the SRFI 261 portable SRFI reference alias.
 (define srfi-261-portable-entry (stdlib-manifest-ref '(srfi srfi-261)))
 
+;; Manifest entry for the reusable portable test harness.
+(define development-test-harness-entry
+  (development-library-manifest-ref '(development testing harness)))
+
 ;; Output string used to verify that pure alias exports include json-write.
 (define json-output (open-output-string))
 
@@ -166,6 +172,14 @@
 (check 'manifest-smoke-consent-json-entry-kind
        (car consent-json-entry)
        'manifest-index-entry)
+
+(check 'manifest-smoke-development-test-harness-kind
+       (car development-test-harness-entry)
+       'manifest-entry)
+
+(check 'manifest-smoke-development-test-harness-source
+       (field development-test-harness-entry 'source)
+       '(path "testing/harness.sld"))
 
 (check 'manifest-smoke-consent-json-target
        (field consent-json-entry 'target)
