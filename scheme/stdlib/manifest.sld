@@ -1693,6 +1693,173 @@
        (manifest-entry
         (schema-version 1)
         (kind library)
+        (name (stdlib eager-comprehensions))
+        (owner stdlib)
+        (provider repo-source)
+        (visibility public)
+        (source-kind source-library)
+        (source (path "eager-comprehensions.sld"))
+        (api-version (compat 0))
+        (source-version
+         (upstream-revision "6a4c4aeb4cb61c6514776144fdfc5fe0d738a548"))
+        (realization portable-source)
+        (aliases
+         ((srfi 42) (srfi srfi-42)
+          (srfi :42) (srfi :42 eager-comprehensions)))
+        (exports
+         (do-ec
+          list-ec
+          append-ec
+          string-ec
+          string-append-ec
+          vector-ec
+          vector-of-length-ec
+          sum-ec
+          product-ec
+          min-ec
+          max-ec
+          first-ec
+          last-ec
+          fold-ec
+          fold3-ec
+          any?-ec
+          every?-ec
+          :
+          :list
+          :string
+          :vector
+          :range
+          :real-range
+          :char-range
+          :port
+          :do
+          :let
+          :parallel
+          :while
+          :until
+          :integers
+          :dispatched
+          :generator-proc
+          dispatch-union
+          make-initial-:-dispatch
+          :-dispatch-ref
+          :-dispatch-set!))
+        (dependencies
+         ((library (scheme base))
+          (library (scheme read))))
+        (provenance
+         ((origin repo)
+          (upstream-source-url
+           "https://github.com/scheme-requests-for-implementation/srfi-42")
+          (local-reference-documents
+           ((path "reference/srfi-42/srfi-42.html")
+            (role specification)
+            (source srfi)))
+          (upstream-status final)
+          (upstream-source-file "ec.scm")
+          (upstream-example-files ("examples.scm" "extension.scm"))
+          (upstream-revision "6a4c4aeb4cb61c6514776144fdfc5fe0d738a548")
+          (upstream-source-sha256
+           "ad456cbcb182ebdda0d490f53535b889c60125ac5e384ac250e867df21d967f0")
+          (upstream-example-sha256
+           (("examples.scm"
+             . "bcc2674881b83cf2e1dc1be9700ac6cce6b69dc9fed795059f65c8110fe868f9")
+            ("extension.scm"
+             . "4de2353aaaead5e4193fe485aa868dea749ed51515be43b236f2fad884b292f3")))
+          (upstream-license "MIT") (local-license "MIT") (vendored? #t)
+          (local-patches
+           ((define-library-wrapper (library (stdlib eager-comprehensions)))
+            (r7rs-read-import (library (scheme read)))
+            (r7rs-inexact-name (from exact->inexact) (to inexact))
+            (gambit-helper-exports)
+            (registry-aliases
+             (aliases (srfi 42) (srfi srfi-42)
+                      (srfi :42) (srfi :42 eager-comprehensions)))
+            (adapted-tests
+             (file "tests/scheme/stdlib-eager-comprehensions-test.scm"))))))
+        (verification
+         ((test-status
+           (import-resolution representative-eager-comprehension-behavior
+                              extension-hooks missing-export-diagnostic
+                              portable-host-suite compiled-host-smoke))))
+        (status vendored-adapted-implementation)
+        (canonical #t))
+       (manifest-index-entry
+        (schema-version 1)
+        (kind library-alias)
+        (name (srfi 42))
+        (owner stdlib)
+        (provider repo-source)
+        (visibility alias)
+        (source-kind alias)
+        (api-version (inherits (stdlib eager-comprehensions)))
+        (source-version unknown)
+        (realization alias)
+        (target (stdlib eager-comprehensions))
+        (aliases ((srfi srfi-42) (srfi :42) (srfi :42 eager-comprehensions)))
+        (dependencies
+         ((library (stdlib eager-comprehensions))))
+        (provenance ((origin repo)))
+        (verification ((test-status (import-resolution))))
+        (status alias)
+        (canonical #f))
+       (manifest-index-entry
+        (schema-version 1)
+        (kind library-alias)
+        (name (srfi srfi-42))
+        (owner stdlib)
+        (provider repo-source)
+        (visibility alias)
+        (source-kind alias)
+        (api-version (inherits (stdlib eager-comprehensions)))
+        (source-version unknown)
+        (realization alias)
+        (target (stdlib eager-comprehensions))
+        (dependencies
+         ((library (stdlib eager-comprehensions))))
+        (provenance ((origin repo)))
+        (verification ((test-status (import-resolution))))
+        (status alias)
+        (canonical #f))
+       (manifest-index-entry
+        (schema-version 1)
+        (kind library-alias)
+        (name (srfi :42))
+        (owner stdlib)
+        (provider repo-source)
+        (visibility alias)
+        (source-kind alias)
+        (api-version (inherits (stdlib eager-comprehensions)))
+        (source-version unknown)
+        (realization alias)
+        (target (stdlib eager-comprehensions))
+        (dependencies
+         ((library (stdlib eager-comprehensions))))
+        (provenance ((origin repo)))
+        (verification ((test-status (import-resolution))))
+        (status alias)
+        (canonical #f))
+       (manifest-index-entry
+        (schema-version 1)
+        (kind library-alias)
+        (name (srfi :42 eager-comprehensions))
+        (owner stdlib)
+        (provider repo-source)
+        (visibility alias)
+        (source-kind alias)
+        (api-version (inherits (stdlib eager-comprehensions)))
+        (source-version unknown)
+        (realization alias)
+        (target (stdlib eager-comprehensions))
+        (dependencies
+         ((library (stdlib eager-comprehensions))))
+        (provenance ((origin repo)))
+        (verification ((test-status (import-resolution))))
+        (status alias)
+        (canonical #f))
+       (manifest-entry
+        (schema-version 1)
+        (kind library)
         (name (stdlib receive))
         (owner stdlib)
         (provider repo-source)

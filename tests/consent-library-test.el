@@ -2836,6 +2836,93 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
                      '(stdlib property-testing))))")
     "#t")))
 
+(ert-deftest consent-library-test-srfi-42-eager-comprehensions-imports ()
+  "Import SRFI 42 aliases and exercise representative comprehensions."
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (srfi 42))
+      (list (list-ec (:range i 5) (* i i))
+            (list-ec (:parallel (:range i 1 10)
+                                (:list x '(a b c)))
+                     (list i x))
+            (any?-ec (:range i 2 3) (even? i)))")
+    "((0 1 4 9 16) ((1 a) (2 b) (3 c)) #t)"))
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (srfi srfi-42))
+      (sum-ec (:range i 4) i)")
+    "6"))
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (srfi :42 eager-comprehensions))
+      (list-ec (:list x '(a b)) x)")
+    "(a b)")))
+
+(ert-deftest consent-library-test-srfi-42-missing-export-diagnostic ()
+  "Report missing SRFI 42 imports through the ordinary resolver diagnostic."
+  (let ((error
+         (should-error
+          (consent-library-test--external
+           "(import (scheme base)
+                    (only (srfi 42) missing-eager-helper))
+            missing-eager-helper")
+          :type 'consent-eval-error)))
+    (should
+     (string-match-p
+      (regexp-quote "only import name not found")
+      (error-message-string error)))
+    (should
+     (string-match-p
+      (regexp-quote "missing-eager-helper")
+      (error-message-string error)))))
+
+(ert-deftest consent-library-test-stdlib-manifest-documents-srfi-42 ()
+  "Expose SRFI 42 support status through the stdlib manifest."
+  (should
+   (equal
+    (consent-library-test--stdlib-manifest-external
+     "(let ((entry (stdlib-manifest-ref '(stdlib eager-comprehensions)))
+            (alias (stdlib-manifest-ref '(srfi 42)))
+            (portable-alias (stdlib-manifest-ref '(srfi srfi-42)))
+            (legacy-alias
+             (stdlib-manifest-ref '(srfi :42 eager-comprehensions))))
+        (and (eq? (car entry) 'manifest-entry)
+             (equal? (manifest-field entry 'name)
+                     '(stdlib eager-comprehensions))
+             (equal? (manifest-field entry 'status)
+                     'vendored-adapted-implementation)
+             (equal? (manifest-subfield entry 'provenance 'upstream-license)
+                     \"MIT\")
+             (equal? (manifest-subfield entry 'provenance 'upstream-status)
+                     'final)
+             (eq? (manifest-subfield entry 'provenance 'vendored?) #t)
+             (equal? (manifest-subfield entry 'provenance
+                                        'local-reference-documents)
+                     '((path \"reference/srfi-42/srfi-42.html\")
+                       (role specification)
+                       (source srfi)))
+             (equal? (manifest-field entry 'aliases)
+                     '((srfi 42)
+                       (srfi srfi-42)
+                       (srfi :42)
+                       (srfi :42 eager-comprehensions)))
+             (equal? (manifest-field entry 'dependencies)
+                     '((library (scheme base))
+                       (library (scheme read))))
+             (member 'list-ec (manifest-field entry 'exports))
+             (member ':range (manifest-field entry 'exports))
+             (member ':-dispatch-set! (manifest-field entry 'exports))
+             (equal? (manifest-field alias 'target)
+                     '(stdlib eager-comprehensions))
+             (equal? (manifest-field portable-alias 'target)
+                     '(stdlib eager-comprehensions))
+             (equal? (manifest-field legacy-alias 'target)
+                     '(stdlib eager-comprehensions))))")
+    "#t")))
+
 (ert-deftest consent-library-test-stdlib-manifest-documents-srfi-27 ()
   "Expose SRFI 27 support status through the stdlib manifest."
   (should

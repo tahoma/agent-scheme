@@ -25,6 +25,8 @@
         (srfi srfi-194)
         (srfi 252)
         (srfi srfi-252)
+        (srfi 42)
+        (srfi srfi-42)
         (srfi 97)
         (srfi :97 srfi-libraries)
         (srfi 261)
@@ -133,6 +135,12 @@
 ;; Manifest entry for the SRFI 252 portable SRFI reference alias.
 (define srfi-252-portable-entry (stdlib-manifest-ref '(srfi srfi-252)))
 
+;; Manifest entry for the SRFI 42 eager-comprehensions alias.
+(define srfi-42-entry (stdlib-manifest-ref '(srfi 42)))
+
+;; Manifest entry for the SRFI 42 portable SRFI reference alias.
+(define srfi-42-portable-entry (stdlib-manifest-ref '(srfi srfi-42)))
+
 ;; Manifest entry for the SRFI 261 portable SRFI reference alias.
 (define srfi-261-portable-entry (stdlib-manifest-ref '(srfi srfi-261)))
 
@@ -236,6 +244,18 @@
            (test-end "srfi-252-smoke"))
          (test-runner-pass-count runner))
        2)
+
+(check 'manifest-smoke-srfi-42-target
+       (field srfi-42-entry 'target)
+       '(stdlib eager-comprehensions))
+
+(check 'manifest-smoke-srfi-42-portable-target
+       (field srfi-42-portable-entry 'target)
+       '(stdlib eager-comprehensions))
+
+(check 'manifest-smoke-srfi-42-import
+       (list-ec (:range i 5) (* i i))
+       '(0 1 4 9 16))
 
 (check 'manifest-smoke-srfi-97-entry-kind
        (car srfi-97-entry)

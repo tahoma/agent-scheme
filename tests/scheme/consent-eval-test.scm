@@ -1619,6 +1619,8 @@
         (find-source-library-spec '(stdlib receive) source-specs))
        (assume-spec
         (find-source-library-spec '(stdlib assume) source-specs))
+       (eager-comprehensions-spec
+        (find-source-library-spec '(stdlib eager-comprehensions) source-specs))
        (json-spec
         (find-source-library-spec '(stdlib json) source-specs)))
   (check 'stdlib-source-library-files
@@ -1631,6 +1633,7 @@
               mapping-spec
               receive-spec
               assume-spec
+              eager-comprehensions-spec
               json-spec
               (string? (cadr (assq 'source-file manifest-spec)))
               (string? (cadr (assq 'source-file and-let-star-spec)))
@@ -1641,6 +1644,7 @@
               (string? (cadr (assq 'source-file mapping-spec)))
               (string? (cadr (assq 'source-file receive-spec)))
               (string? (cadr (assq 'source-file assume-spec)))
+              (string? (cadr (assq 'source-file eager-comprehensions-spec)))
               (string? (cadr (assq 'source-file json-spec))))
          #t)
   (check 'stdlib-source-library-manifest-file
@@ -1679,6 +1683,10 @@
          (and assume-spec
               (cadr (assq 'source-file assume-spec)))
          "stdlib/assume.sld")
+  (check 'stdlib-source-library-eager-comprehensions-file
+         (and eager-comprehensions-spec
+              (cadr (assq 'source-file eager-comprehensions-spec)))
+         "stdlib/eager-comprehensions.sld")
 (check 'stdlib-source-library-json-file
          (and json-spec
               (cadr (assq 'source-file json-spec)))
@@ -1940,6 +1948,62 @@
                                 '(stdlib and-let-star))
                         (equal? (manifest-field portable-alias 'target)
                                 '(stdlib and-let-star))))")
+                "#t")
+
+(check-external 'srfi-42-eager-comprehensions-behavior
+                "(import (scheme base) (srfi 42))
+                 (list (list-ec (:range i 5) (* i i))
+                       (list-ec (:parallel (:range i 1 10)
+                                           (:list x '(a b c)))
+                                (list i x))
+                       (any?-ec (:range i 2 3) (even? i)))"
+                "((0 1 4 9 16) ((1 a) (2 b) (3 c)) #t)")
+
+(check-external 'srfi-42-portable-alias-import
+                "(import (scheme base) (srfi srfi-42))
+                 (sum-ec (:range i 4) i)"
+                "6")
+
+(check-external 'srfi-42-library-reference-alias-import
+                "(import (scheme base) (srfi :42 eager-comprehensions))
+                 (list-ec (:list x '(a b)) x)"
+                "(a b)")
+
+(check-external 'stdlib-srfi-42-manifest
+                (stdlib-manifest-source
+                 "(let ((entry (stdlib-manifest-ref
+                                '(stdlib eager-comprehensions)))
+                       (alias (stdlib-manifest-ref '(srfi 42)))
+                       (portable-alias
+                        (stdlib-manifest-ref '(srfi srfi-42)))
+                       (legacy-alias
+                        (stdlib-manifest-ref
+                         '(srfi :42 eager-comprehensions))))
+                   (and (eq? (car entry) 'manifest-entry)
+                        (equal? (manifest-field entry 'name)
+                                '(stdlib eager-comprehensions))
+                        (equal? (manifest-field entry 'status)
+                                'vendored-adapted-implementation)
+                        (equal? (manifest-subfield
+                                 entry 'provenance 'upstream-license)
+                                \"MIT\")
+                        (equal? (manifest-subfield
+                                 entry 'provenance 'upstream-status)
+                                'final)
+                        (equal? (manifest-field entry 'aliases)
+                                '((srfi 42)
+                                  (srfi srfi-42)
+                                  (srfi :42)
+                                  (srfi :42 eager-comprehensions)))
+                        (equal? (manifest-field entry 'dependencies)
+                                '((library (scheme base))
+                                  (library (scheme read))))
+                        (equal? (manifest-field alias 'target)
+                                '(stdlib eager-comprehensions))
+                        (equal? (manifest-field portable-alias 'target)
+                                '(stdlib eager-comprehensions))
+                        (equal? (manifest-field legacy-alias 'target)
+                                '(stdlib eager-comprehensions))))")
                 "#t")
 
 (check-external 'srfi-145-assume-behavior
