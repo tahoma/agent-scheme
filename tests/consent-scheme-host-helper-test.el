@@ -67,6 +67,10 @@
   "Keep expensive direct-only suites out of compiled host runs."
   (should
    (member
+    "tests/scheme/stdlib-json-reference-test.scm"
+    (consent--scheme-host-test-files-for-host 'racket)))
+  (should
+   (member
     "tests/scheme/consent-manifest-smoke-test.scm"
     (consent--scheme-host-test-files-for-host 'compiled)))
   (should-not
