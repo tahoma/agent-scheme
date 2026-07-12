@@ -1,12 +1,12 @@
-;;; Portable development testing registry tests.
+;;; Portable testing registry tests.
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
 (import (scheme base)
         (scheme cxr)
-        (development manifest)
-        (development testing harness)
-        (development testing registry)
+        (testing manifest)
+        (testing harness)
+        (testing registry)
         (stdlib testing))
 
 (consent-test-registry-clear!)
@@ -40,7 +40,7 @@
 ;; Case-level records extracted from REPORT.
 (define case-results (cadr (assq 'cases (cdr report))))
 
-(consent-test-run "Development testing registry"
+(consent-test-run "Testing registry"
   (test-equal "registration order"
               '(alpha beta gamma)
               (map consent-test-case-name consent-test-registry))
@@ -91,7 +91,7 @@
         (consent-test-case-result (name broken) (status fail)))))))
   (test-assert
    "registry is publicly manifested"
-   (development-library-manifest-ref '(development testing registry))))
+   (testing-library-manifest-ref '(testing registry))))
 
 ;; Diagnostic captured by the host hook for a raised registered case.
 (define captured-diagnostic #f)
@@ -113,7 +113,7 @@
        (consent-test-select-name 'broken)))
     #f))
 
-(consent-test-run "Development testing diagnostics"
+(consent-test-run "Testing registry diagnostics"
   (test-assert "registered failures signal batch failure"
                registered-failure-raised?)
   (test-equal "host diagnostic hook receives case and condition"

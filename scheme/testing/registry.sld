@@ -2,7 +2,7 @@
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
-(define-library (development testing registry)
+(define-library (testing registry)
   (export consent-test-case
           consent-test-register!
           consent-test-registry-clear!
@@ -24,7 +24,7 @@
           consent-test-report-failed-names)
   (import (scheme base)
           (scheme write)
-          (development testing harness)
+          (testing harness)
           (stdlib testing))
   (begin
     ;; Registered test case metadata and executable body.

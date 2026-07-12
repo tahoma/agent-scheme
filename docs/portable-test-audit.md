@@ -47,7 +47,7 @@ The audit groups the remaining ERT files by the boundary they exercise:
 Portable files predating this issue may still contain local failure counters.
 That is a Scheme-harness consistency concern rather than missing portable
 semantic coverage. New and migrated semantic suites use SRFI 64 and
-`(development testing harness)`; #883 tracks mechanical conversion of those
+`(testing harness)`; #883 tracks mechanical conversion of those
 older portable files without moving their assertions back through ERT.
 
 New host-neutral ERT-only tests must state the blocking host boundary in their
@@ -69,24 +69,24 @@ command-line experience.
 | generated/property assertions | SRFI 252 plus SRFI 158/194 generators | exceeds ERT core |
 | table/comprehension assertions | SRFI 78 plus SRFI 42 | exceeds ERT core |
 | actual/expected values and arbitrary result properties | SRFI 64 result alists | parity |
-| deterministic batch failure and summary receipts | `(development testing harness)` over SRFI 64 | parity for CI; Scheme-readable receipts exceed ERT's text-only batch contract |
-| test discovery, selectors, tags, and selective reruns | `(development testing registry)` | parity; selectors are composable Scheme predicates |
+| deterministic batch failure and summary receipts | `(testing harness)` over SRFI 64 | parity for CI; Scheme-readable receipts exceed ERT's text-only batch contract |
+| test discovery, selectors, tags, and selective reruns | `(testing registry)` | parity; selectors are composable Scheme predicates |
 | source locations and per-test timing | registry case metadata and injectable clock | parity without relying on implementation-specific syntax objects or clocks |
 | backtraces and host diagnostics | registry diagnostic hook and result records | parity substrate; each host supplies its native stack capture |
 | interactive failed-test inspection and rerun | Scheme-readable reports plus `consent-test-rerun-failed` | parity substrate for Emacs, CLI, and other host UIs |
 
-`(development testing harness)` is a test-only orchestration extension, not another
+`(testing harness)` is a test-only orchestration extension, not another
 assertion framework. `consent-test-run` supplies the repeated SRFI 64 lifecycle,
 machine-readable summary datum, and nonzero host exit on unexpected failure or
 success. `consent-test-check` adapts silent SRFI 78 checks into one named SRFI
 64 result. Test bodies continue to use the SRFI forms directly. The library
-lives in the manifested `scheme/development/testing/` namespace so it is
+lives in the manifested `scheme/testing/` namespace so it is
 available to downstream users. The executable suites and cases under
 `tests/scheme/` remain outside runtime manifests. Further libraries in the
-development testing namespace must be named for the missing test facility they
-provide; `(stdlib ...)` remains reserved for the portable standards shelf.
+testing namespace must be named for the missing test facility they provide;
+`(stdlib ...)` remains reserved for the portable standards shelf.
 
-`(development testing registry)` carries names, tags, source metadata, timing,
+`(testing registry)` carries names, tags, source metadata, timing,
 status, and host diagnostics without replacing SRFI 64 assertions. R7RS does
 not standardize stack capture or an interactive UI, so the registry exposes a
 diagnostic hook and Scheme-readable reports that host adapters can render and

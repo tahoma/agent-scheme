@@ -11,9 +11,9 @@
 
 (import (scheme base)
         (scheme write)
-        (development manifest)
-        (development testing harness)
-        (development testing registry)
+        (testing manifest)
+        (testing harness)
+        (testing registry)
         (stdlib manifest)
         (consent json)
         (srfi 0)
@@ -162,12 +162,12 @@
 (define srfi-261-portable-entry (stdlib-manifest-ref '(srfi srfi-261)))
 
 ;; Manifest entry for the reusable portable test harness.
-(define development-test-harness-entry
-  (development-library-manifest-ref '(development testing harness)))
+(define testing-harness-entry
+  (testing-library-manifest-ref '(testing harness)))
 
 ;; Manifest entry for portable registered test discovery and selection.
-(define development-test-registry-entry
-  (development-library-manifest-ref '(development testing registry)))
+(define testing-registry-entry
+  (testing-library-manifest-ref '(testing registry)))
 
 ;; Output string used to verify that pure alias exports include json-write.
 (define json-output (open-output-string))
@@ -178,17 +178,17 @@
        (car consent-json-entry)
        'manifest-index-entry)
 
-(check 'manifest-smoke-development-test-harness-kind
-       (car development-test-harness-entry)
+(check 'manifest-smoke-testing-harness-kind
+       (car testing-harness-entry)
        'manifest-entry)
 
-(check 'manifest-smoke-development-test-harness-source
-       (field development-test-harness-entry 'source)
-       '(path "testing/harness.sld"))
+(check 'manifest-smoke-testing-harness-source
+       (field testing-harness-entry 'source)
+       '(path "harness.sld"))
 
-(check 'manifest-smoke-development-test-registry-source
-       (field development-test-registry-entry 'source)
-       '(path "testing/registry.sld"))
+(check 'manifest-smoke-testing-registry-source
+       (field testing-registry-entry 'source)
+       '(path "registry.sld"))
 
 (check 'manifest-smoke-consent-json-target
        (field consent-json-entry 'target)

@@ -2,7 +2,7 @@
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
-(define-library (development testing harness)
+(define-library (testing harness)
   (export consent-test-run
           consent-test-check
           consent-test-runner-summary
