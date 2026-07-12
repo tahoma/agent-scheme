@@ -1605,6 +1605,10 @@
          ((origin repo)
           (upstream-source-url
            "https://github.com/scheme-requests-for-implementation/srfi-252")
+          (local-reference-documents
+           ((path "reference/srfi-252/srfi-252.html")
+            (role specification)
+            (source srfi)))
           (upstream-source-files ("property-test.sld"))
           (upstream-test-files ("property-test-tests.scm"))
           (upstream-source-blobs

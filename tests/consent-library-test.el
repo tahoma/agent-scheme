@@ -1304,6 +1304,7 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
     "(stdlib testing)"
     "(stdlib random-bits)"
     "(stdlib random-distributions)"
+    "(stdlib property-testing)"
     "(stdlib receive)"
     "(stdlib assume)"
     "(stdlib comparator)"
@@ -2787,6 +2788,11 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
              (equal? (manifest-subfield entry 'provenance 'local-license)
                      \"MIT\")
              (eq? (manifest-subfield entry 'provenance 'vendored?) #t)
+             (equal? (manifest-subfield entry 'provenance
+                                        'local-reference-documents)
+                     '((path \"reference/srfi-252/srfi-252.html\")
+                       (role specification)
+                       (source srfi)))
              (member \"property-test-tests.scm\"
                      (manifest-subfield entry 'provenance
                                         'upstream-test-files))
