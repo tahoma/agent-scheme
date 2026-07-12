@@ -50,14 +50,15 @@
         (dependencies ((library (stdlib and-let-star))))
         (provenance
          ((origin repo)
-                              (upstream-source-url "https://github.com/scheme-requests-for-implementation/srfi-180")
-                              (local-reference-documents
-                               ((path "reference/srfi-180/srfi-180.html")
-                                (role specification)
-                                (source srfi)))
-                              (upstream-revision "671857bac55c53e3190a24ec53b457321a1d8f12")
-                              (upstream-license "MIT") (local-license "Apache-2.0") (vendored? #f)
-                              (local-patches ())))
+          (upstream-source-url
+           "https://github.com/scheme-requests-for-implementation/srfi-180")
+          (local-reference-documents
+           ((path "reference/srfi-180/srfi-180.html")
+            (role specification)
+            (source srfi)))
+          (upstream-revision "671857bac55c53e3190a24ec53b457321a1d8f12")
+          (upstream-license "MIT") (local-license "Apache-2.0") (vendored? #f)
+          (local-patches ())))
         (verification
          ((test-status
                                  (import-resolution representative-read-write emacs-json-oracle portable-host-suite
@@ -172,13 +173,14 @@
         (exports (cond-expand))
         (dependencies ((library (scheme base))))
         (provenance
-         ((origin repo) (upstream-source-url "https://srfi.schemers.org/srfi-0/")
-                        (local-reference-documents
-                         ((path "reference/srfi-0/srfi-0.html")
-                          (role specification)
-                          (source srfi)))
-                        (upstream-license "MIT") (local-license "Apache-2.0")
-                        (vendored? #f)))
+         ((origin repo)
+          (upstream-source-url "https://srfi.schemers.org/srfi-0/")
+          (local-reference-documents
+           ((path "reference/srfi-0/srfi-0.html")
+            (role specification)
+            (source srfi)))
+          (upstream-license "MIT") (local-license "Apache-2.0")
+          (vendored? #f)))
         (verification
          ((test-status
            (import-resolution representative-cond-expand-behavior
@@ -220,12 +222,14 @@
         (exports (case-lambda))
         (dependencies ((library (scheme case-lambda))))
         (provenance
-         ((origin repo) (upstream-source-url "https://srfi.schemers.org/srfi-16/") (upstream-license "MIT")
-                              (local-reference-documents
-                               ((path "reference/srfi-16/srfi-16.html")
-                                (role specification)
-                                (source srfi)))
-                              (local-license "Apache-2.0") (vendored? #f)))
+         ((origin repo)
+          (upstream-source-url "https://srfi.schemers.org/srfi-16/")
+          (upstream-license "MIT")
+          (local-reference-documents
+           ((path "reference/srfi-16/srfi-16.html")
+            (role specification)
+            (source srfi)))
+          (local-license "Apache-2.0") (vendored? #f)))
         (verification
          ((test-status
                                 (import-resolution representative-case-lambda-behavior
@@ -299,13 +303,14 @@
         (exports ())
         (dependencies ((library (scheme base))))
         (provenance
-         ((origin repo) (upstream-source-url "https://srfi.schemers.org/srfi-261/")
-                        (local-reference-documents
-                         ((path "reference/srfi-261/srfi-261.html")
-                          (role specification)
-                          (source srfi)))
-                        (upstream-license "MIT") (local-license "Apache-2.0")
-                        (vendored? #f) (local-patches ())))
+         ((origin repo)
+          (upstream-source-url "https://srfi.schemers.org/srfi-261/")
+          (local-reference-documents
+           ((path "reference/srfi-261/srfi-261.html")
+            (role specification)
+            (source srfi)))
+          (upstream-license "MIT") (local-license "Apache-2.0")
+          (vendored? #f) (local-patches ())))
         (verification
          ((test-status
            (import-resolution reference-aliases no-export-shim
@@ -368,13 +373,14 @@
         (exports ())
         (dependencies ((library (scheme base))))
         (provenance
-         ((origin repo) (upstream-source-url "https://srfi.schemers.org/srfi-97/")
-                        (local-reference-documents
-                         ((path "reference/srfi-97/srfi-97.html")
-                          (role specification)
-                          (source srfi)))
-                        (upstream-license "MIT") (local-license "Apache-2.0")
-                        (vendored? #f) (local-patches ())))
+         ((origin repo)
+          (upstream-source-url "https://srfi.schemers.org/srfi-97/")
+          (local-reference-documents
+           ((path "reference/srfi-97/srfi-97.html")
+            (role specification)
+            (source srfi)))
+          (upstream-license "MIT") (local-license "Apache-2.0")
+          (vendored? #f) (local-patches ())))
         (verification
          ((test-status
            (import-resolution library-reference-aliases no-export-shim
@@ -471,20 +477,21 @@
         (exports (and-let*))
         (dependencies ((library (scheme base))))
         (provenance
-         ((origin repo) (upstream-source-url "https://okmij.org/ftp/Scheme/lib/myenv-chez.scm")
-                              (local-reference-documents
-                               ((path "reference/srfi-2/srfi-2.html")
-                                (role specification)
-                                (source srfi)))
-                              (source-test-url "https://okmij.org/ftp/Scheme/tests/vland.scm")
-                              (upstream-revision "myenv-chez.scm,v 1.7 2006/01/19 02:14:07")
-                              (upstream-license "MIT") (local-license "MIT") (vendored? #t)
-                              (local-patches
-                               ((define-library-wrapper (library (stdlib and-let-star)))
-                                (registry-aliases
-                                 (aliases (srfi 2) (srfi srfi-2)
-                                          (srfi :2) (srfi :2 and-let*)))
-                                (adapted-tests (file "tests/scheme/stdlib-and-let-star-test.scm"))))))
+         ((origin repo)
+          (upstream-source-url "https://okmij.org/ftp/Scheme/lib/myenv-chez.scm")
+          (local-reference-documents
+           ((path "reference/srfi-2/srfi-2.html")
+            (role specification)
+            (source srfi)))
+          (source-test-url "https://okmij.org/ftp/Scheme/tests/vland.scm")
+          (upstream-revision "myenv-chez.scm,v 1.7 2006/01/19 02:14:07")
+          (upstream-license "MIT") (local-license "MIT") (vendored? #t)
+          (local-patches
+           ((define-library-wrapper (library (stdlib and-let-star)))
+            (registry-aliases
+             (aliases (srfi 2) (srfi srfi-2)
+                      (srfi :2) (srfi :2 and-let*)))
+            (adapted-tests (file "tests/scheme/stdlib-and-let-star-test.scm"))))))
         (verification
          ((test-status
                                  (import-resolution representative-and-let-star-behavior missing-export-diagnostic
@@ -590,25 +597,27 @@
                            lset-diff+intersection!))
         (dependencies ((library (scheme base)) (library (scheme cxr))))
         (provenance
-         ((origin repo) (upstream-source-url "https://github.com/scheme-requests-for-implementation/srfi-1")
-                              (local-reference-documents
-                               ((path "reference/srfi-1/srfi-1.html")
-                                (role specification)
-                                (source srfi))
-                               ((path "reference/r7rs-large/2016-07-red-edition-report.md")
-                                (role docket-report)
-                                (source r7rs-large)))
-                              (upstream-source-file "srfi-1-reference.scm")
-                              (upstream-revision "d502ec3832de709f00f7ae5488a334a25da8a9f9")
-                              (upstream-source-blob "56a7175d0feeddb07609937f8c59bac8eadab0d8")
-                              (upstream-license "MIT") (local-license "MIT") (vendored? #t)
-                              (local-patches
-                               ((define-library-wrapper (library (stdlib list)))
-                                (registry-aliases
-                                 (aliases (scheme list) (srfi 1) (srfi srfi-1)
-                                          (srfi :1) (srfi :1 lists)))
-                                (portable-optional-argument-helpers (source local))
-                                (adapted-tests (file "tests/scheme/stdlib-list-test.scm"))))))
+         ((origin repo)
+          (upstream-source-url
+           "https://github.com/scheme-requests-for-implementation/srfi-1")
+          (local-reference-documents
+           ((path "reference/srfi-1/srfi-1.html")
+            (role specification)
+            (source srfi))
+           ((path "reference/r7rs-large/2016-07-red-edition-report.md")
+            (role docket-report)
+            (source r7rs-large)))
+          (upstream-source-file "srfi-1-reference.scm")
+          (upstream-revision "d502ec3832de709f00f7ae5488a334a25da8a9f9")
+          (upstream-source-blob "56a7175d0feeddb07609937f8c59bac8eadab0d8")
+          (upstream-license "MIT") (local-license "MIT") (vendored? #t)
+          (local-patches
+           ((define-library-wrapper (library (stdlib list)))
+            (registry-aliases
+             (aliases (scheme list) (srfi 1) (srfi srfi-1)
+                      (srfi :1) (srfi :1 lists)))
+            (portable-optional-argument-helpers (source local))
+            (adapted-tests (file "tests/scheme/stdlib-list-test.scm"))))))
         (verification
          ((test-status
                                  (import-resolution representative-list-behavior alias-import missing-export-diagnostic
@@ -730,23 +739,25 @@
         (dependencies ((library (scheme base)) (library (scheme case-lambda))))
         (provenance
          ((origin repo)
-                              (upstream-source-url "https://github.com/scheme-requests-for-implementation/srfi-158")
-                              (local-reference-documents
-                               ((path "reference/srfi-158/srfi-158.html")
-                                (role specification)
-                                (source srfi))
-                               ((path "reference/r7rs-large/2019-02-tangerine-edition-report.md")
-                                (role docket-report)
-                                (source r7rs-large)))
-                              (upstream-source-file "srfi-158-impl.scm")
-                              (upstream-revision "ffd5bac4caf70167d0b57f701a6c43aa07701158")
-                              (upstream-license "MIT") (local-license "MIT") (vendored? #t)
-                              (local-patches
-                               ((define-library-wrapper (library (stdlib generator)))
-                                (registry-aliases (aliases (scheme generator) (srfi 158) (srfi srfi-158)))
-                                (portable-optional-helpers (source local))
-                                (accumulator-finalization-guards (source local))
-                                (adapted-tests (file "tests/scheme/stdlib-generator-test.scm"))))))
+          (upstream-source-url
+           "https://github.com/scheme-requests-for-implementation/srfi-158")
+          (local-reference-documents
+           ((path "reference/srfi-158/srfi-158.html")
+            (role specification)
+            (source srfi))
+           ((path "reference/r7rs-large/2019-02-tangerine-edition-report.md")
+            (role docket-report)
+            (source r7rs-large)))
+          (upstream-source-file "srfi-158-impl.scm")
+          (upstream-revision "ffd5bac4caf70167d0b57f701a6c43aa07701158")
+          (upstream-license "MIT") (local-license "MIT") (vendored? #t)
+          (local-patches
+           ((define-library-wrapper (library (stdlib generator)))
+            (registry-aliases
+             (aliases (scheme generator) (srfi 158) (srfi srfi-158)))
+            (portable-optional-helpers (source local))
+            (accumulator-finalization-guards (source local))
+            (adapted-tests (file "tests/scheme/stdlib-generator-test.scm"))))))
         (verification
          ((test-status
                                 (import-resolution representative-generator-behavior alias-import
@@ -851,27 +862,28 @@
                                 (library (scheme eval)) (library (scheme file))))
         (provenance
          ((origin repo)
-                              (upstream-source-url "https://github.com/scheme-requests-for-implementation/srfi-64")
-                              (local-reference-documents
-                               ((path "reference/srfi-64/srfi-64.html")
-                                (role specification)
-                                (source srfi)))
-                              (upstream-source-files ("testing.scm" "srfi-64-test.scm"))
-                              (upstream-revision "2d6a9fc514050f75802ef0003cfbf4846602a3ee")
-                              (upstream-source-blobs
-                               (("testing.scm" . "caa8dd9e3361e1e1668376da19bfcd0ba1aa33be")
-                                ("srfi-64-test.scm" . "aab90d1130d50c1dee945ef209c3fc83841355bf")))
-                              (upstream-license "MIT") (local-license "MIT") (vendored? #t)
-                              (local-patches
-                               ((define-library-wrapper (library (stdlib testing)))
-                                (registry-aliases
-                                 (aliases (srfi 64) (srfi srfi-64)
-                                          (srfi :64) (srfi :64 testing)))
-                                (removed-host-branches
-                                 (hosts chicken gauche guile sisc kawa mzscheme))
-                                (default-log-file (from #t) (to #f))
-                                (eval-environment (to (scheme base)))
-                                (adapted-tests (file "tests/scheme/stdlib-testing-test.scm"))))))
+          (upstream-source-url
+           "https://github.com/scheme-requests-for-implementation/srfi-64")
+          (local-reference-documents
+           ((path "reference/srfi-64/srfi-64.html")
+            (role specification)
+            (source srfi)))
+          (upstream-source-files ("testing.scm" "srfi-64-test.scm"))
+          (upstream-revision "2d6a9fc514050f75802ef0003cfbf4846602a3ee")
+          (upstream-source-blobs
+           (("testing.scm" . "caa8dd9e3361e1e1668376da19bfcd0ba1aa33be")
+            ("srfi-64-test.scm" . "aab90d1130d50c1dee945ef209c3fc83841355bf")))
+          (upstream-license "MIT") (local-license "MIT") (vendored? #t)
+          (local-patches
+           ((define-library-wrapper (library (stdlib testing)))
+            (registry-aliases
+             (aliases (srfi 64) (srfi srfi-64)
+                      (srfi :64) (srfi :64 testing)))
+            (removed-host-branches
+             (hosts chicken gauche guile sisc kawa mzscheme))
+            (default-log-file (from #t) (to #f))
+            (eval-environment (to (scheme base)))
+            (adapted-tests (file "tests/scheme/stdlib-testing-test.scm"))))))
         (verification
          ((test-status
                                 (import-resolution representative-test-runner-behavior
@@ -970,34 +982,40 @@
         (dependencies ((library (scheme base)) (library (scheme time))))
         (provenance
          ((origin repo)
-                              (upstream-source-url "https://github.com/scheme-requests-for-implementation/srfi-27")
-                              (local-reference-documents
-                               ((path "reference/srfi-27/srfi-27.html")
-                                (role specification)
-                                (source srfi)))
-                              (upstream-source-files ("reference/srfi-27-a.scm" "reference/mrg32k3a-a.scm"
-                                                      "reference/mrg32k3a.scm"))
-                              (upstream-revision "a547c5508d648c61e73bebed2bcd2283fba5abaa")
-                              (upstream-source-blobs
-                               (("reference/srfi-27-a.scm" . "34388f6bd9e1317b5e081112819687d30170fe3d")
-                                ("reference/mrg32k3a-a.scm" . "a5566f40f2a668dc9f47fafb794e610a2b79f9a8")
-                                ("reference/mrg32k3a.scm" . "184d695cedbcc76ae39001ae6841ffb01f9b6bb2")))
-                              (upstream-test-files ("reference/conftest.scm"))
-                              (upstream-test-blobs
-                               (("reference/conftest.scm" . "5ceaaf0d8af4af29e8270ac52c00a69f80525cb5")))
-                              (upstream-license "MIT") (local-license "MIT") (vendored? #t)
-                              (local-patches
-                               ((define-library-wrapper (library (stdlib random-bits)))
-                                (registry-aliases
-                                 (aliases (srfi 27) (srfi srfi-27)
-                                          (srfi :27) (srfi :27 random-bits)))
-                                (time-source (from "Scheme 48 current-time")
-                                             (to "(scheme time) current-jiffy"))
-                                (upstream-confidence-tests
-                                 (file "fixtures/srfi-27/reference/conftest.scm"))
-                                (adapted-tests
-                                 (file "tests/scheme/stdlib-random-bits-test.scm")
-                                 (file "tests/scheme/stdlib-random-bits-upstream-test.scm"))))))
+          (upstream-source-url
+           "https://github.com/scheme-requests-for-implementation/srfi-27")
+          (local-reference-documents
+           ((path "reference/srfi-27/srfi-27.html")
+            (role specification)
+            (source srfi)))
+          (upstream-source-files
+           ("reference/srfi-27-a.scm" "reference/mrg32k3a-a.scm"
+            "reference/mrg32k3a.scm"))
+          (upstream-revision "a547c5508d648c61e73bebed2bcd2283fba5abaa")
+          (upstream-source-blobs
+           (("reference/srfi-27-a.scm"
+             . "34388f6bd9e1317b5e081112819687d30170fe3d")
+            ("reference/mrg32k3a-a.scm"
+             . "a5566f40f2a668dc9f47fafb794e610a2b79f9a8")
+            ("reference/mrg32k3a.scm"
+             . "184d695cedbcc76ae39001ae6841ffb01f9b6bb2")))
+          (upstream-test-files ("reference/conftest.scm"))
+          (upstream-test-blobs
+           (("reference/conftest.scm"
+             . "5ceaaf0d8af4af29e8270ac52c00a69f80525cb5")))
+          (upstream-license "MIT") (local-license "MIT") (vendored? #t)
+          (local-patches
+           ((define-library-wrapper (library (stdlib random-bits)))
+            (registry-aliases
+             (aliases (srfi 27) (srfi srfi-27)
+                      (srfi :27) (srfi :27 random-bits)))
+            (time-source (from "Scheme 48 current-time")
+                         (to "(scheme time) current-jiffy"))
+            (upstream-confidence-tests
+             (file "fixtures/srfi-27/reference/conftest.scm"))
+            (adapted-tests
+             (file "tests/scheme/stdlib-random-bits-test.scm")
+             (file "tests/scheme/stdlib-random-bits-upstream-test.scm"))))))
         (verification
          ((test-status
                                 (import-resolution representative-random-source-behavior
@@ -1137,21 +1155,23 @@
         (exports (receive))
         (dependencies ((library (scheme base))))
         (provenance
-         ((origin repo) (upstream-source-url "https://srfi.schemers.org/srfi-8/") (upstream-license "MIT")
-                              (local-reference-documents
-                               ((path "reference/srfi-8/srfi-8.html")
-                                (role specification)
-                                (source srfi))
-                               ((path "reference/r7rs-large/2022-02-yellow-edition-report.txt")
-                                (role docket-report)
-                                (source r7rs-large)))
-                              (local-license "Apache-2.0") (vendored? #f)
-                              (local-patches
-                               ((define-library-wrapper (library (stdlib receive)))
-                                (registry-aliases
-                                 (aliases (srfi 8) (srfi srfi-8)
-                                          (srfi :8) (srfi :8 receive)))
-                                (local-tests (file "tests/scheme/stdlib-receive-test.scm"))))))
+         ((origin repo)
+          (upstream-source-url "https://srfi.schemers.org/srfi-8/")
+          (upstream-license "MIT")
+          (local-reference-documents
+           ((path "reference/srfi-8/srfi-8.html")
+            (role specification)
+            (source srfi))
+           ((path "reference/r7rs-large/2022-02-yellow-edition-report.txt")
+            (role docket-report)
+            (source r7rs-large)))
+          (local-license "Apache-2.0") (vendored? #f)
+          (local-patches
+           ((define-library-wrapper (library (stdlib receive)))
+            (registry-aliases
+             (aliases (srfi 8) (srfi srfi-8)
+                      (srfi :8) (srfi :8 receive)))
+            (local-tests (file "tests/scheme/stdlib-receive-test.scm"))))))
         (verification
          ((test-status
                                 (import-resolution representative-receive-behavior
@@ -1243,16 +1263,18 @@
         (exports (assume))
         (dependencies ((library (scheme base))))
         (provenance
-         ((origin repo) (upstream-source-url "https://srfi.schemers.org/srfi-145/") (upstream-license "MIT")
-                              (local-reference-documents
-                               ((path "reference/srfi-145/srfi-145.html")
-                                (role specification)
-                                (source srfi)))
-                              (local-license "Apache-2.0") (vendored? #f)
-                              (local-patches
-                               ((define-library-wrapper (library (stdlib assume)))
-                                (registry-aliases (aliases (srfi 145) (srfi srfi-145)))
-                                (local-tests (file "tests/scheme/stdlib-assume-test.scm"))))))
+         ((origin repo)
+          (upstream-source-url "https://srfi.schemers.org/srfi-145/")
+          (upstream-license "MIT")
+          (local-reference-documents
+           ((path "reference/srfi-145/srfi-145.html")
+            (role specification)
+            (source srfi)))
+          (local-license "Apache-2.0") (vendored? #f)
+          (local-patches
+           ((define-library-wrapper (library (stdlib assume)))
+            (registry-aliases (aliases (srfi 145) (srfi srfi-145)))
+            (local-tests (file "tests/scheme/stdlib-assume-test.scm"))))))
         (verification
          ((test-status
                                 (import-resolution representative-assume-behavior
@@ -1320,23 +1342,24 @@
                                 (library (scheme inexact)) (library (scheme complex))))
         (provenance
          ((origin repo)
-                              (upstream-source-url "https://github.com/scheme-requests-for-implementation/srfi-128")
-                              (local-reference-documents
-                               ((path "reference/srfi-128/srfi-128.html")
-                                (role specification)
-                                (source srfi))
-                               ((path "reference/r7rs-large/2016-07-red-edition-report.md")
-                                (role docket-report)
-                                (source r7rs-large)))
-                              (upstream-revision "3ec333638e787d75a16de83fcf9645c998e4d976")
-                              (upstream-license "MIT") (local-license "MIT") (vendored? #t)
-                              (local-patches
-                               ((library-name (from (srfi 128)) (to (stdlib comparator)))
-                                (inlined-includes (files "srfi/128.body1.scm" "srfi/128.body2.scm"))
-                                (documentation-metadata (scope exported-procedures))
-                                (default-hash (source local-portable-implementation))
-                                (stateful-hasher (source upstream-style-case-lambda))
-                                (hash-helpers (source local-portable-procedures))))))
+          (upstream-source-url
+           "https://github.com/scheme-requests-for-implementation/srfi-128")
+          (local-reference-documents
+           ((path "reference/srfi-128/srfi-128.html")
+            (role specification)
+            (source srfi))
+           ((path "reference/r7rs-large/2016-07-red-edition-report.md")
+            (role docket-report)
+            (source r7rs-large)))
+          (upstream-revision "3ec333638e787d75a16de83fcf9645c998e4d976")
+          (upstream-license "MIT") (local-license "MIT") (vendored? #t)
+          (local-patches
+           ((library-name (from (srfi 128)) (to (stdlib comparator)))
+            (inlined-includes (files "srfi/128.body1.scm" "srfi/128.body2.scm"))
+            (documentation-metadata (scope exported-procedures))
+            (default-hash (source local-portable-implementation))
+            (stateful-hasher (source upstream-style-case-lambda))
+            (hash-helpers (source local-portable-procedures))))))
         (verification
          ((test-status
                                 (import-resolution representative-comparator-behavior alias-import
@@ -1364,29 +1387,31 @@
                                 (library (stdlib comparator))))
         (provenance
          ((origin repo)
-                              (upstream-source-url "https://github.com/scheme-requests-for-implementation/srfi-146")
-                              (local-reference-documents
-                               ((path "reference/srfi-146/srfi-146.html")
-                                (role specification)
-                                (source srfi)))
-                              (upstream-source-path "nieper")
-                              (upstream-source-files ("nieper/rbtree.sld" "nieper/rbtree.scm"))
-                              (upstream-revision "28bd72ed4d8445d8a91f84d919630d0f3a7564fb")
-                              (upstream-source-blobs
-                               (("nieper/rbtree.sld" . "d74e8e469e990dcad0d6a02d8c9cc63943aa3cba")
-                                ("nieper/rbtree.scm" . "03b901e37b5c82333860301ac0bbf6ef96646f26")))
-                              (upstream-license "MIT") (local-license "MIT") (vendored? #t)
-                              (local-patches
-                               ((library-name (from (nieper rbtree)) (to (stdlib rbtree)))
-                                (inlined-include (file "nieper/rbtree.scm"))
-                                (adapted-imports (from (srfi 2) (srfi 8) (srfi 158) (srfi 128))
-                                 (to (stdlib and-let-star) (stdlib receive) (stdlib generator) (stdlib comparator)))
-                                (matcher-hygiene (source local-portability-patch)
-                                 (scope nested-tree-patterns black-height))
-                                (documentation-metadata (scope exported-procedures))
-                                (removed-unused-accessors (names key value))
-                                (internal-stdlib-helper (aliases ()))
-                                (adapted-tests (file "tests/scheme/stdlib-rbtree-test.scm"))))))
+          (upstream-source-url
+           "https://github.com/scheme-requests-for-implementation/srfi-146")
+          (local-reference-documents
+           ((path "reference/srfi-146/srfi-146.html")
+            (role specification)
+            (source srfi)))
+          (upstream-source-path "nieper")
+          (upstream-source-files ("nieper/rbtree.sld" "nieper/rbtree.scm"))
+          (upstream-revision "28bd72ed4d8445d8a91f84d919630d0f3a7564fb")
+          (upstream-source-blobs
+           (("nieper/rbtree.sld" . "d74e8e469e990dcad0d6a02d8c9cc63943aa3cba")
+            ("nieper/rbtree.scm" . "03b901e37b5c82333860301ac0bbf6ef96646f26")))
+          (upstream-license "MIT") (local-license "MIT") (vendored? #t)
+          (local-patches
+           ((library-name (from (nieper rbtree)) (to (stdlib rbtree)))
+            (inlined-include (file "nieper/rbtree.scm"))
+            (adapted-imports (from (srfi 2) (srfi 8) (srfi 158) (srfi 128))
+             (to (stdlib and-let-star) (stdlib receive)
+              (stdlib generator) (stdlib comparator)))
+            (matcher-hygiene (source local-portability-patch)
+             (scope nested-tree-patterns black-height))
+            (documentation-metadata (scope exported-procedures))
+            (removed-unused-accessors (names key value))
+            (internal-stdlib-helper (aliases ()))
+            (adapted-tests (file "tests/scheme/stdlib-rbtree-test.scm"))))))
         (verification
          ((test-status
                                 (import-resolution representative-tree-behavior mutation-sequences
@@ -1433,34 +1458,38 @@
                                 (library (stdlib assume)) (library (stdlib rbtree))))
         (provenance
          ((origin repo)
-                              (upstream-source-url "https://github.com/scheme-requests-for-implementation/srfi-146")
-                              (local-reference-documents
-                               ((path "reference/srfi-146/srfi-146.html")
-                                (role specification)
-                                (source srfi))
-                               ((path "reference/r7rs-large/2019-02-tangerine-edition-report.md")
-                                (role docket-report)
-                                (source r7rs-large)))
-                              (upstream-source-files ("srfi/146.sld" "srfi/146.scm"))
-                              (upstream-source-test-file "srfi/146/test.sld")
-                              (upstream-revision "28bd72ed4d8445d8a91f84d919630d0f3a7564fb")
-                              (upstream-source-blobs
-                               (("srfi/146.sld" . "dbeb605b19232b8fbccb6fb8c94bd5ec1538a85e")
-                                ("srfi/146.scm" . "3e37da6667e55e14b7d7e93db8353530072819c9")
-                                ("srfi/146/test.sld" . "e1804c30ee1e3c5a1cfbf0fa60ed382f2326dfdf")))
-                              (upstream-license "MIT") (local-license "MIT") (vendored? #t)
-                              (local-patches
-                               ((library-name (from (srfi 146)) (to (stdlib mapping)))
-                                (inlined-include (file "srfi/146.scm"))
-                                (adapted-imports (from (srfi 1) (srfi 8) (srfi 128) (srfi 145) (nieper rbtree))
-                                 (to (stdlib list) (stdlib receive) (stdlib comparator)
-                                  (stdlib assume) (stdlib rbtree)))
-                                (registry-aliases (aliases (scheme mapping) (srfi 146) (srfi srfi-146)))
-                                (documentation-metadata (scope exported-procedures))
-                                (linear-update (strategy pure-functional))
-                                (hash-variant-out-of-scope (issue 624))
-                                (local-tests (file "tests/scheme/stdlib-mapping-test.scm"))
-                                (adapted-tests (file "tests/scheme/stdlib-mapping-conformance-test.scm"))))))
+          (upstream-source-url
+           "https://github.com/scheme-requests-for-implementation/srfi-146")
+          (local-reference-documents
+           ((path "reference/srfi-146/srfi-146.html")
+            (role specification)
+            (source srfi))
+           ((path "reference/r7rs-large/2019-02-tangerine-edition-report.md")
+            (role docket-report)
+            (source r7rs-large)))
+          (upstream-source-files ("srfi/146.sld" "srfi/146.scm"))
+          (upstream-source-test-file "srfi/146/test.sld")
+          (upstream-revision "28bd72ed4d8445d8a91f84d919630d0f3a7564fb")
+          (upstream-source-blobs
+           (("srfi/146.sld" . "dbeb605b19232b8fbccb6fb8c94bd5ec1538a85e")
+            ("srfi/146.scm" . "3e37da6667e55e14b7d7e93db8353530072819c9")
+            ("srfi/146/test.sld" . "e1804c30ee1e3c5a1cfbf0fa60ed382f2326dfdf")))
+          (upstream-license "MIT") (local-license "MIT") (vendored? #t)
+          (local-patches
+           ((library-name (from (srfi 146)) (to (stdlib mapping)))
+            (inlined-include (file "srfi/146.scm"))
+            (adapted-imports
+             (from (srfi 1) (srfi 8) (srfi 128) (srfi 145) (nieper rbtree))
+             (to (stdlib list) (stdlib receive) (stdlib comparator)
+              (stdlib assume) (stdlib rbtree)))
+            (registry-aliases
+             (aliases (scheme mapping) (srfi 146) (srfi srfi-146)))
+            (documentation-metadata (scope exported-procedures))
+            (linear-update (strategy pure-functional))
+            (hash-variant-out-of-scope (issue 624))
+            (local-tests (file "tests/scheme/stdlib-mapping-test.scm"))
+            (adapted-tests
+             (file "tests/scheme/stdlib-mapping-conformance-test.scm"))))))
         (verification
          ((test-status
                                 (import-resolution representative-mapping-behavior alias-import
