@@ -1544,6 +1544,144 @@
         (target (stdlib random-data-generators))
         (dependencies
          ((library (stdlib random-data-generators))))
+       (provenance ((origin repo)))
+       (verification ((test-status (import-resolution))))
+       (status alias)
+       (canonical #f))
+       (manifest-entry
+        (schema-version 1)
+        (kind library)
+        (name (stdlib property-testing))
+        (owner stdlib)
+        (provider repo-source)
+        (visibility public)
+        (source-kind source-library)
+        (source (path "property-testing.sld"))
+        (api-version (compat 0))
+        (source-version (upstream-revision "5d809c60b5ba840cd277c48d65f7997a31bb3462"))
+        (realization portable-source)
+        (aliases ((srfi 252) (srfi srfi-252)))
+        (exports
+         (test-property
+          test-property-expect-fail
+          test-property-skip
+          test-property-error
+          test-property-error-type
+          property-test-runner
+          boolean-generator
+          bytevector-generator
+          char-generator
+          string-generator
+          symbol-generator
+          exact-complex-generator
+          exact-integer-generator
+          exact-number-generator
+          exact-rational-generator
+          exact-real-generator
+          exact-integer-complex-generator
+          inexact-complex-generator
+          inexact-integer-generator
+          inexact-number-generator
+          inexact-rational-generator
+          inexact-real-generator
+          complex-generator
+          integer-generator
+          number-generator
+          rational-generator
+          real-generator
+          list-generator-of
+          pair-generator-of
+          procedure-generator-of
+          vector-generator-of))
+        (dependencies
+         ((library (scheme base))
+          (library (scheme case-lambda))
+          (library (scheme complex))
+          (library (stdlib list))
+          (library (stdlib testing))
+          (library (stdlib generator))
+          (library (stdlib random-data-generators))))
+        (provenance
+         ((origin repo)
+          (upstream-source-url
+           "https://github.com/scheme-requests-for-implementation/srfi-252")
+          (upstream-source-files ("property-test.sld"))
+          (upstream-test-files ("property-test-tests.scm"))
+          (upstream-source-blobs
+           (("property-test.sld"
+             . "611b12da5564cd379d1c9dda877a8507fa824f41")))
+          (upstream-test-blobs
+           (("property-test-tests.scm"
+             . "5a37ecee814e5a9b9eaf2478abd436ada2416eaa")))
+          (upstream-revision "5d809c60b5ba840cd277c48d65f7997a31bb3462")
+          (upstream-license "MIT") (local-license "MIT") (vendored? #t)
+          (optional-dependencies
+           ((library (srfi 143)) (library (srfi 144))))
+          (local-patches
+           ((library-name (from (property-test))
+             (to (stdlib property-testing)))
+            (registry-aliases (aliases (srfi 252) (srfi srfi-252)))
+            (dependency-imports
+             (from ((srfi 1) (srfi 64) (srfi 158) (srfi 194)))
+             (to ((stdlib list) (stdlib testing)
+                  (stdlib generator) (stdlib random-data-generators))))
+            (optional-numeric-accelerators
+             (libraries (srfi 143) (srfi 144))
+             (status metadata-only))
+            (special-number-list
+             (from direct-list-argument)
+             (to list->generator))
+            (complex-special-values
+             (from reader-literals)
+             (to portable-constructors))
+            (pair-generator-of
+             (from two-argument-cdr-generator-for-both-fields)
+             (to car-generator-and-cdr-generator))
+            (documentation-metadata (scope exported-procedures))
+            (adapted-tests
+             (file "tests/scheme/stdlib-property-testing-test.scm")
+             (file "tests/scheme/stdlib-property-testing-upstream-test.scm"))))))
+        (verification
+         ((test-status
+           (import-resolution representative-property-behavior
+                              adapted-upstream-tests
+                              missing-export-diagnostic portable-host-suite
+                              compiled-host-smoke))))
+        (status vendored-adapted-implementation)
+        (canonical #t))
+       (manifest-index-entry
+        (schema-version 1)
+        (kind library-alias)
+        (name (srfi 252))
+        (owner stdlib)
+        (provider repo-source)
+        (visibility alias)
+        (source-kind alias)
+        (api-version (inherits (stdlib property-testing)))
+        (source-version unknown)
+        (realization alias)
+        (target (stdlib property-testing))
+        (aliases ((srfi srfi-252)))
+        (dependencies
+         ((library (stdlib property-testing))))
+        (provenance ((origin repo)))
+        (verification ((test-status (import-resolution))))
+        (status alias)
+        (canonical #f))
+       (manifest-index-entry
+        (schema-version 1)
+        (kind library-alias)
+        (name (srfi srfi-252))
+        (owner stdlib)
+        (provider repo-source)
+        (visibility alias)
+        (source-kind alias)
+        (api-version (inherits (stdlib property-testing)))
+        (source-version unknown)
+        (realization alias)
+        (target (stdlib property-testing))
+        (dependencies
+         ((library (stdlib property-testing))))
         (provenance ((origin repo)))
         (verification ((test-status (import-resolution))))
         (status alias)
