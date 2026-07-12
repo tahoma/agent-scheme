@@ -25,7 +25,9 @@
         (api-version (compat 0))
         (source-version unknown)
         (realization portable-source)
-        (exports (stdlib-manifest stdlib-manifest-ref))
+        (exports
+         (stdlib-manifest
+          stdlib-manifest-ref))
         (dependencies
          ((library (scheme base))))
         (provenance ((origin repo)))
@@ -45,9 +47,18 @@
         (realization portable-source)
         (aliases ((consent json) (srfi 180) (srfi srfi-180)))
         (exports
-         (json-number-of-character-limit json-nesting-depth-limit json-null? json-error? json-error-reason
-                           json-fold json-generator json-read json-lines-read json-sequence-read
-                           json-accumulator json-write))
+         (json-number-of-character-limit
+          json-nesting-depth-limit
+          json-null?
+          json-error?
+          json-error-reason
+          json-fold
+          json-generator
+          json-read
+          json-lines-read
+          json-sequence-read
+          json-accumulator
+          json-write))
         (dependencies
          ((library (stdlib and-let-star))))
         (provenance
@@ -81,8 +92,16 @@
         (realization alias)
         (target (stdlib json))
         (exports
-         (json-number-of-character-limit json-nesting-depth-limit json-null? json-error? json-error-reason
-                           json-fold json-generator json-read json-lines-read json-sequence-read))
+         (json-number-of-character-limit
+          json-nesting-depth-limit
+          json-null?
+          json-error?
+          json-error-reason
+          json-fold
+          json-generator
+          json-read
+          json-lines-read
+          json-sequence-read))
         (dependencies
          ((library (stdlib json))))
         (provenance ((origin repo)))
@@ -102,8 +121,16 @@
         (realization alias)
         (target (stdlib json))
         (exports
-         (json-number-of-character-limit json-nesting-depth-limit json-null? json-error? json-error-reason
-                           json-fold json-generator json-read json-lines-read json-sequence-read))
+         (json-number-of-character-limit
+          json-nesting-depth-limit
+          json-null?
+          json-error?
+          json-error-reason
+          json-fold
+          json-generator
+          json-read
+          json-lines-read
+          json-sequence-read))
         (dependencies
          ((library (stdlib json))))
         (provenance ((origin repo)))
@@ -178,7 +205,8 @@
         (realization shim)
         (target (scheme base))
         (aliases ((srfi srfi-0)))
-        (exports (cond-expand))
+        (exports
+         (cond-expand))
         (dependencies
          ((library (scheme base))))
         (provenance
@@ -208,7 +236,8 @@
         (source-version final)
         (realization alias)
         (target (scheme base))
-        (exports (cond-expand))
+        (exports
+         (cond-expand))
         (dependencies
          ((library (scheme base))))
         (provenance ((origin repo)))
@@ -229,7 +258,8 @@
         (realization shim)
         (target (scheme case-lambda))
         (aliases ((srfi srfi-16) (srfi :16) (srfi :16 case-lambda)))
-        (exports (case-lambda))
+        (exports
+         (case-lambda))
         (dependencies
          ((library (scheme case-lambda))))
         (provenance
@@ -498,7 +528,8 @@
         (source-version (upstream-revision "myenv-chez.scm,v 1.7 2006/01/19 02:14:07"))
         (realization portable-source)
         (aliases ((srfi 2) (srfi srfi-2) (srfi :2) (srfi :2 and-let*)))
-        (exports (and-let*))
+        (exports
+         (and-let*))
         (dependencies
          ((library (scheme base))))
         (provenance
@@ -612,19 +643,106 @@
         (aliases
          ((scheme list) (srfi 1) (srfi srfi-1) (srfi :1) (srfi :1 lists)))
         (exports
-         (xcons tree-copy list-tabulate cons* proper-list? circular-list? dotted-list? not-pair? null-list?
-                           list= circular-list length+ iota first second third fourth fifth sixth seventh
-                           eighth ninth tenth car+cdr take drop take-right drop-right take! drop-right!
-                           split-at split-at! last last-pair append! concatenate concatenate! reverse!
-                           append-reverse append-reverse! zip unzip1 unzip2 unzip3 unzip4 unzip5 count fold
-                           fold-right pair-fold pair-fold-right reduce reduce-right unfold unfold-right
-                           append-map append-map! map! pair-for-each filter-map map-in-order filter partition
-                           remove filter! partition! remove! find find-tail take-while drop-while take-while!
-                           span break span! break! any every list-index delete delete! delete-duplicates
-                           delete-duplicates! alist-cons alist-copy alist-delete alist-delete! lset<= lset=
-                           lset-adjoin lset-union lset-intersection lset-difference lset-xor
-                           lset-diff+intersection lset-union! lset-intersection! lset-difference! lset-xor!
-                           lset-diff+intersection!))
+         (xcons
+          tree-copy
+          list-tabulate
+          cons*
+          proper-list?
+          circular-list?
+          dotted-list?
+          not-pair?
+          null-list?
+          list=
+          circular-list
+          length+
+          iota
+          first
+          second
+          third
+          fourth
+          fifth
+          sixth
+          seventh
+          eighth
+          ninth
+          tenth
+          car+cdr
+          take
+          drop
+          take-right
+          drop-right
+          take!
+          drop-right!
+          split-at
+          split-at!
+          last
+          last-pair
+          append!
+          concatenate
+          concatenate!
+          reverse!
+          append-reverse
+          append-reverse!
+          zip
+          unzip1
+          unzip2
+          unzip3
+          unzip4
+          unzip5
+          count
+          fold
+          fold-right
+          pair-fold
+          pair-fold-right
+          reduce
+          reduce-right
+          unfold
+          unfold-right
+          append-map
+          append-map!
+          map!
+          pair-for-each
+          filter-map
+          map-in-order
+          filter
+          partition
+          remove
+          filter!
+          partition!
+          remove!
+          find
+          find-tail
+          take-while
+          drop-while
+          take-while!
+          span
+          break
+          span!
+          break!
+          any
+          every
+          list-index
+          delete
+          delete!
+          delete-duplicates
+          delete-duplicates!
+          alist-cons
+          alist-copy
+          alist-delete
+          alist-delete!
+          lset<=
+          lset=
+          lset-adjoin
+          lset-union
+          lset-intersection
+          lset-difference
+          lset-xor
+          lset-diff+intersection
+          lset-union!
+          lset-intersection!
+          lset-difference!
+          lset-xor!
+          lset-diff+intersection!))
         (dependencies
          ((library (scheme base))
           (library (scheme cxr))))
@@ -761,18 +879,61 @@
         (realization portable-source)
         (aliases ((scheme generator) (srfi 158) (srfi srfi-158)))
         (exports
-         (generator circular-generator make-iota-generator make-range-generator make-coroutine-generator
-                           list->generator vector->generator reverse-vector->generator string->generator
-                           bytevector->generator make-for-each-generator make-unfold-generator gcons* gappend
-                           gcombine gfilter gremove gtake gdrop gtake-while gdrop-while gflatten ggroup
-                           gmerge gmap gstate-filter gdelete gdelete-neighbor-dups gindex gselect
-                           generator->list generator->reverse-list generator->vector generator->vector!
-                           generator->string generator-fold generator-map->list generator-for-each
-                           generator-find generator-count generator-any generator-every generator-unfold
-                           make-accumulator count-accumulator list-accumulator reverse-list-accumulator
-                           vector-accumulator reverse-vector-accumulator vector-accumulator!
-                           string-accumulator bytevector-accumulator bytevector-accumulator! sum-accumulator
-                           product-accumulator))
+         (generator
+          circular-generator
+          make-iota-generator
+          make-range-generator
+          make-coroutine-generator
+          list->generator
+          vector->generator
+          reverse-vector->generator
+          string->generator
+          bytevector->generator
+          make-for-each-generator
+          make-unfold-generator
+          gcons*
+          gappend
+          gcombine
+          gfilter
+          gremove
+          gtake
+          gdrop
+          gtake-while
+          gdrop-while
+          gflatten
+          ggroup
+          gmerge
+          gmap
+          gstate-filter
+          gdelete
+          gdelete-neighbor-dups
+          gindex
+          gselect
+          generator->list
+          generator->reverse-list
+          generator->vector
+          generator->vector!
+          generator->string
+          generator-fold
+          generator-map->list
+          generator-for-each
+          generator-find
+          generator-count
+          generator-any
+          generator-every
+          generator-unfold
+          make-accumulator
+          count-accumulator
+          list-accumulator
+          reverse-list-accumulator
+          vector-accumulator
+          reverse-vector-accumulator
+          vector-accumulator!
+          string-accumulator
+          bytevector-accumulator
+          bytevector-accumulator!
+          sum-accumulator
+          product-accumulator))
         (dependencies
          ((library (scheme base))
           (library (scheme case-lambda))))
@@ -872,33 +1033,78 @@
         (realization portable-source)
         (aliases ((srfi 64) (srfi srfi-64) (srfi :64) (srfi :64 testing)))
         (exports
-         (test-begin test-end test-assert test-eqv test-eq test-equal test-approximate
-                     test-error test-apply test-with-runner test-match-nth test-match-all
-                     test-match-any test-match-name test-skip test-expect-fail
-                     test-read-eval-string test-runner-group-path test-group
-                     test-group-with-cleanup test-result-ref test-result-set!
-                     test-result-clear test-result-remove test-result-kind test-passed?
-                     test-log-to-file test-runner? test-runner-reset test-runner-null
-                     test-runner-simple test-runner-current test-runner-factory
-                     test-runner-get test-runner-create test-runner-test-name
-                     test-runner-pass-count test-runner-pass-count!
-                     test-runner-fail-count test-runner-fail-count!
-                     test-runner-xpass-count test-runner-xpass-count!
-                     test-runner-xfail-count test-runner-xfail-count!
-                     test-runner-skip-count test-runner-skip-count!
-                     test-runner-group-stack test-runner-group-stack!
-                     test-runner-on-test-begin test-runner-on-test-begin!
-                     test-runner-on-test-end test-runner-on-test-end!
-                     test-runner-on-group-begin test-runner-on-group-begin!
-                     test-runner-on-group-end test-runner-on-group-end!
-                     test-runner-on-final test-runner-on-final!
-                     test-runner-on-bad-count test-runner-on-bad-count!
-                     test-runner-on-bad-end-name test-runner-on-bad-end-name!
-                     test-result-alist test-result-alist! test-runner-aux-value
-                     test-runner-aux-value! test-on-group-begin-simple
-                     test-on-group-end-simple test-on-bad-count-simple
-                     test-on-bad-end-name-simple test-on-test-end-simple
-                     test-on-final-simple))
+         (test-begin
+          test-end
+          test-assert
+          test-eqv
+          test-eq
+          test-equal
+          test-approximate
+          test-error
+          test-apply
+          test-with-runner
+          test-match-nth
+          test-match-all
+          test-match-any
+          test-match-name
+          test-skip
+          test-expect-fail
+          test-read-eval-string
+          test-runner-group-path
+          test-group
+          test-group-with-cleanup
+          test-result-ref
+          test-result-set!
+          test-result-clear
+          test-result-remove
+          test-result-kind
+          test-passed?
+          test-log-to-file
+          test-runner?
+          test-runner-reset
+          test-runner-null
+          test-runner-simple
+          test-runner-current
+          test-runner-factory
+          test-runner-get
+          test-runner-create
+          test-runner-test-name
+          test-runner-pass-count
+          test-runner-pass-count!
+          test-runner-fail-count
+          test-runner-fail-count!
+          test-runner-xpass-count
+          test-runner-xpass-count!
+          test-runner-xfail-count
+          test-runner-xfail-count!
+          test-runner-skip-count
+          test-runner-skip-count!
+          test-runner-group-stack
+          test-runner-group-stack!
+          test-runner-on-test-begin
+          test-runner-on-test-begin!
+          test-runner-on-test-end
+          test-runner-on-test-end!
+          test-runner-on-group-begin
+          test-runner-on-group-begin!
+          test-runner-on-group-end
+          test-runner-on-group-end!
+          test-runner-on-final
+          test-runner-on-final!
+          test-runner-on-bad-count
+          test-runner-on-bad-count!
+          test-runner-on-bad-end-name
+          test-runner-on-bad-end-name!
+          test-result-alist
+          test-result-alist!
+          test-runner-aux-value
+          test-runner-aux-value!
+          test-on-group-begin-simple
+          test-on-group-end-simple
+          test-on-bad-count-simple
+          test-on-bad-end-name-simple
+          test-on-test-end-simple
+          test-on-final-simple))
         (dependencies
          ((library (scheme base))
           (library (scheme write))
@@ -1023,11 +1229,17 @@
         (realization portable-source)
         (aliases ((srfi 27) (srfi srfi-27) (srfi :27) (srfi :27 random-bits)))
         (exports
-         (random-integer random-real default-random-source make-random-source
-                         random-source? random-source-state-ref
-                         random-source-state-set! random-source-randomize!
-                         random-source-pseudo-randomize!
-                         random-source-make-integers random-source-make-reals))
+         (random-integer
+          random-real
+          default-random-source
+          make-random-source
+          random-source?
+          random-source-state-ref
+          random-source-state-set!
+          random-source-randomize!
+          random-source-pseudo-randomize!
+          random-source-make-integers
+          random-source-make-reals))
         (dependencies
          ((library (scheme base))
           (library (scheme time))))
@@ -1162,9 +1374,12 @@
         (source-version (upstream-revision "a547c5508d648c61e73bebed2bcd2283fba5abaa"))
         (realization portable-source)
         (exports
-         (random-source-make-permutations random-permutation
-                                          random-source-make-exponentials random-exponential
-                                          random-source-make-normals random-normal))
+         (random-source-make-permutations
+          random-permutation
+          random-source-make-exponentials
+          random-exponential
+          random-source-make-normals
+          random-normal))
         (dependencies
          ((library (scheme base))
           (library (scheme inexact))
@@ -1208,7 +1423,8 @@
         (source-version unknown)
         (realization portable-source)
         (aliases ((srfi 8) (srfi srfi-8) (srfi :8) (srfi :8 receive)))
-        (exports (receive))
+        (exports
+         (receive))
         (dependencies
          ((library (scheme base))))
         (provenance
@@ -1321,7 +1537,8 @@
         (source-version unknown)
         (realization portable-source)
         (aliases ((srfi 145) (srfi srfi-145)))
-        (exports (assume))
+        (exports
+         (assume))
         (dependencies
          ((library (scheme base))))
         (provenance
@@ -1393,14 +1610,41 @@
         (realization portable-source)
         (aliases ((scheme comparator) (srfi 128) (srfi srfi-128)))
         (exports
-         (comparator? comparator-ordered? comparator-hashable? make-comparator make-pair-comparator
-                           make-list-comparator make-vector-comparator make-eq-comparator make-eqv-comparator
-                           make-equal-comparator boolean-hash char-hash char-ci-hash string-hash
-                           string-ci-hash symbol-hash number-hash make-default-comparator default-hash
-                           comparator-register-default! comparator-type-test-predicate
-                           comparator-equality-predicate comparator-ordering-predicate
-                           comparator-hash-function comparator-test-type comparator-check-type
-                           comparator-hash hash-bound hash-salt =? <? >? <=? >=? comparator-if<=>))
+         (comparator?
+          comparator-ordered?
+          comparator-hashable?
+          make-comparator
+          make-pair-comparator
+          make-list-comparator
+          make-vector-comparator
+          make-eq-comparator
+          make-eqv-comparator
+          make-equal-comparator
+          boolean-hash
+          char-hash
+          char-ci-hash
+          string-hash
+          string-ci-hash
+          symbol-hash
+          number-hash
+          make-default-comparator
+          default-hash
+          comparator-register-default!
+          comparator-type-test-predicate
+          comparator-equality-predicate
+          comparator-ordering-predicate
+          comparator-hash-function
+          comparator-test-type
+          comparator-check-type
+          comparator-hash
+          hash-bound
+          hash-salt
+          =?
+          <?
+          >?
+          <=?
+          >=?
+          comparator-if<=>))
         (dependencies
          ((library (scheme base))
           (library (scheme case-lambda))
@@ -1446,8 +1690,17 @@
         (source-version (upstream-revision "28bd72ed4d8445d8a91f84d919630d0f3a7564fb"))
         (realization portable-source)
         (exports
-         (make-tree tree-search tree-for-each tree-fold tree-fold/reverse tree-generator tree-key-predecessor
-                           tree-key-successor tree-map tree-catenate tree-split))
+         (make-tree
+          tree-search
+          tree-for-each
+          tree-fold
+          tree-fold/reverse
+          tree-generator
+          tree-key-predecessor
+          tree-key-successor
+          tree-map
+          tree-catenate
+          tree-split))
         (dependencies
          ((library (scheme base))
           (library (scheme case-lambda))
@@ -1503,26 +1756,99 @@
         (realization portable-source)
         (aliases ((scheme mapping) (srfi 146) (srfi srfi-146)))
         (exports
-         (mapping mapping-unfold mapping/ordered mapping-unfold/ordered mapping? mapping-contains?
-                           mapping-empty? mapping-disjoint? mapping-ref mapping-ref/default
-                           mapping-key-comparator mapping-adjoin mapping-adjoin! mapping-set mapping-set!
-                           mapping-replace mapping-replace! mapping-delete mapping-delete! mapping-delete-all
-                           mapping-delete-all! mapping-intern mapping-intern! mapping-update mapping-update!
-                           mapping-update/default mapping-update!/default mapping-pop mapping-pop!
-                           mapping-search mapping-search! mapping-size mapping-find mapping-count
-                           mapping-any? mapping-every? mapping-keys mapping-values mapping-entries
-                           mapping-map mapping-map->list mapping-for-each mapping-fold mapping-filter
-                           mapping-filter! mapping-remove mapping-remove! mapping-partition
-                           mapping-partition! mapping-copy mapping->alist alist->mapping alist->mapping!
-                           alist->mapping/ordered alist->mapping/ordered! mapping=? mapping<? mapping>?
-                           mapping<=? mapping>=? mapping-union mapping-intersection mapping-difference
-                           mapping-xor mapping-union! mapping-intersection! mapping-difference! mapping-xor!
-                           make-mapping-comparator mapping-comparator mapping-min-key mapping-max-key
-                           mapping-min-value mapping-max-value mapping-key-predecessor mapping-key-successor
-                           mapping-range= mapping-range< mapping-range> mapping-range<= mapping-range>=
-                           mapping-range=! mapping-range<! mapping-range>! mapping-range<=! mapping-range>=!
-                           mapping-split mapping-catenate mapping-catenate! mapping-map/monotone
-                           mapping-map/monotone! mapping-fold/reverse comparator?))
+         (mapping
+          mapping-unfold
+          mapping/ordered
+          mapping-unfold/ordered
+          mapping?
+          mapping-contains?
+          mapping-empty?
+          mapping-disjoint?
+          mapping-ref
+          mapping-ref/default
+          mapping-key-comparator
+          mapping-adjoin
+          mapping-adjoin!
+          mapping-set
+          mapping-set!
+          mapping-replace
+          mapping-replace!
+          mapping-delete
+          mapping-delete!
+          mapping-delete-all
+          mapping-delete-all!
+          mapping-intern
+          mapping-intern!
+          mapping-update
+          mapping-update!
+          mapping-update/default
+          mapping-update!/default
+          mapping-pop
+          mapping-pop!
+          mapping-search
+          mapping-search!
+          mapping-size
+          mapping-find
+          mapping-count
+          mapping-any?
+          mapping-every?
+          mapping-keys
+          mapping-values
+          mapping-entries
+          mapping-map
+          mapping-map->list
+          mapping-for-each
+          mapping-fold
+          mapping-filter
+          mapping-filter!
+          mapping-remove
+          mapping-remove!
+          mapping-partition
+          mapping-partition!
+          mapping-copy
+          mapping->alist
+          alist->mapping
+          alist->mapping!
+          alist->mapping/ordered
+          alist->mapping/ordered!
+          mapping=?
+          mapping<?
+          mapping>?
+          mapping<=?
+          mapping>=?
+          mapping-union
+          mapping-intersection
+          mapping-difference
+          mapping-xor
+          mapping-union!
+          mapping-intersection!
+          mapping-difference!
+          mapping-xor!
+          make-mapping-comparator
+          mapping-comparator
+          mapping-min-key
+          mapping-max-key
+          mapping-min-value
+          mapping-max-value
+          mapping-key-predecessor
+          mapping-key-successor
+          mapping-range=
+          mapping-range<
+          mapping-range>
+          mapping-range<=
+          mapping-range>=
+          mapping-range=!
+          mapping-range<!
+          mapping-range>!
+          mapping-range<=!
+          mapping-range>=!
+          mapping-split
+          mapping-catenate
+          mapping-catenate!
+          mapping-map/monotone
+          mapping-map/monotone!
+          mapping-fold/reverse
+          comparator?))
         (dependencies
          ((library (scheme base))
           (library (scheme case-lambda))
