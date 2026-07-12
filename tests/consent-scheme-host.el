@@ -38,6 +38,7 @@
     "tests/scheme/stdlib-receive-test.scm"
     "tests/scheme/stdlib-assume-test.scm"
     "tests/scheme/stdlib-testing-test.scm"
+    "tests/scheme/stdlib-testing-upstream-test.scm"
     "tests/scheme/stdlib-random-bits-test.scm"
     "tests/scheme/stdlib-random-bits-upstream-test.scm"
     "tests/scheme/stdlib-random-distributions-test.scm"

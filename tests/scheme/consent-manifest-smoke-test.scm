@@ -259,6 +259,17 @@
          (test-runner-pass-count runner))
        2)
 
+(check 'manifest-smoke-srfi-64-runner
+       (let ((runner (test-runner-null)))
+         (test-with-runner runner
+           (test-begin "srfi-64-smoke" 2)
+           (test-assert "assertion" #t)
+           (test-approximate "approximate" 10.0 10.01 0.1)
+           (test-end "srfi-64-smoke"))
+         (list (test-runner-pass-count runner)
+               (test-runner-fail-count runner)))
+       '(2 0))
+
 (check 'manifest-smoke-srfi-42-target
        (field srfi-42-entry 'target)
        '(stdlib eager-comprehensions))

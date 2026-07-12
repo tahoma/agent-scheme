@@ -831,11 +831,13 @@
     (define (%test-match-all . predicates)
       "Return a specifier matching only when every PREDICATES item matches."
       (lambda (runner)
-        (let loop ((rest predicates))
-          (cond
-           ((null? rest) #t)
-           (((car rest) runner) (loop (cdr rest)))
-           (else #f)))))
+        ;; Stateful specifiers such as `test-match-nth` must observe every test,
+        ;; even when an earlier predicate already determines the conjunction.
+        (let loop ((rest predicates) (matched? #t))
+          (if (null? rest)
+              matched?
+              (let ((current? ((car rest) runner)))
+                (loop (cdr rest) (and current? matched?)))))))
 
     ;; Return a specifier matching only when every input specifier matches.
     (define-syntax test-match-all
@@ -846,11 +848,13 @@
     (define (%test-match-any . predicates)
       "Return a specifier matching when any PREDICATES item matches."
       (lambda (runner)
-        (let loop ((rest predicates))
-          (cond
-           ((null? rest) #f)
-           (((car rest) runner) #t)
-           (else (loop (cdr rest)))))))
+        ;; Evaluate every stateful specifier so disjunction order cannot change
+        ;; which later tests a `test-match-nth` predicate observes.
+        (let loop ((rest predicates) (matched? #f))
+          (if (null? rest)
+              matched?
+              (let ((current? ((car rest) runner)))
+                (loop (cdr rest) (or current? matched?)))))))
 
     ;; Return a specifier matching when any input specifier matches.
     (define-syntax test-match-any
@@ -908,7 +912,12 @@
       (let* ((port (open-input-string string))
              (form (read port)))
         (if (eof-object? (read-char port))
-            (eval form (environment '(scheme base)))
+            (cond-expand
+             ;; Gambit's R7RS `(scheme eval)` exports one-argument `eval` but
+             ;; not `environment`; its default evaluation environment is the
+             ;; imported R7RS base environment used by this library.
+             (gambit (eval form))
+             (else (eval form (environment '(scheme base)))))
             (error "not at eof"))))
 
     (define (test-on-group-begin-simple runner suite-name count)
