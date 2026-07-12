@@ -26,7 +26,8 @@
         (source-version unknown)
         (realization portable-source)
         (exports (consent-library-manifest consent-library-manifest-ref))
-        (dependencies ((library (scheme base))))
+        (dependencies
+         ((library (scheme base))))
         (provenance ((origin repo)))
         (status implemented)
         (canonical #t))
@@ -93,7 +94,8 @@
         (source-version unknown)
         (realization portable-source)
         (exports (case-lambda))
-        (dependencies ((library (scheme base))))
+        (dependencies
+         ((library (scheme base))))
         (provenance ((origin repo)))
         (status implemented)
         (canonical #t))
@@ -117,7 +119,9 @@
                            char-lower-case? char-numeric? char-upcase char-upper-case? char-whitespace?
                            digit-value string-ci<=? string-ci<? string-ci=? string-ci>=? string-ci>?
                            string-downcase string-foldcase string-upcase))
-        (dependencies ((library (scheme base)) (library (scheme char primitive))))
+        (dependencies
+         ((library (scheme base))
+          (library (scheme char primitive))))
         (provenance ((origin repo)))
         (status implemented)
         (canonical #t))
@@ -256,7 +260,8 @@
           (arity 1 1)
           (effects (pure))
           (capabilities ())))
-        (dependencies ((library (scheme base))))
+        (dependencies
+         ((library (scheme base))))
         (provenance ((origin repo)))
         (status implemented)
         (canonical #t))
@@ -277,7 +282,8 @@
         (exports
          (caaar caadr cadar caddr cdaar cdadr cddar cdddr caaaar caaadr caadar caaddr cadaar cadadr caddar
                            cadddr cdaaar cdaadr cdadar cdaddr cddaar cddadr cdddar cddddr))
-        (dependencies ((library (scheme base))))
+        (dependencies
+         ((library (scheme base))))
         (provenance ((origin repo)))
         (status implemented)
         (canonical #t))
@@ -310,7 +316,8 @@
           (arity 2 2)
           (effects (evaluation))
           (capabilities ())))
-        (dependencies ((library (scheme base))))
+        (dependencies
+         ((library (scheme base))))
         (provenance ((origin repo)))
         (status implemented)
         (canonical #t))
@@ -386,7 +393,8 @@
           (arity 2 2)
           (effects (host-file))
           (capabilities (file-system))))
-        (dependencies ((library (scheme base))))
+        (dependencies
+         ((library (scheme base))))
         (provenance ((origin repo)))
         (status implemented)
         (canonical #t))
@@ -469,7 +477,8 @@
           (arity 1 1)
           (effects (pure))
           (capabilities ())))
-        (dependencies ((library (scheme base))))
+        (dependencies
+         ((library (scheme base))))
         (provenance ((origin repo)))
         (status implemented)
         (canonical #t))
@@ -488,7 +497,8 @@
         (source-version unknown)
         (realization portable-source)
         (exports (delay delay-force force make-promise promise?))
-        (dependencies ((library (scheme base))))
+        (dependencies
+         ((library (scheme base))))
         (provenance ((origin repo)))
         (status implemented)
         (canonical #t))
@@ -516,7 +526,8 @@
           (arity 1 2)
           (effects (host-file))
           (capabilities (file-system))))
-        (dependencies ((library (scheme base))))
+        (dependencies
+         ((library (scheme base))))
         (provenance ((origin repo)))
         (status implemented)
         (canonical #t))
@@ -564,7 +575,8 @@
           (arity 0 0)
           (effects (host-process))
           (capabilities (process-environment))))
-        (dependencies ((library (scheme base))))
+        (dependencies
+         ((library (scheme base))))
         (provenance ((origin repo)))
         (status implemented)
         (canonical #t))
@@ -592,7 +604,8 @@
           (arity 0 1)
           (effects (state-read))
           (capabilities ())))
-        (dependencies ((library (scheme base))))
+        (dependencies
+         ((library (scheme base))))
         (provenance ((origin repo)))
         (status implemented)
         (canonical #t))
@@ -620,7 +633,8 @@
           (arity 0 0)
           (effects (host-repl))
           (capabilities (repl))))
-        (dependencies ((library (scheme base))))
+        (dependencies
+         ((library (scheme base))))
         (provenance ((origin repo)))
         (status implemented)
         (canonical #t))
@@ -669,7 +683,8 @@
                            bytevector-length bytevector-copy! bytevector-copy bytevector-append bytevector
                            boolean? boolean=? binary-port? apply >= > = <= < / - + * exact->inexact
                            inexact->exact))
-        (dependencies ((library (scheme base))))
+        (dependencies
+         ((library (scheme base))))
         (provenance ((origin repo)))
         (status implemented)
         (canonical #t))
@@ -707,7 +722,8 @@
           (arity 0 0)
           (effects (host-time))
           (capabilities (clock))))
-        (dependencies ((library (scheme base))))
+        (dependencies
+         ((library (scheme base))))
         (provenance ((origin repo)))
         (status implemented)
         (canonical #t))
@@ -750,7 +766,8 @@
           (arity 1 2)
           (effects (state-write))
           (capabilities ())))
-        (dependencies ((library (scheme base))))
+        (dependencies
+         ((library (scheme base))))
         (provenance ((origin repo)))
         (status implemented)
         (canonical #t))
@@ -771,7 +788,9 @@
          (grant-capability! current-grants grant-ref grant-attenuate grant-revoke! handle-ref handle-live?
                            handle-kind handle-revalidate handle-release! call-with-capability-grant
                            with-capability-grant))
-        (dependencies ((library (scheme base)) (library (consent capability primitive))))
+        (dependencies
+         ((library (scheme base))
+          (library (consent capability primitive))))
         (provenance ((origin repo)))
         (status implemented)
         (canonical #t))
@@ -888,7 +907,9 @@
                            consent-record-type-fields consent-make-record consent-record? consent-record-type
                            consent-record-fields))
         (dependencies
-         ((library (scheme base)) (library (scheme char)) (library (scheme inexact))
+         ((library (scheme base))
+          (library (scheme char))
+          (library (scheme inexact))
           (library (scheme write))))
         (provenance ((origin repo)))
         (status internal)
@@ -1023,7 +1044,10 @@
                            environment-define-or-set! environment-ref environment-cell-for-identifier
                            environment-ref-identifier environment-set-identifier! ensure-distinct-names
                            parse-formals))
-        (dependencies ((library (scheme base)) (library (consent reader)) (library (consent version))))
+        (dependencies
+         ((library (scheme base))
+          (library (consent reader))
+          (library (consent version))))
         (provenance ((origin repo)))
         (status internal)
         (canonical #t))
@@ -1049,8 +1073,11 @@
                            consent-base-prelude-binding-names consent-base-prelude-binding-specs
                            consent-base-binding-specs consent-primitive-manifest-binding-specs))
         (dependencies
-         ((library (scheme base)) (library (scheme char)) (library (scheme inexact))
-          (library (scheme write)) (library (consent reader))
+         ((library (scheme base))
+          (library (scheme char))
+          (library (scheme inexact))
+          (library (scheme write))
+          (library (consent reader))
           (library (consent runtime))))
         (provenance ((origin repo)))
         (status internal)
@@ -1088,8 +1115,12 @@
                            ensure-compatible-import-bindings path-policy-allows-file? path-directory
                            read-file-string with-include-directory form-named?))
         (dependencies
-         ((library (scheme base)) (library (scheme char)) (library (scheme file)) (library (consent reader))
-          (library (consent runtime)) (library (consent base))))
+         ((library (scheme base))
+          (library (scheme char))
+          (library (scheme file))
+          (library (consent reader))
+          (library (consent runtime))
+          (library (consent base))))
         (provenance ((origin repo)))
         (status internal)
         (canonical #t))
@@ -1119,8 +1150,11 @@
                            make-local-syntax-scope expand-expression expand-expression/fully
                            expand-sequence-forms))
         (dependencies
-         ((library (scheme base)) (library (consent reader)) (library (consent runtime))
-          (library (consent base)) (library (consent library))))
+         ((library (scheme base))
+          (library (consent reader))
+          (library (consent runtime))
+          (library (consent base))
+          (library (consent library))))
         (provenance ((origin repo)))
         (status internal)
         (canonical #t))
@@ -1143,7 +1177,10 @@
                            debugger-field-value debugger-expect-condition debugger-restart-id-name
                            debugger-default-restarts condition-result-datum budget-exhausted-condition?
                            consent-result->external consent-value->external))
-        (dependencies ((library (scheme base)) (library (consent reader)) (library (consent runtime))))
+        (dependencies
+         ((library (scheme base))
+          (library (consent reader))
+          (library (consent runtime))))
         (provenance ((origin repo)))
         (status implemented)
         (canonical #t))
@@ -1177,11 +1214,18 @@
                            consent-result->external consent-value->external consent-unspecified
                            consent-unspecified? consent-procedure? consent-primitive-procedure?))
         (dependencies
-         ((library (scheme base)) (library (scheme char)) (library (scheme file)) (library (scheme inexact))
-          (library (scheme process-context)) (library (scheme read))
-          (library (scheme write)) (library (consent reader))
-          (library (consent runtime)) (library (consent result))
-          (library (consent base)) (library (consent library))
+         ((library (scheme base))
+          (library (scheme char))
+          (library (scheme file))
+          (library (scheme inexact))
+          (library (scheme process-context))
+          (library (scheme read))
+          (library (scheme write))
+          (library (consent reader))
+          (library (consent runtime))
+          (library (consent result))
+          (library (consent base))
+          (library (consent library))
           (library (consent macro))))
         (provenance ((origin repo)))
         (status internal)
@@ -1215,7 +1259,8 @@
                            consent-stdlib-source-library-specs consent-primitive-manifest-binding-specs
                            consent-result->external consent-value->external consent-unspecified
                            consent-unspecified? consent-procedure? consent-primitive-procedure?))
-        (dependencies ((library (consent interpreter))))
+        (dependencies
+         ((library (consent interpreter))))
         (provenance ((origin repo)))
         (status documented-unavailable-on-some-hosts)
         (canonical #t))
@@ -1233,7 +1278,8 @@
         (source-version unknown)
         (realization portable-source)
         (exports (consent-version-datum))
-        (dependencies ((library (scheme base))))
+        (dependencies
+         ((library (scheme base))))
         (provenance ((origin repo)))
         (status implemented)
         (canonical #t))))

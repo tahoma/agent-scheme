@@ -26,7 +26,8 @@
         (source-version unknown)
         (realization portable-source)
         (exports (stdlib-manifest stdlib-manifest-ref))
-        (dependencies ((library (scheme base))))
+        (dependencies
+         ((library (scheme base))))
         (provenance ((origin repo)))
         (status implemented)
         (canonical #t))
@@ -47,7 +48,8 @@
          (json-number-of-character-limit json-nesting-depth-limit json-null? json-error? json-error-reason
                            json-fold json-generator json-read json-lines-read json-sequence-read
                            json-accumulator json-write))
-        (dependencies ((library (stdlib and-let-star))))
+        (dependencies
+         ((library (stdlib and-let-star))))
         (provenance
          ((origin repo)
           (upstream-source-url
@@ -81,7 +83,8 @@
         (exports
          (json-number-of-character-limit json-nesting-depth-limit json-null? json-error? json-error-reason
                            json-fold json-generator json-read json-lines-read json-sequence-read))
-        (dependencies ((library (stdlib json))))
+        (dependencies
+         ((library (stdlib json))))
         (provenance ((origin repo)))
         (verification ((test-status (import-resolution))))
         (status alias)
@@ -101,7 +104,8 @@
         (exports
          (json-number-of-character-limit json-nesting-depth-limit json-null? json-error? json-error-reason
                            json-fold json-generator json-read json-lines-read json-sequence-read))
-        (dependencies ((library (stdlib json))))
+        (dependencies
+         ((library (stdlib json))))
         (provenance ((origin repo)))
         (verification ((test-status (import-resolution))))
         (status alias)
@@ -118,7 +122,8 @@
         (source-version unknown)
         (realization alias)
         (target (stdlib json))
-        (dependencies ((library (stdlib json))))
+        (dependencies
+         ((library (stdlib json))))
         (provenance ((origin repo)))
         (verification ((test-status (import-resolution))))
         (status alias)
@@ -135,7 +140,8 @@
         (source-version unknown)
         (realization alias)
         (target (stdlib json))
-        (dependencies ((library (stdlib json))))
+        (dependencies
+         ((library (stdlib json))))
         (provenance ((origin repo)))
         (verification ((test-status (import-resolution))))
         (status alias)
@@ -152,7 +158,8 @@
         (source-version unknown)
         (realization alias)
         (target (stdlib json))
-        (dependencies ((library (stdlib json))))
+        (dependencies
+         ((library (stdlib json))))
         (provenance ((origin repo)))
         (verification ((test-status (import-resolution))))
         (status alias)
@@ -172,7 +179,8 @@
         (target (scheme base))
         (aliases ((srfi srfi-0)))
         (exports (cond-expand))
-        (dependencies ((library (scheme base))))
+        (dependencies
+         ((library (scheme base))))
         (provenance
          ((origin repo)
           (upstream-source-url "https://srfi.schemers.org/srfi-0/")
@@ -201,7 +209,8 @@
         (realization alias)
         (target (scheme base))
         (exports (cond-expand))
-        (dependencies ((library (scheme base))))
+        (dependencies
+         ((library (scheme base))))
         (provenance ((origin repo)))
         (verification ((test-status (import-resolution))))
         (status alias)
@@ -221,7 +230,8 @@
         (target (scheme case-lambda))
         (aliases ((srfi srfi-16) (srfi :16) (srfi :16 case-lambda)))
         (exports (case-lambda))
-        (dependencies ((library (scheme case-lambda))))
+        (dependencies
+         ((library (scheme case-lambda))))
         (provenance
          ((origin repo)
           (upstream-source-url "https://srfi.schemers.org/srfi-16/")
@@ -249,7 +259,8 @@
         (source-version unknown)
         (realization alias)
         (target (scheme case-lambda))
-        (dependencies ((library (scheme case-lambda))))
+        (dependencies
+         ((library (scheme case-lambda))))
         (provenance ((origin repo)))
         (verification ((test-status (import-resolution))))
         (status alias)
@@ -266,7 +277,8 @@
         (source-version unknown)
         (realization alias)
         (target (scheme case-lambda))
-        (dependencies ((library (scheme case-lambda))))
+        (dependencies
+         ((library (scheme case-lambda))))
         (provenance ((origin repo)))
         (verification ((test-status (import-resolution))))
         (status alias)
@@ -283,7 +295,8 @@
         (source-version unknown)
         (realization alias)
         (target (scheme case-lambda))
-        (dependencies ((library (scheme case-lambda))))
+        (dependencies
+         ((library (scheme case-lambda))))
         (provenance ((origin repo)))
         (verification ((test-status (import-resolution))))
         (status alias)
@@ -302,7 +315,8 @@
         (realization shim)
         (aliases ((srfi 261) (srfi srfi-261)))
         (exports ())
-        (dependencies ((library (scheme base))))
+        (dependencies
+         ((library (scheme base))))
         (provenance
          ((origin repo)
           (upstream-source-url "https://srfi.schemers.org/srfi-261/")
@@ -332,7 +346,8 @@
         (realization shim)
         (target (stdlib srfi-reference))
         (aliases ((srfi srfi-261)))
-        (dependencies ((library (stdlib srfi-reference))))
+        (dependencies
+         ((library (stdlib srfi-reference))))
         (provenance
          ((origin repo)
           (upstream-source-url "https://srfi.schemers.org/srfi-261/")
@@ -354,7 +369,8 @@
         (source-version final)
         (realization alias)
         (target (stdlib srfi-reference))
-        (dependencies ((library (stdlib srfi-reference))))
+        (dependencies
+         ((library (stdlib srfi-reference))))
         (provenance ((origin repo)))
         (verification ((test-status (import-resolution))))
         (status alias)
@@ -373,7 +389,8 @@
         (realization shim)
         (aliases ((srfi 97) (srfi srfi-97) (srfi :97) (srfi :97 srfi-libraries)))
         (exports ())
-        (dependencies ((library (scheme base))))
+        (dependencies
+         ((library (scheme base))))
         (provenance
          ((origin repo)
           (upstream-source-url "https://srfi.schemers.org/srfi-97/")
@@ -403,7 +420,8 @@
         (realization shim)
         (target (stdlib srfi-libraries))
         (aliases ((srfi srfi-97) (srfi :97) (srfi :97 srfi-libraries)))
-        (dependencies ((library (stdlib srfi-libraries))))
+        (dependencies
+         ((library (stdlib srfi-libraries))))
         (provenance
          ((origin repo)
           (upstream-source-url "https://srfi.schemers.org/srfi-97/")
@@ -425,7 +443,8 @@
         (source-version final)
         (realization alias)
         (target (stdlib srfi-libraries))
-        (dependencies ((library (stdlib srfi-libraries))))
+        (dependencies
+         ((library (stdlib srfi-libraries))))
         (provenance ((origin repo)))
         (verification ((test-status (import-resolution))))
         (status alias)
@@ -442,7 +461,8 @@
         (source-version final)
         (realization alias)
         (target (stdlib srfi-libraries))
-        (dependencies ((library (stdlib srfi-libraries))))
+        (dependencies
+         ((library (stdlib srfi-libraries))))
         (provenance ((origin repo)))
         (verification ((test-status (import-resolution))))
         (status alias)
@@ -459,7 +479,8 @@
         (source-version final)
         (realization alias)
         (target (stdlib srfi-libraries))
-        (dependencies ((library (stdlib srfi-libraries))))
+        (dependencies
+         ((library (stdlib srfi-libraries))))
         (provenance ((origin repo)))
         (verification ((test-status (import-resolution))))
         (status alias)
@@ -478,7 +499,8 @@
         (realization portable-source)
         (aliases ((srfi 2) (srfi srfi-2) (srfi :2) (srfi :2 and-let*)))
         (exports (and-let*))
-        (dependencies ((library (scheme base))))
+        (dependencies
+         ((library (scheme base))))
         (provenance
          ((origin repo)
           (upstream-source-url "https://okmij.org/ftp/Scheme/lib/myenv-chez.scm")
@@ -515,7 +537,8 @@
         (realization alias)
         (target (stdlib and-let-star))
         (aliases ((srfi srfi-2) (srfi :2) (srfi :2 and-let*)))
-        (dependencies ((library (stdlib and-let-star))))
+        (dependencies
+         ((library (stdlib and-let-star))))
         (provenance ((origin repo)))
         (verification ((test-status (import-resolution))))
         (status alias)
@@ -532,7 +555,8 @@
         (source-version unknown)
         (realization alias)
         (target (stdlib and-let-star))
-        (dependencies ((library (stdlib and-let-star))))
+        (dependencies
+         ((library (stdlib and-let-star))))
         (provenance ((origin repo)))
         (verification ((test-status (import-resolution))))
         (status alias)
@@ -549,7 +573,8 @@
         (source-version unknown)
         (realization alias)
         (target (stdlib and-let-star))
-        (dependencies ((library (stdlib and-let-star))))
+        (dependencies
+         ((library (stdlib and-let-star))))
         (provenance ((origin repo)))
         (verification ((test-status (import-resolution))))
         (status alias)
@@ -566,7 +591,8 @@
         (source-version unknown)
         (realization alias)
         (target (stdlib and-let-star))
-        (dependencies ((library (stdlib and-let-star))))
+        (dependencies
+         ((library (stdlib and-let-star))))
         (provenance ((origin repo)))
         (verification ((test-status (import-resolution))))
         (status alias)
@@ -599,7 +625,9 @@
                            lset-adjoin lset-union lset-intersection lset-difference lset-xor
                            lset-diff+intersection lset-union! lset-intersection! lset-difference! lset-xor!
                            lset-diff+intersection!))
-        (dependencies ((library (scheme base)) (library (scheme cxr))))
+        (dependencies
+         ((library (scheme base))
+          (library (scheme cxr))))
         (provenance
          ((origin repo)
           (upstream-source-url
@@ -640,7 +668,8 @@
         (source-version unknown)
         (realization alias)
         (target (stdlib list))
-        (dependencies ((library (stdlib list))))
+        (dependencies
+         ((library (stdlib list))))
         (provenance ((origin repo)))
         (verification ((test-status (import-resolution))))
         (status alias)
@@ -658,7 +687,8 @@
         (realization alias)
         (target (stdlib list))
         (aliases ((srfi srfi-1) (srfi :1) (srfi :1 lists)))
-        (dependencies ((library (stdlib list))))
+        (dependencies
+         ((library (stdlib list))))
         (provenance ((origin repo)))
         (verification ((test-status (import-resolution))))
         (status alias)
@@ -675,7 +705,8 @@
         (source-version unknown)
         (realization alias)
         (target (stdlib list))
-        (dependencies ((library (stdlib list))))
+        (dependencies
+         ((library (stdlib list))))
         (provenance ((origin repo)))
         (verification ((test-status (import-resolution))))
         (status alias)
@@ -692,7 +723,8 @@
         (source-version unknown)
         (realization alias)
         (target (stdlib list))
-        (dependencies ((library (stdlib list))))
+        (dependencies
+         ((library (stdlib list))))
         (provenance ((origin repo)))
         (verification ((test-status (import-resolution))))
         (status alias)
@@ -709,7 +741,8 @@
         (source-version unknown)
         (realization alias)
         (target (stdlib list))
-        (dependencies ((library (stdlib list))))
+        (dependencies
+         ((library (stdlib list))))
         (provenance ((origin repo)))
         (verification ((test-status (import-resolution))))
         (status alias)
@@ -740,7 +773,9 @@
                            vector-accumulator reverse-vector-accumulator vector-accumulator!
                            string-accumulator bytevector-accumulator bytevector-accumulator! sum-accumulator
                            product-accumulator))
-        (dependencies ((library (scheme base)) (library (scheme case-lambda))))
+        (dependencies
+         ((library (scheme base))
+          (library (scheme case-lambda))))
         (provenance
          ((origin repo)
           (upstream-source-url
@@ -781,7 +816,8 @@
         (source-version unknown)
         (realization alias)
         (target (stdlib generator))
-        (dependencies ((library (stdlib generator))))
+        (dependencies
+         ((library (stdlib generator))))
         (provenance ((origin repo)))
         (verification ((test-status (import-resolution))))
         (status alias)
@@ -798,7 +834,8 @@
         (source-version unknown)
         (realization alias)
         (target (stdlib generator))
-        (dependencies ((library (stdlib generator))))
+        (dependencies
+         ((library (stdlib generator))))
         (provenance ((origin repo)))
         (verification ((test-status (import-resolution))))
         (status alias)
@@ -815,7 +852,8 @@
         (source-version unknown)
         (realization alias)
         (target (stdlib generator))
-        (dependencies ((library (stdlib generator))))
+        (dependencies
+         ((library (stdlib generator))))
         (provenance ((origin repo)))
         (verification ((test-status (import-resolution))))
         (status alias)
@@ -862,8 +900,11 @@
                      test-on-bad-end-name-simple test-on-test-end-simple
                      test-on-final-simple))
         (dependencies
-         ((library (scheme base)) (library (scheme write)) (library (scheme read))
-          (library (scheme eval)) (library (scheme file))))
+         ((library (scheme base))
+          (library (scheme write))
+          (library (scheme read))
+          (library (scheme eval))
+          (library (scheme file))))
         (provenance
          ((origin repo)
           (upstream-source-url
@@ -908,7 +949,8 @@
         (realization alias)
         (target (stdlib testing))
         (aliases ((srfi srfi-64) (srfi :64) (srfi :64 testing)))
-        (dependencies ((library (stdlib testing))))
+        (dependencies
+         ((library (stdlib testing))))
         (provenance ((origin repo)))
         (verification ((test-status (import-resolution))))
         (status alias)
@@ -925,7 +967,8 @@
         (source-version unknown)
         (realization alias)
         (target (stdlib testing))
-        (dependencies ((library (stdlib testing))))
+        (dependencies
+         ((library (stdlib testing))))
         (provenance ((origin repo)))
         (verification ((test-status (import-resolution))))
         (status alias)
@@ -942,7 +985,8 @@
         (source-version unknown)
         (realization alias)
         (target (stdlib testing))
-        (dependencies ((library (stdlib testing))))
+        (dependencies
+         ((library (stdlib testing))))
         (provenance ((origin repo)))
         (verification ((test-status (import-resolution))))
         (status alias)
@@ -959,7 +1003,8 @@
         (source-version unknown)
         (realization alias)
         (target (stdlib testing))
-        (dependencies ((library (stdlib testing))))
+        (dependencies
+         ((library (stdlib testing))))
         (provenance ((origin repo)))
         (verification ((test-status (import-resolution))))
         (status alias)
@@ -983,7 +1028,9 @@
                          random-source-state-set! random-source-randomize!
                          random-source-pseudo-randomize!
                          random-source-make-integers random-source-make-reals))
-        (dependencies ((library (scheme base)) (library (scheme time))))
+        (dependencies
+         ((library (scheme base))
+          (library (scheme time))))
         (provenance
          ((origin repo)
           (upstream-source-url
@@ -1042,7 +1089,8 @@
         (realization alias)
         (target (stdlib random-bits))
         (aliases ((srfi srfi-27) (srfi :27) (srfi :27 random-bits)))
-        (dependencies ((library (stdlib random-bits))))
+        (dependencies
+         ((library (stdlib random-bits))))
         (provenance ((origin repo)))
         (verification ((test-status (import-resolution))))
         (status alias)
@@ -1059,7 +1107,8 @@
         (source-version unknown)
         (realization alias)
         (target (stdlib random-bits))
-        (dependencies ((library (stdlib random-bits))))
+        (dependencies
+         ((library (stdlib random-bits))))
         (provenance ((origin repo)))
         (verification ((test-status (import-resolution))))
         (status alias)
@@ -1076,7 +1125,8 @@
         (source-version unknown)
         (realization alias)
         (target (stdlib random-bits))
-        (dependencies ((library (stdlib random-bits))))
+        (dependencies
+         ((library (stdlib random-bits))))
         (provenance ((origin repo)))
         (verification ((test-status (import-resolution))))
         (status alias)
@@ -1093,7 +1143,8 @@
         (source-version unknown)
         (realization alias)
         (target (stdlib random-bits))
-        (dependencies ((library (stdlib random-bits))))
+        (dependencies
+         ((library (stdlib random-bits))))
         (provenance ((origin repo)))
         (verification ((test-status (import-resolution))))
         (status alias)
@@ -1158,7 +1209,8 @@
         (realization portable-source)
         (aliases ((srfi 8) (srfi srfi-8) (srfi :8) (srfi :8 receive)))
         (exports (receive))
-        (dependencies ((library (scheme base))))
+        (dependencies
+         ((library (scheme base))))
         (provenance
          ((origin repo)
           (upstream-source-url "https://srfi.schemers.org/srfi-8/")
@@ -1196,7 +1248,8 @@
         (realization alias)
         (target (stdlib receive))
         (aliases ((srfi srfi-8) (srfi :8) (srfi :8 receive)))
-        (dependencies ((library (stdlib receive))))
+        (dependencies
+         ((library (stdlib receive))))
         (provenance ((origin repo)))
         (verification ((test-status (import-resolution))))
         (status alias)
@@ -1213,7 +1266,8 @@
         (source-version unknown)
         (realization alias)
         (target (stdlib receive))
-        (dependencies ((library (stdlib receive))))
+        (dependencies
+         ((library (stdlib receive))))
         (provenance ((origin repo)))
         (verification ((test-status (import-resolution))))
         (status alias)
@@ -1230,7 +1284,8 @@
         (source-version unknown)
         (realization alias)
         (target (stdlib receive))
-        (dependencies ((library (stdlib receive))))
+        (dependencies
+         ((library (stdlib receive))))
         (provenance ((origin repo)))
         (verification ((test-status (import-resolution))))
         (status alias)
@@ -1247,7 +1302,8 @@
         (source-version unknown)
         (realization alias)
         (target (stdlib receive))
-        (dependencies ((library (stdlib receive))))
+        (dependencies
+         ((library (stdlib receive))))
         (provenance ((origin repo)))
         (verification ((test-status (import-resolution))))
         (status alias)
@@ -1266,7 +1322,8 @@
         (realization portable-source)
         (aliases ((srfi 145) (srfi srfi-145)))
         (exports (assume))
-        (dependencies ((library (scheme base))))
+        (dependencies
+         ((library (scheme base))))
         (provenance
          ((origin repo)
           (upstream-source-url "https://srfi.schemers.org/srfi-145/")
@@ -1298,7 +1355,8 @@
         (source-version unknown)
         (realization alias)
         (target (stdlib assume))
-        (dependencies ((library (stdlib assume))))
+        (dependencies
+         ((library (stdlib assume))))
         (provenance ((origin repo)))
         (verification ((test-status (import-resolution))))
         (status alias)
@@ -1315,7 +1373,8 @@
         (source-version unknown)
         (realization alias)
         (target (stdlib assume))
-        (dependencies ((library (stdlib assume))))
+        (dependencies
+         ((library (stdlib assume))))
         (provenance ((origin repo)))
         (verification ((test-status (import-resolution))))
         (status alias)
@@ -1343,8 +1402,11 @@
                            comparator-hash-function comparator-test-type comparator-check-type
                            comparator-hash hash-bound hash-salt =? <? >? <=? >=? comparator-if<=>))
         (dependencies
-         ((library (scheme base)) (library (scheme case-lambda)) (library (scheme char))
-          (library (scheme inexact)) (library (scheme complex))))
+         ((library (scheme base))
+          (library (scheme case-lambda))
+          (library (scheme char))
+          (library (scheme inexact))
+          (library (scheme complex))))
         (provenance
          ((origin repo)
           (upstream-source-url
@@ -1387,8 +1449,11 @@
          (make-tree tree-search tree-for-each tree-fold tree-fold/reverse tree-generator tree-key-predecessor
                            tree-key-successor tree-map tree-catenate tree-split))
         (dependencies
-         ((library (scheme base)) (library (scheme case-lambda)) (library (stdlib and-let-star))
-          (library (stdlib receive)) (library (stdlib generator))
+         ((library (scheme base))
+          (library (scheme case-lambda))
+          (library (stdlib and-let-star))
+          (library (stdlib receive))
+          (library (stdlib generator))
           (library (stdlib comparator))))
         (provenance
          ((origin repo)
@@ -1459,9 +1524,13 @@
                            mapping-split mapping-catenate mapping-catenate! mapping-map/monotone
                            mapping-map/monotone! mapping-fold/reverse comparator?))
         (dependencies
-         ((library (scheme base)) (library (scheme case-lambda)) (library (stdlib list))
-          (library (stdlib receive)) (library (stdlib comparator))
-          (library (stdlib assume)) (library (stdlib rbtree))))
+         ((library (scheme base))
+          (library (scheme case-lambda))
+          (library (stdlib list))
+          (library (stdlib receive))
+          (library (stdlib comparator))
+          (library (stdlib assume))
+          (library (stdlib rbtree))))
         (provenance
          ((origin repo)
           (upstream-source-url
@@ -1517,7 +1586,8 @@
         (source-version unknown)
         (realization alias)
         (target (stdlib mapping))
-        (dependencies ((library (stdlib mapping))))
+        (dependencies
+         ((library (stdlib mapping))))
         (provenance ((origin repo)))
         (verification ((test-status (import-resolution))))
         (status alias)
@@ -1534,7 +1604,8 @@
         (source-version unknown)
         (realization alias)
         (target (stdlib mapping))
-        (dependencies ((library (stdlib mapping))))
+        (dependencies
+         ((library (stdlib mapping))))
         (provenance ((origin repo)))
         (verification ((test-status (import-resolution))))
         (status alias)
@@ -1551,7 +1622,8 @@
         (source-version unknown)
         (realization alias)
         (target (stdlib mapping))
-        (dependencies ((library (stdlib mapping))))
+        (dependencies
+         ((library (stdlib mapping))))
         (provenance ((origin repo)))
         (verification ((test-status (import-resolution))))
         (status alias)
@@ -1568,7 +1640,8 @@
         (source-version unknown)
         (realization alias)
         (target (stdlib comparator))
-        (dependencies ((library (stdlib comparator))))
+        (dependencies
+         ((library (stdlib comparator))))
         (provenance ((origin repo)))
         (verification ((test-status (import-resolution))))
         (status alias)
@@ -1585,7 +1658,8 @@
         (source-version unknown)
         (realization alias)
         (target (stdlib comparator))
-        (dependencies ((library (stdlib comparator))))
+        (dependencies
+         ((library (stdlib comparator))))
         (provenance ((origin repo)))
         (verification ((test-status (import-resolution))))
         (status alias)
@@ -1602,7 +1676,8 @@
         (source-version unknown)
         (realization alias)
         (target (stdlib comparator))
-        (dependencies ((library (stdlib comparator))))
+        (dependencies
+         ((library (stdlib comparator))))
         (provenance ((origin repo)))
         (verification ((test-status (import-resolution))))
         (status alias)

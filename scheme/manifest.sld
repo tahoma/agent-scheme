@@ -138,7 +138,8 @@
         (source-version unknown)
         (realization portable-source)
         (exports (manifest-index manifest-index-ref))
-        (dependencies ((library (scheme base))))
+        (dependencies
+         ((library (scheme base))))
         (provenance ((origin repo)))
         (status implemented)
         (canonical #t))))

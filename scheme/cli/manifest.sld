@@ -26,7 +26,8 @@
         (source-version unknown)
         (realization portable-source)
         (exports (cli-library-manifest cli-library-manifest-ref))
-        (dependencies ((library (scheme base))))
+        (dependencies
+         ((library (scheme base))))
         (provenance ((origin repo)))
         (status implemented)
         (canonical #t))
@@ -45,7 +46,9 @@
         (realization portable-source)
         (exports (cli-host-available? cli-host-run))
         (dependencies
-         ((library (scheme base)) (library (scheme file)) (library (stdlib generator))
+         ((library (scheme base))
+          (library (scheme file))
+          (library (stdlib generator))
           (library (cli process-host primitive))))
         (provenance ((origin repo)))
         (status implemented)
