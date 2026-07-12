@@ -22,7 +22,7 @@
       (cadr (car fields)))
      (else (loop (cdr fields))))))
 
-(consent-test-run "Agent Redaction portable semantics"
+(testing-harness-run "Agent Redaction portable semantics"
   (consent-redaction-clear!)
   (let* ((secret '((source env)
                    (field "OPENAI_API_KEY")
@@ -55,7 +55,7 @@
      (equal? text (redact text 'debugger)))
    (list (make-random-string-generator 12 "abcxyz"))
    25)
-  (consent-test-check
+  (testing-harness-check
    "lightweight eager safe-datum table" 1
    (check-ec (:list datum '((answer 42) (status ok) (items (1 2 3))))
              (safe-for-provider? datum 'openai)

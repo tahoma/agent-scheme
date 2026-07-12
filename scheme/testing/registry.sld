@@ -3,58 +3,58 @@
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
 (define-library (testing registry)
-  (export consent-test-case
-          consent-test-register!
-          consent-test-registry-clear!
-          consent-test-registry
-          consent-test-case-name
-          consent-test-case-tags
-          consent-test-case-source-file
-          consent-test-case-source-line
-          consent-test-select-all
-          consent-test-select-name
-          consent-test-select-tag
-          consent-test-select-and
-          consent-test-select-or
-          consent-test-select-not
-          consent-test-clock
-          consent-test-diagnostic-hook
-          consent-test-run-registered
-          consent-test-rerun-failed
-          consent-test-report-failed-names)
+  (export testing-registry-case
+          testing-registry-register!
+          testing-registry-clear!
+          testing-registry-cases
+          testing-registry-case-name
+          testing-registry-case-tags
+          testing-registry-case-source-file
+          testing-registry-case-source-line
+          testing-registry-select-all
+          testing-registry-select-name
+          testing-registry-select-tag
+          testing-registry-select-and
+          testing-registry-select-or
+          testing-registry-select-not
+          testing-registry-clock
+          testing-registry-diagnostic-hook
+          testing-registry-run-registered
+          testing-registry-rerun-failed
+          testing-registry-report-failed-names)
   (import (scheme base)
           (scheme write)
           (testing harness)
           (stdlib testing))
   (begin
     ;; Registered test case metadata and executable body.
-    (define-record-type <consent-test-case>
-      (make-consent-test-case name tags source-file source-line thunk)
-      consent-test-case?
-      (name consent-test-case-name)
-      (tags consent-test-case-tags)
-      (source-file consent-test-case-source-file)
-      (source-line consent-test-case-source-line)
-      (thunk consent-test-case-thunk))
+    (define-record-type <testing-registry-case>
+      (make-testing-registry-case name tags source-file source-line thunk)
+      testing-registry-case?
+      (name testing-registry-case-name)
+      (tags testing-registry-case-tags)
+      (source-file testing-registry-case-source-file)
+      (source-line testing-registry-case-source-line)
+      (thunk testing-registry-case-thunk))
 
     ;; Registered test cases in deterministic registration order.
-    (define consent-test-registry '())
+    (define testing-registry-cases '())
 
     ;; Clock procedure returning a number, or false when timing is unavailable.
-    (define consent-test-clock (make-parameter (lambda () #f)))
+    (define testing-registry-clock (make-parameter (lambda () #f)))
 
     ;; Host hook returning diagnostic data for CASE and CONDITION.
-    (define consent-test-diagnostic-hook
+    (define testing-registry-diagnostic-hook
       (make-parameter (lambda (case condition) case condition #f)))
 
-    (define (consent-test-registry-clear!)
+    (define (testing-registry-clear!)
       "Remove all registered portable test cases."
       #((parameters)
         (returns (type unspecified) (description "Unspecified value."))
         (effects state-write))
-      (set! consent-test-registry '()))
+      (set! testing-registry-cases '()))
 
-    (define (consent-test-register! name tags source-file source-line thunk)
+    (define (testing-registry-register! name tags source-file source-line thunk)
       "Register a named test case and return its record."
       #((parameters
          (name (type object) (description "Unique test name."))
@@ -62,69 +62,69 @@
          (source-file (type (or string boolean)) (description "Source file."))
          (source-line (type (or exact-integer boolean)) (description "Line."))
          (thunk (type procedure) (description "Zero-argument test body.")))
-        (returns (type consent-test-case) (description "Registered case."))
+        (returns (type testing-registry-case) (description "Registered case."))
         (effects allocation state-write error))
       (if (not (procedure? thunk))
           (error "test case body must be a procedure" name))
-      (let ((case (make-consent-test-case
+      (let ((case (make-testing-registry-case
                    name tags source-file source-line thunk)))
-        (set! consent-test-registry
+        (set! testing-registry-cases
               (append
-               (let loop ((rest consent-test-registry))
+               (let loop ((rest testing-registry-cases))
                  (cond
                   ((null? rest) '())
-                  ((consent-test-key=?
-                    name (consent-test-case-name (car rest)))
+                  ((testing-registry-key=?
+                    name (testing-registry-case-name (car rest)))
                    (loop (cdr rest)))
                   (else (cons (car rest) (loop (cdr rest))))))
                (list case)))
         case))
 
-    (define (consent-test-key=? left right)
+    (define (testing-registry-key=? left right)
       "Return true when LEFT and RIGHT are equal test keys."
       (if (and (symbol? left) (symbol? right))
           (string=? (symbol->string left) (symbol->string right))
           (equal? left right)))
 
-    (define (consent-test-key-member? key keys)
+    (define (testing-registry-key-member? key keys)
       "Return true when KEY occurs in KEYS."
       (let loop ((rest keys))
         (and (pair? rest)
-             (or (consent-test-key=? key (car rest))
+             (or (testing-registry-key=? key (car rest))
                  (loop (cdr rest))))))
 
     ;; Define and register a portable test case with explicit source metadata.
-    (define-syntax consent-test-case
+    (define-syntax testing-registry-case
       (syntax-rules ()
         ((_ name tags (source-file source-line) body ...)
-         (consent-test-register!
+         (testing-registry-register!
           name tags source-file source-line (lambda () body ...)))))
 
-    (define (consent-test-select-all case)
+    (define (testing-registry-select-all case)
       "Return true for every CASE."
-      #((parameters (case (type consent-test-case) (description "Case.")))
+      #((parameters (case (type testing-registry-case) (description "Case.")))
         (returns (type boolean) (description "Always true."))
         (effects pure))
       case
       #t)
 
-    (define (consent-test-select-name name)
+    (define (testing-registry-select-name name)
       "Return a selector matching test case NAME."
       #((parameters (name (type object) (description "Test name.")))
         (returns (type procedure) (description "Case selector."))
         (effects allocation))
       (lambda (case)
-        (consent-test-key=? name (consent-test-case-name case))))
+        (testing-registry-key=? name (testing-registry-case-name case))))
 
-    (define (consent-test-select-tag tag)
+    (define (testing-registry-select-tag tag)
       "Return a selector matching cases carrying TAG."
       #((parameters (tag (type object) (description "Selection tag.")))
         (returns (type procedure) (description "Case selector."))
         (effects allocation))
       (lambda (case)
-        (consent-test-key-member? tag (consent-test-case-tags case))))
+        (testing-registry-key-member? tag (testing-registry-case-tags case))))
 
-    (define (consent-test-select-and . selectors)
+    (define (testing-registry-select-and . selectors)
       "Return a selector requiring every SELECTORS predicate."
       #((parameters (selectors (type list) (description "Selectors.")))
         (returns (type procedure) (description "Conjoined selector."))
@@ -134,7 +134,7 @@
           (or (null? rest)
               (and ((car rest) case) (loop (cdr rest)))))))
 
-    (define (consent-test-select-or . selectors)
+    (define (testing-registry-select-or . selectors)
       "Return a selector accepting any SELECTORS predicate."
       #((parameters (selectors (type list) (description "Selectors.")))
         (returns (type procedure) (description "Disjoined selector."))
@@ -144,53 +144,53 @@
           (and (pair? rest)
                (or ((car rest) case) (loop (cdr rest)))))))
 
-    (define (consent-test-select-not selector)
+    (define (testing-registry-select-not selector)
       "Return the complement of SELECTOR."
       #((parameters (selector (type procedure) (description "Selector.")))
         (returns (type procedure) (description "Complement selector."))
         (effects allocation))
       (lambda (case) (not (selector case))))
 
-    (define (consent-test-counts runner)
+    (define (testing-registry-counts runner)
       "Return RUNNER's unexpected-result counts."
       (list (test-runner-fail-count runner)
             (test-runner-xpass-count runner)))
 
-    (define (consent-test-case-result case status duration diagnostic)
+    (define (testing-registry-case-result case status duration diagnostic)
       "Return a Scheme-readable result for CASE."
-      (list 'consent-test-case-result
-            (list 'name (consent-test-case-name case))
-            (list 'tags (consent-test-case-tags case))
-            (list 'source-file (consent-test-case-source-file case))
-            (list 'source-line (consent-test-case-source-line case))
+      (list 'testing-registry-case-result
+            (list 'name (testing-registry-case-name case))
+            (list 'tags (testing-registry-case-tags case))
+            (list 'source-file (testing-registry-case-source-file case))
+            (list 'source-line (testing-registry-case-source-line case))
             (list 'duration duration)
             (list 'status status)
             (list 'diagnostic diagnostic)))
 
-    (define (consent-test-run-case runner case)
+    (define (testing-registry-run-case runner case)
       "Run CASE with RUNNER and return its portable result record."
-      (let ((before (consent-test-counts runner))
-            (started ((consent-test-clock)))
+      (let ((before (testing-registry-counts runner))
+            (started ((testing-registry-clock)))
             (raised #f))
         (guard (condition
                 (else
                  (set! raised condition)
-                 (test-assert (consent-test-case-name case) #f)))
-          ((consent-test-case-thunk case)))
-        (let* ((finished ((consent-test-clock)))
-               (after (consent-test-counts runner))
+                 (test-assert (testing-registry-case-name case) #f)))
+          ((testing-registry-case-thunk case)))
+        (let* ((finished ((testing-registry-clock)))
+               (after (testing-registry-counts runner))
                (failed? (not (equal? before after)))
                (duration (if (and (number? started) (number? finished))
                              (- finished started)
                              #f))
                (diagnostic
                 (if failed?
-                    ((consent-test-diagnostic-hook) case raised)
+                    ((testing-registry-diagnostic-hook) case raised)
                     #f)))
-          (consent-test-case-result
+          (testing-registry-case-result
            case (if failed? 'fail 'pass) duration diagnostic))))
 
-    (define (consent-test-report-failed-names report)
+    (define (testing-registry-report-failed-names report)
       "Return failed test names from REPORT."
       #((parameters (report (type list) (description "Test report.")))
         (returns (type list) (description "Failed case names."))
@@ -204,7 +204,7 @@
               (loop (cdr results)
                     (if (eq? status 'fail) (cons name names) names))))))
 
-    (define (consent-test-run-registered suite selector)
+    (define (testing-registry-run-registered suite selector)
       "Run registered cases selected by SELECTOR and return a report."
       #((parameters
          (suite (type object) (description "Suite name."))
@@ -218,30 +218,30 @@
            (lambda (case)
              (if (selector case)
                  (set! results
-                       (cons (consent-test-run-case runner case) results))))
-           consent-test-registry)
+                       (cons (testing-registry-run-case runner case) results))))
+           testing-registry-cases)
           (test-end suite))
         (let ((report
-               (list 'consent-test-report
+               (list 'testing-registry-report
                      (list 'summary
-                           (consent-test-runner-summary suite runner))
+                           (testing-harness-runner-summary suite runner))
                      (list 'cases (reverse results)))))
           (write report)
           (newline)
-          (if (consent-test-runner-failed? runner)
+          (if (testing-harness-runner-failed? runner)
               (error "Consent registered test suite failed" report)
               report))))
 
-    (define (consent-test-rerun-failed suite report)
+    (define (testing-registry-rerun-failed suite report)
       "Rerun the cases that failed in REPORT."
       #((parameters
          (suite (type object) (description "Rerun suite name."))
          (report (type list) (description "Prior test report.")))
         (returns (type list) (description "Portable rerun report."))
         (effects state-read state-write port-io error))
-      (let ((names (consent-test-report-failed-names report)))
-        (consent-test-run-registered
+      (let ((names (testing-registry-report-failed-names report)))
+        (testing-registry-run-registered
          suite
          (lambda (case)
-           (consent-test-key-member?
-            (consent-test-case-name case) names)))))))
+           (testing-registry-key-member?
+            (testing-registry-case-name case) names)))))))

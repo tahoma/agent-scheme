@@ -822,10 +822,10 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
     (should entry)
     (should (eq (plist-get entry :visibility) 'public))
     (should (equal (plist-get entry :exports)
-                   '("consent-test-run"
-                     "consent-test-check"
-                     "consent-test-runner-summary"
-                     "consent-test-runner-failed?")))
+                   '("testing-harness-run"
+                     "testing-harness-check"
+                     "testing-harness-runner-summary"
+                     "testing-harness-runner-failed?")))
     (should source-file)
     (should
      (string-suffix-p

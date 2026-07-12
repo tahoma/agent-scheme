@@ -9,15 +9,15 @@
         (testing registry)
         (stdlib testing))
 
-(consent-test-registry-clear!)
+(testing-registry-clear!)
 
-(consent-test-case 'alpha '(fast unit) ("registry-test.scm" 12)
+(testing-registry-case 'alpha '(fast unit) ("registry-test.scm" 12)
   (test-equal "alpha value" 4 (+ 2 2)))
 
-(consent-test-case 'beta '(slow integration) ("registry-test.scm" 15)
+(testing-registry-case 'beta '(slow integration) ("registry-test.scm" 15)
   (test-assert "beta value" #t))
 
-(consent-test-case 'gamma '(fast integration) ("registry-test.scm" 18)
+(testing-registry-case 'gamma '(fast integration) ("registry-test.scm" 18)
   (test-equal "gamma value" '(a b) (list 'a 'b)))
 
 ;; Deterministic clock values make per-case timing portable and testable.
@@ -32,18 +32,18 @@
 ;; Report from the selected registered cases.
 (define report
   (parameterize
-      ((consent-test-clock next-tick))
-    (consent-test-run-registered
+      ((testing-registry-clock next-tick))
+    (testing-registry-run-registered
      "registered fast cases"
-     (consent-test-select-tag 'fast))))
+     (testing-registry-select-tag 'fast))))
 
 ;; Case-level records extracted from REPORT.
 (define case-results (cadr (assq 'cases (cdr report))))
 
-(consent-test-run "Testing registry"
+(testing-harness-run "Testing registry"
   (test-equal "registration order"
               '(alpha beta gamma)
-              (map consent-test-case-name consent-test-registry))
+              (map testing-registry-case-name testing-registry-cases))
   (test-equal "tag selection and durations"
               '((alpha 3 pass) (gamma 7 pass))
               (map
@@ -59,36 +59,36 @@
                (cadr (assq 'source-line (cdr (car case-results))))))
   (test-equal "name selector"
               '(beta)
-              (map consent-test-case-name
-                   (let ((selector (consent-test-select-name 'beta)))
-                     (let loop ((rest consent-test-registry))
+              (map testing-registry-case-name
+                   (let ((selector (testing-registry-select-name 'beta)))
+                     (let loop ((rest testing-registry-cases))
                        (cond
                         ((null? rest) '())
                         ((selector (car rest))
                          (cons (car rest) (loop (cdr rest))))
                         (else (loop (cdr rest))))))))
-  (let ((gamma (caddr consent-test-registry))
-        (integration? (consent-test-select-tag 'integration))
-        (slow? (consent-test-select-tag 'slow)))
+  (let ((gamma (caddr testing-registry-cases))
+        (integration? (testing-registry-select-tag 'integration))
+        (slow? (testing-registry-select-tag 'slow)))
     (test-equal "selector primitives"
                 '(#t #f #t)
                 (list (integration? gamma)
                       (slow? gamma)
-                      ((consent-test-select-not slow?) gamma)))
+                      ((testing-registry-select-not slow?) gamma)))
     (test-assert "selector composition"
-                 ((consent-test-select-and
+                 ((testing-registry-select-and
                    integration?
-                   (consent-test-select-not slow?))
+                   (testing-registry-select-not slow?))
                   gamma)))
   (test-equal
    "failed-name extraction"
    '(broken)
-   (consent-test-report-failed-names
-    '(consent-test-report
+   (testing-registry-report-failed-names
+    '(testing-registry-report
       (summary ignored)
       (cases
-       ((consent-test-case-result (name ok) (status pass))
-        (consent-test-case-result (name broken) (status fail)))))))
+       ((testing-registry-case-result (name ok) (status pass))
+        (testing-registry-case-result (name broken) (status fail)))))))
   (test-assert
    "registry is publicly manifested"
    (testing-library-manifest-ref '(testing registry))))
@@ -96,24 +96,24 @@
 ;; Diagnostic captured by the host hook for a raised registered case.
 (define captured-diagnostic #f)
 
-(consent-test-case 'broken '(fast failure) ("registry-test.scm" 90)
+(testing-registry-case 'broken '(fast failure) ("registry-test.scm" 90)
   (error "expected registry failure"))
 
 ;; A batch failure remains catchable by an embedding test or interactive host.
 (define registered-failure-raised?
   (guard (condition (else #t))
     (parameterize
-        ((consent-test-diagnostic-hook
+        ((testing-registry-diagnostic-hook
           (lambda (case condition)
             (set! captured-diagnostic
-                  (list (consent-test-case-name case)
+                  (list (testing-registry-case-name case)
                         (if condition 'condition 'missing-condition))))))
-      (consent-test-run-registered
+      (testing-registry-run-registered
        "registered diagnostic case"
-       (consent-test-select-name 'broken)))
+       (testing-registry-select-name 'broken)))
     #f))
 
-(consent-test-run "Testing registry diagnostics"
+(testing-harness-run "Testing registry diagnostics"
   (test-assert "registered failures signal batch failure"
                registered-failure-raised?)
   (test-equal "host diagnostic hook receives case and condition"

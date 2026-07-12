@@ -13,7 +13,7 @@
 
 ;; SRFI 64 runner makes this Scheme file the semantic harness; ERT only starts
 ;; the selected R7RS host process.
-(consent-test-run "Agent Context portable semantics"
+(testing-harness-run "Agent Context portable semantics"
   (test-equal "context field"
               '(request-id req-1)
               (context-field 'request-id 'req-1))

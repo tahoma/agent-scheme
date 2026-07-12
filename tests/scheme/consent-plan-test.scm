@@ -18,7 +18,7 @@
   "Return true when THUNK raises."
   (guard (condition (else #t)) (thunk) #f))
 
-(consent-test-run "Agent Plan portable semantics"
+(testing-harness-run "Agent Plan portable semantics"
   (test-equal "scopes" '(fresh session project) consent-plan-scopes)
   (test-equal "statuses"
               '(pending active blocked done cancelled failed)
