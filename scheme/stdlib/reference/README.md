@@ -3,6 +3,10 @@
 This directory stores local reference material for externally defined optional
 standard libraries implemented by Consent Scheme's stdlib layer.
 
+Stdlib manifest `local-reference-documents` paths are relative to
+`scheme/stdlib/manifest.sld`, so entries point into this directory as
+`reference/...`.
+
 The `srfi-*` directories contain untouched HTML snapshots from
 `https://srfi.schemers.org/`. They are vendored as reference documents, not as
 authored Consent Scheme documentation. Licensing for these third-party HTML

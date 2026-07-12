@@ -100,6 +100,10 @@
    (file-name-directory (or load-file-name buffer-file-name default-directory)))
   "Repository root for library fixture tests.")
 
+(defconst consent-library-test--stdlib-manifest-directory
+  (expand-file-name "scheme/stdlib/" consent-library-test--root)
+  "Directory containing the stdlib collection manifest.")
+
 (defun consent-library-test--manifest-source-file (key)
   "Return the absolute manifest-declared source file for library KEY."
   (let ((entry (consent--library-collection-manifest-entry key)))
@@ -1314,7 +1318,7 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
     (consent--proper-list-elements documents "local reference documents")))
 
 (ert-deftest consent-library-test-stdlib-manifests-link-local-reference-documents ()
-  "Link implemented externally defined stdlib entries to local references."
+  "Link external stdlib entries to manifest-relative local references."
   (let (missing)
     (dolist (key consent-library-test--stdlib-external-reference-entries)
       (let* ((entry (consent--library-collection-manifest-entry key))
@@ -1334,8 +1338,15 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
                ((not path)
                 (push (format "%s reference document lacks path" key)
                       missing))
+               ((file-name-absolute-p path)
+                (push (format "%s reference file is absolute: %s" key path)
+                      missing))
+               ((string-match-p "\\`\\(?:docs\\|scheme\\)/" path)
+                (push (format "%s reference file is repo-relative: %s" key path)
+                      missing))
                ((not (file-exists-p
-                      (expand-file-name path consent-library-test--root)))
+                      (expand-file-name
+                       path consent-library-test--stdlib-manifest-directory)))
                 (push (format "%s missing reference file %s" key path)
                       missing))))))))
     (should-not (nreverse missing))))
