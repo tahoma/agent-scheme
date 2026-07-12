@@ -2511,6 +2511,15 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
              (equal? (manifest-subfield entry 'provenance 'local-license)
                      \"MIT\")
              (eq? (manifest-subfield entry 'provenance 'vendored?) #t)
+             (member \"reference/conftest.scm\"
+                     (manifest-subfield entry 'provenance
+                                        'upstream-test-files))
+             (equal?
+              (cdr
+               (assoc \"reference/conftest.scm\"
+                      (manifest-subfield entry 'provenance
+                                         'upstream-test-blobs)))
+              \"5ceaaf0d8af4af29e8270ac52c00a69f80525cb5\")
              (equal? (manifest-field entry 'aliases)
                      '((srfi 27)
                        (srfi srfi-27)
@@ -3525,6 +3534,10 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
                             (consent-library-test--record-field
                              random-bits 'tests))))
     (should (member "portable-host-suite"
+                    (mapcar #'consent-datum->external
+                            (consent-library-test--record-field
+                             random-bits 'tests))))
+    (should (member "upstream-confidence-tests"
                     (mapcar #'consent-datum->external
                             (consent-library-test--record-field
                              random-bits 'tests))))

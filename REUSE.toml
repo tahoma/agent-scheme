@@ -10,6 +10,7 @@ version = 1
 [[annotations]]
 path = [
   "**/*.md",
+  ".gitattributes",
   "Makefile",
   ".gitignore",
   "NOTICE",
@@ -57,4 +58,13 @@ SPDX-License-Identifier = "BSD-3-Clause"
 path = ["fixtures/srfi-180/files/*.log"]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2014 Joe Hildebrand"
+SPDX-License-Identifier = "MIT"
+
+# Vendored SRFI 27 confidence tests from
+# https://github.com/scheme-requests-for-implementation/srfi-27 at
+# a547c5508d648c61e73bebed2bcd2283fba5abaa.
+[[annotations]]
+path = ["fixtures/srfi-27/reference/conftest.scm"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2002 Sebastian Egner"
 SPDX-License-Identifier = "MIT"

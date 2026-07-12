@@ -936,6 +936,9 @@
                                (("reference/srfi-27-a.scm" . "34388f6bd9e1317b5e081112819687d30170fe3d")
                                 ("reference/mrg32k3a-a.scm" . "a5566f40f2a668dc9f47fafb794e610a2b79f9a8")
                                 ("reference/mrg32k3a.scm" . "184d695cedbcc76ae39001ae6841ffb01f9b6bb2")))
+                              (upstream-test-files ("reference/conftest.scm"))
+                              (upstream-test-blobs
+                               (("reference/conftest.scm" . "5ceaaf0d8af4af29e8270ac52c00a69f80525cb5")))
                               (upstream-license "MIT") (local-license "MIT") (vendored? #t)
                               (local-patches
                                ((define-library-wrapper (library (stdlib random-bits)))
@@ -944,13 +947,17 @@
                                           (srfi :27) (srfi :27 random-bits)))
                                 (time-source (from "Scheme 48 current-time")
                                              (to "(scheme time) current-jiffy"))
+                                (upstream-confidence-tests
+                                 (file "fixtures/srfi-27/reference/conftest.scm"))
                                 (adapted-tests
-                                 (file "tests/scheme/stdlib-random-bits-test.scm"))))))
+                                 (file "tests/scheme/stdlib-random-bits-test.scm")
+                                 (file "tests/scheme/stdlib-random-bits-upstream-test.scm"))))))
         (verification
          ((test-status
                                 (import-resolution representative-random-source-behavior
                                  alias-import missing-export-diagnostic clock-grant-randomization
-                                 adapted-upstream-tests portable-host-suite))))
+                                 adapted-upstream-tests upstream-confidence-tests
+                                 portable-host-suite))))
         (status vendored-adapted-implementation)
         (canonical #t))
        (manifest-index-entry
