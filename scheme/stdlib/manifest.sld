@@ -1134,10 +1134,15 @@
              (hosts chicken gauche guile sisc kawa mzscheme))
             (default-log-file (from #t) (to #f))
             (eval-environment (to (scheme base)))
-            (adapted-tests (file "tests/scheme/stdlib-testing-test.scm"))))))
+            (adapted-tests
+             (files "tests/scheme/stdlib-testing-upstream-test.scm"
+                    "tests/scheme/stdlib-testing-test.scm")
+             (runner-policy fail-on-unexpected-fail-or-pass)
+             (specifier-semantics eager-state-advance))))))
         (verification
          ((test-status
-           (import-resolution representative-test-runner-behavior
+           (import-resolution upstream-meta-suite local-regressions
+                              test-runner-behavior
                               alias-import missing-export-diagnostic
                               adapted-upstream-tests portable-host-suite))))
         (status vendored-adapted-implementation)
