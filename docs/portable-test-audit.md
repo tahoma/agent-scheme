@@ -31,9 +31,11 @@ does; retaining an ERT test does not make it the semantic source of truth.
 - Emacs capability adapters retain ERT checks for live buffers, filesystem and
   process callbacks, persistence, approval UI, and native Emacs object
   translation. Portable tests own their Scheme-readable records and pure logic.
-- `tools/run-portable-tests.sh` remains responsible only for tool discovery,
-  invoking each `tests/scheme/` file, and attaching host/file names to failures;
-  the Scheme libraries own assertion, selection, result, and exit semantics.
+- `(testing plan)` and `(testing runner)` own the Scheme-readable program plan,
+  shard selection, assertion results, and exit semantics.
+  `tools/run-portable-tests.sh` remains responsible only for tool discovery,
+  invoking each selected `tests/scheme/` program, and attaching host/file names
+  to failures.
 
 The audit groups the remaining ERT files by the boundary they exercise:
 
@@ -72,6 +74,7 @@ checks still execute through file-local counters instead of registered cases.
 | actual/expected values and arbitrary result properties | SRFI 64 result alists | parity |
 | deterministic batch failure and summary receipts | `(testing harness)` and `(testing runner)` over SRFI 64 | parity; runner exits distinguish test and configuration failures |
 | named cases, selectors, tags, listing, and selective reruns | `(testing registry)` plus `(testing runner)` | parity for registered suites; selectors are composable Scheme data |
+| multi-program plans and shard selection | `(testing plan)` plus `(testing runner)` | exceeds ERT core; project plans are validated Scheme data |
 | source locations and per-test timing | registry case metadata and runner jiffy clock | parity, with explicit portable source metadata |
 | assertion details and arbitrary result properties | assertion alists retained in each case report | parity |
 | persisted failed-test inspection and rerun | `--report` and `--rerun-failed` | batch parity through Scheme-readable reports |
@@ -102,3 +105,10 @@ case names from a prior report, and owns process exit status. The Context, Plan,
 Redaction, Task, and VCS semantic suites use this path directly; remaining
 legacy portable files still need conversion from file-local counters before
 their individual checks become registry-visible.
+
+`(testing plan)` supplies the layer above an individual registered suite. It
+validates tagged program records and named shard selectors without turning
+project test programs into runtime libraries. The checked-in Consent plan is
+ordinary Scheme data under `tests/scheme/`; the shell launcher consumes only
+the selected path stream needed for host process invocation. Process isolation
+is intentional even though R7RS also provides `(scheme load)`.

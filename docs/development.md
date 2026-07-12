@@ -238,6 +238,15 @@ programs under `tests/scheme/`, outside the manifest. `(stdlib ...)` remains
 reserved for standards-derived libraries. Additional test libraries should be
 named for the missing facility they provide under `(testing ...)`.
 
+`(testing plan)` owns validated, Scheme-readable multi-program test plans.
+The project plan in `tests/scheme/test-plan.scm` records program paths, semantic
+and scheduling tags, and named shards as composable selectors. The plan remains
+project test data outside the runtime manifest; only the reusable plan facility
+is manifested. `tools/run-portable-tests.sh` asks `(testing runner)` to resolve
+that plan and then supplies the irreducible host-specific process invocation.
+R7RS provides `(scheme load)`, but separate processes remain a deliberate test
+isolation policy rather than a language limitation.
+
 `(testing registry)` supplies ERT-style named case registration,
 tags, composable selectors, failed-case reruns, explicit source locations,
 per-case timing through an injectable clock, and Scheme-readable inspection
@@ -264,6 +273,9 @@ guile --r7rs -L scheme tests/scheme/consent-context-test.scm \
 Hosts that do not expose trailing program arguments through R7RS
 `command-line` can provide the same string list as a Scheme datum in
 `TESTING_RUNNER_ARGUMENTS`; this is the portable host-adapter fallback.
+`testing-runner-plan-main` is the corresponding multi-program entry point used
+by the thin launcher; it reads a `(testing plan)` datum and emits the selected
+program paths for one named shard.
 
 Host-neutral semantics must have canonical portable Scheme tests unless a
 documented host boundary makes that impossible. Core runtime, reader,

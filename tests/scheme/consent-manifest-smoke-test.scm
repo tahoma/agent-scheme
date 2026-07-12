@@ -13,6 +13,7 @@
         (scheme write)
         (testing manifest)
         (testing harness)
+        (testing plan)
         (testing registry)
         (testing runner)
         (stdlib manifest)
@@ -170,6 +171,10 @@
 (define testing-registry-entry
   (testing-library-manifest-ref '(testing registry)))
 
+;; Manifest entry for portable multi-program test plans.
+(define testing-plan-entry
+  (testing-library-manifest-ref '(testing plan)))
+
 ;; Manifest entry for the developer-facing portable test runner.
 (define testing-runner-entry
   (testing-library-manifest-ref '(testing runner)))
@@ -194,6 +199,10 @@
 (check 'manifest-smoke-testing-registry-source
        (field testing-registry-entry 'source)
        '(path "registry.sld"))
+
+(check 'manifest-smoke-testing-plan-source
+       (field testing-plan-entry 'source)
+       '(path "plan.sld"))
 
 (check 'manifest-smoke-testing-runner-source
        (field testing-runner-entry 'source)

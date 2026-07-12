@@ -89,11 +89,14 @@ their library names:
 - `scheme/agent/redaction.sld` defines `(agent redaction)`
 - `scheme/testing/harness.sld` defines
   `(testing harness)`
+- `scheme/testing/plan.sld` defines
+  `(testing plan)`
 
 Reusable non-Consent feature libraries prefix public bindings with their
 library namespace rather than `consent-`; for example, `(testing harness)`
 exports `testing-harness-*` and `(testing registry)` exports
-`testing-registry-*`; `(testing runner)` exports `testing-runner-*`.
+`testing-registry-*`; `(testing plan)` exports `testing-plan-*`; `(testing
+runner)` exports `testing-runner-*`.
 
 Here "mirror" means naming and pass-ownership parity, not subordination. Core
 semantic changes should update the corresponding Emacs Lisp and portable R7RS
