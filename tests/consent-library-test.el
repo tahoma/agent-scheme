@@ -2370,6 +2370,164 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
                      '(stdlib testing))))")
     "#t")))
 
+(ert-deftest consent-library-test-srfi-27-imports-and-generates-random-values ()
+  "Import SRFI 27 aliases and exercise representative random-source behavior."
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (srfi 27))
+      (let* ((left (make-random-source))
+             (right (make-random-source))
+             (left-rand (random-source-make-integers left))
+             (right-rand (random-source-make-integers right))
+             (state (random-source-state-ref left))
+             (left-values
+              (list (left-rand 2) (left-rand 17) (left-rand 1000000)))
+             (right-values
+              (list (right-rand 2) (right-rand 17) (right-rand 1000000))))
+        (random-source-state-set! left state)
+        (list (random-source? left)
+              (not (random-source? '(not a source)))
+              (equal? left-values right-values)
+              (equal? (list (left-rand 2) (left-rand 17)
+                            (left-rand 1000000))
+                      left-values)
+              (car state)))")
+    "(#t #t #t #t lecuyer-mrg32k3a)"))
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (srfi srfi-27))
+      (let ((value ((random-source-make-integers (make-random-source)) 23)))
+        (and (integer? value) (<= 0 value) (< value 23)))")
+    "#t"))
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (srfi :27 random-bits))
+      (let ((value ((random-source-make-reals (make-random-source)))))
+        (and (real? value) (< 0 value) (< value 1)))")
+    "#t"))
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (srfi :27))
+      (random-source? default-random-source)")
+    "#t")))
+
+(ert-deftest consent-library-test-srfi-27-pseudo-randomize-is-deterministic ()
+  "Derive deterministic independent SRFI 27 streams by index."
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (srfi 27))
+      (let ((left (make-random-source))
+            (right (make-random-source)))
+        (random-source-pseudo-randomize! left 3 5)
+        (random-source-pseudo-randomize! right 3 5)
+        (let ((left-rand (random-source-make-integers left))
+              (right-rand (random-source-make-integers right)))
+          (equal? (list (left-rand 1000) (left-rand 1000)
+                        (left-rand 1000))
+                  (list (right-rand 1000) (right-rand 1000)
+                        (right-rand 1000)))))")
+    "#t")))
+
+(ert-deftest consent-library-test-srfi-27-randomize-requires-clock-grant ()
+  "Keep SRFI 27 entropy randomization behind the clock capability."
+  (let ((condition
+         (should-error
+          (consent-eval-source
+           "(import (scheme base) (srfi 27))
+            (random-source-randomize! (make-random-source))")
+          :type 'consent-eval-error)))
+    (should
+     (string-match-p "no active clock grant covers request" (cadr condition)))))
+
+(ert-deftest consent-library-test-srfi-27-randomize-uses-clock-grant ()
+  "Allow SRFI 27 entropy randomization when a clock grant is present."
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (consent capability) (srfi 27))
+      (grant-capability!
+       '(capability-grant
+         (id srfi-27-clock-grant)
+         (domain clock)
+         (operations read)
+         (scope (clock system))
+         (expires (uses 1))))
+      (let ((source (make-random-source)))
+        (random-source-randomize! source)
+        (random-source? source))")
+    "#t")))
+
+(ert-deftest consent-library-test-srfi-27-invalid-arguments-report-errors ()
+  "Report SRFI 27 range, unit, and state validation errors."
+  (dolist (source
+           '("(import (scheme base) (srfi 27)) (random-integer 0)"
+             "(import (scheme base) (srfi 27))
+              ((random-source-make-reals (make-random-source) 1))"
+             "(import (scheme base) (srfi 27))
+              (random-source-state-set! (make-random-source) '(bad state))"))
+    (should-error
+     (consent-library-test--external source)
+     :type 'consent-eval-error)))
+
+(ert-deftest consent-library-test-srfi-27-missing-export-diagnostic ()
+  "Report missing SRFI 27 imports through the resolver diagnostic."
+  (let ((error
+         (should-error
+          (consent-library-test--external
+           "(import (scheme base)
+                    (only (srfi 27) missing-random-helper))
+            missing-random-helper")
+          :type 'consent-eval-error)))
+    (should
+     (string-match-p
+      (regexp-quote "only import name not found")
+      (error-message-string error)))
+    (should
+     (string-match-p
+      (regexp-quote "missing-random-helper")
+      (error-message-string error)))))
+
+(ert-deftest consent-library-test-stdlib-manifest-documents-srfi-27 ()
+  "Expose SRFI 27 support status through the stdlib manifest."
+  (should
+   (equal
+    (consent-library-test--stdlib-manifest-external
+     "(let ((entry (stdlib-manifest-ref '(stdlib random-bits)))
+            (alias (stdlib-manifest-ref '(srfi 27)))
+            (portable-alias (stdlib-manifest-ref '(srfi srfi-27)))
+            (legacy-number-alias (stdlib-manifest-ref '(srfi :27)))
+            (legacy-alias (stdlib-manifest-ref '(srfi :27 random-bits))))
+        (and (eq? (car entry) 'manifest-entry)
+             (equal? (manifest-field entry 'name) '(stdlib random-bits))
+             (equal? (manifest-field entry 'status)
+                     'vendored-adapted-implementation)
+             (equal? (manifest-subfield entry 'provenance 'upstream-license)
+                     \"MIT\")
+             (equal? (manifest-subfield entry 'provenance 'local-license)
+                     \"MIT\")
+             (eq? (manifest-subfield entry 'provenance 'vendored?) #t)
+             (equal? (manifest-field entry 'aliases)
+                     '((srfi 27)
+                       (srfi srfi-27)
+                       (srfi :27)
+                       (srfi :27 random-bits)))
+             (equal? (manifest-field entry 'dependencies)
+                     '((library (scheme base))
+                       (library (scheme time))))
+             (equal? (manifest-field alias 'target) '(stdlib random-bits))
+             (equal? (manifest-field portable-alias 'target)
+                     '(stdlib random-bits))
+             (equal? (manifest-field legacy-number-alias 'target)
+                     '(stdlib random-bits))
+             (equal? (manifest-field legacy-alias 'target)
+                     '(stdlib random-bits))))")
+    "#t")))
+
 (ert-deftest consent-library-test-srfi-180-imports-and-round-trips-json ()
   "Import `(srfi 180)' through the library registry and use JSON."
   (should
@@ -3210,6 +3368,7 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
   "Expose SRFI bundle intake metadata as Scheme-readable records."
   (let ((vendored (consent-library-test--vendored-srfi-record 1))
         (testing (consent-library-test--vendored-srfi-record 64))
+        (random-bits (consent-library-test--vendored-srfi-record 27))
         (cond-expand (consent-library-test--vendored-srfi-record 0))
         (shim (consent-library-test--vendored-srfi-record 16))
         (libraries (consent-library-test--vendored-srfi-record 97))
@@ -3315,6 +3474,60 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
                     (mapcar #'consent-datum->external
                             (consent-library-test--record-field
                              testing 'tests))))
+
+    (should (equal (consent-library-test--record-field-external
+                    random-bits 'number)
+                   "27"))
+    (should (equal (consent-library-test--record-field-external
+                    random-bits 'name)
+                   "random-bits"))
+    (should (equal (consent-library-test--record-field-external
+                    random-bits 'library)
+                   "(stdlib random-bits)"))
+    (should (equal (consent-library-test--record-field-external
+                    random-bits 'classification)
+                   "vendored-library"))
+    (should (equal (consent-library-test--record-field-external
+                    random-bits 'status)
+                   "vendored-adapted-implementation"))
+    (should (equal (consent-library-test--record-field
+                    random-bits 'source-url)
+                   "https://github.com/scheme-requests-for-implementation/srfi-27"))
+    (should (equal (consent-library-test--record-field
+                    random-bits 'license)
+                   "MIT"))
+    (should (member "(srfi 27)"
+                    (mapcar #'consent-datum->external
+                            (consent-library-test--record-field
+                             random-bits 'import-names))))
+    (should (member "(srfi srfi-27)"
+                    (mapcar #'consent-datum->external
+                            (consent-library-test--record-field
+                             random-bits 'import-names))))
+    (should (member "(srfi :27)"
+                    (mapcar #'consent-datum->external
+                            (consent-library-test--record-field
+                             random-bits 'import-names))))
+    (should (member "(srfi :27 random-bits)"
+                    (mapcar #'consent-datum->external
+                            (consent-library-test--record-field
+                             random-bits 'import-names))))
+    (should (member "(stdlib random-bits)"
+                    (mapcar #'consent-datum->external
+                            (consent-library-test--record-field
+                             random-bits 'import-names))))
+    (should (member "(library (scheme time))"
+                    (mapcar #'consent-datum->external
+                            (consent-library-test--record-field
+                             random-bits 'dependencies))))
+    (should (member "clock-grant-randomization"
+                    (mapcar #'consent-datum->external
+                            (consent-library-test--record-field
+                             random-bits 'tests))))
+    (should (member "portable-host-suite"
+                    (mapcar #'consent-datum->external
+                            (consent-library-test--record-field
+                             random-bits 'tests))))
 
     (should (equal (consent-library-test--record-field-external
                     cond-expand 'number)

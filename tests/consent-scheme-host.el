@@ -38,6 +38,7 @@
     "tests/scheme/stdlib-receive-test.scm"
     "tests/scheme/stdlib-assume-test.scm"
     "tests/scheme/stdlib-testing-test.scm"
+    "tests/scheme/stdlib-random-bits-test.scm"
     "tests/scheme/stdlib-generator-test.scm"
     "tests/scheme/consent-eval-test.scm")
   "Portable Scheme test files exercised by full-suite host shards.")
