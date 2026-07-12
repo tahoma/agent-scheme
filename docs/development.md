@@ -226,6 +226,18 @@ peers but stays opt-in through `make test-portable-chibi`; that target uses
 `chibi-scheme` on `PATH`, or the command named by `CONSENT_CHIBI`, and skips
 when Chibi is unavailable.
 
+Portable test bodies use SRFI 64 through `(stdlib testing)` as their result
+engine, with SRFI 252 property tests and SRFI 78/SRFI 42 table checks where
+they improve coverage. `(development testing harness)` supplies only the
+suite lifecycle, batch failure, Scheme-readable summary, and SRFI 78 adapter.
+The `scheme/development/` namespace contains reusable portable developer
+libraries and is part of the runtime manifest index, so downstream users can
+import the harness. Executable Consent test suites and cases remain ordinary
+programs under `tests/scheme/`, outside the manifest. `(stdlib ...)` remains
+reserved for standards-derived libraries. Additional test libraries should be
+named for the missing facility they provide, such as a future `(development
+testing registry)`.
+
 Host-neutral semantics must have canonical portable Scheme tests unless a
 documented host boundary makes that impossible. Core runtime, reader,
 evaluator, macro, library, and standard-library changes should therefore add

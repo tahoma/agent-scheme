@@ -20,6 +20,9 @@ library outside the catalog:
   implementation libraries.
 - `scheme/stdlib/manifest.sld` for optional stdlib, SRFI, and R7RS-large-facing
   aliases or owned portable libraries.
+- `scheme/development/manifest.sld` for reusable portable development
+  facilities; project-specific test programs and fixtures remain outside the
+  manifest graph.
 - `scheme/agent/manifest.sld` for public agent APIs and internal agent primitive
   backing libraries.
 - `scheme/cli/manifest.sld` for CLI adapter-facing libraries.

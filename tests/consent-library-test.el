@@ -811,6 +811,28 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
        (cadr (assq 'status (cdr (session-store-retire! store 'source-alpha)))))")
     "(source-alpha source-alpha (source-alpha source-beta) suspended active source-snap source-beta retired)")))
 
+(ert-deftest consent-library-test-development-testing-harness-is-source-backed ()
+  "Expose the reusable portable test harness through the runtime catalog."
+  (let* ((entry
+          (consent--library-collection-manifest-entry
+           "(development testing harness)"))
+         (source-file
+          (consent-library-test--manifest-source-file
+           "(development testing harness)")))
+    (should entry)
+    (should (eq (plist-get entry :visibility) 'public))
+    (should (equal (plist-get entry :exports)
+                   '("consent-test-run"
+                     "consent-test-check"
+                     "consent-test-runner-summary"
+                     "consent-test-runner-failed?")))
+    (should source-file)
+    (should
+     (string-suffix-p
+      "scheme/development/testing/harness.sld"
+      source-file))
+    (should (file-readable-p source-file))))
+
 (ert-deftest consent-library-test-agent-memory-is-source-backed ()
   "Load `(agent memory)' from the shared portable source library."
   (let ((source-file

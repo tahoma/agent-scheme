@@ -259,6 +259,8 @@ without exposing raw host VCS objects or granting mutation by default.
 ## Contributor Placement Rules
 
 - Put host-neutral R7RS libraries in `scheme/consent/`.
+- Put reusable portable developer facilities under `scheme/development/` and
+  register them in the development collection manifest.
 - Put Emacs adapter code in `lisp/consent-*.el`.
 - Put portable Scheme tests in `tests/scheme/` and bridge them through ERT.
 - Put host adapter tests in focused `tests/consent-*-test.el` files.
