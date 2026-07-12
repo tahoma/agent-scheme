@@ -1353,6 +1353,53 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
                       missing))))))))
     (should-not (nreverse missing))))
 
+(defun consent-library-test--file-sha256 (path)
+  "Return the hexadecimal SHA-256 digest of PATH's literal bytes."
+  (with-temp-buffer
+    (set-buffer-multibyte nil)
+    (insert-file-contents-literally path)
+    (secure-hash 'sha256 (current-buffer))))
+
+(ert-deftest consent-library-test-srfi-reference-markdown-inventory ()
+  "Keep generated SRFI Markdown licensed, hashed, and paired with source HTML."
+  (let* ((reference-directory
+          (expand-file-name "reference"
+                            consent-library-test--stdlib-manifest-directory))
+         (inventory-path (expand-file-name "README.md" reference-directory))
+         (inventory
+          (with-temp-buffer
+            (insert-file-contents inventory-path)
+            (buffer-string)))
+         (html-paths
+          (directory-files-recursively reference-directory
+                                       "srfi-[0-9]+\\.html\\'")))
+    (should html-paths)
+    (dolist (html-path html-paths)
+      (let* ((markdown-path (concat (file-name-sans-extension html-path) ".md"))
+             (relative-html (file-relative-name html-path reference-directory))
+             (relative-markdown
+              (file-relative-name markdown-path reference-directory))
+             (html-hash (consent-library-test--file-sha256 html-path))
+             (markdown-hash
+              (and (file-exists-p markdown-path)
+                   (consent-library-test--file-sha256 markdown-path))))
+        (should (file-exists-p markdown-path))
+        (with-temp-buffer
+          (insert-file-contents markdown-path)
+          (should (search-forward
+                   (concat "<!-- SPDX-" "License-Identifier: MIT -->") nil t))
+          (should (search-forward
+                   (concat "<!-- SPDX-"
+                           "FileCopyrightText: SRFI document authors -->")
+                   nil t))
+          (should (search-forward "Permission is hereby granted" nil t)))
+        (should
+         (string-match-p
+          (regexp-quote
+           (format "`%s` | `%s` | `%s` | `%s`"
+                   relative-markdown markdown-hash relative-html html-hash))
+          inventory))))))
+
 (ert-deftest consent-library-test-built-in-manifests-declare-owned-exports ()
   "Require owned libraries to spell exports while pure aliases may inherit."
   (let ((missing (list 'missing-exports))
@@ -2791,7 +2838,7 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
              (eq? (manifest-subfield entry 'provenance 'vendored?) #t)
              (equal? (manifest-subfield entry 'provenance
                                         'local-reference-documents)
-                     '((path \"reference/srfi-252/srfi-252.html\")
+                     '((path \"reference/srfi-252/srfi-252.md\")
                        (role specification)
                        (source srfi)))
              (member \"property-test-tests.scm\"
@@ -2902,7 +2949,7 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
              (eq? (manifest-subfield entry 'provenance 'vendored?) #t)
              (equal? (manifest-subfield entry 'provenance
                                         'local-reference-documents)
-                     '((path \"reference/srfi-42/srfi-42.html\")
+                     '((path \"reference/srfi-42/srfi-42.md\")
                        (role specification)
                        (source srfi)))
              (member
@@ -3011,7 +3058,7 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
              (eq? (manifest-subfield entry 'provenance 'vendored?) #t)
              (equal? (manifest-subfield entry 'provenance
                                         'local-reference-documents)
-                     '((path \"reference/srfi-78/srfi-78.html\")
+                     '((path \"reference/srfi-78/srfi-78.md\")
                        (role specification)
                        (source srfi)))
              (member
