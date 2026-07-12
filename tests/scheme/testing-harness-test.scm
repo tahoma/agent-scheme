@@ -1,20 +1,20 @@
-;;; Portable development testing harness tests.
+;;; Portable testing harness tests.
 ;; SPDX-License-Identifier: Apache-2.0
 ;; SPDX-FileCopyrightText: 2026 Tahoma Toelkes
 
 (import (scheme base)
-        (development manifest)
-        (development testing harness)
+        (testing manifest)
+        (testing harness)
         (stdlib testing)
         (stdlib lightweight-testing))
 
 (consent-test-run "Consent testing extension"
   (let ((entry
-         (development-library-manifest-ref
-          '(development testing harness))))
+         (testing-library-manifest-ref
+          '(testing harness))))
     (test-assert "harness is publicly manifested" entry)
     (test-equal "harness source path"
-                '(path "testing/harness.sld")
+                '(path "harness.sld")
                 (cadr (assq 'source (cdr entry)))))
   (let ((sample-runner (test-runner-null)))
     (test-runner-pass-count! sample-runner 2)

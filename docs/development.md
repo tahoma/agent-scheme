@@ -228,17 +228,16 @@ when Chibi is unavailable.
 
 Portable test bodies use SRFI 64 through `(stdlib testing)` as their result
 engine, with SRFI 252 property tests and SRFI 78/SRFI 42 table checks where
-they improve coverage. `(development testing harness)` supplies only the
+they improve coverage. `(testing harness)` supplies only the
 suite lifecycle, batch failure, Scheme-readable summary, and SRFI 78 adapter.
-The `scheme/development/` namespace contains reusable portable developer
-libraries and is part of the runtime manifest index, so downstream users can
+The `scheme/testing/` namespace contains reusable portable testing libraries
+and is part of the runtime manifest index, so downstream users can
 import the harness. Executable Consent test suites and cases remain ordinary
 programs under `tests/scheme/`, outside the manifest. `(stdlib ...)` remains
 reserved for standards-derived libraries. Additional test libraries should be
-named for the missing facility they provide, such as a future `(development
-testing registry)`.
+named for the missing facility they provide under `(testing ...)`.
 
-`(development testing registry)` supplies ERT-style named case registration,
+`(testing registry)` supplies ERT-style named case registration,
 tags, composable selectors, failed-case reruns, explicit source locations,
 per-case timing through an injectable clock, and Scheme-readable inspection
 records. Its diagnostic hook lets an Emacs, CLI, or other host attach native

@@ -5,7 +5,7 @@
 (import (scheme base)
         (scheme write)
         (agent task)
-        (development testing harness)
+        (testing harness)
         (stdlib testing)
         (stdlib eager-comprehensions)
         (stdlib lightweight-testing))

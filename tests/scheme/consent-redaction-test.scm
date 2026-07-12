@@ -5,7 +5,7 @@
 (import (scheme base)
         (scheme write)
         (agent redaction)
-        (development testing harness)
+        (testing harness)
         (stdlib testing)
         (stdlib random-bits)
         (stdlib random-data-generators)
