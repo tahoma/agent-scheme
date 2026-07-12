@@ -60,6 +60,9 @@
               '("tests/scheme/consent-reader-test.scm"
                 "tests/scheme/consent-manifest-smoke-test.scm")
               (testing-plan-files project-plan 'compiled))
+  (test-equal "compiled live shard uses the self-hosted program"
+              '("tests/scheme/consent-models-compiled-live-test.scm")
+              (testing-plan-files project-plan 'live-compiled))
   (let ((entry (testing-library-manifest-ref '(testing plan))))
     (test-assert "plan library is publicly manifested" entry)
     (test-equal "plan library source"

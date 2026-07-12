@@ -275,7 +275,10 @@ Hosts that do not expose trailing program arguments through R7RS
 `TESTING_RUNNER_ARGUMENTS`; this is the portable host-adapter fallback.
 `testing-runner-plan-main` is the corresponding multi-program entry point used
 by the thin launcher; it reads a `(testing plan)` datum and emits the selected
-program paths for one named shard.
+program paths for one named shard. Host-specific execution semantics remain
+explicit in plan data: the live model checks use `live-direct` for R7RS hosts
+that enter the Consent evaluator and `live-compiled` for self-hosted binaries
+that already execute inside a Consent interaction context.
 
 Host-neutral semantics must have canonical portable Scheme tests unless a
 documented host boundary makes that impossible. Core runtime, reader,

@@ -77,6 +77,13 @@
       "CONSENT_COMPILED"
       "CONSENT_CHIBI"))))
 
+(ert-deftest consent-portable-host-helper-test-selects-live-plan-shards ()
+  "Select direct and self-hosted live programs by host execution semantics."
+  (should (eq (consent--scheme-host-live-plan-shard 'racket) 'live-direct))
+  (should (eq (consent--scheme-host-live-plan-shard 'compiled) 'live-compiled))
+  (should
+   (eq (consent--scheme-host-live-plan-shard 'gambit-native) 'live-compiled)))
+
 (ert-deftest consent-portable-host-helper-test-expands-gambit-native-runner-path ()
   "Expand repository-relative configured Gambit-compiled runner paths."
   (let ((prior (getenv "CONSENT_GAMBIT_NATIVE"))

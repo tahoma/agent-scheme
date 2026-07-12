@@ -111,4 +111,7 @@ validates tagged program records and named shard selectors without turning
 project test programs into runtime libraries. The checked-in Consent plan is
 ordinary Scheme data under `tests/scheme/`; the shell launcher consumes only
 the selected path stream needed for host process invocation. Process isolation
-is intentional even though R7RS also provides `(scheme load)`.
+is intentional even though R7RS also provides `(scheme load)`. Separate
+`live-direct` and `live-compiled` selectors keep nested-evaluator and
+self-hosted interaction-context programs explicit instead of hiding that host
+execution distinction in ERT.

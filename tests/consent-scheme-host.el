@@ -311,6 +311,12 @@ RACKET-COLLECTION-ROOT is accepted for API symmetry with test arguments."
   "Run the portable reflection stress suite on HOST named DISPLAY-NAME."
   (consent--scheme-host-run-plan host display-name 'reflect-stress))
 
+(defun consent--scheme-host-live-plan-shard (host)
+  "Return the live model plan shard appropriate for HOST."
+  (if (memq host '(compiled gambit-native))
+      'live-compiled
+    'live-direct))
+
 (provide 'consent-scheme-host)
 
 ;;; consent-scheme-host.el ends here
