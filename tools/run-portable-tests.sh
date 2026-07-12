@@ -89,6 +89,7 @@ fi
 cd "$root"
 while IFS= read -r test_file; do
   [[ -n $test_file ]] || continue
+  [[ $test_file == \#* ]] && continue
   current_test=$test_file
   case $host in
     gambit)
