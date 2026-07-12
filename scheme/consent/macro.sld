@@ -685,6 +685,22 @@
             (identifier-binding-token
              input use-environment use-syntax-environment))))
 
+    (define (syntax-numeric-datum? datum)
+      "Report whether DATUM is a syntax-rules numeric datum."
+      (or (number? datum) (consent-number? datum)))
+
+    (define (syntax-datum-equal? pattern input)
+      "Report whether non-identifier pattern DATUM matches INPUT."
+      "Consent-number records preserve source metadata and lexical numeric"
+      "syntax, so compare numeric pattern datums by canonical external value"
+      "instead of record identity."
+      (cond
+       ((and (syntax-numeric-datum? pattern)
+             (syntax-numeric-datum? input))
+        (string=? (consent-number->external pattern)
+                  (consent-number->external input)))
+       (else (equal? pattern input))))
+
     (define (match-pattern pattern input transformer bindings path
                            use-environment use-syntax-environment)
       "Match one syntax-rules pattern node and record pattern captures."
@@ -737,7 +753,7 @@
                 use-environment
                 use-syntax-environment)))
          (else
-          (equal? pattern input)))))
+          (syntax-datum-equal? pattern input)))))
 
     (define (find-ellipsis-index patterns ellipsis)
       "Return the index of the ellipsis marker in PATTERNS, or #f."

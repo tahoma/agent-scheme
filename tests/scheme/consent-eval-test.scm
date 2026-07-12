@@ -2938,6 +2938,18 @@
                    (+ x 1))"
                 "42")
 
+(check-external/options 'syntax-rules-numeric-datum-source-metadata
+                        "(define-syntax numeric-tag
+                           (syntax-rules ()
+                             ((numeric-tag 1) 'one)
+                             ((numeric-tag 2.0) 'two-decimal)
+                             ((numeric-tag _) 'other)))
+                         (list (numeric-tag 1)
+                               (numeric-tag 2.0)
+                               (numeric-tag 3))"
+                        '((source-metadata . #t))
+                        "(one two-decimal other)")
+
 (check-external 'introduced-bindings-are-hygienic
                 "(define-syntax my-or
                    (syntax-rules ()
