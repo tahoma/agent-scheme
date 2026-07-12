@@ -1,0 +1,2 @@
+tests/scheme/consent-reader-test.scm
+tests/scheme/consent-manifest-smoke-test.scm

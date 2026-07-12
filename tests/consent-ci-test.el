@@ -87,6 +87,23 @@
                                  slowest)
                          '("consent-reader-test-slow"
                            "consent-reader-test-skip"))))
+          (delete-file log))))
+
+(ert-deftest consent-ci-test-parses-portable-runner-summary ()
+  "Parse Scheme-native portable runner counts without an ERT wrapper."
+  (let* ((log (consent-ci-test--write-log
+               (concat
+                "CONSENT_CI_PORTABLE_SUMMARY=50 49 1 2 12\n"
+                "CONSENT_CI_SHARD_NAME=Portable R7RS\n"
+                "CONSENT_CI_WALL_SECONDS=13\n")))
+         (shard (consent-ci-parse-log-file log)))
+    (unwind-protect
+        (progn
+          (should (= (plist-get shard :ran) 50))
+          (should (= (plist-get shard :expected) 49))
+          (should (= (plist-get shard :unexpected) 1))
+          (should (= (plist-get shard :skipped) 2))
+          (should (= (plist-get shard :ert-seconds) 12.0)))
       (delete-file log))))
 
 (ert-deftest consent-ci-test-renders-summary-with-comparable-surfaces ()
@@ -656,9 +673,26 @@
                  "CONSENT_PORTABLE_TEST_SHARD_TARGETS \\?=.*test-portable-chibi"
                  makefile))
     (should (string-match-p
-             "CONSENT_PORTABLE_CHIBI_TEST_SELECTOR \\?="
+             "CONSENT_PORTABLE_HOST=chibi"
              makefile))
     (should (string-match-p "^test-portable-chibi:" makefile))))
+
+(ert-deftest consent-ci-test-portable-shards-bypass-ert ()
+  "Run portable host shards through the direct host launcher, not ERT."
+  (let ((makefile (consent-ci-test--repo-file-string "Makefile"))
+        (launcher
+         (consent-ci-test--repo-file-string "tools/run-portable-tests.sh"))
+        (files
+         (consent-ci-test--repo-file-string
+          "tests/scheme/full-test-files.txt")))
+    (dolist (host '("gambit" "racket" "guile" "gauche" "chibi"))
+      (should
+       (string-match-p
+        (format "CONSENT_PORTABLE_HOST=%s" host)
+        makefile)))
+    (should-not (string-match-p "emacs\\|ert" launcher))
+    (should (string-match-p "testing-runner-test.scm" files))
+    (should (string-match-p "consent-context-test.scm" files))))
 
 (ert-deftest consent-ci-test-workflow-matrixes-host-option-variants ()
   "Deal out CI shards across host, syntax metadata, and docstring retention."

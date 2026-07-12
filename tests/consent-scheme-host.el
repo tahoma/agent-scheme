@@ -24,6 +24,7 @@
     "tests/scheme/consent-context-test.scm"
     "tests/scheme/testing-harness-test.scm"
     "tests/scheme/testing-registry-test.scm"
+    "tests/scheme/testing-runner-test.scm"
     "tests/scheme/consent-plan-test.scm"
     "tests/scheme/consent-redaction-test.scm"
     "tests/scheme/consent-task-test.scm"

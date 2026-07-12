@@ -219,7 +219,8 @@ and does not load user Emacs configuration.
 Future R7RS conformance fixtures should plug into `make test` through the same
 test command instead of adding a second top-level verification path.
 
-Portable R7RS tests live under `tests/scheme/` and are launched by ERT. The
+Portable R7RS tests live under `tests/scheme/` and are launched directly by
+`tools/run-portable-tests.sh`; ERT is not part of their execution path. The
 default portable shards run the full suite under Gambit, Racket with its `r7rs`
 package, Guile, and Gauche. Chibi runs the same aggregate host suite as its
 peers but stays opt-in through `make test-portable-chibi`; that target uses
@@ -243,11 +244,32 @@ per-case timing through an injectable clock, and Scheme-readable inspection
 records. Its diagnostic hook lets an Emacs, CLI, or other host attach native
 backtraces without putting non-R7RS stack APIs in portable test code.
 
+`(testing runner)` is the developer-facing batch layer. Registered suite
+programs call `testing-runner-main` with `(command-line)` and consequently
+support `--list`, `--select SELECTOR`, `--verbose`, `--report FILE`, and
+`--rerun-failed FILE`. Selectors are Scheme data: `(all)`, `(name NAME)`,
+`(tag TAG)`, and recursively composed `(and ...)`, `(or ...)`, and `(not ...)`
+forms. A normal run prints a concise summary, preserves assertion-level SRFI 64
+result properties in its report, records per-case timing and diagnostics, and
+exits zero for success, one for test failure, or two for runner/configuration
+failure. For example:
+
+```sh
+guile --r7rs -L scheme tests/scheme/consent-context-test.scm \
+  --select '(tag property)' --report context-test-report.scm
+guile --r7rs -L scheme tests/scheme/consent-context-test.scm \
+  --rerun-failed context-test-report.scm
+```
+
+Hosts that do not expose trailing program arguments through R7RS
+`command-line` can provide the same string list as a Scheme datum in
+`TESTING_RUNNER_ARGUMENTS`; this is the portable host-adapter fallback.
+
 Host-neutral semantics must have canonical portable Scheme tests unless a
 documented host boundary makes that impossible. Core runtime, reader,
 evaluator, macro, library, and standard-library changes should therefore add
-or update `tests/scheme/` coverage first. ERT remains the runner and reporting
-bridge for those files, and continues to own Emacs adapter behavior such as
+or update `tests/scheme/` coverage first. The Scheme runner and thin host
+launcher own those files; ERT continues to own Emacs adapter behavior such as
 buffers, windows, commands, and prompts. When host-neutral coverage must remain
 ERT-only temporarily, record the reason in the test and link the focused
 portable follow-up.
@@ -813,8 +835,8 @@ axis-sensitive changes to the reader, writer, or docstring machinery, since
 those are the paths the trimmed default no longer fans out across every host.
 
 Set `CONSENT_TEST_TARGET_ROOT` to keep the current checkout's Makefile and
-ERT harness while pointing portable Scheme host commands at another checkout or
-archive's `scheme/` directory. This is useful for historical timing sweeps that
+portable test launcher while pointing Scheme host commands at another checkout
+or archive's `scheme/` directory. This is useful for historical timing sweeps that
 replay a newer harness against an older reader/evaluator implementation:
 
 ```sh

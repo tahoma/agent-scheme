@@ -21,6 +21,7 @@
           testing-registry-diagnostic-hook
           testing-registry-run-registered
           testing-registry-rerun-failed
+          testing-registry-report-failed?
           testing-registry-report-failed-names)
   (import (scheme base)
           (scheme write)
@@ -98,7 +99,10 @@
       (syntax-rules ()
         ((_ name tags (source-file source-line) body ...)
          (testing-registry-register!
-          name tags source-file source-line (lambda () body ...)))))
+          name tags source-file source-line (lambda () body ...)))
+        ((_ name tags body ...)
+         (testing-registry-register!
+          name tags #f #f (lambda () body ...)))))
 
     (define (testing-registry-select-all case)
       "Return true for every CASE."
@@ -152,11 +156,26 @@
       (lambda (case) (not (selector case))))
 
     (define (testing-registry-counts runner)
-      "Return RUNNER's unexpected-result counts."
-      (list (test-runner-fail-count runner)
-            (test-runner-xpass-count runner)))
+      "Return RUNNER's result counts."
+      (list (test-runner-pass-count runner)
+            (test-runner-fail-count runner)
+            (test-runner-xfail-count runner)
+            (test-runner-xpass-count runner)
+            (test-runner-skip-count runner)))
 
-    (define (testing-registry-case-result case status duration diagnostic)
+    (define (testing-registry-count-delta before after)
+      "Subtract result count list BEFORE from AFTER."
+      (map - after before))
+
+    (define (testing-registry-new-results current previous)
+      "Return result alists added to CURRENT since PREVIOUS."
+      (let loop ((rest current) (results '()))
+        (if (eq? rest previous)
+            (reverse results)
+            (loop (cdr rest) (cons (car rest) results)))))
+
+    (define (testing-registry-case-result
+             case status duration counts assertions diagnostic)
       "Return a Scheme-readable result for CASE."
       (list 'testing-registry-case-result
             (list 'name (testing-registry-case-name case))
@@ -165,11 +184,14 @@
             (list 'source-line (testing-registry-case-source-line case))
             (list 'duration duration)
             (list 'status status)
+            (list 'counts counts)
+            (list 'assertions assertions)
             (list 'diagnostic diagnostic)))
 
-    (define (testing-registry-run-case runner case)
+    (define (testing-registry-run-case runner case results)
       "Run CASE with RUNNER and return its portable result record."
       (let ((before (testing-registry-counts runner))
+            (results-before (results))
             (started ((testing-registry-clock)))
             (raised #f))
         (guard (condition
@@ -179,16 +201,27 @@
           ((testing-registry-case-thunk case)))
         (let* ((finished ((testing-registry-clock)))
                (after (testing-registry-counts runner))
-               (failed? (not (equal? before after)))
+               (counts (testing-registry-count-delta before after))
+               (failed? (or (> (cadr counts) 0) (> (list-ref counts 3) 0)))
                (duration (if (and (number? started) (number? finished))
                              (- finished started)
                              #f))
                (diagnostic
                 (if failed?
-                    ((testing-registry-diagnostic-hook) case raised)
+                    ((testing-registry-diagnostic-hook)
+                     case (or raised 'assertion-failed))
                     #f)))
           (testing-registry-case-result
-           case (if failed? 'fail 'pass) duration diagnostic))))
+           case
+           (cond
+            (failed? 'fail)
+            ((and (= (car counts) 0) (> (list-ref counts 4) 0)) 'skip)
+            ((and (= (car counts) 0) (> (list-ref counts 2) 0)) 'xfail)
+            (else 'pass))
+           duration
+           counts
+           (testing-registry-new-results (results) results-before)
+           diagnostic))))
 
     (define (testing-registry-report-failed-names report)
       "Return failed test names from REPORT."
@@ -204,6 +237,13 @@
               (loop (cdr results)
                     (if (eq? status 'fail) (cons name names) names))))))
 
+    (define (testing-registry-report-failed? report)
+      "Return true when REPORT contains a failed case."
+      #((parameters (report (type list) (description "Test report.")))
+        (returns (type boolean) (description "True when a case failed."))
+        (effects pure error))
+      (pair? (testing-registry-report-failed-names report)))
+
     (define (testing-registry-run-registered suite selector)
       "Run registered cases selected by SELECTOR and return a report."
       #((parameters
@@ -211,26 +251,32 @@
          (selector (type procedure) (description "Case selector.")))
         (returns (type list) (description "Portable test report."))
         (effects state-read state-write port-io error))
-      (let ((runner (test-runner-simple)) (results '()))
+      (let* ((runner (test-runner-simple))
+             (results '())
+             (assertion-results '())
+             (simple-end (test-runner-on-test-end runner)))
+        (test-runner-on-test-end!
+         runner
+         (lambda (runner)
+           (set! assertion-results
+                 (cons (test-result-alist runner) assertion-results))
+           (simple-end runner)))
         (test-with-runner runner
           (test-begin suite)
           (for-each
            (lambda (case)
              (if (selector case)
                  (set! results
-                       (cons (testing-registry-run-case runner case) results))))
+                       (cons
+                        (testing-registry-run-case
+                         runner case (lambda () assertion-results))
+                        results))))
            testing-registry-cases)
           (test-end suite))
-        (let ((report
-               (list 'testing-registry-report
-                     (list 'summary
-                           (testing-harness-runner-summary suite runner))
-                     (list 'cases (reverse results)))))
-          (write report)
-          (newline)
-          (if (testing-harness-runner-failed? runner)
-              (error "Consent registered test suite failed" report)
-              report))))
+        (list 'testing-registry-report
+              (list 'summary
+                    (testing-harness-runner-summary suite runner))
+              (list 'cases (reverse results)))))
 
     (define (testing-registry-rerun-failed suite report)
       "Rerun the cases that failed in REPORT."

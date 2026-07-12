@@ -91,12 +91,44 @@
            testing-registry-diagnostic-hook
            testing-registry-run-registered
            testing-registry-rerun-failed
+           testing-registry-report-failed?
            testing-registry-report-failed-names))
          (dependencies
           ((library (scheme base))
            (library (scheme write))
            (library (testing harness))
            (library (stdlib testing))))
+         (provenance ((origin repo)))
+         (status implemented)
+         (canonical #t))
+        (manifest-entry
+         (schema-version 1)
+         (kind library)
+         (name (testing runner))
+         (owner consent-core)
+         (provider repo-source)
+         (visibility public)
+         (layer library)
+         (source-kind source-library)
+         (source (path "runner.sld"))
+         (api-version (compat 0))
+         (source-version unknown)
+         (realization portable-source)
+         (exports
+          (testing-runner-selector
+           testing-runner-options
+           testing-runner-last-report
+           testing-runner-rerun-failed
+           testing-runner-run
+           testing-runner-main))
+         (dependencies
+          ((library (scheme base))
+           (library (scheme file))
+           (library (scheme process-context))
+           (library (scheme read))
+           (library (scheme time))
+           (library (scheme write))
+           (library (testing registry))))
          (provenance ((origin repo)))
          (status implemented)
          (canonical #t))))

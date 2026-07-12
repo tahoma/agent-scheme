@@ -14,6 +14,7 @@
         (testing manifest)
         (testing harness)
         (testing registry)
+        (testing runner)
         (stdlib manifest)
         (consent json)
         (srfi 0)
@@ -169,6 +170,10 @@
 (define testing-registry-entry
   (testing-library-manifest-ref '(testing registry)))
 
+;; Manifest entry for the developer-facing portable test runner.
+(define testing-runner-entry
+  (testing-library-manifest-ref '(testing runner)))
+
 ;; Output string used to verify that pure alias exports include json-write.
 (define json-output (open-output-string))
 
@@ -189,6 +194,10 @@
 (check 'manifest-smoke-testing-registry-source
        (field testing-registry-entry 'source)
        '(path "registry.sld"))
+
+(check 'manifest-smoke-testing-runner-source
+       (field testing-runner-entry 'source)
+       '(path "runner.sld"))
 
 (check 'manifest-smoke-consent-json-target
        (field consent-json-entry 'target)
