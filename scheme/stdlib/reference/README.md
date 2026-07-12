@@ -27,6 +27,7 @@ as reference documents under the report-copying permission recorded in
 | SRFI 8 | `srfi-8/srfi-8.html` | `https://srfi.schemers.org/srfi-8/srfi-8.html` | `745e473cbe3062150587b9e9412603caa53b452c1dd6648f3e3cdaad8eff33eb` |
 | SRFI 16 | `srfi-16/srfi-16.html` | `https://srfi.schemers.org/srfi-16/srfi-16.html` | `a2a16ebe3811e36a12a4eee69665ba739bdd88f67d04563f4ad80ca35c590fbd` |
 | SRFI 27 | `srfi-27/srfi-27.html` | `https://srfi.schemers.org/srfi-27/srfi-27.html` | `505040519b7d44a26152e424d932dec72dbb53eee153314189f9cc15bb88ac8e` |
+| SRFI 42 | `srfi-42/srfi-42.html` | `https://srfi.schemers.org/srfi-42/srfi-42.html` | `b6ab81485f568bccdb43358ec2a0ef4fa906d0a5c068588a243d95f087073daf` |
 | SRFI 64 | `srfi-64/srfi-64.html` | `https://srfi.schemers.org/srfi-64/srfi-64.html` | `ad4b7ab6c2137c997e21d3a0c2a347ee99f2837ad79467200d0b63bff8cfb1a5` |
 | SRFI 97 | `srfi-97/srfi-97.html` | `https://srfi.schemers.org/srfi-97/srfi-97.html` | `a0572a9fd50bead52d86ffa1a589f00e013a0ad0842a837026d076134b3bfb43` |
 | SRFI 128 | `srfi-128/srfi-128.html` | `https://srfi.schemers.org/srfi-128/srfi-128.html` | `e981d747fc5f53bcc72f6868333a35cf056b198386b80541a2ff266916c9fa97` |
