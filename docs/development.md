@@ -226,10 +226,17 @@ peers but stays opt-in through `make test-portable-chibi`; that target uses
 `chibi-scheme` on `PATH`, or the command named by `CONSENT_CHIBI`, and skips
 when Chibi is unavailable.
 
-Core runtime, reader, evaluator, macro, library, and standard-library changes
-should normally add or update portable tests alongside the Emacs Lisp tests.
-Those tests are parity checks for the product path, not optional examples of
-the bootstrap implementation.
+Host-neutral semantics must have canonical portable Scheme tests unless a
+documented host boundary makes that impossible. Core runtime, reader,
+evaluator, macro, library, and standard-library changes should therefore add
+or update `tests/scheme/` coverage first. ERT remains the runner and reporting
+bridge for those files, and continues to own Emacs adapter behavior such as
+buffers, windows, commands, and prompts. When host-neutral coverage must remain
+ERT-only temporarily, record the reason in the test and link the focused
+portable follow-up.
+
+The current placement audit and justified ERT-only categories are recorded in
+[`docs/portable-test-audit.md`](portable-test-audit.md).
 
 The multi-host bootstrap strategy in
 [`docs/multi-host-bootstrap.md`](multi-host-bootstrap.md) defines what belongs
@@ -588,13 +595,14 @@ longest expected wall-time shards first. That ordering is a scheduling hint so
 constrained runner pools start tail rows early; it does not change the behavior
 surface each shard covers.
 
-The official stdlib reference corpus tests are isolated in
-`test-emacs-stdlib-reference` and `test-emacs-stdlib-reference-stress`. They
-remain part of `make test` and per-push CI, but run in parallel with the
-broader `test-emacs-library` shard so large upstream fixture corpora do not hide
-unrelated library/conformance timing. The stress shard keeps large valid cases
-such as the FoundationDB JSON sample as positive, budgeted conformance coverage
-without folding their wall time into the ordinary corpus row.
+The official stdlib reference corpus has canonical portable coverage in
+`tests/scheme/stdlib-json-reference-test.scm`, including the FoundationDB JSON
+sample. The `test-emacs-stdlib-reference` and
+`test-emacs-stdlib-reference-stress` shards remain as Emacs-bootstrap
+compatibility and budget coverage, so moving semantics portable-first does not
+reduce bootstrap coverage. Portable host failures are reported by the named
+`test-portable-*` shard and test file; Emacs adapter/bootstrap failures remain
+reported by the named `test-emacs-*` shard.
 
 Portable reflection tests follow the same behavior-surface split. Quick
 manifest-input and helper contracts run in dedicated

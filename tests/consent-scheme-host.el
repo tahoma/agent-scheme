@@ -50,6 +50,7 @@
     "tests/scheme/stdlib-eager-comprehensions-upstream-test.scm"
     "tests/scheme/stdlib-lightweight-testing-test.scm"
     "tests/scheme/stdlib-lightweight-testing-upstream-test.scm"
+    "tests/scheme/stdlib-json-reference-test.scm"
     "tests/scheme/stdlib-generator-test.scm"
     "tests/scheme/consent-eval-test.scm")
   "Portable Scheme test files exercised by full-suite host shards.")
@@ -305,8 +306,11 @@ RACKET-COLLECTION-ROOT is accepted for API symmetry with test arguments."
                        racket-collection-root))))
                 (unless (equal status 0)
                   (ert-fail
-                   (with-current-buffer output-buffer
-                     (buffer-string))))))
+                   (format "Portable Scheme test file %s failed on %s:\n%s"
+                           test-file
+                           display-name
+                           (with-current-buffer output-buffer
+                             (buffer-string)))))))
             (consent--test-emit-ci-check-timings output-buffer))
         (when (and racket-collection-root
                    (file-directory-p racket-collection-root))

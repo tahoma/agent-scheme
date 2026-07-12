@@ -225,10 +225,12 @@ Current examples:
 - `tests/consent-conformance-test.el` validates the fixture suite and runs
   implemented cases through the Consent Scheme evaluator.
 
-Future portable-core work should add R7RS fixtures first when practical, then
-bridge them into `make test` through ERT so a minimal checkout still has one
-verification command. If an external Scheme is unavailable, the bridge may skip
-the external run, but the fixture shape should still be validated.
+Host-neutral behavior must add R7RS fixtures first unless the test documents a
+host-boundary reason that prevents it. Bridge those fixtures into `make test`
+through ERT so a minimal checkout still has one verification command; ERT is
+the host runner and reporting adapter, not the canonical semantic test home.
+If an external Scheme is unavailable, the bridge may skip the external run,
+but the fixture shape should still be validated.
 
 The helper library and artifact workflow in
 [Helper Libraries and Artifacts](helper-artifacts.md) follows this boundary:
