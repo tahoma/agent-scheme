@@ -90,6 +90,11 @@ their library names:
 - `scheme/testing/harness.sld` defines
   `(testing harness)`
 
+Reusable non-Consent feature libraries prefix public bindings with their
+library namespace rather than `consent-`; for example, `(testing harness)`
+exports `testing-harness-*` and `(testing registry)` exports
+`testing-registry-*`.
+
 Here "mirror" means naming and pass-ownership parity, not subordination. Core
 semantic changes should update the corresponding Emacs Lisp and portable R7RS
 modules and test bridges in the same slice when practical.

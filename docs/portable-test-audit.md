@@ -73,12 +73,12 @@ command-line experience.
 | test discovery, selectors, tags, and selective reruns | `(testing registry)` | parity; selectors are composable Scheme predicates |
 | source locations and per-test timing | registry case metadata and injectable clock | parity without relying on implementation-specific syntax objects or clocks |
 | backtraces and host diagnostics | registry diagnostic hook and result records | parity substrate; each host supplies its native stack capture |
-| interactive failed-test inspection and rerun | Scheme-readable reports plus `consent-test-rerun-failed` | parity substrate for Emacs, CLI, and other host UIs |
+| interactive failed-test inspection and rerun | Scheme-readable reports plus `testing-registry-rerun-failed` | parity substrate for Emacs, CLI, and other host UIs |
 
 `(testing harness)` is a test-only orchestration extension, not another
-assertion framework. `consent-test-run` supplies the repeated SRFI 64 lifecycle,
+assertion framework. `testing-harness-run` supplies the repeated SRFI 64 lifecycle,
 machine-readable summary datum, and nonzero host exit on unexpected failure or
-success. `consent-test-check` adapts silent SRFI 78 checks into one named SRFI
+success. `testing-harness-check` adapts silent SRFI 78 checks into one named SRFI
 64 result. Test bodies continue to use the SRFI forms directly. The library
 lives in the manifested `scheme/testing/` namespace so it is
 available to downstream users. The executable suites and cases under

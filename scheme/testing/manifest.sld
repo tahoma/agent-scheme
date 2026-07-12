@@ -47,10 +47,10 @@
          (source-version unknown)
          (realization portable-source)
          (exports
-          (consent-test-run
-           consent-test-check
-           consent-test-runner-summary
-           consent-test-runner-failed?))
+          (testing-harness-run
+           testing-harness-check
+           testing-harness-runner-summary
+           testing-harness-runner-failed?))
          (dependencies
           ((library (scheme base))
            (library (scheme write))
@@ -73,25 +73,25 @@
          (source-version unknown)
          (realization portable-source)
          (exports
-          (consent-test-case
-           consent-test-register!
-           consent-test-registry-clear!
-           consent-test-registry
-           consent-test-case-name
-           consent-test-case-tags
-           consent-test-case-source-file
-           consent-test-case-source-line
-           consent-test-select-all
-           consent-test-select-name
-           consent-test-select-tag
-           consent-test-select-and
-           consent-test-select-or
-           consent-test-select-not
-           consent-test-clock
-           consent-test-diagnostic-hook
-           consent-test-run-registered
-           consent-test-rerun-failed
-           consent-test-report-failed-names))
+          (testing-registry-case
+           testing-registry-register!
+           testing-registry-clear!
+           testing-registry-cases
+           testing-registry-case-name
+           testing-registry-case-tags
+           testing-registry-case-source-file
+           testing-registry-case-source-line
+           testing-registry-select-all
+           testing-registry-select-name
+           testing-registry-select-tag
+           testing-registry-select-and
+           testing-registry-select-or
+           testing-registry-select-not
+           testing-registry-clock
+           testing-registry-diagnostic-hook
+           testing-registry-run-registered
+           testing-registry-rerun-failed
+           testing-registry-report-failed-names))
          (dependencies
           ((library (scheme base))
            (library (scheme write))

@@ -14,7 +14,7 @@
   "Return true when THUNK raises."
   (guard (condition (else #t)) (thunk) #f))
 
-(consent-test-run "Agent Task portable semantics"
+(testing-harness-run "Agent Task portable semantics"
   (test-assert "created to observing"
                (task-transition-allowed? 'created 'observing))
   (test-assert "created to complete rejected"
@@ -47,7 +47,7 @@
                 (task-field-value task 'state #f)))
   (test-assert "malformed record rejected"
                (not (task-record-valid? '(agent-task (id incomplete)))))
-  (consent-test-check
+  (testing-harness-check
    "lightweight eager state table" 1
    (check-ec (:list state task-states)
              (task-state? state)

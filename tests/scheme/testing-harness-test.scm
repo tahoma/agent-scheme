@@ -8,7 +8,7 @@
         (stdlib testing)
         (stdlib lightweight-testing))
 
-(consent-test-run "Consent testing extension"
+(testing-harness-run "Testing harness"
   (let ((entry
          (testing-library-manifest-ref
           '(testing harness))))
@@ -22,7 +22,7 @@
     (test-runner-skip-count! sample-runner 3)
     (test-equal
      "Scheme-readable summary"
-     '(consent-test-summary
+     '(testing-harness-summary
        (suite sample)
        (pass 2)
        (fail 0)
@@ -30,13 +30,13 @@
        (xpass 0)
        (skip 3)
        (status pass))
-     (consent-test-runner-summary 'sample sample-runner))
+     (testing-harness-runner-summary 'sample sample-runner))
     (test-assert "expected failures do not fail a suite"
-                 (not (consent-test-runner-failed? sample-runner)))
+                 (not (testing-harness-runner-failed? sample-runner)))
     (test-runner-xpass-count! sample-runner 1)
     (test-assert "unexpected successes fail a suite"
-                 (consent-test-runner-failed? sample-runner)))
-  (consent-test-check
+                 (testing-harness-runner-failed? sample-runner)))
+  (testing-harness-check
    "SRFI 78 checks adapt to SRFI 64" 2
    (check (+ 1 1) => 2)
    (check (reverse '(a b)) => '(b a))))

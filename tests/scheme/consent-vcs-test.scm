@@ -14,7 +14,7 @@
 ;; NUL separator used by Git's `-z' machine-readable output formats.
 (define nul (string #\null))
 
-(consent-test-run "Agent VCS portable semantics"
+(testing-harness-run "Agent VCS portable semantics"
   (let* ((status
           (parse-git-status-porcelain-v2-z
            (string-append
