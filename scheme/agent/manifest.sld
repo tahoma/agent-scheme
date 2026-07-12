@@ -26,7 +26,8 @@
         (source-version unknown)
         (realization portable-source)
         (exports (agent-library-manifest agent-library-manifest-ref))
-        (dependencies ((library (scheme base))))
+        (dependencies
+         ((library (scheme base))))
         (provenance ((origin repo)))
         (status implemented)
         (canonical #t))
@@ -97,7 +98,8 @@
                            approval-store-records approval-store-resolve! approval-store-cancel!
                            approval-store-pending approval-request! approval-status approval-cancel!
                            approval-yield-pending approval-resolve!))
-        (dependencies ((library (scheme base))))
+        (dependencies
+         ((library (scheme base))))
         (provenance ((origin repo)))
         (status implemented)
         (canonical #t))
@@ -222,7 +224,9 @@
                            helper-record-name helper-record-forms helper-store-artifact-save!
                            helper-promote-to-skill agent-artifact agent-helper-save! agent-helper-load
                            agent-helper-list agent-helper-ref agent-helper-promote-to-skill))
-        (dependencies ((library (scheme base)) (library (stdlib list))))
+        (dependencies
+         ((library (scheme base))
+          (library (stdlib list))))
         (provenance ((origin repo)))
         (status implemented)
         (canonical #t))
@@ -300,7 +304,9 @@
                            job-store-status job-store-mark-running! job-store-record-yield!
                            job-store-complete! job-store-fail! job-store-finish-cancelled! job-datum-id
                            job-start! job-ref job-list job-cancel! job-interrupt! job-yields job-status))
-        (dependencies ((library (scheme base)) (library (stdlib list))))
+        (dependencies
+         ((library (scheme base))
+          (library (stdlib list))))
         (provenance ((origin repo)))
         (status implemented)
         (canonical #t))
@@ -376,8 +382,10 @@
         (realization portable-source)
         (exports (test-case test-error test-group test-run test-yield-failures skill-test skill-test-run))
         (dependencies
-         ((library (scheme base)) (library (scheme write))
-          (library (agent io)) (library (agent test primitive))))
+         ((library (scheme base))
+          (library (scheme write))
+          (library (agent io))
+          (library (agent test primitive))))
         (provenance ((origin repo)))
         (status implemented)
         (canonical #t))
@@ -431,7 +439,9 @@
                            diagnostics-capability-request-operation make-diagnostics-capability-result
                            make-diagnostics-outcome diagnostics-outcome? diagnostics-outcome-status
                            diagnostic-known-severity? diagnostics-read-only-operation? diagnostics-yield))
-        (dependencies ((library (scheme base)) (library (agent io))))
+        (dependencies
+         ((library (scheme base))
+          (library (agent io))))
         (provenance ((origin repo)))
         (status implemented)
         (canonical #t))
@@ -452,8 +462,10 @@
          (make-diff make-diff-hunk diff-line no-change-diff proposed-edit-diff diff? diff-changed?
                            diff-source diff-hunks diff-render-unified diff-yield))
         (dependencies
-         ((library (scheme base)) (library (scheme cxr))
-          (library (stdlib generator)) (library (agent io))))
+         ((library (scheme base))
+          (library (scheme cxr))
+          (library (stdlib generator))
+          (library (agent io))))
         (provenance ((origin repo)))
         (status implemented)
         (canonical #t))
@@ -486,7 +498,9 @@
                            vcs-outcome-status vcs-known-outcome? vcs-read-only-operation?
                            vcs-mutating-operation? vcs-remote-operation? vcs-operation-required-authority
                            parse-git-status-porcelain-v2-z parse-git-raw-diff-z))
-        (dependencies ((library (scheme base)) (library (stdlib generator))))
+        (dependencies
+         ((library (scheme base))
+          (library (stdlib generator))))
         (provenance ((origin repo)))
         (status implemented)
         (canonical #t))
@@ -510,7 +524,8 @@
                            network-capability-decision-status network-authorize-request make-network-response
                            make-network-stream-handle make-network-port-capability make-network-audit
                            network-audit?))
-        (dependencies ((library (scheme base))))
+        (dependencies
+         ((library (scheme base))))
         (provenance ((origin repo)))
         (status implemented)
         (canonical #t))
@@ -536,7 +551,8 @@
                            make-agent-task make-agent-step make-agent-action make-agent-observation
                            make-agent-decision make-task-pause make-task-stop make-task-wait
                            make-task-failure make-agent-completion))
-        (dependencies ((library (scheme base))))
+        (dependencies
+         ((library (scheme base))))
         (provenance ((origin repo)))
         (status implemented)
         (canonical #t))
@@ -565,7 +581,10 @@
                            memory-selection-candidates memory-selection-cutoff memory-put! memory-ref
                            memory-delete! memory-add! memory-find memory-by-tag memory-recent memory-access!
                            memory-reflect! memory-select memory-yield))
-        (dependencies ((library (scheme base)) (library (stdlib list)) (library (scheme write))))
+        (dependencies
+         ((library (scheme base))
+          (library (stdlib list))
+          (library (scheme write))))
         (provenance ((origin repo)))
         (status implemented)
         (canonical #t))
@@ -669,7 +688,9 @@
                            plan-store-status! plan-record-id plan-record-scope plan-record-steps plan-step-id
                            plan-step-status plan-memory-important? plan-create! plan-ref plan-list
                            plan-step-add! plan-step-status! plan-status! plan-yield))
-        (dependencies ((library (scheme base)) (library (stdlib list))))
+        (dependencies
+         ((library (scheme base))
+          (library (stdlib list))))
         (provenance ((origin repo)))
         (status implemented)
         (canonical #t))
@@ -746,7 +767,10 @@
         (exports
          (model-provider-register! model-providers model-route model-tool-spec model-complete
                            model-provider-diagnostics))
-        (dependencies ((library (scheme base)) (library (agent reflect)) (library (agent models primitive))))
+        (dependencies
+         ((library (scheme base))
+          (library (agent reflect))
+          (library (agent models primitive))))
         (provenance ((origin repo)))
         (status implemented)
         (canonical #t))
@@ -817,8 +841,11 @@
                            model-openai-compatible-http-completion-result
                            model-openai-compatible-http-complete))
         (dependencies
-         ((library (scheme base)) (library (scheme write)) (library (agent redaction))
-          (library (cli process-host)) (library (stdlib generator))
+         ((library (scheme base))
+          (library (scheme write))
+          (library (agent redaction))
+          (library (cli process-host))
+          (library (stdlib generator))
           (library (stdlib json))))
         (provenance ((origin repo)))
         (status implemented)
@@ -1237,7 +1264,9 @@
                            session-manager-create! session-manager-seed! session-manager-switch!
                            session-manager-current session-manager-list session-manager-close! create-session
                            switch-session set-default-session! current-session list-sessions close-session))
-        (dependencies ((library (scheme base)) (library (stdlib list))))
+        (dependencies
+         ((library (scheme base))
+          (library (stdlib list))))
         (provenance ((origin repo)))
         (status implemented)
         (canonical #t))
@@ -1361,7 +1390,9 @@
                            select-agent agent-selection? agent-selection-field-value agent-selection-status
                            agent-selection-agent agent-selection-agent-id agent-selection-basis
                            agent-selection-reason agent-selection-considered))
-        (dependencies ((library (scheme base)) (library (stdlib list))))
+        (dependencies
+         ((library (scheme base))
+          (library (stdlib list))))
         (provenance ((origin repo)))
         (status implemented)
         (canonical #t))
@@ -1384,7 +1415,8 @@
                            analysis-capability-requests analysis-quarantine-decisions
                            analysis-failure-decisions capability-request? capability-decision?
                            capability-decision-status))
-        (dependencies ((library (scheme base))))
+        (dependencies
+         ((library (scheme base))))
         (provenance ((origin repo)))
         (status implemented)
         (canonical #t))
@@ -1406,7 +1438,9 @@
                            task-run-completion task-run-steps task-run-observations task-run-transcript
                            task-run-budget))
         (dependencies
-         ((library (scheme base)) (library (agent task)) (library (agent transcript))
+         ((library (scheme base))
+          (library (agent task))
+          (library (agent transcript))
           (library (agent proposal))))
         (provenance ((origin repo)))
         (status implemented)
@@ -1428,8 +1462,11 @@
          (pass-k reliability-field-value reliability-stop-reason reliability-trial-passed?
                            measure-reliability measure-policy-ablation))
         (dependencies
-         ((library (scheme base)) (library (stdlib list)) (library (scheme write))
-          (library (agent runner)) (library (agent task))))
+         ((library (scheme base))
+          (library (stdlib list))
+          (library (scheme write))
+          (library (agent runner))
+          (library (agent task))))
         (provenance ((origin repo)))
         (status implemented)
         (canonical #t))
@@ -1465,8 +1502,12 @@
                            prompt-result-transcript prompt-result-observations prompt-result-budget
                            prompt-result-audit))
         (dependencies
-         ((library (scheme base)) (library (scheme case-lambda)) (library (stdlib list))
-          (library (agent runner)) (library (agent registry)) (library (agent task))))
+         ((library (scheme base))
+          (library (scheme case-lambda))
+          (library (stdlib list))
+          (library (agent runner))
+          (library (agent registry))
+          (library (agent task))))
         (provenance ((origin repo)))
         (status implemented)
         (canonical #t))
@@ -1493,7 +1534,9 @@
                            generated-source-run-candidate generated-source-run-diagnostics
                            generated-source-run-repair-prompts generated-source-repair-prompt
                            generated-source-apply))
-        (dependencies ((library (scheme base)) (library (scheme read))))
+        (dependencies
+         ((library (scheme base))
+          (library (scheme read))))
         (provenance ((origin repo)))
         (status implemented)
         (canonical #t))
@@ -1517,7 +1560,9 @@
                            transcript-recorded-observation? transcript-event->fixture-case
                            transcript-event-summary transcript-raw-view transcript-summary-view
                            transcript-rotate transcript-export))
-        (dependencies ((library (scheme base)) (library (stdlib list))))
+        (dependencies
+         ((library (scheme base))
+          (library (stdlib list))))
         (provenance ((origin repo)))
         (status implemented)
         (canonical #t))))

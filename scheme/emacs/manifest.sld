@@ -28,7 +28,8 @@
         (source-version unknown)
         (realization portable-source)
         (exports (emacs-library-manifest emacs-library-manifest-ref))
-        (dependencies ((library (scheme base))))
+        (dependencies
+         ((library (scheme base))))
         (provenance ((origin repo)))
         (status implemented)
         (canonical #t))
