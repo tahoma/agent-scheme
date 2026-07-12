@@ -2237,6 +2237,139 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
                      '(stdlib generator))))")
     "#t")))
 
+(ert-deftest consent-library-test-srfi-64-imports-and-runs-tests ()
+  "Import SRFI 64 aliases and exercise representative test-runner behavior."
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (srfi 64))
+      (let ((runner (test-runner-null)))
+        (test-with-runner runner
+          (test-begin \"numbers\" 3)
+          (test-assert \"truth\" #t)
+          (test-eqv \"sum\" 4 (+ 2 2))
+          (test-equal \"list\" '(a b) (list 'a 'b))
+          (test-end \"numbers\"))
+        (list (test-runner-pass-count runner)
+              (test-runner-fail-count runner)
+              (test-runner-skip-count runner)))")
+    "(3 0 0)"))
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (srfi srfi-64))
+      (let ((runner (test-runner-null)))
+        (test-with-runner runner
+          (test-begin \"control\")
+          (test-skip \"skipped\")
+          (test-assert \"kept\" #t)
+          (test-assert \"skipped\" #f)
+          (test-expect-fail \"known\")
+          (test-assert \"known\" #f)
+          (test-end \"control\"))
+        (list (test-runner-pass-count runner)
+              (test-runner-xfail-count runner)
+              (test-runner-skip-count runner)))")
+    "(1 1 1)"))
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (srfi :64 testing))
+      (let ((runner (test-runner-null)))
+        (test-with-runner runner
+          (test-begin \"legacy\" 1)
+          (test-assert \"truth\" #t)
+          (test-end \"legacy\"))
+        (test-runner-pass-count runner))")
+    "1"))
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (srfi :64))
+      (test-runner? (test-runner-null))")
+    "#t")))
+
+(ert-deftest consent-library-test-srfi-64-records-result-properties ()
+  "Expose SRFI 64 result properties and test names to custom runners."
+  (should
+   (equal
+    (consent-library-test--external
+     "(import (scheme base) (srfi 64))
+      (let ((runner (test-runner-null))
+            (properties '()))
+        (test-runner-on-test-end!
+         runner
+         (lambda (active)
+           (set! properties (cons (test-result-alist active)
+                                  properties))))
+        (test-with-runner runner
+          (test-begin \"properties\")
+          (test-equal \"named\" '(x y) (list 'x 'y))
+          (test-end \"properties\"))
+        (let ((result (car properties)))
+          (list (cdr (assq 'test-name result))
+                (cdr (assq 'expected-value result))
+                (cdr (assq 'actual-value result))
+                (cdr (assq 'result-kind result)))))")
+    "(\"named\" (x y) (x y) pass)")))
+
+(ert-deftest consent-library-test-srfi-64-missing-export-diagnostic ()
+  "Report missing SRFI 64 imports through the resolver diagnostic."
+  (let ((error
+         (should-error
+          (consent-library-test--external
+           "(import (scheme base)
+                    (only (srfi 64) missing-test-helper))
+            missing-test-helper")
+          :type 'consent-eval-error)))
+    (should
+     (string-match-p
+      (regexp-quote "only import name not found")
+      (error-message-string error)))
+    (should
+     (string-match-p
+      (regexp-quote "missing-test-helper")
+      (error-message-string error)))))
+
+(ert-deftest consent-library-test-stdlib-manifest-documents-srfi-64 ()
+  "Expose SRFI 64 support status through the stdlib manifest."
+  (should
+   (equal
+    (consent-library-test--stdlib-manifest-external
+     "(let ((entry (stdlib-manifest-ref '(stdlib testing)))
+            (alias (stdlib-manifest-ref '(srfi 64)))
+            (portable-alias (stdlib-manifest-ref '(srfi srfi-64)))
+            (legacy-number-alias (stdlib-manifest-ref '(srfi :64)))
+            (legacy-alias (stdlib-manifest-ref '(srfi :64 testing))))
+        (and (eq? (car entry) 'manifest-entry)
+             (equal? (manifest-field entry 'name) '(stdlib testing))
+             (equal? (manifest-field entry 'status)
+                     'vendored-adapted-implementation)
+             (equal? (manifest-subfield entry 'provenance 'upstream-license)
+                     \"MIT\")
+             (equal? (manifest-subfield entry 'provenance 'local-license)
+                     \"MIT\")
+             (eq? (manifest-subfield entry 'provenance 'vendored?) #t)
+             (equal? (manifest-field entry 'aliases)
+                     '((srfi 64)
+                       (srfi srfi-64)
+                       (srfi :64)
+                       (srfi :64 testing)))
+             (equal? (manifest-field entry 'dependencies)
+                     '((library (scheme base))
+                       (library (scheme write))
+                       (library (scheme read))
+                       (library (scheme eval))
+                       (library (scheme file))))
+             (equal? (manifest-field alias 'target) '(stdlib testing))
+             (equal? (manifest-field portable-alias 'target)
+                     '(stdlib testing))
+             (equal? (manifest-field legacy-number-alias 'target)
+                     '(stdlib testing))
+             (equal? (manifest-field legacy-alias 'target)
+                     '(stdlib testing))))")
+    "#t")))
+
 (ert-deftest consent-library-test-srfi-180-imports-and-round-trips-json ()
   "Import `(srfi 180)' through the library registry and use JSON."
   (should
@@ -3076,6 +3209,7 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
 (ert-deftest consent-library-test-vendored-srfi-records-cover-intake-contract ()
   "Expose SRFI bundle intake metadata as Scheme-readable records."
   (let ((vendored (consent-library-test--vendored-srfi-record 1))
+        (testing (consent-library-test--vendored-srfi-record 64))
         (cond-expand (consent-library-test--vendored-srfi-record 0))
         (shim (consent-library-test--vendored-srfi-record 16))
         (libraries (consent-library-test--vendored-srfi-record 97))
@@ -3137,6 +3271,50 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
                     (mapcar #'consent-datum->external
                             (consent-library-test--record-field
                              vendored 'tests))))
+
+    (should (equal (consent-library-test--record-field-external
+                    testing 'number)
+                   "64"))
+    (should (equal (consent-library-test--record-field-external
+                    testing 'name)
+                   "testing"))
+    (should (equal (consent-library-test--record-field-external
+                    testing 'library)
+                   "(stdlib testing)"))
+    (should (equal (consent-library-test--record-field-external
+                    testing 'classification)
+                   "vendored-library"))
+    (should (equal (consent-library-test--record-field
+                    testing 'source-url)
+                   "https://github.com/scheme-requests-for-implementation/srfi-64"))
+    (should (member "(srfi 64)"
+                    (mapcar #'consent-datum->external
+                            (consent-library-test--record-field
+                             testing 'import-names))))
+    (should (member "(srfi srfi-64)"
+                    (mapcar #'consent-datum->external
+                            (consent-library-test--record-field
+                             testing 'import-names))))
+    (should (member "(srfi :64)"
+                    (mapcar #'consent-datum->external
+                            (consent-library-test--record-field
+                             testing 'import-names))))
+    (should (member "(srfi :64 testing)"
+                    (mapcar #'consent-datum->external
+                            (consent-library-test--record-field
+                             testing 'import-names))))
+    (should (member "(stdlib testing)"
+                    (mapcar #'consent-datum->external
+                            (consent-library-test--record-field
+                             testing 'import-names))))
+    (should (member "(library (scheme eval))"
+                    (mapcar #'consent-datum->external
+                            (consent-library-test--record-field
+                             testing 'dependencies))))
+    (should (member "adapted-upstream-tests"
+                    (mapcar #'consent-datum->external
+                            (consent-library-test--record-field
+                             testing 'tests))))
 
     (should (equal (consent-library-test--record-field-external
                     cond-expand 'number)

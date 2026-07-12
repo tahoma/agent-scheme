@@ -770,6 +770,145 @@
        (manifest-entry
         (schema-version 1)
         (kind library)
+        (name (stdlib testing))
+        (owner stdlib)
+        (provider repo-source)
+        (visibility public)
+        (source-kind source-library)
+        (source (path "testing.sld"))
+        (api-version (compat 0))
+        (source-version (upstream-revision "2d6a9fc514050f75802ef0003cfbf4846602a3ee"))
+        (realization portable-source)
+        (aliases ((srfi 64) (srfi srfi-64) (srfi :64) (srfi :64 testing)))
+        (exports
+         (test-begin test-end test-assert test-eqv test-eq test-equal test-approximate
+                     test-error test-apply test-with-runner test-match-nth test-match-all
+                     test-match-any test-match-name test-skip test-expect-fail
+                     test-read-eval-string test-runner-group-path test-group
+                     test-group-with-cleanup test-result-ref test-result-set!
+                     test-result-clear test-result-remove test-result-kind test-passed?
+                     test-log-to-file test-runner? test-runner-reset test-runner-null
+                     test-runner-simple test-runner-current test-runner-factory
+                     test-runner-get test-runner-create test-runner-test-name
+                     test-runner-pass-count test-runner-pass-count!
+                     test-runner-fail-count test-runner-fail-count!
+                     test-runner-xpass-count test-runner-xpass-count!
+                     test-runner-xfail-count test-runner-xfail-count!
+                     test-runner-skip-count test-runner-skip-count!
+                     test-runner-group-stack test-runner-group-stack!
+                     test-runner-on-test-begin test-runner-on-test-begin!
+                     test-runner-on-test-end test-runner-on-test-end!
+                     test-runner-on-group-begin test-runner-on-group-begin!
+                     test-runner-on-group-end test-runner-on-group-end!
+                     test-runner-on-final test-runner-on-final!
+                     test-runner-on-bad-count test-runner-on-bad-count!
+                     test-runner-on-bad-end-name test-runner-on-bad-end-name!
+                     test-result-alist test-result-alist! test-runner-aux-value
+                     test-runner-aux-value! test-on-group-begin-simple
+                     test-on-group-end-simple test-on-bad-count-simple
+                     test-on-bad-end-name-simple test-on-test-end-simple
+                     test-on-final-simple))
+        (dependencies
+         ((library (scheme base)) (library (scheme write)) (library (scheme read))
+                                (library (scheme eval)) (library (scheme file))))
+        (provenance
+         ((origin repo)
+                              (upstream-source-url "https://github.com/scheme-requests-for-implementation/srfi-64")
+                              (upstream-source-files ("testing.scm" "srfi-64-test.scm"))
+                              (upstream-revision "2d6a9fc514050f75802ef0003cfbf4846602a3ee")
+                              (upstream-source-blobs
+                               (("testing.scm" . "caa8dd9e3361e1e1668376da19bfcd0ba1aa33be")
+                                ("srfi-64-test.scm" . "aab90d1130d50c1dee945ef209c3fc83841355bf")))
+                              (upstream-license "MIT") (local-license "MIT") (vendored? #t)
+                              (local-patches
+                               ((define-library-wrapper (library (stdlib testing)))
+                                (registry-aliases
+                                 (aliases (srfi 64) (srfi srfi-64)
+                                          (srfi :64) (srfi :64 testing)))
+                                (removed-host-branches
+                                 (hosts chicken gauche guile sisc kawa mzscheme))
+                                (default-log-file (from #t) (to #f))
+                                (eval-environment (to (scheme base)))
+                                (adapted-tests (file "tests/scheme/stdlib-testing-test.scm"))))))
+        (verification
+         ((test-status
+                                (import-resolution representative-test-runner-behavior
+                                 alias-import missing-export-diagnostic
+                                 adapted-upstream-tests portable-host-suite))))
+        (status vendored-adapted-implementation)
+        (canonical #t))
+       (manifest-index-entry
+        (schema-version 1)
+        (kind library-alias)
+        (name (srfi 64))
+        (owner stdlib)
+        (provider repo-source)
+        (visibility alias)
+        (source-kind alias)
+        (api-version (inherits (stdlib testing)))
+        (source-version unknown)
+        (realization alias)
+        (target (stdlib testing))
+        (aliases ((srfi srfi-64) (srfi :64) (srfi :64 testing)))
+        (dependencies ((library (stdlib testing))))
+        (provenance ((origin repo)))
+        (verification ((test-status (import-resolution))))
+        (status alias)
+        (canonical #f))
+       (manifest-index-entry
+        (schema-version 1)
+        (kind library-alias)
+        (name (srfi srfi-64))
+        (owner stdlib)
+        (provider repo-source)
+        (visibility alias)
+        (source-kind alias)
+        (api-version (inherits (stdlib testing)))
+        (source-version unknown)
+        (realization alias)
+        (target (stdlib testing))
+        (dependencies ((library (stdlib testing))))
+        (provenance ((origin repo)))
+        (verification ((test-status (import-resolution))))
+        (status alias)
+        (canonical #f))
+       (manifest-index-entry
+        (schema-version 1)
+        (kind library-alias)
+        (name (srfi :64))
+        (owner stdlib)
+        (provider repo-source)
+        (visibility alias)
+        (source-kind alias)
+        (api-version (inherits (stdlib testing)))
+        (source-version unknown)
+        (realization alias)
+        (target (stdlib testing))
+        (dependencies ((library (stdlib testing))))
+        (provenance ((origin repo)))
+        (verification ((test-status (import-resolution))))
+        (status alias)
+        (canonical #f))
+       (manifest-index-entry
+        (schema-version 1)
+        (kind library-alias)
+        (name (srfi :64 testing))
+        (owner stdlib)
+        (provider repo-source)
+        (visibility alias)
+        (source-kind alias)
+        (api-version (inherits (stdlib testing)))
+        (source-version unknown)
+        (realization alias)
+        (target (stdlib testing))
+        (dependencies ((library (stdlib testing))))
+        (provenance ((origin repo)))
+        (verification ((test-status (import-resolution))))
+        (status alias)
+        (canonical #f))
+       (manifest-entry
+        (schema-version 1)
+        (kind library)
         (name (stdlib receive))
         (owner stdlib)
         (provider repo-source)
