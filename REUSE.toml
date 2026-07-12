@@ -68,3 +68,28 @@ path = ["fixtures/srfi-27/reference/conftest.scm"]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2002 Sebastian Egner"
 SPDX-License-Identifier = "MIT"
+
+# Vendored SRFI specification snapshots from https://srfi.schemers.org/.
+# The individual HTML files include their upstream copyright and MIT-style
+# permission notices; this aggregate annotation supplies REUSE metadata for
+# snapshots that do not carry machine-readable SPDX headers.
+[[annotations]]
+path = ["docs/stdlib/reference/srfi-*/*.html"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "SRFI document authors"
+SPDX-License-Identifier = "MIT"
+
+# Vendored R7RS-large report and ballot snapshots from the official
+# https://codeberg.org/scheme/r7rs repository. These files use the Scheme report
+# copying permission recorded in the upstream LICENCE.txt snapshot and mirrored
+# in LICENSES/LicenseRef-R7RS-Report-Permission.txt.
+[[annotations]]
+path = [
+  "docs/stdlib/reference/r7rs-large/2016-07-red-edition-report.md",
+  "docs/stdlib/reference/r7rs-large/2019-02-tangerine-edition-report.md",
+  "docs/stdlib/reference/r7rs-large/2022-02-yellow-edition-report.txt",
+  "docs/stdlib/reference/r7rs-large/LICENCE.txt",
+]
+precedence = "override"
+SPDX-FileCopyrightText = "Scheme Working Groups and Scheme report contributors"
+SPDX-License-Identifier = "LicenseRef-R7RS-Report-Permission"
