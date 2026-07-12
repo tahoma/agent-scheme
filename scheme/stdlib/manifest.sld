@@ -1474,7 +1474,18 @@
           (upstream-source-files
            ("srfi/194.sld" "srfi/194-impl.scm"
             "srfi/zipf-zri.scm" "srfi/sphere.scm"))
-          (upstream-test-files ("srfi-194-test.scm"))
+          (upstream-test-files
+           ("srfi-194-test.scm" "zipf-test.scm"
+            "sphere-test.scm" "ellipsoid-test.scm"))
+          (upstream-test-blobs
+           (("srfi-194-test.scm"
+             . "ffb1ec46ecf83853e1fd2b15d01a9f3ec250b41b")
+            ("zipf-test.scm"
+             . "509db74f571e3cf0c989f7674dc78425b5bb9876")
+            ("sphere-test.scm"
+             . "2de4be9e47f03e328e4e73b85dbb516c4a87ee1b")
+            ("ellipsoid-test.scm"
+             . "bc0d289cb1ab1f3da1c77b184124f86d7b18b7a6")))
           (upstream-revision "f2110d303dee2c5bbedc3bc0dfd841f3dacc4b4b")
           (upstream-license "MIT") (local-license "MIT") (vendored? #t)
           (local-patches
@@ -1489,11 +1500,13 @@
             (srfi-133-vector-helpers (source local-portable-loops))
             (documentation-metadata (scope exported-procedures))
             (adapted-tests
-             (file "tests/scheme/stdlib-random-data-generators-test.scm"))))))
+             (file "tests/scheme/stdlib-random-data-generators-test.scm")
+             (file "tests/scheme/stdlib-random-data-generators-upstream-test.scm"))))))
         (verification
          ((test-status
            (import-resolution representative-random-data-behavior
-                              adapted-upstream-tests
+                              upstream-fixtures adapted-upstream-tests
+                              adapted-upstream-statistical-tests
                               missing-export-diagnostic portable-host-suite
                               compiled-host-smoke))))
         (status vendored-adapted-implementation)
