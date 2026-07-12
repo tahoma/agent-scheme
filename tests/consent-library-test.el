@@ -2904,6 +2904,12 @@ Keep this list empty: upstream `y_*.json' files are positive corpus coverage.")
                      '((path \"reference/srfi-42/srfi-42.html\")
                        (role specification)
                        (source srfi)))
+             (member
+              '(adapted-tests
+                (file \"tests/scheme/stdlib-eager-comprehensions-test.scm\")
+                (file
+                 \"tests/scheme/stdlib-eager-comprehensions-upstream-test.scm\"))
+              (manifest-subfield entry 'provenance 'local-patches))
              (equal? (manifest-field entry 'aliases)
                      '((srfi 42)
                        (srfi srfi-42)

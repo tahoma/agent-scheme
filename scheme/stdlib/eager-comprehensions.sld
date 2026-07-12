@@ -538,54 +538,58 @@
 
     ((:range cc var 0 arg2 1)
      (:do cc
-          (let ((b arg2))
-            (if (not (and (integer? b) (exact? b)))
+          (let ((ec-range-end arg2))
+            (if (not (and (integer? ec-range-end) (exact? ec-range-end)))
                 (error 
                    "arguments of :range are not exact integer "
-                   "(use :real-range?)" 0 b 1 )))
+                   "(use :real-range?)" 0 ec-range-end 1 )))
           ((var 0))
-          (< var b)
+          (< var ec-range-end)
           (let ())
           #t
           ((+ var 1)) ))
 
     ((:range cc var 0 arg2 -1)
      (:do cc
-          (let ((b arg2))
-            (if (not (and (integer? b) (exact? b)))
+          (let ((ec-range-end arg2))
+            (if (not (and (integer? ec-range-end) (exact? ec-range-end)))
                 (error 
                    "arguments of :range are not exact integer "
-                   "(use :real-range?)" 0 b 1 )))
+                   "(use :real-range?)" 0 ec-range-end 1 )))
           ((var 0))
-          (> var b)
+          (> var ec-range-end)
           (let ())
           #t
           ((- var 1)) ))
 
     ((:range cc var arg1 arg2 1)
      (:do cc
-          (let ((a arg1) (b arg2))
-            (if (not (and (integer? a) (exact? a)
-                          (integer? b) (exact? b) ))
+          (let ((ec-range-start arg1) (ec-range-end arg2))
+            (if (not (and (integer? ec-range-start)
+                          (exact? ec-range-start)
+                          (integer? ec-range-end)
+                          (exact? ec-range-end) ))
                 (error 
                    "arguments of :range are not exact integer "
-                   "(use :real-range?)" a b 1 )) )
-          ((var a))
-          (< var b)
+                   "(use :real-range?)" ec-range-start ec-range-end 1 )) )
+          ((var ec-range-start))
+          (< var ec-range-end)
           (let ())
           #t
           ((+ var 1)) ))
 
     ((:range cc var arg1 arg2 -1)
      (:do cc
-          (let ((a arg1) (b arg2) (s -1) (stop 0))
-            (if (not (and (integer? a) (exact? a)
-                          (integer? b) (exact? b) ))
+          (let ((ec-range-start arg1) (ec-range-end arg2))
+            (if (not (and (integer? ec-range-start)
+                          (exact? ec-range-start)
+                          (integer? ec-range-end)
+                          (exact? ec-range-end) ))
                 (error 
                    "arguments of :range are not exact integer "
-                   "(use :real-range?)" a b -1 )) )
-          ((var a))
-          (> var b)
+                   "(use :real-range?)" ec-range-start ec-range-end -1 )) )
+          ((var ec-range-start))
+          (> var ec-range-end)
           (let ())
           #t
           ((- var 1)) ))
@@ -594,21 +598,33 @@
 
     ((:range cc var arg1 arg2 arg3)
      (:do cc
-          (let ((a arg1) (b arg2) (s arg3) (stop 0))
-            (if (not (and (integer? a) (exact? a)
-                          (integer? b) (exact? b)
-                          (integer? s) (exact? s) ))
+          (let ((ec-range-start arg1)
+                (ec-range-end arg2)
+                (ec-range-step arg3)
+                (ec-range-stop 0))
+            (if (not (and (integer? ec-range-start)
+                          (exact? ec-range-start)
+                          (integer? ec-range-end)
+                          (exact? ec-range-end)
+                          (integer? ec-range-step)
+                          (exact? ec-range-step) ))
                 (error 
                    "arguments of :range are not exact integer "
-                   "(use :real-range?)" a b s ))
-            (if (zero? s)
+                   "(use :real-range?)"
+                   ec-range-start ec-range-end ec-range-step ))
+            (if (zero? ec-range-step)
                 (error "step size must not be zero in :range") )
-            (set! stop (+ a (* (max 0 (ceiling (/ (- b a) s))) s))) )
-          ((var a))
-          (not (= var stop))
+            (set! ec-range-stop
+                  (+ ec-range-start
+                     (* (max 0
+                             (ceiling (/ (- ec-range-end ec-range-start)
+                                         ec-range-step)))
+                        ec-range-step))) )
+          ((var ec-range-start))
+          (not (= var ec-range-stop))
           (let ())
           #t
-          ((+ var s)) ))))
+          ((+ var ec-range-step)) ))))
 
 ;; Comment: The macro :range inserts some code to make sure the values
 ;;   are exact integers. This overhead has proven very helpful for 
@@ -633,15 +649,24 @@
     ; the fully qualified case
     ((:real-range cc var (index i) arg1 arg2 arg3)
      (:do cc
-          (let ((a arg1) (b arg2) (s arg3) (istop 0))
-            (if (not (and (real? a) (real? b) (real? s)))
-                (error "arguments of :real-range are not real" a b s) )
-            (if (and (exact? a) (or (not (exact? b)) (not (exact? s))))
-                (set! a (inexact a)) )
-            (set! istop (/ (- b a) s)) )
+          (let ((ec-real-start arg1)
+                (ec-real-end arg2)
+                (ec-real-step arg3)
+                (ec-real-stop 0))
+            (if (not (and (real? ec-real-start)
+                          (real? ec-real-end)
+                          (real? ec-real-step)))
+                (error "arguments of :real-range are not real"
+                       ec-real-start ec-real-end ec-real-step) )
+            (if (and (exact? ec-real-start)
+                     (or (not (exact? ec-real-end))
+                         (not (exact? ec-real-step))))
+                (set! ec-real-start (inexact ec-real-start)) )
+            (set! ec-real-stop
+                  (/ (- ec-real-end ec-real-start) ec-real-step)) )
           ((i 0))
-          (< i istop)
-          (let ((var (+ a (* s i)))))
+          (< i ec-real-stop)
+          (let ((var (+ ec-real-start (* ec-real-step i)))))
           #t
           ((+ i 1)) ))))
 
@@ -653,7 +678,13 @@
 (define-syntax :char-range
   (syntax-rules (index)
     ((:char-range cc var (index i) arg1 arg2)
-     (:parallel cc (:char-range var arg1 arg2) (:integers i)) )
+     (:do cc
+          (let ((imax (char->integer arg2))))
+          ((char-code (char->integer arg1)) (i 0))
+          (<= char-code imax)
+          (let ((var (integer->char char-code))))
+          #t
+          ((+ char-code 1) (+ i 1)) ))
     ((:char-range cc var arg1 arg2)
      (:do cc
           (let ((imax (char->integer arg2))))
@@ -907,14 +938,17 @@
      (fold3-ec x0 (nested) expression f1 f2) )
 
     ((fold3-ec x0 qualifier expression f1 f2)
-     (let ((result #f) (empty #t))
+     (let ((ec-fold3-result #f)
+           (ec-fold3-empty? #t))
        (do-ec qualifier
-              (let ((value expression)) ; don't duplicate
-                (if empty
-                    (begin (set! result (f1 value))
-                           (set! empty #f) )
-                    (set! result (f2 value result)) )))
-       (if empty x0 result) ))))
+              (let ((ec-fold3-value expression)) ; don't duplicate
+                (if ec-fold3-empty?
+                    (begin
+                      (set! ec-fold3-result (f1 ec-fold3-value))
+                      (set! ec-fold3-empty? #f) )
+                    (set! ec-fold3-result
+                          (f2 ec-fold3-value ec-fold3-result)) )))
+       (if ec-fold3-empty? x0 ec-fold3-result) ))))
 
 
 ;; Fold eager-comprehension results with a binary procedure.
@@ -995,13 +1029,13 @@
     ((vector-of-length-ec k qualifier expression)
      (let ((len k))
        (let ((vec (make-vector len))
-             (i 0) )
+             (ec-index 0) )
          (do-ec qualifier
-                (if (< i len)
-                    (begin (vector-set! vec i expression)
-                           (set! i (+ i 1)) )
+                (if (< ec-index len)
+                    (begin (vector-set! vec ec-index expression)
+                           (set! ec-index (+ ec-index 1)) )
                     (error "vector is too short for the comprehension") ))
-         (if (= i len)
+         (if (= ec-index len)
              vec
              (error "vector is too long for the comprehension") ))))))
 

@@ -1771,17 +1771,21 @@
            ((define-library-wrapper (library (stdlib eager-comprehensions)))
             (r7rs-read-import (library (scheme read)))
             (r7rs-inexact-name (from exact->inexact) (to inexact))
+            (gambit-hygiene-friendly-temporaries)
             (gambit-helper-exports)
             (registry-aliases
              (aliases (srfi 42) (srfi srfi-42)
                       (srfi :42) (srfi :42 eager-comprehensions)))
             (adapted-tests
-             (file "tests/scheme/stdlib-eager-comprehensions-test.scm"))))))
+             (file "tests/scheme/stdlib-eager-comprehensions-test.scm")
+             (file
+              "tests/scheme/stdlib-eager-comprehensions-upstream-test.scm"))))))
         (verification
          ((test-status
            (import-resolution representative-eager-comprehension-behavior
-                              extension-hooks missing-export-diagnostic
-                              portable-host-suite compiled-host-smoke))))
+                              extension-hooks adapted-upstream-tests
+                              missing-export-diagnostic portable-host-suite
+                              compiled-host-smoke))))
         (status vendored-adapted-implementation)
         (canonical #t))
        (manifest-index-entry

@@ -46,6 +46,7 @@
     "tests/scheme/stdlib-property-testing-test.scm"
     "tests/scheme/stdlib-property-testing-upstream-test.scm"
     "tests/scheme/stdlib-eager-comprehensions-test.scm"
+    "tests/scheme/stdlib-eager-comprehensions-upstream-test.scm"
     "tests/scheme/stdlib-generator-test.scm"
     "tests/scheme/consent-eval-test.scm")
   "Portable Scheme test files exercised by full-suite host shards.")
