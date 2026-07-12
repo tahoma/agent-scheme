@@ -376,8 +376,8 @@
         (realization portable-source)
         (exports (test-case test-error test-group test-run test-yield-failures skill-test skill-test-run))
         (dependencies
-         ((library (scheme base)) (library (scheme write)) (library (agent io))
-                                (library (agent test primitive))))
+         ((library (scheme base)) (library (scheme write))
+          (library (agent io)) (library (agent test primitive))))
         (provenance ((origin repo)))
         (status implemented)
         (canonical #t))
@@ -453,7 +453,7 @@
                            diff-source diff-hunks diff-render-unified diff-yield))
         (dependencies
          ((library (scheme base)) (library (scheme cxr))
-                                (library (stdlib generator)) (library (agent io))))
+          (library (stdlib generator)) (library (agent io))))
         (provenance ((origin repo)))
         (status implemented)
         (canonical #t))
@@ -818,8 +818,8 @@
                            model-openai-compatible-http-complete))
         (dependencies
          ((library (scheme base)) (library (scheme write)) (library (agent redaction))
-                                (library (cli process-host)) (library (stdlib generator))
-                                (library (stdlib json))))
+          (library (cli process-host)) (library (stdlib generator))
+          (library (stdlib json))))
         (provenance ((origin repo)))
         (status implemented)
         (canonical #t))
@@ -1407,7 +1407,7 @@
                            task-run-budget))
         (dependencies
          ((library (scheme base)) (library (agent task)) (library (agent transcript))
-                                (library (agent proposal))))
+          (library (agent proposal))))
         (provenance ((origin repo)))
         (status implemented)
         (canonical #t))
@@ -1428,8 +1428,8 @@
          (pass-k reliability-field-value reliability-stop-reason reliability-trial-passed?
                            measure-reliability measure-policy-ablation))
         (dependencies
-         ((library (scheme base)) (library (stdlib list)) (library (scheme write)) (library (agent runner))
-                                (library (agent task))))
+         ((library (scheme base)) (library (stdlib list)) (library (scheme write))
+          (library (agent runner)) (library (agent task))))
         (provenance ((origin repo)))
         (status implemented)
         (canonical #t))
@@ -1466,7 +1466,7 @@
                            prompt-result-audit))
         (dependencies
          ((library (scheme base)) (library (scheme case-lambda)) (library (stdlib list))
-                                (library (agent runner)) (library (agent registry)) (library (agent task))))
+          (library (agent runner)) (library (agent registry)) (library (agent task))))
         (provenance ((origin repo)))
         (status implemented)
         (canonical #t))

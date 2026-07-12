@@ -889,7 +889,7 @@
                            consent-record-fields))
         (dependencies
          ((library (scheme base)) (library (scheme char)) (library (scheme inexact))
-                                (library (scheme write))))
+          (library (scheme write))))
         (provenance ((origin repo)))
         (status internal)
         (canonical #t))
@@ -1049,8 +1049,9 @@
                            consent-base-prelude-binding-names consent-base-prelude-binding-specs
                            consent-base-binding-specs consent-primitive-manifest-binding-specs))
         (dependencies
-         ((library (scheme base)) (library (scheme char)) (library (scheme inexact)) (library (scheme write))
-                                (library (consent reader)) (library (consent runtime))))
+         ((library (scheme base)) (library (scheme char)) (library (scheme inexact))
+          (library (scheme write)) (library (consent reader))
+          (library (consent runtime))))
         (provenance ((origin repo)))
         (status internal)
         (canonical #t))
@@ -1088,7 +1089,7 @@
                            read-file-string with-include-directory form-named?))
         (dependencies
          ((library (scheme base)) (library (scheme char)) (library (scheme file)) (library (consent reader))
-                                (library (consent runtime)) (library (consent base))))
+          (library (consent runtime)) (library (consent base))))
         (provenance ((origin repo)))
         (status internal)
         (canonical #t))
@@ -1119,7 +1120,7 @@
                            expand-sequence-forms))
         (dependencies
          ((library (scheme base)) (library (consent reader)) (library (consent runtime))
-                                (library (consent base)) (library (consent library))))
+          (library (consent base)) (library (consent library))))
         (provenance ((origin repo)))
         (status internal)
         (canonical #t))
@@ -1177,11 +1178,11 @@
                            consent-unspecified? consent-procedure? consent-primitive-procedure?))
         (dependencies
          ((library (scheme base)) (library (scheme char)) (library (scheme file)) (library (scheme inexact))
-                                (library (scheme process-context)) (library (scheme read))
-                                (library (scheme write)) (library (consent reader))
-                                (library (consent runtime)) (library (consent result))
-                                (library (consent base)) (library (consent library))
-                                (library (consent macro))))
+          (library (scheme process-context)) (library (scheme read))
+          (library (scheme write)) (library (consent reader))
+          (library (consent runtime)) (library (consent result))
+          (library (consent base)) (library (consent library))
+          (library (consent macro))))
         (provenance ((origin repo)))
         (status internal)
         (canonical #t))
