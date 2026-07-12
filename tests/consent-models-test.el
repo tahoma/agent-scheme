@@ -270,7 +270,8 @@ the local tests passed. Use only ASCII text.")
 
 (defun consent-models-test--run-live-portable-host (host display-name)
   "Run live model portable tests on HOST named DISPLAY-NAME."
-  (consent--scheme-host-run-plan host display-name 'live))
+  (consent--scheme-host-run-plan
+   host display-name (consent--scheme-host-live-plan-shard host)))
 
 (ert-deftest consent-models-test-local-complete-through-transport ()
   "Expose `(agent models)' and complete through a selected local provider."

@@ -172,10 +172,14 @@
     (tags (reflect-stress reflection stress slow)))
    (program
     (path "tests/scheme/consent-models-live-test.scm")
-    (tags (live agent models integration)))))
+    (tags (live-direct agent models integration)))
+   (program
+    (path "tests/scheme/consent-models-compiled-live-test.scm")
+    (tags (live-compiled agent models integration self-hosted)))))
  (shards
   ((shard (name full) (selector (tag full)))
    (shard (name compiled) (selector (tag compiled)))
    (shard (name reflect) (selector (tag reflect)))
    (shard (name reflect-stress) (selector (tag reflect-stress)))
-   (shard (name live) (selector (tag live))))))
+   (shard (name live-direct) (selector (tag live-direct)))
+   (shard (name live-compiled) (selector (tag live-compiled))))))
